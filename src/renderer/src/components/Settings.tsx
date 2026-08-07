@@ -9,7 +9,10 @@ import type {
 } from '@core/config.js'
 
 import { Button } from './Button.js'
-import { AccountsSection } from './settings/AccountsSection.js'
+import { AccountCard } from './settings/AccountCard.js'
+import { AuthTerminal } from './settings/AuthTerminal.js'
+import { ClaudeSection } from './settings/ClaudeSection.js'
+import { type AccountsController, useAccounts } from './settings/useAccounts.js'
 
 interface SettingsProps {
   readonly config: Config
@@ -46,6 +49,8 @@ const SECTIONS: readonly {
 export function Settings({ config, onChange, onClose }: SettingsProps): React.JSX.Element {
   const { t } = useTranslation()
   const [section, setSection] = useState<SectionId>('general')
+  // Shared between the Claude and Git sections, which show the same accounts.
+  const accounts = useAccounts()
 
   useEffect(() => {
     const onKey = (event: KeyboardEvent): void => {
@@ -93,9 +98,11 @@ export function Settings({ config, onChange, onClose }: SettingsProps): React.JS
         <div className="flex-1 overflow-auto">
           <div className="max-w-2xl space-y-6 p-8">
             {section === 'general' && <GeneralSection config={config} onChange={onChange} />}
-            {section === 'git' && <GitSection config={config} onChange={onChange} />}
+            {section === 'git' && (
+              <GitSection config={config} onChange={onChange} accounts={accounts} />
+            )}
             {section === 'agent' && <AgentSection config={config} onChange={onChange} />}
-            {section === 'accounts' && <AccountsSection />}
+            {section === 'accounts' && <ClaudeSection accounts={accounts} />}
             {section === 'about' && <AboutSection config={config} />}
           </div>
         </div>
@@ -140,19 +147,67 @@ function GeneralSection({ config, onChange }: SectionProps): React.JSX.Element {
   )
 }
 
-function GitSection({ config, onChange }: SectionProps): React.JSX.Element {
+/**
+ * Git settings, including the GitHub account.
+ *
+ * The account lives here rather than under Claude because everything it
+ * affects — branches, pull requests, checks — is git work.
+ */
+function GitSection({
+  config,
+  onChange,
+  accounts
+}: SectionProps & { accounts: AccountsController }): React.JSX.Element {
   const { t } = useTranslation()
+  const label = t('settings.githubAccount')
+
+  if (accounts.session?.kind === 'github') {
+    return <AuthTerminal session={accounts.session} onClose={accounts.endSession} />
+  }
 
   return (
-    <Field label={t('settings.branchPrefix')} hint={t('settings.branchPrefixHint')}>
-      {/* key resets the draft when the stored value changes — the
-          React-recommended alternative to syncing props into state. */}
-      <BranchPrefixInput
-        key={config.branchPrefix}
-        value={config.branchPrefix}
-        onCommit={(branchPrefix) => void onChange({ branchPrefix })}
-      />
-    </Field>
+    <div className="space-y-6">
+      <Field label={t('settings.branchPrefix')} hint={t('settings.branchPrefixHint')}>
+        {/* key resets the draft when the stored value changes — the
+            React-recommended alternative to syncing props into state. */}
+        <BranchPrefixInput
+          key={config.branchPrefix}
+          value={config.branchPrefix}
+          onCommit={(branchPrefix) => void onChange({ branchPrefix })}
+        />
+      </Field>
+
+      <div className="space-y-3">
+        <div className="flex items-start justify-between gap-4">
+          <p className="text-ink-faint max-w-md leading-relaxed">{t('settings.gitHint')}</p>
+          <Button
+            variant="quiet"
+            size="sm"
+            onClick={() => void accounts.refresh()}
+            disabled={accounts.checking}
+          >
+            {t('settings.recheck')}
+          </Button>
+        </div>
+
+        <AccountCard
+          title={label}
+          hint={t('settings.githubAccountHint')}
+          connected={accounts.status?.github.connected ?? false}
+          primary={accounts.status?.github.login ?? null}
+          details={[{ label: '', value: accounts.status?.github.name ?? null }]}
+          busy={accounts.signingOut === 'github'}
+          onSignIn={() => {
+            accounts.signIn('github', label)
+          }}
+          onSignOut={() => {
+            void accounts.signOut('github', label)
+          }}
+        />
+
+        {accounts.error !== null && <p className="text-danger">{accounts.error}</p>}
+      </div>
+    </div>
   )
 }
 

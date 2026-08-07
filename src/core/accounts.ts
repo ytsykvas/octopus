@@ -153,29 +153,81 @@ export class InvalidAuthRequestError extends Error {
 }
 
 /**
- * The command that signs a user in or out.
+ * The command that signs a user in.
  *
- * Both CLIs are interactive and need a real terminal, so the app cannot run
- * them itself — it opens Terminal with the command prepared. Returning the
- * argv here keeps that decision testable and out of the Electron layer.
+ * Both CLIs prompt for input here, so this one is meant to run in a terminal
+ * the user can type into.
  *
  * Arguments are validated at runtime rather than trusted from their types.
  * They arrive over IPC, where TypeScript guarantees nothing: a compromised or
  * simply buggy renderer can send anything, and the result ends up in a command
  * line. This is the same boundary rule the rest of the core follows (§11.3).
  */
-export function authCommand(kind: unknown, action: unknown): readonly string[] {
-  const parsedKind = AccountKindSchema.safeParse(kind)
-  if (!parsedKind.success) {
+export function signInCommand(kind: unknown): readonly string[] {
+  return [cliFor(kind), 'auth', 'login']
+}
+
+/**
+ * The command that signs a user out.
+ *
+ * Unlike signing in, this asks nothing — provided `gh` is told which account
+ * to drop, which it otherwise prompts for. That is why signing out runs
+ * silently instead of opening a terminal.
+ *
+ * `login` is only used for GitHub and is validated as a plain account name;
+ * anything unexpected is dropped rather than passed to a command line.
+ */
+export function signOutCommand(kind: unknown, login?: string | null): SignOutCommand {
+  const cli = cliFor(kind)
+  if (cli === 'claude') return { command: 'claude', args: ['auth', 'logout'] }
+
+  const args = ['auth', 'logout', '--hostname', 'github.com']
+  return {
+    command: 'gh',
+    args: isPlainAccountName(login) ? [...args, '--user', login] : args
+  }
+}
+
+/** Command and arguments kept apart, so no indexed access is needed to run it. */
+export interface SignOutCommand {
+  readonly command: string
+  readonly args: readonly string[]
+}
+
+/** GitHub account names are alphanumerics and hyphens; nothing else is accepted. */
+function isPlainAccountName(value: unknown): value is string {
+  return typeof value === 'string' && /^[A-Za-z0-9-]{1,39}$/.test(value)
+}
+
+function cliFor(kind: unknown): 'claude' | 'gh' {
+  const parsed = AccountKindSchema.safeParse(kind)
+  if (!parsed.success) {
     throw new InvalidAuthRequestError(`Unknown account: ${JSON.stringify(kind)}`)
   }
+  return parsed.data === 'claude' ? 'claude' : 'gh'
+}
 
-  const parsedAction = AuthActionSchema.safeParse(action)
-  if (!parsedAction.success) {
-    throw new InvalidAuthRequestError(`Unknown action: ${JSON.stringify(action)}`)
+/**
+ * Runs a sign-out and reports whether the account is gone afterwards.
+ *
+ * Verifying by re-reading the status rather than trusting the exit code: the
+ * CLIs can report success while leaving an account behind, and the UI should
+ * show what is actually true.
+ */
+export async function signOut(
+  kind: AccountKind,
+  login: string | null,
+  exec: CommandExec = defaultExec
+): Promise<boolean> {
+  const { command, args } = signOutCommand(kind, login)
+
+  try {
+    await exec(command, args)
+  } catch {
+    // Fall through: the check below decides, not the exit code.
   }
 
-  return parsedKind.data === 'claude'
-    ? ['claude', 'auth', parsedAction.data]
-    : ['gh', 'auth', parsedAction.data]
+  const account =
+    kind === 'claude' ? await checkClaudeAccount(exec) : await checkGitHubAccount(exec)
+  return !account.connected
 }

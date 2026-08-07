@@ -1,13 +1,15 @@
 import { describe, expect, it } from 'vitest'
 
 import {
-  authCommand,
   checkAccounts,
   checkClaudeAccount,
   checkGitHubAccount,
   type CommandExec,
   defaultExec,
-  InvalidAuthRequestError
+  InvalidAuthRequestError,
+  signInCommand,
+  signOut,
+  signOutCommand
 } from './accounts.js'
 
 /** Answers a fixed payload for one command and fails for anything else. */
@@ -159,47 +161,116 @@ describe('checkAccounts', () => {
   })
 })
 
-describe('authCommand', () => {
+describe('signInCommand', () => {
   it('builds the Claude sign-in command', () => {
-    expect(authCommand('claude', 'login')).toEqual(['claude', 'auth', 'login'])
+    expect(signInCommand('claude')).toEqual(['claude', 'auth', 'login'])
   })
 
-  it('builds the GitHub sign-out command', () => {
-    expect(authCommand('github', 'logout')).toEqual(['gh', 'auth', 'logout'])
+  it('builds the GitHub sign-in command', () => {
+    expect(signInCommand('github')).toEqual(['gh', 'auth', 'login'])
   })
 
-  // These arguments cross an IPC boundary, where TypeScript guarantees
+  // This argument crosses an IPC boundary, where TypeScript guarantees
   // nothing, and the result ends up on a command line. The validation must
   // survive refactoring, so the attack itself is a test.
   it('rejects an unknown account instead of passing it through', () => {
-    expect(() => authCommand('evil', 'login')).toThrow(InvalidAuthRequestError)
-  })
-
-  it('rejects an action carrying shell or AppleScript metacharacters', () => {
-    expect(() => authCommand('claude', 'login"; do shell script "rm -rf ~')).toThrow(
-      InvalidAuthRequestError
-    )
+    expect(() => signInCommand('evil')).toThrow(InvalidAuthRequestError)
   })
 
   it('rejects non-string arguments', () => {
-    expect(() => authCommand(null, 'login')).toThrow(InvalidAuthRequestError)
-    expect(() => authCommand('claude', { toString: () => 'login' })).toThrow(
-      InvalidAuthRequestError
-    )
+    expect(() => signInCommand(null)).toThrow(InvalidAuthRequestError)
+    expect(() => signInCommand({ toString: () => 'claude' })).toThrow(InvalidAuthRequestError)
+  })
+})
+
+describe('signOutCommand', () => {
+  it('signs out of Claude without extra arguments', () => {
+    expect(signOutCommand('claude')).toEqual({ command: 'claude', args: ['auth', 'logout'] })
   })
 
-  it('never emits anything beyond the two fixed command vectors', () => {
-    const allowed = [
-      ['claude', 'auth', 'login'],
-      ['claude', 'auth', 'logout'],
-      ['gh', 'auth', 'login'],
-      ['gh', 'auth', 'logout']
-    ]
+  it('tells gh which host to drop, so it does not prompt', () => {
+    expect(signOutCommand('github')).toEqual({
+      command: 'gh',
+      args: ['auth', 'logout', '--hostname', 'github.com']
+    })
+  })
 
-    for (const kind of ['claude', 'github']) {
-      for (const action of ['login', 'logout']) {
-        expect(allowed).toContainEqual(authCommand(kind, action))
+  it('names the account when one is known', () => {
+    expect(signOutCommand('github', 'ytsykvas').args).toEqual([
+      'auth',
+      'logout',
+      '--hostname',
+      'github.com',
+      '--user',
+      'ytsykvas'
+    ])
+  })
+
+  // The login comes from a CLI's output and ends up on a command line, so it
+  // is checked rather than trusted.
+  it('drops a login that does not look like an account name', () => {
+    expect(signOutCommand('github', 'user; rm -rf ~').args).not.toContain('--user')
+  })
+
+  it('drops a login that is empty or absurdly long', () => {
+    expect(signOutCommand('github', '').args).not.toContain('--user')
+    expect(signOutCommand('github', 'x'.repeat(40)).args).not.toContain('--user')
+  })
+
+  it('ignores a login for Claude, which takes none', () => {
+    expect(signOutCommand('claude', 'ytsykvas').args).toEqual(['auth', 'logout'])
+  })
+
+  it('rejects an unknown account', () => {
+    expect(() => signOutCommand('evil')).toThrow(InvalidAuthRequestError)
+  })
+})
+
+describe('signOut', () => {
+  it('confirms success by re-reading the status, not by the exit code', async () => {
+    let loggedIn = true
+    const exec: CommandExec = (command, args) => {
+      if (args[1] === 'logout') {
+        loggedIn = false
+        return Promise.resolve('')
       }
+      if (command === 'gh') {
+        return loggedIn ? Promise.resolve(GITHUB_USER) : Promise.reject(new Error('not logged in'))
+      }
+      return Promise.reject(new Error('unexpected'))
     }
+
+    await expect(signOut('github', 'ytsykvas', exec)).resolves.toBe(true)
+  })
+
+  it('reports failure when the account is still there afterwards', async () => {
+    const exec: CommandExec = (command, args) => {
+      if (args[1] === 'logout') return Promise.resolve('')
+      if (command === 'gh') return Promise.resolve(GITHUB_USER)
+      return Promise.reject(new Error('unexpected'))
+    }
+
+    await expect(signOut('github', 'ytsykvas', exec)).resolves.toBe(false)
+  })
+
+  it('still verifies when the command itself fails — the exit code is not trusted', async () => {
+    const exec: CommandExec = (_command, args) => {
+      if (args[1] === 'logout') return Promise.reject(new Error('exit 1'))
+      return Promise.reject(new Error('not logged in'))
+    }
+
+    await expect(signOut('claude', null, exec)).resolves.toBe(true)
+  })
+
+  it('checks the Claude account when signing out of Claude', async () => {
+    const seen: string[] = []
+    const exec: CommandExec = (command) => {
+      seen.push(command)
+      return Promise.reject(new Error('gone'))
+    }
+
+    await signOut('claude', null, exec)
+    expect(seen).toContain('claude')
+    expect(seen).not.toContain('gh')
   })
 })

@@ -43,7 +43,7 @@ export const en = {
     sectionGeneral: 'General',
     sectionGit: 'Git',
     sectionAgent: 'Agent',
-    sectionAccounts: 'Accounts',
+    sectionAccounts: 'Claude',
     sectionAbout: 'About',
 
     appearance: 'Appearance',
@@ -74,7 +74,9 @@ export const en = {
 
     accounts: 'Accounts',
     accountsHint:
-      'octopus never stores credentials. Both tools keep them in the system keychain; this screen only reports what they say.',
+      'octopus never stores credentials. The CLI keeps them in the system keychain; this screen only reports what it says.',
+    gitHint:
+      'GitHub is used for pull requests and checks. Credentials stay with the gh CLI, in the system keychain.',
     claudeAccount: 'Claude',
     claudeAccountHint: 'The agent runs on this account.',
     githubAccount: 'GitHub',
@@ -85,7 +87,8 @@ export const en = {
     signOut: 'Sign out',
     recheck: 'Refresh',
     signInRunning: 'Signing in to {{service}}',
-    signOutRunning: 'Signing out of {{service}}',
+    signingOut: 'Signing out…',
+    signOutFailed: 'Could not sign out of {{service}}.',
     signInDone: 'Finished. Closing this returns to the account list.',
     signInKilled: 'The command was interrupted before it finished.',
     signInFailed: 'The command exited with code {{code}}.',

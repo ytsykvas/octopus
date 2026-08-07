@@ -52,9 +52,13 @@ const api = {
     status: (): Promise<Result<AccountsStatus>> =>
       ipcRenderer.invoke('accounts:status') as Promise<Result<AccountsStatus>>,
 
-    /** Returns the argv to run for signing in or out; the UI hosts it in a terminal. */
-    authCommand: (kind: AccountKind, action: 'login' | 'logout'): readonly string[] =>
-      kind === 'claude' ? ['claude', 'auth', action] : ['gh', 'auth', action]
+    /** Argv for the interactive sign-in; the UI hosts it in a terminal. */
+    signInCommand: (kind: AccountKind): readonly string[] =>
+      kind === 'claude' ? ['claude', 'auth', 'login'] : ['gh', 'auth', 'login'],
+
+    /** Signs out silently and reports whether the account is really gone. */
+    signOut: (kind: AccountKind, login: string | null): Promise<Result<boolean>> =>
+      ipcRenderer.invoke('accounts:signOut', kind, login) as Promise<Result<boolean>>
   },
 
   terminal: {

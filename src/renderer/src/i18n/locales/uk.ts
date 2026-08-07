@@ -45,7 +45,7 @@ export const uk: Translation = {
     sectionGeneral: 'Загальні',
     sectionGit: 'Git',
     sectionAgent: 'Агент',
-    sectionAccounts: 'Акаунти',
+    sectionAccounts: 'Claude',
     sectionAbout: 'Про застосунок',
 
     appearance: 'Оформлення',
@@ -77,7 +77,9 @@ export const uk: Translation = {
 
     accounts: 'Акаунти',
     accountsHint:
-      'octopus не зберігає жодних облікових даних. Обидва інструменти тримають їх у системному сховищі ключів; цей екран лише показує те, що вони повідомляють.',
+      'octopus не зберігає облікових даних. Їх тримає CLI у системному сховищі ключів; цей екран лише показує те, що він повідомляє.',
+    gitHint:
+      'GitHub потрібен для pull request і перевірок. Облікові дані лишаються в gh CLI, у системному сховищі ключів.',
     claudeAccount: 'Claude',
     claudeAccountHint: 'На цьому акаунті працює агент.',
     githubAccount: 'GitHub',
@@ -88,7 +90,8 @@ export const uk: Translation = {
     signOut: 'Вийти',
     recheck: 'Оновити',
     signInRunning: 'Вхід у {{service}}',
-    signOutRunning: 'Вихід з {{service}}',
+    signingOut: 'Виходимо…',
+    signOutFailed: 'Не вдалося вийти з {{service}}.',
     signInDone: 'Завершено. Закрийте, щоб повернутися до списку акаунтів.',
     signInKilled: 'Команду перервано до завершення.',
     signInFailed: 'Команда завершилася з кодом {{code}}.',

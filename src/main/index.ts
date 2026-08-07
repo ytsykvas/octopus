@@ -2,7 +2,7 @@ import { join } from 'node:path'
 
 import { app, BrowserWindow, dialog, ipcMain, Menu, nativeTheme, shell } from 'electron'
 
-import { checkAccounts } from '../core/accounts.js'
+import { type AccountKind, checkAccounts, signOut } from '../core/accounts.js'
 import type { Config, ThemePreference } from '../core/config.js'
 import { describeError } from '../core/persist.js'
 import { ProjectValidationError } from '../core/projects.js'
@@ -116,6 +116,11 @@ function registerIpc(service: OctopusService, terminals: TerminalManager): void 
   ipcMain.handle('projects:list', () => attempt(() => service.listProjects()))
 
   ipcMain.handle('accounts:status', () => attempt(() => checkAccounts()))
+
+  // Signing out asks nothing, so it runs silently rather than in a terminal.
+  ipcMain.handle('accounts:signOut', (_event, kind: AccountKind, login: string | null) =>
+    attempt(() => signOut(kind, login))
+  )
 
   // Terminal sessions. The spec is validated rather than trusted: it arrives
   // over IPC and ends up as a working directory and a command line.
