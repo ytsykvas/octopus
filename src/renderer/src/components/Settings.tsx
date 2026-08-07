@@ -166,25 +166,7 @@ function GitSection({
 
   return (
     <div className="space-y-6">
-      <Field label={t('settings.branchPrefix')} hint={t('settings.branchPrefixHint')}>
-        {/* key resets the draft when the stored value changes — the
-            React-recommended alternative to syncing props into state. */}
-        <BranchPrefixInput
-          key={config.branchPrefix}
-          value={config.branchPrefix}
-          onCommit={(branchPrefix) => void onChange({ branchPrefix })}
-        />
-      </Field>
-
-      <Field label={t('settings.cloneDirectory')} hint={t('settings.cloneDirectoryHint')}>
-        <DirectoryField
-          value={config.cloneDirectory}
-          placeholder={t('settings.cloneDirectoryUnset')}
-          title={t('settings.cloneDirectory')}
-          onPick={(cloneDirectory) => void onChange({ cloneDirectory })}
-        />
-      </Field>
-
+      {/* The account comes first: it is what everything below depends on. */}
       <div className="space-y-3">
         <div className="flex items-start justify-between gap-4">
           <p className="text-ink-faint max-w-md leading-relaxed">{t('settings.gitHint')}</p>
@@ -215,6 +197,27 @@ function GitSection({
 
         {accounts.error !== null && <p className="text-danger">{accounts.error}</p>}
       </div>
+
+      <div className="border-line border-t pt-6">
+        <Field label={t('settings.branchPrefix')} hint={t('settings.branchPrefixHint')}>
+          {/* key resets the draft when the stored value changes — the
+              React-recommended alternative to syncing props into state. */}
+          <BranchPrefixInput
+            key={config.branchPrefix}
+            value={config.branchPrefix}
+            onCommit={(branchPrefix) => void onChange({ branchPrefix })}
+          />
+        </Field>
+      </div>
+
+      <Field label={t('settings.cloneDirectory')} hint={t('settings.cloneDirectoryHint')}>
+        <DirectoryField
+          value={config.cloneDirectory}
+          placeholder={t('settings.cloneDirectoryUnset')}
+          title={t('settings.cloneDirectory')}
+          onPick={(cloneDirectory) => void onChange({ cloneDirectory })}
+        />
+      </Field>
     </div>
   )
 }
