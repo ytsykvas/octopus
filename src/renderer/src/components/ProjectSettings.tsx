@@ -75,13 +75,6 @@ export function ProjectSettings({
     })()
   }
 
-  // The stored branch may be gone from the repository. Keeping it in the list
-  // means the field shows what is actually configured instead of silently
-  // displaying someone else's branch.
-  const options = branches.includes(project.baseBranch)
-    ? branches
-    : [project.baseBranch, ...branches]
-
   return (
     <Modal
       title={t('project.title')}
@@ -112,10 +105,15 @@ export function ProjectSettings({
           />
         </Field>
 
+        {/* The list is only what the repository offers. A project added before
+            this dialog existed may still sit on a local `main`, and showing
+            that next to `origin/main` would list two entries for what reads as
+            one branch. The button shows the stored value either way, so the
+            difference is visible and one click from fixed. */}
         <Field label={t('project.baseBranch')} hint={t('project.baseBranchHint')}>
           <Combobox
             value={project.baseBranch}
-            options={options}
+            options={branches}
             onChange={changeBranch}
             placeholder={t('project.branchSearch')}
             emptyLabel={t('project.branchNone')}

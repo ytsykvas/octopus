@@ -12,7 +12,7 @@ import { cloneRepository, listRepositories, type RemoteRepository } from './gith
 import type { GitExec } from './git.js'
 import { gitIn } from './git.js'
 import { configFile, rootDir, stateFile, stateTempFile } from './paths.js'
-import { assertBranchExists, createProject } from './projects.js'
+import { assertBranchExists, createProject, orderBaseBranches } from './projects.js'
 import {
   addProject,
   addWorkspace,
@@ -187,7 +187,7 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
       // repository added from disk may have no remote at all, though, and an
       // empty list would leave nothing to choose.
       const remote = await listRemoteBranches(exec)
-      return remote.length > 0 ? remote : listBranches(exec)
+      return orderBaseBranches(remote.length > 0 ? remote : await listBranches(exec))
     },
 
     async removeProjectById(projectId) {

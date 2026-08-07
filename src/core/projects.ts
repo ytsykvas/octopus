@@ -154,3 +154,28 @@ export async function assertBranchExists(exec: GitExec, branch: string): Promise
     `Branch ${branch} no longer exists in this repository.`
   )
 }
+
+/**
+ * Branches most likely to be the one wanted, in the order they should appear.
+ *
+ * Matched against the last segment so `origin/main` counts as `main`.
+ */
+const PREFERRED_BASE_BRANCHES = ['main', 'master', 'develop']
+
+/**
+ * Orders branches for the base-branch picker.
+ *
+ * A real repository's remote list is mostly automated noise — dependabot
+ * pushes a branch per dependency — and the one branch anyone actually bases
+ * work on would otherwise sit somewhere in the middle of it, alphabetically.
+ */
+export function orderBaseBranches(branches: readonly string[]): string[] {
+  const rank = (branch: string): number => {
+    const found = PREFERRED_BASE_BRANCHES.findIndex(
+      (name) => branch === name || branch.endsWith(`/${name}`)
+    )
+    return found === -1 ? PREFERRED_BASE_BRANCHES.length : found
+  }
+
+  return [...branches].sort((a, b) => rank(a) - rank(b) || a.localeCompare(b))
+}

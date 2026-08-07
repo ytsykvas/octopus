@@ -8,6 +8,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 
 import {
   createProject,
+  orderBaseBranches,
   inspectRepository,
   ProjectValidationError,
   uniqueProjectId
@@ -160,5 +161,50 @@ describe('createProject', () => {
     const project = await createProject(repo, 'ytsykvas', EMPTY_STATE)
     expect(project.id).toBe('family-shopping')
     expect(project.name).toBe('Family Shopping')
+  })
+})
+
+describe('orderBaseBranches', () => {
+  // A real remote list is mostly dependabot noise; the branch anyone actually
+  // works from would otherwise be somewhere in the middle of it.
+  it('puts the usual base branches first', () => {
+    const ordered = orderBaseBranches([
+      'origin/dependabot/bundler/puma-8.0.1',
+      'origin/develop',
+      'origin/release/0.1.1',
+      'origin/main'
+    ])
+
+    expect(ordered.slice(0, 2)).toEqual(['origin/main', 'origin/develop'])
+  })
+
+  it('ranks main above master above develop', () => {
+    expect(orderBaseBranches(['origin/develop', 'origin/master', 'origin/main'])).toEqual([
+      'origin/main',
+      'origin/master',
+      'origin/develop'
+    ])
+  })
+
+  it('matches the last segment, so a bare local branch ranks too', () => {
+    expect(orderBaseBranches(['feature/x', 'main'])[0]).toBe('main')
+  })
+
+  it('sorts the rest alphabetically', () => {
+    expect(orderBaseBranches(['origin/zeta', 'origin/alpha'])).toEqual([
+      'origin/alpha',
+      'origin/zeta'
+    ])
+  })
+
+  // A branch that merely contains the word must not jump the queue.
+  it('does not promote a branch that only looks like one', () => {
+    expect(orderBaseBranches(['origin/maintenance', 'origin/main'])[0]).toBe('origin/main')
+  })
+
+  it('leaves the input untouched', () => {
+    const input = ['origin/zeta', 'origin/main']
+    orderBaseBranches(input)
+    expect(input).toEqual(['origin/zeta', 'origin/main'])
   })
 })
