@@ -73,7 +73,8 @@ export const uk: Translation = {
     collapse: 'Згорнути панель',
     expand: 'Показати панель',
     changesPlaceholder: 'Зміни воркспейсу відносно базової гілки проєкту.',
-    terminalPlaceholder: 'Термінал у теці воркспейсу.'
+    terminalPlaceholder: 'Виберіть воркспейс, щоб відкрити термінал у його теці.',
+    resize: 'Змінити ширину панелі'
   },
 
   center: {

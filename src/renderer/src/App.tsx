@@ -300,6 +300,10 @@ export function App(): React.JSX.Element {
 
       {rightPanelOpen && (
         <RightPanel
+          workspaces={workspaces.flat}
+          activeWorkspaceId={selectedWorkspaceId}
+          width={config?.rightPanelWidth ?? 360}
+          onWidthChange={(rightPanelWidth) => void updateConfig({ rightPanelWidth })}
           onCollapse={() => {
             setRightPanelOpen(false)
           }}

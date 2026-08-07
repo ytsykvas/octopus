@@ -6,6 +6,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 
 import {
   type Config,
+  ConfigSchema,
   createDefaultConfig,
   loadConfig,
   saveConfig,
@@ -88,7 +89,7 @@ describe('loadConfig', () => {
   })
 
   it('still loads a config written before a newer field existed', async () => {
-    // A config from an older build: no `language` key at all.
+    // A config from an older build: neither `language` nor `rightPanelWidth`.
     const legacy = {
       version: 1,
       branchPrefix: 'ytsykvas',
@@ -101,7 +102,32 @@ describe('loadConfig', () => {
 
     const config = await loadConfig(file)
     expect(config.language).toBe('en')
+    expect(config.rightPanelWidth).toBe(360)
     expect(config.branchPrefix).toBe('ytsykvas')
+  })
+})
+
+describe('rightPanelWidth', () => {
+  // The bounds keep a dragged edge from leaving the pane unusable — too narrow
+  // to read output in, or so wide the centre pane is gone.
+  it('rejects a width outside the usable range', () => {
+    const base = createDefaultConfig('ytsykvas', NOW, () => UUID)
+
+    expect(ConfigSchema.safeParse({ ...base, rightPanelWidth: 100 }).success).toBe(false)
+    expect(ConfigSchema.safeParse({ ...base, rightPanelWidth: 2000 }).success).toBe(false)
+  })
+
+  it('accepts the bounds themselves', () => {
+    const base = createDefaultConfig('ytsykvas', NOW, () => UUID)
+
+    expect(ConfigSchema.safeParse({ ...base, rightPanelWidth: 280 }).success).toBe(true)
+    expect(ConfigSchema.safeParse({ ...base, rightPanelWidth: 900 }).success).toBe(true)
+  })
+
+  // A fractional width would reach CSS as a blurry half-pixel edge.
+  it('rejects a fractional width', () => {
+    const base = createDefaultConfig('ytsykvas', NOW, () => UUID)
+    expect(ConfigSchema.safeParse({ ...base, rightPanelWidth: 360.5 }).success).toBe(false)
   })
 })
 

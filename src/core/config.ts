@@ -53,6 +53,18 @@ export const ConfigSchema = z.object({
   language: LanguageSchema.default('en'),
 
   /**
+   * Width of the right pane in pixels.
+   *
+   * Stored because it is a working preference, not a view state: someone who
+   * widened the pane to read test output wants it that way tomorrow too.
+   *
+   * The bounds are functional rather than cosmetic. Below ~280px a terminal
+   * wraps almost every line of build output; above 900 the centre pane, which
+   * is the actual working area, stops being one.
+   */
+  rightPanelWidth: z.number().int().min(280).max(900).default(360),
+
+  /**
    * Stable device identifier (§15.3).
    * Unused for now — reserved for future licensing.
    */
@@ -82,6 +94,7 @@ export function createDefaultConfig(
     theme: 'system',
     language: 'en',
     cloneDirectory: '',
+    rightPanelWidth: 360,
     deviceId: uuid(),
     installedAt: now.toISOString()
   }

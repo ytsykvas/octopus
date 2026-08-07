@@ -74,7 +74,8 @@ export const en = {
     collapse: 'Collapse panel',
     expand: 'Show panel',
     changesPlaceholder: "Changes in this workspace against the project's base branch.",
-    terminalPlaceholder: "A terminal in the workspace's directory."
+    terminalPlaceholder: 'Select a workspace to open a terminal in its directory.',
+    resize: 'Resize panel'
   },
 
   center: {
