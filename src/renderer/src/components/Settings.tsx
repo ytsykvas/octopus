@@ -9,6 +9,7 @@ import type {
 } from '@core/config.js'
 
 import { Button } from './Button.js'
+import { AccountsSection } from './settings/AccountsSection.js'
 
 interface SettingsProps {
   readonly config: Config
@@ -16,14 +17,35 @@ interface SettingsProps {
   readonly onClose: () => void
 }
 
+type SectionId = 'general' | 'git' | 'agent' | 'accounts' | 'about'
+
+const SECTIONS: readonly {
+  readonly id: SectionId
+  readonly labelKey:
+    | 'settings.sectionGeneral'
+    | 'settings.sectionGit'
+    | 'settings.sectionAgent'
+    | 'settings.sectionAccounts'
+    | 'settings.sectionAbout'
+  readonly icon: string
+}[] = [
+  { id: 'general', labelKey: 'settings.sectionGeneral', icon: '◐' },
+  { id: 'git', labelKey: 'settings.sectionGit', icon: '⑂' },
+  { id: 'agent', labelKey: 'settings.sectionAgent', icon: '✦' },
+  { id: 'accounts', labelKey: 'settings.sectionAccounts', icon: '◉' },
+  { id: 'about', labelKey: 'settings.sectionAbout', icon: 'ⓘ' }
+]
+
 /**
- * Settings screen, opened from the sidebar or with ⌘, (§10.8).
+ * Settings, split into sections with a navigation rail — the shape macOS
+ * System Settings uses, so the layout is already familiar.
  *
- * Changes apply immediately — there is no Save button. For a local tool with
- * a handful of options a confirmation step only adds friction.
+ * Changes apply immediately; there is no Save button. For a local tool with a
+ * handful of options a confirmation step only adds friction.
  */
 export function Settings({ config, onChange, onClose }: SettingsProps): React.JSX.Element {
   const { t } = useTranslation()
+  const [section, setSection] = useState<SectionId>('general')
 
   useEffect(() => {
     const onKey = (event: KeyboardEvent): void => {
@@ -44,97 +66,137 @@ export function Settings({ config, onChange, onClose }: SettingsProps): React.JS
         </Button>
       </header>
 
-      <div className="flex-1 overflow-auto">
-        <div className="mx-auto max-w-xl space-y-8 p-8">
-          <Section title={t('settings.appearance')}>
-            <Field label={t('settings.theme')}>
-              <Segmented<ThemePreference>
-                value={config.theme}
-                options={[
-                  { value: 'system', label: t('settings.themeSystem') },
-                  { value: 'light', label: t('settings.themeLight') },
-                  { value: 'dark', label: t('settings.themeDark') }
-                ]}
-                onChange={(theme) => void onChange({ theme })}
-              />
-            </Field>
+      <div className="flex min-h-0 flex-1">
+        <nav className="border-line bg-surface w-48 shrink-0 border-r p-2">
+          <ul className="space-y-px">
+            {SECTIONS.map((item) => (
+              <li key={item.id}>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSection(item.id)
+                  }}
+                  className={`row focus-ring flex w-full items-center gap-2 px-2 py-1.5 ${
+                    section === item.id ? 'row-selected font-medium' : 'text-ink-soft'
+                  }`}
+                >
+                  <span aria-hidden className="w-4 text-center">
+                    {item.icon}
+                  </span>
+                  {t(item.labelKey)}
+                </button>
+              </li>
+            ))}
+          </ul>
+        </nav>
 
-            <Field label={t('settings.language')} hint={t('settings.languageHint')}>
-              <Segmented<LanguagePreference>
-                value={config.language}
-                options={[
-                  { value: 'en', label: 'English' },
-                  { value: 'uk', label: 'Українська' }
-                ]}
-                onChange={(language) => void onChange({ language })}
-              />
-            </Field>
-          </Section>
-
-          <Section title={t('settings.git')}>
-            <Field label={t('settings.branchPrefix')} hint={t('settings.branchPrefixHint')}>
-              {/* key resets the draft when the stored value changes —
-                  the React-recommended alternative to syncing props into
-                  state inside an effect. */}
-              <BranchPrefixInput
-                key={config.branchPrefix}
-                value={config.branchPrefix}
-                onCommit={(branchPrefix) => void onChange({ branchPrefix })}
-              />
-            </Field>
-          </Section>
-
-          <Section title={t('settings.agent')}>
-            <Field label={t('settings.settingSources')} hint={t('settings.settingSourcesHint')}>
-              <RadioList<SettingSourcesMode>
-                value={config.settingSources}
-                options={[
-                  {
-                    value: 'none',
-                    label: t('settings.settingSourcesNone'),
-                    hint: t('settings.settingSourcesNoneHint')
-                  },
-                  {
-                    value: 'project',
-                    label: t('settings.settingSourcesProject'),
-                    hint: t('settings.settingSourcesProjectHint')
-                  },
-                  {
-                    value: 'all',
-                    label: t('settings.settingSourcesAll'),
-                    hint: t('settings.settingSourcesAllHint')
-                  }
-                ]}
-                onChange={(settingSources) => void onChange({ settingSources })}
-              />
-            </Field>
-          </Section>
-
-          <Section title={t('settings.about')}>
-            <ReadOnlyRow label={t('settings.deviceId')} value={config.deviceId} />
-            <ReadOnlyRow
-              label={t('settings.installedAt')}
-              value={new Date(config.installedAt).toLocaleString()}
-            />
-          </Section>
+        <div className="flex-1 overflow-auto">
+          <div className="max-w-2xl space-y-6 p-8">
+            {section === 'general' && <GeneralSection config={config} onChange={onChange} />}
+            {section === 'git' && <GitSection config={config} onChange={onChange} />}
+            {section === 'agent' && <AgentSection config={config} onChange={onChange} />}
+            {section === 'accounts' && <AccountsSection />}
+            {section === 'about' && <AboutSection config={config} />}
+          </div>
         </div>
       </div>
     </div>
   )
 }
 
-function Section({
-  title,
-  children
-}: {
-  title: string
-  children: React.ReactNode
-}): React.JSX.Element {
+interface SectionProps {
+  readonly config: Config
+  readonly onChange: (patch: Partial<Config>) => Promise<void>
+}
+
+function GeneralSection({ config, onChange }: SectionProps): React.JSX.Element {
+  const { t } = useTranslation()
+
   return (
-    <section>
-      <h2 className="section-label border-line mb-3 border-b pb-2">{title}</h2>
-      <div className="space-y-5">{children}</div>
-    </section>
+    <div className="space-y-6">
+      <Field label={t('settings.theme')}>
+        <Segmented<ThemePreference>
+          value={config.theme}
+          options={[
+            { value: 'system', label: t('settings.themeSystem') },
+            { value: 'light', label: t('settings.themeLight') },
+            { value: 'dark', label: t('settings.themeDark') }
+          ]}
+          onChange={(theme) => void onChange({ theme })}
+        />
+      </Field>
+
+      <Field label={t('settings.language')} hint={t('settings.languageHint')}>
+        <Segmented<LanguagePreference>
+          value={config.language}
+          options={[
+            { value: 'en', label: 'English' },
+            { value: 'uk', label: 'Українська' }
+          ]}
+          onChange={(language) => void onChange({ language })}
+        />
+      </Field>
+    </div>
+  )
+}
+
+function GitSection({ config, onChange }: SectionProps): React.JSX.Element {
+  const { t } = useTranslation()
+
+  return (
+    <Field label={t('settings.branchPrefix')} hint={t('settings.branchPrefixHint')}>
+      {/* key resets the draft when the stored value changes — the
+          React-recommended alternative to syncing props into state. */}
+      <BranchPrefixInput
+        key={config.branchPrefix}
+        value={config.branchPrefix}
+        onCommit={(branchPrefix) => void onChange({ branchPrefix })}
+      />
+    </Field>
+  )
+}
+
+function AgentSection({ config, onChange }: SectionProps): React.JSX.Element {
+  const { t } = useTranslation()
+
+  return (
+    <Field label={t('settings.settingSources')} hint={t('settings.settingSourcesHint')}>
+      <RadioList<SettingSourcesMode>
+        value={config.settingSources}
+        options={[
+          {
+            value: 'none',
+            label: t('settings.settingSourcesNone'),
+            hint: t('settings.settingSourcesNoneHint')
+          },
+          {
+            value: 'project',
+            label: t('settings.settingSourcesProject'),
+            hint: t('settings.settingSourcesProjectHint')
+          },
+          {
+            value: 'all',
+            label: t('settings.settingSourcesAll'),
+            hint: t('settings.settingSourcesAllHint')
+          }
+        ]}
+        onChange={(settingSources) => void onChange({ settingSources })}
+      />
+    </Field>
+  )
+}
+
+function AboutSection({ config }: { config: Config }): React.JSX.Element {
+  const { t } = useTranslation()
+
+  return (
+    <div className="space-y-2">
+      <ReadOnlyRow label={t('settings.deviceId')} value={config.deviceId} />
+      <ReadOnlyRow
+        label={t('settings.installedAt')}
+        value={new Date(config.installedAt).toLocaleString()}
+      />
+    </div>
   )
 }
 
@@ -151,7 +213,9 @@ function Field({
     <div>
       <p className="mb-1.5 font-medium">{label}</p>
       {children}
-      {hint !== undefined && <p className="text-ink-faint mt-1.5 leading-relaxed">{hint}</p>}
+      {hint !== undefined && (
+        <p className="text-ink-faint mt-1.5 max-w-lg leading-relaxed">{hint}</p>
+      )}
     </div>
   )
 }
@@ -207,7 +271,7 @@ function RadioList<T extends string>({
   onChange: (value: T) => void
 }): React.JSX.Element {
   return (
-    <div className="space-y-1.5">
+    <div className="max-w-lg space-y-1.5">
       {options.map((option) => (
         <button
           key={option.value}

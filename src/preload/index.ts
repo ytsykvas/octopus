@@ -1,5 +1,6 @@
 import { contextBridge, ipcRenderer } from 'electron'
 
+import type { AccountKind, AccountsStatus } from '@core/accounts.js'
 import type { Config } from '@core/config.js'
 import type { Project } from '@core/store.js'
 import type { ThemeName } from '@core/types.js'
@@ -44,6 +45,15 @@ const api = {
 
     update: (patch: Partial<Config>): Promise<Result<Config>> =>
       ipcRenderer.invoke('config:update', patch) as Promise<Result<Config>>
+  },
+
+  accounts: {
+    status: (): Promise<Result<AccountsStatus>> =>
+      ipcRenderer.invoke('accounts:status') as Promise<Result<AccountsStatus>>,
+
+    /** Opens Terminal with the sign-in command — both CLIs need a real TTY. */
+    auth: (kind: AccountKind, action: 'login' | 'logout'): Promise<Result<void>> =>
+      ipcRenderer.invoke('accounts:auth', kind, action) as Promise<Result<void>>
   },
 
   settings: {

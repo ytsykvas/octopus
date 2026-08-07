@@ -1,7 +1,10 @@
+import { execFile } from 'node:child_process'
 import { join } from 'node:path'
+import { promisify } from 'node:util'
 
 import { app, BrowserWindow, dialog, ipcMain, Menu, nativeTheme, shell } from 'electron'
 
+import { type AccountKind, authCommand, checkAccounts } from '../core/accounts.js'
 import type { Config, ThemePreference } from '../core/config.js'
 import { describeError } from '../core/persist.js'
 import { ProjectValidationError } from '../core/projects.js'
@@ -9,6 +12,8 @@ import { createService, type MaestroService } from '../core/service.js'
 import type { ThemeName } from '../core/types.js'
 
 /** Canvas colours from the design system (§10) — so the window does not flash white on launch. */
+const execFileAsync = promisify(execFile)
+
 const CANVAS_LIGHT = '#ffffff'
 const CANVAS_DARK = '#0f1115'
 
@@ -112,6 +117,12 @@ function registerIpc(service: MaestroService): void {
 
   ipcMain.handle('projects:list', () => attempt(() => service.listProjects()))
 
+  ipcMain.handle('accounts:status', () => attempt(() => checkAccounts()))
+
+  ipcMain.handle('accounts:auth', (_event, kind: AccountKind, action: 'login' | 'logout') =>
+    attempt(() => openInTerminal(authCommand(kind, action)))
+  )
+
   ipcMain.handle('projects:remove', (_event, projectId: string) =>
     attempt(() => service.removeProjectById(projectId))
   )
@@ -171,6 +182,27 @@ function registerMenu(): void {
   ]
 
   Menu.setApplicationMenu(Menu.buildFromTemplate(template))
+}
+
+/**
+ * Runs a command in Terminal.app.
+ *
+ * `claude auth login` and `gh auth login` are interactive and need a real TTY,
+ * so the app cannot host them. Handing the prepared command to Terminal is
+ * honest about that instead of pretending to sign the user in.
+ *
+ * Only fixed command vectors from `authCommand` reach this function — no user
+ * input is interpolated.
+ */
+async function openInTerminal(argv: readonly string[]): Promise<void> {
+  const command = argv.join(' ')
+
+  await execFileAsync('osascript', [
+    '-e',
+    `tell application "Terminal" to do script "${command}"`,
+    '-e',
+    'tell application "Terminal" to activate'
+  ])
 }
 
 function broadcastTheme(theme: ThemeName): void {

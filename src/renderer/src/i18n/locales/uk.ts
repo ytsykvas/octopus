@@ -42,6 +42,12 @@ export const uk: Translation = {
     close: 'Закрити',
     saved: 'Збережено',
 
+    sectionGeneral: 'Загальні',
+    sectionGit: 'Git',
+    sectionAgent: 'Агент',
+    sectionAccounts: 'Акаунти',
+    sectionAbout: 'Про застосунок',
+
     appearance: 'Оформлення',
     theme: 'Тема',
     themeSystem: 'Як у системі',
@@ -68,6 +74,24 @@ export const uk: Translation = {
     settingSourcesAll: 'Усе',
     settingSourcesAllHint:
       'Підтягує користувацькі, проєктні й локальні налаштування — як звичайний CLI.',
+
+    accounts: 'Акаунти',
+    accountsHint:
+      'maestro не зберігає жодних облікових даних. Обидва інструменти тримають їх у системному сховищі ключів; цей екран лише показує те, що вони повідомляють.',
+    claudeAccount: 'Claude',
+    claudeAccountHint: 'На цьому акаунті працює агент.',
+    githubAccount: 'GitHub',
+    githubAccountHint: 'Потрібен для pull request і перевірок.',
+    connected: 'Підключено',
+    notConnected: 'Не підключено',
+    signIn: 'Увійти',
+    signOut: 'Вийти',
+    recheck: 'Оновити',
+    opensTerminal:
+      'Вхід відбувається в Terminal — обидва інструменти ставлять запитання, для яких потрібен справжній термінал. Після завершення поверніться й натисніть «Оновити».',
+    plan: 'Підписка',
+    organisation: 'Організація',
+    cliMissing: 'Команду не знайдено. Спершу встановіть інструмент.',
 
     about: 'Про застосунок',
     deviceId: 'Ідентифікатор пристрою',

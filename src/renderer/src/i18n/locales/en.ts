@@ -40,6 +40,12 @@ export const en = {
     close: 'Close',
     saved: 'Saved',
 
+    sectionGeneral: 'General',
+    sectionGit: 'Git',
+    sectionAgent: 'Agent',
+    sectionAccounts: 'Accounts',
+    sectionAbout: 'About',
+
     appearance: 'Appearance',
     theme: 'Theme',
     themeSystem: 'Follow system',
@@ -65,6 +71,24 @@ export const en = {
     settingSourcesProjectHint: "Loads the repository's own CLAUDE.md and settings.",
     settingSourcesAll: 'Everything',
     settingSourcesAllHint: 'Loads user, project and local settings, as the plain CLI would.',
+
+    accounts: 'Accounts',
+    accountsHint:
+      'maestro never stores credentials. Both tools keep them in the system keychain; this screen only reports what they say.',
+    claudeAccount: 'Claude',
+    claudeAccountHint: 'The agent runs on this account.',
+    githubAccount: 'GitHub',
+    githubAccountHint: 'Used for pull requests and checks.',
+    connected: 'Connected',
+    notConnected: 'Not connected',
+    signIn: 'Sign in',
+    signOut: 'Sign out',
+    recheck: 'Refresh',
+    opensTerminal:
+      'Sign-in runs in Terminal — both tools ask questions that need a real terminal. Come back and press Refresh when done.',
+    plan: 'Plan',
+    organisation: 'Organisation',
+    cliMissing: 'Command not found. Install the tool first.',
 
     about: 'About',
     deviceId: 'Device id',
