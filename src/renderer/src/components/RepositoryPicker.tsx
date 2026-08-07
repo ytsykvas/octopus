@@ -5,6 +5,7 @@ import type { RemoteRepository } from '@core/github.js'
 
 import { useErrorMessage } from '../hooks/useErrorMessage.js'
 import { Button } from './Button.js'
+import { Modal } from './Modal.js'
 
 interface RepositoryPickerProps {
   readonly onPicked: () => void
@@ -76,15 +77,17 @@ export function RepositoryPicker({ onPicked, onCancel }: RepositoryPickerProps):
   }
 
   return (
-    <div className="bg-canvas absolute inset-0 z-20 flex flex-col">
-      <header className="titlebar-drag border-line flex h-11 shrink-0 items-center justify-between border-b px-4 pl-24">
-        <span className="font-medium">{t('repositories.title')}</span>
-        <Button variant="quiet" size="sm" onClick={onCancel}>
+    <Modal
+      title={t('repositories.title')}
+      onClose={onCancel}
+      footer={
+        <Button variant="quiet" onClick={onCancel}>
           {t('repositories.cancel')}
         </Button>
-      </header>
-
-      <div className="border-line shrink-0 border-b p-3">
+      }
+    >
+      {/* Opaque, otherwise the list scrolls through it. */}
+      <div className="border-line bg-canvas sticky top-0 z-10 border-b p-3">
         <input
           type="search"
           autoFocus
@@ -98,7 +101,7 @@ export function RepositoryPicker({ onPicked, onCancel }: RepositoryPickerProps):
         />
       </div>
 
-      <div className="flex-1 overflow-auto p-3">
+      <div className="p-3">
         {error !== null && (
           <div className="bg-danger-bg text-danger border-danger/25 mb-3 rounded-[var(--radius-control)] border px-3 py-2">
             {error}
@@ -130,7 +133,7 @@ export function RepositoryPicker({ onPicked, onCancel }: RepositoryPickerProps):
           ))}
         </ul>
       </div>
-    </div>
+    </Modal>
   )
 }
 
@@ -158,9 +161,11 @@ function RepositoryRow({
             </span>
           )}
         </div>
-        {repository.description !== null && repository.description !== undefined && (
-          <p className="text-ink-faint truncate">{repository.description}</p>
-        )}
+        {repository.description !== null &&
+          repository.description !== undefined &&
+          repository.description !== '' && (
+            <p className="text-ink-faint truncate">{repository.description}</p>
+          )}
       </div>
 
       <Button variant="quiet" size="sm" onClick={onAdd} disabled={disabled}>

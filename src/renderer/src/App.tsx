@@ -155,20 +155,6 @@ export function App(): React.JSX.Element {
 
   const selectedProject = projects.find((project) => project.id === selectedProjectId) ?? null
 
-  if (pickingRepository) {
-    return (
-      <RepositoryPicker
-        onPicked={() => {
-          setPickingRepository(false)
-          void refresh()
-        }}
-        onCancel={() => {
-          setPickingRepository(false)
-        }}
-      />
-    )
-  }
-
   if (settingsOpen && config) {
     return (
       <Settings
@@ -236,6 +222,18 @@ export function App(): React.JSX.Element {
         <RightPanel
           onCollapse={() => {
             setRightPanelOpen(false)
+          }}
+        />
+      )}
+
+      {pickingRepository && (
+        <RepositoryPicker
+          onPicked={() => {
+            setPickingRepository(false)
+            void refresh()
+          }}
+          onCancel={() => {
+            setPickingRepository(false)
           }}
         />
       )}
