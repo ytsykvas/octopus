@@ -145,6 +145,18 @@
     color: var(--ink-soft);
   }
 
+  /* Text field, and anything shaped like one — the combobox trigger included.
+     Shared because six near-identical copies had already drifted by a few
+     pixels of height, which reads as sloppiness rather than as variety. */
+  .input {
+    height: 1.75rem;
+    width: 100%;
+    padding-inline: 0.5rem;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-control);
+    background-color: var(--canvas);
+  }
+
   .panel {
     background-color: var(--surface);
     border: 1px solid var(--border);

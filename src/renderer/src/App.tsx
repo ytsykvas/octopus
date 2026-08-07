@@ -13,6 +13,7 @@ import { Settings } from './components/Settings.js'
 import { Sidebar } from './components/Sidebar.js'
 import { useConfirm } from './hooks/useConfirm.js'
 import { useErrorMessage } from './hooks/useErrorMessage.js'
+import { useProjects } from './hooks/useProjects.js'
 import { useWorkspaces } from './hooks/useWorkspaces.js'
 
 /**
@@ -28,16 +29,15 @@ export function App(): React.JSX.Element {
   const [theme, setTheme] = useState<ThemeName>('light')
   const [config, setConfig] = useState<Config | null>(null)
   const [settingsOpen, setSettingsOpen] = useState(false)
-  const [projects, setProjects] = useState<readonly Project[]>([])
   const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
-  const [busy, setBusy] = useState(false)
   const [rightPanelOpen, setRightPanelOpen] = useState(true)
   const [pickingRepository, setPickingRepository] = useState(false)
   const [selectedWorkspaceId, setSelectedWorkspaceId] = useState<string | null>(null)
   const [editingProjectId, setEditingProjectId] = useState<string | null>(null)
 
-  const workspaces = useWorkspaces(projects, confirm, setError)
+  const projects = useProjects(confirm, setError)
+  const workspaces = useWorkspaces(projects.all, confirm, setError)
 
   useEffect(() => {
     const controller = new AbortController()
@@ -57,27 +57,6 @@ export function App(): React.JSX.Element {
   useEffect(() => {
     document.documentElement.classList.toggle('dark', theme === 'dark')
   }, [theme])
-
-  // Initial load. Aborting protects against writing state into an unmounted
-  // component if the window closes mid-request.
-  useEffect(() => {
-    const controller = new AbortController()
-
-    void (async () => {
-      const result = await window.octopus.projects.list()
-      if (controller.signal.aborted) return
-
-      if (result.ok) {
-        setProjects(result.value)
-      } else {
-        setError(describeFailure(result))
-      }
-    })()
-
-    return () => {
-      controller.abort()
-    }
-  }, [describeFailure])
 
   useEffect(() => {
     const controller = new AbortController()
@@ -121,79 +100,22 @@ export function App(): React.JSX.Element {
     [describeFailure]
   )
 
-  const refresh = useCallback(async () => {
-    const result = await window.octopus.projects.list()
-    if (result.ok) {
-      setProjects(result.value)
-      setError(null)
-    } else {
-      setError(describeFailure(result))
-    }
-  }, [describeFailure])
-
-  const addProject = useCallback(async () => {
-    setBusy(true)
-    try {
-      const result = await window.octopus.projects.add()
-      if (!result.ok) {
-        setError(describeFailure(result))
-        return
-      }
-      // null means the dialog was cancelled — not an error.
-      if (result.value) {
-        setSelectedProjectId(result.value.id)
-        await refresh()
-      }
-    } finally {
-      setBusy(false)
-    }
-  }, [refresh, describeFailure])
-
-  const updateProject = useCallback(
-    async (projectId: string, patch: { name?: string; baseBranch?: string }): Promise<boolean> => {
-      const result = await window.octopus.projects.update(projectId, patch)
-      if (!result.ok) {
-        setError(describeFailure(result))
-        return false
-      }
-
-      await refresh()
-      return true
-    },
-    [refresh, describeFailure]
-  )
-
+  /**
+   * Removes a project and clears anything pointing at it.
+   *
+   * The selection and the workspace list are this component's business, so
+   * they are settled here rather than inside the hook.
+   */
   const removeProject = useCallback(
     async (projectId: string) => {
-      const project = projects.find((item) => item.id === projectId)
-      if (!project) return
-
-      // Workspaces go with the project, so the count is part of the question:
-      // "remove a project" reads much smaller than "delete four branches".
       const count = (workspaces.byProject.get(projectId) ?? []).length
+      if (!(await projects.remove(projectId, count))) return
 
-      const confirmed = await confirm({
-        title: t('sidebar.removeTitle'),
-        message: t('sidebar.removeMessage', { name: project.name }),
-        detail:
-          count > 0 ? t('sidebar.removeDetailWorkspaces', { count }) : t('sidebar.removeDetail'),
-        confirmLabel: t('sidebar.removeConfirm'),
-        cancelLabel: t('sidebar.removeCancel'),
-        destructive: true
-      })
-
-      if (!confirmed.confirmed) return
-
-      const result = await window.octopus.projects.remove(projectId)
-      if (!result.ok) {
-        setError(describeFailure(result))
-        return
-      }
       setSelectedProjectId((current) => (current === projectId ? null : current))
-      await refresh()
+      setSelectedWorkspaceId(null)
       await workspaces.refresh()
     },
-    [projects, refresh, describeFailure, confirm, workspaces, t]
+    [projects, workspaces]
   )
 
   // ⌘⇧N creates a workspace in the selected project; ⌘1–⌘9 jump between
@@ -225,8 +147,8 @@ export function App(): React.JSX.Element {
     }
   }, [selectedProjectId, workspaces])
 
-  const selectedProject = projects.find((project) => project.id === selectedProjectId) ?? null
-  const editingProject = projects.find((project) => project.id === editingProjectId) ?? null
+  const selectedProject = projects.all.find((project) => project.id === selectedProjectId) ?? null
+  const editingProject = projects.all.find((project) => project.id === editingProjectId) ?? null
 
   if (settingsOpen && config) {
     return (
@@ -243,13 +165,18 @@ export function App(): React.JSX.Element {
   return (
     <div className="bg-canvas text-ink flex h-full">
       <Sidebar
-        projects={projects}
+        projects={projects.all}
         selectedProjectId={selectedProjectId}
         onSelectProject={(id) => {
           setSelectedProjectId(id)
           setSelectedWorkspaceId(null)
         }}
-        onAddFromDisk={() => void addProject()}
+        onAddFromDisk={() => {
+          void (async () => {
+            const added = await projects.addFromDisk()
+            if (added) setSelectedProjectId(added.id)
+          })()
+        }}
         onAddFromGitHub={() => {
           setPickingRepository(true)
         }}
@@ -269,7 +196,7 @@ export function App(): React.JSX.Element {
         onOpenSettings={() => {
           setSettingsOpen(true)
         }}
-        busy={busy}
+        busy={projects.busy}
       />
 
       <main className="flex min-w-0 flex-1 flex-col">
@@ -302,7 +229,7 @@ export function App(): React.JSX.Element {
             </div>
           )}
 
-          <CenterPane project={selectedProject} hasProjects={projects.length > 0} />
+          <CenterPane project={selectedProject} hasProjects={projects.all.length > 0} />
         </div>
       </main>
 
@@ -321,7 +248,7 @@ export function App(): React.JSX.Element {
       {editingProject && (
         <ProjectSettings
           project={editingProject}
-          onUpdate={(patch) => updateProject(editingProject.id, patch)}
+          onUpdate={(patch) => projects.update(editingProject.id, patch)}
           onRemove={() => {
             void (async () => {
               // Closing first keeps the confirmation from appearing behind the
@@ -344,7 +271,7 @@ export function App(): React.JSX.Element {
           onCloneDirectoryChange={(cloneDirectory) => void updateConfig({ cloneDirectory })}
           onPicked={() => {
             setPickingRepository(false)
-            void refresh()
+            void projects.refresh()
           }}
           onCancel={() => {
             setPickingRepository(false)

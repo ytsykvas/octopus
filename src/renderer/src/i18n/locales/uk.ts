@@ -19,7 +19,6 @@ export const uk: Translation = {
     addFromGitHub: 'З GitHub…',
     removeProject: 'Прибрати проєкт',
     editProject: 'Редагувати…',
-    renameProject: 'Перейменувати',
     projectActions: 'Ще',
     renameHint: 'Enter — зберегти, Escape — скасувати',
     removeTitle: 'Прибрати проєкт?',
@@ -49,14 +48,10 @@ export const uk: Translation = {
     add: 'Додати',
     cloning: 'Клонуємо {{name}}…',
     cloneInto: 'Клонуємо в',
-    cloneIntoUnset: 'Спитаємо, куди клонувати.',
-    connectFirst: 'Спершу підключіть акаунт GitHub у налаштуваннях.',
-    openSettings: 'Відкрити налаштування'
+    cloneIntoUnset: 'Спитаємо, куди клонувати.'
   },
 
   workspaces: {
-    heading: 'Воркспейси',
-    empty: 'Поки жодного воркспейсу.',
     create: 'Новий воркспейс',
     rename: 'Перейменувати',
     remove: 'Видалити воркспейс',
@@ -119,15 +114,12 @@ export const uk: Translation = {
   settings: {
     title: 'Налаштування',
     close: 'Закрити',
-    saved: 'Збережено',
-
     sectionGeneral: 'Загальні',
     sectionGit: 'Git',
     sectionAgent: 'Агент',
     sectionAccounts: 'Claude',
     sectionAbout: 'Про застосунок',
 
-    appearance: 'Оформлення',
     theme: 'Тема',
     themeSystem: 'Як у системі',
     themeLight: 'Світла',
@@ -136,7 +128,6 @@ export const uk: Translation = {
     language: 'Мова',
     languageHint: 'Англійська — типова. Перезапуск не потрібен.',
 
-    git: 'Git',
     branchPrefix: 'Префікс гілок',
     branchPrefixHint:
       'Гілки воркспейсів називаються <префікс>/<воркспейс>. Зазвичай беруть GitHub-username.',
@@ -148,7 +139,6 @@ export const uk: Translation = {
     cloneDirectoryUnset: 'Не задано — спитаємо при першому клонуванні.',
     change: 'Змінити…',
 
-    agent: 'Агент',
     settingSources: 'Джерела інструкцій',
     settingSourcesHint:
       'Визначає, що агент підтягує додатково до того, що надсилає застосунок. «Нічого» лишає контекст повністю під вашим контролем.',
@@ -160,7 +150,6 @@ export const uk: Translation = {
     settingSourcesAllHint:
       'Підтягує користувацькі, проєктні й локальні налаштування — як звичайний CLI.',
 
-    accounts: 'Акаунти',
     accountsHint:
       'octopus не зберігає облікових даних. Їх тримає CLI у системному сховищі ключів; цей екран лише показує те, що він повідомляє.',
     gitHint:
@@ -185,9 +174,6 @@ export const uk: Translation = {
       'Вхід відкриває термінал просто тут — обидва інструменти ставлять запитання інтерактивно. Список акаунтів оновиться після завершення.',
     plan: 'Підписка',
     organisation: 'Організація',
-    cliMissing: 'Команду не знайдено. Спершу встановіть інструмент.',
-
-    about: 'Про застосунок',
     deviceId: 'Ідентифікатор пристрою',
     installedAt: 'Перший запуск'
   },

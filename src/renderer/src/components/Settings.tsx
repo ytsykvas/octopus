@@ -417,9 +417,7 @@ function BranchPrefixInput({
           }
           if (trimmed !== value) onCommit(trimmed)
         }}
-        className={`focus-ring bg-canvas h-7 w-64 rounded-[var(--radius-control)] border px-2 font-mono ${
-          invalid ? 'border-danger' : 'border-line'
-        }`}
+        className={`input focus-ring w-64 font-mono ${invalid ? 'border-danger' : ''}`}
       />
       {invalid && <p className="text-danger mt-1.5">{t('settings.branchPrefixEmpty')}</p>}
     </div>

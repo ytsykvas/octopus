@@ -51,7 +51,7 @@ export function NameEditor({ initial, onCommit, onCancel }: NameEditorProps): Re
       onFocus={(event) => {
         event.target.select()
       }}
-      className="focus-ring border-line bg-canvas h-7 w-full rounded-[var(--radius-control)] border px-2"
+      className="input focus-ring"
     />
   )
 }

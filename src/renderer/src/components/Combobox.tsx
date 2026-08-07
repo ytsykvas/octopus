@@ -90,7 +90,7 @@ export function Combobox({
         onClick={() => {
           setOpen((current) => !current)
         }}
-        className="focus-ring border-line bg-canvas hover:bg-muted flex h-7 w-full items-center gap-2 rounded-[var(--radius-control)] border px-2 text-left transition-colors disabled:pointer-events-none disabled:opacity-50"
+        className="input focus-ring hover:bg-muted flex items-center gap-2 text-left transition-colors disabled:pointer-events-none disabled:opacity-50"
       >
         <span className="min-w-0 flex-1 truncate font-mono">{value}</span>
         <ChevronsUpDown aria-hidden size={12} className="text-ink-faint shrink-0" />

@@ -133,7 +133,7 @@ export function RepositoryPicker({
           onChange={(event) => {
             setQuery(event.target.value)
           }}
-          className="focus-ring border-line bg-canvas h-7 w-full rounded-[var(--radius-control)] border px-2"
+          className="input focus-ring"
         />
       </div>
 

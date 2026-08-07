@@ -17,7 +17,6 @@ export const en = {
     addFromGitHub: 'From GitHub…',
     removeProject: 'Remove project',
     editProject: 'Edit…',
-    renameProject: 'Rename',
     projectActions: 'More',
     renameHint: 'Enter to save, Escape to cancel',
     removeTitle: 'Remove project?',
@@ -47,14 +46,10 @@ export const en = {
     add: 'Add',
     cloning: 'Cloning {{name}}…',
     cloneInto: 'Cloning into',
-    cloneIntoUnset: 'You will be asked where to clone.',
-    connectFirst: 'Connect a GitHub account in Settings first.',
-    openSettings: 'Open settings'
+    cloneIntoUnset: 'You will be asked where to clone.'
   },
 
   workspaces: {
-    heading: 'Workspaces',
-    empty: 'No workspaces yet.',
     create: 'New workspace',
     rename: 'Rename',
     remove: 'Remove workspace',
@@ -121,15 +116,12 @@ export const en = {
   settings: {
     title: 'Settings',
     close: 'Close',
-    saved: 'Saved',
-
     sectionGeneral: 'General',
     sectionGit: 'Git',
     sectionAgent: 'Agent',
     sectionAccounts: 'Claude',
     sectionAbout: 'About',
 
-    appearance: 'Appearance',
     theme: 'Theme',
     themeSystem: 'Follow system',
     themeLight: 'Light',
@@ -138,7 +130,6 @@ export const en = {
     language: 'Language',
     languageHint: 'English is the default. Restart is not required.',
 
-    git: 'Git',
     branchPrefix: 'Branch prefix',
     branchPrefixHint:
       'Workspace branches are named <prefix>/<workspace>. A GitHub username is a common choice.',
@@ -150,7 +141,6 @@ export const en = {
     cloneDirectoryUnset: 'Not set — you will be asked on the first clone.',
     change: 'Change…',
 
-    agent: 'Agent',
     settingSources: 'Instruction sources',
     settingSourcesHint:
       'Controls what the agent loads besides what this app sends. "Nothing" keeps the context fully under your control.',
@@ -161,7 +151,6 @@ export const en = {
     settingSourcesAll: 'Everything',
     settingSourcesAllHint: 'Loads user, project and local settings, as the plain CLI would.',
 
-    accounts: 'Accounts',
     accountsHint:
       'octopus never stores credentials. The CLI keeps them in the system keychain; this screen only reports what it says.',
     gitHint:
@@ -186,9 +175,6 @@ export const en = {
       'Sign-in opens a terminal here — both tools ask questions interactively. The account list refreshes once it finishes.',
     plan: 'Plan',
     organisation: 'Organisation',
-    cliMissing: 'Command not found. Install the tool first.',
-
-    about: 'About',
     deviceId: 'Device id',
     installedAt: 'First run'
   },

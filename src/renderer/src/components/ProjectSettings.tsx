@@ -101,7 +101,7 @@ export function ProjectSettings({
               if (event.key === 'Enter') event.currentTarget.blur()
               if (event.key === 'Escape') setName(project.name)
             }}
-            className="focus-ring border-line bg-canvas h-7 w-full max-w-sm rounded-[var(--radius-control)] border px-2"
+            className="input focus-ring max-w-sm"
           />
         </Field>
 
