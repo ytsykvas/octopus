@@ -42,6 +42,31 @@ export const en = {
     openSettings: 'Open settings'
   },
 
+  workspaces: {
+    heading: 'Workspaces',
+    empty: 'No workspaces yet.',
+    create: 'New workspace',
+    rename: 'Rename',
+    remove: 'Remove workspace',
+    missing: 'Directory is gone',
+    missingHint: 'Removed outside the app. Removing the entry is safe.',
+    // Ukrainian needs `few` and `many` as well; i18next picks the form that
+    // applies to the active language and ignores the rest.
+    changedFiles_one: '{{count}} file',
+    changedFiles_few: '{{count}} files',
+    changedFiles_many: '{{count}} files',
+    changedFiles_other: '{{count}} files',
+
+    removeTitle: 'Remove workspace?',
+    removeMessage: 'Remove “{{name}}”?',
+    removeDetail: 'The worktree directory is deleted. Committed work stays on the branch.',
+    removeDirty:
+      'This workspace has uncommitted changes. They will be lost — nothing else keeps a copy.',
+    removeBranch: 'Delete the branch {{branch}} as well',
+    removeConfirm: 'Remove',
+    removeCancel: 'Cancel'
+  },
+
   panel: {
     changes: 'Changes',
     terminal: 'Terminal',
@@ -146,6 +171,11 @@ export const en = {
     listFailed: 'GitHub returned something unexpected.',
     cloneFailed: 'Could not clone {{repository}}.',
     alreadyExists: '{{path}} already exists. Add it from disk instead.',
+    branchExists: 'A branch named {{branch}} already exists.',
+    pathExists: '{{path}} already exists.',
+    uncommittedChanges: '{{name}} has uncommitted changes.',
+    nameEmpty: 'The name cannot be empty.',
+    worktreeMissing: 'That workspace is no longer there.',
     unknown: 'Something went wrong: {{message}}'
   }
 }

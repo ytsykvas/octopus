@@ -32,6 +32,16 @@ export function useErrorMessage(): (failure: Failure) => string {
           return t('errors.cloneFailed', { repository: failure.params?.repository ?? '' })
         case 'alreadyExists':
           return t('errors.alreadyExists', { path: failure.params?.path ?? '' })
+        case 'branchExists':
+          return t('errors.branchExists', { branch: failure.params?.branch ?? '' })
+        case 'pathExists':
+          return t('errors.pathExists', { path: failure.params?.path ?? '' })
+        case 'uncommittedChanges':
+          return t('errors.uncommittedChanges', { name: failure.params?.name ?? '' })
+        case 'nameEmpty':
+          return t('errors.nameEmpty')
+        case 'worktreeMissing':
+          return t('errors.worktreeMissing')
         default:
           return t('errors.unknown', { message: failure.error })
       }

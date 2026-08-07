@@ -12,11 +12,19 @@ export interface ConfirmRequest {
   readonly cancelLabel: string
   /** Colours the confirm button as dangerous and shows a warning mark. */
   readonly destructive?: boolean
+  /** An extra opt-in choice, off by default — its value comes back on confirm. */
+  readonly checkbox?: { readonly label: string }
+}
+
+export interface ConfirmResult {
+  readonly confirmed: boolean
+  /** State of the optional checkbox; false when there was none. */
+  readonly checked: boolean
 }
 
 interface Confirmation {
-  /** Resolves to true only if the user confirmed. */
-  readonly confirm: (request: ConfirmRequest) => Promise<boolean>
+  /** Resolves with the answer and the state of the optional checkbox. */
+  readonly confirm: (request: ConfirmRequest) => Promise<ConfirmResult>
   /** Render this somewhere in the tree; it is null while nothing is pending. */
   readonly dialog: React.JSX.Element | null
 }
@@ -31,21 +39,26 @@ interface Confirmation {
  */
 export function useConfirm(): Confirmation {
   const [request, setRequest] = useState<ConfirmRequest | null>(null)
+  const [checked, setChecked] = useState(false)
   // Held in a ref because the promise outlives the render that created it.
-  const settle = useRef<((confirmed: boolean) => void) | null>(null)
+  const settle = useRef<((result: ConfirmResult) => void) | null>(null)
 
   const confirm = useCallback((next: ConfirmRequest) => {
     setRequest(next)
-    return new Promise<boolean>((resolve) => {
+    setChecked(false)
+    return new Promise<ConfirmResult>((resolve) => {
       settle.current = resolve
     })
   }, [])
 
-  const close = useCallback((confirmed: boolean) => {
-    setRequest(null)
-    settle.current?.(confirmed)
-    settle.current = null
-  }, [])
+  const close = useCallback(
+    (confirmed: boolean) => {
+      setRequest(null)
+      settle.current?.({ confirmed, checked: confirmed && checked })
+      settle.current = null
+    },
+    [checked]
+  )
 
   const dialog =
     request === null ? null : (
@@ -91,6 +104,20 @@ export function useConfirm(): Confirmation {
             <p className="font-medium">{request.message}</p>
             {request.detail !== undefined && (
               <p className="text-ink-soft mt-1.5 leading-relaxed">{request.detail}</p>
+            )}
+
+            {request.checkbox !== undefined && (
+              <label className="mt-3 flex cursor-pointer items-center gap-2">
+                <input
+                  type="checkbox"
+                  checked={checked}
+                  onChange={(event) => {
+                    setChecked(event.target.checked)
+                  }}
+                  className="focus-ring accent-danger"
+                />
+                <span className="text-ink-soft">{request.checkbox.label}</span>
+              </label>
             )}
           </div>
         </div>

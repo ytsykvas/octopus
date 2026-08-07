@@ -12,6 +12,7 @@ import { Settings } from './components/Settings.js'
 import { Sidebar } from './components/Sidebar.js'
 import { useConfirm } from './hooks/useConfirm.js'
 import { useErrorMessage } from './hooks/useErrorMessage.js'
+import { useWorkspaces } from './hooks/useWorkspaces.js'
 
 /**
  * Three-pane layout modelled on Conductor (§10.8 docs/PROJECT.md):
@@ -32,6 +33,9 @@ export function App(): React.JSX.Element {
   const [busy, setBusy] = useState(false)
   const [rightPanelOpen, setRightPanelOpen] = useState(true)
   const [pickingRepository, setPickingRepository] = useState(false)
+  const [selectedWorkspaceId, setSelectedWorkspaceId] = useState<string | null>(null)
+
+  const workspaces = useWorkspaces(projects, confirm, setError)
 
   useEffect(() => {
     const controller = new AbortController()
@@ -170,7 +174,7 @@ export function App(): React.JSX.Element {
         destructive: true
       })
 
-      if (!confirmed) return
+      if (!confirmed.confirmed) return
 
       const result = await window.octopus.projects.remove(projectId)
       if (!result.ok) {
@@ -179,9 +183,39 @@ export function App(): React.JSX.Element {
       }
       setSelectedProjectId((current) => (current === projectId ? null : current))
       await refresh()
+      await workspaces.refresh()
     },
-    [projects, refresh, describeFailure, confirm, t]
+    [projects, refresh, describeFailure, confirm, workspaces, t]
   )
+
+  // ⌘⇧N creates a workspace in the selected project; ⌘1–⌘9 jump between
+  // them (§10.8).
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent): void => {
+      if (!event.metaKey) return
+
+      if (event.shiftKey && event.key.toLowerCase() === 'n') {
+        event.preventDefault()
+        if (selectedProjectId !== null) void workspaces.create(selectedProjectId)
+        return
+      }
+
+      const digit = Number.parseInt(event.key, 10)
+      if (!Number.isNaN(digit) && digit >= 1 && digit <= 9) {
+        const target = workspaces.flat[digit - 1]
+        if (target) {
+          event.preventDefault()
+          setSelectedWorkspaceId(target.id)
+          setSelectedProjectId(target.projectId)
+        }
+      }
+    }
+
+    window.addEventListener('keydown', onKey)
+    return () => {
+      window.removeEventListener('keydown', onKey)
+    }
+  }, [selectedProjectId, workspaces])
 
   const selectedProject = projects.find((project) => project.id === selectedProjectId) ?? null
 
@@ -209,6 +243,14 @@ export function App(): React.JSX.Element {
         }}
         onRemoveProject={(id) => void removeProject(id)}
         onRenameProject={(id, name) => void renameProject(id, name)}
+        workspaces={workspaces.byProject}
+        selectedWorkspaceId={selectedWorkspaceId}
+        onSelectWorkspace={setSelectedWorkspaceId}
+        onCreateWorkspace={(id) => void workspaces.create(id)}
+        onRenameWorkspace={(id, name) => void workspaces.rename(id, name)}
+        onRemoveWorkspace={(id) => void workspaces.remove(id)}
+        editingWorkspaceId={workspaces.editingId}
+        onEditingWorkspaceChange={workspaces.setEditingId}
         onOpenSettings={() => {
           setSettingsOpen(true)
         }}

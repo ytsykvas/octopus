@@ -3,42 +3,59 @@ import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import type { Project } from '@core/store.js'
+import type { WorkspaceView } from '@core/workspaces.js'
 
 import { Button } from './Button.js'
+import { NameEditor } from './NameEditor.js'
+import { WorkspaceRow } from './WorkspaceRow.js'
 
 interface SidebarProps {
   readonly projects: readonly Project[]
+  readonly workspaces: ReadonlyMap<string, readonly WorkspaceView[]>
   readonly selectedProjectId: string | null
+  readonly selectedWorkspaceId: string | null
   readonly onSelectProject: (projectId: string) => void
+  readonly onSelectWorkspace: (workspaceId: string) => void
   readonly onAddFromDisk: () => void
   readonly onAddFromGitHub: () => void
   readonly onRemoveProject: (projectId: string) => void
   readonly onRenameProject: (projectId: string, name: string) => void
+  readonly onCreateWorkspace: (projectId: string) => void
+  readonly onRenameWorkspace: (workspaceId: string, name: string) => void
+  readonly onRemoveWorkspace: (workspaceId: string) => void
   readonly onOpenSettings: () => void
+  /** Workspace whose name is being edited — set right after creation. */
+  readonly editingWorkspaceId: string | null
+  readonly onEditingWorkspaceChange: (workspaceId: string | null) => void
   readonly busy: boolean
 }
 
 /**
- * Left pane — projects and workspaces (§10.8).
- *
- * Until workspaces exist it lists projects only. Step 3 will nest each
- * project's workspaces underneath it, with agent status.
+ * Left pane — projects with their workspaces nested underneath (§10.8).
  */
 export function Sidebar({
   projects,
+  workspaces,
   selectedProjectId,
+  selectedWorkspaceId,
   onSelectProject,
+  onSelectWorkspace,
   onAddFromDisk,
   onAddFromGitHub,
   onRemoveProject,
   onRenameProject,
+  onCreateWorkspace,
+  onRenameWorkspace,
+  onRemoveWorkspace,
   onOpenSettings,
+  editingWorkspaceId,
+  onEditingWorkspaceChange,
   busy
 }: SidebarProps): React.JSX.Element {
   const { t } = useTranslation()
 
   return (
-    <aside className="border-line bg-surface flex w-60 shrink-0 flex-col border-r">
+    <aside className="border-line bg-surface flex w-64 shrink-0 flex-col border-r">
       <div className="titlebar-drag h-11 shrink-0" />
 
       <div className="flex items-center justify-between px-3 pb-1.5">
@@ -50,7 +67,7 @@ export function Sidebar({
         {projects.length === 0 ? (
           <p className="text-ink-faint px-2 py-3 leading-relaxed">{t('sidebar.empty')}</p>
         ) : (
-          <ul className="space-y-px">
+          <ul className="space-y-1">
             {projects.map((project) => (
               <li key={project.id}>
                 <ProjectRow
@@ -65,6 +82,19 @@ export function Sidebar({
                   onRename={(name) => {
                     onRenameProject(project.id, name)
                   }}
+                  onCreateWorkspace={() => {
+                    onCreateWorkspace(project.id)
+                  }}
+                />
+
+                <WorkspaceList
+                  workspaces={workspaces.get(project.id) ?? []}
+                  selectedWorkspaceId={selectedWorkspaceId}
+                  editingWorkspaceId={editingWorkspaceId}
+                  onSelect={onSelectWorkspace}
+                  onRename={onRenameWorkspace}
+                  onRemove={onRemoveWorkspace}
+                  onEditingChange={onEditingWorkspaceChange}
                 />
               </li>
             ))}
@@ -83,6 +113,52 @@ export function Sidebar({
         </button>
       </div>
     </aside>
+  )
+}
+
+function WorkspaceList({
+  workspaces,
+  selectedWorkspaceId,
+  editingWorkspaceId,
+  onSelect,
+  onRename,
+  onRemove,
+  onEditingChange
+}: {
+  workspaces: readonly WorkspaceView[]
+  selectedWorkspaceId: string | null
+  editingWorkspaceId: string | null
+  onSelect: (workspaceId: string) => void
+  onRename: (workspaceId: string, name: string) => void
+  onRemove: (workspaceId: string) => void
+  onEditingChange: (workspaceId: string | null) => void
+}): React.JSX.Element | null {
+  if (workspaces.length === 0) return null
+
+  return (
+    <ul className="border-line mt-0.5 ml-3 space-y-px border-l pl-1">
+      {workspaces.map((workspace) => (
+        <li key={workspace.id}>
+          <WorkspaceRow
+            workspace={workspace}
+            selected={workspace.id === selectedWorkspaceId}
+            editing={workspace.id === editingWorkspaceId}
+            onSelect={() => {
+              onSelect(workspace.id)
+            }}
+            onRename={(name) => {
+              onRename(workspace.id, name)
+            }}
+            onRemove={() => {
+              onRemove(workspace.id)
+            }}
+            onEditingChange={(editing) => {
+              onEditingChange(editing ? workspace.id : null)
+            }}
+          />
+        </li>
+      ))}
+    </ul>
   )
 }
 
@@ -183,6 +259,7 @@ interface ProjectRowProps {
   readonly onSelect: () => void
   readonly onRemove: () => void
   readonly onRename: (name: string) => void
+  readonly onCreateWorkspace: () => void
 }
 
 function ProjectRow({
@@ -190,7 +267,8 @@ function ProjectRow({
   selected,
   onSelect,
   onRemove,
-  onRename
+  onRename,
+  onCreateWorkspace
 }: ProjectRowProps): React.JSX.Element {
   const { t } = useTranslation()
   const [editing, setEditing] = useState(false)
@@ -231,6 +309,15 @@ function ProjectRow({
 
       <button
         type="button"
+        onClick={onCreateWorkspace}
+        title={t('workspaces.create')}
+        className="text-ink-faint hover:text-accent focus-ring shrink-0 rounded p-1 opacity-0 transition-opacity group-hover:opacity-100"
+      >
+        <Plus aria-hidden size={13} />
+      </button>
+
+      <button
+        type="button"
         onClick={() => {
           setEditing(true)
         }}
@@ -249,61 +336,5 @@ function ProjectRow({
         <X aria-hidden size={13} />
       </button>
     </div>
-  )
-}
-
-/**
- * Inline rename.
- *
- * Committing on blur as well as on Enter: clicking away is a common way to
- * mean "done", and losing the edit there would be surprising.
- */
-function NameEditor({
-  initial,
-  onCommit,
-  onCancel
-}: {
-  initial: string
-  onCommit: (name: string) => void
-  onCancel: () => void
-}): React.JSX.Element {
-  const { t } = useTranslation()
-  const [draft, setDraft] = useState(initial)
-
-  const commit = (): void => {
-    const trimmed = draft.trim()
-    if (trimmed === '') {
-      onCancel()
-      return
-    }
-    onCommit(trimmed)
-  }
-
-  return (
-    <input
-      type="text"
-      autoFocus
-      value={draft}
-      title={t('sidebar.renameHint')}
-      spellCheck={false}
-      onChange={(event) => {
-        setDraft(event.target.value)
-      }}
-      onBlur={commit}
-      onKeyDown={(event) => {
-        if (event.key === 'Enter') {
-          event.preventDefault()
-          commit()
-        }
-        if (event.key === 'Escape') {
-          event.preventDefault()
-          onCancel()
-        }
-      }}
-      onFocus={(event) => {
-        event.target.select()
-      }}
-      className="focus-ring border-line bg-canvas h-7 w-full rounded-[var(--radius-control)] border px-2 font-medium"
-    />
   )
 }

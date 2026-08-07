@@ -44,6 +44,28 @@ export const uk: Translation = {
     openSettings: 'Відкрити налаштування'
   },
 
+  workspaces: {
+    heading: 'Воркспейси',
+    empty: 'Поки жодного воркспейсу.',
+    create: 'Новий воркспейс',
+    rename: 'Перейменувати',
+    remove: 'Видалити воркспейс',
+    missing: 'Теки немає',
+    missingHint: 'Прибрано повз застосунок. Запис можна безпечно видалити.',
+    changedFiles_one: '{{count}} файл',
+    changedFiles_few: '{{count}} файли',
+    changedFiles_many: '{{count}} файлів',
+    changedFiles_other: '{{count}} файлів',
+
+    removeTitle: 'Видалити воркспейс?',
+    removeMessage: 'Видалити «{{name}}»?',
+    removeDetail: 'Теку worktree буде видалено. Закомічена робота лишається в гілці.',
+    removeDirty: 'У цьому воркспейсі є незакомічені зміни. Вони зникнуть — більше їх ніде немає.',
+    removeBranch: 'Видалити також гілку {{branch}}',
+    removeConfirm: 'Видалити',
+    removeCancel: 'Скасувати'
+  },
+
   panel: {
     changes: 'Зміни',
     terminal: 'Термінал',
@@ -149,6 +171,11 @@ export const uk: Translation = {
     listFailed: 'GitHub повернув щось неочікуване.',
     cloneFailed: 'Не вдалося клонувати {{repository}}.',
     alreadyExists: '{{path}} уже існує. Додайте його з диска.',
+    branchExists: 'Гілка {{branch}} уже існує.',
+    pathExists: '{{path}} уже існує.',
+    uncommittedChanges: 'У {{name}} є незакомічені зміни.',
+    nameEmpty: 'Назва не може бути порожньою.',
+    worktreeMissing: 'Цього воркспейсу вже немає.',
     unknown: 'Щось пішло не так: {{message}}'
   }
 }
