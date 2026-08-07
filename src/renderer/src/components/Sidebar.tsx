@@ -26,16 +26,29 @@ export function Sidebar({
   busy
 }: SidebarProps): React.JSX.Element {
   return (
-    <aside className="border-outline bg-muted flex w-64 shrink-0 flex-col border-r-[3px]">
-      <div className="titlebar-drag h-14 shrink-0" />
+    <aside className="border-line bg-surface flex w-60 shrink-0 flex-col border-r">
+      <div className="titlebar-drag h-11 shrink-0" />
 
-      <div className="flex-1 overflow-auto px-3 pb-3">
+      <div className="flex items-center justify-between px-3 pb-1.5">
+        <span className="section-label">Проєкти</span>
+        <Button
+          variant="quiet"
+          size="sm"
+          disabled={busy}
+          onClick={onAddProject}
+          title="Додати репозиторій"
+        >
+          {busy ? '…' : '+'}
+        </Button>
+      </div>
+
+      <nav className="flex-1 overflow-auto px-2 pb-3">
         {projects.length === 0 ? (
-          <p className="text-ink-soft px-2 py-6 text-sm leading-relaxed">
-            Жодного проєкту. Додайте репозиторій, щоб почати.
+          <p className="text-ink-faint px-2 py-3 leading-relaxed">
+            Порожньо. Додайте репозиторій кнопкою «+».
           </p>
         ) : (
-          <ul className="space-y-2">
+          <ul className="space-y-px">
             {projects.map((project) => (
               <li key={project.id}>
                 <ProjectRow
@@ -52,19 +65,7 @@ export function Sidebar({
             ))}
           </ul>
         )}
-      </div>
-
-      <div className="border-outline border-t-[3px] p-3">
-        <Button
-          tone="success"
-          className="w-full"
-          disabled={busy}
-          onClick={onAddProject}
-          title="Додати репозиторій"
-        >
-          {busy ? 'діалог…' : '+ проєкт'}
-        </Button>
-      </div>
+      </nav>
     </aside>
   )
 }
@@ -79,18 +80,16 @@ interface ProjectRowProps {
 function ProjectRow({ project, selected, onSelect, onRemove }: ProjectRowProps): React.JSX.Element {
   return (
     <div
-      className={`border-outline group rounded-[var(--radius-badge)] border-2 p-2.5 transition-shadow ${
-        selected ? 'bg-surface shadow-[var(--shadow-brutal-sm)]' : 'bg-canvas'
-      }`}
+      className={`row group flex items-center gap-2 px-2 py-1.5 ${selected ? 'row-selected' : ''}`}
     >
       <button
         type="button"
         onClick={onSelect}
-        className="block w-full text-left"
+        className="focus-ring min-w-0 flex-1 rounded-[var(--radius-control)] text-left"
         title={project.repoPath}
       >
-        <span className="brutal-label block truncate text-xs">{project.name}</span>
-        <span className="text-ink-soft mt-1 block truncate font-mono text-[0.7rem]">
+        <span className="block truncate font-medium">{project.name}</span>
+        <span className="text-ink-faint block truncate font-mono text-[11px]">
           {project.baseBranch}
         </span>
       </button>
@@ -98,9 +97,10 @@ function ProjectRow({ project, selected, onSelect, onRemove }: ProjectRowProps):
       <button
         type="button"
         onClick={onRemove}
-        className="text-ink-soft hover:text-danger mt-1.5 hidden text-[0.7rem] group-hover:block"
+        title="Прибрати проєкт"
+        className="text-ink-faint hover:text-danger focus-ring shrink-0 rounded px-1 opacity-0 transition-opacity group-hover:opacity-100"
       >
-        прибрати
+        ✕
       </button>
     </div>
   )

@@ -7,7 +7,7 @@ import { createService, type MaestroService } from '../core/service.js'
 
 /** Кольори полотна з дизайн-системи (§10.7) — щоб вікно не блимало білим при старті. */
 const CANVAS_LIGHT = '#ffffff'
-const CANVAS_DARK = '#16161a'
+const CANVAS_DARK = '#0f1115'
 
 /**
  * Результат операції у вигляді значення, а не винятку.

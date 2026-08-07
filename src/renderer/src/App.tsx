@@ -113,10 +113,13 @@ export function App(): React.JSX.Element {
       />
 
       <main className="flex min-w-0 flex-1 flex-col">
-        <header className="titlebar-drag border-outline flex h-14 shrink-0 items-center gap-3 border-b-[3px] px-5">
-          <span className="brutal-label truncate text-sm">
-            {selectedProject?.name ?? 'maestro'}
-          </span>
+        <header className="titlebar-drag border-line flex h-11 shrink-0 items-center gap-3 border-b px-4">
+          <span className="truncate font-medium">{selectedProject?.name ?? 'maestro'}</span>
+          {selectedProject && (
+            <span className="text-ink-faint truncate font-mono text-[11px]">
+              {selectedProject.repoPath}
+            </span>
+          )}
 
           {!rightPanelOpen && (
             <button
@@ -124,18 +127,18 @@ export function App(): React.JSX.Element {
               onClick={() => {
                 setRightPanelOpen(true)
               }}
-              className="brutal-label text-ink-soft hover:text-ink ml-auto text-[0.65rem]"
+              className="text-ink-faint hover:text-ink focus-ring ml-auto rounded px-2 transition-colors"
+              title="Показати панель"
             >
-              показати панель ‹
+              ←
             </button>
           )}
         </header>
 
         <div className="flex-1 overflow-auto p-6">
           {error !== null && (
-            <div className="brutal-surface bg-danger text-on-danger mb-6 p-4">
-              <p className="brutal-label mb-1 text-xs">не вдалося</p>
-              <p className="text-sm">{error}</p>
+            <div className="bg-danger-bg text-danger border-danger/25 mb-5 rounded-[var(--radius-control)] border px-3 py-2">
+              {error}
             </div>
           )}
 
@@ -163,7 +166,7 @@ function CenterPane({
 }): React.JSX.Element {
   if (!hasProjects) {
     return (
-      <Placeholder title="почніть з репозиторію">
+      <Placeholder title="Почніть з репозиторію">
         Додайте проєкт у лівій панелі. Далі в ньому створюватимуться воркспейси — кожен з власною
         гілкою, текою й сесією агента.
       </Placeholder>
@@ -171,7 +174,7 @@ function CenterPane({
   }
 
   if (!project) {
-    return <Placeholder title="виберіть проєкт">Проєкт зі списку ліворуч.</Placeholder>
+    return <Placeholder title="Виберіть проєкт">Проєкт зі списку ліворуч.</Placeholder>
   }
 
   return (
@@ -190,9 +193,9 @@ function Placeholder({
   children: React.ReactNode
 }): React.JSX.Element {
   return (
-    <div className="brutal-surface flex min-h-64 flex-col items-center justify-center p-12 text-center">
-      <p className="brutal-label mb-3 text-xl">{title}</p>
-      <p className="text-ink-soft max-w-md leading-relaxed">{children}</p>
+    <div className="panel mx-auto flex min-h-56 max-w-lg flex-col items-center justify-center p-10 text-center">
+      <p className="mb-2 text-[15px] font-semibold">{title}</p>
+      <p className="text-ink-soft leading-relaxed">{children}</p>
     </div>
   )
 }

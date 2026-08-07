@@ -1,89 +1,102 @@
 @import 'tailwindcss';
 
 /*
- * Дизайн-система — необруталізм (§10 docs/PROJECT.md).
- * Джерело: ytsykvas/family-shopping.
+ * Дизайн-система (§10 docs/PROJECT.md).
  *
- * Кольори оголошені двічі: у :root (світла) і .dark (темна, §10.7).
+ * Спокійний десктопний інтерфейс у дусі сучасних dev-інструментів:
+ * нейтральна база, тонкі роздільники, стримані акценти. Вибір продиктований
+ * вмістом — чат, дифи й логи це щільний текст, який має читатися годинами.
+ *
+ * Кольори оголошені двічі: у :root (світла) і .dark (темна).
  * Токени @theme посилаються на ці змінні, тому перемикання теми
  * не потребує перегенерації утиліт.
  */
 
 :root {
+  /* Поверхні: полотно → панель → підкладка */
   --canvas: #ffffff;
-  --surface: #d6e0df;
-  --muted: #efefef;
-  --outline: #000000;
-  --ink: #000000;
-  --ink-soft: #4a4a4a;
+  --surface: #f7f8fa;
+  --muted: #eef0f4;
+  --border: #e2e5ea;
+  --border-strong: #cdd2da;
 
-  --accent-success: #35e593;
-  --accent-danger: #c81346;
-  --accent-warning: #ffc107;
-  --accent-info: #0dcaf0;
-  --accent-primary: #0d6efd;
-  --accent-secondary: #6c757d;
+  --ink: #16181d;
+  --ink-soft: #666e7d;
+  --ink-faint: #98a1b0;
 
-  /* На світлих акцентах текст чорний, на темних — білий (§10.1). */
-  --on-success: #000000;
-  --on-warning: #000000;
-  --on-info: #000000;
-  --on-danger: #ffffff;
-  --on-primary: #ffffff;
+  --accent: #2563eb;
+  --accent-hover: #1d4ed8;
+  --on-accent: #ffffff;
+
+  --success: #16a34a;
+  --danger: #dc2626;
+  --warning: #d97706;
+  --info: #0891b2;
+
+  --success-bg: #e8f6ed;
+  --danger-bg: #fdeaea;
+  --warning-bg: #fdf3e3;
+  --info-bg: #e4f4f8;
 }
 
 .dark {
-  --canvas: #16161a;
-  --surface: #242429;
-  --muted: #1d1d22;
-  --outline: #ededf0;
-  --ink: #ededf0;
-  --ink-soft: #a0a0ab;
+  --canvas: #0f1115;
+  --surface: #161920;
+  --muted: #1d212a;
+  --border: #282d38;
+  --border-strong: #3a4150;
 
-  --accent-success: #35e593;
-  --accent-danger: #ff4d6d;
-  --accent-warning: #ffc107;
-  --accent-info: #0dcaf0;
-  --accent-primary: #4d8fff;
-  --accent-secondary: #8b8b96;
+  --ink: #e7eaee;
+  --ink-soft: #99a1af;
+  --ink-faint: #6b7385;
 
-  /* У темній темі всі акценти світлі, тому текст на них завжди темний (§10.7). */
-  --on-success: #16161a;
-  --on-warning: #16161a;
-  --on-info: #16161a;
-  --on-danger: #16161a;
-  --on-primary: #16161a;
+  --accent: #3b82f6;
+  --accent-hover: #60a5fa;
+  --on-accent: #ffffff;
+
+  --success: #22c55e;
+  --danger: #ef4444;
+  --warning: #f59e0b;
+  --info: #06b6d4;
+
+  --success-bg: #12281c;
+  --danger-bg: #2b1516;
+  --warning-bg: #2b1f0d;
+  --info-bg: #0d2429;
 }
 
 @theme inline {
   --color-canvas: var(--canvas);
   --color-surface: var(--surface);
   --color-muted: var(--muted);
-  --color-outline: var(--outline);
+  --color-line: var(--border);
+  --color-line-strong: var(--border-strong);
+
   --color-ink: var(--ink);
   --color-ink-soft: var(--ink-soft);
+  --color-ink-faint: var(--ink-faint);
 
-  --color-success: var(--accent-success);
-  --color-danger: var(--accent-danger);
-  --color-warning: var(--accent-warning);
-  --color-info: var(--accent-info);
-  --color-primary: var(--accent-primary);
-  --color-secondary: var(--accent-secondary);
+  --color-accent: var(--accent);
+  --color-accent-hover: var(--accent-hover);
+  --color-on-accent: var(--on-accent);
 
-  --color-on-success: var(--on-success);
-  --color-on-warning: var(--on-warning);
-  --color-on-info: var(--on-info);
-  --color-on-danger: var(--on-danger);
-  --color-on-primary: var(--on-primary);
+  --color-success: var(--success);
+  --color-danger: var(--danger);
+  --color-warning: var(--warning);
+  --color-info: var(--info);
 
-  /* Масштаб елементів (§10.2): бейдж → кнопка → картка. */
-  --radius-badge: 8px;
-  --radius-brutal: 12px;
+  --color-success-bg: var(--success-bg);
+  --color-danger-bg: var(--danger-bg);
+  --color-warning-bg: var(--warning-bg);
+  --color-info-bg: var(--info-bg);
 
-  --shadow-brutal-sm: 3px 3px 0 var(--outline);
-  --shadow-brutal: 6px 6px 0 var(--outline);
-  --shadow-brutal-md: 8px 8px 0 var(--outline);
-  --shadow-brutal-lg: 9px 9px 0 var(--outline);
+  --radius-control: 6px;
+  --radius-panel: 10px;
+
+  /* Тіні лише для того, що спливає над вмістом. Панелі розділяються
+     бордерами — так інтерфейс лишається спокійним. */
+  --shadow-pop: 0 4px 12px rgb(0 0 0 / 0.1);
+  --shadow-modal: 0 16px 40px rgb(0 0 0 / 0.18);
 
   --font-sans:
     -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
@@ -101,11 +114,12 @@
     background-color: var(--canvas);
     color: var(--ink);
     font-family: var(--font-sans);
-    font-weight: 600;
+    font-size: 13px;
+    line-height: 1.55;
     -webkit-font-smoothing: antialiased;
   }
 
-  /* Смуга для перетягування вікна під hiddenInset-тайтлбаром (§10.5). */
+  /* Смуга для перетягування вікна під hiddenInset-тайтлбаром. */
   .titlebar-drag {
     -webkit-app-region: drag;
   }
@@ -115,42 +129,47 @@
   .titlebar-drag input {
     -webkit-app-region: no-drag;
   }
+
+  ::selection {
+    background-color: color-mix(in srgb, var(--accent) 25%, transparent);
+  }
 }
 
 @layer components {
-  /*
-   * Базові примітиви стилю. Компоненти shadcn/ui, які додаватимуться далі,
-   * спираються на ці ж токени — див. застереження в §10.4 про обсяг
-   * перестилізації.
-   */
-  .brutal-surface {
+  /* Заголовок секції: маленький, приглушений, з легким розрідженням.
+     Не uppercase-900 — вміст поруч має лишатися головним. */
+  .section-label {
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.02em;
+    color: var(--ink-soft);
+  }
+
+  .panel {
     background-color: var(--surface);
-    border: 3px solid var(--outline);
-    border-radius: var(--radius-brutal);
-    box-shadow: var(--shadow-brutal);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-panel);
   }
 
-  .brutal-interactive {
+  /* Рядок списку: підсвітка на наведенні, виразніша — на вибраному. */
+  .row {
+    border-radius: var(--radius-control);
     transition:
-      transform 0.15s ease,
-      box-shadow 0.15s ease,
-      background-color 0.15s ease;
+      background-color 0.12s ease,
+      color 0.12s ease;
   }
 
-  .brutal-interactive:hover {
-    transform: translate(-2px, -2px);
-    box-shadow: var(--shadow-brutal-md);
+  .row:hover {
+    background-color: var(--muted);
   }
 
-  .brutal-interactive:active {
-    transform: translate(0, 0);
-    box-shadow: var(--shadow-brutal-sm);
+  .row-selected {
+    background-color: color-mix(in srgb, var(--accent) 12%, transparent);
+    color: var(--ink);
   }
 
-  /* Написи керування — uppercase лише тут, не на вмісті (§10.6). */
-  .brutal-label {
-    font-weight: 900;
-    text-transform: uppercase;
-    letter-spacing: 1px;
+  .focus-ring:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
   }
 }

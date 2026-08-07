@@ -1,27 +1,35 @@
 import type { ButtonHTMLAttributes, ReactNode } from 'react'
 
 /**
- * Кнопка дизайн-системи (§10.2).
+ * Кнопка (§10.2 docs/PROJECT.md).
  *
- * Бордер 3px, радіус 12px, тінь 6px зі зсувом на hover і «натисканням»
- * на active. Кольори тільки через токени — інакше зламається темна тема.
+ * Три варіанти, яких вистачає всьому інтерфейсу: акцентна для головної дії,
+ * тиха для другорядних, небезпечна для руйнівних. Кольори лише через токени —
+ * інакше зламається темна тема.
  */
-export type ButtonTone = 'success' | 'danger' | 'primary' | 'neutral'
+export type ButtonVariant = 'accent' | 'quiet' | 'danger'
+export type ButtonSize = 'sm' | 'md'
 
-const TONE_CLASSES: Record<ButtonTone, string> = {
-  success: 'bg-success text-on-success',
-  danger: 'bg-danger text-on-danger',
-  primary: 'bg-primary text-on-primary',
-  neutral: 'bg-muted text-ink'
+const VARIANTS: Record<ButtonVariant, string> = {
+  accent: 'bg-accent text-on-accent hover:bg-accent-hover border-transparent',
+  quiet: 'bg-canvas text-ink border-line hover:bg-muted',
+  danger: 'bg-transparent text-danger border-transparent hover:bg-danger-bg'
+}
+
+const SIZES: Record<ButtonSize, string> = {
+  sm: 'h-6 px-2 text-[11px]',
+  md: 'h-7 px-3 text-[12px]'
 }
 
 interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
-  readonly tone?: ButtonTone
+  readonly variant?: ButtonVariant
+  readonly size?: ButtonSize
   readonly children: ReactNode
 }
 
 export function Button({
-  tone = 'neutral',
+  variant = 'quiet',
+  size = 'md',
   children,
   className = '',
   ...rest
@@ -29,7 +37,7 @@ export function Button({
   return (
     <button
       type="button"
-      className={`brutal-label brutal-interactive border-outline rounded-[var(--radius-brutal)] border-[3px] px-5 py-2 text-xs shadow-[var(--shadow-brutal)] disabled:cursor-not-allowed disabled:opacity-60 ${TONE_CLASSES[tone]} ${className}`}
+      className={`focus-ring inline-flex items-center justify-center gap-1.5 rounded-[var(--radius-control)] border font-medium transition-colors disabled:pointer-events-none disabled:opacity-50 ${VARIANTS[variant]} ${SIZES[size]} ${className}`}
       {...rest}
     >
       {children}
