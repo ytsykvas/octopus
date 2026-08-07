@@ -1,19 +1,17 @@
-import { execFile } from 'node:child_process'
 import { join } from 'node:path'
-import { promisify } from 'node:util'
 
 import { app, BrowserWindow, dialog, ipcMain, Menu, nativeTheme, shell } from 'electron'
 
-import { type AccountKind, authCommand, checkAccounts } from '../core/accounts.js'
+import { checkAccounts } from '../core/accounts.js'
 import type { Config, ThemePreference } from '../core/config.js'
 import { describeError } from '../core/persist.js'
 import { ProjectValidationError } from '../core/projects.js'
 import { createService, type OctopusService } from '../core/service.js'
+import { TerminalSpecSchema } from '../core/terminal.js'
 import type { ThemeName } from '../core/types.js'
+import { TerminalManager } from './terminals.js'
 
 /** Canvas colours from the design system (§10) — so the window does not flash white on launch. */
-const execFileAsync = promisify(execFile)
-
 const CANVAS_LIGHT = '#ffffff'
 const CANVAS_DARK = '#0f1115'
 
@@ -102,7 +100,7 @@ function createWindow(theme: ThemeName): BrowserWindow {
  * They are deliberately one-liners: all logic lives in the core service and
  * this layer only forwards calls (§11.1).
  */
-function registerIpc(service: OctopusService): void {
+function registerIpc(service: OctopusService, terminals: TerminalManager): void {
   ipcMain.handle('theme:get', () => resolveTheme(service.getConfig().theme))
 
   ipcMain.handle('config:get', () => attempt(() => service.getConfig()))
@@ -119,9 +117,23 @@ function registerIpc(service: OctopusService): void {
 
   ipcMain.handle('accounts:status', () => attempt(() => checkAccounts()))
 
-  ipcMain.handle('accounts:auth', (_event, kind: AccountKind, action: 'login' | 'logout') =>
-    attempt(() => openInTerminal(authCommand(kind, action)))
+  // Terminal sessions. The spec is validated rather than trusted: it arrives
+  // over IPC and ends up as a working directory and a command line.
+  ipcMain.handle('terminal:create', (event, spec: unknown) =>
+    attempt(() => terminals.create(TerminalSpecSchema.parse(spec), event.sender))
   )
+
+  ipcMain.handle('terminal:write', (_event, id: string, data: string) => {
+    terminals.write(id, data)
+  })
+
+  ipcMain.handle('terminal:resize', (_event, id: string, cols: number, rows: number) => {
+    terminals.resize(id, cols, rows)
+  })
+
+  ipcMain.handle('terminal:dispose', (_event, id: string) => {
+    terminals.dispose(id)
+  })
 
   ipcMain.handle('projects:remove', (_event, projectId: string) =>
     attempt(() => service.removeProjectById(projectId))
@@ -184,34 +196,6 @@ function registerMenu(): void {
   Menu.setApplicationMenu(Menu.buildFromTemplate(template))
 }
 
-/**
- * Runs a command in Terminal.app.
- *
- * `claude auth login` and `gh auth login` are interactive and need a real TTY,
- * so the app cannot host them. Handing the prepared command to Terminal is
- * honest about that instead of pretending to sign the user in.
- *
- * The command is passed to osascript as an **argument**, never interpolated
- * into the script source. Interpolation would make a stray quote in the input
- * an AppleScript injection, and the input crosses an IPC boundary where types
- * guarantee nothing. `authCommand` validates its arguments as well — two
- * independent layers, because this path ends in command execution.
- */
-async function openInTerminal(argv: readonly string[]): Promise<void> {
-  await execFileAsync('osascript', [
-    '-e',
-    'on run argv',
-    '-e',
-    'tell application "Terminal" to do script (item 1 of argv)',
-    '-e',
-    'tell application "Terminal" to activate',
-    '-e',
-    'end run',
-    '--',
-    argv.join(' ')
-  ])
-}
-
 function broadcastTheme(theme: ThemeName): void {
   for (const window of BrowserWindow.getAllWindows()) {
     window.setBackgroundColor(canvasColor(theme))
@@ -250,7 +234,12 @@ async function start(): Promise<void> {
     return
   }
 
-  registerIpc(service)
+  const terminals = new TerminalManager()
+  app.on('will-quit', () => {
+    terminals.disposeAll()
+  })
+
+  registerIpc(service, terminals)
   watchSystemTheme(service)
   registerMenu()
   createWindow(resolveTheme(service.getConfig().theme))

@@ -172,9 +172,14 @@ Versions below are **actually installed and verified** (`npm run check` and `ele
 | motion               | 13.0.0        | animation                      |
 | lucide-react         | 1.30.0        | icons                          |
 | zustand              | 5.0.14        | UI state                       |
+| node-pty             | 1.1.0         | pseudo-terminals (native)      |
+| @xterm/xterm         | 6.0.0         | terminal rendering             |
+| @xterm/addon-fit     | 0.11.0        | terminal sizing                |
 | shadcn/ui            | not yet added | added as components require it |
 
-**No native modules in stage 1** — a deliberate choice that avoids `electron-rebuild`. State is JSON; `node:sqlite` is available (verified on Node 26) and will be added when chat history needs searching. `node-pty` arrives with the terminal.
+**Native modules.** Stage 1 started without them to avoid `electron-rebuild`, and that held until the embedded terminal arrived: `node-pty` is native and has to be rebuilt against Electron's ABI. A `postinstall` script does it automatically, so `npm install` remains a single step.
+
+State is JSON; `node:sqlite` is available (verified on Node 26) and will be added when chat history needs searching.
 
 #### One forced change from the original intent
 
@@ -572,7 +577,9 @@ This is not an argument against the hooks — they are free. It is an argument a
 
 ## 16. Out of scope for stage 1
 
-Terminal (`node-pty` + `xterm.js`), Monaco diff, GitHub PRs and checks through `gh`, notifications, workspace archiving, Linux builds, signing and notarisation, the auth service and licensing (§15).
+Monaco diff, GitHub PRs and checks through `gh`, notifications, workspace archiving, Linux builds, signing and notarisation, the auth service and licensing (§15).
+
+The terminal moved into scope early: account sign-in needs an interactive session, and sending the user to Terminal.app for it broke the sense that this window is where the work happens. The same component will fill the right pane's Terminal tab.
 
 ---
 

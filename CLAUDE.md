@@ -108,4 +108,15 @@ node node_modules/electron/install.js
 
 ## Out of scope for now
 
-Terminal, Monaco diff, GitHub PRs, notifications, Linux builds, auth service.
+Monaco diff, GitHub PRs, notifications, Linux builds, auth service.
+
+## Native modules
+
+`node-pty` is native and must match Electron's ABI. `postinstall` runs
+`electron-rebuild` automatically, so `npm install` is still one step — but if
+the terminal fails to open with a `NODE_MODULE_VERSION` error, that rebuild is
+what did not run:
+
+```bash
+npx electron-rebuild -f -w node-pty
+```

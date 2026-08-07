@@ -1,6 +1,7 @@
 import { contextBridge, ipcRenderer } from 'electron'
 
 import type { AccountKind, AccountsStatus } from '@core/accounts.js'
+import type { TerminalExit, TerminalOutput, TerminalSpec } from '@core/terminal.js'
 import type { Config } from '@core/config.js'
 import type { Project } from '@core/store.js'
 import type { ThemeName } from '@core/types.js'
@@ -51,9 +52,46 @@ const api = {
     status: (): Promise<Result<AccountsStatus>> =>
       ipcRenderer.invoke('accounts:status') as Promise<Result<AccountsStatus>>,
 
-    /** Opens Terminal with the sign-in command — both CLIs need a real TTY. */
-    auth: (kind: AccountKind, action: 'login' | 'logout'): Promise<Result<void>> =>
-      ipcRenderer.invoke('accounts:auth', kind, action) as Promise<Result<void>>
+    /** Returns the argv to run for signing in or out; the UI hosts it in a terminal. */
+    authCommand: (kind: AccountKind, action: 'login' | 'logout'): readonly string[] =>
+      kind === 'claude' ? ['claude', 'auth', action] : ['gh', 'auth', action]
+  },
+
+  terminal: {
+    create: (spec: Partial<TerminalSpec> & { cwd: string }): Promise<Result<string>> =>
+      ipcRenderer.invoke('terminal:create', spec) as Promise<Result<string>>,
+
+    write: (id: string, data: string): void => {
+      void ipcRenderer.invoke('terminal:write', id, data)
+    },
+
+    resize: (id: string, cols: number, rows: number): void => {
+      void ipcRenderer.invoke('terminal:resize', id, cols, rows)
+    },
+
+    dispose: (id: string): void => {
+      void ipcRenderer.invoke('terminal:dispose', id)
+    },
+
+    onData: (handler: (output: TerminalOutput) => void): (() => void) => {
+      const listener = (_event: unknown, output: TerminalOutput): void => {
+        handler(output)
+      }
+      ipcRenderer.on('terminal:data', listener)
+      return () => {
+        ipcRenderer.off('terminal:data', listener)
+      }
+    },
+
+    onExit: (handler: (exit: TerminalExit) => void): (() => void) => {
+      const listener = (_event: unknown, exit: TerminalExit): void => {
+        handler(exit)
+      }
+      ipcRenderer.on('terminal:exit', listener)
+      return () => {
+        ipcRenderer.off('terminal:exit', listener)
+      }
+    }
   },
 
   settings: {

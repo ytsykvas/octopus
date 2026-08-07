@@ -84,8 +84,12 @@ export const en = {
     signIn: 'Sign in',
     signOut: 'Sign out',
     recheck: 'Refresh',
+    signInRunning: 'Signing in to {{service}}',
+    signInDone: 'Finished. Closing this returns to the account list.',
+    signInFailed: 'The command exited with code {{code}}.',
+    closeTerminal: 'Done',
     opensTerminal:
-      'Sign-in runs in Terminal — both tools ask questions that need a real terminal. Come back and press Refresh when done.',
+      'Sign-in opens a terminal here — both tools ask questions interactively. The account list refreshes once it finishes.',
     plan: 'Plan',
     organisation: 'Organisation',
     cliMissing: 'Command not found. Install the tool first.',

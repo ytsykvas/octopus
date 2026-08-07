@@ -4,18 +4,20 @@ import { useTranslation } from 'react-i18next'
 import type { AccountKind, AccountsStatus } from '@core/accounts.js'
 
 import { Button } from '../Button.js'
+import { Terminal } from '../Terminal.js'
 
 /**
  * Connected accounts.
  *
  * octopus never handles credentials: both `claude` and `gh` keep them in the
  * system keychain, and this screen only reports what those tools say. Signing
- * in opens Terminal, because both CLIs are interactive.
+ * in runs in an embedded terminal, because both CLIs are interactive.
  */
 export function AccountsSection(): React.JSX.Element {
   const { t } = useTranslation()
   const [status, setStatus] = useState<AccountsStatus | null>(null)
   const [checking, setChecking] = useState(false)
+  const [session, setSession] = useState<AuthSession | null>(null)
 
   const refresh = useCallback(async () => {
     setChecking(true)
@@ -40,9 +42,21 @@ export function AccountsSection(): React.JSX.Element {
     }
   }, [])
 
-  const auth = useCallback((kind: AccountKind, action: 'login' | 'logout') => {
-    void window.octopus.accounts.auth(kind, action)
-  }, [])
+  if (session) {
+    return (
+      <AuthTerminal
+        session={session}
+        onClose={() => {
+          setSession(null)
+          void refresh()
+        }}
+      />
+    )
+  }
+
+  const startAuth = (kind: AccountKind, action: 'login' | 'logout', label: string): void => {
+    setSession({ kind, action, label, command: window.octopus.accounts.authCommand(kind, action) })
+  }
 
   return (
     <div className="space-y-5">
@@ -63,10 +77,10 @@ export function AccountsSection(): React.JSX.Element {
           { label: t('settings.organisation'), value: status?.claude.orgName ?? null }
         ]}
         onSignIn={() => {
-          auth('claude', 'login')
+          startAuth('claude', 'login', t('settings.claudeAccount'))
         }}
         onSignOut={() => {
-          auth('claude', 'logout')
+          startAuth('claude', 'logout', t('settings.claudeAccount'))
         }}
       />
 
@@ -77,14 +91,67 @@ export function AccountsSection(): React.JSX.Element {
         primary={status?.github.login ?? null}
         details={[{ label: '', value: status?.github.name ?? null }]}
         onSignIn={() => {
-          auth('github', 'login')
+          startAuth('github', 'login', t('settings.githubAccount'))
         }}
         onSignOut={() => {
-          auth('github', 'logout')
+          startAuth('github', 'logout', t('settings.githubAccount'))
         }}
       />
 
       <p className="text-ink-faint leading-relaxed">{t('settings.opensTerminal')}</p>
+    </div>
+  )
+}
+
+interface AuthSession {
+  readonly kind: AccountKind
+  readonly action: 'login' | 'logout'
+  readonly label: string
+  readonly command: readonly string[]
+}
+
+/**
+ * Hosts the interactive sign-in.
+ *
+ * The home directory is used as the working directory: these commands are not
+ * tied to any repository, and starting in one would be arbitrary.
+ */
+function AuthTerminal({
+  session,
+  onClose
+}: {
+  session: AuthSession
+  onClose: () => void
+}): React.JSX.Element {
+  const { t } = useTranslation()
+  const [exitCode, setExitCode] = useState<number | null | undefined>(undefined)
+
+  return (
+    <div className="flex h-[28rem] flex-col">
+      <div className="mb-3 flex items-center justify-between gap-4">
+        <div className="min-w-0">
+          <p className="font-medium">{t('settings.signInRunning', { service: session.label })}</p>
+          <p className="text-ink-faint mt-0.5 truncate font-mono text-[11px]">
+            {session.command.join(' ')}
+          </p>
+        </div>
+
+        <Button variant={exitCode === undefined ? 'quiet' : 'accent'} onClick={onClose}>
+          {t('settings.closeTerminal')}
+        </Button>
+      </div>
+
+      <div className="panel min-h-0 flex-1 overflow-hidden p-2">
+        <Terminal cwd="~" command={session.command} onExit={setExitCode} />
+      </div>
+
+      {exitCode !== undefined && (
+        <p className={`mt-2 ${exitCode === 0 ? 'text-success' : 'text-danger'}`}>
+          {exitCode === 0
+            ? t('settings.signInDone')
+            : t('settings.signInFailed', { code: exitCode ?? '—' })}
+        </p>
+      )}
     </div>
   )
 }
