@@ -24,6 +24,18 @@ interface ProjectSettingsProps {
  * multi-step edit, and a Save button would invite closing the dialog with work
  * still pending.
  */
+/**
+ * Drops the remote prefix for display.
+ *
+ * Every entry in the list carries the same `origin/`, so it is noise in all of
+ * them at once. Only `origin/` is stripped, not any first segment: the list
+ * falls back to local branches when a repository has no remote, and `feature/x`
+ * must not be shown as `x`.
+ */
+function shortBranch(branch: string): string {
+  return branch.startsWith('origin/') ? branch.slice('origin/'.length) : branch
+}
+
 export function ProjectSettings({
   project,
   onUpdate,
@@ -117,6 +129,7 @@ export function ProjectSettings({
             onChange={changeBranch}
             placeholder={t('project.branchSearch')}
             emptyLabel={t('project.branchNone')}
+            display={shortBranch}
           />
         </Field>
 

@@ -11,6 +11,11 @@ interface ComboboxProps {
   readonly placeholder?: string
   /** Shown in the list when nothing matches the query. */
   readonly emptyLabel?: string
+  /**
+   * Shortens an option for display. The stored value is unaffected — search
+   * still matches the full string, so typing either form finds it.
+   */
+  readonly display?: (option: string) => string
   readonly disabled?: boolean
 }
 
@@ -27,6 +32,7 @@ export function Combobox({
   onChange,
   placeholder,
   emptyLabel,
+  display = (option) => option,
   disabled = false
 }: ComboboxProps): React.JSX.Element {
   const { t } = useTranslation()
@@ -92,7 +98,7 @@ export function Combobox({
         }}
         className="input focus-ring hover:bg-muted flex items-center gap-2 text-left transition-colors disabled:pointer-events-none disabled:opacity-50"
       >
-        <span className="min-w-0 flex-1 truncate font-mono">{value}</span>
+        <span className="min-w-0 flex-1 truncate font-mono">{display(value)}</span>
         <ChevronsUpDown aria-hidden size={12} className="text-ink-faint shrink-0" />
       </button>
 
@@ -142,7 +148,7 @@ export function Combobox({
                     size={12}
                     className={`shrink-0 ${option === value ? 'text-accent' : 'opacity-0'}`}
                   />
-                  <span className="truncate font-mono">{option}</span>
+                  <span className="truncate font-mono">{display(option)}</span>
                 </button>
               ))
             )}
