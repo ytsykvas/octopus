@@ -82,6 +82,6 @@ const api = {
   }
 } as const
 
-export type MaestroApi = typeof api
+export type OctopusApi = typeof api
 
-contextBridge.exposeInMainWorld('maestro', api)
+contextBridge.exposeInMainWorld('octopus', api)

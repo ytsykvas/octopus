@@ -13,19 +13,19 @@ import { join } from 'node:path'
 
 import type { ProjectId, WorkspaceId } from './types.js'
 
-const ROOT_DIR_NAME = '.maestro'
+const ROOT_DIR_NAME = '.octopus'
 
-/** Application data root: `~/.maestro`. */
+/** Application data root: `~/.octopus`. */
 export function rootDir(home: string = homedir()): string {
   return join(home, ROOT_DIR_NAME)
 }
 
-/** Global settings: `~/.maestro/config.json`. */
+/** Global settings: `~/.octopus/config.json`. */
 export function configFile(root: string = rootDir()): string {
   return join(root, 'config.json')
 }
 
-/** Workspace state: `~/.maestro/state.json`. */
+/** Workspace state: `~/.octopus/state.json`. */
 export function stateFile(root: string = rootDir()): string {
   return join(root, 'state.json')
 }
@@ -39,7 +39,7 @@ export function stateTempFile(root: string = rootDir()): string {
   return join(root, 'state.json.tmp')
 }
 
-/** Project metadata directory: `~/.maestro/projects/<projectId>`. */
+/** Project metadata directory: `~/.octopus/projects/<projectId>`. */
 export function projectDir(projectId: ProjectId, root: string = rootDir()): string {
   return join(root, 'projects', projectId)
 }
@@ -54,7 +54,7 @@ export function setupScript(projectId: ProjectId, root: string = rootDir()): str
   return join(projectScriptsDir(projectId, root), 'setup.sh')
 }
 
-/** Script that starts the dev server; receives `$MAESTRO_PORT`. */
+/** Script that starts the dev server; receives `$OCTOPUS_PORT`. */
 export function runScript(projectId: ProjectId, root: string = rootDir()): string {
   return join(projectScriptsDir(projectId, root), 'run.sh')
 }

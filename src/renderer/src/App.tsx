@@ -31,11 +31,11 @@ export function App(): React.JSX.Element {
   useEffect(() => {
     const controller = new AbortController()
 
-    void window.maestro.theme.get().then((value) => {
+    void window.octopus.theme.get().then((value) => {
       if (!controller.signal.aborted) setTheme(value)
     })
 
-    const unsubscribe = window.maestro.theme.onChange(setTheme)
+    const unsubscribe = window.octopus.theme.onChange(setTheme)
 
     return () => {
       controller.abort()
@@ -53,7 +53,7 @@ export function App(): React.JSX.Element {
     const controller = new AbortController()
 
     void (async () => {
-      const result = await window.maestro.projects.list()
+      const result = await window.octopus.projects.list()
       if (controller.signal.aborted) return
 
       if (result.ok) {
@@ -72,7 +72,7 @@ export function App(): React.JSX.Element {
     const controller = new AbortController()
 
     void (async () => {
-      const result = await window.maestro.config.get()
+      const result = await window.octopus.config.get()
       if (controller.signal.aborted) return
       if (result.ok) setConfig(result.value)
     })()
@@ -85,7 +85,7 @@ export function App(): React.JSX.Element {
   // The native menu owns ⌘, on macOS; the renderer just reacts to it.
   useEffect(
     () =>
-      window.maestro.settings.onOpen(() => {
+      window.octopus.settings.onOpen(() => {
         setSettingsOpen(true)
       }),
     []
@@ -100,7 +100,7 @@ export function App(): React.JSX.Element {
 
   const updateConfig = useCallback(
     async (patch: Partial<Config>) => {
-      const result = await window.maestro.config.update(patch)
+      const result = await window.octopus.config.update(patch)
       if (result.ok) {
         setConfig(result.value)
       } else {
@@ -111,7 +111,7 @@ export function App(): React.JSX.Element {
   )
 
   const refresh = useCallback(async () => {
-    const result = await window.maestro.projects.list()
+    const result = await window.octopus.projects.list()
     if (result.ok) {
       setProjects(result.value)
       setError(null)
@@ -123,7 +123,7 @@ export function App(): React.JSX.Element {
   const addProject = useCallback(async () => {
     setBusy(true)
     try {
-      const result = await window.maestro.projects.add()
+      const result = await window.octopus.projects.add()
       if (!result.ok) {
         setError(describeFailure(result))
         return
@@ -140,7 +140,7 @@ export function App(): React.JSX.Element {
 
   const removeProject = useCallback(
     async (projectId: string) => {
-      const result = await window.maestro.projects.remove(projectId)
+      const result = await window.octopus.projects.remove(projectId)
       if (!result.ok) {
         setError(describeFailure(result))
         return

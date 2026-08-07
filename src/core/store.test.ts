@@ -55,7 +55,7 @@ let dir: string
 let file: string
 
 beforeEach(async () => {
-  dir = await mkdtemp(join(tmpdir(), 'maestro-store-'))
+  dir = await mkdtemp(join(tmpdir(), 'octopus-store-'))
   file = join(dir, 'state.json')
 })
 

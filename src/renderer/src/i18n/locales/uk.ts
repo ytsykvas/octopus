@@ -8,7 +8,7 @@ import type { Translation } from './en.js'
  */
 export const uk: Translation = {
   app: {
-    name: 'maestro'
+    name: 'octopus'
   },
 
   sidebar: {
@@ -68,7 +68,7 @@ export const uk: Translation = {
     settingSourcesHint:
       'Визначає, що агент підтягує додатково до того, що надсилає застосунок. «Нічого» лишає контекст повністю під вашим контролем.',
     settingSourcesNone: 'Нічого',
-    settingSourcesNoneHint: 'Агент отримує лише те, що maestro передає явно.',
+    settingSourcesNoneHint: 'Агент отримує лише те, що octopus передає явно.',
     settingSourcesProject: 'Лише проєкт',
     settingSourcesProjectHint: 'Підтягує CLAUDE.md і налаштування самого репозиторію.',
     settingSourcesAll: 'Усе',
@@ -77,7 +77,7 @@ export const uk: Translation = {
 
     accounts: 'Акаунти',
     accountsHint:
-      'maestro не зберігає жодних облікових даних. Обидва інструменти тримають їх у системному сховищі ключів; цей екран лише показує те, що вони повідомляють.',
+      'octopus не зберігає жодних облікових даних. Обидва інструменти тримають їх у системному сховищі ключів; цей екран лише показує те, що вони повідомляють.',
     claudeAccount: 'Claude',
     claudeAccountHint: 'На цьому акаунті працює агент.',
     githubAccount: 'GitHub',

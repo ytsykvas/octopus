@@ -37,7 +37,7 @@ describe('defaultExec', () => {
   })
 
   it('rejects when the command does not exist', async () => {
-    await expect(defaultExec('maestro-no-such-binary', [])).rejects.toThrow()
+    await expect(defaultExec('octopus-no-such-binary', [])).rejects.toThrow()
   })
 })
 

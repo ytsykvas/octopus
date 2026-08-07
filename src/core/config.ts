@@ -1,5 +1,5 @@
 /**
- * Global application settings — `~/.maestro/config.json`.
+ * Global application settings — `~/.octopus/config.json`.
  *
  * Created on first run, then only read and updated.
  */
@@ -81,7 +81,7 @@ export function createDefaultConfig(
 /** Reads the config, creating and persisting it if the file is missing. */
 export async function loadConfig(
   filePath: string = configFile(),
-  defaults: Config = createDefaultConfig('maestro')
+  defaults: Config = createDefaultConfig('octopus')
 ): Promise<Config> {
   const existing = await readJsonFile<Config | null>(filePath, ConfigSchema.nullable(), null)
   if (existing) return existing

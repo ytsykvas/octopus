@@ -8,7 +8,7 @@ import { Button } from '../Button.js'
 /**
  * Connected accounts.
  *
- * maestro never handles credentials: both `claude` and `gh` keep them in the
+ * octopus never handles credentials: both `claude` and `gh` keep them in the
  * system keychain, and this screen only reports what those tools say. Signing
  * in opens Terminal, because both CLIs are interactive.
  */
@@ -20,7 +20,7 @@ export function AccountsSection(): React.JSX.Element {
   const refresh = useCallback(async () => {
     setChecking(true)
     try {
-      const result = await window.maestro.accounts.status()
+      const result = await window.octopus.accounts.status()
       if (result.ok) setStatus(result.value)
     } finally {
       setChecking(false)
@@ -31,7 +31,7 @@ export function AccountsSection(): React.JSX.Element {
     const controller = new AbortController()
 
     void (async () => {
-      const result = await window.maestro.accounts.status()
+      const result = await window.octopus.accounts.status()
       if (!controller.signal.aborted && result.ok) setStatus(result.value)
     })()
 
@@ -41,7 +41,7 @@ export function AccountsSection(): React.JSX.Element {
   }, [])
 
   const auth = useCallback((kind: AccountKind, action: 'login' | 'logout') => {
-    void window.maestro.accounts.auth(kind, action)
+    void window.octopus.accounts.auth(kind, action)
   }, [])
 
   return (

@@ -1,5 +1,5 @@
 /**
- * Application state — `~/.maestro/state.json`.
+ * Application state — `~/.octopus/state.json`.
  *
  * Holds the list of projects and workspaces. Git remains the source of truth
  * about git; this file only stores what git does not know — the agent session

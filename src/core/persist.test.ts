@@ -20,7 +20,7 @@ let dir: string
 let file: string
 
 beforeEach(async () => {
-  dir = await mkdtemp(join(tmpdir(), 'maestro-persist-'))
+  dir = await mkdtemp(join(tmpdir(), 'octopus-persist-'))
   file = join(dir, 'data.json')
 })
 

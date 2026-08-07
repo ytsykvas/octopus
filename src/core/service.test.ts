@@ -6,12 +6,12 @@ import { promisify } from 'node:util'
 
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 
-import { createService, type MaestroService } from './service.js'
+import { createService, type OctopusService } from './service.js'
 
 const run = promisify(execFile)
 
 let dir: string
-let service: MaestroService
+let service: OctopusService
 
 async function initRepo(path: string): Promise<void> {
   await mkdir(path, { recursive: true })
@@ -32,7 +32,7 @@ function paths(root: string): Parameters<typeof createService>[0] {
 }
 
 beforeEach(async () => {
-  dir = await mkdtemp(join(tmpdir(), 'maestro-service-'))
+  dir = await mkdtemp(join(tmpdir(), 'octopus-service-'))
   service = await createService(paths(dir))
 })
 
@@ -41,7 +41,7 @@ afterEach(async () => {
 })
 
 describe('default paths', () => {
-  it('works in ~/.maestro when given no parameters', async () => {
+  it('works in ~/.octopus when given no parameters', async () => {
     const previousHome = process.env.HOME
     process.env.HOME = dir
 
@@ -50,8 +50,8 @@ describe('default paths', () => {
       expect(withDefaults.listProjects()).toHaveLength(0)
       expect(withDefaults.getConfig().version).toBe(1)
 
-      // The config must land in the .maestro subdirectory of the home directory.
-      await expect(readFile(join(dir, '.maestro', 'config.json'), 'utf8')).resolves.toContain(
+      // The config must land in the .octopus subdirectory of the home directory.
+      await expect(readFile(join(dir, '.octopus', 'config.json'), 'utf8')).resolves.toContain(
         'deviceId'
       )
     } finally {

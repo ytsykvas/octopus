@@ -1,5 +1,5 @@
 {
-  "name": "maestro",
+  "name": "octopus",
   "version": "0.1.0",
   "description": "Local dispatcher for parallel Claude Code agent tasks",
   "main": "./out/main/index.js",

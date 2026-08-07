@@ -16,17 +16,17 @@ import {
   workspacesDir
 } from './paths.js'
 
-const HOME = join('/tmp', 'maestro-test-home')
-const ROOT = join(HOME, '.maestro')
+const HOME = join('/tmp', 'octopus-test-home')
+const ROOT = join(HOME, '.octopus')
 const PROJECT = 'planner'
 
 describe('rootDir', () => {
   it('places application data inside the user home directory', () => {
-    expect(rootDir(HOME)).toBe(join(HOME, '.maestro'))
+    expect(rootDir(HOME)).toBe(join(HOME, '.octopus'))
   })
 
   it('defaults to the current user home directory', () => {
-    expect(rootDir()).toBe(join(homedir(), '.maestro'))
+    expect(rootDir()).toBe(join(homedir(), '.octopus'))
   })
 })
 

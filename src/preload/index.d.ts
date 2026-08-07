@@ -1,8 +1,8 @@
-import type { MaestroApi } from './index.js'
+import type { OctopusApi } from './index.js'
 
 declare global {
   interface Window {
-    readonly maestro: MaestroApi
+    readonly octopus: OctopusApi
   }
 }
 

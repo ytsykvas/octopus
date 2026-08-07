@@ -1,4 +1,4 @@
-# maestro
+# octopus
 
 A local app for running Claude Code sessions in parallel: every task lives in its
 own git worktree — with its own branch, agent session and dev server on a

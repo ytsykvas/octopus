@@ -43,7 +43,7 @@ async function initRepo(path: string): Promise<void> {
 }
 
 beforeEach(async () => {
-  dir = await mkdtemp(join(tmpdir(), 'maestro-git-'))
+  dir = await mkdtemp(join(tmpdir(), 'octopus-git-'))
   exec = gitIn(dir)
 })
 

@@ -28,7 +28,7 @@ async function initRepo(path: string, branch = 'main'): Promise<void> {
 }
 
 beforeEach(async () => {
-  dir = await mkdtemp(join(tmpdir(), 'maestro-projects-'))
+  dir = await mkdtemp(join(tmpdir(), 'octopus-projects-'))
 })
 
 afterEach(async () => {

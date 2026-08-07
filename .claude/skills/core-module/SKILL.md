@@ -36,12 +36,12 @@ This removes the need to mock the filesystem and makes coverage trivial.
 ```ts
 // Good: testable without mocks
 export function rootDir(home: string = homedir()): string {
-  return join(home, '.maestro')
+  return join(home, '.octopus')
 }
 
 // Bad: testing this means mocking a whole module
 export function rootDir(): string {
-  return join(os.homedir(), '.maestro')
+  return join(os.homedir(), '.octopus')
 }
 ```
 

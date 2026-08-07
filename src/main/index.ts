@@ -8,7 +8,7 @@ import { type AccountKind, authCommand, checkAccounts } from '../core/accounts.j
 import type { Config, ThemePreference } from '../core/config.js'
 import { describeError } from '../core/persist.js'
 import { ProjectValidationError } from '../core/projects.js'
-import { createService, type MaestroService } from '../core/service.js'
+import { createService, type OctopusService } from '../core/service.js'
 import type { ThemeName } from '../core/types.js'
 
 /** Canvas colours from the design system (§10) — so the window does not flash white on launch. */
@@ -102,7 +102,7 @@ function createWindow(theme: ThemeName): BrowserWindow {
  * They are deliberately one-liners: all logic lives in the core service and
  * this layer only forwards calls (§11.1).
  */
-function registerIpc(service: MaestroService): void {
+function registerIpc(service: OctopusService): void {
   ipcMain.handle('theme:get', () => resolveTheme(service.getConfig().theme))
 
   ipcMain.handle('config:get', () => attempt(() => service.getConfig()))
@@ -225,7 +225,7 @@ function broadcastTheme(theme: ThemeName): void {
  * Only relevant while the preference is 'system'; an explicit choice must not
  * be overridden when macOS switches.
  */
-function watchSystemTheme(service: MaestroService): void {
+function watchSystemTheme(service: OctopusService): void {
   nativeTheme.on('updated', () => {
     if (service.getConfig().theme !== 'system') return
     broadcastTheme(nativeTheme.shouldUseDarkColors ? 'dark' : 'light')
@@ -240,12 +240,12 @@ function watchSystemTheme(service: MaestroService): void {
  * act on it.
  */
 async function start(): Promise<void> {
-  let service: MaestroService
+  let service: OctopusService
 
   try {
     service = await createService()
   } catch (error) {
-    dialog.showErrorBox('maestro could not start', describeError(error))
+    dialog.showErrorBox('octopus could not start', describeError(error))
     app.quit()
     return
   }

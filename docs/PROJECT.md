@@ -1,4 +1,4 @@
-# maestro
+# octopus
 
 > The main context document for the project. Describes what is being built and why, and records the requirements for stage 1.
 > The stack is settled; the remaining sections grow through discussion.
@@ -7,7 +7,7 @@
 
 ## 1. What this is
 
-**maestro** is a local macOS application for running Claude Code sessions in parallel: a dispatcher for agent tasks where each task executes in its own isolated copy of a repository.
+**octopus** is a local macOS application for running Claude Code sessions in parallel: a dispatcher for agent tasks where each task executes in its own isolated copy of a repository.
 
 Instead of waiting for the agent to finish one task, the developer starts several at once — each in a separate git worktree with its own branch, its own agent session and its own dev server. The tasks never see each other and never conflict.
 
@@ -420,7 +420,7 @@ Further rules:
 ### 12.2 Scripts
 
 - `setup.sh` — runs after the worktree is created (copying `.env`, installing dependencies).
-- `run.sh` — the dev server; receives `$MAESTRO_PORT`.
+- `run.sh` — the dev server; receives `$OCTOPUS_PORT`.
 - The port is derived deterministically from the workspace id, range 3000–9000, checked for availability.
 
 ### 12.3 The agent — the key requirement
@@ -450,7 +450,7 @@ The `sessionId` from `SDKSystemMessage` is persisted — that is what enables re
 Everything under one directory (Conductor spreads across `~/conductor` and `~/.conductor`):
 
 ```
-~/.maestro/
+~/.octopus/
   config.json                global settings
   state.json                 workspaces, session ids, statuses
   projects/<slug>/
@@ -474,7 +474,7 @@ Everything under one directory (Conductor spreads across `~/conductor` and `~/.c
 ## 14. Project layout
 
 ```
-/Users/tsykvas/projects/maestro/
+/Users/tsykvas/projects/octopus/
   src/
     core/
       paths.ts       every path
@@ -554,7 +554,7 @@ An Electron application is JavaScript in an `asar` archive that unpacks with one
 
 The practical conclusion: a check makes sense as a barrier for honest people and as a convenient way to pay — not as protection. At $5–20 that works out fine: the time to break it costs more than the licence. Real protection comes only from a server component the product is incomplete without.
 
-A consequence for the trial: a local first-run date resets when `~/.maestro` is deleted. If that matters, the trial has to be registered server-side against `deviceId`, which means the network is required on first start. Once issued, the licence should be cached signed (Ed25519 / JWT) with a grace period so the app works offline.
+A consequence for the trial: a local first-run date resets when `~/.octopus` is deleted. If that matters, the trial has to be registered server-side against `deviceId`, which means the network is required on first start. Once issued, the licence should be cached signed (Ed25519 / JWT) with a grace period so the app works offline.
 
 ### 15.5 Note on pricing
 

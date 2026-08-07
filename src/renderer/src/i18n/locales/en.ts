@@ -6,7 +6,7 @@
  */
 export const en = {
   app: {
-    name: 'maestro'
+    name: 'octopus'
   },
 
   sidebar: {
@@ -66,7 +66,7 @@ export const en = {
     settingSourcesHint:
       'Controls what the agent loads besides what this app sends. "Nothing" keeps the context fully under your control.',
     settingSourcesNone: 'Nothing',
-    settingSourcesNoneHint: 'The agent receives only what maestro passes explicitly.',
+    settingSourcesNoneHint: 'The agent receives only what octopus passes explicitly.',
     settingSourcesProject: 'Project only',
     settingSourcesProjectHint: "Loads the repository's own CLAUDE.md and settings.",
     settingSourcesAll: 'Everything',
@@ -74,7 +74,7 @@ export const en = {
 
     accounts: 'Accounts',
     accountsHint:
-      'maestro never stores credentials. Both tools keep them in the system keychain; this screen only reports what they say.',
+      'octopus never stores credentials. Both tools keep them in the system keychain; this screen only reports what they say.',
     claudeAccount: 'Claude',
     claudeAccountHint: 'The agent runs on this account.',
     githubAccount: 'GitHub',

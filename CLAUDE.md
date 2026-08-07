@@ -1,4 +1,4 @@
-# maestro
+# octopus
 
 A local macOS app for running Claude Code sessions in parallel: every task runs in its own
 git worktree, with its own branch, agent session and dev server.
@@ -54,7 +54,7 @@ src/renderer/  UI (React + Tailwind + i18next)
 | `/check`       | manual — quality gate with plain explanations |
 | `/ship`        | manual — gate plus a conventional commit      |
 
-**Subagent** `maestro-reviewer` reviews against this project's standards.
+**Subagent** `octopus-reviewer` reviews against this project's standards.
 
 **Hooks** (`.claude/hooks/`) run automatically:
 

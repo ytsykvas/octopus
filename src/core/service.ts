@@ -27,7 +27,7 @@ export interface ServiceOptions {
   readonly makeExec?: (cwd: string) => GitExec
 }
 
-export interface MaestroService {
+export interface OctopusService {
   getConfig(): Config
   updateConfig(
     patch: Partial<Omit<Config, 'version' | 'deviceId' | 'installedAt'>>
@@ -43,7 +43,7 @@ export interface MaestroService {
  * Every path is a parameter with a default, so the service can be tested
  * against a temporary directory without touching real data.
  */
-export async function createService(options: ServiceOptions = {}): Promise<MaestroService> {
+export async function createService(options: ServiceOptions = {}): Promise<OctopusService> {
   const statePath = options.stateFilePath ?? stateFile()
   const stateTempPath = options.stateTempFilePath ?? stateTempFile()
   const configPath = options.configFilePath ?? configFile()

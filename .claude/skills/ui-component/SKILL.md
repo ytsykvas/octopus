@@ -95,7 +95,7 @@ Nothing to do if you use tokens: `.dark` on `<html>` swaps every value at once.
 
 ## Where logic does not go
 
-A component renders and calls `window.maestro.*`. Git, filesystem and process
+A component renders and calls `window.octopus.*`. Git, filesystem and process
 work lives in `src/core/`.
 
 ## Before finishing

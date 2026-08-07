@@ -20,7 +20,7 @@ let dir: string
 let file: string
 
 beforeEach(async () => {
-  dir = await mkdtemp(join(tmpdir(), 'maestro-config-'))
+  dir = await mkdtemp(join(tmpdir(), 'octopus-config-'))
   file = join(dir, 'config.json')
 })
 
@@ -84,7 +84,7 @@ describe('loadConfig', () => {
 
   it('uses built-in defaults when none are supplied', async () => {
     const config = await loadConfig(file)
-    expect(config.branchPrefix).toBe('maestro')
+    expect(config.branchPrefix).toBe('octopus')
   })
 
   it('still loads a config written before a newer field existed', async () => {
