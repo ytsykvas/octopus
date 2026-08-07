@@ -99,6 +99,12 @@ const api = {
     }
   },
 
+  dialog: {
+    /** Opens a directory picker; `null` means the user cancelled. */
+    pickDirectory: (title: string): Promise<Result<string | null>> =>
+      ipcRenderer.invoke('dialog:pickDirectory', title) as Promise<Result<string | null>>
+  },
+
   settings: {
     /** Fires when the user picks Settings from the native menu (⌘,). */
     onOpen: (handler: () => void): (() => void) => {

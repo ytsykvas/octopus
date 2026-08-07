@@ -31,6 +31,8 @@ export const uk: Translation = {
     cancel: 'Скасувати',
     add: 'Додати',
     cloning: 'Клонуємо {{name}}…',
+    cloneInto: 'Клонуємо в',
+    cloneIntoUnset: 'Спитаємо, куди клонувати.',
     connectFirst: 'Спершу підключіть акаунт GitHub у налаштуваннях.',
     openSettings: 'Відкрити налаштування'
   },
@@ -78,6 +80,12 @@ export const uk: Translation = {
     branchPrefixHint:
       'Гілки воркспейсів називаються <префікс>/<воркспейс>. Зазвичай беруть GitHub-username.',
     branchPrefixEmpty: 'Префікс не може бути порожнім.',
+
+    cloneDirectory: 'Тека для клонування',
+    cloneDirectoryHint:
+      'Репозиторії, додані з GitHub, клонуються сюди. Кожен отримує власну теку з назвою репозиторію.',
+    cloneDirectoryUnset: 'Не задано — спитаємо при першому клонуванні.',
+    change: 'Змінити…',
 
     agent: 'Агент',
     settingSources: 'Джерела інструкцій',

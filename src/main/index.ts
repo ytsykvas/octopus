@@ -147,6 +147,22 @@ function registerIpc(service: OctopusService, terminals: TerminalManager): void 
 
   ipcMain.handle('projects:listRemote', () => attempt(() => service.listRemoteRepositories()))
 
+  // Choosing a directory needs Electron's dialog, so it lives here.
+  ipcMain.handle('dialog:pickDirectory', async (event, title: string) => {
+    const window = BrowserWindow.fromWebContents(event.sender)
+    const options: Electron.OpenDialogOptions = {
+      title,
+      properties: ['openDirectory', 'createDirectory']
+    }
+
+    const picked = window
+      ? await dialog.showOpenDialog(window, options)
+      : await dialog.showOpenDialog(options)
+
+    const [chosen] = picked.filePaths
+    return { ok: true, value: picked.canceled ? null : (chosen ?? null) }
+  })
+
   ipcMain.handle('projects:addFromGitHub', async (event, repository: RemoteRepository) => {
     const destination = await resolveCloneDirectory(service, event)
     if (destination === null) return { ok: true, value: null }

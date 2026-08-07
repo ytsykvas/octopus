@@ -29,6 +29,8 @@ export const en = {
     cancel: 'Cancel',
     add: 'Add',
     cloning: 'Cloning {{name}}…',
+    cloneInto: 'Cloning into',
+    cloneIntoUnset: 'You will be asked where to clone.',
     connectFirst: 'Connect a GitHub account in Settings first.',
     openSettings: 'Open settings'
   },
@@ -76,6 +78,12 @@ export const en = {
     branchPrefixHint:
       'Workspace branches are named <prefix>/<workspace>. A GitHub username is a common choice.',
     branchPrefixEmpty: 'The prefix cannot be empty.',
+
+    cloneDirectory: 'Clone destination',
+    cloneDirectoryHint:
+      'Repositories added from GitHub are cloned here. Each gets its own directory named after the repository.',
+    cloneDirectoryUnset: 'Not set — you will be asked on the first clone.',
+    change: 'Change…',
 
     agent: 'Agent',
     settingSources: 'Instruction sources',

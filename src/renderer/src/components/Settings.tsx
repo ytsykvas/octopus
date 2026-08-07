@@ -177,6 +177,15 @@ function GitSection({
         />
       </Field>
 
+      <Field label={t('settings.cloneDirectory')} hint={t('settings.cloneDirectoryHint')}>
+        <DirectoryField
+          value={config.cloneDirectory}
+          placeholder={t('settings.cloneDirectoryUnset')}
+          title={t('settings.cloneDirectory')}
+          onPick={(cloneDirectory) => void onChange({ cloneDirectory })}
+        />
+      </Field>
+
       <div className="space-y-3">
         <div className="flex items-start justify-between gap-4">
           <p className="text-ink-faint max-w-md leading-relaxed">{t('settings.gitHint')}</p>
@@ -342,6 +351,52 @@ function RadioList<T extends string>({
           <span className="text-ink-faint mt-0.5 block leading-relaxed">{option.hint}</span>
         </button>
       ))}
+    </div>
+  )
+}
+
+/**
+ * A directory chosen through the system picker.
+ *
+ * Read-only by design: typing a path invites typos that only surface later,
+ * when something fails to clone.
+ */
+function DirectoryField({
+  value,
+  placeholder,
+  title,
+  onPick
+}: {
+  value: string
+  placeholder: string
+  title: string
+  onPick: (path: string) => void
+}): React.JSX.Element {
+  const { t } = useTranslation()
+
+  return (
+    <div className="flex items-center gap-2">
+      <span
+        className={`border-line bg-muted flex h-7 min-w-0 flex-1 items-center truncate rounded-[var(--radius-control)] border px-2 font-mono text-[11px] ${
+          value === '' ? 'text-ink-faint' : 'text-ink-soft'
+        }`}
+        title={value || placeholder}
+      >
+        {value === '' ? placeholder : value}
+      </span>
+
+      <Button
+        variant="quiet"
+        size="sm"
+        onClick={() => {
+          void (async () => {
+            const result = await window.octopus.dialog.pickDirectory(title)
+            if (result.ok && result.value !== null) onPick(result.value)
+          })()
+        }}
+      >
+        {t('settings.change')}
+      </Button>
     </div>
   )
 }

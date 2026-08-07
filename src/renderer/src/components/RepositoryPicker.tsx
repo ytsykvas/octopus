@@ -10,6 +10,9 @@ import { Modal } from './Modal.js'
 interface RepositoryPickerProps {
   readonly onPicked: () => void
   readonly onCancel: () => void
+  /** Where clones land; empty means the destination has not been chosen yet. */
+  readonly cloneDirectory: string
+  readonly onCloneDirectoryChange: (path: string) => void
 }
 
 /**
@@ -18,7 +21,12 @@ interface RepositoryPickerProps {
  * The list comes from `gh`, so it reflects whatever account is signed in —
  * there is no separate authentication here.
  */
-export function RepositoryPicker({ onPicked, onCancel }: RepositoryPickerProps): React.JSX.Element {
+export function RepositoryPicker({
+  onPicked,
+  onCancel,
+  cloneDirectory,
+  onCloneDirectoryChange
+}: RepositoryPickerProps): React.JSX.Element {
   const { t } = useTranslation()
   const describeFailure = useErrorMessage()
 
@@ -81,9 +89,37 @@ export function RepositoryPicker({ onPicked, onCancel }: RepositoryPickerProps):
       title={t('repositories.title')}
       onClose={onCancel}
       footer={
-        <Button variant="quiet" onClick={onCancel}>
-          {t('repositories.cancel')}
-        </Button>
+        <>
+          {/* Shown before anything is cloned: the destination is easy to set
+              once and then forget, and a surprise location is hard to undo. */}
+          <div className="mr-auto flex min-w-0 items-center gap-2">
+            <span className="text-ink-faint shrink-0">{t('repositories.cloneInto')}</span>
+            <span
+              className="text-ink-soft truncate font-mono text-[11px]"
+              title={cloneDirectory || undefined}
+            >
+              {cloneDirectory === '' ? t('repositories.cloneIntoUnset') : cloneDirectory}
+            </span>
+            <Button
+              variant="quiet"
+              size="sm"
+              onClick={() => {
+                void (async () => {
+                  const result = await window.octopus.dialog.pickDirectory(
+                    t('settings.cloneDirectory')
+                  )
+                  if (result.ok && result.value !== null) onCloneDirectoryChange(result.value)
+                })()
+              }}
+            >
+              {t('settings.change')}
+            </Button>
+          </div>
+
+          <Button variant="quiet" onClick={onCancel}>
+            {t('repositories.cancel')}
+          </Button>
+        </>
       }
     >
       {/* Opaque, otherwise the list scrolls through it. */}

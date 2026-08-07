@@ -228,6 +228,8 @@ export function App(): React.JSX.Element {
 
       {pickingRepository && (
         <RepositoryPicker
+          cloneDirectory={config?.cloneDirectory ?? ''}
+          onCloneDirectoryChange={(cloneDirectory) => void updateConfig({ cloneDirectory })}
           onPicked={() => {
             setPickingRepository(false)
             void refresh()
