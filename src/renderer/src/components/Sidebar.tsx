@@ -309,10 +309,6 @@ function ProjectRow({
             {project.baseBranch}
           </span>
         </span>
-
-        {collapsed && workspaceCount > 0 && (
-          <span className="text-ink-faint shrink-0 text-[11px]">{workspaceCount}</span>
-        )}
       </button>
 
       <button
