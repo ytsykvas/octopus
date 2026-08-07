@@ -87,7 +87,9 @@ export function ProjectSettings({
       onClose={onClose}
       footer={<Button onClick={onClose}>{t('project.done')}</Button>}
     >
-      <div className="space-y-6">
+      {/* Modal leaves its body flush so a list can span the full width; a form
+          has to bring its own padding. */}
+      <div className="space-y-5 p-4">
         {error !== null && (
           <div className="bg-danger-bg text-danger border-danger/25 rounded-[var(--radius-control)] border px-3 py-2">
             {error}
@@ -105,7 +107,7 @@ export function ProjectSettings({
               if (event.key === 'Enter') event.currentTarget.blur()
               if (event.key === 'Escape') setName(project.name)
             }}
-            className="border-line bg-canvas focus-ring h-8 w-full max-w-sm rounded-[var(--radius-control)] border px-2"
+            className="focus-ring border-line bg-canvas h-7 w-full max-w-sm rounded-[var(--radius-control)] border px-2"
           />
         </Field>
 
@@ -115,7 +117,7 @@ export function ProjectSettings({
             onChange={(event) => {
               changeBranch(event.target.value)
             }}
-            className="border-line bg-canvas focus-ring h-8 w-full max-w-sm rounded-[var(--radius-control)] border px-2 font-mono"
+            className="focus-ring border-line bg-canvas h-7 w-full max-w-sm rounded-[var(--radius-control)] border px-2 font-mono"
           >
             {options.map((branch) => (
               <option key={branch} value={branch}>
@@ -132,12 +134,13 @@ export function ProjectSettings({
         </Field>
 
         {/* Destructive actions sit apart and below, so reaching one is a
-            deliberate move rather than a mis-click on the way past. */}
-        <div className="border-danger/25 space-y-3 rounded-[var(--radius-control)] border p-4">
+            deliberate move rather than a mis-click on the way past. The extra
+            gap above is what makes it read as a separate place. */}
+        <div className="border-danger/25 bg-danger-bg/40 mt-2 space-y-2.5 rounded-[var(--radius-control)] border p-3.5">
           <p className="text-danger font-medium">{t('project.dangerZone')}</p>
           <div className="flex items-center justify-between gap-4">
             <p className="text-ink-faint max-w-sm leading-relaxed">{t('project.removeHint')}</p>
-            <Button variant="danger" onClick={onRemove}>
+            <Button variant="destructive" onClick={onRemove}>
               {t('sidebar.removeProject')}
             </Button>
           </div>
