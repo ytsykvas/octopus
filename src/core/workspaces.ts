@@ -1,0 +1,283 @@
+/**
+ * Workspace lifecycle: create, rename, remove.
+ *
+ * A layer over `worktree.ts` and `store.ts`, shaped like `projects.ts` —
+ * typed errors carrying a code the UI localises, and no knowledge of Electron.
+ *
+ * The layout follows Conductor's: one directory per workspace, one branch per
+ * workspace, both named after the workspace. Unlike Conductor, everything
+ * lives under a single root (§12.4).
+ */
+
+import { access } from 'node:fs/promises'
+
+import { type GitExec, toSlug } from './git.js'
+import { nextWorkspaceName } from './names.js'
+import { workspacePath } from './paths.js'
+import { assignPort, type Project, type State, type Workspace } from './store.js'
+import {
+  addWorktree,
+  changedFiles,
+  listWorktrees,
+  deleteBranch,
+  hasUncommittedChanges,
+  removeWorktree,
+  renameBranch,
+  type Worktree
+} from './worktree.js'
+
+/** Machine-readable reason an operation was refused; the UI localises these. */
+export type WorkspaceErrorCode =
+  'branchExists' | 'pathExists' | 'uncommittedChanges' | 'nameEmpty' | 'worktreeMissing'
+
+export class WorkspaceError extends Error {
+  constructor(
+    readonly code: WorkspaceErrorCode,
+    readonly params: Readonly<Record<string, string>>,
+    message: string
+  ) {
+    super(message)
+    this.name = 'WorkspaceError'
+  }
+}
+
+/**
+ * A workspace as the UI sees it: the stored record plus what only git knows.
+ *
+ * Deliberately not persisted — `changedFiles` and `missing` are facts about
+ * the working tree right now, and a stale copy on disk would be worse than
+ * no copy at all.
+ */
+export interface WorkspaceView extends Workspace {
+  /** Files with uncommitted changes, including untracked ones. */
+  readonly changedFiles: number
+  /** The directory is gone — removed outside the app. */
+  readonly missing: boolean
+}
+
+async function pathExists(path: string): Promise<boolean> {
+  try {
+    await access(path)
+    return true
+  } catch {
+    return false
+  }
+}
+
+/** Full branch name for a workspace: `<prefix>/<name>`. */
+export function branchFor(project: Project, name: string): string {
+  return `${project.branchPrefix}/${toSlug(name)}`
+}
+
+interface CreateOptions {
+  readonly root?: string
+  readonly exists?: (path: string) => Promise<boolean>
+}
+
+/**
+ * Creates a workspace: a directory, a branch, and the record tying them
+ * together.
+ *
+ * The generated name becomes the id, and the id fixes the directory for good.
+ * Renaming later moves the branch but not the directory, because
+ * `git worktree move` fails whenever something is running inside it.
+ */
+export async function createWorkspace(
+  project: Project,
+  state: State,
+  exec: GitExec,
+  options: CreateOptions = {}
+): Promise<Workspace> {
+  const exists = options.exists ?? pathExists
+
+  const taken = state.workspaces
+    .filter((workspace) => workspace.projectId === project.id)
+    .map((workspace) => workspace.id)
+
+  const id = nextWorkspaceName(taken)
+  const branch = branchFor(project, id)
+  const path = workspacePath(project.id, id, options.root)
+
+  if (await exists(path)) {
+    throw new WorkspaceError('pathExists', { path }, `${path} already exists.`)
+  }
+
+  await addWorktree(exec, path, branch, project.baseBranch)
+
+  return {
+    id,
+    projectId: project.id,
+    name: id,
+    branch,
+    path: await canonicalPath(exec, branch, path),
+    status: 'idle',
+    sessionId: null,
+    port: assignPort(
+      id,
+      state.workspaces.map((workspace) => workspace.port)
+    ),
+    createdAt: new Date().toISOString(),
+    ownerId: null
+  }
+}
+
+/**
+ * The path git reports for a freshly created worktree.
+ *
+ * git canonicalises paths — on macOS `/var` is a symlink to `/private/var`,
+ * so the directory it reports differs from the one we asked for. Storing our
+ * version would make every workspace look missing when the two are compared.
+ */
+async function canonicalPath(exec: GitExec, branch: string, fallback: string): Promise<string> {
+  try {
+    const created = (await listWorktrees(exec)).find((worktree) => worktree.branch === branch)
+    return created?.path ?? fallback
+  } catch {
+    return fallback
+  }
+}
+
+/**
+ * Renames a workspace: the label and the branch, never the directory.
+ *
+ * The branch is what shows up in a pull request and in `git log`, so keeping
+ * it aligned with the label is the point of the operation.
+ */
+export async function renameWorkspace(
+  workspace: Workspace,
+  project: Project,
+  name: string,
+  exec: GitExec
+): Promise<{ name: string; branch: string }> {
+  const trimmed = name.trim()
+  if (trimmed === '') {
+    throw new WorkspaceError('nameEmpty', {}, 'A workspace name cannot be empty.')
+  }
+
+  const branch = branchFor(project, trimmed)
+  if (branch === workspace.branch) {
+    // The slug did not change — nothing for git to do.
+    return { name: trimmed, branch }
+  }
+
+  try {
+    await renameBranch(exec, workspace.branch, branch)
+  } catch {
+    throw new WorkspaceError('branchExists', { branch }, `Branch ${branch} already exists.`)
+  }
+
+  return { name: trimmed, branch }
+}
+
+export interface RemoveOptions {
+  /** Discard uncommitted work. Only ever true after the user was told. */
+  readonly force?: boolean
+  /** Also delete the branch, losing any commits that were never merged. */
+  readonly deleteBranch?: boolean
+}
+
+/**
+ * The two git contexts an operation on a workspace needs.
+ *
+ * They are genuinely different directories: worktrees and branches are managed
+ * from the repository, while the state of the work lives inside the workspace.
+ * Passing one executor for both silently asks the wrong directory.
+ */
+export interface WorkspaceExec {
+  readonly repository: GitExec
+  readonly workspace: GitExec
+}
+
+/**
+ * Removes a workspace's worktree, and optionally its branch.
+ *
+ * Uncommitted work blocks the removal unless forced: git refuses on its own,
+ * but checking first lets the UI explain what is at stake instead of showing
+ * a failed command.
+ */
+export async function removeWorkspace(
+  workspace: Workspace,
+  exec: WorkspaceExec,
+  options: RemoveOptions = {}
+): Promise<void> {
+  const force = options.force ?? false
+
+  if (!force && (await holdsUncommittedWork(exec.workspace))) {
+    throw new WorkspaceError(
+      'uncommittedChanges',
+      { name: workspace.name },
+      `${workspace.name} has uncommitted changes.`
+    )
+  }
+
+  await removeWorktree(exec.repository, workspace.path, force)
+
+  if (options.deleteBranch === true) {
+    // Forced removal implies the user accepted losing work, so an unmerged
+    // branch is not a reason to stop here.
+    await deleteBranch(exec.repository, workspace.branch, force)
+  }
+}
+
+/**
+ * Whether a workspace holds uncommitted work.
+ *
+ * A directory that is already gone counts as clean: there is nothing left to
+ * lose, and refusing to tidy up the record would leave the user stuck with an
+ * entry they cannot remove.
+ */
+async function holdsUncommittedWork(exec: GitExec): Promise<boolean> {
+  try {
+    return await hasUncommittedChanges(exec)
+  } catch {
+    return false
+  }
+}
+
+/**
+ * Reconciles stored workspaces with what git actually has.
+ *
+ * git is the source of truth about worktrees; the store only holds what git
+ * does not know. A workspace whose directory vanished is marked rather than
+ * dropped: silently deleting records would hide the discrepancy instead of
+ * surfacing it (§13).
+ */
+export function reconcile(
+  workspaces: readonly Workspace[],
+  worktrees: readonly Worktree[],
+  changes: ReadonlyMap<string, number> = new Map()
+): WorkspaceView[] {
+  const known = new Set(worktrees.map((worktree) => worktree.path))
+
+  return workspaces.map((workspace) => ({
+    ...workspace,
+    missing: !known.has(workspace.path),
+    changedFiles: changes.get(workspace.id) ?? 0
+  }))
+}
+
+/**
+ * Counts uncommitted files per workspace.
+ *
+ * Failures are swallowed per workspace on purpose: one broken worktree should
+ * not blank out the counts for every other one.
+ */
+export async function countChanges(
+  workspaces: readonly Workspace[],
+  makeExec: (cwd: string) => GitExec
+): Promise<Map<string, number>> {
+  const counts = new Map<string, number>()
+
+  await Promise.all(
+    workspaces.map(async (workspace) => {
+      try {
+        const files = await changedFiles(makeExec(workspace.path))
+        counts.set(workspace.id, files.length)
+      } catch {
+        counts.set(workspace.id, 0)
+      }
+    })
+  )
+
+  return counts
+}
