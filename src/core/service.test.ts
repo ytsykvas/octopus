@@ -29,7 +29,9 @@ function paths(root: string): Parameters<typeof createService>[0] {
   return {
     stateFilePath: join(root, 'state.json'),
     stateTempFilePath: join(root, 'state.json.tmp'),
-    configFilePath: join(root, 'config.json')
+    configFilePath: join(root, 'config.json'),
+    // Without this, worktrees would land in the real ~/.octopus.
+    dataRoot: join(root, 'data')
   }
 }
 
@@ -120,6 +122,152 @@ describe('GitHub projects', () => {
     // than crashing, whatever the machine's gh reports.
     const plain = await createService(paths(join(dir, 'plain')))
     await expect(plain.listRemoteRepositories()).resolves.toBeInstanceOf(Array)
+  })
+})
+
+describe('workspaces', () => {
+  /** A service with one project already added, as the UI would have. */
+  async function withProject(): Promise<{ service: OctopusService; projectId: string }> {
+    const repo = join(dir, 'planner')
+    await initRepo(repo)
+
+    const service = await createService(paths(dir))
+    const project = await service.addProjectFromPath(repo)
+    return { service, projectId: project.id }
+  }
+
+  it('starts with no workspaces', async () => {
+    const { service, projectId } = await withProject()
+    await expect(service.listWorkspaces(projectId)).resolves.toEqual([])
+  })
+
+  it('creates a workspace with a generated name', async () => {
+    const { service, projectId } = await withProject()
+
+    const workspace = await service.createWorkspaceIn(projectId)
+    expect(workspace.name).toBe('anna')
+
+    const listed = await service.listWorkspaces(projectId)
+    expect(listed).toHaveLength(1)
+    expect(listed[0]?.missing).toBe(false)
+  })
+
+  it('keeps workspaces across a restart', async () => {
+    const { service, projectId } = await withProject()
+    await service.createWorkspaceIn(projectId)
+
+    const restarted = await createService(paths(dir))
+    await expect(restarted.listWorkspaces(projectId)).resolves.toHaveLength(1)
+  })
+
+  it('renames a workspace and its branch', async () => {
+    const { service, projectId } = await withProject()
+    const workspace = await service.createWorkspaceIn(projectId)
+
+    await service.renameWorkspaceById(workspace.id, 'fix auth')
+
+    const listed = await service.listWorkspaces(projectId)
+    expect(listed[0]?.name).toBe('fix auth')
+    expect(listed[0]?.branch).toContain('fix-auth')
+  })
+
+  it('reports changed files', async () => {
+    const { service, projectId } = await withProject()
+    const workspace = await service.createWorkspaceIn(projectId)
+
+    await expect(service.workspaceHasChanges(workspace.id)).resolves.toBe(false)
+
+    await writeFile(join(workspace.path, 'draft.txt'), 'work\n', 'utf8')
+
+    await expect(service.workspaceHasChanges(workspace.id)).resolves.toBe(true)
+    const listed = await service.listWorkspaces(projectId)
+    expect(listed[0]?.changedFiles).toBe(1)
+  })
+
+  it('refuses to remove a workspace holding uncommitted work', async () => {
+    const { service, projectId } = await withProject()
+    const workspace = await service.createWorkspaceIn(projectId)
+    await writeFile(join(workspace.path, 'draft.txt'), 'work\n', 'utf8')
+
+    await expect(service.removeWorkspaceById(workspace.id)).rejects.toThrow()
+    await expect(service.listWorkspaces(projectId)).resolves.toHaveLength(1)
+  })
+
+  it('removes a workspace once forced', async () => {
+    const { service, projectId } = await withProject()
+    const workspace = await service.createWorkspaceIn(projectId)
+    await writeFile(join(workspace.path, 'draft.txt'), 'work\n', 'utf8')
+
+    await service.removeWorkspaceById(workspace.id, { force: true })
+    await expect(service.listWorkspaces(projectId)).resolves.toEqual([])
+  })
+
+  it('gives each workspace a distinct name', async () => {
+    const { service, projectId } = await withProject()
+    const first = await service.createWorkspaceIn(projectId)
+    const second = await service.createWorkspaceIn(projectId)
+
+    expect(second.name).not.toBe(first.name)
+  })
+
+  it('reports nothing for a project that does not exist', async () => {
+    const service = await createService(paths(dir))
+    await expect(service.listWorkspaces('missing')).resolves.toEqual([])
+  })
+
+  it('refuses to act on a workspace that does not exist', async () => {
+    const service = await createService(paths(dir))
+
+    await expect(service.renameWorkspaceById('missing', 'name')).rejects.toThrow()
+    await expect(service.removeWorkspaceById('missing')).rejects.toThrow()
+    await expect(service.workspaceHasChanges('missing')).rejects.toThrow()
+  })
+
+  it('refuses to create a workspace in a project that does not exist', async () => {
+    const service = await createService(paths(dir))
+    await expect(service.createWorkspaceIn('missing')).rejects.toThrow()
+  })
+
+  // A repository that cannot be read must not blank the list — the records
+  // are still there, and hiding them would look like data loss.
+  it('still lists workspaces when git cannot be read', async () => {
+    const { service, projectId } = await withProject()
+    const workspace = await service.createWorkspaceIn(projectId)
+
+    // Point the project at a directory that is not a repository.
+    const broken = await createService({
+      ...paths(dir),
+      makeExec: () => () => Promise.reject(new Error('not a repository'))
+    })
+
+    const listed = await broken.listWorkspaces(projectId)
+    expect(listed).toHaveLength(1)
+    expect(listed[0]?.id).toBe(workspace.id)
+    // With no worktrees reported, the workspace reads as missing.
+    expect(listed[0]?.missing).toBe(true)
+  })
+
+  it('falls back to the default root when none is configured', async () => {
+    // Only the state paths are overridden here; dataRoot is left out, so the
+    // default location is used. Creation is expected to fail because that
+    // project does not exist — enough to exercise the branch without writing
+    // into the real home directory.
+    const service = await createService({
+      stateFilePath: join(dir, 'plain-state.json'),
+      stateTempFilePath: join(dir, 'plain-state.json.tmp'),
+      configFilePath: join(dir, 'plain-config.json')
+    })
+
+    await expect(service.createWorkspaceIn('missing')).rejects.toThrow()
+  })
+
+  // Removing the project should not strand its workspaces in the store.
+  it('drops workspaces along with their project', async () => {
+    const { service, projectId } = await withProject()
+    await service.createWorkspaceIn(projectId)
+
+    await service.removeProjectById(projectId)
+    await expect(service.listWorkspaces(projectId)).resolves.toEqual([])
   })
 })
 

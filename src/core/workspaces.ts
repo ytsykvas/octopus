@@ -257,9 +257,26 @@ export function reconcile(
 }
 
 /**
+ * Counts uncommitted files in one workspace.
+ *
+ * A worktree that cannot be read reports zero rather than failing: the count
+ * is an indicator, and a broken one must not take the surrounding view with it.
+ */
+export async function changeCount(
+  workspace: Workspace,
+  makeExec: (cwd: string) => GitExec
+): Promise<number> {
+  try {
+    return (await changedFiles(makeExec(workspace.path))).length
+  } catch {
+    return 0
+  }
+}
+
+/**
  * Counts uncommitted files per workspace.
  *
- * Failures are swallowed per workspace on purpose: one broken worktree should
+ * Failures are handled per workspace on purpose: one broken worktree should
  * not blank out the counts for every other one.
  */
 export async function countChanges(
@@ -270,12 +287,7 @@ export async function countChanges(
 
   await Promise.all(
     workspaces.map(async (workspace) => {
-      try {
-        const files = await changedFiles(makeExec(workspace.path))
-        counts.set(workspace.id, files.length)
-      } catch {
-        counts.set(workspace.id, 0)
-      }
+      counts.set(workspace.id, await changeCount(workspace, makeExec))
     })
   )
 

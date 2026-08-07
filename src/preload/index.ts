@@ -4,6 +4,8 @@ import type { AccountKind, AccountsStatus } from '@core/accounts.js'
 import type { TerminalExit, TerminalOutput, TerminalSpec } from '@core/terminal.js'
 import type { Config } from '@core/config.js'
 import type { RemoteRepository } from '@core/github.js'
+import type { Workspace } from '@core/store.js'
+import type { RemoveOptions, WorkspaceView } from '@core/workspaces.js'
 import type { Project } from '@core/store.js'
 import type { ThemeName } from '@core/types.js'
 
@@ -97,6 +99,25 @@ const api = {
         ipcRenderer.off('terminal:exit', listener)
       }
     }
+  },
+
+  workspaces: {
+    /** Workspaces of a project, reconciled with what git actually has. */
+    list: (projectId: string): Promise<Result<WorkspaceView[]>> =>
+      ipcRenderer.invoke('workspaces:list', projectId) as Promise<Result<WorkspaceView[]>>,
+
+    create: (projectId: string): Promise<Result<Workspace>> =>
+      ipcRenderer.invoke('workspaces:create', projectId) as Promise<Result<Workspace>>,
+
+    rename: (workspaceId: string, name: string): Promise<Result<void>> =>
+      ipcRenderer.invoke('workspaces:rename', workspaceId, name) as Promise<Result<void>>,
+
+    remove: (workspaceId: string, options: RemoveOptions = {}): Promise<Result<void>> =>
+      ipcRenderer.invoke('workspaces:remove', workspaceId, options) as Promise<Result<void>>,
+
+    /** Whether removing this workspace would discard uncommitted work. */
+    hasChanges: (workspaceId: string): Promise<Result<boolean>> =>
+      ipcRenderer.invoke('workspaces:hasChanges', workspaceId) as Promise<Result<boolean>>
   },
 
   dialog: {

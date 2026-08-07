@@ -7,6 +7,7 @@ import type { Config, ThemePreference } from '../core/config.js'
 import { describeError } from '../core/persist.js'
 import { GitHubError, type RemoteRepository } from '../core/github.js'
 import { ProjectValidationError } from '../core/projects.js'
+import { type RemoveOptions, WorkspaceError } from '../core/workspaces.js'
 import { createService, type OctopusService } from '../core/service.js'
 import { TerminalSpecSchema } from '../core/terminal.js'
 import type { ThemeName } from '../core/types.js'
@@ -34,7 +35,11 @@ async function attempt<T>(operation: () => Promise<T> | T): Promise<Result<T>> {
   try {
     return { ok: true, value: await operation() }
   } catch (error) {
-    if (error instanceof ProjectValidationError || error instanceof GitHubError) {
+    if (
+      error instanceof ProjectValidationError ||
+      error instanceof GitHubError ||
+      error instanceof WorkspaceError
+    ) {
       return { ok: false, error: error.message, code: error.code, params: error.params }
     }
     return { ok: false, error: describeError(error) }
@@ -150,6 +155,26 @@ function registerIpc(service: OctopusService, terminals: TerminalManager): void 
   )
 
   ipcMain.handle('projects:listRemote', () => attempt(() => service.listRemoteRepositories()))
+
+  ipcMain.handle('workspaces:list', (_event, projectId: string) =>
+    attempt(() => service.listWorkspaces(projectId))
+  )
+
+  ipcMain.handle('workspaces:create', (_event, projectId: string) =>
+    attempt(() => service.createWorkspaceIn(projectId))
+  )
+
+  ipcMain.handle('workspaces:rename', (_event, workspaceId: string, name: string) =>
+    attempt(() => service.renameWorkspaceById(workspaceId, name))
+  )
+
+  ipcMain.handle('workspaces:remove', (_event, workspaceId: string, options: RemoveOptions) =>
+    attempt(() => service.removeWorkspaceById(workspaceId, options))
+  )
+
+  ipcMain.handle('workspaces:hasChanges', (_event, workspaceId: string) =>
+    attempt(() => service.workspaceHasChanges(workspaceId))
+  )
 
   // Choosing a directory needs Electron's dialog, so it lives here.
   ipcMain.handle('dialog:pickDirectory', async (event, title: string) => {

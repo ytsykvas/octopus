@@ -11,22 +11,49 @@ import { type Config, loadConfig, saveConfig } from './config.js'
 import { cloneRepository, listRepositories, type RemoteRepository } from './github.js'
 import type { GitExec } from './git.js'
 import { gitIn } from './git.js'
-import { configFile, stateFile, stateTempFile } from './paths.js'
+import { configFile, rootDir, stateFile, stateTempFile } from './paths.js'
 import { createProject } from './projects.js'
 import {
   addProject,
+  addWorkspace,
+  findProject,
   loadState,
   type Project,
   removeProject,
+  removeWorkspace as removeWorkspaceRecord,
   renameProject,
   saveState,
-  type State
+  type State,
+  updateWorkspace,
+  type Workspace,
+  workspacesOfProject
 } from './store.js'
+import { listWorktrees } from './worktree.js'
+import {
+  changeCount,
+  countChanges,
+  createWorkspace,
+  reconcile,
+  removeWorkspace,
+  renameWorkspace,
+  WorkspaceError,
+  type WorkspaceView,
+  type RemoveOptions
+} from './workspaces.js'
 
 export interface ServiceOptions {
   readonly stateFilePath?: string
   readonly stateTempFilePath?: string
   readonly configFilePath?: string
+  /**
+   * Root for workspace directories.
+   *
+   * Separate from the state and config paths because worktrees are the one
+   * thing the service writes outside those files — without it, a test with
+   * its own state file would still create worktrees in the real home
+   * directory.
+   */
+  readonly dataRoot?: string
   readonly makeExec?: (cwd: string) => GitExec
   readonly commandExec?: CommandExec
 }
@@ -43,6 +70,14 @@ export interface OctopusService {
   listRemoteRepositories(): Promise<RemoteRepository[]>
   renameProjectById(projectId: string, name: string): Promise<void>
   removeProjectById(projectId: string): Promise<void>
+
+  /** Workspaces of a project, reconciled with what git actually has. */
+  listWorkspaces(projectId: string): Promise<WorkspaceView[]>
+  createWorkspaceIn(projectId: string): Promise<Workspace>
+  renameWorkspaceById(workspaceId: string, name: string): Promise<void>
+  removeWorkspaceById(workspaceId: string, options?: RemoveOptions): Promise<void>
+  /** Whether a workspace holds work that removal would discard. */
+  workspaceHasChanges(workspaceId: string): Promise<boolean>
 }
 
 /**
@@ -57,6 +92,7 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
   const configPath = options.configFilePath ?? configFile()
   const makeExec = options.makeExec ?? gitIn
   const commandExec = options.commandExec ?? defaultExec
+  const dataRoot = options.dataRoot ?? rootDir()
 
   let state: State = await loadState(statePath)
   let config: Config = await loadConfig(configPath)
@@ -64,6 +100,32 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
   async function commit(next: State): Promise<void> {
     await saveState(next, statePath, stateTempPath)
     state = next
+  }
+
+  /**
+   * Looks up a project, failing loudly.
+   *
+   * An operation aimed at something that is not there is a bug in the caller,
+   * not a state the UI should try to render around.
+   */
+  function requireProject(projectId: string): Project {
+    const project = findProject(state, projectId)
+    if (!project) {
+      throw new WorkspaceError('worktreeMissing', { projectId }, `Project ${projectId} not found.`)
+    }
+    return project
+  }
+
+  function requireWorkspace(workspaceId: string): Workspace {
+    const workspace = state.workspaces.find((item) => item.id === workspaceId)
+    if (!workspace) {
+      throw new WorkspaceError(
+        'worktreeMissing',
+        { workspaceId },
+        `Workspace ${workspaceId} not found.`
+      )
+    }
+    return workspace
   }
 
   async function addFromPath(path: string): Promise<Project> {
@@ -107,6 +169,57 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
 
     async removeProjectById(projectId) {
       await commit(removeProject(state, projectId))
+    },
+
+    async listWorkspaces(projectId) {
+      const project = findProject(state, projectId)
+      if (!project) return []
+
+      const stored = workspacesOfProject(state, projectId)
+      if (stored.length === 0) return []
+
+      // git is the source of truth about worktrees; the store only holds what
+      // git does not know. A failure to read it must not blank the list.
+      const worktrees = await listWorktrees(makeExec(project.repoPath)).catch(() => [])
+      const changes = await countChanges(stored, makeExec)
+
+      return reconcile(stored, worktrees, changes)
+    },
+
+    async createWorkspaceIn(projectId) {
+      const project = requireProject(projectId)
+
+      const workspace = await createWorkspace(project, state, makeExec(project.repoPath), {
+        root: dataRoot
+      })
+      await commit(addWorkspace(state, workspace))
+      return workspace
+    },
+
+    async renameWorkspaceById(workspaceId, name) {
+      const workspace = requireWorkspace(workspaceId)
+      const project = requireProject(workspace.projectId)
+
+      const renamed = await renameWorkspace(workspace, project, name, makeExec(project.repoPath))
+      await commit(updateWorkspace(state, workspaceId, renamed))
+    },
+
+    async removeWorkspaceById(workspaceId, options) {
+      const workspace = requireWorkspace(workspaceId)
+      const project = requireProject(workspace.projectId)
+
+      await removeWorkspace(
+        workspace,
+        { repository: makeExec(project.repoPath), workspace: makeExec(workspace.path) },
+        options
+      )
+
+      await commit(removeWorkspaceRecord(state, workspaceId))
+    },
+
+    async workspaceHasChanges(workspaceId) {
+      const workspace = requireWorkspace(workspaceId)
+      return (await changeCount(workspace, makeExec)) > 0
     }
   }
 }
