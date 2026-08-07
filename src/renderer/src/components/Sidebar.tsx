@@ -1,4 +1,6 @@
 import {
+  ChevronDown,
+  ChevronRight,
   CloudDownload,
   FolderOpen,
   MoreHorizontal,
@@ -62,6 +64,21 @@ export function Sidebar({
   busy
 }: SidebarProps): React.JSX.Element {
   const { t } = useTranslation()
+  // Ephemeral on purpose: which projects are folded away is a view preference
+  // for the current session, not something worth persisting.
+  const [collapsed, setCollapsed] = useState<ReadonlySet<string>>(new Set())
+
+  const toggle = (projectId: string): void => {
+    setCollapsed((current) => {
+      const next = new Set(current)
+      if (next.has(projectId)) {
+        next.delete(projectId)
+      } else {
+        next.add(projectId)
+      }
+      return next
+    })
+  }
 
   return (
     <aside className="border-line bg-surface flex w-64 shrink-0 flex-col border-r">
@@ -82,8 +99,11 @@ export function Sidebar({
                 <ProjectRow
                   project={project}
                   selected={project.id === selectedProjectId}
+                  collapsed={collapsed.has(project.id)}
+                  workspaceCount={(workspaces.get(project.id) ?? []).length}
                   onSelect={() => {
                     onSelectProject(project.id)
+                    toggle(project.id)
                   }}
                   onRemove={() => {
                     onRemoveProject(project.id)
@@ -97,7 +117,7 @@ export function Sidebar({
                 />
 
                 <WorkspaceList
-                  workspaces={workspaces.get(project.id) ?? []}
+                  workspaces={collapsed.has(project.id) ? [] : (workspaces.get(project.id) ?? [])}
                   selectedWorkspaceId={selectedWorkspaceId}
                   editingWorkspaceId={editingWorkspaceId}
                   onSelect={onSelectWorkspace}
@@ -222,6 +242,8 @@ function AddMenu({
 interface ProjectRowProps {
   readonly project: Project
   readonly selected: boolean
+  readonly collapsed: boolean
+  readonly workspaceCount: number
   readonly onSelect: () => void
   readonly onRemove: () => void
   readonly onRename: (name: string) => void
@@ -231,6 +253,8 @@ interface ProjectRowProps {
 function ProjectRow({
   project,
   selected,
+  collapsed,
+  workspaceCount,
   onSelect,
   onRemove,
   onRename,
@@ -264,13 +288,29 @@ function ProjectRow({
         onDoubleClick={() => {
           setEditing(true)
         }}
-        className="focus-ring min-w-0 flex-1 rounded-[var(--radius-control)] text-left"
+        className="focus-ring flex min-w-0 flex-1 items-center gap-1.5 rounded-[var(--radius-control)] text-left"
         title={project.repoPath}
       >
-        <span className="block truncate font-medium">{project.name}</span>
-        <span className="text-ink-faint block truncate font-mono text-[11px]">
-          {project.baseBranch}
+        {/* The chevron only appears once there is something to fold away. */}
+        <span className="text-ink-faint w-3 shrink-0">
+          {workspaceCount > 0 &&
+            (collapsed ? (
+              <ChevronRight aria-hidden size={12} />
+            ) : (
+              <ChevronDown aria-hidden size={12} />
+            ))}
         </span>
+
+        <span className="min-w-0 flex-1">
+          <span className="block truncate font-medium">{project.name}</span>
+          <span className="text-ink-faint block truncate font-mono text-[11px]">
+            {project.baseBranch}
+          </span>
+        </span>
+
+        {collapsed && workspaceCount > 0 && (
+          <span className="text-ink-faint shrink-0 text-[11px]">{workspaceCount}</span>
+        )}
       </button>
 
       <button
