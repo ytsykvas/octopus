@@ -1,6 +1,7 @@
 import { join } from 'node:path'
 
 import { app, BrowserWindow, dialog, ipcMain, Menu, nativeTheme, shell } from 'electron'
+import { z } from 'zod'
 
 import { type AccountKind, checkAccounts, signOut } from '../core/accounts.js'
 import type { Config, ThemePreference } from '../core/config.js'
@@ -26,6 +27,16 @@ const CANVAS_DARK = '#0f1115'
  * Validation failures also carry a code and params, so the renderer can
  * render a localised message rather than the raw English fallback.
  */
+/** Shape of a confirmation request; validated because it crosses IPC. */
+const ConfirmRequestSchema = z.object({
+  title: z.string(),
+  message: z.string(),
+  detail: z.string().optional(),
+  confirmLabel: z.string(),
+  cancelLabel: z.string(),
+  destructive: z.boolean().default(false)
+})
+
 type Result<T> =
   | { ok: true; value: T }
   | { ok: false; error: string; code?: string; params?: Readonly<Record<string, string>> }
@@ -150,6 +161,39 @@ function registerIpc(service: OctopusService, terminals: TerminalManager): void 
   )
 
   ipcMain.handle('projects:listRemote', () => attempt(() => service.listRemoteRepositories()))
+
+  /**
+   * Confirmation for a destructive action.
+   *
+   * The strings come from the renderer because that is where localisation
+   * lives; main only knows how to present them. Native rather than an
+   * in-app modal: the system dialog places its buttons by platform
+   * convention, which matters when one of them destroys something.
+   */
+  ipcMain.handle('dialog:confirm', async (event, request: unknown) => {
+    const parsed = ConfirmRequestSchema.safeParse(request)
+    if (!parsed.success) return { ok: true, value: false }
+
+    const { title, message, detail, confirmLabel, cancelLabel, destructive } = parsed.data
+    const window = BrowserWindow.fromWebContents(event.sender)
+
+    const options: Electron.MessageBoxOptions = {
+      type: 'warning',
+      title,
+      message,
+      ...(detail === undefined ? {} : { detail }),
+      buttons: [confirmLabel, cancelLabel],
+      defaultId: 1,
+      cancelId: 1,
+      ...(destructive ? { noLink: true } : {})
+    }
+
+    const answer = window
+      ? await dialog.showMessageBox(window, options)
+      : await dialog.showMessageBox(options)
+
+    return { ok: true, value: answer.response === 0 }
+  })
 
   // Choosing a directory needs Electron's dialog, so it lives here.
   ipcMain.handle('dialog:pickDirectory', async (event, title: string) => {

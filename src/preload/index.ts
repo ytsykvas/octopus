@@ -100,6 +100,17 @@ const api = {
   },
 
   dialog: {
+    /** Asks the user to confirm a destructive action. */
+    confirm: (request: {
+      title: string
+      message: string
+      detail?: string
+      confirmLabel: string
+      cancelLabel: string
+      destructive?: boolean
+    }): Promise<Result<boolean>> =>
+      ipcRenderer.invoke('dialog:confirm', request) as Promise<Result<boolean>>,
+
     /** Opens a directory picker; `null` means the user cancelled. */
     pickDirectory: (title: string): Promise<Result<string | null>> =>
       ipcRenderer.invoke('dialog:pickDirectory', title) as Promise<Result<string | null>>

@@ -20,6 +20,11 @@ export const uk: Translation = {
     removeProject: 'Прибрати проєкт',
     renameProject: 'Перейменувати',
     renameHint: 'Enter — зберегти, Escape — скасувати',
+    removeTitle: 'Прибрати проєкт?',
+    removeMessage: 'Прибрати «{{name}}» зі списку?',
+    removeDetail: 'Репозиторій лишається на диску там, де він є — зникає лише цей запис.',
+    removeConfirm: 'Прибрати',
+    removeCancel: 'Скасувати',
     settings: 'Налаштування'
   },
 

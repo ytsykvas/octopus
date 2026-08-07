@@ -18,6 +18,11 @@ export const en = {
     removeProject: 'Remove project',
     renameProject: 'Rename',
     renameHint: 'Enter to save, Escape to cancel',
+    removeTitle: 'Remove project?',
+    removeMessage: 'Remove “{{name}}” from the list?',
+    removeDetail: 'The repository stays on disk exactly where it is — only this entry disappears.',
+    removeConfirm: 'Remove',
+    removeCancel: 'Cancel',
     settings: 'Settings'
   },
 

@@ -155,6 +155,21 @@ export function App(): React.JSX.Element {
 
   const removeProject = useCallback(
     async (projectId: string) => {
+      const project = projects.find((item) => item.id === projectId)
+      if (!project) return
+
+      // Removing is one click away from a hover state, so it asks first.
+      const confirmed = await window.octopus.dialog.confirm({
+        title: t('sidebar.removeTitle'),
+        message: t('sidebar.removeMessage', { name: project.name }),
+        detail: t('sidebar.removeDetail'),
+        confirmLabel: t('sidebar.removeConfirm'),
+        cancelLabel: t('sidebar.removeCancel'),
+        destructive: true
+      })
+
+      if (!confirmed.ok || !confirmed.value) return
+
       const result = await window.octopus.projects.remove(projectId)
       if (!result.ok) {
         setError(describeFailure(result))
@@ -163,7 +178,7 @@ export function App(): React.JSX.Element {
       setSelectedProjectId((current) => (current === projectId ? null : current))
       await refresh()
     },
-    [refresh, describeFailure]
+    [projects, refresh, describeFailure, t]
   )
 
   const selectedProject = projects.find((project) => project.id === selectedProjectId) ?? null
