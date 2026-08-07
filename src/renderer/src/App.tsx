@@ -236,7 +236,10 @@ export function App(): React.JSX.Element {
       <Sidebar
         projects={projects}
         selectedProjectId={selectedProjectId}
-        onSelectProject={setSelectedProjectId}
+        onSelectProject={(id) => {
+          setSelectedProjectId(id)
+          setSelectedWorkspaceId(null)
+        }}
         onAddFromDisk={() => void addProject()}
         onAddFromGitHub={() => {
           setPickingRepository(true)
@@ -245,7 +248,11 @@ export function App(): React.JSX.Element {
         onRenameProject={(id, name) => void renameProject(id, name)}
         workspaces={workspaces.byProject}
         selectedWorkspaceId={selectedWorkspaceId}
-        onSelectWorkspace={setSelectedWorkspaceId}
+        onSelectWorkspace={(id) => {
+          setSelectedWorkspaceId(id)
+          const owner = workspaces.flat.find((item) => item.id === id)
+          if (owner) setSelectedProjectId(owner.projectId)
+        }}
         onCreateWorkspace={(id) => void workspaces.create(id)}
         onRenameWorkspace={(id, name) => void workspaces.rename(id, name)}
         onRemoveWorkspace={(id) => void workspaces.remove(id)}

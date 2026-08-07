@@ -163,9 +163,23 @@
     background-color: var(--muted);
   }
 
+  /* Selection has to read against the sidebar's own tint, so it carries a
+     left marker as well as a fill — colour alone was too quiet there. */
   .row-selected {
-    background-color: color-mix(in srgb, var(--accent) 12%, transparent);
+    position: relative;
+    background-color: color-mix(in srgb, var(--accent) 16%, transparent);
     color: var(--ink);
+  }
+
+  .row-selected::before {
+    content: '';
+    position: absolute;
+    top: 4px;
+    bottom: 4px;
+    left: 0;
+    width: 2px;
+    border-radius: 1px;
+    background-color: var(--accent);
   }
 
   .focus-ring:focus-visible {

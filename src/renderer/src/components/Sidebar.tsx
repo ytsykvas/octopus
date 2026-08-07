@@ -98,7 +98,9 @@ export function Sidebar({
               <li key={project.id}>
                 <ProjectRow
                   project={project}
-                  selected={project.id === selectedProjectId}
+                  // Only one row is highlighted at a time: picking a
+                  // workspace hands the highlight over to it.
+                  selected={project.id === selectedProjectId && selectedWorkspaceId === null}
                   collapsed={collapsed.has(project.id)}
                   workspaceCount={(workspaces.get(project.id) ?? []).length}
                   onSelect={() => {
