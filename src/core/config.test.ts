@@ -108,20 +108,26 @@ describe('loadConfig', () => {
 })
 
 describe('rightPanelWidth', () => {
-  // The bounds keep a dragged edge from leaving the pane unusable — too narrow
-  // to read output in, or so wide the centre pane is gone.
+  // Too narrow to read build output in, or wider than any real display.
   it('rejects a width outside the usable range', () => {
     const base = createDefaultConfig('ytsykvas', NOW, () => UUID)
 
     expect(ConfigSchema.safeParse({ ...base, rightPanelWidth: 100 }).success).toBe(false)
-    expect(ConfigSchema.safeParse({ ...base, rightPanelWidth: 2000 }).success).toBe(false)
+    expect(ConfigSchema.safeParse({ ...base, rightPanelWidth: 9000 }).success).toBe(false)
   })
 
   it('accepts the bounds themselves', () => {
     const base = createDefaultConfig('ytsykvas', NOW, () => UUID)
 
     expect(ConfigSchema.safeParse({ ...base, rightPanelWidth: 280 }).success).toBe(true)
-    expect(ConfigSchema.safeParse({ ...base, rightPanelWidth: 900 }).success).toBe(true)
+    expect(ConfigSchema.safeParse({ ...base, rightPanelWidth: 4000 }).success).toBe(true)
+  })
+
+  // A width saved on a wide display must still load on a laptop; the pane is
+  // clamped to the window when rendered, not rejected here.
+  it('accepts a width wider than the current window', () => {
+    const base = createDefaultConfig('ytsykvas', NOW, () => UUID)
+    expect(ConfigSchema.safeParse({ ...base, rightPanelWidth: 2200 }).success).toBe(true)
   })
 
   // A fractional width would reach CSS as a blurry half-pixel edge.

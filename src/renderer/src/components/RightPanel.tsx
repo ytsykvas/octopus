@@ -1,5 +1,5 @@
 import { PanelRightClose } from 'lucide-react'
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import type { WorkspaceView } from '@core/workspaces.js'
@@ -22,9 +22,21 @@ const TABS: readonly {
   { id: 'terminal', labelKey: 'panel.terminal' }
 ]
 
-/** Matches the bounds on `rightPanelWidth` in the config schema. */
+/** Matches the lower bound on `rightPanelWidth` in the config schema. */
 const MIN_WIDTH = 280
-const MAX_WIDTH = 900
+
+/**
+ * Room the rest of the window keeps: the sidebar (`w-64`) plus enough centre
+ * pane to still be one. The pane can take everything else, so on a wide
+ * display the terminal gets genuinely wide, while on a laptop the working area
+ * survives.
+ */
+const SIDEBAR_WIDTH = 256
+const MIN_CENTRE_WIDTH = 360
+
+function maxWidthFor(windowWidth: number): number {
+  return Math.max(MIN_WIDTH, windowWidth - SIDEBAR_WIDTH - MIN_CENTRE_WIDTH)
+}
 
 interface RightPanelProps {
   readonly workspaces: readonly WorkspaceView[]
@@ -47,16 +59,34 @@ export function RightPanel({
   // The pane follows the cursor from local state; the config only hears about
   // the width once the drag is over.
   const [dragWidth, setDragWidth] = useState<number | null>(null)
+  const [maxWidth, setMaxWidth] = useState(() => maxWidthFor(window.innerWidth))
+
+  // The ceiling moves with the window: shrinking it must not leave the pane
+  // covering the centre, and growing it should make the extra room available.
+  useEffect(() => {
+    const onResize = (): void => {
+      setMaxWidth(maxWidthFor(window.innerWidth))
+    }
+
+    window.addEventListener('resize', onResize)
+    return () => {
+      window.removeEventListener('resize', onResize)
+    }
+  }, [])
+
+  // Clamped on the way out rather than on the way in, so a width saved on a
+  // wide display is kept in the config and comes back when the window does.
+  const applied = Math.min(dragWidth ?? width, maxWidth)
 
   return (
     <section
-      style={{ width: dragWidth ?? width }}
+      style={{ width: applied }}
       className="border-line bg-surface relative flex shrink-0 flex-col border-l"
     >
       <ResizeHandle
-        width={dragWidth ?? width}
+        width={applied}
         min={MIN_WIDTH}
-        max={MAX_WIDTH}
+        max={maxWidth}
         onResize={setDragWidth}
         onCommit={(committed) => {
           setDragWidth(null)

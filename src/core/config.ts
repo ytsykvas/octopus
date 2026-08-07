@@ -58,11 +58,12 @@ export const ConfigSchema = z.object({
    * Stored because it is a working preference, not a view state: someone who
    * widened the pane to read test output wants it that way tomorrow too.
    *
-   * The bounds are functional rather than cosmetic. Below ~280px a terminal
-   * wraps almost every line of build output; above 900 the centre pane, which
-   * is the actual working area, stops being one.
+   * The lower bound is functional: below ~280px a terminal wraps almost every
+   * line of build output. The upper one only has to survive a move to a
+   * smaller display — what actually limits dragging is how much room the
+   * centre pane needs, which depends on the window and so cannot live here.
    */
-  rightPanelWidth: z.number().int().min(280).max(900).default(360),
+  rightPanelWidth: z.number().int().min(280).max(4000).default(360),
 
   /**
    * Stable device identifier (§15.3).
