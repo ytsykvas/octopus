@@ -84,7 +84,8 @@ Never lower the coverage threshold or disable a lint rule to make the gate pass.
 
 ## Git
 
-`origin` is a **private** repository, `ytsykvas/octopus`. Push only when asked.
+`origin` is a **private** repository, `ytsykvas/octopus`. Push only when asked —
+pushing puts the change somewhere it can be seen and copied.
 
 Work goes straight to `main` while this is a single-author project: a branch
 per change would be friction without review. Revisit once octopus opens pull

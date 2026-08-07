@@ -101,6 +101,14 @@ Look at **changed code only** (`git diff`) unless told otherwise.
 - No magic values.
 - No dead or commented-out code.
 - Comments explain "why", not "what".
+- **Nothing is left orphaned by the change itself.** Removing a menu entry
+  strands its translation key; removing a caller strands its export. Neither
+  fails a type check — `en.ts` types `uk.ts`, but nothing types either against
+  the code — so a review is where they get caught.
+- A second copy of the same run of utility classes belongs in `styles.css`
+  (`.row`, `.input`) rather than repeated.
+- IPC calls and their error handling live in a hook, not in a component that is
+  also laying out a window (`useProjects`, `useWorkspaces`).
 
 ## How to report
 

@@ -29,6 +29,30 @@ return <span>{t('sidebar.projects')}</span>
 Errors coming from core carry a `code`; render them through `useErrorMessage`
 rather than printing `failure.error` directly.
 
+**Delete a key when its last caller goes.** A key nothing reads is a claim
+about the interface that has quietly stopped being true, and it survives every
+type check — `en.ts` types `uk.ts`, but nothing types either against the code.
+
+## State that is not this component's
+
+IPC calls, their error handling and the list they maintain belong in a hook —
+`useProjects` and `useWorkspaces` are the pattern. A component that lays out a
+window should not also know what an IPC failure looks like.
+
+The split is not all-or-nothing: `useProjects.remove` asks and deletes, while
+`App` clears the selection afterwards, because what points at a project is the
+window's business, not the hook's.
+
+## React rules the linter enforces
+
+`react-hooks` here is strict, and two rules come up constantly:
+
+- **No `setState` in an effect.** State derived from a prop is adjusted during
+  render (`if (activeId !== lastActiveId) { … }`, the official pattern); state
+  that follows an event is set in the handler.
+- **No reading a ref during render.** A ref is not an escape hatch from the
+  rule above; both were rejected in turn while writing `WorkspaceTerminals`.
+
 ## The content comes first
 
 This interface carries chat, diffs and logs — dense text people read for hours.
@@ -47,9 +71,14 @@ over its own content.
 
 - `.panel` — surface with border and 10px radius;
 - `.row` / `.row-selected` — list row with hover and selection;
+- `.input` — text field, and anything shaped like one;
 - `.section-label` — section heading (11px, weight 600, muted);
 - `.focus-ring` — visible keyboard focus;
 - `.titlebar-drag` — window drag region.
+
+The second copy of a run of utility classes is the moment to add a class here.
+Six copies of the field styling had already drifted by a few pixels of height —
+inconsistency that reads as sloppiness rather than as variety.
 
 ## Colours through tokens only
 
@@ -82,9 +111,14 @@ forces scrolling.
 
 ## Components
 
-`Button` already exists with three variants: `accent` (primary action),
-`quiet` (secondary), `danger` (destructive). Extend it rather than adding
-new button components.
+`Button` has four variants: `accent` (primary action), `quiet` (secondary),
+`danger` (subdued destructive), `destructive` (filled, for the action a
+confirmation is asking about). Extend it rather than adding new button
+components.
+
+`Modal`, `DropdownMenu`, `Combobox` (a select with search), `Field` and
+`NameEditor` already exist. `Modal` deliberately leaves its body without
+padding so a list can span the full width — a form inside it brings its own.
 
 ## Themes
 
