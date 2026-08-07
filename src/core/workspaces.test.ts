@@ -17,6 +17,7 @@ import {
   reconcile,
   removeWorkspace,
   renameWorkspace,
+  rollbackWorkspace,
   WorkspaceError
 } from './workspaces.js'
 
@@ -330,6 +331,47 @@ describe('removeWorkspace', () => {
     await expect(
       removeWorkspace(workspace, { repository: exec, workspace: gitIn(workspace.path) })
     ).resolves.toBeUndefined()
+  })
+})
+
+describe('rollbackWorkspace', () => {
+  it('removes the worktree and the branch', async () => {
+    const workspace = await create()
+
+    await rollbackWorkspace(workspace, exec)
+
+    await expect(listWorktrees(exec)).resolves.toHaveLength(1)
+    await expect(exec(['branch', '--list', workspace.branch])).resolves.toBe('')
+  })
+
+  it('discards uncommitted work — the workspace was never really created', async () => {
+    const workspace = await create()
+    await writeFile(join(workspace.path, 'draft.txt'), 'work\n', 'utf8')
+
+    await rollbackWorkspace(workspace, exec)
+    await expect(listWorktrees(exec)).resolves.toHaveLength(1)
+  })
+
+  // It runs while another failure is already being handled, so a second one
+  // must not replace the original.
+  it('never throws, whatever git says', async () => {
+    const workspace = await create()
+    const broken: GitExec = () => Promise.reject(new Error('git is gone'))
+
+    await expect(rollbackWorkspace(workspace, broken)).resolves.toBeUndefined()
+  })
+
+  it('still tries the branch when removing the worktree fails', async () => {
+    const workspace = await create()
+    const seen: string[] = []
+    const partial: GitExec = (args) => {
+      seen.push(args.join(' '))
+      if (args[0] === 'worktree') return Promise.reject(new Error('busy'))
+      return exec(args)
+    }
+
+    await rollbackWorkspace(workspace, partial)
+    expect(seen.some((command) => command.startsWith('branch -D'))).toBe(true)
   })
 })
 

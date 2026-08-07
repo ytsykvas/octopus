@@ -252,6 +252,28 @@ async function holdsUncommittedWork(exec: GitExec): Promise<boolean> {
 }
 
 /**
+ * Undoes a half-finished creation.
+ *
+ * A worktree without a record is invisible to the app yet blocks every later
+ * attempt with "already exists". Best-effort by design: this runs while
+ * another failure is already being handled, and a second one must not replace
+ * the original.
+ */
+export async function rollbackWorkspace(workspace: Workspace, exec: GitExec): Promise<void> {
+  try {
+    await removeWorktree(exec, workspace.path, true)
+  } catch {
+    // Nothing better to do — the caller is already failing.
+  }
+
+  try {
+    await deleteBranch(exec, workspace.branch, true)
+  } catch {
+    // Same.
+  }
+}
+
+/**
  * Reconciles stored workspaces with what git actually has.
  *
  * git is the source of truth about worktrees; the store only holds what git

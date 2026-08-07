@@ -8,7 +8,9 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 
 import type { CommandExec } from './accounts.js'
 import type { RemoteRepository } from './github.js'
+import { gitIn } from './git.js'
 import { createService, type OctopusService } from './service.js'
+import { listWorktrees } from './worktree.js'
 
 const run = promisify(execFile)
 
@@ -221,6 +223,28 @@ describe('workspaces', () => {
     await expect(service.renameWorkspaceById('missing', 'name')).rejects.toThrow()
     await expect(service.removeWorkspaceById('missing')).rejects.toThrow()
     await expect(service.workspaceHasChanges('missing')).rejects.toThrow()
+  })
+
+  // A worktree without a record is invisible to the app but blocks every
+  // later attempt with "already exists", so a failed create must clean up.
+  it('leaves nothing behind when the record cannot be stored', async () => {
+    const repo = join(dir, 'planner')
+    await initRepo(repo)
+
+    const service = await createService(paths(dir))
+    const project = await service.addProjectFromPath(repo)
+
+    // Make the state file unwritable so committing the record fails after the
+    // worktree already exists.
+    await service.createWorkspaceIn(project.id)
+    await rm(join(dir, 'state.json'))
+    await mkdir(join(dir, 'state.json'))
+
+    await expect(service.createWorkspaceIn(project.id)).rejects.toThrow()
+
+    // The second workspace's directory must be gone again.
+    const worktrees = await listWorktrees(gitIn(repo))
+    expect(worktrees).toHaveLength(2)
   })
 
   it('refuses to create a workspace in a project that does not exist', async () => {

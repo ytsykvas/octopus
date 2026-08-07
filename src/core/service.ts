@@ -36,6 +36,7 @@ import {
   reconcile,
   removeWorkspace,
   renameWorkspace,
+  rollbackWorkspace,
   WorkspaceError,
   type WorkspaceView,
   type RemoveOptions
@@ -188,11 +189,17 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
 
     async createWorkspaceIn(projectId) {
       const project = requireProject(projectId)
+      const exec = makeExec(project.repoPath)
 
-      const workspace = await createWorkspace(project, state, makeExec(project.repoPath), {
-        root: dataRoot
-      })
-      await commit(addWorkspace(state, workspace))
+      const workspace = await createWorkspace(project, state, exec, { root: dataRoot })
+
+      try {
+        await commit(addWorkspace(state, workspace))
+      } catch (error) {
+        await rollbackWorkspace(workspace, exec)
+        throw error
+      }
+
       return workspace
     },
 
