@@ -12,7 +12,7 @@
 import { access } from 'node:fs/promises'
 
 import { type GitExec, toSlug } from './git.js'
-import { nextWorkspaceName } from './names.js'
+import { nextWorkspaceName, type Random } from './names.js'
 import { workspacePath } from './paths.js'
 import { assignPort, type Project, type State, type Workspace } from './store.js'
 import {
@@ -84,6 +84,8 @@ export function branchFor(project: Project, name: string): string {
 interface CreateOptions {
   readonly root?: string
   readonly exists?: (path: string) => Promise<boolean>
+  /** Injectable so tests get a fixed name instead of a random one. */
+  readonly random?: Random
 }
 
 /**
@@ -111,7 +113,10 @@ export async function createWorkspace(
   // A branch outlives the worktree it was made for — removal keeps it unless
   // asked otherwise — so the store alone would happily reuse a name git still
   // holds, and `worktree add` would then fail.
-  const name = nextWorkspaceName([...fromState, ...(await takenByBranches(project, exec))])
+  const name = nextWorkspaceName(
+    [...fromState, ...(await takenByBranches(project, exec))],
+    options.random
+  )
 
   // The id, by contrast, must be unique across the app: it is the key for
   // renaming, removal and the jump shortcuts, none of which carry a project.

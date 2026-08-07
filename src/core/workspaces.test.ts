@@ -7,7 +7,7 @@ import { promisify } from 'node:util'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 
 import { type GitExec, gitIn } from './git.js'
-import { NAME_POOL_SIZE } from './names.js'
+import { NAME_POOL_SIZE, type Random, WORKSPACE_NAMES } from './names.js'
 import { addProject, EMPTY_STATE, type Project, type State, type Workspace } from './store.js'
 import { listWorktrees } from './worktree.js'
 import {
@@ -57,9 +57,19 @@ afterEach(async () => {
   await rm(dir, { recursive: true, force: true })
 })
 
+/**
+ * Always picks the first free name.
+ *
+ * Names are drawn at random in production; a test that has to say which name
+ * it expects supplies this instead of gambling on the draw.
+ */
+const first: Random = () => 0
+
+const [FIRST_NAME, SECOND_NAME] = WORKSPACE_NAMES as [string, string]
+
 /** Creates a workspace and folds it into the state, as the service does. */
 async function create(): Promise<Workspace> {
-  const workspace = await createWorkspace(project, state, exec, { root })
+  const workspace = await createWorkspace(project, state, exec, { root, random: first })
   state = { ...state, workspaces: [...state.workspaces, workspace] }
   return workspace
 }
@@ -79,42 +89,40 @@ describe('createWorkspace', () => {
     const workspace = await create()
 
     const worktrees = await listWorktrees(exec)
-    expect(worktrees.map((item) => item.branch)).toContain('ytsykvas/anna')
-    expect(workspace.path).toContain(join('workspaces', 'planner', 'anna'))
+    expect(worktrees.map((item) => item.branch)).toContain(`ytsykvas/${FIRST_NAME}`)
+    expect(workspace.path).toContain(join('workspaces', 'planner', FIRST_NAME))
   })
 
   // Removal keeps the branch unless the user asks otherwise, so a name can be
   // free in our records while git still holds it. Reusing it made `worktree
   // add` fail with "a branch named … already exists" and nothing got created.
   it('skips a name whose branch outlived its workspace', async () => {
-    const first = await create()
-    await removeWorkspace(first, { repository: exec, workspace: gitIn(first.path) }, {})
+    const created = await create()
+    await removeWorkspace(created, { repository: exec, workspace: gitIn(created.path) }, {})
     state = { ...state, workspaces: [] }
 
-    const second = await create()
-    expect(second.name).toBe('maria')
+    expect((await create()).name).toBe(SECOND_NAME)
   })
 
   it('ignores branches outside the project prefix', async () => {
-    await run('git', ['branch', 'anna'], { cwd: repo })
+    // Same name, no prefix: the user's own branch, which we must not claim.
+    await run('git', ['branch', FIRST_NAME], { cwd: repo })
 
-    const workspace = await create()
-    expect(workspace.name).toBe('anna')
+    expect((await create()).name).toBe(FIRST_NAME)
   })
 
-  it('names the first workspace from the start of the pool', async () => {
-    const workspace = await create()
-    expect(workspace.name).toBe('anna')
+  it('names a workspace from the pool', async () => {
+    expect(WORKSPACE_NAMES).toContain((await create()).name)
   })
 
   // The name is per project; the id has to be unique across the whole app,
   // because renaming, removal and the jump shortcuts carry nothing else.
   it('keys the workspace by project and name', async () => {
     const workspace = await create()
-    expect(workspace.id).toBe('planner/anna')
+    expect(workspace.id).toBe(`planner/${FIRST_NAME}`)
   })
 
-  it('lets two projects each have an anna', async () => {
+  it('lets two projects each hold the same name', async () => {
     // A second project means a second repository — addProject refuses to add
     // the same one twice — so the branches cannot collide.
     const otherRepo = join(dir, 'esl')
@@ -127,11 +135,11 @@ describe('createWorkspace', () => {
 
     const other: Project = { ...project, id: 'esl', name: 'esl', repoPath: otherRepo }
 
-    const first = await create()
-    const second = await createWorkspace(other, state, gitIn(otherRepo), { root })
+    const mine = await create()
+    const theirs = await createWorkspace(other, state, gitIn(otherRepo), { root, random: first })
 
-    expect(second.name).toBe(first.name)
-    expect(second.id).not.toBe(first.id)
+    expect(theirs.name).toBe(mine.name)
+    expect(theirs.id).not.toBe(mine.id)
   })
 
   it('gives the next workspace a different name and branch', async () => {
@@ -177,14 +185,14 @@ describe('createWorkspace', () => {
     // Without an `exists` override the default runs; the path is free, so
     // creation proceeds.
     const workspace = await createWorkspace(project, state, exec, { root })
-    expect(workspace.name).toBe('anna')
+    expect(WORKSPACE_NAMES).toContain(workspace.name)
   })
 
   it('refuses a directory that genuinely exists on disk', async () => {
-    // Occupy the path the generator will pick first.
-    await mkdir(join(root, 'workspaces', 'planner', 'anna'), { recursive: true })
+    // Occupy the path the generator is made to pick.
+    await mkdir(join(root, 'workspaces', 'planner', FIRST_NAME), { recursive: true })
 
-    const error = await createWorkspace(project, state, exec, { root }).catch(
+    const error = await createWorkspace(project, state, exec, { root, random: first }).catch(
       (cause: unknown) => cause
     )
 
@@ -200,8 +208,8 @@ describe('createWorkspace', () => {
       return exec(args)
     }
 
-    const workspace = await createWorkspace(project, state, quiet, { root })
-    expect(workspace.path).toContain(join('workspaces', 'planner', 'anna'))
+    const workspace = await createWorkspace(project, state, quiet, { root, random: first })
+    expect(workspace.path).toContain(join('workspaces', 'planner', FIRST_NAME))
   })
 
   it('survives git failing to list worktrees at all', async () => {
@@ -212,8 +220,8 @@ describe('createWorkspace', () => {
       return exec(args)
     }
 
-    const workspace = await createWorkspace(project, state, broken, { root })
-    expect(workspace.path).toContain('anna')
+    const workspace = await createWorkspace(project, state, broken, { root, random: first })
+    expect(workspace.path).toContain(FIRST_NAME)
   })
 })
 
@@ -258,8 +266,8 @@ describe('renameWorkspace', () => {
   it('does nothing to git when the slug is unchanged', async () => {
     const workspace = await create()
 
-    // 'Anna' slugs to the same branch it already has.
-    const renamed = await renameWorkspace(workspace, project, 'Anna', exec)
+    // Case is all `toSlug` would change, so the branch stays where it is.
+    const renamed = await renameWorkspace(workspace, project, FIRST_NAME.toUpperCase(), exec)
     expect(renamed.branch).toBe(workspace.branch)
   })
 
@@ -282,7 +290,7 @@ describe('removeWorkspace', () => {
     await removeWorkspace(workspace, { repository: exec, workspace: gitIn(workspace.path) })
 
     await expect(listWorktrees(exec)).resolves.toHaveLength(1)
-    await expect(exec(['branch', '--list', workspace.branch])).resolves.toContain('anna')
+    await expect(exec(['branch', '--list', workspace.branch])).resolves.toContain(FIRST_NAME)
   })
 
   it('deletes the branch when asked', async () => {

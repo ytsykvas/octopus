@@ -9,6 +9,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import type { CommandExec } from './accounts.js'
 import type { RemoteRepository } from './github.js'
 import { gitIn } from './git.js'
+import { WORKSPACE_NAMES } from './names.js'
 import { createService, type OctopusService } from './service.js'
 import { listWorktrees } from './worktree.js'
 
@@ -147,7 +148,7 @@ describe('workspaces', () => {
     const { service, projectId } = await withProject()
 
     const workspace = await service.createWorkspaceIn(projectId)
-    expect(workspace.name).toBe('anna')
+    expect(WORKSPACE_NAMES).toContain(workspace.name)
 
     const listed = await service.listWorkspaces(projectId)
     expect(listed).toHaveLength(1)
