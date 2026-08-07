@@ -50,22 +50,44 @@ Look at **changed code only** (`git diff`) unless told otherwise.
 - No `any`, including hidden behind `as`.
 - `unknown` is narrowed, not force-cast.
 - Types derive from zod schemas via `z.infer` rather than being restated.
+- No non-null assertions (`!`) outside tests, and no `as T` standing in for one.
+  With `noUncheckedIndexedAccess` an indexed read is `T | undefined`; the fix is
+  to iterate or destructure, not to assert.
 
-### 5. Tests
+### 5. Scope and consistency — this project's recurring bug
+
+- **A duplicate check states its scope.** Ask what the value is unique within:
+  a workspace name and its branch are unique per project, the id across the
+  whole app. Comparing a project-scoped value globally has caused three bugs
+  here and is worth flagging on sight.
+- **git is consulted for what git knows.** Branches and worktrees outlive our
+  records — a name free in `state.json` may still be taken in the repository.
+- **A multi-step operation rolls back.** If it creates a directory, a branch
+  and a record, a failure part-way must undo what it made. Debris in git is
+  invisible to the app and blocks every later attempt.
+- Rollback and cleanup paths do not throw: they run while another failure is
+  being handled.
+
+### 6. Tests
 
 - Every new module in `src/core/` is covered 100%.
 - Tests assert behaviour, not implementation.
 - Functions with default parameters are called both with and without the
   argument, otherwise the default branch stays uncovered.
 - No hollow tests that assert nothing.
+- Non-determinism (clock, randomness) is injected, not left to chance. A test
+  asserting on a random outcome is flaky; one asserting nothing is hollow.
+- Tests touch temporary directories only — never `~/.octopus` or a real
+  repository.
+- A fixed bug has a test that reproduces it.
 
-### 6. Error handling
+### 7. Error handling
 
 - Errors are not swallowed. A `catch` that only logs and continues is worth
   flagging.
 - stderr from external commands reaches the user.
 
-### 7. Design system (for `src/renderer/`)
+### 8. Design system (for `src/renderer/`)
 
 - Colours through tokens, no raw hex.
 - Text on an accent uses the paired `on-*` token.
@@ -73,7 +95,7 @@ Look at **changed code only** (`git diff`) unless told otherwise.
   readable.
 - Verified in both themes.
 
-### 8. Cleanliness
+### 9. Cleanliness
 
 - One unit of code, one responsibility.
 - No magic values.

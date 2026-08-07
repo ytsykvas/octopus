@@ -59,6 +59,16 @@ export async function listWorktrees(exec: Exec): Promise<Worktree[]> {
 Keep the parser (`parseWorktrees`) a separate pure function — it can then be
 tested on strings without any git at all.
 
+Anything non-deterministic — the clock, randomness — is a parameter too.
+Without that, a test either asserts nothing useful or becomes flaky:
+
+```ts
+export function nextWorkspaceName(taken: readonly string[], random: Random = Math.random): string
+```
+
+Tests that need to name the value they expect pass a fixed source; the rest
+assert on properties.
+
 ## External processes
 
 Only `execFile`, **never `exec`**. Branch names and paths come from the user,
@@ -94,10 +104,54 @@ const WorkspaceSchema = z.object({
 export type Workspace = z.infer<typeof WorkspaceSchema>
 ```
 
+## Uniqueness has a scope
+
+Before rejecting a value as a duplicate, ask **within what** it must be unique.
+Getting this wrong has produced three separate bugs here, all with the same
+shape: a name meaningful inside one project was checked against the whole app.
+
+| Value              | Unique within                               |
+| ------------------ | ------------------------------------------- |
+| workspace `name`   | its project                                 |
+| workspace `branch` | its project — branches live in a repository |
+| workspace `id`     | the whole app — it is the IPC key           |
+| directory path     | the filesystem                              |
+
+Two projects are two repositories: `octopus/anna` in each is two different
+branches, and treating that as a clash locks every project after the first out
+of the start of the name pool.
+
+## git is the source of truth, not our state
+
+`state.json` holds only what git cannot know — the agent session, the port, the
+label. Anything git knows, ask git.
+
+A branch outlives the worktree it was created for: removal keeps it unless the
+user asks otherwise. So a name free in our records may still be taken in the
+repository, and `worktree add` will refuse. `takenByBranches` in `workspaces.ts`
+exists for exactly this.
+
+## A failed operation cleans up after itself
+
+An operation that creates several things — a directory, a branch, a record —
+must undo what it managed before failing. Debris left in git is invisible to
+the app but blocks every later attempt, so one failure becomes permanent.
+
+```ts
+export async function rollbackWorkspace(workspace: Workspace, exec: GitExec): Promise<void>
+```
+
+Rollback is best-effort and never throws: it runs while another failure is
+already being handled, and a second one must not replace the original.
+
 ## Errors
 
 Never swallow them. If git fails, propagate stderr so the cause is visible in
 the UI rather than a generic "something went wrong".
+
+A `catch` is justified when the fallback is genuinely correct — not to make a
+gap in coverage disappear. If the alternative is a clearer error one line
+later, let it through instead.
 
 For failures the user can act on, throw a typed error carrying a
 machine-readable `code` — the renderer turns that into a localised message
@@ -119,6 +173,18 @@ describe('createWorkspace', () => {
 Prefer driving **real** git in a temporary repository over mocking it: parsing
 git output is where assumptions turn out wrong. Use a fake executor for edge
 cases that real git will not produce.
+
+Real git has already caught bugs no mock would have: a slug that destroyed
+Cyrillic, paths git canonicalises (`/var` → `/private/var`, so a workspace read
+as missing), and a branch left behind by an earlier removal.
+
+**Never test against the user's real state or data root.** Point the service at
+a temporary directory. Writing to `~/.octopus` while the app is running leaves
+it acting on a stale in-memory copy — and a repro that corrupts what it is
+diagnosing is worse than no repro.
+
+Reproduce the reported bug as a test **before** fixing it. Each of the naming
+bugs above now has one, and each would have caught its own regression.
 
 Remember default parameters: to cover the default branch, call the function
 both **with** and **without** the argument.

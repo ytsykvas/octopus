@@ -74,9 +74,21 @@ cannot be broken by accident.
   UI and IPC are covered by substance, not by chasing a number.
 - Tests are written alongside the code. A bug is reproduced by a test first.
 - Comments explain **why**, not **what**.
-- Conventional Commits; never commit straight to `main`.
+- Conventional Commits.
+- No non-null assertions (`!`) outside tests: `strictTypeChecked` forbids them,
+  and with `noUncheckedIndexedAccess` an indexed read is `T | undefined`.
+  Iterate, destructure or rotate the array instead of reaching for `!` —
+  `nextWorkspaceName` in `names.ts` is the worked example.
 
 Never lower the coverage threshold or disable a lint rule to make the gate pass.
+
+## Git
+
+`origin` is a **private** repository, `ytsykvas/octopus`. Push only when asked.
+
+Work goes straight to `main` while this is a single-author project: a branch
+per change would be friction without review. Revisit once octopus opens pull
+requests itself.
 
 ## Design
 
@@ -96,6 +108,17 @@ The user does not know this stack: explain problems in plain language rather
 than pasting tool output.
 
 ## Known traps
+
+**`src/main/` and `src/preload/` do not hot-reload.** Only the renderer does.
+A change to the main process, IPC or preload reaches the app only after
+`npm run dev` is restarted — until then the user is testing the old build, and
+a fix that looks ineffective may simply not be loaded. Verified, not assumed.
+
+**The running app holds the state in memory.** Editing `~/.octopus/state.json`
+from the outside while it runs makes the two disagree, and the app will happily
+act on its stale copy. Never reproduce a bug against the user's real state or
+data root: point the service at a temporary directory instead. A repro that
+corrupts the thing being diagnosed is worse than no repro.
 
 The `electron` package's `postinstall` sometimes fails silently to download the
 binary. Symptom: `npm run dev` fails with `Error: Electron uninstall` even though

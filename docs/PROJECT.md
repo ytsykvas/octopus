@@ -408,7 +408,7 @@ Further rules:
 
 - Conventional Commits (`feat:`, `fix:`, `refactor:`, `test:`, `chore:`) — a readable history and a basis for changelog automation later.
 - Atomic commits: one logical change each.
-- Never commit straight to `main` — branch per change, even when working alone.
+- Work goes straight to `main` while this is a single-author project: with no review, a branch per change is friction without benefit. Revisit once octopus opens pull requests itself.
 
 ---
 

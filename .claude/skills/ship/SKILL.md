@@ -17,9 +17,9 @@ allowed-tools: Bash(npm run:*), Bash(git status:*), Bash(git diff:*), Bash(git l
    slipped in: temporary files, debug `console.log`, commented-out code,
    secrets.
 
-3. **Branch.** Check with `git branch --show-current`. Never commit straight
-   to `main` (§11.3). If you are on it, create a branch with a meaningful name
-   and tell the user.
+3. **Branch.** `main` is where work goes while this is a single-author
+   project — see the Git section of `CLAUDE.md`. Branch only when the user asks
+   or when the change is genuinely speculative.
 
 4. **Commit.** Conventional Commits, **in English** like the rest of the
    repository:
@@ -43,7 +43,8 @@ allowed-tools: Bash(npm run:*), Bash(git status:*), Bash(git diff:*), Bash(git l
 
 ## Do not
 
-- Push unless the user asked.
+- Push unless the user asked. `origin` is a private repository on GitHub, and
+  pushing puts the change somewhere it can be seen and copied.
 - Open a PR without an explicit request.
 - Pass `--no-verify`.
 - Commit `.env`, keys or tokens. If you spot one in the diff, stop and warn.
