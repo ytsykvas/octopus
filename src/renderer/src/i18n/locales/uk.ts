@@ -15,8 +15,24 @@ export const uk: Translation = {
     projects: 'Проєкти',
     empty: 'Поки порожньо. Додайте репозиторій кнопкою «+».',
     addProject: 'Додати репозиторій',
+    addFromDisk: 'З диска…',
+    addFromGitHub: 'З GitHub…',
     removeProject: 'Прибрати проєкт',
     settings: 'Налаштування'
+  },
+
+  repositories: {
+    title: 'Додати з GitHub',
+    search: 'Пошук репозиторіїв',
+    empty: 'Репозиторіїв не знайдено.',
+    noMatch: 'Нічого не знайдено за «{{query}}».',
+    loading: 'Завантаження…',
+    private: 'Приватний',
+    cancel: 'Скасувати',
+    add: 'Додати',
+    cloning: 'Клонуємо {{name}}…',
+    connectFirst: 'Спершу підключіть акаунт GitHub у налаштуваннях.',
+    openSettings: 'Відкрити налаштування'
   },
 
   panel: {
@@ -114,6 +130,10 @@ export const uk: Translation = {
     noBaseBranch:
       'Не вдалося визначити базову гілку в {{path}}. Перейдіть на потрібну гілку й спробуйте ще раз.',
     duplicateProject: 'Цей репозиторій уже доданий як проєкт «{{name}}».',
+    notConnected: 'Не вдалося звернутися до GitHub. Перевірте акаунт у налаштуваннях.',
+    listFailed: 'GitHub повернув щось неочікуване.',
+    cloneFailed: 'Не вдалося клонувати {{repository}}.',
+    alreadyExists: '{{path}} уже існує. Додайте його з диска.',
     unknown: 'Щось пішло не так: {{message}}'
   }
 }

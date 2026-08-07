@@ -34,6 +34,14 @@ export const ConfigSchema = z.object({
   /** Branch prefix for workspaces, e.g. a GitHub username. */
   branchPrefix: z.string().min(1),
 
+  /**
+   * Where repositories cloned from GitHub land.
+   *
+   * Defaulted rather than required so a config from an older build still
+   * loads; an empty string means "ask every time".
+   */
+  cloneDirectory: z.string().default(''),
+
   settingSources: SettingSourcesModeSchema,
   theme: ThemePreferenceSchema,
 
@@ -73,6 +81,7 @@ export function createDefaultConfig(
     settingSources: 'none',
     theme: 'system',
     language: 'en',
+    cloneDirectory: '',
     deviceId: uuid(),
     installedAt: now.toISOString()
   }

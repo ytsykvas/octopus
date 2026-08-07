@@ -13,8 +13,24 @@ export const en = {
     projects: 'Projects',
     empty: 'Nothing here yet. Add a repository with the "+" button.',
     addProject: 'Add repository',
+    addFromDisk: 'From disk…',
+    addFromGitHub: 'From GitHub…',
     removeProject: 'Remove project',
     settings: 'Settings'
+  },
+
+  repositories: {
+    title: 'Add from GitHub',
+    search: 'Search repositories',
+    empty: 'No repositories found.',
+    noMatch: 'Nothing matches “{{query}}”.',
+    loading: 'Loading…',
+    private: 'Private',
+    cancel: 'Cancel',
+    add: 'Add',
+    cloning: 'Cloning {{name}}…',
+    connectFirst: 'Connect a GitHub account in Settings first.',
+    openSettings: 'Open settings'
   },
 
   panel: {
@@ -111,6 +127,10 @@ export const en = {
     noBaseBranch:
       'Could not determine a base branch in {{path}}. Check out the branch you want and try again.',
     duplicateProject: 'This repository is already added as project "{{name}}".',
+    notConnected: 'Could not reach GitHub. Check the account in Settings.',
+    listFailed: 'GitHub returned something unexpected.',
+    cloneFailed: 'Could not clone {{repository}}.',
+    alreadyExists: '{{path}} already exists. Add it from disk instead.',
     unknown: 'Something went wrong: {{message}}'
   }
 }

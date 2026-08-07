@@ -1,3 +1,4 @@
+import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import type { Project } from '@core/store.js'
@@ -8,7 +9,8 @@ interface SidebarProps {
   readonly projects: readonly Project[]
   readonly selectedProjectId: string | null
   readonly onSelectProject: (projectId: string) => void
-  readonly onAddProject: () => void
+  readonly onAddFromDisk: () => void
+  readonly onAddFromGitHub: () => void
   readonly onRemoveProject: (projectId: string) => void
   readonly onOpenSettings: () => void
   readonly busy: boolean
@@ -24,7 +26,8 @@ export function Sidebar({
   projects,
   selectedProjectId,
   onSelectProject,
-  onAddProject,
+  onAddFromDisk,
+  onAddFromGitHub,
   onRemoveProject,
   onOpenSettings,
   busy
@@ -37,15 +40,7 @@ export function Sidebar({
 
       <div className="flex items-center justify-between px-3 pb-1.5">
         <span className="section-label">{t('sidebar.projects')}</span>
-        <Button
-          variant="quiet"
-          size="sm"
-          disabled={busy}
-          onClick={onAddProject}
-          title={t('sidebar.addProject')}
-        >
-          {busy ? '…' : '+'}
-        </Button>
+        <AddMenu busy={busy} onAddFromDisk={onAddFromDisk} onAddFromGitHub={onAddFromGitHub} />
       </div>
 
       <nav className="flex-1 overflow-auto px-2 pb-3">
@@ -82,6 +77,82 @@ export function Sidebar({
         </button>
       </div>
     </aside>
+  )
+}
+
+/**
+ * Choice of where a project comes from.
+ *
+ * A small menu rather than two buttons: adding a project is one action with
+ * two sources, and the sidebar has little room to spare.
+ */
+function AddMenu({
+  busy,
+  onAddFromDisk,
+  onAddFromGitHub
+}: {
+  busy: boolean
+  onAddFromDisk: () => void
+  onAddFromGitHub: () => void
+}): React.JSX.Element {
+  const { t } = useTranslation()
+  const [open, setOpen] = useState(false)
+
+  useEffect(() => {
+    if (!open) return
+
+    const close = (): void => {
+      setOpen(false)
+    }
+    // Any click outside dismisses it, as a menu should.
+    window.addEventListener('click', close)
+    return () => {
+      window.removeEventListener('click', close)
+    }
+  }, [open])
+
+  return (
+    <div className="relative">
+      <Button
+        variant="quiet"
+        size="sm"
+        disabled={busy}
+        title={t('sidebar.addProject')}
+        onClick={(event) => {
+          event.stopPropagation()
+          setOpen((current) => !current)
+        }}
+      >
+        {busy ? '…' : '+'}
+      </Button>
+
+      {open && (
+        <div className="border-line bg-canvas absolute right-0 z-10 mt-1 w-40 rounded-[var(--radius-control)] border p-1 shadow-[var(--shadow-pop)]">
+          <MenuItem
+            label={t('sidebar.addFromDisk')}
+            onClick={() => {
+              setOpen(false)
+              onAddFromDisk()
+            }}
+          />
+          <MenuItem
+            label={t('sidebar.addFromGitHub')}
+            onClick={() => {
+              setOpen(false)
+              onAddFromGitHub()
+            }}
+          />
+        </div>
+      )}
+    </div>
+  )
+}
+
+function MenuItem({ label, onClick }: { label: string; onClick: () => void }): React.JSX.Element {
+  return (
+    <button type="button" onClick={onClick} className="row focus-ring w-full px-2 py-1 text-left">
+      {label}
+    </button>
   )
 }
 

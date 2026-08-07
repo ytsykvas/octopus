@@ -5,6 +5,7 @@ import type { Config } from '@core/config.js'
 import type { Project } from '@core/store.js'
 import type { ThemeName } from '@core/types.js'
 
+import { RepositoryPicker } from './components/RepositoryPicker.js'
 import { RightPanel } from './components/RightPanel.js'
 import { Settings } from './components/Settings.js'
 import { Sidebar } from './components/Sidebar.js'
@@ -27,6 +28,7 @@ export function App(): React.JSX.Element {
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
   const [rightPanelOpen, setRightPanelOpen] = useState(true)
+  const [pickingRepository, setPickingRepository] = useState(false)
 
   useEffect(() => {
     const controller = new AbortController()
@@ -153,6 +155,20 @@ export function App(): React.JSX.Element {
 
   const selectedProject = projects.find((project) => project.id === selectedProjectId) ?? null
 
+  if (pickingRepository) {
+    return (
+      <RepositoryPicker
+        onPicked={() => {
+          setPickingRepository(false)
+          void refresh()
+        }}
+        onCancel={() => {
+          setPickingRepository(false)
+        }}
+      />
+    )
+  }
+
   if (settingsOpen && config) {
     return (
       <Settings
@@ -171,7 +187,10 @@ export function App(): React.JSX.Element {
         projects={projects}
         selectedProjectId={selectedProjectId}
         onSelectProject={setSelectedProjectId}
-        onAddProject={() => void addProject()}
+        onAddFromDisk={() => void addProject()}
+        onAddFromGitHub={() => {
+          setPickingRepository(true)
+        }}
         onRemoveProject={(id) => void removeProject(id)}
         onOpenSettings={() => {
           setSettingsOpen(true)

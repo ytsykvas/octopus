@@ -6,6 +6,8 @@ import { promisify } from 'node:util'
 
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 
+import type { CommandExec } from './accounts.js'
+import type { RemoteRepository } from './github.js'
 import { createService, type OctopusService } from './service.js'
 
 const run = promisify(execFile)
@@ -57,6 +59,67 @@ describe('default paths', () => {
     } finally {
       process.env.HOME = previousHome
     }
+  })
+})
+
+describe('GitHub projects', () => {
+  const repository: RemoteRepository = {
+    name: 'planner',
+    nameWithOwner: 'ytsykvas/planner',
+    description: null,
+    isPrivate: true,
+    updatedAt: '2026-08-01T00:00:00Z',
+    defaultBranchRef: { name: 'main' }
+  }
+
+  it('lists what gh reports', async () => {
+    const commandExec: CommandExec = () => Promise.resolve(JSON.stringify([repository]))
+    const withGitHub = await createService({ ...paths(dir), commandExec })
+
+    await expect(withGitHub.listRemoteRepositories()).resolves.toHaveLength(1)
+  })
+
+  it('surfaces a GitHub failure rather than an empty list', async () => {
+    const commandExec: CommandExec = () => Promise.reject(new Error('not signed in'))
+    const withGitHub = await createService({ ...paths(dir), commandExec })
+
+    await expect(withGitHub.listRemoteRepositories()).rejects.toThrow()
+  })
+
+  it('clones a repository and adds it as a project', async () => {
+    const destination = join(dir, 'clones')
+    await mkdir(destination, { recursive: true })
+
+    // The fake clone builds a real repository, so the project can actually
+    // be validated afterwards — a mock returning success would prove nothing.
+    const commandExec: CommandExec = async (_command, args) => {
+      if (args[0] === 'repo' && args[1] === 'clone') {
+        const target = args[3]
+        if (target !== undefined) await initRepo(target)
+      }
+      return ''
+    }
+
+    const withGitHub = await createService({ ...paths(dir), commandExec })
+    const project = await withGitHub.addProjectFromGitHub(repository, destination)
+
+    expect(project.name).toBe('planner')
+    expect(withGitHub.listProjects()).toHaveLength(1)
+  })
+
+  it('does not add a project when the clone fails', async () => {
+    const commandExec: CommandExec = () => Promise.reject(new Error('clone failed'))
+    const withGitHub = await createService({ ...paths(dir), commandExec })
+
+    await expect(withGitHub.addProjectFromGitHub(repository, join(dir, 'clones'))).rejects.toThrow()
+    expect(withGitHub.listProjects()).toHaveLength(0)
+  })
+
+  it('falls back to the real gh when no executor is supplied', async () => {
+    // No commandExec: the service must still expose the capability rather
+    // than crashing, whatever the machine's gh reports.
+    const plain = await createService(paths(join(dir, 'plain')))
+    await expect(plain.listRemoteRepositories()).resolves.toBeInstanceOf(Array)
   })
 })
 

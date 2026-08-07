@@ -24,6 +24,14 @@ export function useErrorMessage(): (failure: Failure) => string {
           return t('errors.noBaseBranch', { path: failure.params?.path ?? '' })
         case 'duplicateProject':
           return t('errors.duplicateProject', { name: failure.params?.name ?? '' })
+        case 'notConnected':
+          return t('errors.notConnected')
+        case 'listFailed':
+          return t('errors.listFailed')
+        case 'cloneFailed':
+          return t('errors.cloneFailed', { repository: failure.params?.repository ?? '' })
+        case 'alreadyExists':
+          return t('errors.alreadyExists', { path: failure.params?.path ?? '' })
         default:
           return t('errors.unknown', { message: failure.error })
       }

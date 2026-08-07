@@ -3,6 +3,7 @@ import { contextBridge, ipcRenderer } from 'electron'
 import type { AccountKind, AccountsStatus } from '@core/accounts.js'
 import type { TerminalExit, TerminalOutput, TerminalSpec } from '@core/terminal.js'
 import type { Config } from '@core/config.js'
+import type { RemoteRepository } from '@core/github.js'
 import type { Project } from '@core/store.js'
 import type { ThemeName } from '@core/types.js'
 
@@ -120,7 +121,15 @@ const api = {
       ipcRenderer.invoke('projects:add') as Promise<Result<Project | null>>,
 
     remove: (projectId: string): Promise<Result<void>> =>
-      ipcRenderer.invoke('projects:remove', projectId) as Promise<Result<void>>
+      ipcRenderer.invoke('projects:remove', projectId) as Promise<Result<void>>,
+
+    /** Repositories of the signed-in GitHub account. */
+    listRemote: (): Promise<Result<RemoteRepository[]>> =>
+      ipcRenderer.invoke('projects:listRemote') as Promise<Result<RemoteRepository[]>>,
+
+    /** Clones a repository and adds it. `null` means the destination prompt was cancelled. */
+    addFromGitHub: (repository: RemoteRepository): Promise<Result<Project | null>> =>
+      ipcRenderer.invoke('projects:addFromGitHub', repository) as Promise<Result<Project | null>>
   }
 } as const
 

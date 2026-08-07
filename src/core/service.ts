@@ -6,7 +6,9 @@
  * handler should only have to forward the call here.
  */
 
+import { type CommandExec, defaultExec } from './accounts.js'
 import { type Config, loadConfig, saveConfig } from './config.js'
+import { cloneRepository, listRepositories, type RemoteRepository } from './github.js'
 import type { GitExec } from './git.js'
 import { gitIn } from './git.js'
 import { configFile, stateFile, stateTempFile } from './paths.js'
@@ -25,6 +27,7 @@ export interface ServiceOptions {
   readonly stateTempFilePath?: string
   readonly configFilePath?: string
   readonly makeExec?: (cwd: string) => GitExec
+  readonly commandExec?: CommandExec
 }
 
 export interface OctopusService {
@@ -34,6 +37,9 @@ export interface OctopusService {
   ): Promise<Config>
   listProjects(): readonly Project[]
   addProjectFromPath(path: string): Promise<Project>
+  /** Clones a GitHub repository into `destination`, then adds it as a project. */
+  addProjectFromGitHub(repository: RemoteRepository, destination: string): Promise<Project>
+  listRemoteRepositories(): Promise<RemoteRepository[]>
   removeProjectById(projectId: string): Promise<void>
 }
 
@@ -48,6 +54,7 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
   const stateTempPath = options.stateTempFilePath ?? stateTempFile()
   const configPath = options.configFilePath ?? configFile()
   const makeExec = options.makeExec ?? gitIn
+  const commandExec = options.commandExec ?? defaultExec
 
   let state: State = await loadState(statePath)
   let config: Config = await loadConfig(configPath)
@@ -55,6 +62,12 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
   async function commit(next: State): Promise<void> {
     await saveState(next, statePath, stateTempPath)
     state = next
+  }
+
+  async function addFromPath(path: string): Promise<Project> {
+    const project = await createProject(path, config.branchPrefix, state, makeExec)
+    await commit(addProject(state, project))
+    return project
   }
 
   return {
@@ -73,10 +86,17 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
       return state.projects
     },
 
-    async addProjectFromPath(path) {
-      const project = await createProject(path, config.branchPrefix, state, makeExec)
-      await commit(addProject(state, project))
-      return project
+    addProjectFromPath(path) {
+      return addFromPath(path)
+    },
+
+    async listRemoteRepositories() {
+      return listRepositories(commandExec)
+    },
+
+    async addProjectFromGitHub(repository, destination) {
+      const path = await cloneRepository(repository, destination, commandExec)
+      return addFromPath(path)
     },
 
     async removeProjectById(projectId) {

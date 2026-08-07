@@ -5,6 +5,7 @@ import { app, BrowserWindow, dialog, ipcMain, Menu, nativeTheme, shell } from 'e
 import { type AccountKind, checkAccounts, signOut } from '../core/accounts.js'
 import type { Config, ThemePreference } from '../core/config.js'
 import { describeError } from '../core/persist.js'
+import { GitHubError, type RemoteRepository } from '../core/github.js'
 import { ProjectValidationError } from '../core/projects.js'
 import { createService, type OctopusService } from '../core/service.js'
 import { TerminalSpecSchema } from '../core/terminal.js'
@@ -33,7 +34,7 @@ async function attempt<T>(operation: () => Promise<T> | T): Promise<Result<T>> {
   try {
     return { ok: true, value: await operation() }
   } catch (error) {
-    if (error instanceof ProjectValidationError) {
+    if (error instanceof ProjectValidationError || error instanceof GitHubError) {
       return { ok: false, error: error.message, code: error.code, params: error.params }
     }
     return { ok: false, error: describeError(error) }
@@ -144,6 +145,15 @@ function registerIpc(service: OctopusService, terminals: TerminalManager): void 
     attempt(() => service.removeProjectById(projectId))
   )
 
+  ipcMain.handle('projects:listRemote', () => attempt(() => service.listRemoteRepositories()))
+
+  ipcMain.handle('projects:addFromGitHub', async (event, repository: RemoteRepository) => {
+    const destination = await resolveCloneDirectory(service, event)
+    if (destination === null) return { ok: true, value: null }
+
+    return attempt(() => service.addProjectFromGitHub(repository, destination))
+  })
+
   // Picking a directory is the one part that genuinely belongs to main:
   // the dialog is an Electron API.
   ipcMain.handle('projects:add', async (event) => {
@@ -199,6 +209,36 @@ function registerMenu(): void {
   ]
 
   Menu.setApplicationMenu(Menu.buildFromTemplate(template))
+}
+
+/**
+ * Where a cloned repository should land.
+ *
+ * A configured directory is used silently; otherwise the user picks one and
+ * the choice is remembered, so the question is asked once rather than on
+ * every clone.
+ */
+async function resolveCloneDirectory(
+  service: OctopusService,
+  event: Electron.IpcMainInvokeEvent
+): Promise<string | null> {
+  const configured = service.getConfig().cloneDirectory
+  if (configured !== '') return configured
+
+  const window = BrowserWindow.fromWebContents(event.sender)
+  const picked = window
+    ? await dialog.showOpenDialog(window, {
+        title: 'Where should repositories be cloned?',
+        properties: ['openDirectory', 'createDirectory'],
+        buttonLabel: 'Clone here'
+      })
+    : await dialog.showOpenDialog({ properties: ['openDirectory', 'createDirectory'] })
+
+  const [chosen] = picked.filePaths
+  if (picked.canceled || chosen === undefined) return null
+
+  await service.updateConfig({ cloneDirectory: chosen })
+  return chosen
 }
 
 function broadcastTheme(theme: ThemeName): void {
