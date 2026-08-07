@@ -178,8 +178,19 @@ export function addWorkspace(state: State, workspace: Workspace): State {
   if (state.workspaces.some((existing) => existing.id === workspace.id)) {
     throw new StateConflictError(`Workspace ${workspace.id} already exists`)
   }
-  if (state.workspaces.some((existing) => existing.branch === workspace.branch)) {
-    throw new StateConflictError(`Branch ${workspace.branch} is already used by another workspace`)
+  // Branches live inside a repository, so the clash is only real within one
+  // project: `octopus/anna` in two different projects is two different
+  // branches, and rejecting the second would make every project after the
+  // first unable to use the start of the name pool.
+  if (
+    state.workspaces.some(
+      (existing) =>
+        existing.projectId === workspace.projectId && existing.branch === workspace.branch
+    )
+  ) {
+    throw new StateConflictError(
+      `Branch ${workspace.branch} is already used by another workspace of ${workspace.projectId}`
+    )
   }
 
   return { ...state, workspaces: [...state.workspaces, workspace] }

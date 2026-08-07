@@ -240,6 +240,17 @@ describe('workspaces', () => {
     expect(() => addWorkspace(state, twin)).toThrow(StateConflictError)
   })
 
+  // Two projects are two repositories, so the same branch name in each is two
+  // different branches. Treating that as a conflict left every project after
+  // the first unable to use the start of the name pool.
+  it('allows the same branch name in another project', () => {
+    const other = addProject(withProject, { ...project, id: 'esl', repoPath: '/repos/esl' })
+    const state = addWorkspace(other, makeWorkspace())
+    const twin = makeWorkspace({ id: 'esl/kyiv', projectId: 'esl' })
+
+    expect(addWorkspace(state, twin).workspaces).toHaveLength(2)
+  })
+
   it('are filtered by project', () => {
     const other = addProject(withProject, { ...project, id: 'esl', repoPath: '/repos/esl' })
     const state = addWorkspace(other, makeWorkspace())
