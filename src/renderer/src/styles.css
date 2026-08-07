@@ -1,0 +1,156 @@
+@import 'tailwindcss';
+
+/*
+ * Дизайн-система — необруталізм (§10 docs/PROJECT.md).
+ * Джерело: ytsykvas/family-shopping.
+ *
+ * Кольори оголошені двічі: у :root (світла) і .dark (темна, §10.7).
+ * Токени @theme посилаються на ці змінні, тому перемикання теми
+ * не потребує перегенерації утиліт.
+ */
+
+:root {
+  --canvas: #ffffff;
+  --surface: #d6e0df;
+  --muted: #efefef;
+  --outline: #000000;
+  --ink: #000000;
+  --ink-soft: #4a4a4a;
+
+  --accent-success: #35e593;
+  --accent-danger: #c81346;
+  --accent-warning: #ffc107;
+  --accent-info: #0dcaf0;
+  --accent-primary: #0d6efd;
+  --accent-secondary: #6c757d;
+
+  /* На світлих акцентах текст чорний, на темних — білий (§10.1). */
+  --on-success: #000000;
+  --on-warning: #000000;
+  --on-info: #000000;
+  --on-danger: #ffffff;
+  --on-primary: #ffffff;
+}
+
+.dark {
+  --canvas: #16161a;
+  --surface: #242429;
+  --muted: #1d1d22;
+  --outline: #ededf0;
+  --ink: #ededf0;
+  --ink-soft: #a0a0ab;
+
+  --accent-success: #35e593;
+  --accent-danger: #ff4d6d;
+  --accent-warning: #ffc107;
+  --accent-info: #0dcaf0;
+  --accent-primary: #4d8fff;
+  --accent-secondary: #8b8b96;
+
+  /* У темній темі всі акценти світлі, тому текст на них завжди темний (§10.7). */
+  --on-success: #16161a;
+  --on-warning: #16161a;
+  --on-info: #16161a;
+  --on-danger: #16161a;
+  --on-primary: #16161a;
+}
+
+@theme inline {
+  --color-canvas: var(--canvas);
+  --color-surface: var(--surface);
+  --color-muted: var(--muted);
+  --color-outline: var(--outline);
+  --color-ink: var(--ink);
+  --color-ink-soft: var(--ink-soft);
+
+  --color-success: var(--accent-success);
+  --color-danger: var(--accent-danger);
+  --color-warning: var(--accent-warning);
+  --color-info: var(--accent-info);
+  --color-primary: var(--accent-primary);
+  --color-secondary: var(--accent-secondary);
+
+  --color-on-success: var(--on-success);
+  --color-on-warning: var(--on-warning);
+  --color-on-info: var(--on-info);
+  --color-on-danger: var(--on-danger);
+  --color-on-primary: var(--on-primary);
+
+  /* Масштаб елементів (§10.2): бейдж → кнопка → картка. */
+  --radius-badge: 8px;
+  --radius-brutal: 12px;
+
+  --shadow-brutal-sm: 3px 3px 0 var(--outline);
+  --shadow-brutal: 6px 6px 0 var(--outline);
+  --shadow-brutal-md: 8px 8px 0 var(--outline);
+  --shadow-brutal-lg: 9px 9px 0 var(--outline);
+
+  --font-sans:
+    -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+  --font-mono: ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, monospace;
+}
+
+@layer base {
+  html,
+  body,
+  #root {
+    height: 100%;
+  }
+
+  body {
+    background-color: var(--canvas);
+    color: var(--ink);
+    font-family: var(--font-sans);
+    font-weight: 600;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  /* Смуга для перетягування вікна під hiddenInset-тайтлбаром (§10.5). */
+  .titlebar-drag {
+    -webkit-app-region: drag;
+  }
+
+  .titlebar-drag button,
+  .titlebar-drag a,
+  .titlebar-drag input {
+    -webkit-app-region: no-drag;
+  }
+}
+
+@layer components {
+  /*
+   * Базові примітиви стилю. Компоненти shadcn/ui, які додаватимуться далі,
+   * спираються на ці ж токени — див. застереження в §10.4 про обсяг
+   * перестилізації.
+   */
+  .brutal-surface {
+    background-color: var(--surface);
+    border: 3px solid var(--outline);
+    border-radius: var(--radius-brutal);
+    box-shadow: var(--shadow-brutal);
+  }
+
+  .brutal-interactive {
+    transition:
+      transform 0.15s ease,
+      box-shadow 0.15s ease,
+      background-color 0.15s ease;
+  }
+
+  .brutal-interactive:hover {
+    transform: translate(-2px, -2px);
+    box-shadow: var(--shadow-brutal-md);
+  }
+
+  .brutal-interactive:active {
+    transform: translate(0, 0);
+    box-shadow: var(--shadow-brutal-sm);
+  }
+
+  /* Написи керування — uppercase лише тут, не на вмісті (§10.6). */
+  .brutal-label {
+    font-weight: 900;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+  }
+}
