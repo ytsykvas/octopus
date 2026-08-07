@@ -64,6 +64,17 @@ async function pathExists(path: string): Promise<boolean> {
   }
 }
 
+/**
+ * Globally unique key for a workspace.
+ *
+ * Names repeat across projects on purpose, so the key carries the project as
+ * well. It never reaches the filesystem — the directory is named after the
+ * workspace alone.
+ */
+export function workspaceId(projectId: string, name: string): string {
+  return `${projectId}/${name}`
+}
+
 /** Full branch name for a workspace: `<prefix>/<name>`. */
 export function branchFor(project: Project, name: string): string {
   return `${project.branchPrefix}/${toSlug(name)}`
@@ -90,13 +101,19 @@ export async function createWorkspace(
 ): Promise<Workspace> {
   const exists = options.exists ?? pathExists
 
+  // Names are picked per project, so every project starts from the top of the
+  // pool: two projects may both have an `anna`.
   const taken = state.workspaces
     .filter((workspace) => workspace.projectId === project.id)
-    .map((workspace) => workspace.id)
+    .map((workspace) => workspace.name)
 
-  const id = nextWorkspaceName(taken)
-  const branch = branchFor(project, id)
-  const path = workspacePath(project.id, id, options.root)
+  const name = nextWorkspaceName(taken)
+
+  // The id, by contrast, must be unique across the app: it is the key for
+  // renaming, removal and the jump shortcuts, none of which carry a project.
+  const id = workspaceId(project.id, name)
+  const branch = branchFor(project, name)
+  const path = workspacePath(project.id, name, options.root)
 
   if (await exists(path)) {
     throw new WorkspaceError('pathExists', { path }, `${path} already exists.`)
@@ -107,7 +124,7 @@ export async function createWorkspace(
   return {
     id,
     projectId: project.id,
-    name: id,
+    name,
     branch,
     path: await canonicalPath(exec, branch, path),
     status: 'idle',

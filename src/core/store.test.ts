@@ -12,6 +12,7 @@ import {
   EMPTY_STATE,
   findProject,
   loadState,
+  migrate,
   PORT_RANGE_END,
   PORT_RANGE_START,
   type Project,
@@ -36,7 +37,8 @@ const project: Project = {
 
 function makeWorkspace(overrides: Partial<Workspace> = {}): Workspace {
   return {
-    id: 'kyiv',
+    // Ids are `<project>/<name>`; see the migration tests for the old format.
+    id: 'planner/kyiv',
     projectId: 'planner',
     name: 'kyiv',
     branch: 'ytsykvas/kyiv',
@@ -83,6 +85,44 @@ describe('load and save', () => {
   it('refuses a workspace whose port is outside the allowed range', async () => {
     const broken = { ...withProject, workspaces: [makeWorkspace({ port: 80 })] }
     await expect(saveState(broken, file, `${file}.tmp`)).rejects.toBeInstanceOf(InvalidFileError)
+  })
+})
+
+describe('migration', () => {
+  // Ids used to be the bare name, which collided once two projects each had
+  // an `anna`. Old records are rewritten so only one format is ever in play.
+  it('qualifies a bare workspace id with its project', () => {
+    const legacy: State = {
+      ...withProject,
+      workspaces: [makeWorkspace({ id: 'kyiv' })]
+    }
+
+    expect(migrate(legacy).workspaces[0]?.id).toBe('planner/kyiv')
+  })
+
+  it('leaves an already qualified id alone', () => {
+    const current: State = {
+      ...withProject,
+      workspaces: [makeWorkspace({ id: 'planner/kyiv' })]
+    }
+
+    expect(migrate(current).workspaces[0]?.id).toBe('planner/kyiv')
+  })
+
+  it('runs on load', async () => {
+    const legacy = { ...withProject, workspaces: [makeWorkspace({ id: 'kyiv' })] }
+    await writeFile(file, JSON.stringify(legacy), 'utf8')
+
+    const loaded = await loadState(file)
+    expect(loaded.workspaces[0]?.id).toBe('planner/kyiv')
+  })
+
+  it('keeps everything else untouched', () => {
+    const legacy: State = { ...withProject, workspaces: [makeWorkspace({ id: 'kyiv' })] }
+    const migrated = migrate(legacy)
+
+    expect(migrated.projects).toEqual(legacy.projects)
+    expect(migrated.workspaces[0]?.branch).toBe('ytsykvas/kyiv')
   })
 })
 
@@ -209,7 +249,7 @@ describe('workspaces', () => {
 
   it('updates only the fields passed in', () => {
     const state = addWorkspace(withProject, makeWorkspace())
-    const after = updateWorkspace(state, 'kyiv', { status: 'running', sessionId: 'sess-1' })
+    const after = updateWorkspace(state, 'planner/kyiv', { status: 'running', sessionId: 'sess-1' })
     expect(after.workspaces[0]).toMatchObject({
       status: 'running',
       sessionId: 'sess-1',
@@ -221,13 +261,13 @@ describe('workspaces', () => {
     const first = addWorkspace(withProject, makeWorkspace())
     const state = addWorkspace(
       first,
-      makeWorkspace({ id: 'lviv', name: 'lviv', branch: 'ytsykvas/lviv', port: 3200 })
+      makeWorkspace({ id: 'planner/lviv', name: 'lviv', branch: 'ytsykvas/lviv', port: 3200 })
     )
 
-    const after = updateWorkspace(state, 'lviv', { status: 'running' })
+    const after = updateWorkspace(state, 'planner/lviv', { status: 'running' })
 
-    expect(after.workspaces.find((w) => w.id === 'lviv')?.status).toBe('running')
-    expect(after.workspaces.find((w) => w.id === 'kyiv')?.status).toBe('idle')
+    expect(after.workspaces.find((w) => w.id === 'planner/lviv')?.status).toBe('running')
+    expect(after.workspaces.find((w) => w.id === 'planner/kyiv')?.status).toBe('idle')
   })
 
   it('throws when updating a missing workspace instead of silently doing nothing', () => {
@@ -238,13 +278,13 @@ describe('workspaces', () => {
 
   it('does not mutate the previous state', () => {
     const state = addWorkspace(withProject, makeWorkspace())
-    updateWorkspace(state, 'kyiv', { status: 'error' })
+    updateWorkspace(state, 'planner/kyiv', { status: 'error' })
     expect(state.workspaces[0]?.status).toBe('idle')
   })
 
   it('is removed by id', () => {
     const state = addWorkspace(withProject, makeWorkspace())
-    expect(removeWorkspace(state, 'kyiv').workspaces).toHaveLength(0)
+    expect(removeWorkspace(state, 'planner/kyiv').workspaces).toHaveLength(0)
   })
 
   it('removing a missing one breaks nothing', () => {

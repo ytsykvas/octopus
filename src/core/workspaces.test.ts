@@ -84,8 +84,34 @@ describe('createWorkspace', () => {
 
   it('names the first workspace from the start of the pool', async () => {
     const workspace = await create()
-    expect(workspace.id).toBe('anna')
     expect(workspace.name).toBe('anna')
+  })
+
+  // The name is per project; the id has to be unique across the whole app,
+  // because renaming, removal and the jump shortcuts carry nothing else.
+  it('keys the workspace by project and name', async () => {
+    const workspace = await create()
+    expect(workspace.id).toBe('planner/anna')
+  })
+
+  it('lets two projects each have an anna', async () => {
+    // A second project means a second repository — addProject refuses to add
+    // the same one twice — so the branches cannot collide.
+    const otherRepo = join(dir, 'esl')
+    await run('git', ['init', '-q', '--initial-branch=main', otherRepo])
+    await run('git', ['config', 'user.email', 'test@example.com'], { cwd: otherRepo })
+    await run('git', ['config', 'user.name', 'Test'], { cwd: otherRepo })
+    await writeFile(join(otherRepo, 'README.md'), '# other\n', 'utf8')
+    await run('git', ['add', '.'], { cwd: otherRepo })
+    await run('git', ['commit', '-q', '-m', 'first'], { cwd: otherRepo })
+
+    const other: Project = { ...project, id: 'esl', name: 'esl', repoPath: otherRepo }
+
+    const first = await create()
+    const second = await createWorkspace(other, state, gitIn(otherRepo), { root })
+
+    expect(second.name).toBe(first.name)
+    expect(second.id).not.toBe(first.id)
   })
 
   it('gives the next workspace a different name and branch', async () => {
@@ -131,7 +157,7 @@ describe('createWorkspace', () => {
     // Without an `exists` override the default runs; the path is free, so
     // creation proceeds.
     const workspace = await createWorkspace(project, state, exec, { root })
-    expect(workspace.id).toBe('anna')
+    expect(workspace.name).toBe('anna')
   })
 
   it('refuses a directory that genuinely exists on disk', async () => {

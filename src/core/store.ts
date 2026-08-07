@@ -65,7 +65,25 @@ export class StateConflictError extends Error {
 }
 
 export async function loadState(filePath: string = stateFile()): Promise<State> {
-  return readJsonFile(filePath, StateSchema, EMPTY_STATE)
+  return migrate(await readJsonFile(filePath, StateSchema, EMPTY_STATE))
+}
+
+/**
+ * Brings a state written by an older build up to date.
+ *
+ * Workspace ids used to be the bare name, which collided as soon as two
+ * projects each had an `anna`. They are now `<project>/<name>`. Records
+ * written before that change are rewritten on load, so only one format is
+ * ever in play.
+ */
+export function migrate(state: State): State {
+  const workspaces = state.workspaces.map((workspace) =>
+    workspace.id.includes('/')
+      ? workspace
+      : { ...workspace, id: `${workspace.projectId}/${workspace.id}` }
+  )
+
+  return { ...state, workspaces }
 }
 
 export async function saveState(
