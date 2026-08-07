@@ -1,8 +1,9 @@
-import { AlertTriangle, Pencil, X } from 'lucide-react'
+import { AlertTriangle, MoreHorizontal, Pencil, Trash2 } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 
 import type { WorkspaceView } from '@core/workspaces.js'
 
+import { DropdownMenu } from './DropdownMenu.js'
 import { NameEditor } from './NameEditor.js'
 
 interface WorkspaceRowProps {
@@ -79,25 +80,39 @@ export function WorkspaceRow({
         )}
       </button>
 
-      <button
-        type="button"
-        onClick={() => {
-          onEditingChange(true)
-        }}
-        title={t('workspaces.rename')}
-        className="text-ink-faint hover:text-ink focus-ring shrink-0 rounded p-1 opacity-0 transition-opacity group-hover:opacity-100"
-      >
-        <Pencil aria-hidden size={12} />
-      </button>
-
-      <button
-        type="button"
-        onClick={onRemove}
-        title={t('workspaces.remove')}
-        className="text-ink-faint hover:text-danger focus-ring shrink-0 rounded p-1 opacity-0 transition-opacity group-hover:opacity-100"
-      >
-        <X aria-hidden size={12} />
-      </button>
+      {/* Same menu as projects — neighbouring rows behaving differently would
+          be its own kind of confusing. */}
+      <DropdownMenu
+        trigger={({ onClick, open }) => (
+          <button
+            type="button"
+            onClick={onClick}
+            title={t('sidebar.projectActions')}
+            className={`text-ink-faint hover:text-ink focus-ring shrink-0 rounded p-1 transition-opacity ${
+              open ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'
+            }`}
+          >
+            <MoreHorizontal aria-hidden size={12} />
+          </button>
+        )}
+        actions={[
+          {
+            id: 'rename',
+            label: t('workspaces.rename'),
+            icon: <Pencil aria-hidden size={12} />,
+            onSelect: () => {
+              onEditingChange(true)
+            }
+          },
+          {
+            id: 'remove',
+            label: t('workspaces.remove'),
+            icon: <Trash2 aria-hidden size={12} />,
+            destructive: true,
+            onSelect: onRemove
+          }
+        ]}
+      />
     </div>
   )
 }

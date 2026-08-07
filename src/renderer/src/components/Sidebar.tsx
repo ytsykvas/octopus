@@ -1,11 +1,20 @@
-import { CloudDownload, FolderOpen, Pencil, Plus, Settings as SettingsIcon, X } from 'lucide-react'
-import { useEffect, useState } from 'react'
+import {
+  CloudDownload,
+  FolderOpen,
+  MoreHorizontal,
+  Pencil,
+  Plus,
+  Settings as SettingsIcon,
+  Trash2
+} from 'lucide-react'
+import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import type { Project } from '@core/store.js'
 import type { WorkspaceView } from '@core/workspaces.js'
 
 import { Button } from './Button.js'
+import { DropdownMenu } from './DropdownMenu.js'
 import { NameEditor } from './NameEditor.js'
 import { WorkspaceRow } from './WorkspaceRow.js'
 
@@ -165,8 +174,8 @@ function WorkspaceList({
 /**
  * Choice of where a project comes from.
  *
- * A small menu rather than two buttons: adding a project is one action with
- * two sources, and the sidebar has little room to spare.
+ * A menu rather than two buttons: adding a project is one action with two
+ * sources, and the sidebar has little room to spare.
  */
 function AddMenu({
   busy,
@@ -178,78 +187,35 @@ function AddMenu({
   onAddFromGitHub: () => void
 }): React.JSX.Element {
   const { t } = useTranslation()
-  const [open, setOpen] = useState(false)
-
-  useEffect(() => {
-    if (!open) return
-
-    const close = (): void => {
-      setOpen(false)
-    }
-    // Any click outside dismisses it, as a menu should.
-    window.addEventListener('click', close)
-    return () => {
-      window.removeEventListener('click', close)
-    }
-  }, [open])
 
   return (
-    <div className="relative">
-      <Button
-        variant="quiet"
-        size="sm"
-        disabled={busy}
-        title={t('sidebar.addProject')}
-        onClick={(event) => {
-          event.stopPropagation()
-          setOpen((current) => !current)
-        }}
-      >
-        <Plus aria-hidden size={14} />
-      </Button>
-
-      {open && (
-        <div className="border-line bg-canvas absolute right-0 z-10 mt-1 w-40 rounded-[var(--radius-control)] border p-1 shadow-[var(--shadow-pop)]">
-          <MenuItem
-            icon={<FolderOpen aria-hidden size={14} />}
-            label={t('sidebar.addFromDisk')}
-            onClick={() => {
-              setOpen(false)
-              onAddFromDisk()
-            }}
-          />
-          <MenuItem
-            icon={<CloudDownload aria-hidden size={14} />}
-            label={t('sidebar.addFromGitHub')}
-            onClick={() => {
-              setOpen(false)
-              onAddFromGitHub()
-            }}
-          />
-        </div>
+    <DropdownMenu
+      trigger={({ onClick }) => (
+        <Button
+          variant="quiet"
+          size="sm"
+          disabled={busy}
+          title={t('sidebar.addProject')}
+          onClick={onClick}
+        >
+          <Plus aria-hidden size={14} />
+        </Button>
       )}
-    </div>
-  )
-}
-
-function MenuItem({
-  icon,
-  label,
-  onClick
-}: {
-  icon: React.ReactNode
-  label: string
-  onClick: () => void
-}): React.JSX.Element {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      className="row focus-ring text-ink-soft hover:text-ink flex w-full items-center gap-2 px-2 py-1 text-left"
-    >
-      {icon}
-      {label}
-    </button>
+      actions={[
+        {
+          id: 'disk',
+          label: t('sidebar.addFromDisk'),
+          icon: <FolderOpen aria-hidden size={14} />,
+          onSelect: onAddFromDisk
+        },
+        {
+          id: 'github',
+          label: t('sidebar.addFromGitHub'),
+          icon: <CloudDownload aria-hidden size={14} />,
+          onSelect: onAddFromGitHub
+        }
+      ]}
+    />
   )
 }
 
@@ -316,25 +282,39 @@ function ProjectRow({
         <Plus aria-hidden size={13} />
       </button>
 
-      <button
-        type="button"
-        onClick={() => {
-          setEditing(true)
-        }}
-        title={t('sidebar.renameProject')}
-        className="text-ink-faint hover:text-ink focus-ring shrink-0 rounded p-1 opacity-0 transition-opacity group-hover:opacity-100"
-      >
-        <Pencil aria-hidden size={13} />
-      </button>
-
-      <button
-        type="button"
-        onClick={onRemove}
-        title={t('sidebar.removeProject')}
-        className="text-ink-faint hover:text-danger focus-ring shrink-0 rounded p-1 opacity-0 transition-opacity group-hover:opacity-100"
-      >
-        <X aria-hidden size={13} />
-      </button>
+      {/* Rename and remove live behind a menu: they are occasional, and three
+          buttons on every row was more noise than the list could carry. */}
+      <DropdownMenu
+        trigger={({ onClick, open }) => (
+          <button
+            type="button"
+            onClick={onClick}
+            title={t('sidebar.projectActions')}
+            className={`text-ink-faint hover:text-ink focus-ring shrink-0 rounded p-1 transition-opacity ${
+              open ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'
+            }`}
+          >
+            <MoreHorizontal aria-hidden size={13} />
+          </button>
+        )}
+        actions={[
+          {
+            id: 'rename',
+            label: t('sidebar.renameProject'),
+            icon: <Pencil aria-hidden size={13} />,
+            onSelect: () => {
+              setEditing(true)
+            }
+          },
+          {
+            id: 'remove',
+            label: t('sidebar.removeProject'),
+            icon: <Trash2 aria-hidden size={13} />,
+            destructive: true,
+            onSelect: onRemove
+          }
+        ]}
+      />
     </div>
   )
 }

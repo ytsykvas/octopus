@@ -19,6 +19,7 @@ export const uk: Translation = {
     addFromGitHub: 'З GitHub…',
     removeProject: 'Прибрати проєкт',
     renameProject: 'Перейменувати',
+    projectActions: 'Ще',
     renameHint: 'Enter — зберегти, Escape — скасувати',
     removeTitle: 'Прибрати проєкт?',
     removeMessage: 'Прибрати «{{name}}» зі списку?',

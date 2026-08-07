@@ -17,6 +17,7 @@ export const en = {
     addFromGitHub: 'From GitHub…',
     removeProject: 'Remove project',
     renameProject: 'Rename',
+    projectActions: 'More',
     renameHint: 'Enter to save, Escape to cancel',
     removeTitle: 'Remove project?',
     removeMessage: 'Remove “{{name}}” from the list?',
