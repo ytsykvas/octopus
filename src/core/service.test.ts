@@ -190,6 +190,22 @@ describe('projects', () => {
     await expect(service.addProjectFromPath(plain)).rejects.toThrow(/is not a git repository/)
   })
 
+  it('renames a project and keeps the change across a restart', async () => {
+    const repo = join(dir, 'planner')
+    await initRepo(repo)
+    const project = await service.addProjectFromPath(repo)
+
+    await service.renameProjectById(project.id, 'Weekly planner')
+    expect(service.listProjects()[0]?.name).toBe('Weekly planner')
+
+    const restarted = await createService(paths(dir))
+    expect(restarted.listProjects()[0]?.name).toBe('Weekly planner')
+  })
+
+  it('refuses to rename a project that is not there', async () => {
+    await expect(service.renameProjectById('missing', 'Name')).rejects.toThrow()
+  })
+
   it('removes the project from the list and from disk', async () => {
     const repo = join(dir, 'planner')
     await initRepo(repo)

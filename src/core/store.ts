@@ -120,6 +120,30 @@ export function addProject(state: State, project: Project): State {
   return { ...state, projects: [...state.projects, project] }
 }
 
+/**
+ * Renames a project.
+ *
+ * Only the display name changes: the id stays put because workspaces and
+ * on-disk paths are keyed by it, and the repository itself is untouched.
+ */
+export function renameProject(state: State, projectId: string, name: string): State {
+  const trimmed = name.trim()
+  if (trimmed === '') {
+    throw new StateConflictError('A project name cannot be empty')
+  }
+
+  if (!state.projects.some((project) => project.id === projectId)) {
+    throw new StateConflictError(`Project ${projectId} not found`)
+  }
+
+  return {
+    ...state,
+    projects: state.projects.map((project) =>
+      project.id === projectId ? { ...project, name: trimmed } : project
+    )
+  }
+}
+
 /** Removes a project together with its workspaces — no orphans are left behind. */
 export function removeProject(state: State, projectId: string): State {
   return {

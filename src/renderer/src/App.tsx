@@ -140,6 +140,18 @@ export function App(): React.JSX.Element {
     }
   }, [refresh, describeFailure])
 
+  const renameProject = useCallback(
+    async (projectId: string, name: string) => {
+      const result = await window.octopus.projects.rename(projectId, name)
+      if (result.ok) {
+        await refresh()
+      } else {
+        setError(describeFailure(result))
+      }
+    },
+    [refresh, describeFailure]
+  )
+
   const removeProject = useCallback(
     async (projectId: string) => {
       const result = await window.octopus.projects.remove(projectId)
@@ -178,6 +190,7 @@ export function App(): React.JSX.Element {
           setPickingRepository(true)
         }}
         onRemoveProject={(id) => void removeProject(id)}
+        onRenameProject={(id, name) => void renameProject(id, name)}
         onOpenSettings={() => {
           setSettingsOpen(true)
         }}

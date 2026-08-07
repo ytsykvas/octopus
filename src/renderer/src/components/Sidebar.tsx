@@ -12,6 +12,7 @@ interface SidebarProps {
   readonly onAddFromDisk: () => void
   readonly onAddFromGitHub: () => void
   readonly onRemoveProject: (projectId: string) => void
+  readonly onRenameProject: (projectId: string, name: string) => void
   readonly onOpenSettings: () => void
   readonly busy: boolean
 }
@@ -29,6 +30,7 @@ export function Sidebar({
   onAddFromDisk,
   onAddFromGitHub,
   onRemoveProject,
+  onRenameProject,
   onOpenSettings,
   busy
 }: SidebarProps): React.JSX.Element {
@@ -58,6 +60,9 @@ export function Sidebar({
                   }}
                   onRemove={() => {
                     onRemoveProject(project.id)
+                  }}
+                  onRename={(name) => {
+                    onRenameProject(project.id, name)
                   }}
                 />
               </li>
@@ -161,18 +166,44 @@ interface ProjectRowProps {
   readonly selected: boolean
   readonly onSelect: () => void
   readonly onRemove: () => void
+  readonly onRename: (name: string) => void
 }
 
-function ProjectRow({ project, selected, onSelect, onRemove }: ProjectRowProps): React.JSX.Element {
+function ProjectRow({
+  project,
+  selected,
+  onSelect,
+  onRemove,
+  onRename
+}: ProjectRowProps): React.JSX.Element {
   const { t } = useTranslation()
+  const [editing, setEditing] = useState(false)
+
+  if (editing) {
+    return (
+      <NameEditor
+        initial={project.name}
+        onCommit={(name) => {
+          setEditing(false)
+          if (name !== project.name) onRename(name)
+        }}
+        onCancel={() => {
+          setEditing(false)
+        }}
+      />
+    )
+  }
 
   return (
     <div
-      className={`row group flex items-center gap-2 px-2 py-1.5 ${selected ? 'row-selected' : ''}`}
+      className={`row group flex items-center gap-1 px-2 py-1.5 ${selected ? 'row-selected' : ''}`}
     >
       <button
         type="button"
         onClick={onSelect}
+        onDoubleClick={() => {
+          setEditing(true)
+        }}
         className="focus-ring min-w-0 flex-1 rounded-[var(--radius-control)] text-left"
         title={project.repoPath}
       >
@@ -184,6 +215,17 @@ function ProjectRow({ project, selected, onSelect, onRemove }: ProjectRowProps):
 
       <button
         type="button"
+        onClick={() => {
+          setEditing(true)
+        }}
+        title={t('sidebar.renameProject')}
+        className="text-ink-faint hover:text-ink focus-ring shrink-0 rounded px-1 opacity-0 transition-opacity group-hover:opacity-100"
+      >
+        ✎
+      </button>
+
+      <button
+        type="button"
         onClick={onRemove}
         title={t('sidebar.removeProject')}
         className="text-ink-faint hover:text-danger focus-ring shrink-0 rounded px-1 opacity-0 transition-opacity group-hover:opacity-100"
@@ -191,5 +233,61 @@ function ProjectRow({ project, selected, onSelect, onRemove }: ProjectRowProps):
         ✕
       </button>
     </div>
+  )
+}
+
+/**
+ * Inline rename.
+ *
+ * Committing on blur as well as on Enter: clicking away is a common way to
+ * mean "done", and losing the edit there would be surprising.
+ */
+function NameEditor({
+  initial,
+  onCommit,
+  onCancel
+}: {
+  initial: string
+  onCommit: (name: string) => void
+  onCancel: () => void
+}): React.JSX.Element {
+  const { t } = useTranslation()
+  const [draft, setDraft] = useState(initial)
+
+  const commit = (): void => {
+    const trimmed = draft.trim()
+    if (trimmed === '') {
+      onCancel()
+      return
+    }
+    onCommit(trimmed)
+  }
+
+  return (
+    <input
+      type="text"
+      autoFocus
+      value={draft}
+      title={t('sidebar.renameHint')}
+      spellCheck={false}
+      onChange={(event) => {
+        setDraft(event.target.value)
+      }}
+      onBlur={commit}
+      onKeyDown={(event) => {
+        if (event.key === 'Enter') {
+          event.preventDefault()
+          commit()
+        }
+        if (event.key === 'Escape') {
+          event.preventDefault()
+          onCancel()
+        }
+      }}
+      onFocus={(event) => {
+        event.target.select()
+      }}
+      className="focus-ring border-line bg-canvas h-7 w-full rounded-[var(--radius-control)] border px-2 font-medium"
+    />
   )
 }

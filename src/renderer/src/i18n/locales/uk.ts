@@ -18,6 +18,8 @@ export const uk: Translation = {
     addFromDisk: 'З диска…',
     addFromGitHub: 'З GitHub…',
     removeProject: 'Прибрати проєкт',
+    renameProject: 'Перейменувати',
+    renameHint: 'Enter — зберегти, Escape — скасувати',
     settings: 'Налаштування'
   },
 

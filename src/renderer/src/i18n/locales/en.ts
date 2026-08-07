@@ -16,6 +16,8 @@ export const en = {
     addFromDisk: 'From disk…',
     addFromGitHub: 'From GitHub…',
     removeProject: 'Remove project',
+    renameProject: 'Rename',
+    renameHint: 'Enter to save, Escape to cancel',
     settings: 'Settings'
   },
 

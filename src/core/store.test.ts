@@ -17,6 +17,7 @@ import {
   type Project,
   removeProject,
   removeWorkspace,
+  renameProject,
   saveState,
   type State,
   StateConflictError,
@@ -130,6 +131,40 @@ describe('projects', () => {
   it('treats the same repository under another id as a conflict too', () => {
     const twin = { ...project, id: 'other' }
     expect(() => addProject(withProject, twin)).toThrow(StateConflictError)
+  })
+
+  it('is renamed without touching anything else', () => {
+    const renamed = renameProject(withProject, 'planner', 'Weekly planner')
+    const project = renamed.projects[0]
+
+    expect(project?.name).toBe('Weekly planner')
+    expect(project?.id).toBe('planner')
+    expect(project?.repoPath).toBe('/repos/planner')
+  })
+
+  it('trims whitespace around a new name', () => {
+    expect(renameProject(withProject, 'planner', '  Spaced  ').projects[0]?.name).toBe('Spaced')
+  })
+
+  it('refuses an empty name', () => {
+    expect(() => renameProject(withProject, 'planner', '   ')).toThrow(StateConflictError)
+  })
+
+  it('refuses to rename a project that does not exist', () => {
+    expect(() => renameProject(withProject, 'missing', 'Name')).toThrow(StateConflictError)
+  })
+
+  it('does not mutate the previous state', () => {
+    renameProject(withProject, 'planner', 'Changed')
+    expect(withProject.projects[0]?.name).toBe('planner')
+  })
+
+  it('leaves other projects alone', () => {
+    const two = addProject(withProject, { ...project, id: 'esl', repoPath: '/repos/esl' })
+    const renamed = renameProject(two, 'esl', 'ESL')
+
+    expect(renamed.projects.find((item) => item.id === 'esl')?.name).toBe('ESL')
+    expect(renamed.projects.find((item) => item.id === 'planner')?.name).toBe('planner')
   })
 
   it('removes the project workspaces too, leaving no orphans', () => {

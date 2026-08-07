@@ -126,6 +126,9 @@ const api = {
     add: (): Promise<Result<Project | null>> =>
       ipcRenderer.invoke('projects:add') as Promise<Result<Project | null>>,
 
+    rename: (projectId: string, name: string): Promise<Result<void>> =>
+      ipcRenderer.invoke('projects:rename', projectId, name) as Promise<Result<void>>,
+
     remove: (projectId: string): Promise<Result<void>> =>
       ipcRenderer.invoke('projects:remove', projectId) as Promise<Result<void>>,
 

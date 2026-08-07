@@ -18,6 +18,7 @@ import {
   loadState,
   type Project,
   removeProject,
+  renameProject,
   saveState,
   type State
 } from './store.js'
@@ -40,6 +41,7 @@ export interface OctopusService {
   /** Clones a GitHub repository into `destination`, then adds it as a project. */
   addProjectFromGitHub(repository: RemoteRepository, destination: string): Promise<Project>
   listRemoteRepositories(): Promise<RemoteRepository[]>
+  renameProjectById(projectId: string, name: string): Promise<void>
   removeProjectById(projectId: string): Promise<void>
 }
 
@@ -97,6 +99,10 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
     async addProjectFromGitHub(repository, destination) {
       const path = await cloneRepository(repository, destination, commandExec)
       return addFromPath(path)
+    },
+
+    async renameProjectById(projectId, name) {
+      await commit(renameProject(state, projectId, name))
     },
 
     async removeProjectById(projectId) {

@@ -141,6 +141,10 @@ function registerIpc(service: OctopusService, terminals: TerminalManager): void 
     terminals.dispose(id)
   })
 
+  ipcMain.handle('projects:rename', (_event, projectId: string, name: string) =>
+    attempt(() => service.renameProjectById(projectId, name))
+  )
+
   ipcMain.handle('projects:remove', (_event, projectId: string) =>
     attempt(() => service.removeProjectById(projectId))
   )
