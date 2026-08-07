@@ -130,7 +130,11 @@ function AuthTerminal({
     <div className="flex h-[28rem] flex-col">
       <div className="mb-3 flex items-center justify-between gap-4">
         <div className="min-w-0">
-          <p className="font-medium">{t('settings.signInRunning', { service: session.label })}</p>
+          <p className="font-medium">
+            {session.action === 'login'
+              ? t('settings.signInRunning', { service: session.label })
+              : t('settings.signOutRunning', { service: session.label })}
+          </p>
           <p className="text-ink-faint mt-0.5 truncate font-mono text-[11px]">
             {session.command.join(' ')}
           </p>
@@ -147,9 +151,13 @@ function AuthTerminal({
 
       {exitCode !== undefined && (
         <p className={`mt-2 ${exitCode === 0 ? 'text-success' : 'text-danger'}`}>
-          {exitCode === 0
-            ? t('settings.signInDone')
-            : t('settings.signInFailed', { code: exitCode ?? '—' })}
+          {exitCode === 0 && t('settings.signInDone')}
+          {/* null means a signal killed it — a different situation from a
+              command that ran and returned a failure code. */}
+          {exitCode === null && t('settings.signInKilled')}
+          {typeof exitCode === 'number' &&
+            exitCode !== 0 &&
+            t('settings.signInFailed', { code: exitCode })}
         </p>
       )}
     </div>

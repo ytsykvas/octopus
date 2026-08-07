@@ -85,7 +85,9 @@ export const en = {
     signOut: 'Sign out',
     recheck: 'Refresh',
     signInRunning: 'Signing in to {{service}}',
+    signOutRunning: 'Signing out of {{service}}',
     signInDone: 'Finished. Closing this returns to the account list.',
+    signInKilled: 'The command was interrupted before it finished.',
     signInFailed: 'The command exited with code {{code}}.',
     closeTerminal: 'Done',
     opensTerminal:

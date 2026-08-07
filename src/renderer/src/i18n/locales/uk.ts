@@ -88,7 +88,9 @@ export const uk: Translation = {
     signOut: 'Вийти',
     recheck: 'Оновити',
     signInRunning: 'Вхід у {{service}}',
+    signOutRunning: 'Вихід з {{service}}',
     signInDone: 'Завершено. Закрийте, щоб повернутися до списку акаунтів.',
+    signInKilled: 'Команду перервано до завершення.',
     signInFailed: 'Команда завершилася з кодом {{code}}.',
     closeTerminal: 'Готово',
     opensTerminal:

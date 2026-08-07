@@ -1,9 +1,12 @@
 import type { WebContents } from 'electron'
 import { spawn, type IPty } from 'node-pty'
 
+import { homedir } from 'node:os'
+
 import {
   buildTerminalArgv,
   buildTerminalEnv,
+  resolveCwd,
   resolveShell,
   type TerminalId,
   type TerminalSpec
@@ -31,7 +34,7 @@ export class TerminalManager {
 
     const pty = spawn(shell, [...buildTerminalArgv(spec)], {
       name: 'xterm-256color',
-      cwd: spec.cwd,
+      cwd: resolveCwd(spec.cwd, homedir()),
       env: buildTerminalEnv(),
       cols: spec.cols,
       rows: spec.rows
@@ -44,9 +47,12 @@ export class TerminalManager {
 
     pty.onExit(({ exitCode, signal }) => {
       this.sessions.delete(id)
-      if (!target.isDestroyed()) {
-        target.send('terminal:exit', { id, exitCode: signal === undefined ? exitCode : null })
-      }
+      if (target.isDestroyed()) return
+
+      // The typings say `signal?: number`, but a normal exit reports 0 rather
+      // than undefined — checking for undefined reported every run as killed.
+      // Signal numbers start at 1, so falsy means "no signal".
+      target.send('terminal:exit', { id, exitCode: signal ? null : exitCode })
     })
 
     this.sessions.set(id, pty)

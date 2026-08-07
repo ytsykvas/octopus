@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest'
 import {
   buildTerminalArgv,
   buildTerminalEnv,
+  resolveCwd,
   resolveShell,
   TerminalSpecSchema
 } from './terminal.js'
@@ -51,6 +52,26 @@ describe('resolveShell', () => {
 
   it('reads the real environment by default', () => {
     expect(resolveShell()).toMatch(/\/\w+/)
+  })
+})
+
+describe('resolveCwd', () => {
+  // A `~` reaching a process as its working directory kills the session
+  // instantly: expansion is a shell feature, not a system one.
+  it('expands a bare tilde to the home directory', () => {
+    expect(resolveCwd('~', '/Users/test')).toBe('/Users/test')
+  })
+
+  it('expands a tilde prefix', () => {
+    expect(resolveCwd('~/projects/app', '/Users/test')).toBe('/Users/test/projects/app')
+  })
+
+  it('leaves absolute paths untouched', () => {
+    expect(resolveCwd('/repos/app', '/Users/test')).toBe('/repos/app')
+  })
+
+  it('does not touch a tilde in the middle of a path', () => {
+    expect(resolveCwd('/repos/~backup', '/Users/test')).toBe('/repos/~backup')
   })
 })
 

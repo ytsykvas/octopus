@@ -7,6 +7,8 @@
  * spawning anything (§11.1 docs/PROJECT.md).
  */
 
+import { join } from 'node:path'
+
 import { z } from 'zod'
 
 /** Identifies a live terminal session. */
@@ -50,6 +52,19 @@ export function resolveShell(
   // A blank SHELL counts as missing, which `??` would not catch.
   const configured = env.SHELL?.trim()
   return configured !== undefined && configured.length > 0 ? configured : '/bin/zsh'
+}
+
+/**
+ * Expands a leading `~` into the home directory.
+ *
+ * The shell does this expansion, not the operating system, so a `~` handed to
+ * a process as its working directory simply fails to resolve — the session
+ * dies immediately with a non-zero exit code and no obvious explanation.
+ */
+export function resolveCwd(cwd: string, home: string): string {
+  if (cwd === '~') return home
+  if (cwd.startsWith('~/')) return join(home, cwd.slice(2))
+  return cwd
 }
 
 /**
