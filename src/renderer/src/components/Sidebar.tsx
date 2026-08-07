@@ -10,6 +10,7 @@ interface SidebarProps {
   readonly onSelectProject: (projectId: string) => void
   readonly onAddProject: () => void
   readonly onRemoveProject: (projectId: string) => void
+  readonly onOpenSettings: () => void
   readonly busy: boolean
 }
 
@@ -25,6 +26,7 @@ export function Sidebar({
   onSelectProject,
   onAddProject,
   onRemoveProject,
+  onOpenSettings,
   busy
 }: SidebarProps): React.JSX.Element {
   const { t } = useTranslation()
@@ -68,6 +70,17 @@ export function Sidebar({
           </ul>
         )}
       </nav>
+
+      <div className="border-line border-t p-2">
+        <button
+          type="button"
+          onClick={onOpenSettings}
+          className="row focus-ring text-ink-soft hover:text-ink flex w-full items-center gap-2 px-2 py-1.5"
+        >
+          <span aria-hidden>⚙</span>
+          {t('sidebar.settings')}
+        </button>
+      </div>
     </aside>
   )
 }

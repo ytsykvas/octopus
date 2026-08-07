@@ -86,6 +86,23 @@ describe('loadConfig', () => {
     const config = await loadConfig(file)
     expect(config.branchPrefix).toBe('maestro')
   })
+
+  it('still loads a config written before a newer field existed', async () => {
+    // A config from an older build: no `language` key at all.
+    const legacy = {
+      version: 1,
+      branchPrefix: 'ytsykvas',
+      settingSources: 'none',
+      theme: 'system',
+      deviceId: UUID,
+      installedAt: '2026-08-07T12:00:00.000Z'
+    }
+    await writeFile(file, JSON.stringify(legacy), 'utf8')
+
+    const config = await loadConfig(file)
+    expect(config.language).toBe('en')
+    expect(config.branchPrefix).toBe('ytsykvas')
+  })
 })
 
 describe('saveConfig', () => {

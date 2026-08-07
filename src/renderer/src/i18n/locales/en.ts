@@ -13,7 +13,8 @@ export const en = {
     projects: 'Projects',
     empty: 'Nothing here yet. Add a repository with the "+" button.',
     addProject: 'Add repository',
-    removeProject: 'Remove project'
+    removeProject: 'Remove project',
+    settings: 'Settings'
   },
 
   panel: {
@@ -32,6 +33,42 @@ export const en = {
     noSelectionTitle: 'Select a project',
     noSelectionBody: 'Pick one from the list on the left.',
     projectBody: 'Base branch {{branch}}. The agent chat appears here once workspaces exist.'
+  },
+
+  settings: {
+    title: 'Settings',
+    close: 'Close',
+    saved: 'Saved',
+
+    appearance: 'Appearance',
+    theme: 'Theme',
+    themeSystem: 'Follow system',
+    themeLight: 'Light',
+    themeDark: 'Dark',
+
+    language: 'Language',
+    languageHint: 'English is the default. Restart is not required.',
+
+    git: 'Git',
+    branchPrefix: 'Branch prefix',
+    branchPrefixHint:
+      'Workspace branches are named <prefix>/<workspace>. A GitHub username is a common choice.',
+    branchPrefixEmpty: 'The prefix cannot be empty.',
+
+    agent: 'Agent',
+    settingSources: 'Instruction sources',
+    settingSourcesHint:
+      'Controls what the agent loads besides what this app sends. "Nothing" keeps the context fully under your control.',
+    settingSourcesNone: 'Nothing',
+    settingSourcesNoneHint: 'The agent receives only what maestro passes explicitly.',
+    settingSourcesProject: 'Project only',
+    settingSourcesProjectHint: "Loads the repository's own CLAUDE.md and settings.",
+    settingSourcesAll: 'Everything',
+    settingSourcesAllHint: 'Loads user, project and local settings, as the plain CLI would.',
+
+    about: 'About',
+    deviceId: 'Device id',
+    installedAt: 'First run'
   },
 
   errors: {

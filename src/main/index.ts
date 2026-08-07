@@ -1,10 +1,12 @@
 import { join } from 'node:path'
 
-import { app, BrowserWindow, dialog, ipcMain, nativeTheme, shell } from 'electron'
+import { app, BrowserWindow, dialog, ipcMain, Menu, nativeTheme, shell } from 'electron'
 
+import type { Config, ThemePreference } from '../core/config.js'
 import { describeError } from '../core/persist.js'
 import { ProjectValidationError } from '../core/projects.js'
 import { createService, type MaestroService } from '../core/service.js'
+import type { ThemeName } from '../core/types.js'
 
 /** Canvas colours from the design system (§10) — so the window does not flash white on launch. */
 const CANVAS_LIGHT = '#ffffff'
@@ -35,18 +37,29 @@ async function attempt<T>(operation: () => Promise<T> | T): Promise<Result<T>> {
   }
 }
 
-function canvasColor(): string {
-  return nativeTheme.shouldUseDarkColors ? CANVAS_DARK : CANVAS_LIGHT
+/**
+ * Resolves the effective theme.
+ *
+ * The config wins over the system: 'system' defers to macOS, while an
+ * explicit choice is honoured regardless of what the OS is doing.
+ */
+function resolveTheme(preference: ThemePreference): ThemeName {
+  if (preference === 'system') return nativeTheme.shouldUseDarkColors ? 'dark' : 'light'
+  return preference
 }
 
-function createWindow(): BrowserWindow {
+function canvasColor(theme: ThemeName): string {
+  return theme === 'dark' ? CANVAS_DARK : CANVAS_LIGHT
+}
+
+function createWindow(theme: ThemeName): BrowserWindow {
   const window = new BrowserWindow({
     width: 1280,
     height: 820,
     minWidth: 940,
     minHeight: 620,
     show: false,
-    backgroundColor: canvasColor(),
+    backgroundColor: canvasColor(theme),
     // §10.5: hiddenInset stays; vibrancy is deliberately unused — translucent
     // materials make dense text harder to read.
     titleBarStyle: 'hiddenInset',
@@ -85,9 +98,17 @@ function createWindow(): BrowserWindow {
  * this layer only forwards calls (§11.1).
  */
 function registerIpc(service: MaestroService): void {
-  ipcMain.handle('theme:get', () => (nativeTheme.shouldUseDarkColors ? 'dark' : 'light'))
+  ipcMain.handle('theme:get', () => resolveTheme(service.getConfig().theme))
 
   ipcMain.handle('config:get', () => attempt(() => service.getConfig()))
+
+  ipcMain.handle('config:update', (_event, patch: Partial<Config>) =>
+    attempt(async () => {
+      const updated = await service.updateConfig(patch)
+      broadcastTheme(resolveTheme(updated.theme))
+      return updated
+    })
+  )
 
   ipcMain.handle('projects:list', () => attempt(() => service.listProjects()))
 
@@ -114,29 +135,95 @@ function registerIpc(service: MaestroService): void {
   })
 }
 
-function broadcastThemeChanges(): void {
+/**
+ * Native menu.
+ *
+ * Exists mainly for ⌘, — on macOS that is where users expect settings, and
+ * an app without it feels foreign.
+ */
+function registerMenu(): void {
+  const template: Electron.MenuItemConstructorOptions[] = [
+    {
+      role: 'appMenu',
+      submenu: [
+        { role: 'about' },
+        { type: 'separator' },
+        {
+          label: 'Settings…',
+          accelerator: 'CmdOrCtrl+,',
+          click: () => {
+            BrowserWindow.getFocusedWindow()?.webContents.send('settings:open')
+          }
+        },
+        { type: 'separator' },
+        { role: 'services' },
+        { type: 'separator' },
+        { role: 'hide' },
+        { role: 'hideOthers' },
+        { role: 'unhide' },
+        { type: 'separator' },
+        { role: 'quit' }
+      ]
+    },
+    { role: 'editMenu' },
+    { role: 'viewMenu' },
+    { role: 'windowMenu' }
+  ]
+
+  Menu.setApplicationMenu(Menu.buildFromTemplate(template))
+}
+
+function broadcastTheme(theme: ThemeName): void {
+  for (const window of BrowserWindow.getAllWindows()) {
+    window.setBackgroundColor(canvasColor(theme))
+    window.webContents.send('theme:changed', theme)
+  }
+}
+
+/**
+ * Follows the OS appearance.
+ *
+ * Only relevant while the preference is 'system'; an explicit choice must not
+ * be overridden when macOS switches.
+ */
+function watchSystemTheme(service: MaestroService): void {
   nativeTheme.on('updated', () => {
-    const theme = nativeTheme.shouldUseDarkColors ? 'dark' : 'light'
-    for (const window of BrowserWindow.getAllWindows()) {
-      window.setBackgroundColor(canvasColor())
-      window.webContents.send('theme:changed', theme)
+    if (service.getConfig().theme !== 'system') return
+    broadcastTheme(nativeTheme.shouldUseDarkColors ? 'dark' : 'light')
+  })
+}
+
+/**
+ * Startup failures must be visible.
+ *
+ * If the config or state on disk cannot be read, the app previously died with
+ * an unhandled rejection and an empty window. Showing the reason lets the user
+ * act on it.
+ */
+async function start(): Promise<void> {
+  let service: MaestroService
+
+  try {
+    service = await createService()
+  } catch (error) {
+    dialog.showErrorBox('maestro could not start', describeError(error))
+    app.quit()
+    return
+  }
+
+  registerIpc(service)
+  watchSystemTheme(service)
+  registerMenu()
+  createWindow(resolveTheme(service.getConfig().theme))
+
+  app.on('activate', () => {
+    if (BrowserWindow.getAllWindows().length === 0) {
+      createWindow(resolveTheme(service.getConfig().theme))
     }
   })
 }
 
-void app.whenReady().then(async () => {
-  const service = await createService()
-
-  registerIpc(service)
-  broadcastThemeChanges()
-  createWindow()
-
-  app.on('activate', () => {
-    if (BrowserWindow.getAllWindows().length === 0) {
-      createWindow()
-    }
-  })
-})
+void app.whenReady().then(start)
 
 app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') {

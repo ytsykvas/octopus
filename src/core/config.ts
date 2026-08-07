@@ -36,7 +36,13 @@ export const ConfigSchema = z.object({
 
   settingSources: SettingSourcesModeSchema,
   theme: ThemePreferenceSchema,
-  language: LanguageSchema,
+
+  /**
+   * Newer fields carry a default so a config written by an older build still
+   * loads. Without it, adding a field would reject every existing config as
+   * malformed — which is what happened when `language` was introduced.
+   */
+  language: LanguageSchema.default('en'),
 
   /**
    * Stable device identifier (§15.3).

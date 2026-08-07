@@ -40,7 +40,23 @@ const api = {
   },
 
   config: {
-    get: (): Promise<Result<Config>> => ipcRenderer.invoke('config:get') as Promise<Result<Config>>
+    get: (): Promise<Result<Config>> => ipcRenderer.invoke('config:get') as Promise<Result<Config>>,
+
+    update: (patch: Partial<Config>): Promise<Result<Config>> =>
+      ipcRenderer.invoke('config:update', patch) as Promise<Result<Config>>
+  },
+
+  settings: {
+    /** Fires when the user picks Settings from the native menu (⌘,). */
+    onOpen: (handler: () => void): (() => void) => {
+      const listener = (): void => {
+        handler()
+      }
+      ipcRenderer.on('settings:open', listener)
+      return () => {
+        ipcRenderer.off('settings:open', listener)
+      }
+    }
   },
 
   projects: {

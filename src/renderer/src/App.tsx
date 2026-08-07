@@ -1,10 +1,12 @@
 import { useCallback, useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
+import type { Config } from '@core/config.js'
 import type { Project } from '@core/store.js'
 import type { ThemeName } from '@core/types.js'
 
 import { RightPanel } from './components/RightPanel.js'
+import { Settings } from './components/Settings.js'
 import { Sidebar } from './components/Sidebar.js'
 import { useErrorMessage } from './hooks/useErrorMessage.js'
 
@@ -14,10 +16,12 @@ import { useErrorMessage } from './hooks/useErrorMessage.js'
  * the right.
  */
 export function App(): React.JSX.Element {
-  const { t } = useTranslation()
+  const { t, i18n } = useTranslation()
   const describeFailure = useErrorMessage()
 
   const [theme, setTheme] = useState<ThemeName>('light')
+  const [config, setConfig] = useState<Config | null>(null)
+  const [settingsOpen, setSettingsOpen] = useState(false)
   const [projects, setProjects] = useState<readonly Project[]>([])
   const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -64,6 +68,48 @@ export function App(): React.JSX.Element {
     }
   }, [describeFailure])
 
+  useEffect(() => {
+    const controller = new AbortController()
+
+    void (async () => {
+      const result = await window.maestro.config.get()
+      if (controller.signal.aborted) return
+      if (result.ok) setConfig(result.value)
+    })()
+
+    return () => {
+      controller.abort()
+    }
+  }, [])
+
+  // The native menu owns ⌘, on macOS; the renderer just reacts to it.
+  useEffect(
+    () =>
+      window.maestro.settings.onOpen(() => {
+        setSettingsOpen(true)
+      }),
+    []
+  )
+
+  // The language lives in the config, so it survives restarts.
+  useEffect(() => {
+    if (config && i18n.language !== config.language) {
+      void i18n.changeLanguage(config.language)
+    }
+  }, [config, i18n])
+
+  const updateConfig = useCallback(
+    async (patch: Partial<Config>) => {
+      const result = await window.maestro.config.update(patch)
+      if (result.ok) {
+        setConfig(result.value)
+      } else {
+        setError(describeFailure(result))
+      }
+    },
+    [describeFailure]
+  )
+
   const refresh = useCallback(async () => {
     const result = await window.maestro.projects.list()
     if (result.ok) {
@@ -107,6 +153,18 @@ export function App(): React.JSX.Element {
 
   const selectedProject = projects.find((project) => project.id === selectedProjectId) ?? null
 
+  if (settingsOpen && config) {
+    return (
+      <Settings
+        config={config}
+        onChange={updateConfig}
+        onClose={() => {
+          setSettingsOpen(false)
+        }}
+      />
+    )
+  }
+
   return (
     <div className="bg-canvas text-ink flex h-full">
       <Sidebar
@@ -115,6 +173,9 @@ export function App(): React.JSX.Element {
         onSelectProject={setSelectedProjectId}
         onAddProject={() => void addProject()}
         onRemoveProject={(id) => void removeProject(id)}
+        onOpenSettings={() => {
+          setSettingsOpen(true)
+        }}
         busy={busy}
       />
 

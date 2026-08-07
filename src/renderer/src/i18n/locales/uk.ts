@@ -15,7 +15,8 @@ export const uk: Translation = {
     projects: 'Проєкти',
     empty: 'Поки порожньо. Додайте репозиторій кнопкою «+».',
     addProject: 'Додати репозиторій',
-    removeProject: 'Прибрати проєкт'
+    removeProject: 'Прибрати проєкт',
+    settings: 'Налаштування'
   },
 
   panel: {
@@ -34,6 +35,43 @@ export const uk: Translation = {
     noSelectionTitle: 'Виберіть проєкт',
     noSelectionBody: 'Оберіть зі списку ліворуч.',
     projectBody: 'Базова гілка {{branch}}. Чат з агентом з’явиться тут, щойно будуть воркспейси.'
+  },
+
+  settings: {
+    title: 'Налаштування',
+    close: 'Закрити',
+    saved: 'Збережено',
+
+    appearance: 'Оформлення',
+    theme: 'Тема',
+    themeSystem: 'Як у системі',
+    themeLight: 'Світла',
+    themeDark: 'Темна',
+
+    language: 'Мова',
+    languageHint: 'Англійська — типова. Перезапуск не потрібен.',
+
+    git: 'Git',
+    branchPrefix: 'Префікс гілок',
+    branchPrefixHint:
+      'Гілки воркспейсів називаються <префікс>/<воркспейс>. Зазвичай беруть GitHub-username.',
+    branchPrefixEmpty: 'Префікс не може бути порожнім.',
+
+    agent: 'Агент',
+    settingSources: 'Джерела інструкцій',
+    settingSourcesHint:
+      'Визначає, що агент підтягує додатково до того, що надсилає застосунок. «Нічого» лишає контекст повністю під вашим контролем.',
+    settingSourcesNone: 'Нічого',
+    settingSourcesNoneHint: 'Агент отримує лише те, що maestro передає явно.',
+    settingSourcesProject: 'Лише проєкт',
+    settingSourcesProjectHint: 'Підтягує CLAUDE.md і налаштування самого репозиторію.',
+    settingSourcesAll: 'Усе',
+    settingSourcesAllHint:
+      'Підтягує користувацькі, проєктні й локальні налаштування — як звичайний CLI.',
+
+    about: 'Про застосунок',
+    deviceId: 'Ідентифікатор пристрою',
+    installedAt: 'Перший запуск'
   },
 
   errors: {

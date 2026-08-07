@@ -1,0 +1,270 @@
+import { useEffect, useState } from 'react'
+import { useTranslation } from 'react-i18next'
+
+import type {
+  Config,
+  LanguagePreference,
+  SettingSourcesMode,
+  ThemePreference
+} from '@core/config.js'
+
+import { Button } from './Button.js'
+
+interface SettingsProps {
+  readonly config: Config
+  readonly onChange: (patch: Partial<Config>) => Promise<void>
+  readonly onClose: () => void
+}
+
+/**
+ * Settings screen, opened from the sidebar or with ⌘, (§10.8).
+ *
+ * Changes apply immediately — there is no Save button. For a local tool with
+ * a handful of options a confirmation step only adds friction.
+ */
+export function Settings({ config, onChange, onClose }: SettingsProps): React.JSX.Element {
+  const { t } = useTranslation()
+
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent): void => {
+      if (event.key === 'Escape') onClose()
+    }
+    window.addEventListener('keydown', onKey)
+    return () => {
+      window.removeEventListener('keydown', onKey)
+    }
+  }, [onClose])
+
+  return (
+    <div className="bg-canvas absolute inset-0 z-10 flex flex-col">
+      <header className="titlebar-drag border-line flex h-11 shrink-0 items-center justify-between border-b px-4 pl-24">
+        <span className="font-medium">{t('settings.title')}</span>
+        <Button variant="quiet" size="sm" onClick={onClose}>
+          {t('settings.close')}
+        </Button>
+      </header>
+
+      <div className="flex-1 overflow-auto">
+        <div className="mx-auto max-w-xl space-y-8 p-8">
+          <Section title={t('settings.appearance')}>
+            <Field label={t('settings.theme')}>
+              <Segmented<ThemePreference>
+                value={config.theme}
+                options={[
+                  { value: 'system', label: t('settings.themeSystem') },
+                  { value: 'light', label: t('settings.themeLight') },
+                  { value: 'dark', label: t('settings.themeDark') }
+                ]}
+                onChange={(theme) => void onChange({ theme })}
+              />
+            </Field>
+
+            <Field label={t('settings.language')} hint={t('settings.languageHint')}>
+              <Segmented<LanguagePreference>
+                value={config.language}
+                options={[
+                  { value: 'en', label: 'English' },
+                  { value: 'uk', label: 'Українська' }
+                ]}
+                onChange={(language) => void onChange({ language })}
+              />
+            </Field>
+          </Section>
+
+          <Section title={t('settings.git')}>
+            <Field label={t('settings.branchPrefix')} hint={t('settings.branchPrefixHint')}>
+              {/* key resets the draft when the stored value changes —
+                  the React-recommended alternative to syncing props into
+                  state inside an effect. */}
+              <BranchPrefixInput
+                key={config.branchPrefix}
+                value={config.branchPrefix}
+                onCommit={(branchPrefix) => void onChange({ branchPrefix })}
+              />
+            </Field>
+          </Section>
+
+          <Section title={t('settings.agent')}>
+            <Field label={t('settings.settingSources')} hint={t('settings.settingSourcesHint')}>
+              <RadioList<SettingSourcesMode>
+                value={config.settingSources}
+                options={[
+                  {
+                    value: 'none',
+                    label: t('settings.settingSourcesNone'),
+                    hint: t('settings.settingSourcesNoneHint')
+                  },
+                  {
+                    value: 'project',
+                    label: t('settings.settingSourcesProject'),
+                    hint: t('settings.settingSourcesProjectHint')
+                  },
+                  {
+                    value: 'all',
+                    label: t('settings.settingSourcesAll'),
+                    hint: t('settings.settingSourcesAllHint')
+                  }
+                ]}
+                onChange={(settingSources) => void onChange({ settingSources })}
+              />
+            </Field>
+          </Section>
+
+          <Section title={t('settings.about')}>
+            <ReadOnlyRow label={t('settings.deviceId')} value={config.deviceId} />
+            <ReadOnlyRow
+              label={t('settings.installedAt')}
+              value={new Date(config.installedAt).toLocaleString()}
+            />
+          </Section>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function Section({
+  title,
+  children
+}: {
+  title: string
+  children: React.ReactNode
+}): React.JSX.Element {
+  return (
+    <section>
+      <h2 className="section-label border-line mb-3 border-b pb-2">{title}</h2>
+      <div className="space-y-5">{children}</div>
+    </section>
+  )
+}
+
+function Field({
+  label,
+  hint,
+  children
+}: {
+  label: string
+  hint?: string
+  children: React.ReactNode
+}): React.JSX.Element {
+  return (
+    <div>
+      <p className="mb-1.5 font-medium">{label}</p>
+      {children}
+      {hint !== undefined && <p className="text-ink-faint mt-1.5 leading-relaxed">{hint}</p>}
+    </div>
+  )
+}
+
+/** A value the user can read and copy but not change. */
+function ReadOnlyRow({ label, value }: { label: string; value: string }): React.JSX.Element {
+  return (
+    <div className="flex items-baseline justify-between gap-4">
+      <span className="text-ink-soft">{label}</span>
+      <span className="text-ink-faint truncate font-mono text-[11px]" title={value}>
+        {value}
+      </span>
+    </div>
+  )
+}
+
+function Segmented<T extends string>({
+  value,
+  options,
+  onChange
+}: {
+  value: T
+  options: readonly { value: T; label: string }[]
+  onChange: (value: T) => void
+}): React.JSX.Element {
+  return (
+    <div className="border-line bg-muted inline-flex rounded-[var(--radius-control)] border p-0.5">
+      {options.map((option) => (
+        <button
+          key={option.value}
+          type="button"
+          onClick={() => {
+            onChange(option.value)
+          }}
+          className={`focus-ring h-6 rounded-[4px] px-3 font-medium transition-colors ${
+            value === option.value ? 'bg-canvas text-ink' : 'text-ink-soft hover:text-ink'
+          }`}
+        >
+          {option.label}
+        </button>
+      ))}
+    </div>
+  )
+}
+
+function RadioList<T extends string>({
+  value,
+  options,
+  onChange
+}: {
+  value: T
+  options: readonly { value: T; label: string; hint: string }[]
+  onChange: (value: T) => void
+}): React.JSX.Element {
+  return (
+    <div className="space-y-1.5">
+      {options.map((option) => (
+        <button
+          key={option.value}
+          type="button"
+          onClick={() => {
+            onChange(option.value)
+          }}
+          className={`focus-ring border-line block w-full rounded-[var(--radius-control)] border px-3 py-2 text-left transition-colors ${
+            value === option.value ? 'row-selected' : 'hover:bg-muted'
+          }`}
+        >
+          <span className="font-medium">{option.label}</span>
+          <span className="text-ink-faint mt-0.5 block leading-relaxed">{option.hint}</span>
+        </button>
+      ))}
+    </div>
+  )
+}
+
+/**
+ * Committed on blur rather than on every keystroke — writing the config on
+ * each character would hammer the disk for no benefit.
+ */
+function BranchPrefixInput({
+  value,
+  onCommit
+}: {
+  value: string
+  onCommit: (value: string) => void
+}): React.JSX.Element {
+  const { t } = useTranslation()
+  const [draft, setDraft] = useState(value)
+
+  const trimmed = draft.trim()
+  const invalid = trimmed.length === 0
+
+  return (
+    <div>
+      <input
+        type="text"
+        value={draft}
+        spellCheck={false}
+        onChange={(event) => {
+          setDraft(event.target.value)
+        }}
+        onBlur={() => {
+          if (invalid) {
+            setDraft(value)
+            return
+          }
+          if (trimmed !== value) onCommit(trimmed)
+        }}
+        className={`focus-ring bg-canvas h-7 w-64 rounded-[var(--radius-control)] border px-2 font-mono ${
+          invalid ? 'border-danger' : 'border-line'
+        }`}
+      />
+      {invalid && <p className="text-danger mt-1.5">{t('settings.branchPrefixEmpty')}</p>}
+    </div>
+  )
+}
