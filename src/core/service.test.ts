@@ -10,6 +10,7 @@ import type { CommandExec } from './accounts.js'
 import type { RemoteRepository } from './github.js'
 import { gitIn } from './git.js'
 import { WORKSPACE_NAMES } from './names.js'
+import { ProjectValidationError } from './projects.js'
 import { createService, type OctopusService } from './service.js'
 import { listWorktrees } from './worktree.js'
 
@@ -368,15 +369,49 @@ describe('projects', () => {
     await initRepo(repo)
     const project = await service.addProjectFromPath(repo)
 
-    await service.renameProjectById(project.id, 'Weekly planner')
+    await service.updateProjectById(project.id, { name: 'Weekly planner' })
     expect(service.listProjects()[0]?.name).toBe('Weekly planner')
 
     const restarted = await createService(paths(dir))
     expect(restarted.listProjects()[0]?.name).toBe('Weekly planner')
   })
 
-  it('refuses to rename a project that is not there', async () => {
-    await expect(service.renameProjectById('missing', 'Name')).rejects.toThrow()
+  it('refuses to update a project that is not there', async () => {
+    await expect(service.updateProjectById('missing', { name: 'Name' })).rejects.toThrow()
+  })
+
+  it('changes the base branch new workspaces start from', async () => {
+    const repo = join(dir, 'planner')
+    await initRepo(repo)
+    await run('git', ['branch', 'develop'], { cwd: repo })
+    const project = await service.addProjectFromPath(repo)
+
+    await service.updateProjectById(project.id, { baseBranch: 'develop' })
+    expect(service.listProjects()[0]?.baseBranch).toBe('develop')
+  })
+
+  // The dialog offers a list read when it opened; the branch can be gone by
+  // the time one is chosen, and storing it would fail much later instead.
+  it('refuses a base branch the repository does not have', async () => {
+    const repo = join(dir, 'planner')
+    await initRepo(repo)
+    const project = await service.addProjectFromPath(repo)
+
+    await expect(
+      service.updateProjectById(project.id, { baseBranch: 'never-existed' })
+    ).rejects.toThrow(ProjectValidationError)
+
+    expect(service.listProjects()[0]?.baseBranch).not.toBe('never-existed')
+  })
+
+  it('lists branches to choose a base from, remotes included', async () => {
+    const repo = join(dir, 'planner')
+    await initRepo(repo)
+    await run('git', ['branch', 'develop'], { cwd: repo })
+    const project = await service.addProjectFromPath(repo)
+
+    const branches = await service.listProjectBranches(project.id)
+    expect(branches).toContain('develop')
   })
 
   it('removes the project from the list and from disk', async () => {

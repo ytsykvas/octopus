@@ -10,6 +10,7 @@ import type {
 } from '@core/config.js'
 
 import { Button } from './Button.js'
+import { Field } from './Field.js'
 import { AccountCard } from './settings/AccountCard.js'
 import { AuthTerminal } from './settings/AuthTerminal.js'
 import { ClaudeSection } from './settings/ClaudeSection.js'
@@ -262,26 +263,6 @@ function AboutSection({ config }: { config: Config }): React.JSX.Element {
         label={t('settings.installedAt')}
         value={new Date(config.installedAt).toLocaleString()}
       />
-    </div>
-  )
-}
-
-function Field({
-  label,
-  hint,
-  children
-}: {
-  label: string
-  hint?: string
-  children: React.ReactNode
-}): React.JSX.Element {
-  return (
-    <div>
-      <p className="mb-1.5 font-medium">{label}</p>
-      {children}
-      {hint !== undefined && (
-        <p className="text-ink-faint mt-1.5 max-w-lg leading-relaxed">{hint}</p>
-      )}
     </div>
   )
 }

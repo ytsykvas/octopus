@@ -31,7 +31,22 @@ import {
 const run = promisify(execFile)
 
 let dir: string
+let remoteDir: string | null = null
 let exec: GitExec
+
+/**
+ * Gives the repository a real remote carrying a branch it does not have
+ * locally — the situation a fresh clone is usually in.
+ */
+async function addRemote(): Promise<void> {
+  remoteDir = await mkdtemp(join(tmpdir(), 'octopus-remote-'))
+
+  await run('git', ['init', '-q', '--bare', '--initial-branch=main', remoteDir])
+  await run('git', ['remote', 'add', 'origin', remoteDir], { cwd: dir })
+  await run('git', ['push', '-q', 'origin', 'main'], { cwd: dir })
+  await run('git', ['push', '-q', 'origin', 'main:develop'], { cwd: dir })
+  await run('git', ['fetch', '-q', 'origin'], { cwd: dir })
+}
 
 beforeEach(async () => {
   dir = await mkdtemp(join(tmpdir(), 'octopus-worktree-'))
@@ -45,6 +60,10 @@ beforeEach(async () => {
 })
 
 afterEach(async () => {
+  if (remoteDir !== null) {
+    await rm(remoteDir, { recursive: true, force: true })
+    remoteDir = null
+  }
   await rm(dir, { recursive: true, force: true })
 })
 
@@ -266,6 +285,28 @@ describe('listBranches', () => {
   it('keeps slashes in branch names', async () => {
     await addWorktree(exec, join(dir, 'wt'), 'ytsykvas/fix-auth', 'main')
     await expect(listBranches(exec)).resolves.toContain('ytsykvas/fix-auth')
+  })
+
+  it('leaves remote branches out unless asked', async () => {
+    await addRemote()
+    await expect(listBranches(exec)).resolves.toEqual(['main'])
+  })
+
+  it('includes tracking branches on request', async () => {
+    await addRemote()
+
+    const branches = await listBranches(exec, true)
+    expect(branches).toContain('main')
+    expect(branches).toContain('origin/develop')
+  })
+
+  // origin/HEAD is a pointer at whatever the remote calls default, not a
+  // branch — choosing it would mean choosing a name that moves.
+  it('never offers origin/HEAD', async () => {
+    await addRemote()
+    await run('git', ['remote', 'set-head', 'origin', 'main'], { cwd: dir })
+
+    await expect(listBranches(exec, true)).resolves.not.toContain('origin/HEAD')
   })
 })
 

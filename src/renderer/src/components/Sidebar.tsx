@@ -6,8 +6,7 @@ import {
   MoreHorizontal,
   Pencil,
   Plus,
-  Settings as SettingsIcon,
-  Trash2
+  Settings as SettingsIcon
 } from 'lucide-react'
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
@@ -17,7 +16,6 @@ import type { WorkspaceView } from '@core/workspaces.js'
 
 import { Button } from './Button.js'
 import { DropdownMenu } from './DropdownMenu.js'
-import { NameEditor } from './NameEditor.js'
 import { WorkspaceRow } from './WorkspaceRow.js'
 
 interface SidebarProps {
@@ -29,8 +27,7 @@ interface SidebarProps {
   readonly onSelectWorkspace: (workspaceId: string) => void
   readonly onAddFromDisk: () => void
   readonly onAddFromGitHub: () => void
-  readonly onRemoveProject: (projectId: string) => void
-  readonly onRenameProject: (projectId: string, name: string) => void
+  readonly onEditProject: (projectId: string) => void
   readonly onCreateWorkspace: (projectId: string) => void
   readonly onRenameWorkspace: (workspaceId: string, name: string) => void
   readonly onRemoveWorkspace: (workspaceId: string) => void
@@ -53,8 +50,7 @@ export function Sidebar({
   onSelectWorkspace,
   onAddFromDisk,
   onAddFromGitHub,
-  onRemoveProject,
-  onRenameProject,
+  onEditProject,
   onCreateWorkspace,
   onRenameWorkspace,
   onRemoveWorkspace,
@@ -107,11 +103,8 @@ export function Sidebar({
                     onSelectProject(project.id)
                     toggle(project.id)
                   }}
-                  onRemove={() => {
-                    onRemoveProject(project.id)
-                  }}
-                  onRename={(name) => {
-                    onRenameProject(project.id, name)
+                  onEdit={() => {
+                    onEditProject(project.id)
                   }}
                   onCreateWorkspace={() => {
                     onCreateWorkspace(project.id)
@@ -247,8 +240,7 @@ interface ProjectRowProps {
   readonly collapsed: boolean
   readonly workspaceCount: number
   readonly onSelect: () => void
-  readonly onRemove: () => void
-  readonly onRename: (name: string) => void
+  readonly onEdit: () => void
   readonly onCreateWorkspace: () => void
 }
 
@@ -258,27 +250,10 @@ function ProjectRow({
   collapsed,
   workspaceCount,
   onSelect,
-  onRemove,
-  onRename,
+  onEdit,
   onCreateWorkspace
 }: ProjectRowProps): React.JSX.Element {
   const { t } = useTranslation()
-  const [editing, setEditing] = useState(false)
-
-  if (editing) {
-    return (
-      <NameEditor
-        initial={project.name}
-        onCommit={(name) => {
-          setEditing(false)
-          if (name !== project.name) onRename(name)
-        }}
-        onCancel={() => {
-          setEditing(false)
-        }}
-      />
-    )
-  }
 
   return (
     <div
@@ -287,9 +262,6 @@ function ProjectRow({
       <button
         type="button"
         onClick={onSelect}
-        onDoubleClick={() => {
-          setEditing(true)
-        }}
         className="focus-ring flex min-w-0 flex-1 items-center gap-1.5 rounded-[var(--radius-control)] text-left"
         title={project.repoPath}
       >
@@ -320,8 +292,8 @@ function ProjectRow({
         <Plus aria-hidden size={13} />
       </button>
 
-      {/* Rename and remove live behind a menu: they are occasional, and three
-          buttons on every row was more noise than the list could carry. */}
+      {/* Editing lives behind a menu: it is occasional, and a second button on
+          every row was more noise than the list could carry. */}
       <DropdownMenu
         trigger={({ onClick, open }) => (
           <button
@@ -337,19 +309,10 @@ function ProjectRow({
         )}
         actions={[
           {
-            id: 'rename',
-            label: t('sidebar.renameProject'),
+            id: 'edit',
+            label: t('sidebar.editProject'),
             icon: <Pencil aria-hidden size={13} />,
-            onSelect: () => {
-              setEditing(true)
-            }
-          },
-          {
-            id: 'remove',
-            label: t('sidebar.removeProject'),
-            icon: <Trash2 aria-hidden size={13} />,
-            destructive: true,
-            onSelect: onRemove
+            onSelect: onEdit
           }
         ]}
       />

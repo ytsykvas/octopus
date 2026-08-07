@@ -97,17 +97,32 @@ export async function deleteBranch(exec: GitExec, branch: string, force = false)
 }
 
 /**
- * Local branch names.
+ * Branch names.
  *
- * Needed when picking a workspace name: a branch outlives the worktree it was
- * created for, so the store alone does not know which names are still taken.
+ * Needed twice over: picking a workspace name, where a branch outliving its
+ * worktree means the store alone cannot tell which names are taken, and
+ * choosing a project's base branch.
+ *
+ * `includeRemote` adds tracking branches, because a freshly cloned repository
+ * often has only `main` locally while `develop` or `staging` exist solely on
+ * the remote — and git will happily branch a worktree from either.
  */
-export async function listBranches(exec: GitExec): Promise<string[]> {
-  const output = await exec(['branch', '--format=%(refname:short)'])
-  return output
-    .split('\n')
-    .map((line) => line.trim())
-    .filter((line) => line !== '')
+export async function listBranches(exec: GitExec, includeRemote = false): Promise<string[]> {
+  const output = await exec([
+    'branch',
+    ...(includeRemote ? ['--all'] : []),
+    '--format=%(refname:short)'
+  ])
+
+  return (
+    output
+      .split('\n')
+      .map((line) => line.trim())
+      .filter((line) => line !== '')
+      // `origin/HEAD` is a pointer at the remote's default branch, not a branch
+      // of its own; offering it would mean picking a name that moves.
+      .filter((line) => !line.endsWith('/HEAD'))
+  )
 }
 
 /** Renames a branch. Works from any worktree of the repository. */

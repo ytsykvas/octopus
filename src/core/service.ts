@@ -12,7 +12,7 @@ import { cloneRepository, listRepositories, type RemoteRepository } from './gith
 import type { GitExec } from './git.js'
 import { gitIn } from './git.js'
 import { configFile, rootDir, stateFile, stateTempFile } from './paths.js'
-import { createProject } from './projects.js'
+import { assertBranchExists, createProject } from './projects.js'
 import {
   addProject,
   addWorkspace,
@@ -20,15 +20,16 @@ import {
   loadState,
   type Project,
   removeProject,
+  type ProjectPatch,
   removeWorkspace as removeWorkspaceRecord,
-  renameProject,
   saveState,
   type State,
+  updateProject,
   updateWorkspace,
   type Workspace,
   workspacesOfProject
 } from './store.js'
-import { listWorktrees } from './worktree.js'
+import { listBranches, listWorktrees } from './worktree.js'
 import {
   changeCount,
   countChanges,
@@ -69,8 +70,10 @@ export interface OctopusService {
   /** Clones a GitHub repository into `destination`, then adds it as a project. */
   addProjectFromGitHub(repository: RemoteRepository, destination: string): Promise<Project>
   listRemoteRepositories(): Promise<RemoteRepository[]>
-  renameProjectById(projectId: string, name: string): Promise<void>
+  updateProjectById(projectId: string, patch: ProjectPatch): Promise<void>
   removeProjectById(projectId: string): Promise<void>
+  /** Branches the project's repository offers as a base, remotes included. */
+  listProjectBranches(projectId: string): Promise<string[]>
 
   /** Workspaces of a project, reconciled with what git actually has. */
   listWorkspaces(projectId: string): Promise<WorkspaceView[]>
@@ -164,8 +167,21 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
       return addFromPath(path)
     },
 
-    async renameProjectById(projectId, name) {
-      await commit(renameProject(state, projectId, name))
+    async updateProjectById(projectId, patch) {
+      const project = requireProject(projectId)
+
+      // Checked before the write, so a branch deleted since the dialog opened
+      // is reported here rather than as a worktree failure days later.
+      if (patch.baseBranch !== undefined) {
+        await assertBranchExists(makeExec(project.repoPath), patch.baseBranch)
+      }
+
+      await commit(updateProject(state, projectId, patch))
+    },
+
+    async listProjectBranches(projectId) {
+      const project = requireProject(projectId)
+      return listBranches(makeExec(project.repoPath), true)
     },
 
     async removeProjectById(projectId) {

@@ -6,6 +6,7 @@
  */
 
 import {
+  branchExists,
   detectBaseBranch,
   findRepositoryRoot,
   type GitExec,
@@ -23,7 +24,12 @@ import type { Project, State } from './store.js'
  * on the error stays as a fallback for logs (§10 i18n).
  */
 export type ProjectValidationCode =
-  'notARepository' | 'emptyRepository' | 'noBaseBranch' | 'duplicateProject'
+  | 'notARepository'
+  | 'emptyRepository'
+  | 'noBaseBranch'
+  | 'duplicateProject'
+  /** The chosen base branch is not in the repository. */
+  | 'branchMissing'
 
 /** A directory cannot be used as a project, with a reason the user can act on. */
 export class ProjectValidationError extends Error {
@@ -129,4 +135,22 @@ export async function createProject(
     baseBranch: info.baseBranch,
     branchPrefix
   }
+}
+
+/**
+ * Checks that a branch a project is about to be based on actually exists.
+ *
+ * The UI picks from a list read when its dialog opened, and the repository is
+ * used from outside meanwhile — a branch can be deleted in a terminal in the
+ * seconds between. Storing a name git does not know would surface much later,
+ * as a `worktree add` failure that says nothing about project settings.
+ */
+export async function assertBranchExists(exec: GitExec, branch: string): Promise<void> {
+  if (await branchExists(exec, branch)) return
+
+  throw new ProjectValidationError(
+    'branchMissing',
+    { branch },
+    `Branch ${branch} no longer exists in this repository.`
+  )
 }

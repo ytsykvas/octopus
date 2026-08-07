@@ -8,6 +8,7 @@ import { describeError } from '../core/persist.js'
 import { GitHubError, type RemoteRepository } from '../core/github.js'
 import { ProjectValidationError } from '../core/projects.js'
 import { type RemoveOptions, WorkspaceError } from '../core/workspaces.js'
+import { ProjectPatchSchema } from '../core/store.js'
 import { createService, type OctopusService } from '../core/service.js'
 import { TerminalSpecSchema } from '../core/terminal.js'
 import type { ThemeName } from '../core/types.js'
@@ -146,8 +147,14 @@ function registerIpc(service: OctopusService, terminals: TerminalManager): void 
     terminals.dispose(id)
   })
 
-  ipcMain.handle('projects:rename', (_event, projectId: string, name: string) =>
-    attempt(() => service.renameProjectById(projectId, name))
+  // The patch is validated rather than trusted: it arrives from the renderer
+  // and its base branch reaches a git command.
+  ipcMain.handle('projects:update', (_event, projectId: string, patch: unknown) =>
+    attempt(() => service.updateProjectById(projectId, ProjectPatchSchema.parse(patch)))
+  )
+
+  ipcMain.handle('projects:branches', (_event, projectId: string) =>
+    attempt(() => service.listProjectBranches(projectId))
   )
 
   ipcMain.handle('projects:remove', (_event, projectId: string) =>

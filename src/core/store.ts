@@ -139,25 +139,47 @@ export function addProject(state: State, project: Project): State {
 }
 
 /**
- * Renames a project.
+ * The parts of a project a user may change after it is added.
  *
- * Only the display name changes: the id stays put because workspaces and
- * on-disk paths are keyed by it, and the repository itself is untouched.
+ * `id` and `repoPath` are absent on purpose: workspaces and on-disk paths are
+ * keyed by the id, and the repository is not ours to move. `branchPrefix`
+ * belongs to the config, which is shared across projects.
  */
-export function renameProject(state: State, projectId: string, name: string): State {
-  const trimmed = name.trim()
-  if (trimmed === '') {
+export const ProjectPatchSchema = ProjectSchema.pick({ name: true, baseBranch: true }).partial()
+
+export type ProjectPatch = z.infer<typeof ProjectPatchSchema>
+
+/**
+ * Updates a project's editable fields.
+ *
+ * Only the keys present in the patch are touched, so changing the base branch
+ * cannot quietly rewrite the name with a stale copy held by the UI.
+ */
+export function updateProject(state: State, projectId: string, patch: ProjectPatch): State {
+  if (!state.projects.some((project) => project.id === projectId)) {
+    throw new StateConflictError(`Project ${projectId} not found`)
+  }
+
+  const name = patch.name?.trim()
+  if (name !== undefined && name === '') {
     throw new StateConflictError('A project name cannot be empty')
   }
 
-  if (!state.projects.some((project) => project.id === projectId)) {
-    throw new StateConflictError(`Project ${projectId} not found`)
+  const baseBranch = patch.baseBranch?.trim()
+  if (baseBranch !== undefined && baseBranch === '') {
+    throw new StateConflictError('A base branch cannot be empty')
   }
 
   return {
     ...state,
     projects: state.projects.map((project) =>
-      project.id === projectId ? { ...project, name: trimmed } : project
+      project.id === projectId
+        ? {
+            ...project,
+            ...(name !== undefined && { name }),
+            ...(baseBranch !== undefined && { baseBranch })
+          }
+        : project
     )
   }
 }

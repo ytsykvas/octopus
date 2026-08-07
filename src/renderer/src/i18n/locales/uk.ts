@@ -18,6 +18,7 @@ export const uk: Translation = {
     addFromDisk: 'З диска…',
     addFromGitHub: 'З GitHub…',
     removeProject: 'Прибрати проєкт',
+    editProject: 'Редагувати…',
     renameProject: 'Перейменувати',
     projectActions: 'Ще',
     renameHint: 'Enter — зберегти, Escape — скасувати',
@@ -65,6 +66,20 @@ export const uk: Translation = {
     removeBranch: 'Видалити також гілку {{branch}}',
     removeConfirm: 'Видалити',
     removeCancel: 'Скасувати'
+  },
+
+  project: {
+    title: 'Налаштування проєкту',
+    done: 'Готово',
+    name: 'Назва',
+    nameHint: 'Показується в сайдбарі. Репозиторій і його теку не змінює.',
+    baseBranch: 'Базова гілка',
+    baseBranchHint: 'Нові воркспейси відгалужуються звідси. Наявні лишаються на своїх гілках.',
+    branchFailed:
+      'Не вдалося встановити цю гілку. Можливо, її видалили після того, як список було прочитано.',
+    repository: 'Репозиторій',
+    dangerZone: 'Небезпечна зона',
+    removeHint: 'Прибирає проєкт з Octopus. Репозиторій лишається на диску.'
   },
 
   panel: {

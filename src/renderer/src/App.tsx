@@ -7,6 +7,7 @@ import type { Project } from '@core/store.js'
 import type { ThemeName } from '@core/types.js'
 
 import { RepositoryPicker } from './components/RepositoryPicker.js'
+import { ProjectSettings } from './components/ProjectSettings.js'
 import { RightPanel } from './components/RightPanel.js'
 import { Settings } from './components/Settings.js'
 import { Sidebar } from './components/Sidebar.js'
@@ -34,6 +35,7 @@ export function App(): React.JSX.Element {
   const [rightPanelOpen, setRightPanelOpen] = useState(true)
   const [pickingRepository, setPickingRepository] = useState(false)
   const [selectedWorkspaceId, setSelectedWorkspaceId] = useState<string | null>(null)
+  const [editingProjectId, setEditingProjectId] = useState<string | null>(null)
 
   const workspaces = useWorkspaces(projects, confirm, setError)
 
@@ -147,14 +149,16 @@ export function App(): React.JSX.Element {
     }
   }, [refresh, describeFailure])
 
-  const renameProject = useCallback(
-    async (projectId: string, name: string) => {
-      const result = await window.octopus.projects.rename(projectId, name)
-      if (result.ok) {
-        await refresh()
-      } else {
+  const updateProject = useCallback(
+    async (projectId: string, patch: { name?: string; baseBranch?: string }): Promise<boolean> => {
+      const result = await window.octopus.projects.update(projectId, patch)
+      if (!result.ok) {
         setError(describeFailure(result))
+        return false
       }
+
+      await refresh()
+      return true
     },
     [refresh, describeFailure]
   )
@@ -218,6 +222,7 @@ export function App(): React.JSX.Element {
   }, [selectedProjectId, workspaces])
 
   const selectedProject = projects.find((project) => project.id === selectedProjectId) ?? null
+  const editingProject = projects.find((project) => project.id === editingProjectId) ?? null
 
   if (settingsOpen && config) {
     return (
@@ -244,8 +249,7 @@ export function App(): React.JSX.Element {
         onAddFromGitHub={() => {
           setPickingRepository(true)
         }}
-        onRemoveProject={(id) => void removeProject(id)}
-        onRenameProject={(id, name) => void renameProject(id, name)}
+        onEditProject={setEditingProjectId}
         workspaces={workspaces.byProject}
         selectedWorkspaceId={selectedWorkspaceId}
         onSelectWorkspace={(id) => {
@@ -306,6 +310,24 @@ export function App(): React.JSX.Element {
           onWidthChange={(rightPanelWidth) => void updateConfig({ rightPanelWidth })}
           onCollapse={() => {
             setRightPanelOpen(false)
+          }}
+        />
+      )}
+
+      {editingProject && (
+        <ProjectSettings
+          project={editingProject}
+          onUpdate={(patch) => updateProject(editingProject.id, patch)}
+          onRemove={() => {
+            void (async () => {
+              // Closing first keeps the confirmation from appearing behind the
+              // dialog that raised it.
+              setEditingProjectId(null)
+              await removeProject(editingProject.id)
+            })()
+          }}
+          onClose={() => {
+            setEditingProjectId(null)
           }}
         />
       )}

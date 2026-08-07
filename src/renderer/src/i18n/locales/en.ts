@@ -16,6 +16,7 @@ export const en = {
     addFromDisk: 'From disk…',
     addFromGitHub: 'From GitHub…',
     removeProject: 'Remove project',
+    editProject: 'Edit…',
     renameProject: 'Rename',
     projectActions: 'More',
     renameHint: 'Enter to save, Escape to cancel',
@@ -66,6 +67,21 @@ export const en = {
     removeBranch: 'Delete the branch {{branch}} as well',
     removeConfirm: 'Remove',
     removeCancel: 'Cancel'
+  },
+
+  project: {
+    title: 'Project settings',
+    done: 'Done',
+    name: 'Name',
+    nameHint: 'Shown in the sidebar. The repository and its folder are untouched.',
+    baseBranch: 'Base branch',
+    baseBranchHint:
+      'New workspaces branch from here. Existing ones keep the branch they were created from.',
+    branchFailed:
+      'That branch could not be set. It may have been deleted since this list was read.',
+    repository: 'Repository',
+    dangerZone: 'Danger zone',
+    removeHint: 'Removes the project from octopus. The repository stays on disk.'
   },
 
   panel: {

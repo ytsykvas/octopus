@@ -6,7 +6,7 @@ import type { Config } from '@core/config.js'
 import type { RemoteRepository } from '@core/github.js'
 import type { Workspace } from '@core/store.js'
 import type { RemoveOptions, WorkspaceView } from '@core/workspaces.js'
-import type { Project } from '@core/store.js'
+import type { Project, ProjectPatch } from '@core/store.js'
 import type { ThemeName } from '@core/types.js'
 
 /**
@@ -147,8 +147,13 @@ const api = {
     add: (): Promise<Result<Project | null>> =>
       ipcRenderer.invoke('projects:add') as Promise<Result<Project | null>>,
 
-    rename: (projectId: string, name: string): Promise<Result<void>> =>
-      ipcRenderer.invoke('projects:rename', projectId, name) as Promise<Result<void>>,
+    /** Changes a project's editable fields; omitted keys are left alone. */
+    update: (projectId: string, patch: ProjectPatch): Promise<Result<void>> =>
+      ipcRenderer.invoke('projects:update', projectId, patch) as Promise<Result<void>>,
+
+    /** Branches the repository offers as a base, remotes included. */
+    branches: (projectId: string): Promise<Result<string[]>> =>
+      ipcRenderer.invoke('projects:branches', projectId) as Promise<Result<string[]>>,
 
     remove: (projectId: string): Promise<Result<void>> =>
       ipcRenderer.invoke('projects:remove', projectId) as Promise<Result<void>>,

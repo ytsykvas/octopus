@@ -18,7 +18,7 @@ import {
   type Project,
   removeProject,
   removeWorkspace,
-  renameProject,
+  updateProject,
   saveState,
   type State,
   StateConflictError,
@@ -174,7 +174,7 @@ describe('projects', () => {
   })
 
   it('is renamed without touching anything else', () => {
-    const renamed = renameProject(withProject, 'planner', 'Weekly planner')
+    const renamed = updateProject(withProject, 'planner', { name: 'Weekly planner' })
     const project = renamed.projects[0]
 
     expect(project?.name).toBe('Weekly planner')
@@ -182,26 +182,58 @@ describe('projects', () => {
     expect(project?.repoPath).toBe('/repos/planner')
   })
 
+  it('changes the base branch new workspaces start from', () => {
+    const updated = updateProject(withProject, 'planner', { baseBranch: 'develop' })
+    expect(updated.projects[0]?.baseBranch).toBe('develop')
+  })
+
+  // The modal edits one field at a time, so a patch must not carry a stale
+  // copy of the others back into the state.
+  it('touches only the fields the patch carries', () => {
+    const updated = updateProject(withProject, 'planner', { baseBranch: 'develop' })
+    expect(updated.projects[0]?.name).toBe('planner')
+  })
+
+  it('accepts an empty patch as a no-op', () => {
+    expect(updateProject(withProject, 'planner', {}).projects[0]).toEqual(withProject.projects[0])
+  })
+
   it('trims whitespace around a new name', () => {
-    expect(renameProject(withProject, 'planner', '  Spaced  ').projects[0]?.name).toBe('Spaced')
+    expect(updateProject(withProject, 'planner', { name: '  Spaced  ' }).projects[0]?.name).toBe(
+      'Spaced'
+    )
+  })
+
+  it('trims whitespace around a base branch', () => {
+    expect(
+      updateProject(withProject, 'planner', { baseBranch: ' develop ' }).projects[0]?.baseBranch
+    ).toBe('develop')
   })
 
   it('refuses an empty name', () => {
-    expect(() => renameProject(withProject, 'planner', '   ')).toThrow(StateConflictError)
+    expect(() => updateProject(withProject, 'planner', { name: '   ' })).toThrow(StateConflictError)
   })
 
-  it('refuses to rename a project that does not exist', () => {
-    expect(() => renameProject(withProject, 'missing', 'Name')).toThrow(StateConflictError)
+  it('refuses an empty base branch', () => {
+    expect(() => updateProject(withProject, 'planner', { baseBranch: '  ' })).toThrow(
+      StateConflictError
+    )
+  })
+
+  it('refuses to update a project that does not exist', () => {
+    expect(() => updateProject(withProject, 'missing', { name: 'Name' })).toThrow(
+      StateConflictError
+    )
   })
 
   it('does not mutate the previous state', () => {
-    renameProject(withProject, 'planner', 'Changed')
+    updateProject(withProject, 'planner', { name: 'Changed' })
     expect(withProject.projects[0]?.name).toBe('planner')
   })
 
   it('leaves other projects alone', () => {
     const two = addProject(withProject, { ...project, id: 'esl', repoPath: '/repos/esl' })
-    const renamed = renameProject(two, 'esl', 'ESL')
+    const renamed = updateProject(two, 'esl', { name: 'ESL' })
 
     expect(renamed.projects.find((item) => item.id === 'esl')?.name).toBe('ESL')
     expect(renamed.projects.find((item) => item.id === 'planner')?.name).toBe('planner')
