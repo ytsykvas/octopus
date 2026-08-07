@@ -1,72 +1,115 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 
+import type { Project } from '@core/store.js'
 import type { ThemeName } from '@core/types.js'
 
-/**
- * Тимчасовий UI етапу 1.
- *
- * Його єдине завдання — довести, що каркас працює: IPC живий, тема
- * підхоплюється з системи, токени дизайн-системи застосовуються.
- * Лейаут ще не обрано (§17), тож цей екран буде замінений цілком.
- */
+import { Button } from './components/Button.js'
+import { ProjectList } from './components/ProjectList.js'
+
 export function App(): React.JSX.Element {
   const [theme, setTheme] = useState<ThemeName>('light')
+  const [projects, setProjects] = useState<readonly Project[]>([])
+  const [error, setError] = useState<string | null>(null)
+  const [busy, setBusy] = useState(false)
 
   useEffect(() => {
-    void window.maestro.theme.get().then(setTheme)
-    return window.maestro.theme.onChange(setTheme)
+    const controller = new AbortController()
+
+    void window.maestro.theme.get().then((value) => {
+      if (!controller.signal.aborted) setTheme(value)
+    })
+
+    const unsubscribe = window.maestro.theme.onChange(setTheme)
+
+    return () => {
+      controller.abort()
+      unsubscribe()
+    }
   }, [])
 
   useEffect(() => {
     document.documentElement.classList.toggle('dark', theme === 'dark')
   }, [theme])
 
+  // Початкове завантаження. Скасування рятує від запису стану в уже
+  // розмонтований компонент, якщо вікно закриють під час запиту.
+  useEffect(() => {
+    const controller = new AbortController()
+
+    void (async () => {
+      const result = await window.maestro.projects.list()
+      if (controller.signal.aborted) return
+
+      if (result.ok) {
+        setProjects(result.value)
+      } else {
+        setError(result.error)
+      }
+    })()
+
+    return () => {
+      controller.abort()
+    }
+  }, [])
+
+  const refresh = useCallback(async () => {
+    const result = await window.maestro.projects.list()
+    if (result.ok) {
+      setProjects(result.value)
+      setError(null)
+    } else {
+      setError(result.error)
+    }
+  }, [])
+
+  const addProject = useCallback(async () => {
+    setBusy(true)
+    try {
+      const result = await window.maestro.projects.add()
+      if (!result.ok) {
+        setError(result.error)
+        return
+      }
+      // null означає, що діалог скасували — це не помилка.
+      if (result.value) {
+        await refresh()
+      }
+    } finally {
+      setBusy(false)
+    }
+  }, [refresh])
+
+  const removeProject = useCallback(
+    async (projectId: string) => {
+      const result = await window.maestro.projects.remove(projectId)
+      if (result.ok) {
+        await refresh()
+      } else {
+        setError(result.error)
+      }
+    },
+    [refresh]
+  )
+
   return (
-    <div className="flex h-full flex-col bg-canvas text-ink">
-      <header className="titlebar-drag flex h-14 shrink-0 items-center justify-end px-5">
-        <span className="brutal-label text-ink-soft text-xs">
-          тема: {theme === 'dark' ? 'темна' : 'світла'}
-        </span>
+    <div className="bg-canvas text-ink flex h-full flex-col">
+      <header className="titlebar-drag flex h-14 shrink-0 items-center justify-between px-5 pl-24">
+        <span className="brutal-label text-sm">maestro</span>
+        <Button onClick={() => void addProject()} disabled={busy} tone="success">
+          {busy ? 'відкрито діалог…' : '+ проєкт'}
+        </Button>
       </header>
 
-      <main className="flex flex-1 items-center justify-center p-10">
-        <section className="brutal-surface w-full max-w-xl p-8">
-          <h1 className="brutal-label mb-3 text-3xl">maestro</h1>
-          <p className="mb-7 leading-relaxed">
-            Каркас працює. Далі — менеджер worktree та інтеграція з Agent SDK.
-          </p>
-
-          <div className="flex flex-wrap gap-3">
-            <Badge tone="success">idle</Badge>
-            <Badge tone="info">running</Badge>
-            <Badge tone="warning">waiting</Badge>
-            <Badge tone="danger">error</Badge>
+      <main className="flex-1 overflow-auto px-8 pb-8">
+        {error !== null && (
+          <div className="brutal-surface bg-danger text-on-danger mb-6 p-4">
+            <p className="brutal-label mb-1 text-xs">не вдалося</p>
+            <p className="text-sm">{error}</p>
           </div>
-        </section>
+        )}
+
+        <ProjectList projects={projects} onRemove={(id) => void removeProject(id)} />
       </main>
     </div>
-  )
-}
-
-const TONE_CLASSES = {
-  success: 'bg-success text-on-success',
-  info: 'bg-info text-on-info',
-  warning: 'bg-warning text-on-warning',
-  danger: 'bg-danger text-on-danger'
-} as const
-
-function Badge({
-  tone,
-  children
-}: {
-  tone: keyof typeof TONE_CLASSES
-  children: React.ReactNode
-}): React.JSX.Element {
-  return (
-    <span
-      className={`brutal-label brutal-interactive rounded-[var(--radius-badge)] border-2 border-outline px-3 py-1.5 text-xs shadow-[var(--shadow-brutal-sm)] ${TONE_CLASSES[tone]}`}
-    >
-      {children}
-    </span>
   )
 }

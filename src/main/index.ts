@@ -1,10 +1,30 @@
 import { join } from 'node:path'
 
-import { app, BrowserWindow, ipcMain, nativeTheme, shell } from 'electron'
+import { app, BrowserWindow, dialog, ipcMain, nativeTheme, shell } from 'electron'
+
+import { describeError } from '../core/persist.js'
+import { createService, type MaestroService } from '../core/service.js'
 
 /** Кольори полотна з дизайн-системи (§10.7) — щоб вікно не блимало білим при старті. */
 const CANVAS_LIGHT = '#ffffff'
 const CANVAS_DARK = '#16161a'
+
+/**
+ * Результат операції у вигляді значення, а не винятку.
+ *
+ * Помилки ядра осмислені й призначені користувачеві (напр. «тека не є
+ * git-репозиторієм»), тому вони мають дійти до UI текстом, а не перетворитися
+ * на безлике «Error invoking remote method» (§13 docs/PROJECT.md).
+ */
+type Result<T> = { ok: true; value: T } | { ok: false; error: string }
+
+async function attempt<T>(operation: () => Promise<T> | T): Promise<Result<T>> {
+  try {
+    return { ok: true, value: await operation() }
+  } catch (error) {
+    return { ok: false, error: describeError(error) }
+  }
+}
 
 function canvasColor(): string {
   return nativeTheme.shouldUseDarkColors ? CANVAS_DARK : CANVAS_LIGHT
@@ -49,8 +69,39 @@ function createWindow(): BrowserWindow {
   return window
 }
 
-function registerIpc(): void {
+/**
+ * Реєструє IPC.
+ *
+ * Обробники навмисно однорядкові: уся логіка живе в сервісі ядра, а цей
+ * шар лише переадресовує виклики (§11.1).
+ */
+function registerIpc(service: MaestroService): void {
   ipcMain.handle('theme:get', () => (nativeTheme.shouldUseDarkColors ? 'dark' : 'light'))
+
+  ipcMain.handle('config:get', () => attempt(() => service.getConfig()))
+
+  ipcMain.handle('projects:list', () => attempt(() => service.listProjects()))
+
+  ipcMain.handle('projects:remove', (_event, projectId: string) =>
+    attempt(() => service.removeProjectById(projectId))
+  )
+
+  // Вибір теки — єдина частина, що належить саме main: діалог дає Electron.
+  ipcMain.handle('projects:add', async (event) => {
+    const window = BrowserWindow.fromWebContents(event.sender)
+    const picked = window
+      ? await dialog.showOpenDialog(window, {
+          title: 'Виберіть репозиторій',
+          properties: ['openDirectory'],
+          buttonLabel: 'Додати'
+        })
+      : await dialog.showOpenDialog({ properties: ['openDirectory'] })
+
+    const [path] = picked.filePaths
+    if (picked.canceled || !path) return { ok: true, value: null }
+
+    return attempt(() => service.addProjectFromPath(path))
+  })
 }
 
 function broadcastThemeChanges(): void {
@@ -63,8 +114,10 @@ function broadcastThemeChanges(): void {
   })
 }
 
-void app.whenReady().then(() => {
-  registerIpc()
+void app.whenReady().then(async () => {
+  const service = await createService()
+
+  registerIpc(service)
   broadcastThemeChanges()
   createWindow()
 
