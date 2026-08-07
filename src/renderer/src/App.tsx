@@ -10,6 +10,7 @@ import { RepositoryPicker } from './components/RepositoryPicker.js'
 import { RightPanel } from './components/RightPanel.js'
 import { Settings } from './components/Settings.js'
 import { Sidebar } from './components/Sidebar.js'
+import { useConfirm } from './hooks/useConfirm.js'
 import { useErrorMessage } from './hooks/useErrorMessage.js'
 
 /**
@@ -20,6 +21,7 @@ import { useErrorMessage } from './hooks/useErrorMessage.js'
 export function App(): React.JSX.Element {
   const { t, i18n } = useTranslation()
   const describeFailure = useErrorMessage()
+  const { confirm, dialog: confirmDialog } = useConfirm()
 
   const [theme, setTheme] = useState<ThemeName>('light')
   const [config, setConfig] = useState<Config | null>(null)
@@ -159,7 +161,7 @@ export function App(): React.JSX.Element {
       if (!project) return
 
       // Removing is one click away from a hover state, so it asks first.
-      const confirmed = await window.octopus.dialog.confirm({
+      const confirmed = await confirm({
         title: t('sidebar.removeTitle'),
         message: t('sidebar.removeMessage', { name: project.name }),
         detail: t('sidebar.removeDetail'),
@@ -168,7 +170,7 @@ export function App(): React.JSX.Element {
         destructive: true
       })
 
-      if (!confirmed.ok || !confirmed.value) return
+      if (!confirmed) return
 
       const result = await window.octopus.projects.remove(projectId)
       if (!result.ok) {
@@ -178,7 +180,7 @@ export function App(): React.JSX.Element {
       setSelectedProjectId((current) => (current === projectId ? null : current))
       await refresh()
     },
-    [projects, refresh, describeFailure, t]
+    [projects, refresh, describeFailure, confirm, t]
   )
 
   const selectedProject = projects.find((project) => project.id === selectedProjectId) ?? null
@@ -254,6 +256,8 @@ export function App(): React.JSX.Element {
           }}
         />
       )}
+
+      {confirmDialog}
 
       {pickingRepository && (
         <RepositoryPicker

@@ -6,7 +6,14 @@ interface ModalProps {
   readonly children: React.ReactNode
   /** Optional row of controls pinned to the bottom. */
   readonly footer?: React.ReactNode
+  /** `sm` for a question, `md` for a list or form. */
+  readonly size?: 'sm' | 'md'
 }
+
+const WIDTHS = {
+  sm: 'w-[min(26rem,calc(100vw-4rem))]',
+  md: 'w-[min(46rem,calc(100vw-4rem))]'
+} as const
 
 /**
  * A modal dialog.
@@ -15,7 +22,13 @@ interface ModalProps {
  * Escape key and inertness of the page behind it for free — all of which are
  * easy to get subtly wrong by hand.
  */
-export function Modal({ title, onClose, children, footer }: ModalProps): React.JSX.Element {
+export function Modal({
+  title,
+  onClose,
+  children,
+  footer,
+  size = 'md'
+}: ModalProps): React.JSX.Element {
   const dialog = useRef<HTMLDialogElement>(null)
 
   useEffect(() => {
@@ -42,7 +55,7 @@ export function Modal({ title, onClose, children, footer }: ModalProps): React.J
         // sits in a child element and stops the event there.
         if (event.target === dialog.current) onClose()
       }}
-      className="bg-canvas text-ink border-line m-auto w-[min(46rem,calc(100vw-4rem))] rounded-[var(--radius-panel)] border p-0 shadow-[var(--shadow-modal)] backdrop:bg-black/40"
+      className={`bg-canvas text-ink border-line m-auto rounded-[var(--radius-panel)] border p-0 shadow-[var(--shadow-modal)] backdrop:bg-black/40 ${WIDTHS[size]}`}
     >
       <div className="flex max-h-[min(34rem,calc(100vh-8rem))] flex-col">
         <header className="border-line flex shrink-0 items-center justify-between border-b px-4 py-3">

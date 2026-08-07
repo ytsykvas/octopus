@@ -3,17 +3,21 @@ import type { ButtonHTMLAttributes, ReactNode } from 'react'
 /**
  * Button (§10.2 docs/PROJECT.md).
  *
- * Three variants cover the whole interface: accent for the primary action,
- * quiet for secondary ones, danger for destructive ones. Colours go through
- * tokens only, otherwise the dark theme breaks.
+ * Variants: accent for the primary action, quiet for secondary ones, danger
+ * for a subdued destructive control, destructive for a filled one that leads
+ * a confirmation. Colours go through tokens only, otherwise the dark theme
+ * breaks.
  */
-export type ButtonVariant = 'accent' | 'quiet' | 'danger'
+export type ButtonVariant = 'accent' | 'quiet' | 'danger' | 'destructive'
 export type ButtonSize = 'sm' | 'md'
 
 const VARIANTS: Record<ButtonVariant, string> = {
   accent: 'bg-accent text-on-accent hover:bg-accent-hover border-transparent',
   quiet: 'bg-canvas text-ink border-line hover:bg-muted',
-  danger: 'bg-transparent text-danger border-transparent hover:bg-danger-bg'
+  danger: 'bg-transparent text-danger border-transparent hover:bg-danger-bg',
+  // Filled: for the primary action of a confirmation, where it must be the
+  // thing the eye lands on.
+  destructive: 'bg-danger text-white border-transparent hover:brightness-110'
 }
 
 const SIZES: Record<ButtonSize, string> = {
