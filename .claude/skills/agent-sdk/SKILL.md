@@ -1,60 +1,61 @@
 ---
 name: agent-sdk
-description: Інтеграція з @anthropic-ai/claude-agent-sdk — запуск сесій агента, стрімінг подій, дозволи інструментів, resume, мапінг повідомлень SDK у власний тип AgentEvent. Використовуй при роботі з src/core/agent.ts, при додаванні можливостей чату з агентом, обробці подій сесії чи роботі з session_id.
-when_to_use: Коли треба запустити агента у воркспейсі, обробити його відповіді, реалізувати дозволи інструментів, продовжити сесію після перезапуску або показати вартість сесії.
+description: Integrating with @anthropic-ai/claude-agent-sdk — starting agent sessions, streaming events, tool permissions, resume, and mapping SDK messages onto the internal AgentEvent type. Use when working on src/core/agent.ts, adding agent chat capabilities, handling session events or session ids.
+when_to_use: When an agent needs to be started in a workspace, its replies handled, tool permissions implemented, a session resumed after a restart, or session cost surfaced.
 allowed-tools: Read, Write, Edit, Glob, Grep, Bash(npx vitest:*), Bash(npm run typecheck:*)
 ---
 
-# Робота з Claude Agent SDK
+# Working with the Claude Agent SDK
 
-Пакет: `@anthropic-ai/claude-agent-sdk` (встановлений). Типи — у
-`node_modules/@anthropic-ai/claude-agent-sdk/sdk.d.ts`; **звіряйся з ними**,
-бо публічна документація подає спрощену картину.
+Package: `@anthropic-ai/claude-agent-sdk` (installed). Types live in
+`node_modules/@anthropic-ai/claude-agent-sdk/sdk.d.ts` — **check them**, because
+the public documentation presents a simplified picture.
 
-## Головний принцип проєкту
+## The project's core principle
 
 ```ts
 settingSources: []
 ```
 
-Це технічна відповідь на претензію до Conductor (§4, §12.3 docs/PROJECT.md).
-З порожнім списком SDK **не підтягує неявно** ані користувацьких налаштувань,
-ані `CLAUDE.md`. Усе, що потрапляє в контекст агента, ми додаємо свідомо.
+This is the technical answer to the complaint about Conductor (§4, §12.3
+docs/PROJECT.md). With an empty list the SDK loads **nothing implicitly** —
+neither user settings nor `CLAUDE.md`. Everything reaching the agent's context
+is put there deliberately.
 
-Не змінюй це значення «щоб запрацювало» — конфіг має давати користувачеві
-явний перемикач: нічого / `['project']` / `['user','project','local']`.
+Do not change this value "to make it work" — the config is meant to expose an
+explicit switch: nothing / `['project']` / `['user','project','local']`.
 
-## Базовий запуск
+## Basic run
 
 ```ts
 import { query } from '@anthropic-ai/claude-agent-sdk'
 
 const session = query({
-  prompt: inputStream, // AsyncIterable<SDKUserMessage> — для follow-up
+  prompt: inputStream, // AsyncIterable<SDKUserMessage> — enables follow-ups
   options: {
     cwd: workspace.path,
     resume: workspace.sessionId ?? undefined,
     settingSources: [],
     systemPrompt: { type: 'preset', preset: 'claude_code' },
     canUseTool: async (toolName, input) => {
-      /* власний діалог дозволів */
+      /* our own permission dialog */
     }
   }
 })
 
 for await (const message of session) {
-  // мапінг у AgentEvent — див. нижче
+  // map onto AgentEvent — see below
 }
 ```
 
-## Пастка: де насправді живуть виклики інструментів
+## The trap: where tool calls actually live
 
-`SDKMessage` — union із ~38 варіантів, і окремих `SDKToolUseMessage` чи
-`SDKToolResultMessage` там **немає**. Виклики інструментів приходять як
-**блоки всередині** повідомлень у форматі Anthropic API:
+`SDKMessage` is a union of roughly 38 variants, and there is **no** separate
+`SDKToolUseMessage` or `SDKToolResultMessage`. Tool activity arrives as
+**blocks inside** messages in the Anthropic API shape:
 
 ```ts
-// tool_use — у SDKAssistantMessage.message.content
+// tool_use lives in SDKAssistantMessage.message.content
 if (message.type === 'assistant') {
   for (const block of message.message.content) {
     if (block.type === 'text') emit({ type: 'text', text: block.text })
@@ -65,7 +66,7 @@ if (message.type === 'assistant') {
   }
 }
 
-// tool_result — у SDKUserMessage.message.content
+// tool_result lives in SDKUserMessage.message.content
 if (message.type === 'user') {
   const content = message.message.content
   if (Array.isArray(content)) {
@@ -83,13 +84,13 @@ if (message.type === 'user') {
 }
 ```
 
-`SDKUserMessage` має ще `tool_use_result?: unknown` — структурований вивід
-інструмента (не рядок для моделі). Корисно для рендеру, але типізований як
-`unknown`: валідуй через zod, перш ніж використовувати.
+`SDKUserMessage` also carries `tool_use_result?: unknown` — the structured tool
+output rather than the string sent to the model. Useful for rendering, but typed
+as `unknown`: validate it with zod before use.
 
-## session_id для resume
+## session_id for resume
 
-Приходить у стартовому системному повідомленні:
+It arrives in the init system message:
 
 ```ts
 if (message.type === 'system' && message.subtype === 'init') {
@@ -97,10 +98,10 @@ if (message.type === 'system' && message.subtype === 'init') {
 }
 ```
 
-Зберігай його в `state.json` одразу — саме це дає продовження розмови після
-перезапуску застосунку.
+Persist it to `state.json` immediately — that is what lets a conversation
+continue after the application restarts.
 
-## Завершення й вартість
+## Completion and cost
 
 ```ts
 if (message.type === 'result') {
@@ -113,18 +114,18 @@ if (message.type === 'result') {
 }
 ```
 
-**Не підсумовуй вартість між результатами.** У сесіях зі стрімінговим вводом
-`total_cost_usd` уже кумулятивна — кожен `result` несе поточний загальний
-підсумок. Читай останній.
+**Do not sum cost across results.** In streaming-input sessions
+`total_cost_usd` is already cumulative — every `result` carries the running
+total. Read the latest one.
 
-## Follow-up без перезапуску сесії
+## Follow-ups without restarting the session
 
-Промпт має бути async-генератором, у який ти дописуєш повідомлення:
+The prompt must be an async generator you push messages into:
 
 ```ts
 async function* inputStream(): AsyncGenerator<SDKUserMessage> {
   while (true) {
-    const text = await queue.next() // черга з UI
+    const text = await queue.next() // queue fed by the UI
     yield {
       type: 'user',
       message: { role: 'user', content: text },
@@ -135,40 +136,40 @@ async function* inputStream(): AsyncGenerator<SDKUserMessage> {
 }
 ```
 
-Альтернатива — метод `session.streamInput(...)` на вже створеному об'єкті.
+Alternatively call `session.streamInput(...)` on an existing session object.
 
-## Керування сесією
+## Session control
 
-- `session.interrupt()` — перервати поточну роботу;
-- `session.setModel(model)` — змінити модель на льоту;
+- `session.interrupt()` — stop the current work;
+- `session.setModel(model)` — switch models mid-flight;
 - `session.setPermissionMode(mode)` — `'default' | 'plan' | 'dontAsk' | 'bypassPermissions'`;
-- `session.close()` — **обов'язково** при видаленні чи архівації воркспейсу.
+- `session.close()` — **mandatory** when a workspace is removed or archived.
 
-Незакритий `query()` лишає живий дочірній процес. Кожен воркспейс мусить
-закривати свою сесію у своєму ж teardown.
+An unclosed `query()` leaves a live child process behind. Every workspace must
+close its own session in its own teardown.
 
-## Дозволи
+## Permissions
 
-`canUseTool` викликається лише тоді, коли рішення не покрите `allowedTools`
-чи налаштуваннями. Це місце для власного діалогу — саме тут UI показує
-користувачеві, що агент хоче зробити.
+`canUseTool` fires only when the decision is not already covered by
+`allowedTools` or settings. That is where our own dialog belongs — the point
+at which the UI shows the user what the agent wants to do.
 
-Не став `bypassPermissions` типовим значенням: прозорість важливіша за
-зручність (§4).
+Do not make `bypassPermissions` the default: transparency beats convenience (§4).
 
-## Ізоляція від SDK
+## Isolation from the SDK
 
-Ядро не віддає `SDKMessage` у renderer. Усе мапиться у власний плоский
-`AgentEvent` з `src/core/types.ts` (§11.2). Причина: union SDK великий і
-змінюється між версіями — без цього шару кожне оновлення пакета ламало б UI.
+The core never hands `SDKMessage` to the renderer. Everything is mapped onto the
+flat `AgentEvent` in `src/core/types.ts` (§11.2). Reason: the SDK union is large
+and changes between versions — without this layer every package upgrade would
+break the UI.
 
-Якщо потрібен новий вид події — **спершу додай варіант в `AgentEvent`**,
-потім мапінг, потім рендер.
+When a new kind of event is needed, **add the variant to `AgentEvent` first**,
+then the mapping, then the rendering.
 
-## Тестування
+## Testing
 
-Мапінг подій — чиста функція від `SDKMessage` до `AgentEvent[]`. Тестуй її
-на літералах повідомлень, без запуску агента: це дає 100% покриття без мережі
-й без дочірніх процесів.
+The event mapping is a pure function from `SDKMessage` to `AgentEvent[]`. Test it
+against message literals, without starting an agent: that gives 100% coverage
+with no network and no child processes.
 
-Сам `query()` у тестах не викликай.
+Never call `query()` from a test.

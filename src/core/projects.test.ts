@@ -36,7 +36,7 @@ afterEach(async () => {
 })
 
 describe('inspectRepository', () => {
-  it('розпізнає готовий репозиторій', async () => {
+  it('recognises a ready repository', async () => {
     const repo = join(dir, 'planner')
     await mkdir(repo)
     await initRepo(repo)
@@ -47,7 +47,7 @@ describe('inspectRepository', () => {
     expect(info.root).toContain('planner')
   })
 
-  it('прив’язується до кореня, навіть якщо вибрано підтеку', async () => {
+  it('binds to the root even when a subdirectory was picked', async () => {
     const repo = join(dir, 'planner')
     await mkdir(repo)
     await initRepo(repo)
@@ -60,47 +60,56 @@ describe('inspectRepository', () => {
     expect(fromNested.name).toBe('planner')
   })
 
-  it('пояснює, що тека не є репозиторієм', async () => {
-    await expect(inspectRepository(dir)).rejects.toBeInstanceOf(ProjectValidationError)
+  it('reports a plain directory with a machine-readable code', async () => {
+    const error = await inspectRepository(dir).catch((cause: unknown) => cause)
+    expect(error).toBeInstanceOf(ProjectValidationError)
+    expect((error as ProjectValidationError).code).toBe('notARepository')
   })
 
-  it('відмовляє порожньому репозиторію без жодного коміту', async () => {
+  it('rejects a repository without any commit', async () => {
     const repo = join(dir, 'empty')
     await mkdir(repo)
     await run('git', ['init', '-q'], { cwd: repo })
 
-    await expect(inspectRepository(repo)).rejects.toThrow(/порожній/)
+    const error = await inspectRepository(repo).catch((cause: unknown) => cause)
+    expect((error as ProjectValidationError).code).toBe('emptyRepository')
   })
 
-  it('відмовляє, коли базову гілку визначити нічим', async () => {
+  it('rejects when no base branch can be inferred', async () => {
     const repo = join(dir, 'detached')
     await mkdir(repo)
     await initRepo(repo, 'trunk')
     const { stdout } = await run('git', ['rev-parse', 'HEAD'], { cwd: repo })
-    await run('git', ['branch', '-m', 'trunk', 'нетипова'], { cwd: repo })
+    await run('git', ['branch', '-m', 'trunk', 'unconventional'], { cwd: repo })
     await run('git', ['checkout', '-q', stdout.trim()], { cwd: repo })
-    await run('git', ['branch', '-D', 'нетипова'], { cwd: repo })
+    await run('git', ['branch', '-D', 'unconventional'], { cwd: repo })
 
-    await expect(inspectRepository(repo)).rejects.toThrow(/базову гілку/)
+    const error = await inspectRepository(repo).catch((cause: unknown) => cause)
+    expect((error as ProjectValidationError).code).toBe('noBaseBranch')
+  })
+
+  it('passes the offending path along for the message', async () => {
+    const error = await inspectRepository(dir).catch((cause: unknown) => cause)
+    expect((error as ProjectValidationError).params.path).toBe(dir)
   })
 })
 
 describe('uniqueProjectId', () => {
-  it('лишає вільний ідентифікатор без змін', () => {
+  it('keeps a free identifier as is', () => {
     expect(uniqueProjectId('planner', [])).toBe('planner')
   })
 
-  it('додає суфікс, коли ідентифікатор зайнятий', () => {
+  it('appends a suffix when the identifier is taken', () => {
     expect(uniqueProjectId('planner', ['planner'])).toBe('planner-2')
   })
 
-  it('шукає далі, поки не знайде вільний', () => {
+  it('keeps searching until a free one is found', () => {
     expect(uniqueProjectId('app', ['app', 'app-2', 'app-3'])).toBe('app-4')
   })
 })
 
 describe('createProject', () => {
-  it('збирає запис проєкту з теки', async () => {
+  it('assembles a project record from a directory', async () => {
     const repo = join(dir, 'planner')
     await mkdir(repo)
     await initRepo(repo)
@@ -114,7 +123,7 @@ describe('createProject', () => {
     })
   })
 
-  it('відмовляє, якщо репозиторій уже доданий', async () => {
+  it('refuses a repository that is already added', async () => {
     const repo = join(dir, 'planner')
     await mkdir(repo)
     await initRepo(repo)
@@ -122,10 +131,12 @@ describe('createProject', () => {
     const first = await createProject(repo, 'ytsykvas', EMPTY_STATE)
     const state: State = addProject(EMPTY_STATE, first)
 
-    await expect(createProject(repo, 'ytsykvas', state)).rejects.toThrow(/уже доданий/)
+    const error = await createProject(repo, 'ytsykvas', state).catch((cause: unknown) => cause)
+    expect((error as ProjectValidationError).code).toBe('duplicateProject')
+    expect((error as ProjectValidationError).params.name).toBe('planner')
   })
 
-  it('розводить ідентифікатори однойменних репозиторіїв у різних теках', async () => {
+  it('separates identifiers of same-named repositories in different directories', async () => {
     const first = join(dir, 'a', 'app')
     const second = join(dir, 'b', 'app')
     await mkdir(first, { recursive: true })
@@ -141,7 +152,7 @@ describe('createProject', () => {
     expect(two.id).toBe('app-2')
   })
 
-  it('нормалізує назву репозиторію в ідентифікатор', async () => {
+  it('normalises the repository name into an identifier', async () => {
     const repo = join(dir, 'Family Shopping')
     await mkdir(repo)
     await initRepo(repo)

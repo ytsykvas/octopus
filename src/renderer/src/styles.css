@@ -1,19 +1,19 @@
 @import 'tailwindcss';
 
 /*
- * Дизайн-система (§10 docs/PROJECT.md).
+ * Design system (§10 docs/PROJECT.md).
  *
- * Спокійний десктопний інтерфейс у дусі сучасних dev-інструментів:
- * нейтральна база, тонкі роздільники, стримані акценти. Вибір продиктований
- * вмістом — чат, дифи й логи це щільний текст, який має читатися годинами.
+ * A calm desktop interface in the spirit of modern development tools:
+ * neutral base, thin separators, restrained accents. The choice follows the
+ * content — chat, diffs and logs are dense text meant to be read for hours.
  *
- * Кольори оголошені двічі: у :root (світла) і .dark (темна).
- * Токени @theme посилаються на ці змінні, тому перемикання теми
- * не потребує перегенерації утиліт.
+ * Colours are declared twice: in :root (light) and .dark (dark).
+ * @theme tokens reference those variables, so switching themes does not
+ * require regenerating utilities.
  */
 
 :root {
-  /* Поверхні: полотно → панель → підкладка */
+  /* Surfaces: canvas -> pane -> fill */
   --canvas: #ffffff;
   --surface: #f7f8fa;
   --muted: #eef0f4;
@@ -93,8 +93,8 @@
   --radius-control: 6px;
   --radius-panel: 10px;
 
-  /* Тіні лише для того, що спливає над вмістом. Панелі розділяються
-     бордерами — так інтерфейс лишається спокійним. */
+  /* Shadows only for things floating above the content. Panes are separated
+     by borders, which keeps the interface calm. */
   --shadow-pop: 0 4px 12px rgb(0 0 0 / 0.1);
   --shadow-modal: 0 16px 40px rgb(0 0 0 / 0.18);
 
@@ -119,7 +119,7 @@
     -webkit-font-smoothing: antialiased;
   }
 
-  /* Смуга для перетягування вікна під hiddenInset-тайтлбаром. */
+  /* Drag region for the window under the hiddenInset title bar. */
   .titlebar-drag {
     -webkit-app-region: drag;
   }
@@ -136,8 +136,8 @@
 }
 
 @layer components {
-  /* Заголовок секції: маленький, приглушений, з легким розрідженням.
-     Не uppercase-900 — вміст поруч має лишатися головним. */
+  /* Section heading: small, muted, slightly tracked out.
+     Not uppercase-900 — the content beside it stays the focus. */
   .section-label {
     font-size: 11px;
     font-weight: 600;
@@ -151,7 +151,7 @@
     border-radius: var(--radius-panel);
   }
 
-  /* Рядок списку: підсвітка на наведенні, виразніша — на вибраному. */
+  /* List row: highlighted on hover, stronger when selected. */
   .row {
     border-radius: var(--radius-control);
     transition:

@@ -1,11 +1,11 @@
 /**
- * Єдине джерело правди для всіх шляхів на диску.
+ * Single source of truth for every on-disk path.
  *
- * Жодного хардкоду `~/Library` чи `/Users/...` — усе через `path.join`,
- * щоб та сама збірка працювала на macOS і на Linux (§11.2 docs/PROJECT.md).
+ * No hardcoded `~/Library` or `/Users/...` — everything goes through
+ * `path.join`, so the same build works on macOS and Linux (§11.2).
  *
- * Кожна функція приймає базову теку параметром із розумним типовим значенням:
- * це робить модуль тестованим без моків файлової системи.
+ * Each function takes its base directory as a parameter with a sensible
+ * default, which makes the module testable without mocking the filesystem.
  */
 
 import { homedir } from 'node:os'
@@ -15,56 +15,56 @@ import type { ProjectId, WorkspaceId } from './types.js'
 
 const ROOT_DIR_NAME = '.maestro'
 
-/** Коренева тека даних застосунку: `~/.maestro`. */
+/** Application data root: `~/.maestro`. */
 export function rootDir(home: string = homedir()): string {
   return join(home, ROOT_DIR_NAME)
 }
 
-/** Глобальні налаштування: `~/.maestro/config.json`. */
+/** Global settings: `~/.maestro/config.json`. */
 export function configFile(root: string = rootDir()): string {
   return join(root, 'config.json')
 }
 
-/** Стан воркспейсів: `~/.maestro/state.json`. */
+/** Workspace state: `~/.maestro/state.json`. */
 export function stateFile(root: string = rootDir()): string {
   return join(root, 'state.json')
 }
 
 /**
- * Тимчасовий файл для атомарного запису стану.
- * Запис іде сюди, далі `rename` — щоб аварійне завершення не лишило
- * обрізаний `state.json` (§11.2).
+ * Temporary file used for atomic state writes.
+ * Content is written here, then renamed, so a crash cannot leave a
+ * truncated `state.json` behind (§11.2).
  */
 export function stateTempFile(root: string = rootDir()): string {
   return join(root, 'state.json.tmp')
 }
 
-/** Тека метаданих проєкту: `~/.maestro/projects/<projectId>`. */
+/** Project metadata directory: `~/.maestro/projects/<projectId>`. */
 export function projectDir(projectId: ProjectId, root: string = rootDir()): string {
   return join(root, 'projects', projectId)
 }
 
-/** Тека скриптів проєкту. */
+/** Directory holding a project's scripts. */
 export function projectScriptsDir(projectId: ProjectId, root: string = rootDir()): string {
   return join(projectDir(projectId, root), 'scripts')
 }
 
-/** Скрипт підготовки воркспейсу після `git worktree add`. */
+/** Script run right after `git worktree add`. */
 export function setupScript(projectId: ProjectId, root: string = rootDir()): string {
   return join(projectScriptsDir(projectId, root), 'setup.sh')
 }
 
-/** Скрипт запуску dev-сервера; отримує `$MAESTRO_PORT`. */
+/** Script that starts the dev server; receives `$MAESTRO_PORT`. */
 export function runScript(projectId: ProjectId, root: string = rootDir()): string {
   return join(projectScriptsDir(projectId, root), 'run.sh')
 }
 
-/** Тека всіх воркспейсів проєкту. */
+/** Directory holding every workspace of a project. */
 export function workspacesDir(projectId: ProjectId, root: string = rootDir()): string {
   return join(root, 'workspaces', projectId)
 }
 
-/** Тека конкретного воркспейсу — вона ж корінь git worktree. */
+/** A single workspace directory — also the root of its git worktree. */
 export function workspacePath(
   projectId: ProjectId,
   workspaceId: WorkspaceId,

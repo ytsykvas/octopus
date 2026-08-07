@@ -1,64 +1,68 @@
 ---
 name: core-module
-description: Створення або зміна модуля в src/core — headless-логіка з обов'язковим 100% покриттям тестами. Використовуй при роботі з будь-яким файлом у src/core, при додаванні операцій git, роботі з файловою системою, станом на диску чи зовнішніми процесами.
-when_to_use: Коли треба додати чи змінити логіку в src/core, написати тести до неї, або коли постає питання «куди покласти цю функцію».
+description: Creating or changing a module in src/core — headless logic with mandatory 100% test coverage. Use when touching any file under src/core, adding git operations, filesystem work, on-disk state or external processes.
+when_to_use: When logic in src/core needs to be added or changed, tests written for it, or when the question "where should this function live" comes up.
 paths:
   - src/core/**
 allowed-tools: Read, Write, Edit, Glob, Grep, Bash(npx vitest:*), Bash(npm test:*), Bash(npm run typecheck:*)
 ---
 
-# Модуль ядра
+# Core module
 
-`src/core/` — це вся логіка застосунку. Він headless: жодних імпортів Electron,
-жодного знання про UI. Це дозволяє тестувати його без запуску застосунку
-і згодом винести в CLI чи демон (§11.1 docs/PROJECT.md).
+`src/core/` holds all application logic. It is headless: no Electron imports,
+no knowledge of the UI. That is what makes it testable without launching the
+app and extractable into a CLI or daemon later (§11.1 docs/PROJECT.md).
 
-## Обов'язкові умови
+## Non-negotiables
 
-**Покриття 100%.** Поріг заданий у `vitest.config.ts` і ламає збірку при просіданні.
-Це не побажання — тест пишеться разом з кодом, не «потім».
+**Everything is written in English** — code, comments, test names, error
+messages. See the language policy in `CLAUDE.md`.
 
-**Жодного `electron`.** Спроба імпортувати його в `src/core/` блокується хуком.
-Якщо логіці потрібне вікно, діалог чи меню — вона належить до `src/main/`,
-а в ядрі лишається чиста функція з типізованим інтерфейсом.
+**100% coverage.** The threshold lives in `vitest.config.ts` and fails the
+build when it drops. This is not aspirational: the test is written with the
+code, not "later".
 
-**`any` заборонений.** Для справді невідомого — `unknown` зі звуженням через zod.
+**No `electron`.** Importing it under `src/core/` is blocked by a hook. If
+logic needs a window, dialog or menu, it belongs in `src/main/`, and the core
+keeps a pure function behind a typed interface.
 
-## Як писати тестований модуль
+**No `any`.** For genuinely unknown data use `unknown` and narrow it with zod.
 
-Головний прийом — **залежності передаються параметром із типовим значенням**.
-Це прибирає потребу в моках файлової системи й робить покриття тривіальним:
+## Writing a testable module
+
+The key technique: **dependencies are parameters with sensible defaults**.
+This removes the need to mock the filesystem and makes coverage trivial.
 
 ```ts
-// Добре: тестується без моків
+// Good: testable without mocks
 export function rootDir(home: string = homedir()): string {
   return join(home, '.maestro')
 }
 
-// Погано: щоб протестувати, доведеться мокати цілий модуль
+// Bad: testing this means mocking a whole module
 export function rootDir(): string {
   return join(os.homedir(), '.maestro')
 }
 ```
 
-Той самий прийом для процесів і файлової системи: приймай виконавця параметром.
+The same applies to processes and the filesystem: take the executor as a
+parameter.
 
 ```ts
-type Exec = (cmd: string, args: string[]) => Promise<string>
+type Exec = (args: readonly string[]) => Promise<string>
 
-export async function listWorktrees(repo: string, exec: Exec = defaultExec): Promise<Worktree[]> {
-  const out = await exec('git', ['-C', repo, 'worktree', 'list', '--porcelain'])
-  return parseWorktrees(out)
+export async function listWorktrees(exec: Exec): Promise<Worktree[]> {
+  return parseWorktrees(await exec(['worktree', 'list', '--porcelain']))
 }
 ```
 
-Парсер (`parseWorktrees`) винось окремою чистою функцією — вона тестується
-на рядках без жодного git.
+Keep the parser (`parseWorktrees`) a separate pure function — it can then be
+tested on strings without any git at all.
 
-## Зовнішні процеси
+## External processes
 
-Тільки `execFile`, **ніколи `exec`**. Назви гілок і шляхи приходять від
-користувача, а `exec` віддає їх шелу — це пряма ін'єкція команд.
+Only `execFile`, **never `exec`**. Branch names and paths come from the user,
+and `exec` hands them to a shell — that is command injection.
 
 ```ts
 import { execFile } from 'node:child_process'
@@ -68,58 +72,54 @@ const run = promisify(execFile)
 const { stdout } = await run('git', ['-C', repoPath, 'worktree', 'list', '--porcelain'])
 ```
 
-## Дані ззовні
+## External data
 
-Усе, що приходить з диска, від git або від SDK, валідується zod **на межі**.
-Далі всередині воно вже типізоване.
+Anything arriving from disk, git or the SDK is validated with zod **at the
+boundary**. Past that point it is typed.
 
 ```ts
-import { z } from 'zod'
-
 const WorkspaceSchema = z.object({
   id: z.string(),
-  branch: z.string(),
   port: z.number().int().min(3000).max(9000)
 })
 
-// Тип виводиться зі схеми — вони не розійдуться
+// The type is derived from the schema, so they cannot drift apart
 export type Workspace = z.infer<typeof WorkspaceSchema>
 ```
 
-## Помилки
+## Errors
 
-Не ковтати. Якщо git упав — прокинути stderr нагору, щоб причина була видна
-в UI, а не «щось пішло не так».
+Never swallow them. If git fails, propagate stderr so the cause is visible in
+the UI rather than a generic "something went wrong".
 
-```ts
-try {
-  await run('git', args)
-} catch (error) {
-  const stderr = error instanceof Error && 'stderr' in error ? String(error.stderr) : ''
-  throw new Error(`git ${args.join(' ')} завершився помилкою: ${stderr || String(error)}`)
-}
-```
+For failures the user can act on, throw a typed error carrying a
+machine-readable `code` — the renderer turns that into a localised message
+(see `ProjectValidationError` in `projects.ts`).
 
-## Структура тесту
+## Test shape
 
-Назва describe — модуль або функція, назва `it` — **сценарій**, не назва методу.
-Українською, як і решта коментарів.
+`describe` names the module or function; `it` names the **scenario**, not the
+method.
 
 ```ts
 describe('createWorkspace', () => {
-  it('створює гілку з префіксом із конфігу', async () => { ... })
-  it('відмовляє, якщо гілка вже існує', async () => { ... })
-  it('прокидає stderr від git, а не ковтає його', async () => { ... })
+  it('creates a branch using the prefix from config', async () => { ... })
+  it('refuses when the branch already exists', async () => { ... })
+  it('propagates stderr from git instead of swallowing it', async () => { ... })
 })
 ```
 
-Пам'ятай про типові значення параметрів: щоб покрити гілку з дефолтом,
-виклич функцію і **з** аргументом, і **без** нього.
+Prefer driving **real** git in a temporary repository over mocking it: parsing
+git output is where assumptions turn out wrong. Use a fake executor for edge
+cases that real git will not produce.
 
-## Перевірка перед завершенням
+Remember default parameters: to cover the default branch, call the function
+both **with** and **without** the argument.
+
+## Before finishing
 
 ```bash
 npx vitest run --coverage
 ```
 
-Покриття мусить лишитися 100%. Якщо просіло — дописуй тести, а не знижуй поріг.
+Coverage must stay at 100%. If it drops, add tests — never lower the threshold.

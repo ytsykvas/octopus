@@ -14,7 +14,7 @@ const Schema = z.object({
 
 type Value = z.infer<typeof Schema>
 
-const FALLBACK: Value = { name: 'типове', count: 0 }
+const FALLBACK: Value = { name: 'default', count: 0 }
 
 let dir: string
 let file: string
@@ -29,84 +29,87 @@ afterEach(async () => {
 })
 
 describe('describeError', () => {
-  it('бере повідомлення зі справжньої помилки', () => {
-    expect(describeError(new Error('git не знайдено'))).toBe('git не знайдено')
+  it('takes the message from a real error', () => {
+    expect(describeError(new Error('git not found'))).toBe('git not found')
   })
 
-  it('приводить до рядка те, що помилкою не є — кинути в JS можна будь-що', () => {
-    expect(describeError('просто рядок')).toBe('просто рядок')
+  it('stringifies non-errors — JavaScript lets you throw anything', () => {
+    expect(describeError('plain string')).toBe('plain string')
     expect(describeError(42)).toBe('42')
     expect(describeError(null)).toBe('null')
   })
 })
 
 describe('readJsonFile', () => {
-  it('повертає типове значення, якщо файлу ще немає — це нормальний перший запуск', async () => {
+  it('returns the fallback when the file does not exist yet — a normal first run', async () => {
     await expect(readJsonFile(file, Schema, FALLBACK)).resolves.toEqual(FALLBACK)
   })
 
-  it('читає збережене значення', async () => {
+  it('reads back a stored value', async () => {
     await writeFile(file, JSON.stringify({ name: 'kyiv', count: 3 }), 'utf8')
     await expect(readJsonFile(file, Schema, FALLBACK)).resolves.toEqual({ name: 'kyiv', count: 3 })
   })
 
-  it('кидає помилку на пошкодженому JSON, а не мовчки скидає стан', async () => {
-    await writeFile(file, '{ це не json', 'utf8')
+  it('throws on malformed JSON instead of silently resetting state', async () => {
+    await writeFile(file, '{ not json', 'utf8')
     await expect(readJsonFile(file, Schema, FALLBACK)).rejects.toBeInstanceOf(InvalidFileError)
   })
 
-  it('кидає помилку, коли структура не відповідає схемі', async () => {
-    await writeFile(file, JSON.stringify({ name: 'kyiv', count: 'не число' }), 'utf8')
+  it('throws when the structure does not match the schema', async () => {
+    await writeFile(file, JSON.stringify({ name: 'kyiv', count: 'not a number' }), 'utf8')
     await expect(readJsonFile(file, Schema, FALLBACK)).rejects.toBeInstanceOf(InvalidFileError)
   })
 
-  it('повідомляє шлях до проблемного файлу', async () => {
-    await writeFile(file, 'зіпсовано', 'utf8')
+  it('reports which file is broken', async () => {
+    await writeFile(file, 'corrupt', 'utf8')
     await expect(readJsonFile(file, Schema, FALLBACK)).rejects.toMatchObject({ filePath: file })
   })
 
-  it('прокидає інші помилки файлової системи, а не видає їх за відсутній файл', async () => {
-    // Тека замість файлу: читання дає EISDIR, і це не має перетворитися на fallback.
+  it('propagates other filesystem errors rather than treating them as a missing file', async () => {
+    // A directory instead of a file yields EISDIR, which must not become a fallback.
     await expect(readJsonFile(dir, Schema, FALLBACK)).rejects.not.toBeInstanceOf(InvalidFileError)
   })
 })
 
 describe('writeJsonFile', () => {
-  it('записує значення, яке потім читається назад', async () => {
+  it('writes a value that reads back', async () => {
     await writeJsonFile(file, Schema, { name: 'lviv', count: 7 })
     await expect(readJsonFile(file, Schema, FALLBACK)).resolves.toEqual({ name: 'lviv', count: 7 })
   })
 
-  it('створює теку, якщо її ще немає', async () => {
+  it('creates the directory when it is missing', async () => {
     const nested = join(dir, 'a', 'b', 'data.json')
     await writeJsonFile(nested, Schema, FALLBACK)
     await expect(readJsonFile(nested, Schema, FALLBACK)).resolves.toEqual(FALLBACK)
   })
 
-  it('не лишає тимчасового файлу після успішного запису', async () => {
+  it('leaves no temporary file behind after a successful write', async () => {
     await writeJsonFile(file, Schema, FALLBACK)
     await expect(readFile(`${file}.tmp`, 'utf8')).rejects.toThrow()
   })
 
-  it('відмовляється записувати значення, що не проходить схему', async () => {
+  it('refuses to write a value that fails the schema', async () => {
     const broken = { name: 'kyiv', count: 1.5 }
     await expect(writeJsonFile(file, Schema, broken)).rejects.toBeInstanceOf(InvalidFileError)
   })
 
-  it('не чіпає наявний файл, якщо нове значення невалідне', async () => {
-    await writeJsonFile(file, Schema, { name: 'було', count: 1 })
+  it('leaves the existing file untouched when the new value is invalid', async () => {
+    await writeJsonFile(file, Schema, { name: 'previous', count: 1 })
     const broken = { name: 'kyiv', count: 1.5 }
     await expect(writeJsonFile(file, Schema, broken)).rejects.toBeInstanceOf(InvalidFileError)
-    await expect(readJsonFile(file, Schema, FALLBACK)).resolves.toEqual({ name: 'було', count: 1 })
+    await expect(readJsonFile(file, Schema, FALLBACK)).resolves.toEqual({
+      name: 'previous',
+      count: 1
+    })
   })
 
-  it('приймає власний шлях тимчасового файлу', async () => {
+  it('accepts a custom temporary path', async () => {
     const temp = join(dir, 'custom.tmp')
     await writeJsonFile(file, Schema, FALLBACK, temp)
     await expect(readJsonFile(file, Schema, FALLBACK)).resolves.toEqual(FALLBACK)
   })
 
-  it('записує з переносом рядка в кінці — файл лишається зручним для git', async () => {
+  it('ends the file with a newline, keeping it git-friendly', async () => {
     await writeJsonFile(file, Schema, FALLBACK)
     await expect(readFile(file, 'utf8')).resolves.toMatch(/\n$/)
   })

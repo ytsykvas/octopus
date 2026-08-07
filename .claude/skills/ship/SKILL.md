@@ -1,54 +1,54 @@
 ---
 name: ship
-description: Завершити роботу над зміною — прогнати перевірки, показати підсумок змін і закомітити за конвенцією проєкту.
-when_to_use: Коли зміна готова і треба її зафіксувати. Також на фрази «закоміть», «збережи зміни», «готово, фіксуємо».
-argument-hint: '[опис зміни]'
+description: Finish a change — run the quality gate, review what changed and commit it following the project convention.
+when_to_use: When a change is ready to be recorded. Also on phrases like "commit this", "save the changes", "done, let us record it".
+argument-hint: '[change description]'
 allowed-tools: Bash(npm run:*), Bash(git status:*), Bash(git diff:*), Bash(git log:*), Bash(git add:*), Bash(git commit:*), Bash(git branch:*), Read
 ---
 
-# Фіксація зміни
+# Recording a change
 
-## Порядок
+## Steps
 
-1. **Перевірка.** `npm run check`. Якщо падає — спершу полагодь, комітити
-   зламане не можна.
+1. **Gate.** Run `npm run check`. If it fails, fix it first — broken code is
+   not committed.
 
-2. **Огляд.** `git status` і `git diff`. Переконайся, що в коміт не потрапило
-   зайве: тимчасові файли, налагоджувальні `console.log`, закоментований код,
-   секрети.
+2. **Review.** Run `git status` and `git diff`. Make sure nothing unwanted
+   slipped in: temporary files, debug `console.log`, commented-out code,
+   secrets.
 
-3. **Гілка.** Перевір поточну через `git branch --show-current`.
-   У `main` напряму не комітимо (§11.3). Якщо ти в `main` — створи гілку
-   з осмисленою назвою і попередь користувача.
+3. **Branch.** Check with `git branch --show-current`. Never commit straight
+   to `main` (§11.3). If you are on it, create a branch with a meaningful name
+   and tell the user.
 
-4. **Коміт.** Conventional Commits, українською:
+4. **Commit.** Conventional Commits, **in English** like the rest of the
+   repository:
 
    ```
-   feat: додано менеджер worktree
+   feat: add worktree manager
 
-   Створення, список і видалення воркспейсів через git worktree.
-   Порт обчислюється детерміновано з id воркспейсу.
+   Create, list and remove workspaces via git worktree. The port is derived
+   deterministically from the workspace id.
    ```
 
-   Префікси: `feat:` нова можливість, `fix:` виправлення, `refactor:`
-   без зміни поведінки, `test:` тести, `docs:` документація, `chore:`
-   рутина (залежності, конфіги).
+   Prefixes: `feat:` new capability, `fix:` bug fix, `refactor:` no behaviour
+   change, `test:` tests, `docs:` documentation, `chore:` chores (dependencies,
+   configs).
 
-   Один коміт — одна логічна зміна. Якщо в diff дві незалежні речі,
-   розбий на два коміти.
+   One commit, one logical change. If the diff holds two unrelated things,
+   split it.
 
-5. **Підсумок.** Скажи користувачеві простою мовою, що зафіксовано.
-   Не переказуй diff.
+5. **Report.** Tell the user in plain Ukrainian what was recorded. Do not
+   recite the diff.
 
-## Чого не робити
+## Do not
 
-- Не пушити, якщо користувач про це не просив.
-- Не створювати PR без прямого прохання.
-- Не додавати `--no-verify`.
-- Не комітити `.env`, ключі, токени. Якщо помітив таке в diff — зупинись
-  і попередь.
+- Push unless the user asked.
+- Open a PR without an explicit request.
+- Pass `--no-verify`.
+- Commit `.env`, keys or tokens. If you spot one in the diff, stop and warn.
 
-## Якщо передано опис
+## If a description was supplied
 
-Використай його як основу теми коміта, привівши до конвенції. Тіло коміта
-склади сам із фактичних змін у diff.
+Use it as the basis for the commit subject, reshaped to the convention. Write
+the body yourself from the actual diff.

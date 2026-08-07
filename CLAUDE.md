@@ -1,96 +1,111 @@
 # maestro
 
-Локальний macOS-застосунок для паралельної роботи з Claude Code: кожна задача виконується
-у власному git worktree з окремою гілкою, сесією агента і dev-сервером.
+A local macOS app for running Claude Code sessions in parallel: every task runs in its own
+git worktree, with its own branch, agent session and dev server.
 
-**Повний контекст — `docs/PROJECT.md`.** Читай його перед нетривіальними змінами.
+**Full context is in `docs/PROJECT.md`.** Read it before non-trivial changes.
 
-## Команди
+## Language policy
 
-```bash
-npm run dev          # запуск у режимі розробки
-npm run build        # typecheck + збірка
-npm run check        # повний гейт: format + lint + types + тести з покриттям
-npm test             # тести
-npm run test:watch   # тести у watch-режимі
-```
+**The entire repository is English** — code, comments, test names, error messages,
+documentation and commit messages. No exceptions.
 
-`npm run check` має проходити перед кожним комітом.
+User-facing strings never appear inline. They live in
+`src/renderer/src/i18n/locales/`, with English as the source of truth and the
+default language. Add the key to `en.ts` first; TypeScript then requires every
+other locale to match.
 
-## Архітектура
+Core throws errors carrying a machine-readable `code`, which the renderer maps
+onto a localised message. The English text on the error is a fallback for logs.
 
-```
-src/core/      вся логіка, headless, БЕЗ імпортів Electron — тестується через vitest
-src/main/      тонкий IPC-міст, без логіки
-src/preload/   contextBridge, типізований API
-src/renderer/  UI (React + Tailwind)
-```
-
-**Головне правило:** `core/` не знає про існування UI. Лейаут ще не обрано, тому renderer
-вважається замінним — логіка в нього не потрапляє.
-
-## Інфраструктура проєкту
-
-**Скіли** (`.claude/skills/`) — завантажуються самі, коли доречні:
-
-| Скіл           | Коли вмикається                            |
-| -------------- | ------------------------------------------ |
-| `core-module`  | автоматично при роботі з `src/core/**`     |
-| `ui-component` | автоматично при роботі з `src/renderer/**` |
-| `agent-sdk`    | при інтеграції з Claude Agent SDK          |
-| `/check`       | вручну — перевірка якості з поясненням     |
-| `/ship`        | вручну — перевірка + коміт за конвенцією   |
-
-**Субагент** `maestro-reviewer` — рев'ю під стандарти цього проєкту.
-
-**Хуки** (`.claude/hooks/`) працюють автоматично:
-
-- `protect-core.sh` — **блокує** імпорт `electron` у `src/core/`;
-- `format-file.sh` — форматує та лінтить кожен змінений файл.
-
-Тобто форматування вручну запускати не треба, а порушити головний
-архітектурний інваріант випадково не вийде.
-
-## Стандарти (деталі — §11.3 docs/PROJECT.md)
-
-- `any` заборонений; для невідомого — `unknown` із звуженням.
-- Зовнішні дані валідуються через zod на межі; типи виводяться з `z.infer`.
-- Зовнішні процеси — тільки `execFile`, ніколи `exec`.
-- Усі шляхи через `path.join()`; хардкоди `~/Library` і `/Users/...` заборонені.
-- **Покриття `src/core/` — 100%**, поріг ламає збірку. UI та IPC покриваються по суті,
-  без гонитви за цифрою.
-- Тести пишуться разом з кодом. Баг спершу відтворюється тестом.
-- Коментарі пояснюють «чому», не «що».
-- Conventional Commits; у `main` не комітимо напряму.
-
-Поріг покриття не знижуємо і правила лінтера не вимикаємо, щоб гейт пройшов.
-
-## Дизайн
-
-Спокійний десктопний інтерфейс: нейтральна база, тонкі роздільники 1px,
-стримані акценти (§10 docs/PROJECT.md). Токени — у `src/renderer/src/styles.css`.
-
-Кольори тільки через токени, ніколи hex напряму — інакше зламається темна тема.
-Ніякого `uppercase` і ваги 900: інтерфейс тримає чат, дифи й логи, і оформлення
-має відступати перед вмістом.
-
-## Спілкування
-
-Українською. Технічні терміни й ідентифікатори лишаються в оригіналі.
-
-Користувач не знає цього стеку — пояснюй причини проблем простою мовою,
-а не переказом виводу інструментів.
-
-## Відомі граблі
-
-`postinstall` пакета `electron` іноді тихо не завантажує бінарник. Ознака:
-`npm run dev` падає з `Error: Electron uninstall`, хоча збірка проходить.
+## Commands
 
 ```bash
-ls node_modules/electron/dist   # має існувати
+npm run dev          # development mode
+npm run build        # typecheck + build
+npm run check        # full gate: format + lint + types + tests with coverage
+npm test             # tests
+npm run test:watch   # tests in watch mode
+```
+
+`npm run check` must pass before every commit.
+
+## Architecture
+
+```
+src/core/      all logic, headless, NO Electron imports — tested with vitest
+src/main/      thin IPC bridge, no logic
+src/preload/   contextBridge, typed API
+src/renderer/  UI (React + Tailwind + i18next)
+```
+
+**The main rule:** `core/` knows nothing about the UI. A hook blocks importing
+`electron` there.
+
+## Project infrastructure
+
+**Skills** (`.claude/skills/`) load automatically when relevant:
+
+| Skill          | Trigger                                       |
+| -------------- | --------------------------------------------- |
+| `core-module`  | automatically when touching `src/core/**`     |
+| `ui-component` | automatically when touching `src/renderer/**` |
+| `agent-sdk`    | when integrating with the Claude Agent SDK    |
+| `/check`       | manual — quality gate with plain explanations |
+| `/ship`        | manual — gate plus a conventional commit      |
+
+**Subagent** `maestro-reviewer` reviews against this project's standards.
+
+**Hooks** (`.claude/hooks/`) run automatically:
+
+- `protect-core.sh` — **blocks** importing `electron` inside `src/core/`;
+- `format-file.sh` — formats and lints every edited file.
+
+So formatting never needs a manual run, and the main architectural invariant
+cannot be broken by accident.
+
+## Standards (details in §11.3 of docs/PROJECT.md)
+
+- No `any`; use `unknown` and narrow it.
+- External data is validated with zod at the boundary; types come from `z.infer`.
+- External processes go through `execFile`, never `exec`.
+- All paths through `path.join()`; no hardcoded `~/Library` or `/Users/...`.
+- **`src/core/` coverage is 100%**, enforced by a threshold that fails the build.
+  UI and IPC are covered by substance, not by chasing a number.
+- Tests are written alongside the code. A bug is reproduced by a test first.
+- Comments explain **why**, not **what**.
+- Conventional Commits; never commit straight to `main`.
+
+Never lower the coverage threshold or disable a lint rule to make the gate pass.
+
+## Design
+
+A calm desktop interface: neutral base, 1px separators, restrained accents
+(§10 of docs/PROJECT.md). Tokens live in `src/renderer/src/styles.css`.
+
+Colours only through tokens, never raw hex — otherwise the dark theme breaks.
+No `uppercase` or weight 900: the interface carries chat, diffs and logs, so the
+styling has to stay out of the content's way.
+
+## Talking to the user
+
+The user writes in Ukrainian and expects replies in Ukrainian. That applies to
+conversation only — everything written into the repository stays English.
+
+The user does not know this stack: explain problems in plain language rather
+than pasting tool output.
+
+## Known traps
+
+The `electron` package's `postinstall` sometimes fails silently to download the
+binary. Symptom: `npm run dev` fails with `Error: Electron uninstall` even though
+the build succeeds.
+
+```bash
+ls node_modules/electron/dist   # must exist
 node node_modules/electron/install.js
 ```
 
-## Що НЕ робимо на цьому етапі
+## Out of scope for now
 
-Термінал, Monaco diff, GitHub PR, нотифікації, Linux-збірка, auth-сервіс.
+Terminal, Monaco diff, GitHub PRs, notifications, Linux builds, auth service.

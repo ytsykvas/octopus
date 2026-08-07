@@ -1,11 +1,11 @@
 import type { ButtonHTMLAttributes, ReactNode } from 'react'
 
 /**
- * Кнопка (§10.2 docs/PROJECT.md).
+ * Button (§10.2 docs/PROJECT.md).
  *
- * Три варіанти, яких вистачає всьому інтерфейсу: акцентна для головної дії,
- * тиха для другорядних, небезпечна для руйнівних. Кольори лише через токени —
- * інакше зламається темна тема.
+ * Three variants cover the whole interface: accent for the primary action,
+ * quiet for secondary ones, danger for destructive ones. Colours go through
+ * tokens only, otherwise the dark theme breaks.
  */
 export type ButtonVariant = 'accent' | 'quiet' | 'danger'
 export type ButtonSize = 'sm' | 'md'

@@ -1,446 +1,458 @@
 # maestro
 
-> Головний контекстний документ проєкту. Описує, що ми будуємо і чому, та фіксує вимоги до першого етапу.
-> Стек зафіксовано; решта розділів розширюється брейнштормінгом.
-> Після створення репозиторію файл переїде в нього (`docs/PROJECT.md`) і слугуватиме контекстом для агентів.
+> The main context document for the project. Describes what is being built and why, and records the requirements for stage 1.
+> The stack is settled; the remaining sections grow through discussion.
 
 ---
 
-## 1. Що це
+## 1. What this is
 
-**maestro** — локальний macOS-застосунок для паралельної роботи з Claude Code: диспетчер агентних задач, де кожна задача виконується у власній ізольованій копії репозиторію.
+**maestro** is a local macOS application for running Claude Code sessions in parallel: a dispatcher for agent tasks where each task executes in its own isolated copy of a repository.
 
-Замість того щоб чекати, поки агент завершить одну задачу, розробник запускає кілька задач одночасно — кожну в окремому git worktree з власною гілкою, власною сесією агента і власним dev-сервером. Задачі не бачать одна одну й не конфліктують.
+Instead of waiting for the agent to finish one task, the developer starts several at once — each in a separate git worktree with its own branch, its own agent session and its own dev server. The tasks never see each other and never conflict.
 
-**Ціль** — інструмент для щоденної особистої роботи, який не нав'язує чужий workflow і не втручається в те, що отримує агент. Не продукт на продаж, не сервіс, не команда користувачів.
-
----
-
-## 2. Проблема
-
-Ця модель роботи вже використовується через [Conductor](https://www.conductor.build/), і сама модель себе виправдовує. Не влаштовує реалізація:
-
-| Проблема                             | Наслідок                                                               |
-| ------------------------------------ | ---------------------------------------------------------------------- |
-| Зайві надбудови в інструкціях агента | у контекст потрапляє те, чого ми не писали; поведінка агента непрозора |
-| Негнучкий workflow                   | нав'язаний порядок кроків замість власного                             |
-
-Головна з двох — перша: прихований промпт-інжект прямо впливає на якість роботи агента й на здатність зрозуміти, чому він повівся саме так.
-
-**UI Conductor претензій не викликає** — його розмітка вважається вдалою й береться за взірець (§10.8).
+**The goal** is a tool for daily personal work that imposes no foreign workflow and does not interfere with what the agent receives. Not a product for sale, not a service, not a team tool.
 
 ---
 
-## 3. Головний концепт
+## 2. The problem
 
-**Одиниця роботи — ізольований воркспейс. Одиниця інтеграції — гілка й pull request.**
+This way of working is already in use through [Conductor](https://www.conductor.build/), and the model itself has proven its worth. The implementation is what falls short:
 
-Воркспейс — це git worktree: повноцінна робоча копія репозиторію в окремій теці, що ділить історію з основним репо, але має власну гілку й власний робочий стан.
+| Problem                                         | Consequence                                                            |
+| ----------------------------------------------- | ---------------------------------------------------------------------- |
+| Extra material injected into agent instructions | context receives things we never wrote; agent behaviour becomes opaque |
+| Inflexible workflow                             | an imposed order of steps instead of one's own                         |
+
+The first matters more: hidden prompt injection directly affects the quality of the agent's work and the ability to understand why it behaved as it did.
+
+**Conductor's UI draws no complaints** — its layout is considered good and is taken as the model (§10.8).
+
+---
+
+## 3. The core concept
+
+**The unit of work is an isolated workspace. The unit of integration is a branch and a pull request.**
+
+A workspace is a git worktree: a full working copy of the repository in a separate directory that shares history with the main repo but carries its own branch and working state.
 
 ```
-                    ┌── worktree + гілка + агент + порт ──┐
-   репозиторій ─────┼── worktree + гілка + агент + порт ──┼──→ PR ──→ merge
-                    └── worktree + гілка + агент + порт ──┘
+                    ┌── worktree + branch + agent + port ──┐
+   repository ──────┼── worktree + branch + agent + port ──┼──→ PR ──→ merge
+                    └── worktree + branch + agent + port ──┘
 ```
 
-До кожного воркспейсу прив'язані:
+Each workspace owns:
 
-- **гілка** — створюється автоматично при створенні воркспейсу;
-- **сесія агента** — власний `session_id`, що переживає перезапуск застосунку;
-- **dev-сервер** — на власному порту, тож кілька копій застосунку працюють одночасно;
-- **дифф** — зміни відносно базової гілки.
+- **a branch** — created automatically with the workspace;
+- **an agent session** — its own `session_id`, surviving application restarts;
+- **a dev server** — on its own port, so several copies of the app run at once;
+- **a diff** — changes relative to the base branch.
 
-### Життєвий цикл задачі
+### Task lifecycle
 
 ```
-задача → воркспейс → агент працює → дифф → PR → merge → архів
-         (worktree     (ізольовано,   (огляд   (gh)          (worktree
-          + гілка       власна сесія)  змін)                  видаляється,
-          + setup.sh)                                         історія лишається)
+task → workspace → agent works → diff → PR → merge → archive
+       (worktree    (isolated,    (review) (gh)        (worktree removed,
+        + branch     own session)                       history kept)
+        + setup.sh)
 ```
 
 ---
 
-## 4. Ключові принципи
+## 4. Guiding principles
 
-**Прозорість над зручністю.** Агент отримує рівно те, що ми свідомо йому дали. Жодних прихованих доповнень до системного промпта, жодного неявного підтягування налаштувань. Якщо щось потрапляє в контекст — це видно в конфізі.
+**Transparency over convenience.** The agent receives exactly what we deliberately gave it. No hidden additions to the system prompt, no implicit loading of settings. If something enters the context, it is visible in the config.
 
-**Тонкий шар.** Застосунок керує worktree, процесами й UI. Він не намагається бути розумнішим за агента, не переписує промпти й не вирішує за користувача.
+**A thin layer.** The application manages worktrees, processes and the UI. It does not try to outsmart the agent, rewrite prompts or decide on the user's behalf.
 
-**Ядро не знає про UI.** Уся логіка headless і тестується без Electron. Лейаут можна переписати, не чіпаючи логіку.
+**The core knows nothing about the UI.** All logic is headless and tested without Electron.
 
-**Свій workflow.** Кроки не нав'язані: воркспейс можна створити й закинути, працювати без PR, запускати скрипти вручну.
-
----
-
-## 5. Не-цілі
-
-**Ніколи:**
-
-- Не мультиагентна платформа — **тільки Claude Code**, без Codex/Cursor/Gemini.
-- Не заміна IDE й не заміна терміналу.
-- Не для App Store.
-
-**Не зараз, але місце закладаємо (див. §15):**
-
-- Хмарне виконання воркспейсів — усе локально, жодного бекенду.
-- Акаунти, авторизація, ліцензування.
-- Командна робота й синхронізація.
+**Your own workflow.** No step is mandatory: a workspace can be created and abandoned, work can happen without a PR, scripts can be run by hand.
 
 ---
 
-## 6. Прийняті рішення
+## 5. Non-goals
 
-| Рішення                              | Обґрунтування                                                                                                                                                                         |
-| ------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Агент — тільки Claude Code           | пряма інтеграція через Agent SDK замість абстракції під кілька агентів                                                                                                                |
-| Дистрибуція поза App Store           | sandbox (Guideline 2.4.5) забороняє виконувати сторонні бінарники та писати поза контейнером (2.5.2); дочірні процеси не успадковують security-scoped доступ. На старті — без підпису |
-| Розмітка — три панелі як у Conductor | його UI перевірений щоденним використанням і нарікань не викликає; копіюється структура простору, стиль лишається необруталістським (§10.8)                                           |
-| Стек — Electron + TS + React         | див. розділи 7–9                                                                                                                                                                      |
+**Never:**
 
----
+- Not a multi-agent platform — **Claude Code only**, no Codex/Cursor/Gemini.
+- Not an IDE replacement, not a terminal replacement.
+- Not for the App Store.
 
-## 7. Критерії вибору стеку
+**Not now, but room is reserved (see §15):**
 
-| №   | Критерій                                                 |
-| --- | -------------------------------------------------------- |
-| 1   | Добре працює на сучасному macOS                          |
-| 2   | Claude Code дуже добре розуміє код і працює з цим стеком |
-| 3   | Сучасний, активно підтримуваний стек                     |
-| 4   | Широкі можливості UI із сучасним дизайном                |
+- Cloud execution of workspaces — everything is local, no backend.
+- Accounts, authentication, licensing.
+- Team work and synchronisation.
 
 ---
 
-## 8. Оцінка кандидатів
+## 6. Settled decisions
 
-|                    | Electron + TS + React                                                              | Tauri v2 + React                     | SwiftUI                     |
-| ------------------ | ---------------------------------------------------------------------------------- | ------------------------------------ | --------------------------- |
-| **1. macOS**       | добре; не нативний, вища пам'ять, але vibrancy й hiddenInset дають нативний вигляд | добре; легший бандл (WKWebView)      | найкраще; повністю нативний |
-| **2. Claude Code** | **найкраще**                                                                       | посередньо                           | добре, але з ризиками       |
-| **3. Підтримка**   | Electron 43, VS Code / Figma / Slack                                               | активний                             | Apple; не кросплатформний   |
-| **4. UI**          | **найширше**                                                                       | те саме, але WebKit замість Chromium | вужче для кастомного UI     |
-
-### Чому критерій 2 вирішальний
-
-Це головний критерій, бо весь код писатиме Claude Code. Тут перевага TypeScript/React не маргінальна:
-
-- TS/React — найбільш представлений стек у знаннях моделі; менше галюцинацій API.
-- **Agent SDK написаний саме на TypeScript** — типи доступні напряму, без містків і без ручного парсингу JSONL.
-- **shadcn/ui копіює код компонентів у репозиторій**, а не ховає в `node_modules`. Claude бачить і редагує повний код кожного компонента — це якісно інша ситуація, ніж чорна скринька бібліотеки.
-- Tailwind тримає стилі в розмітці — модель не мусить синхронізувати JSX з окремим CSS-файлом.
-
-**Ризики SwiftUI:** API помітно змінюється між версіями macOS, і моделі легко змішати ідіоми різних років; переважна більшість прикладів у навчальних даних — iOS, а не складні десктопні застосунки; кастомні багатопанельні лейаути реалізуються болісно.
-
-**Ризики Tauri v2:** брейкінг-зміни між v1 і v2 (зокрема модель плагінів) створюють ризик змішування API двох поколінь; цикл ітерації довший через компіляцію Rust; на Linux рендерить WebKitGTK, а на macOS WKWebView — два різні движки з різними багами.
-
-### Рішення
-
-**Electron + TypeScript + React** — перемагає за критеріями 2 і 4, прийнятний за 1, відмінний за 3.
-
-Бонусом зберігає кросплатформність (Ubuntu-десктоп) безкоштовно, хоча в поточних критеріях вона не фігурує.
+| Decision                              | Rationale                                                                                                                                                                                |
+| ------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Agent — Claude Code only              | direct integration through the Agent SDK instead of an abstraction over several agents                                                                                                   |
+| Distribution outside the App Store    | the sandbox (Guideline 2.4.5) forbids executing third-party binaries and writing outside the container (2.5.2); child processes do not inherit security-scoped access. Unsigned at first |
+| Layout — three panes, as in Conductor | its UI is proven by daily use and draws no complaints; the structure of the space is copied, the visual style is our own (§10.8)                                                         |
+| Stack — Electron + TS + React         | see sections 7–9                                                                                                                                                                         |
+| Repository language — English         | code, comments, tests, documentation; user-facing strings are localised, English being the default (§10.9)                                                                               |
 
 ---
 
-## 9. Стек із версіями
+## 7. Stack selection criteria
 
-Версії нижче — **фактично встановлені й перевірені** (`npm run check` і `electron-vite build` проходять).
+| #   | Criterion                                    |
+| --- | -------------------------------------------- |
+| 1   | Works well on modern macOS                   |
+| 2   | Claude Code understands the stack very well  |
+| 3   | Modern, actively maintained                  |
+| 4   | Broad UI capability with a contemporary look |
 
-**Ядро**
+---
 
-| Пакет                          | Версія       | Роль                     |
-| ------------------------------ | ------------ | ------------------------ |
-| electron                       | 43.3.0       | оболонка                 |
-| typescript                     | 5.9.3        | мова                     |
-| electron-vite                  | 6.0.0-beta.1 | збірка                   |
-| vite                           | 8.2.1        | бандлер (Rolldown)       |
-| @anthropic-ai/claude-agent-sdk | 0.3.224      | інтеграція з агентом     |
-| zod                            | 4.4.3        | валідація стану на диску |
-| vitest                         | 4.1.10       | тести ядра               |
-| eslint                         | 10.8.0       | лінт                     |
-| typescript-eslint              | 8.66.0       | типізовані правила       |
-| prettier                       | 3.9.6        | форматування             |
+## 8. Candidate assessment
+
+|                    | Electron + TS + React                                  | Tauri v2 + React                     | SwiftUI                        |
+| ------------------ | ------------------------------------------------------ | ------------------------------------ | ------------------------------ |
+| **1. macOS**       | good; not native, higher memory, but hiddenInset helps | good; lighter bundle (WKWebView)     | best; fully native             |
+| **2. Claude Code** | **best**                                               | middling                             | good, but with risks           |
+| **3. Maintenance** | Electron 43, VS Code / Figma / Slack                   | active                               | Apple; not cross-platform      |
+| **4. UI**          | **widest**                                             | same, but WebKit instead of Chromium | narrower for custom interfaces |
+
+### Why criterion 2 decided it
+
+This is the deciding criterion because Claude Code writes all the code. The TypeScript/React advantage here is not marginal:
+
+- TS/React is the most represented stack in the model's knowledge; fewer hallucinated APIs.
+- **The Agent SDK is written in TypeScript** — types are available directly, with no bridge and no manual JSONL parsing.
+- **shadcn/ui copies component source into the repository** rather than hiding it in `node_modules`. Claude can read and edit every component in full — qualitatively different from a black-box library.
+- Tailwind keeps styles in the markup — the model does not have to keep JSX and a separate CSS file in sync.
+
+**SwiftUI risks:** the API shifts noticeably between macOS releases and a model easily mixes idioms from different years; most examples in training data are iOS rather than complex desktop apps; custom multi-pane layouts are painful.
+
+**Tauri v2 risks:** breaking changes between v1 and v2 (notably the plugin model) invite mixing two generations of API; iteration is slower because Rust compiles; Linux renders through WebKitGTK while macOS uses WKWebView — two engines with different bugs.
+
+### Decision
+
+**Electron + TypeScript + React** — wins criteria 2 and 4, acceptable on 1, excellent on 3.
+
+It also preserves cross-platform reach (a Linux desktop) at no cost, though that is not among the current criteria.
+
+---
+
+## 9. Stack with versions
+
+Versions below are **actually installed and verified** (`npm run check` and `electron-vite build` pass).
+
+**Core**
+
+| Package                        | Version      | Role                    |
+| ------------------------------ | ------------ | ----------------------- |
+| electron                       | 43.3.0       | shell                   |
+| typescript                     | 5.9.3        | language                |
+| electron-vite                  | 6.0.0-beta.1 | build                   |
+| vite                           | 8.2.1        | bundler (Rolldown)      |
+| @anthropic-ai/claude-agent-sdk | 0.3.224      | agent integration       |
+| zod                            | 4.4.3        | on-disk data validation |
+| vitest                         | 4.1.10       | core tests              |
+| eslint                         | 10.8.0       | linting                 |
+| typescript-eslint              | 8.66.0       | typed rules             |
+| prettier                       | 3.9.6        | formatting              |
 
 **UI**
 
-| Пакет                   | Версія       | Роль                                    |
-| ----------------------- | ------------ | --------------------------------------- |
-| react                   | 19.2.8       | рендер                                  |
-| tailwindcss             | 4.3.3        | стилі (CSS-first конфіг)                |
-| @vitejs/plugin-react    | 6.0.5        | React у Vite                            |
-| motion                  | 13.0.0       | анімації                                |
-| lucide-react            | 1.30.0       | іконки                                  |
-| zustand                 | 5.0.14       | стан UI                                 |
-| shadcn/ui + @radix-ui/* | ще не додані | ставляться в міру потреби в компонентах |
+| Package              | Version       | Role                           |
+| -------------------- | ------------- | ------------------------------ |
+| react                | 19.2.8        | rendering                      |
+| tailwindcss          | 4.3.3         | styles (CSS-first config)      |
+| @vitejs/plugin-react | 6.0.5         | React in Vite                  |
+| i18next              | 26.3.6        | localisation                   |
+| react-i18next        | 17.0.11       | React bindings                 |
+| motion               | 13.0.0        | animation                      |
+| lucide-react         | 1.30.0        | icons                          |
+| zustand              | 5.0.14        | UI state                       |
+| shadcn/ui            | not yet added | added as components require it |
 
-**Нативних модулів на етапі 1 немає** — свідомо, щоб уникнути `electron-rebuild`. Стан у JSON; `node:sqlite` доступний (перевірено на Node 26) і додасться, коли знадобиться пошук по історії. `node-pty` з'явиться лише разом з терміналом.
+**No native modules in stage 1** — a deliberate choice that avoids `electron-rebuild`. State is JSON; `node:sqlite` is available (verified on Node 26) and will be added when chat history needs searching. `node-pty` arrives with the terminal.
 
-#### Одна вимушена зміна проти початкового наміру
+#### One forced change from the original intent
 
-**TypeScript 5.9.3 замість 7.0.2.** `typescript-eslint` підтримує `>=4.8.4 <6.1.0` — і канарковий білд теж. Це не консервативний діапазон, а наслідок того, що TS 7 (`tsgo`) переписаний на Go з іншим внутрішнім API, якого типізований лінт поки не вміє читати. Тобто вибір стоїть між TS 7 і `strictTypeChecked`-правилами; правила важливіші (§11.3).
+**TypeScript 5.9.3 instead of 7.0.2.** `typescript-eslint` supports `>=4.8.4 <6.1.0`, canary builds included. This is not a conservative range but a consequence of TS 7 (`tsgo`) being rewritten in Go with a different internal API that typed linting cannot yet read. The choice is between TS 7 and the `strictTypeChecked` rules; the rules matter more (§11.3).
 
-Повернемось, коли підтягнеться `typescript-eslint`. Архітектурних наслідків немає.
+We return to it once `typescript-eslint` catches up. No architectural consequences.
 
-#### Vite 8 — узято через beta збирача
+#### Vite 8 came via a beta builder
 
-`electron-vite@5` приймає лише `^5 || ^6 || ^7`, тому з ним Vite 8 недосяжний. Зате `electron-vite@6.0.0-beta.1` вже приймає `^6 || ^7 || ^8`, і на ньому весь ланцюжок сходиться: Vite 8.2.1 + `plugin-react` 6.0.5 + vitest 4 + `@tailwindcss/vite`.
+`electron-vite@5` accepts only `^5 || ^6 || ^7`, putting Vite 8 out of reach. `electron-vite@6.0.0-beta.1` accepts `^6 || ^7 || ^8`, and with it the whole chain lines up: Vite 8.2.1 + `plugin-react` 6.0.5 + vitest 4 + `@tailwindcss/vite`.
 
-Виграш вимірюваний: бандл рендерера **490 kB замість 557**, збірка 47 ms замість 263 — Vite 8 працює на Rolldown.
+The gain is measurable: the renderer bundle is **490 kB instead of 557**, and a build takes 47 ms instead of 263 — Vite 8 runs on Rolldown.
 
-Ціна — збирач у статусі beta (випущена 12.04.2026). Перевірено фактично: `npm run check`, `electron-vite build` і реальний запуск `npm run dev` проходять. Якщо beta почне заважати, відкат на `electron-vite@5` + Vite 7 — це один рядок у `package.json`.
+The cost is a builder in beta (released 2026-04-12). Verified in practice: `npm run check`, `electron-vite build` and an actual `npm run dev` all pass. Should the beta cause trouble, reverting to `electron-vite@5` plus Vite 7 is a one-line change.
 
-#### Граблі при встановленні
+#### Install trap
 
-`postinstall` пакета `electron` може тихо не завантажити бінарник (~100 МБ). Ознака: `npm run dev` падає з `Error: Electron uninstall`, при тому що збірка проходить. Перевірка й лікування:
+The `electron` package's `postinstall` can quietly fail to download the binary (~100 MB). Symptom: `npm run dev` fails with `Error: Electron uninstall` while the build succeeds. Check and cure:
 
 ```bash
-ls node_modules/electron/dist   # має існувати
+ls node_modules/electron/dist   # must exist
 node node_modules/electron/install.js
 ```
 
 ---
 
-## 10. Дизайн-система
+## 10. Design system
 
-Спокійний десктопний інтерфейс у дусі сучасних інструментів для розробки (Linear, Raycast, VS Code): нейтральна база, тонкі роздільники, стримані акценти.
+A calm desktop interface in the spirit of modern development tools (Linear, Raycast, VS Code): neutral base, thin separators, restrained accents.
 
-**Чому не необруталізм.** Спершу за основу брався стиль з [ytsykvas/family-shopping](https://github.com/ytsykvas/family-shopping) — чорні бордери 3px, жорсткі тіні `6px 6px 0`, суцільний uppercase. У живому застосунку він виявився надто крикливим: цей інтерфейс тримає чат, дифи й логи — щільний текст, який читають годинами, і агресивне оформлення заважає його читати. Ризик був відзначений заздалегідь, але підтвердився лише на екрані.
+**Why not neo-brutalism.** The style from [ytsykvas/family-shopping](https://github.com/ytsykvas/family-shopping) was the original basis — 3px black borders, hard `6px 6px 0` shadows, pervasive uppercase. In the running application it proved far too loud: this interface carries chat, diffs and logs, dense text read for hours, and aggressive styling fights it. The risk was noted in advance but only confirmed on screen.
 
-Побічна вигода: shadcn/ui за замовчуванням саме такий, тож перестилізовувати кожен компонент більше не потрібно.
+A side benefit: shadcn/ui looks like this by default, so its components no longer need restyling.
 
-### 10.1 Палітра
+### 10.1 Palette
 
-| Токен       | Світла    | Темна     | Роль                    |
-| ----------- | --------- | --------- | ----------------------- |
-| `canvas`    | `#ffffff` | `#0f1115` | полотно                 |
-| `surface`   | `#f7f8fa` | `#161920` | панелі (сайдбар, права) |
-| `muted`     | `#eef0f4` | `#1d212a` | підкладка, hover        |
-| `line`      | `#e2e5ea` | `#282d38` | роздільники, 1px        |
-| `ink`       | `#16181d` | `#e7eaee` | основний текст          |
-| `ink-soft`  | `#666e7d` | `#99a1af` | другорядний текст       |
-| `ink-faint` | `#98a1b0` | `#6b7385` | підписи, приглушене     |
-| `accent`    | `#2563eb` | `#3b82f6` | головна дія, виділення  |
-| `success`   | `#16a34a` | `#22c55e` | стан                    |
-| `danger`    | `#dc2626` | `#ef4444` | стан                    |
-| `warning`   | `#d97706` | `#f59e0b` | стан                    |
-| `info`      | `#0891b2` | `#06b6d4` | стан                    |
+| Token       | Light     | Dark      | Role                      |
+| ----------- | --------- | --------- | ------------------------- |
+| `canvas`    | `#ffffff` | `#0f1115` | page ground               |
+| `surface`   | `#f7f8fa` | `#161920` | panes (sidebar, right)    |
+| `muted`     | `#eef0f4` | `#1d212a` | fills, hover              |
+| `line`      | `#e2e5ea` | `#282d38` | separators, 1px           |
+| `ink`       | `#16181d` | `#e7eaee` | primary text              |
+| `ink-soft`  | `#666e7d` | `#99a1af` | secondary text            |
+| `ink-faint` | `#98a1b0` | `#6b7385` | captions, muted           |
+| `accent`    | `#2563eb` | `#3b82f6` | primary action, selection |
+| `success`   | `#16a34a` | `#22c55e` | status                    |
+| `danger`    | `#dc2626` | `#ef4444` | status                    |
+| `warning`   | `#d97706` | `#f59e0b` | status                    |
+| `info`      | `#0891b2` | `#06b6d4` | status                    |
 
-Кожен статус має парний фон `*-bg` для плашок і повідомлень.
+Every status has a paired `*-bg` background for badges and notices.
 
-### 10.2 Форма й простір
+### 10.2 Shape and space
 
-- Радіуси: `--radius-control` 6px для кнопок і рядків, `--radius-panel` 10px для панелей.
-- Бордери 1px кольору `line`. Панелі розділяються бордерами, **не тінями**.
-- Тіні лише для того, що спливає над вмістом: `--shadow-pop`, `--shadow-modal`.
-- Висота елементів керування: 24px (`sm`), 28px (`md`). Інтерфейс щільний, бо даних багато.
+- Radii: `--radius-control` 6px for buttons and rows, `--radius-panel` 10px for panes.
+- 1px borders in `line`. Panes are separated by borders, **not** shadows.
+- Shadows only for things floating above content: `--shadow-pop`, `--shadow-modal`.
+- Control heights: 24px (`sm`), 28px (`md`). The interface is dense because there is a lot of data.
 
-### 10.3 Типографіка
+### 10.3 Typography
 
-- Системний шрифт; базовий розмір **13px**, висота рядка 1.55.
-- Ніякого `uppercase` й ваги 900. Заголовки секцій — `.section-label`: 11px, вага 600, приглушений колір.
-- Гілки, шляхи, код — моноширинним (`font-mono`), 11px.
-- Ієрархія тримається на кольорі (`ink` → `ink-soft` → `ink-faint`) і вазі, а не на розмірі.
+- System font; base size **13px**, line height 1.55.
+- No `uppercase`, no weight 900. Section headings use `.section-label`: 11px, weight 600, muted.
+- Branches, paths and code are monospace (`font-mono`), 11px.
+- Hierarchy rests on colour (`ink` → `ink-soft` → `ink-faint`) and weight, not size.
 
-### 10.4 Готові класи
+### 10.4 Ready-made classes
 
-`styles.css` дає базові патерни — перевір їх, перш ніж писати власні стилі:
+`styles.css` provides the base patterns — check them before writing new styles:
 
-- `.panel` — поверхня з бордером і радіусом;
-- `.row` / `.row-selected` — рядок списку з hover і виділенням;
-- `.section-label` — заголовок секції;
-- `.focus-ring` — видимий фокус для клавіатури;
-- `.titlebar-drag` — зона перетягування вікна.
+- `.panel` — surface with border and radius;
+- `.row` / `.row-selected` — list row with hover and selection;
+- `.section-label` — section heading;
+- `.focus-ring` — visible keyboard focus;
+- `.titlebar-drag` — window drag region.
 
-### 10.5 Інтеграція з macOS
+### 10.5 macOS integration
 
-- `titleBarStyle: 'hiddenInset'` + керована `trafficLightPosition`;
-- системний шрифт;
-- нативне меню й повний набір системних хоткеїв;
-- `vibrancy` не використовується: напівпрозорий сайдбар ускладнює читання щільного тексту.
+- `titleBarStyle: 'hiddenInset'` with a managed `trafficLightPosition`;
+- system font;
+- native menu and the full set of system shortcuts;
+- `vibrancy` is not used: translucency makes dense text harder to read.
 
-### 10.6 Теми
+### 10.6 Themes
 
-Токени оголошені двічі — базово та під `.dark`; клас на `<html>` ставить renderer за подією з main-процесу. Керування: три режими (світла / темна / системна) з підпискою на `nativeTheme.updated`.
+Tokens are declared twice — at the base and under `.dark`; the renderer sets the class from a main-process event. Three modes are offered (light / dark / system) with a subscription to `nativeTheme.updated`.
 
-Кольори завжди через токени, ніколи hex напряму — інакше темна тема зламається.
+Colours always go through tokens, never raw hex, otherwise the dark theme breaks.
 
-### 10.7 Правила, які легко порушити
+### 10.7 Rules that are easy to break
 
-- Текст на акценті — токен `on-accent`, не `text-white`.
-- Стани (`success`, `danger`…) як колір тексту чи іконки, фон — лише парний `*-bg`. Суцільні кольорові плашки роблять список строкатим.
-- Порожні стани й підказки — `ink-soft`, щоб не сперечалися з основним вмістом.
+- Text on an accent uses the `on-accent` token, not `text-white`.
+- Statuses (`success`, `danger`, …) colour text or icons; only the paired `*-bg` is used as a background. Solid colour blocks make a list look like confetti.
+- Empty states and hints use `ink-soft` so they do not compete with the content.
 
-### 10.8 Розмітка екранів
+### 10.8 Screen layout
 
-За взірець береться розмітка Conductor — вона перевірена щоденним використанням і не викликає нарікань. Копіюється **структура простору**, не оформлення: візуальний стиль лишається необруталістським (§10.1–10.7).
+Conductor's layout is the model — proven by daily use and free of complaints. What is copied is the **structure of the space**, not the styling.
 
 ```
 ┌────────────────┬──────────────────────────┬─────────────────────┐
-│  ВОРКСПЕЙСИ    │        ЧАТ З АГЕНТОМ     │   ДИФФ / ТЕРМІНАЛ   │
+│   WORKSPACES   │        AGENT CHAT        │  CHANGES / TERMINAL │
 │                │                          │                     │
-│  planner       │  агент: читаю auth.rb    │  ▸ app/user.rb      │
+│  planner       │  agent: reading auth.rb  │  ▸ app/user.rb      │
 │   ● kyiv       │  ✓ Edit user.rb          │  + def call         │
 │   ○ berlin     │  ✓ Bash rspec            │  -   old_impl       │
 │                │                          │  +   new_impl       │
 │  esl           │                          │                     │
-│   ○ dili       │  > промпт…               │  [дифф] [термінал]  │
+│   ○ dili       │  > prompt…               │  [changes][terminal]│
 └────────────────┴──────────────────────────┴─────────────────────┘
 ```
 
-**Ліва панель — воркспейси.** Згруповані за проєктами. Кожен рядок показує стан агента. Воркспейс упізнається насамперед **за назвою гілки**; назва теки (місто) — вторинний ідентифікатор.
+**Left pane — workspaces.** Grouped by project. Each row shows agent status. A workspace is recognised primarily **by its branch name**; the directory name (a city) is the secondary identifier.
 
-**Центр — чат з агентом.** Головна робоча область: потік подій сесії та поле вводу.
+**Centre — agent chat.** The main working area: the session event stream and the input field.
 
-**Права панель — дифф і термінал** у вкладках. Показує, що агент наробив, і дає ручний доступ до воркспейсу.
+**Right pane — changes and terminal** in tabs. Shows what the agent did and gives manual access to the workspace.
 
-#### Хоткеї
+#### Shortcuts
 
-| Комбінація | Дія                   |
-| ---------- | --------------------- |
-| `⌘⇧N`      | новий воркспейс       |
-| `⌘⇧D`      | дифф                  |
-| `⌘⇧P`      | pull request          |
-| `⌘1`–`⌘9`  | перехід до воркспейсу |
+| Combination | Action              |
+| ----------- | ------------------- |
+| `⌘⇧N`       | new workspace       |
+| `⌘⇧D`       | changes             |
+| `⌘⇧P`       | pull request        |
+| `⌘1`–`⌘9`   | jump to a workspace |
 
-Праву панель можна згортати — на вузькому екрані три колонки не вміщаються.
+The right pane collapses — three columns do not fit on a narrow screen.
+
+### 10.9 Language and localisation
+
+**The entire repository is written in English**: code, comments, test names, error messages, documentation, commit messages.
+
+User-facing strings never appear inline. They live in `src/renderer/src/i18n/locales/`, where `en.ts` is the source of truth and the default language. Other locales are typed against it, so a missing or renamed key is a compile error rather than a raw key rendered on screen.
+
+Ukrainian ships alongside English.
+
+Core throws errors carrying a machine-readable `code` and parameters; the renderer maps those onto localised messages. The English text on the error stays as a fallback for logs.
 
 ---
 
-## 11. Архітектура та стандарти коду
+## 11. Architecture and code standards
 
-### 11.1 Розділ ядра і UI
+### 11.1 The core/UI split
 
-**Ядро не знає про існування UI.** Уся логіка — в `src/core/`, чисті TS-модулі без жодного імпорту Electron.
+**The core knows nothing about the UI.** All logic sits in `src/core/`, plain TypeScript modules with no Electron imports whatsoever.
 
 ```
-core/      ← вся логіка, headless, тестується через vitest без Electron
-   ↑ типізовані методи та події
-main/      ← тонкий IPC-міст, без логіки
+core/      all logic, headless, tested through vitest without Electron
+   ↑ typed methods and events
+main/      thin IPC bridge, no logic
    ↑ contextBridge
-renderer/  ← UI, повністю замінний
+renderer/  UI, fully replaceable
 ```
 
-Це прямий наслідок того, що лейаут ще не обрано: коли він визначиться, переписується лише `renderer/`. Ядро можна буде винести в CLI чи демон без переробки.
+The core can be lifted into a CLI or a daemon without rework.
 
-### 11.2 Технічні правила
+### 11.2 Technical rules
 
-- Події SDK мапляться у власний плоский тип `AgentEvent` — зміни в SDK не течуть у UI.
-- Зовнішні процеси — тільки через `execFile`, ніколи `exec` (назви гілок надходять від користувача).
-- Усі шляхи через `path.join()`; жодних хардкодів `~/Library` чи `/Users/...`.
-- Хоткеї через `CmdOrCtrl`.
-- Запис стану атомарний (temp + rename).
-
----
-
-### 11.3 Стандарти якості коду
-
-Кодова база ведеться **за найкращими практиками стеку**. Це не побажання, а умова: проєкт розрахований на довге життя, і майже весь код пишеться агентом — тому правила мають бути машинно-перевірюваними, а не усними домовленостями.
-
-#### Чистота
-
-- Одна одиниця коду — одна відповідальність. Функція, що робить дві речі, розділяється.
-- Функції короткі; вкладеність мінімальна (ранній `return` замість `else`-драбини).
-- Імена явні й доменні: `createWorkspace`, а не `doStuff`; `staleSessionIds`, а не `arr2`.
-- Жодних магічних значень — константи з іменами (`PORT_RANGE_START = 3000`).
-- Мертвий код і закоментовані блоки не лишаються в репозиторії: історію тримає git.
-- Коментарі пояснюють **чому**, а не **що**. Код, який потребує коментаря «що він робить», переписується.
-
-#### Перевикористання
-
-- DRY у межах здорового глузду: третє повторення — привід виносити абстракцію (двічі ще можна лишити).
-- Спільні утиліти живуть у `core/`, а не дублюються між `main/` і `renderer/`.
-- Композиція замість успадкування; дрібні чисті функції замість класів зі станом там, де стан не потрібен.
-- UI будується з перевикористовних компонентів дизайн-системи (§10), а не з разової верстки в кожній панелі.
-
-#### Типізація
-
-- `strict: true` плюс `noUncheckedIndexedAccess`, `exactOptionalPropertyTypes`, `noImplicitOverride`.
-- `any` заборонений. Для справді невідомого — `unknown` з подальним звуженням.
-- Дані, що приходять ззовні (файли на диску, вивід git, події SDK), валідуються через zod на межі — далі всередині вони вже типізовані.
-- Типи виводяться зі схем zod (`z.infer`), щоб схема й тип не розходились.
-
-#### Тестування
-
-Цільове покриття диференційоване — і це свідоме рішення, а не послаблення вимоги:
-
-| Шар                 | Ціль          | Чому саме так                                                                                                |
-| ------------------- | ------------- | ------------------------------------------------------------------------------------------------------------ |
-| `core/`             | **100%**      | чиста headless-логіка без Electron; тестується тривіально, і саме тут живуть усі помилки, що коштують дорого |
-| `main/`, `preload/` | контракти IPC | тонкий проксі-шар; сенс — перевірити, що канали передають те, що обіцяють                                    |
-| `renderer/`         | поведінка     | тести на дії користувача, а не снапшоти розмітки                                                             |
-
-100% на `core/` виставляється порогом у `vitest.config` і ламає збірку при просіданні.
-
-Свідомо **не** женемося за 100% на UI та IPC: там гонитва за цифрою породжує тести-пустушки, які нічого не ловлять, але ламаються від кожного рефакторингу. Покриття — інструмент, а не метрика для звіту.
-
-Решта правил:
-
-- тести пишуться разом з кодом, не «потім»;
-- один тест перевіряє одну поведінку; назва описує сценарій, а не назву методу;
-- зовнішні межі (git, файлова система, SDK) мокаються на рівні своїх модулів, а не глибше;
-- баг, який дійшов до рантайму, спершу відтворюється тестом, і лише потім лагодиться.
-
-#### Автоматичні перевірки
-
-- **ESLint** (flat config) + `@typescript-eslint` у strict-пресеті, правила для React-хуків.
-- **Prettier** — форматування не обговорюється й не рев'ю́ється вручну.
-- **Перевірка типів** окремим кроком (`tsc --noEmit`), бо збирач її не робить.
-- Один агрегатний скрипт `npm run check` = lint + types + tests + coverage. Він же — гейт перед комітом.
-
-#### Коміти
-
-- Conventional Commits (`feat:`, `fix:`, `refactor:`, `test:`, `chore:`) — читана історія й підстава для автоматичного чейнджлогу згодом.
-- Атомарні коміти: одна логічна зміна на коміт.
-- У `main` не комітимо напряму — гілка на зміну, навіть коли працюєш сам.
+- SDK events are mapped onto the flat `AgentEvent` type — SDK changes do not leak into the UI.
+- External processes go through `execFile`, never `exec` (branch names come from the user).
+- All paths via `path.join()`; no hardcoded `~/Library` or `/Users/...`.
+- Shortcuts through `CmdOrCtrl`.
+- State writes are atomic (temp file + rename).
 
 ---
 
-## 12. Функціональні вимоги етапу 1
+### 11.3 Code quality standards
 
-### 12.1 Воркспейси
+The codebase follows **the best practices of its stack**. This is a condition, not a wish: the project is meant to live a long time and almost all of its code is written by an agent, so the rules must be machine-checkable rather than verbal.
 
-- Створити воркспейс: `git worktree add -b <префікс>/<назва> <шлях> <база>`.
-- Префікс гілки налаштовується (розумний дефолт — GitHub-username, як у Conductor).
-- Список воркспейсів зі статусом, звірений між `git worktree list --porcelain` і власним станом.
-- Видалення з перевіркою незакомічених змін.
-- Дифф: `git diff <база>...HEAD` + `git status --porcelain`.
+#### Cleanliness
 
-### 12.2 Скрипти
+- One unit of code, one responsibility. A function doing two things gets split.
+- Functions stay short; nesting stays shallow (early `return` over `else` ladders).
+- Names are explicit and domain-shaped: `createWorkspace`, not `doStuff`; `staleSessionIds`, not `arr2`.
+- No magic values — named constants (`PORT_RANGE_START = 3000`).
+- Dead code and commented-out blocks do not stay in the repository: git holds the history.
+- Comments explain **why**, not **what**. Code that needs a "what" comment gets rewritten.
 
-- `setup.sh` — виконується після створення worktree (копіювання `.env`, встановлення залежностей).
-- `run.sh` — dev-сервер; отримує `$MAESTRO_PORT`.
-- Порт детермінований з id воркспейсу, діапазон 3000–9000, з перевіркою зайнятості.
-  (Пряма аналогія `$CONDUCTOR_PORT`, який уже використовується у твоїх скриптах: `bin/rails server -b 0.0.0.0 -p $CONDUCTOR_PORT`.)
+#### Reuse
 
-### 12.3 Агент — ключова вимога
+- DRY within reason: the third repetition is the cue to abstract (twice is still fine).
+- Shared utilities live in `core/` rather than being duplicated between `main/` and `renderer/`.
+- Composition over inheritance; small pure functions over stateful classes where no state is needed.
+- The UI is assembled from reusable design-system components, not one-off markup per pane.
+
+#### Typing
+
+- `strict: true` plus `noUncheckedIndexedAccess`, `exactOptionalPropertyTypes`, `noImplicitOverride`.
+- `any` is forbidden. For genuinely unknown data, `unknown` narrowed afterwards.
+- Data arriving from outside (files on disk, git output, SDK events) is validated with zod at the boundary; past that point it is typed.
+- Types derive from zod schemas (`z.infer`) so schema and type cannot drift.
+
+#### Testing
+
+The coverage target is differentiated, and that is a deliberate decision rather than a relaxation:
+
+| Layer               | Target        | Why                                                                                          |
+| ------------------- | ------------- | -------------------------------------------------------------------------------------------- |
+| `core/`             | **100%**      | pure headless logic without Electron; trivially testable, and this is where costly bugs live |
+| `main/`, `preload/` | IPC contracts | a thin proxy layer; the point is that channels carry what they promise                       |
+| `renderer/`         | behaviour     | tests on user actions rather than markup snapshots                                           |
+
+The 100% figure for `core/` is a threshold in `vitest.config.ts` and fails the build when it drops.
+
+We deliberately do **not** chase 100% on UI and IPC: there, chasing the number breeds hollow tests that catch nothing yet break on every refactor. Coverage is a tool, not a metric for a report.
+
+Further rules:
+
+- tests are written with the code, not "later";
+- one test covers one behaviour; the name describes the scenario, not the method;
+- external boundaries (git, filesystem, SDK) are faked at their own module level, no deeper;
+- prefer driving real git in a temporary repository over mocking it — parsing its output is where assumptions fail;
+- a bug that reached runtime is reproduced by a test first and fixed second.
+
+#### Automated checks
+
+- **ESLint** (flat config) with `@typescript-eslint` in the strict preset, plus React hook rules.
+- **Prettier** — formatting is neither discussed nor reviewed by hand.
+- **Type checking** as a separate step (`tsc --noEmit`), because the bundler does not do it.
+- One aggregate script `npm run check` = lint + types + tests + coverage. It is also the pre-commit gate.
+
+#### Commits
+
+- Conventional Commits (`feat:`, `fix:`, `refactor:`, `test:`, `chore:`) — a readable history and a basis for changelog automation later.
+- Atomic commits: one logical change each.
+- Never commit straight to `main` — branch per change, even when working alone.
+
+---
+
+## 12. Stage 1 functional requirements
+
+### 12.1 Workspaces
+
+- Create a workspace: `git worktree add -b <prefix>/<name> <path> <base>`.
+- The branch prefix is configurable (a sensible default is the GitHub username).
+- List workspaces with status, reconciled between `git worktree list --porcelain` and our own state.
+- Removal with a check for uncommitted changes.
+- Diff: `git diff <base>...HEAD` plus `git status --porcelain`.
+
+### 12.2 Scripts
+
+- `setup.sh` — runs after the worktree is created (copying `.env`, installing dependencies).
+- `run.sh` — the dev server; receives `$MAESTRO_PORT`.
+- The port is derived deterministically from the workspace id, range 3000–9000, checked for availability.
+
+### 12.3 The agent — the key requirement
 
 ```ts
 const q = query({
-  prompt: userInputStream, // async generator — follow-up без перезапуску
+  prompt: userInputStream, // async generator — follow-ups without a restart
   options: {
     cwd: workspace.path,
-    resume: workspace.sessionId, // продовження після рестарту застосунку
-    settingSources: [], // ← нічого не підтягуємо неявно
+    resume: workspace.sessionId, // continues after an application restart
+    settingSources: [], // ← nothing is loaded implicitly
     systemPrompt: { type: 'preset', preset: 'claude_code' },
     canUseTool: async (req) => {
-      /* власний діалог дозволів */
+      /* our own permission dialog */
     }
   }
 })
 ```
 
-**`settingSources: []` — це технічна відповідь на головну претензію до Conductor.** SDK не завантажує жодних налаштувань і `CLAUDE.md` неявно; усе, що потрапляє в контекст, додаємо самі й свідомо. Конфіг дає перемикач: нічого / тільки `project` / `user + project + local`.
+**`settingSources: []` is the technical answer to the main complaint about Conductor.** The SDK loads no settings and no `CLAUDE.md` implicitly; everything entering the context is added by us, deliberately. The config exposes a switch: nothing / `project` / `user + project + local`.
 
-Керування сесією: `interrupt()`, `setModel()`, `setPermissionMode()`, `streamInput()`, `close()`.
-`sessionId` з `SDKSystemMessage` зберігається на диск — це дає resume після перезапуску застосунку.
+Session control: `interrupt()`, `setModel()`, `setPermissionMode()`, `streamInput()`, `close()`.
+The `sessionId` from `SDKSystemMessage` is persisted — that is what enables resuming after a restart.
 
-### 12.4 Розкладка на диску
+### 12.4 On-disk layout
 
-Усе під однією текою (Conductor розкидає на `~/conductor` + `~/.conductor`):
+Everything under one directory (Conductor spreads across `~/conductor` and `~/.conductor`):
 
 ```
 ~/.maestro/
-  config.json                глобальні налаштування
-  state.json                 воркспейси, session_id, статуси
+  config.json                global settings
+  state.json                 workspaces, session ids, statuses
   projects/<slug>/
     scripts/setup.sh
     scripts/run.sh
@@ -449,120 +461,128 @@ const q = query({
 
 ---
 
-## 13. Нефункціональні вимоги
+## 13. Non-functional requirements
 
-- Холодний старт до інтерактивності — до 2 с.
-- Стан переживає аварійне завершення: атомарний запис, валідація zod при читанні, зрозуміла помилка замість мовчазного скидання.
-- Помилки git і скриптів показуються з повним stderr, не ковтаються.
-- Ядро покрите тестами vitest без запуску Electron.
-- Жодних секретів у `state.json`; автентифікація лишається за Claude Code.
+- Cold start to interactive: under 2 s.
+- State survives a crash: atomic writes, zod validation on read, a clear error instead of a silent reset.
+- Errors from git and scripts surface with full stderr rather than being swallowed.
+- The core is covered by vitest without launching Electron.
+- No secrets in `state.json`; authentication remains Claude Code's business.
 
 ---
 
-## 14. Структура проєкту
+## 14. Project layout
 
 ```
-/Users/tsykvas/maestro/
+/Users/tsykvas/projects/maestro/
   src/
     core/
-      paths.ts       усі шляхи
-      store.ts       state.json + zod, атомарний запис
+      paths.ts       every path
+      persist.ts     atomic JSON with zod validation
+      config.ts      settings, setting-source switch, licensing hooks
+      store.ts       projects and workspaces, port assignment
       types.ts       Workspace, Project, AgentEvent, WorkspaceStatus
-      worktree.ts    операції git
-      scripts.ts     setup/run + порти
-      agent.ts       Agent SDK, мапінг подій
-    main/index.ts    вікно + IPC
-    preload/index.ts contextBridge, типізований API
-    renderer/        UI
+      git.ts         git operations
+      projects.ts    repository validation, project records
+      service.ts     core facade for the IPC layer
+      worktree.ts    (next) worktree operations
+      agent.ts       (next) Agent SDK, event mapping
+    main/index.ts    window + IPC
+    preload/index.ts contextBridge, typed API
+    renderer/
+      src/
+        components/  UI components
+        hooks/       React hooks
+        i18n/        localisation, en is the source of truth
+        styles.css   design tokens
 ```
 
 ---
 
-## 15. Закладки під авторизацію й монетизацію
+## 15. Hooks for authentication and monetisation
 
-> **Пріоритет — далеке майбутнє.** Інструмент робиться виключно для власного користування. Цей розділ ні на що в етапі 1 не впливає й нічого в ньому не блокує.
+> **Priority: distant future.** The tool is built purely for personal use. This section affects nothing in stage 1 and blocks nothing.
 >
-> З усього розділу зараз реально робиться лише **§15.3** — три поля в конфізі та одна заглушка. Решта записана для того, щоб не переробляти архітектуру, якщо колись дійде до продажу.
+> Only **§15.3** is actually implemented right now — three fields in the config and one stub. The rest is written down so the architecture does not need rework if it ever comes to selling.
 
-### 15.1 Передбачувана модель
+### 15.1 Anticipated model
 
-Окремий auth-сервіс (пишеться пізніше) + ліцензування в клієнті:
+A separate auth service (written later) plus licensing in the client:
 
-| Рівень        | Умова                     |
-| ------------- | ------------------------- |
-| Trial         | перший місяць безкоштовно |
-| Підписка      | $5 / місяць               |
-| Повний доступ | $20 одноразово            |
+| Tier         | Terms            |
+| ------------ | ---------------- |
+| Trial        | first month free |
+| Subscription | $5 / month       |
+| Full access  | $20 one-off      |
 
-### 15.2 Схема автентифікації
+### 15.2 Authentication scheme
 
-Автентифікація через власний сервіс при запуску. Сервіс перевіряє статус акаунта і вирішує, впускати чи ні — але видає при цьому **підписаний токен**, а не разову відповідь «так/ні».
+Authentication through our own service at launch. The service checks the account status and decides whether to let the user in — but issues a **signed token** rather than a one-off yes/no.
 
 ```
-перший запуск
-  └─→ логін через сервіс ──→ токен (Ed25519, TTL ~14 днів) ──→ кеш локально
+first launch
+  └─→ sign in via the service ──→ token (Ed25519, TTL ~14 days) ──→ cached locally
 
-наступні запуски
-  └─→ перевірка підпису локально, без мережі
-        ├─ токен чинний        → впускаємо одразу
-        ├─ протух, є мережа    → тихе поновлення у фоні
-        └─ протух, немає мережі → grace-період, далі блокування
+later launches
+  └─→ signature verified locally, no network
+        ├─ token valid          → straight in
+        ├─ expired, online      → silent background refresh
+        └─ expired, offline     → grace period, then blocked
 ```
 
-Чому не онлайн-перевірка при кожному старті:
+Why not an online check on every start:
 
-- **Офлайн.** Це dev-інструмент, вся робота якого локальна. Застосунок, що не відкривається в поїзді чи при поганому Wi-Fi, дратує сильніше за будь-який зайвий елемент UI — тобто рівно та проблема, від якої ми тікаємо.
-- **Єдина точка відмови.** Лежить сервіс — заблоковані всі. За ціни $20 підтримувати відповідний аптайм не окупається.
-- **Захисту це не додає** (див. §15.4), тобто ціна платиться, а вигоди немає.
+- **Offline.** This is a developer tool whose work is entirely local. An app that refuses to open on a train or bad Wi-Fi is more irritating than any surplus UI element — precisely the problem we are escaping.
+- **Single point of failure.** If the service is down, everyone is locked out. At a $20 price point the required uptime does not pay for itself.
+- **It adds no protection** (see §15.4), so the cost is paid for nothing.
 
-Токен з обмеженим TTL зберігає контроль: скасована підписка чи повернення коштів відберуть доступ максимум через строк життя токена. Це стандартна схема (JetBrains, Sublime, Tailscale).
+A short-lived token keeps control: a cancelled subscription or a refund revokes access within the token's lifetime at worst. This is the standard scheme (JetBrains, Sublime, Tailscale).
 
-### 15.3 Що закладаємо зараз (нульова вартість)
+### 15.3 What is reserved now (zero cost)
 
-- **`src/core/entitlements.ts`** — єдина точка, що відповідає на питання «чи дозволено». На етапі 1 це заглушка, яка завжди повертає `{ status: 'unlimited' }`. Важливо, що всі майбутні фіче-гейти йдуть **через неї з першого дня**, а не розсипаються по коду потім.
-- **`deviceId`** у `config.json` — стабільний UUID, генерується при першому запуску. Зараз не використовується; потім це якір для прив'язки ліцензії та обліку trial.
-- **`installedAt`** — мітка першого запуску, потрібна для відліку trial.
-- **Місце під `ownerId`** у типах стану — не робити структури, які жорстко припускають «користувач рівно один».
-- **Розділ core/UI (§11) — головний гачок.** Саме він дозволяє потім винести ядро в headless-демон, і це фундамент для хмарного виконання, якщо колись знадобиться.
+- **`src/core/entitlements.ts`** — a single point answering "is this allowed". In stage 1 it is a stub always returning `{ status: 'unlimited' }`. What matters is that every future feature gate goes **through it from day one** rather than being scattered through the code later.
+- **`deviceId`** in `config.json` — a stable UUID generated on first run. Unused today; later the anchor for licence binding and trial accounting.
+- **`installedAt`** — first-run timestamp, needed to count the trial.
+- **Room for `ownerId`** in the state types — no structure hardcodes the assumption of exactly one user.
+- **The core/UI split (§11) is the main hook.** It is what would later allow lifting the core into a headless daemon, the foundation for cloud execution if that ever becomes relevant.
 
-Мережевого шару зараз немає взагалі — він з'явиться разом з auth-сервісом.
+There is no networking layer at all right now — it arrives with the auth service.
 
-### 15.4 Технічна чесність про захист
+### 15.4 Honest note on protection
 
-Electron-застосунок — це JavaScript в `asar`-архіві, який розпаковується однією командою. **Будь-яка клієнтська перевірка ліцензії обходиться патчем одного файлу**, обфускація додає години затримки, не більше.
+An Electron application is JavaScript in an `asar` archive that unpacks with one command. **Any client-side licence check is bypassed by patching one file**; obfuscation buys hours, not more.
 
-Практичний висновок: перевірка має сенс як бар'єр від чесних людей і як зручний спосіб заплатити — не як захист. За цінами $5–20 це працює нормально: вартість часу на злам вища за ціну. Реальний захист дає лише серверна частина, без якої продукт неповноцінний.
+The practical conclusion: a check makes sense as a barrier for honest people and as a convenient way to pay — not as protection. At $5–20 that works out fine: the time to break it costs more than the licence. Real protection comes only from a server component the product is incomplete without.
 
-Наслідок для trial: локальна дата першого запуску скидається видаленням `~/.maestro`. Якщо це має значення — trial доведеться реєструвати на сервері за `deviceId`, тобто потрібна мережа при першому старті. Ліцензію після видачі варто кешувати підписаною (Ed25519 / JWT) з grace-періодом, щоб застосунок працював офлайн.
+A consequence for the trial: a local first-run date resets when `~/.maestro` is deleted. If that matters, the trial has to be registered server-side against `deviceId`, which means the network is required on first start. Once issued, the licence should be cached signed (Ed25519 / JWT) with a grace period so the app works offline.
 
-### 15.5 Зауваження до цін
+### 15.5 Note on pricing
 
-Співвідношення $5/міс до $20 разово — це чотири місяці окупності. За такого розриву підписку не обиратиме майже ніхто, тобто фактично буде один тариф за $20. Якщо підписка задумана як робочий варіант, звичне співвідношення для lifetime — 20–30 місячних платежів (тут це $100–150) або хоча б два роки.
+$5/month against $20 one-off is four months to break even. At that ratio essentially nobody picks the subscription, so in practice there would be a single $20 tier. If the subscription is meant to be a real option, the usual ratio for a lifetime licence is 20–30 monthly payments (here $100–150), or at least two years.
 
-### 15.6 Ризик, який варто тримати на увазі
+### 15.6 A risk worth keeping in mind
 
-Conductor віддає локальний застосунок **безкоштовно** й монетизує лише хмару ($50/міс), multiplayer і командні фічі. Продавати локальну обгортку, коли прямий конкурент віддає її задарма, — складна позиція.
+Conductor gives its local application away **free** and monetises only the cloud ($50/month), multiplayer and team features. Selling a local wrapper while a direct competitor gives one away is a hard position.
 
-Додатковий тиск з боку платформи: Claude Code вже вміє працювати з git worktree самостійно (інструменти `EnterWorktree` / `ExitWorktree` вбудовані в сам агент). Ніша окремих worktree-обгорток звужується в міру того, як платформа вбирає ці функції.
+Additional pressure from the platform: Claude Code already works with git worktrees on its own (`EnterWorktree` / `ExitWorktree` are built into the agent). The niche for standalone worktree wrappers narrows as the platform absorbs these functions.
 
-Це не аргумент проти закладок — вони безкоштовні. Це аргумент проти того, щоб зараз витрачати час на сам auth-сервіс.
+This is not an argument against the hooks — they are free. It is an argument against spending time on the auth service now.
 
 ---
 
-## 16. Поза межами етапу 1
+## 16. Out of scope for stage 1
 
-Термінал (`node-pty` + `xterm.js`), Monaco diff, GitHub PR і checks через `gh`, нотифікації, архівація воркспейсів, Linux-збірка, підпис і нотаризація, auth-сервіс і ліцензування (§15).
+Terminal (`node-pty` + `xterm.js`), Monaco diff, GitHub PRs and checks through `gh`, notifications, workspace archiving, Linux builds, signing and notarisation, the auth service and licensing (§15).
 
 ---
 
-## 17. Відкриті питання для брейнштормінгу
+## 17. Open questions
 
-- ~~**Лейаут UI**~~ — вирішено: три панелі за взірцем Conductor (§10.8).
-- **Іменування воркспейсів** — міста як у Conductor, за назвою задачі, чи з тексту промпта.
-- **Дозволи інструментів** — які автоматично, які через діалог, чи потрібні профілі на проєкт.
-- **Кросплатформність** — чи лишається Ubuntu в планах (впливає лише на CI, не на архітектуру).
-- **Джерело задач** — створення воркспейсу з GitHub issue чи Linear, як у Conductor.
-- **Огляд коду** — інлайн-коментарі в диффі, що стають вкладенням у промпт.
-- **Кілька агентів на воркспейс** — чи потрібен паралельний запуск в одній теці.
-- **Що показувати в списку** — статус агента, кількість змін, стан CI, вартість сесії.
-- **Модель монетизації** — чи лишається $20 як повний доступ (див. зауваження в §15.5), і чи потрібен окремий auth-сервіс узагалі з огляду на ризики в §15.6.
+- **Workspace naming** — cities as in Conductor, task-derived names, or generated from the prompt text.
+- **Tool permissions** — which are automatic, which prompt, whether per-project profiles are needed.
+- **Cross-platform** — whether Linux stays in the plans (affects CI only, not architecture).
+- **Task sources** — creating a workspace from a GitHub issue or a Linear ticket, as Conductor does.
+- **Code review** — inline comments on a diff that become attachments to the prompt.
+- **Several agents per workspace** — whether parallel runs in one directory are needed.
+- **What the list shows** — agent status, change count, CI state, session cost.
+- **Monetisation model** — whether $20 stays as full access (see the note in §15.5), and whether a separate auth service is warranted at all given the risks in §15.6.

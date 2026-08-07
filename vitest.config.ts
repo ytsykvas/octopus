@@ -10,15 +10,15 @@ export default defineConfig({
   },
   test: {
     globals: true,
-    // Наразі тестується лише headless-ядро. Коли з'являться тести UI,
-    // сюди додасться окремий проєкт з environment: 'jsdom'.
+    // Only the headless core is tested for now. Once UI tests appear, a
+    // separate project with environment: 'jsdom' will be added here.
     environment: 'node',
     include: ['src/**/*.{test,spec}.{ts,tsx}'],
     coverage: {
       provider: 'v8',
       reporter: ['text', 'html'],
-      // Покриття рахується лише для ядра — див. §11.3 docs/PROJECT.md.
-      // Гонитва за 100% на IPC та UI породжує тести-пустушки.
+      // Coverage is measured for the core only — see §11.3 docs/PROJECT.md.
+      // Chasing 100% on IPC and UI only breeds hollow tests.
       include: ['src/core/**/*.ts'],
       exclude: ['src/core/**/*.{test,spec}.ts', 'src/core/types.ts'],
       thresholds: {

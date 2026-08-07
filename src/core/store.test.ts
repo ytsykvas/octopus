@@ -63,116 +63,116 @@ afterEach(async () => {
   await rm(dir, { recursive: true, force: true })
 })
 
-describe('завантаження та збереження', () => {
-  it('на першому запуску стан порожній', async () => {
+describe('load and save', () => {
+  it('starts empty on first run', async () => {
     await expect(loadState(file)).resolves.toEqual(EMPTY_STATE)
   })
 
-  it('збережений стан читається без втрат', async () => {
+  it('reads saved state back without loss', async () => {
     const state = addWorkspace(withProject, makeWorkspace())
     await saveState(state, file, `${file}.tmp`)
     await expect(loadState(file)).resolves.toEqual(state)
   })
 
-  it('пошкоджений файл дає помилку, а не тихе обнулення списку воркспейсів', async () => {
-    await writeFile(file, '{ поламано', 'utf8')
+  it('throws on a corrupt file rather than silently emptying the workspace list', async () => {
+    await writeFile(file, '{ broken', 'utf8')
     await expect(loadState(file)).rejects.toBeInstanceOf(InvalidFileError)
   })
 
-  it('не зберігає воркспейс із портом поза дозволеним діапазоном', async () => {
+  it('refuses a workspace whose port is outside the allowed range', async () => {
     const broken = { ...withProject, workspaces: [makeWorkspace({ port: 80 })] }
     await expect(saveState(broken, file, `${file}.tmp`)).rejects.toBeInstanceOf(InvalidFileError)
   })
 })
 
 describe('assignPort', () => {
-  it('повертає той самий порт для того самого воркспейсу', () => {
+  it('returns the same port for the same workspace', () => {
     expect(assignPort('kyiv')).toBe(assignPort('kyiv'))
   })
 
-  it('тримається дозволеного діапазону', () => {
-    for (const id of ['kyiv', 'lviv', 'osaka', 'a', 'дуже-довга-назва-воркспейсу']) {
+  it('stays within the allowed range', () => {
+    for (const id of ['kyiv', 'lviv', 'osaka', 'a', 'a-very-long-workspace-name']) {
       const port = assignPort(id)
       expect(port).toBeGreaterThanOrEqual(PORT_RANGE_START)
       expect(port).toBeLessThanOrEqual(PORT_RANGE_END)
     }
   })
 
-  it('обходить зайняті порти', () => {
+  it('skips ports already taken', () => {
     const first = assignPort('kyiv')
     expect(assignPort('kyiv', [first])).not.toBe(first)
   })
 
-  it('різні воркспейси зазвичай отримують різні порти', () => {
+  it('usually gives different workspaces different ports', () => {
     expect(assignPort('kyiv')).not.toBe(assignPort('lviv'))
   })
 
-  it('кидає помилку, коли весь діапазон зайнятий', () => {
+  it('throws when the whole range is taken', () => {
     const span = PORT_RANGE_END - PORT_RANGE_START + 1
     const all = Array.from({ length: span }, (_, i) => PORT_RANGE_START + i)
     expect(() => assignPort('kyiv', all)).toThrow(StateConflictError)
   })
 })
 
-describe('проєкти', () => {
-  it('додається і знаходиться за id', () => {
+describe('projects', () => {
+  it('is added and found by id', () => {
     expect(findProject(withProject, 'planner')).toEqual(project)
   })
 
-  it('невідомий проєкт не знаходиться', () => {
-    expect(findProject(withProject, 'немає')).toBeUndefined()
+  it('does not find an unknown project', () => {
+    expect(findProject(withProject, 'missing')).toBeUndefined()
   })
 
-  it('повторне додавання того самого id — конфлікт', () => {
+  it('treats a repeated id as a conflict', () => {
     expect(() => addProject(withProject, project)).toThrow(StateConflictError)
   })
 
-  it('той самий репозиторій під іншим id теж конфлікт', () => {
-    const twin = { ...project, id: 'інший' }
+  it('treats the same repository under another id as a conflict too', () => {
+    const twin = { ...project, id: 'other' }
     expect(() => addProject(withProject, twin)).toThrow(StateConflictError)
   })
 
-  it('видалення прибирає й воркспейси проєкту — осиротілих не лишається', () => {
+  it('removes the project workspaces too, leaving no orphans', () => {
     const state = addWorkspace(withProject, makeWorkspace())
     const after = removeProject(state, 'planner')
     expect(after.projects).toHaveLength(0)
     expect(after.workspaces).toHaveLength(0)
   })
 
-  it('видалення неіснуючого проєкту нічого не ламає', () => {
-    expect(removeProject(withProject, 'немає').projects).toHaveLength(1)
+  it('removing a missing project breaks nothing', () => {
+    expect(removeProject(withProject, 'missing').projects).toHaveLength(1)
   })
 })
 
-describe('воркспейси', () => {
-  it('додається до наявного проєкту', () => {
+describe('workspaces', () => {
+  it('is added to an existing project', () => {
     expect(addWorkspace(withProject, makeWorkspace()).workspaces).toHaveLength(1)
   })
 
-  it('не додається до проєкту, якого немає', () => {
-    const orphan = makeWorkspace({ projectId: 'немає' })
+  it('is not added to a project that does not exist', () => {
+    const orphan = makeWorkspace({ projectId: 'missing' })
     expect(() => addWorkspace(withProject, orphan)).toThrow(StateConflictError)
   })
 
-  it('повторний id — конфлікт', () => {
+  it('treats a repeated id as a conflict', () => {
     const state = addWorkspace(withProject, makeWorkspace())
     expect(() => addWorkspace(state, makeWorkspace())).toThrow(StateConflictError)
   })
 
-  it('дві гілки з однаковою назвою — конфлікт, бо git цього не дозволить', () => {
+  it('treats two workspaces on one branch as a conflict, since git would not allow it', () => {
     const state = addWorkspace(withProject, makeWorkspace())
-    const twin = makeWorkspace({ id: 'інший', branch: 'ytsykvas/kyiv' })
+    const twin = makeWorkspace({ id: 'other', branch: 'ytsykvas/kyiv' })
     expect(() => addWorkspace(state, twin)).toThrow(StateConflictError)
   })
 
-  it('фільтруються за проєктом', () => {
+  it('are filtered by project', () => {
     const other = addProject(withProject, { ...project, id: 'esl', repoPath: '/repos/esl' })
     const state = addWorkspace(other, makeWorkspace())
     expect(workspacesOfProject(state, 'planner')).toHaveLength(1)
     expect(workspacesOfProject(state, 'esl')).toHaveLength(0)
   })
 
-  it('оновлення змінює лише передані поля', () => {
+  it('updates only the fields passed in', () => {
     const state = addWorkspace(withProject, makeWorkspace())
     const after = updateWorkspace(state, 'kyiv', { status: 'running', sessionId: 'sess-1' })
     expect(after.workspaces[0]).toMatchObject({
@@ -182,7 +182,7 @@ describe('воркспейси', () => {
     })
   })
 
-  it('оновлення одного воркспейсу не зачіпає сусідів', () => {
+  it('updating one workspace leaves its neighbours untouched', () => {
     const first = addWorkspace(withProject, makeWorkspace())
     const state = addWorkspace(
       first,
@@ -195,25 +195,25 @@ describe('воркспейси', () => {
     expect(after.workspaces.find((w) => w.id === 'kyiv')?.status).toBe('idle')
   })
 
-  it('оновлення неіснуючого воркспейсу — помилка, а не мовчазний no-op', () => {
-    expect(() => updateWorkspace(withProject, 'немає', { status: 'error' })).toThrow(
+  it('throws when updating a missing workspace instead of silently doing nothing', () => {
+    expect(() => updateWorkspace(withProject, 'missing', { status: 'error' })).toThrow(
       StateConflictError
     )
   })
 
-  it('оновлення не мутує попередній стан', () => {
+  it('does not mutate the previous state', () => {
     const state = addWorkspace(withProject, makeWorkspace())
     updateWorkspace(state, 'kyiv', { status: 'error' })
     expect(state.workspaces[0]?.status).toBe('idle')
   })
 
-  it('видаляється за id', () => {
+  it('is removed by id', () => {
     const state = addWorkspace(withProject, makeWorkspace())
     expect(removeWorkspace(state, 'kyiv').workspaces).toHaveLength(0)
   })
 
-  it('видалення неіснуючого нічого не ламає', () => {
+  it('removing a missing one breaks nothing', () => {
     const state = addWorkspace(withProject, makeWorkspace())
-    expect(removeWorkspace(state, 'немає').workspaces).toHaveLength(1)
+    expect(removeWorkspace(state, 'missing').workspaces).toHaveLength(1)
   })
 })

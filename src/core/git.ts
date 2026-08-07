@@ -1,9 +1,9 @@
 /**
- * Низькорівневі операції з git.
+ * Low-level git operations.
  *
- * Усі виклики йдуть через `execFile` — **ніколи** через `exec`. Назви гілок
- * і шляхи приходять від користувача, а `exec` віддав би їх шелу, що є прямою
- * ін'єкцією команд (§11.2 docs/PROJECT.md).
+ * Every call goes through `execFile` — **never** `exec`. Branch names and
+ * paths come from the user, and `exec` would hand them to a shell, which is
+ * command injection by construction (§11.2 docs/PROJECT.md).
  */
 
 import { execFile } from 'node:child_process'
@@ -15,30 +15,31 @@ import { describeError } from './persist.js'
 const run = promisify(execFile)
 
 /**
- * Виконавець git-команд.
+ * Runs git commands.
  *
- * Передається параметром у кожну функцію, щоб логіку можна було тестувати
- * без запуску git, а самі команди — перевіряти на справжньому репозиторії.
+ * Passed as a parameter to every function so logic can be tested without
+ * spawning git, while the commands themselves are verified against a real
+ * repository.
  */
 export type GitExec = (args: readonly string[]) => Promise<string>
 
-/** Помилка виконання git — несе stderr, а не ковтає його (§13). */
+/** A git command failed — carries stderr rather than swallowing it (§13). */
 export class GitError extends Error {
   constructor(
     readonly args: readonly string[],
     readonly stderr: string
   ) {
-    super(`git ${args.join(' ')} завершився помилкою: ${stderr}`)
+    super(`git ${args.join(' ')} failed: ${stderr}`)
     this.name = 'GitError'
   }
 }
 
 /**
- * Дістає з помилки виконання найзмістовніше пояснення.
+ * Extracts the most meaningful explanation from a spawn failure.
  *
- * `execFile` кладе вивід у `stderr`, але не завжди: при ENOENT його немає
- * зовсім, а при частині збоїв він порожній. Винесено окремо, щоб цю
- * непослідовність можна було перевірити тестом напряму.
+ * `execFile` usually puts output in `stderr`, but not always: on ENOENT the
+ * field is absent, and some failures leave it empty. Extracted so this
+ * inconsistency can be covered by a test directly.
  */
 export function extractStderr(error: unknown): string {
   const fromField =
@@ -47,7 +48,7 @@ export function extractStderr(error: unknown): string {
   return fromField.trim() || describeError(error)
 }
 
-/** Створює виконавця, прив'язаного до теки репозиторію. */
+/** Creates an executor bound to a repository directory. */
 export function gitIn(cwd: string): GitExec {
   return async (args) => {
     try {
@@ -60,10 +61,10 @@ export function gitIn(cwd: string): GitExec {
 }
 
 /**
- * Корінь робочого дерева, або null якщо тека не в репозиторії.
+ * The working tree root, or null when the directory is not in a repository.
  *
- * Повертає саме корінь, а не переданий шлях: користувач може вибрати
- * підтеку, і проєкт має прив'язатися до репозиторію, а не до неї.
+ * Returns the root rather than the given path: the user may pick a
+ * subdirectory, and the project should bind to the repository itself.
  */
 export async function findRepositoryRoot(exec: GitExec): Promise<string | null> {
   try {
@@ -74,7 +75,7 @@ export async function findRepositoryRoot(exec: GitExec): Promise<string | null> 
   }
 }
 
-/** Чи має репозиторій хоча б один коміт. Порожній репо не годиться для worktree. */
+/** Whether the repository has at least one commit — an empty one cannot host a worktree. */
 export async function hasCommits(exec: GitExec): Promise<boolean> {
   try {
     await exec(['rev-parse', '--verify', 'HEAD'])
@@ -84,13 +85,13 @@ export async function hasCommits(exec: GitExec): Promise<boolean> {
   }
 }
 
-/** Поточна гілка, або null у detached HEAD. */
+/** The current branch, or null when HEAD is detached. */
 export async function currentBranch(exec: GitExec): Promise<string | null> {
   const out = (await exec(['branch', '--show-current'])).trim()
   return out || null
 }
 
-/** Чи існує локальна гілка з такою назвою. */
+/** Whether a local branch with this name exists. */
 export async function branchExists(exec: GitExec, branch: string): Promise<boolean> {
   try {
     await exec(['rev-parse', '--verify', `refs/heads/${branch}`])
@@ -101,10 +102,10 @@ export async function branchExists(exec: GitExec, branch: string): Promise<boole
 }
 
 /**
- * Визначає базову гілку репозиторію.
+ * Determines the repository's base branch.
  *
- * Порядок: гілка за замовчуванням у origin → поширені назви → поточна гілка.
- * Останній крок важливий для репозиторіїв з нетиповим іменуванням.
+ * Order: origin's default branch → common names → current branch. The last
+ * step matters for repositories with unconventional naming.
  */
 export async function detectBaseBranch(exec: GitExec): Promise<string | null> {
   try {
@@ -112,7 +113,7 @@ export async function detectBaseBranch(exec: GitExec): Promise<string | null> {
     const name = out.replace(/^origin\//, '')
     if (name) return name
   } catch {
-    // origin/HEAD не налаштований — звичайна ситуація для локальних репозиторіїв.
+    // origin/HEAD is not configured — normal for local-only repositories.
   }
 
   for (const candidate of ['main', 'master', 'develop']) {
@@ -122,23 +123,23 @@ export async function detectBaseBranch(exec: GitExec): Promise<string | null> {
   return currentBranch(exec)
 }
 
-/** Назва репозиторію — остання складова шляху до його кореня. */
+/** Repository name — the last segment of its root path. */
 export function repositoryName(repoRoot: string): string {
   return basename(repoRoot)
 }
 
 /**
- * Перетворює довільний рядок на безпечний slug для тек і гілок.
+ * Turns an arbitrary string into a slug safe for directories and branches.
  *
- * Юнікод свідомо зберігається: git приймає UTF-8 у назвах гілок, і українські
- * назви мають лишатися читабельними. Вирізається лише те, що git справді
- * забороняє (`git check-ref-format`): пробіли, `~^:?*[\`, керуючі символи,
- * подвійні крапки, крайні крапки й дефіси, суфікс `.lock`.
+ * Unicode is deliberately preserved: git accepts UTF-8 in branch names, and
+ * non-Latin names should stay readable. Only what git actually rejects is
+ * stripped (`git check-ref-format`): whitespace, `~^:?*[\`, control
+ * characters, double dots, leading/trailing dots and dashes, `.lock` suffix.
  */
 export function toSlug(value: string): string {
   const slug = value
     .toLowerCase()
-    // eslint-disable-next-line no-control-regex -- саме керуючі символи git і відхиляє
+    // eslint-disable-next-line no-control-regex -- control characters are exactly what git rejects
     .replace(/[\u0000-\u001f\u007f]+/g, '')
     .replace(/[\s~^:?*[\]\\@{}]+/g, '-')
     .replace(/\.{2,}/g, '.')

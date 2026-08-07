@@ -1,7 +1,7 @@
 /**
- * Глобальні налаштування застосунку — `~/.maestro/config.json`.
+ * Global application settings — `~/.maestro/config.json`.
  *
- * Створюється при першому запуску й далі лише читається та оновлюється.
+ * Created on first run, then only read and updated.
  */
 
 import { randomUUID } from 'node:crypto'
@@ -12,11 +12,11 @@ import { configFile } from './paths.js'
 import { readJsonFile, writeJsonFile } from './persist.js'
 
 /**
- * Які джерела налаштувань дозволено підтягувати агенту.
+ * Which setting sources the agent is allowed to load.
  *
- * Це ключовий перемикач прозорості (§4 docs/PROJECT.md): типове значення
- * `none` означає, що в контекст агента не потрапляє нічого, чого ми не
- * додали свідомо.
+ * This is the key transparency switch (§4 docs/PROJECT.md): the default
+ * `none` means nothing reaches the agent's context that we did not put
+ * there deliberately.
  */
 export const SettingSourcesModeSchema = z.enum(['none', 'project', 'all'])
 export type SettingSourcesMode = z.infer<typeof SettingSourcesModeSchema>
@@ -24,33 +24,37 @@ export type SettingSourcesMode = z.infer<typeof SettingSourcesModeSchema>
 export const ThemePreferenceSchema = z.enum(['system', 'light', 'dark'])
 export type ThemePreference = z.infer<typeof ThemePreferenceSchema>
 
+export const LanguageSchema = z.enum(['en', 'uk'])
+export type LanguagePreference = z.infer<typeof LanguageSchema>
+
 export const ConfigSchema = z.object({
-  /** Версія формату — знадобиться, коли доведеться мігрувати конфіг. */
+  /** Format version — needed once the config has to be migrated. */
   version: z.literal(1),
 
-  /** Префікс гілок воркспейсів, напр. GitHub-username. */
+  /** Branch prefix for workspaces, e.g. a GitHub username. */
   branchPrefix: z.string().min(1),
 
   settingSources: SettingSourcesModeSchema,
   theme: ThemePreferenceSchema,
+  language: LanguageSchema,
 
   /**
-   * Стабільний ідентифікатор пристрою (§15.3).
-   * Наразі не використовується — місце під майбутнє ліцензування.
+   * Stable device identifier (§15.3).
+   * Unused for now — reserved for future licensing.
    */
   deviceId: z.uuid(),
 
-  /** Мітка першого запуску (§15.3). */
+  /** First-run timestamp (§15.3). */
   installedAt: z.iso.datetime()
 })
 
 export type Config = z.infer<typeof ConfigSchema>
 
 /**
- * Створює конфіг першого запуску.
+ * Builds the first-run config.
  *
- * `now` і `uuid` приймаються параметрами, щоб функція лишалася чистою
- * і тестувалася без підміни глобального часу.
+ * `now` and `uuid` are parameters so the function stays pure and testable
+ * without patching global time.
  */
 export function createDefaultConfig(
   branchPrefix: string,
@@ -62,12 +66,13 @@ export function createDefaultConfig(
     branchPrefix,
     settingSources: 'none',
     theme: 'system',
+    language: 'en',
     deviceId: uuid(),
     installedAt: now.toISOString()
   }
 }
 
-/** Читає конфіг; за відсутності файлу створює його й записує на диск. */
+/** Reads the config, creating and persisting it if the file is missing. */
 export async function loadConfig(
   filePath: string = configFile(),
   defaults: Config = createDefaultConfig('maestro')
@@ -79,16 +84,16 @@ export async function loadConfig(
   return defaults
 }
 
-/** Записує оновлений конфіг. */
+/** Persists an updated config. */
 export async function saveConfig(config: Config, filePath: string = configFile()): Promise<void> {
   await writeJsonFile(filePath, ConfigSchema, config)
 }
 
 /**
- * Перетворює режим із конфігу на значення для `settingSources` Agent SDK.
+ * Maps the config mode onto the Agent SDK's `settingSources` value.
  *
- * Порожній масив — це саме те, що не дає SDK підтягнути `CLAUDE.md`
- * і користувацькі налаштування непомітно для нас (§12.3).
+ * The empty array is exactly what stops the SDK from quietly picking up
+ * `CLAUDE.md` and user settings behind our back (§12.3).
  */
 export function toSdkSettingSources(mode: SettingSourcesMode): string[] {
   switch (mode) {

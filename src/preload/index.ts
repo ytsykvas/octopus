@@ -4,14 +4,26 @@ import type { Config } from '@core/config.js'
 import type { Project } from '@core/store.js'
 import type { ThemeName } from '@core/types.js'
 
-/** Операція ядра або вдалася, або пояснила причину — див. `attempt` у main. */
-export type Result<T> = { ok: true; value: T } | { ok: false; error: string }
+/**
+ * A core operation either succeeded or explained why not — see `attempt` in main.
+ *
+ * `code` and `params` are present for known validation failures, letting the
+ * renderer show a localised message; `error` is the English fallback.
+ */
+export interface Failure {
+  ok: false
+  error: string
+  code?: string
+  params?: Readonly<Record<string, string>>
+}
+
+export type Result<T> = { ok: true; value: T } | Failure
 
 /**
- * Типізований міст між renderer і main.
+ * Typed bridge between the renderer and main.
  *
- * Логіки тут немає свідомо — це тонкий проксі (§11.1). Уся робота
- * живе в `src/core`, main лише пробрасує її в IPC.
+ * There is deliberately no logic here — it is a thin proxy (§11.1). The work
+ * lives in `src/core`; main only exposes it over IPC.
  */
 const api = {
   theme: {
@@ -35,7 +47,7 @@ const api = {
     list: (): Promise<Result<Project[]>> =>
       ipcRenderer.invoke('projects:list') as Promise<Result<Project[]>>,
 
-    /** Відкриває діалог вибору теки. `null` означає, що користувач скасував. */
+    /** Opens a directory picker. `null` means the user cancelled. */
     add: (): Promise<Result<Project | null>> =>
       ipcRenderer.invoke('projects:add') as Promise<Result<Project | null>>,
 

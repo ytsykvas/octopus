@@ -1,30 +1,30 @@
 /**
- * Базові типи ядра.
+ * Core domain types.
  *
- * Модуль свідомо не має жодних імпортів — ані Electron, ані Node.
- * Його вільно імпортує і main-процес, і renderer (див. §11.1 docs/PROJECT.md).
+ * This module deliberately has no imports — neither Electron nor Node.
+ * Both the main process and the renderer are free to import it (§11.1).
  */
 
-/** Активна тема оформлення (§10.7). */
+/** Active colour theme (§10.6). */
 export type ThemeName = 'light' | 'dark'
 
-/** Slug проєкту, похідний від назви репозиторію. */
+/** Project slug, derived from the repository name. */
 export type ProjectId = string
 
-/** Ідентифікатор воркспейсу, стабільний протягом його життя. */
+/** Workspace identifier, stable for the workspace's whole lifetime. */
 export type WorkspaceId = string
 
-/** Стан воркспейсу в його життєвому циклі. */
+/** Where a workspace sits in its lifecycle. */
 export type WorkspaceStatus = 'idle' | 'running' | 'waiting_permission' | 'error' | 'archived'
 
 export interface Project {
   readonly id: ProjectId
   readonly name: string
-  /** Абсолютний шлях до основного репозиторію. */
+  /** Absolute path to the main repository. */
   readonly repoPath: string
-  /** Гілка, від якої створюються воркспейси і проти якої рахується дифф. */
+  /** Branch workspaces branch off from, and diffs are measured against. */
   readonly baseBranch: string
-  /** Префікс гілок, напр. GitHub-username. */
+  /** Branch prefix, e.g. a GitHub username. */
   readonly branchPrefix: string
 }
 
@@ -33,26 +33,27 @@ export interface Workspace {
   readonly projectId: ProjectId
   readonly name: string
   readonly branch: string
-  /** Абсолютний шлях до git worktree. */
+  /** Absolute path to the git worktree. */
   readonly path: string
   readonly status: WorkspaceStatus
-  /** session_id Claude Code; null, поки сесія не стартувала. */
+  /** Claude Code session id; null until a session has started. */
   readonly sessionId: string | null
-  /** Порт для dev-сервера, детермінований з id. */
+  /** Dev server port, derived deterministically from the id. */
   readonly port: number
   readonly createdAt: string
   /**
-   * Місце під майбутню багатокористувацькість (§15.3).
-   * Наразі завжди null — структура просто не припускає одного користувача.
+   * Reserved for future multi-user support (§15.3).
+   * Always null for now — the shape simply does not assume a single user.
    */
   readonly ownerId: string | null
 }
 
 /**
- * Нормалізована подія агента.
+ * A normalised agent event.
  *
- * Шар ізоляції від Agent SDK: UI знає лише цей тип, тому зміни у формі
- * повідомлень SDK не течуть у renderer (§11.2).
+ * This is the isolation layer around the Agent SDK: the UI only ever sees
+ * this type, so changes to the SDK's message shapes do not leak into the
+ * renderer (§11.2).
  */
 export type AgentEvent =
   | { readonly type: 'session_started'; readonly sessionId: string }

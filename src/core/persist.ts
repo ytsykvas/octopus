@@ -1,11 +1,12 @@
 /**
- * Атомарне читання та запис JSON-файлів із валідацією.
+ * Atomic reading and writing of validated JSON files.
  *
- * Використовується і конфігом, і станом. Винесено окремо, щоб механіка
- * збереження була в одному місці, а не дублювалася (§11.3 docs/PROJECT.md).
+ * Shared by both the config and the state store, so the persistence mechanics
+ * live in one place (§11.3 docs/PROJECT.md).
  *
- * Головна гарантія: файл на диску або старий, або новий — ніколи обрізаний.
- * Досягається записом у тимчасовий файл і `rename`, який на POSIX атомарний.
+ * The guarantee: the file on disk is either the old version or the new one,
+ * never a truncated mix. Achieved by writing to a temporary file and renaming,
+ * which is atomic on POSIX.
  */
 
 import { mkdir, readFile, rename, writeFile } from 'node:fs/promises'
@@ -13,22 +14,23 @@ import { dirname } from 'node:path'
 
 import type { z } from 'zod'
 
-/** Файл не пройшов валідацію — дані на диску пошкоджені або з іншої версії. */
+/** A file failed validation — data on disk is corrupt or from another version. */
 export class InvalidFileError extends Error {
   constructor(
     readonly filePath: string,
     readonly issues: string
   ) {
-    super(`Файл ${filePath} має неочікувану структуру: ${issues}`)
+    super(`File ${filePath} has an unexpected structure: ${issues}`)
     this.name = 'InvalidFileError'
   }
 }
 
 /**
- * Приводить довільне кинуте значення до читабельного рядка.
+ * Turns an arbitrary thrown value into a readable string.
  *
- * У JS кинути можна будь-що, а `catch` дає `unknown`. Ця функція — єдине
- * місце, де ця незручність обробляється; далі по коду вже звичайний рядок.
+ * JavaScript allows throwing anything and `catch` yields `unknown`. This is
+ * the single place that deals with that awkwardness; everything downstream
+ * works with a plain string.
  */
 export function describeError(error: unknown): string {
   return error instanceof Error ? error.message : String(error)
@@ -39,12 +41,12 @@ function isNotFound(error: unknown): boolean {
 }
 
 /**
- * Читає JSON і валідує схемою.
+ * Reads JSON and validates it against a schema.
  *
- * Якщо файлу немає — повертає `fallback`: це нормальний перший запуск,
- * а не помилка. Якщо файл є, але зіпсований — кидає {@link InvalidFileError}
- * замість тихого скидання на типове значення, бо мовчазна втрата стану
- * гірша за явну помилку (§13).
+ * A missing file yields `fallback`: that is a normal first run, not an error.
+ * A file that exists but is corrupt throws {@link InvalidFileError} instead of
+ * silently resetting to defaults — losing state quietly is worse than failing
+ * loudly (§13).
  */
 export async function readJsonFile<T>(
   filePath: string,
@@ -69,17 +71,20 @@ export async function readJsonFile<T>(
 
   const result = schema.safeParse(parsed)
   if (!result.success) {
-    throw new InvalidFileError(filePath, result.error.issues.map((i) => i.message).join('; '))
+    throw new InvalidFileError(
+      filePath,
+      result.error.issues.map((issue) => issue.message).join('; ')
+    )
   }
 
   return result.data
 }
 
 /**
- * Атомарно записує JSON.
+ * Writes JSON atomically.
  *
- * Валідація перед записом навмисна: краще впасти тут, ніж покласти на диск
- * дані, які потім не прочитаються.
+ * Validating before the write is deliberate: better to fail here than to put
+ * data on disk that cannot be read back.
  */
 export async function writeJsonFile<T>(
   filePath: string,
@@ -89,7 +94,10 @@ export async function writeJsonFile<T>(
 ): Promise<void> {
   const result = schema.safeParse(value)
   if (!result.success) {
-    throw new InvalidFileError(filePath, result.error.issues.map((i) => i.message).join('; '))
+    throw new InvalidFileError(
+      filePath,
+      result.error.issues.map((issue) => issue.message).join('; ')
+    )
   }
 
   await mkdir(dirname(filePath), { recursive: true })

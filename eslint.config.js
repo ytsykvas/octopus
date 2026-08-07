@@ -13,13 +13,13 @@ export default tseslint.config(
   {
     languageOptions: {
       parserOptions: {
-        // Кореневий tsconfig.json — лише диспетчер, тому проєкти вказані явно.
+        // The root tsconfig.json is only a dispatcher, so projects are listed explicitly.
         project: ['./tsconfig.node.json', './tsconfig.web.json'],
         tsconfigRootDir: import.meta.dirname
       }
     },
     rules: {
-      // §11.3: any заборонений — для справді невідомого використовується unknown.
+      // §11.3: any is forbidden — genuinely unknown data uses unknown.
       '@typescript-eslint/no-explicit-any': 'error',
       '@typescript-eslint/consistent-type-imports': 'error',
       '@typescript-eslint/explicit-function-return-type': [

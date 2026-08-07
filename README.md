@@ -1,58 +1,63 @@
 # maestro
 
-Локальний застосунок для паралельної роботи з Claude Code: кожна задача
-виконується у власному git worktree — з окремою гілкою, сесією агента
-і dev-сервером на власному порту.
+A local app for running Claude Code sessions in parallel: every task lives in its
+own git worktree — with its own branch, agent session and dev server on a
+dedicated port.
 
-Замість того щоб чекати завершення однієї задачі, запускаєш кілька одночасно.
-Вони не бачать одна одну й не конфліктують.
+Instead of waiting for one task to finish, you start several at once. They never
+see each other and never conflict.
 
-## Стан
+## Status
 
-Етап 1, у розробці. Готовий каркас: збірка, дизайн-система, інструменти якості.
-Менеджер worktree та інтеграція з агентом — наступні.
+Stage 1, in development. The shell is in place: build, design system, quality
+tooling, project management. The worktree manager and agent integration come next.
 
-## Вимоги
+## Requirements
 
 - Node.js 22+
 - git
-- [Claude Code](https://claude.com/claude-code) — застосунок працює через нього
+- [Claude Code](https://claude.com/claude-code) — the app drives it
 
-## Запуск
+## Running
 
 ```bash
 npm install
 npm run dev
 ```
 
-Якщо `npm run dev` падає з `Error: Electron uninstall` — бінарник Electron
-не завантажився при встановленні:
+If `npm run dev` fails with `Error: Electron uninstall`, the Electron binary was
+not downloaded during install:
 
 ```bash
 node node_modules/electron/install.js
 ```
 
-## Розробка
+## Development
 
 ```bash
-npm run check    # повна перевірка: формат, лінт, типи, тести з покриттям
-npm test         # тести
-npm run build    # збірка
+npm run check    # full gate: format, lint, types, tests with coverage
+npm test         # tests
+npm run build    # build
 ```
 
-`npm run check` має проходити перед кожним комітом. Покриття `src/core/`
-тримається на 100% — поріг ламає збірку при просіданні.
+`npm run check` must pass before every commit. `src/core/` coverage is held at
+100% — the threshold fails the build when it drops.
 
-## Структура
+## Layout
 
 ```
-src/core/      логіка застосунку, headless, без Electron
-src/main/      процес Electron, тонкий IPC-міст
-src/preload/   типізований місток до renderer
-src/renderer/  UI (React + Tailwind)
-docs/PROJECT.md   повний опис проєкту, рішень і вимог
+src/core/         application logic, headless, no Electron
+src/main/         Electron main process, thin IPC bridge
+src/preload/      typed bridge to the renderer
+src/renderer/     UI (React + Tailwind + i18next)
+docs/PROJECT.md   full description of the project, decisions and requirements
 ```
 
-## Ліцензія
+## Localisation
 
-Приватний проєкт для власного користування.
+English is the default and the source of truth. Translations live in
+`src/renderer/src/i18n/locales/`; Ukrainian ships alongside English.
+
+## Licence
+
+Private project for personal use.

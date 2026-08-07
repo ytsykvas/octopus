@@ -1,9 +1,9 @@
 /**
- * Фасад ядра — єдина точка, через яку застосунок виконує операції.
+ * Core facade — the single entry point for application operations.
  *
- * Тримає стан у пам'яті й записує його на диск після кожної зміни.
- * Існує, щоб `main/` лишався тонким проксі без логіки (§11.1 docs/PROJECT.md):
- * IPC-обробник має вміти лише переадресувати виклик сюди.
+ * Holds state in memory and persists it after every change. It exists so
+ * `main/` stays a thin proxy with no logic (§11.1 docs/PROJECT.md): an IPC
+ * handler should only have to forward the call here.
  */
 
 import { type Config, loadConfig, saveConfig } from './config.js'
@@ -38,10 +38,10 @@ export interface MaestroService {
 }
 
 /**
- * Створює сервіс, читаючи стан і конфіг з диска.
+ * Creates the service, reading state and config from disk.
  *
- * Усі шляхи приймаються параметрами з типовими значеннями — це дозволяє
- * тестувати сервіс на тимчасовій теці, не чіпаючи справжніх даних.
+ * Every path is a parameter with a default, so the service can be tested
+ * against a temporary directory without touching real data.
  */
 export async function createService(options: ServiceOptions = {}): Promise<MaestroService> {
   const statePath = options.stateFilePath ?? stateFile()

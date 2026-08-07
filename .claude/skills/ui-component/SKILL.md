@@ -1,88 +1,104 @@
 ---
 name: ui-component
-description: Створення компонентів UI — палітра, токени, теми, типографіка, готові класи дизайн-системи. Використовуй при роботі з будь-яким файлом у src/renderer, при створенні компонента, панелі, кнопки, списку чи при роботі зі стилями й темами.
-when_to_use: Коли треба додати чи змінити компонент UI, підібрати колір, вирішити питання світлої/темної теми, або коли постає питання «як це має виглядати».
+description: Creating UI components — palette, tokens, themes, typography, ready-made design-system classes, and localisation of every user-facing string. Use when touching any file under src/renderer, creating a component, panel, button or list, or working with styles and themes.
+when_to_use: When a UI component needs to be added or changed, a colour picked, a light/dark theme question resolved, a string localised, or when the question "how should this look" comes up.
 paths:
   - src/renderer/**
 allowed-tools: Read, Write, Edit, Glob, Grep, Bash(npm run typecheck:*), Bash(npx eslint:*)
 ---
 
-# Компонент UI
+# UI component
 
-Стиль — **спокійний десктопний інтерфейс** у дусі Linear, Raycast, VS Code:
-нейтральна база, тонкі роздільники, стримані акценти (§10 docs/PROJECT.md).
+The style is a **calm desktop interface** in the spirit of Linear, Raycast and
+VS Code: neutral base, thin separators, restrained accents (§10 docs/PROJECT.md).
 
-Токени живуть у `src/renderer/src/styles.css`. **Ніколи не вписуй кольори
-напряму** — тільки через токени, інакше темна тема зламається.
+Tokens live in `src/renderer/src/styles.css`. **Never write colours inline** —
+tokens only, otherwise the dark theme breaks.
 
-## Головне правило вмісту
+## Every string is localised
 
-Цей інтерфейс тримає чат, дифи й логи — щільний текст, який читають годинами.
-Оформлення має відступати перед вмістом:
-
-- ніякого `uppercase` і ваги 900;
-- ієрархія через **колір** (`ink` → `ink-soft` → `ink-faint`) і вагу, не через розмір;
-- панелі розділяються бордерами 1px, **не тінями**;
-- тіні лише для того, що спливає над вмістом (меню, модалки).
-
-Саме через це від початкового необруталістського стилю відмовилися — він
-перебивав власний вміст.
-
-## Перевір готові класи, перш ніж писати свої
-
-- `.panel` — поверхня з бордером і радіусом 10px;
-- `.row` / `.row-selected` — рядок списку з hover і виділенням;
-- `.section-label` — заголовок секції (11px, вага 600, приглушений);
-- `.focus-ring` — видимий фокус для клавіатури;
-- `.titlebar-drag` — зона перетягування вікна.
-
-## Кольори — тільки через токени
+No user-facing text appears in a component. Add the key to
+`src/renderer/src/i18n/locales/en.ts` first — English is the source of truth —
+then translate it in `uk.ts`. TypeScript rejects a locale that drifts.
 
 ```tsx
-// Добре
+const { t } = useTranslation()
+return <span>{t('sidebar.projects')}</span>
+```
+
+Errors coming from core carry a `code`; render them through `useErrorMessage`
+rather than printing `failure.error` directly.
+
+## The content comes first
+
+This interface carries chat, diffs and logs — dense text people read for hours.
+The styling has to stay out of its way:
+
+- no `uppercase`, no weight 900;
+- hierarchy through **colour** (`ink` → `ink-soft` → `ink-faint`) and weight,
+  not size;
+- panels separated by 1px borders, **not** shadows;
+- shadows only for things floating above the content (menus, modals).
+
+That is exactly why the original neo-brutalist style was dropped — it shouted
+over its own content.
+
+## Check the ready-made classes first
+
+- `.panel` — surface with border and 10px radius;
+- `.row` / `.row-selected` — list row with hover and selection;
+- `.section-label` — section heading (11px, weight 600, muted);
+- `.focus-ring` — visible keyboard focus;
+- `.titlebar-drag` — window drag region.
+
+## Colours through tokens only
+
+```tsx
+// Good
 <div className="bg-surface text-ink border-line">
 
-// Погано — темна тема зламається
+// Bad — breaks the dark theme
 <div className="bg-[#f7f8fa] text-black border-gray-200">
 ```
 
-Доступні: `canvas`, `surface`, `muted`, `line`, `line-strong`,
-`ink`, `ink-soft`, `ink-faint`, `accent`, `accent-hover`, `on-accent`,
-`success`, `danger`, `warning`, `info` та парні фони `success-bg`, `danger-bg`,
+Available: `canvas`, `surface`, `muted`, `line`, `line-strong`, `ink`,
+`ink-soft`, `ink-faint`, `accent`, `accent-hover`, `on-accent`, `success`,
+`danger`, `warning`, `info`, plus paired backgrounds `success-bg`, `danger-bg`,
 `warning-bg`, `info-bg`.
 
-**Текст на акценті** — токен `on-accent`, не `text-white`.
+**Text on an accent** uses the `on-accent` token, not `text-white`.
 
-**Стани** — як колір тексту чи іконки; фон лише парний `*-bg`. Суцільні
-кольорові плашки роблять список строкатим.
+**Status colours** apply to text or icons; only the paired `*-bg` is used as a
+background. Solid colour blocks make a list look like confetti.
 
-## Розміри
+## Sizing
 
-- Кнопки й рядки: висота 24px (`sm`) або 28px (`md`), радіус `--radius-control`.
-- Панелі: радіус `--radius-panel`.
-- Базовий текст 13px; моноширинний (гілки, шляхи, код) — 11px.
+- Buttons and rows: 24px (`sm`) or 28px (`md`) tall, radius `--radius-control`.
+- Panels: radius `--radius-panel`.
+- Body text 13px; monospace (branches, paths, code) 11px.
 
-Інтерфейс щільний навмисно: даних багато, і зайві відступи змушують гортати.
+The interface is dense on purpose: there is a lot of data, and generous padding
+forces scrolling.
 
-## Компоненти
+## Components
 
-`Button` уже є — три варіанти: `accent` (головна дія), `quiet` (другорядні),
-`danger` (руйнівні). Не плоди нових кнопок, розширюй наявну.
+`Button` already exists with three variants: `accent` (primary action),
+`quiet` (secondary), `danger` (destructive). Extend it rather than adding
+new button components.
 
-## Теми
+## Themes
 
-Нічого робити не треба, якщо використовуєш токени: `.dark` на `<html>`
-перемикає всі значення разом. Клас ставить `App.tsx` за подією з main-процесу.
+Nothing to do if you use tokens: `.dark` on `<html>` swaps every value at once.
+`App.tsx` sets the class from a main-process event.
 
-**Перевіряй обидві теми** — контраст приглушених кольорів на темному тлі
-поводиться інакше.
+**Check both themes** — muted colours behave differently against a dark ground.
 
-## Куди не класти логіку
+## Where logic does not go
 
-Компонент рендерить і викликає `window.maestro.*`. Робота з git, файлами,
-процесами живе в `src/core/`.
+A component renders and calls `window.maestro.*`. Git, filesystem and process
+work lives in `src/core/`.
 
-## Перевірка
+## Before finishing
 
 ```bash
 npm run typecheck:web

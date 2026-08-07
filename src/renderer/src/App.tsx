@@ -1,16 +1,22 @@
 import { useCallback, useEffect, useState } from 'react'
+import { useTranslation } from 'react-i18next'
 
 import type { Project } from '@core/store.js'
 import type { ThemeName } from '@core/types.js'
 
 import { RightPanel } from './components/RightPanel.js'
 import { Sidebar } from './components/Sidebar.js'
+import { useErrorMessage } from './hooks/useErrorMessage.js'
 
 /**
- * Розмітка з трьох панелей за взірцем Conductor (§10.8 docs/PROJECT.md):
- * ліворуч воркспейси, по центру чат, праворуч дифф і термінал.
+ * Three-pane layout modelled on Conductor (§10.8 docs/PROJECT.md):
+ * workspaces on the left, agent chat in the middle, diff and terminal on
+ * the right.
  */
 export function App(): React.JSX.Element {
+  const { t } = useTranslation()
+  const describeFailure = useErrorMessage()
+
   const [theme, setTheme] = useState<ThemeName>('light')
   const [projects, setProjects] = useState<readonly Project[]>([])
   const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null)
@@ -37,8 +43,8 @@ export function App(): React.JSX.Element {
     document.documentElement.classList.toggle('dark', theme === 'dark')
   }, [theme])
 
-  // Початкове завантаження. Скасування рятує від запису стану в уже
-  // розмонтований компонент, якщо вікно закриють під час запиту.
+  // Initial load. Aborting protects against writing state into an unmounted
+  // component if the window closes mid-request.
   useEffect(() => {
     const controller = new AbortController()
 
@@ -49,14 +55,14 @@ export function App(): React.JSX.Element {
       if (result.ok) {
         setProjects(result.value)
       } else {
-        setError(result.error)
+        setError(describeFailure(result))
       }
     })()
 
     return () => {
       controller.abort()
     }
-  }, [])
+  }, [describeFailure])
 
   const refresh = useCallback(async () => {
     const result = await window.maestro.projects.list()
@@ -64,19 +70,19 @@ export function App(): React.JSX.Element {
       setProjects(result.value)
       setError(null)
     } else {
-      setError(result.error)
+      setError(describeFailure(result))
     }
-  }, [])
+  }, [describeFailure])
 
   const addProject = useCallback(async () => {
     setBusy(true)
     try {
       const result = await window.maestro.projects.add()
       if (!result.ok) {
-        setError(result.error)
+        setError(describeFailure(result))
         return
       }
-      // null означає, що діалог скасували — це не помилка.
+      // null means the dialog was cancelled — not an error.
       if (result.value) {
         setSelectedProjectId(result.value.id)
         await refresh()
@@ -84,19 +90,19 @@ export function App(): React.JSX.Element {
     } finally {
       setBusy(false)
     }
-  }, [refresh])
+  }, [refresh, describeFailure])
 
   const removeProject = useCallback(
     async (projectId: string) => {
       const result = await window.maestro.projects.remove(projectId)
       if (!result.ok) {
-        setError(result.error)
+        setError(describeFailure(result))
         return
       }
       setSelectedProjectId((current) => (current === projectId ? null : current))
       await refresh()
     },
-    [refresh]
+    [refresh, describeFailure]
   )
 
   const selectedProject = projects.find((project) => project.id === selectedProjectId) ?? null
@@ -114,7 +120,7 @@ export function App(): React.JSX.Element {
 
       <main className="flex min-w-0 flex-1 flex-col">
         <header className="titlebar-drag border-line flex h-11 shrink-0 items-center gap-3 border-b px-4">
-          <span className="truncate font-medium">{selectedProject?.name ?? 'maestro'}</span>
+          <span className="truncate font-medium">{selectedProject?.name ?? t('app.name')}</span>
           {selectedProject && (
             <span className="text-ink-faint truncate font-mono text-[11px]">
               {selectedProject.repoPath}
@@ -128,7 +134,7 @@ export function App(): React.JSX.Element {
                 setRightPanelOpen(true)
               }}
               className="text-ink-faint hover:text-ink focus-ring ml-auto rounded px-2 transition-colors"
-              title="Показати панель"
+              title={t('panel.expand')}
             >
               ←
             </button>
@@ -164,23 +170,23 @@ function CenterPane({
   project: Project | null
   hasProjects: boolean
 }): React.JSX.Element {
+  const { t } = useTranslation()
+
   if (!hasProjects) {
     return (
-      <Placeholder title="Почніть з репозиторію">
-        Додайте проєкт у лівій панелі. Далі в ньому створюватимуться воркспейси — кожен з власною
-        гілкою, текою й сесією агента.
-      </Placeholder>
+      <Placeholder title={t('center.noProjectsTitle')}>{t('center.noProjectsBody')}</Placeholder>
     )
   }
 
   if (!project) {
-    return <Placeholder title="Виберіть проєкт">Проєкт зі списку ліворуч.</Placeholder>
+    return (
+      <Placeholder title={t('center.noSelectionTitle')}>{t('center.noSelectionBody')}</Placeholder>
+    )
   }
 
   return (
     <Placeholder title={project.name}>
-      Базова гілка <code className="font-mono">{project.baseBranch}</code>. Тут буде чат з агентом,
-      щойно з’являться воркспейси.
+      {t('center.projectBody', { branch: project.baseBranch })}
     </Placeholder>
   )
 }

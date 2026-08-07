@@ -1,16 +1,20 @@
 import { useState } from 'react'
+import { useTranslation } from 'react-i18next'
 
 /**
- * Права панель — дифф і термінал у вкладках (§10.8).
+ * Right pane — changes and terminal in tabs (§10.8).
  *
- * Вміст обох вкладок з'явиться на пізніших кроках; зараз панель тримає
- * структуру й перемикання, щоб її не довелося вбудовувати заднім числом.
+ * Both tabs get their content in later steps; for now the pane carries the
+ * structure and switching, so it does not have to be retrofitted.
  */
 type RightTab = 'diff' | 'terminal'
 
-const TABS: readonly { readonly id: RightTab; readonly label: string }[] = [
-  { id: 'diff', label: 'Зміни' },
-  { id: 'terminal', label: 'Термінал' }
+const TABS: readonly {
+  readonly id: RightTab
+  readonly labelKey: 'panel.changes' | 'panel.terminal'
+}[] = [
+  { id: 'diff', labelKey: 'panel.changes' },
+  { id: 'terminal', labelKey: 'panel.terminal' }
 ]
 
 interface RightPanelProps {
@@ -18,6 +22,7 @@ interface RightPanelProps {
 }
 
 export function RightPanel({ onCollapse }: RightPanelProps): React.JSX.Element {
+  const { t } = useTranslation()
   const [tab, setTab] = useState<RightTab>('diff')
 
   return (
@@ -34,14 +39,14 @@ export function RightPanel({ onCollapse }: RightPanelProps): React.JSX.Element {
               tab === item.id ? 'bg-muted text-ink' : 'text-ink-soft hover:text-ink'
             }`}
           >
-            {item.label}
+            {t(item.labelKey)}
           </button>
         ))}
 
         <button
           type="button"
           onClick={onCollapse}
-          title="Згорнути панель"
+          title={t('panel.collapse')}
           className="text-ink-faint hover:text-ink focus-ring ml-auto rounded px-2 transition-colors"
         >
           →
@@ -50,9 +55,7 @@ export function RightPanel({ onCollapse }: RightPanelProps): React.JSX.Element {
 
       <div className="flex-1 overflow-auto p-4">
         <p className="text-ink-faint leading-relaxed">
-          {tab === 'diff'
-            ? 'Тут будуть зміни воркспейсу відносно базової гілки.'
-            : 'Тут буде термінал у теці воркспейсу.'}
+          {tab === 'diff' ? t('panel.changesPlaceholder') : t('panel.terminalPlaceholder')}
         </p>
       </div>
     </section>

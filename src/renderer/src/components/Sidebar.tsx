@@ -1,3 +1,5 @@
+import { useTranslation } from 'react-i18next'
+
 import type { Project } from '@core/store.js'
 
 import { Button } from './Button.js'
@@ -12,10 +14,10 @@ interface SidebarProps {
 }
 
 /**
- * Ліва панель — проєкти й воркспейси (§10.8).
+ * Left pane — projects and workspaces (§10.8).
  *
- * Поки воркспейсів немає, показує лише проєкти. Крок 3 додасть під кожним
- * проєктом його воркспейси зі станом агента.
+ * Until workspaces exist it lists projects only. Step 3 will nest each
+ * project's workspaces underneath it, with agent status.
  */
 export function Sidebar({
   projects,
@@ -25,18 +27,20 @@ export function Sidebar({
   onRemoveProject,
   busy
 }: SidebarProps): React.JSX.Element {
+  const { t } = useTranslation()
+
   return (
     <aside className="border-line bg-surface flex w-60 shrink-0 flex-col border-r">
       <div className="titlebar-drag h-11 shrink-0" />
 
       <div className="flex items-center justify-between px-3 pb-1.5">
-        <span className="section-label">Проєкти</span>
+        <span className="section-label">{t('sidebar.projects')}</span>
         <Button
           variant="quiet"
           size="sm"
           disabled={busy}
           onClick={onAddProject}
-          title="Додати репозиторій"
+          title={t('sidebar.addProject')}
         >
           {busy ? '…' : '+'}
         </Button>
@@ -44,9 +48,7 @@ export function Sidebar({
 
       <nav className="flex-1 overflow-auto px-2 pb-3">
         {projects.length === 0 ? (
-          <p className="text-ink-faint px-2 py-3 leading-relaxed">
-            Порожньо. Додайте репозиторій кнопкою «+».
-          </p>
+          <p className="text-ink-faint px-2 py-3 leading-relaxed">{t('sidebar.empty')}</p>
         ) : (
           <ul className="space-y-px">
             {projects.map((project) => (
@@ -78,6 +80,8 @@ interface ProjectRowProps {
 }
 
 function ProjectRow({ project, selected, onSelect, onRemove }: ProjectRowProps): React.JSX.Element {
+  const { t } = useTranslation()
+
   return (
     <div
       className={`row group flex items-center gap-2 px-2 py-1.5 ${selected ? 'row-selected' : ''}`}
@@ -97,7 +101,7 @@ function ProjectRow({ project, selected, onSelect, onRemove }: ProjectRowProps):
       <button
         type="button"
         onClick={onRemove}
-        title="Прибрати проєкт"
+        title={t('sidebar.removeProject')}
         className="text-ink-faint hover:text-danger focus-ring shrink-0 rounded px-1 opacity-0 transition-opacity group-hover:opacity-100"
       >
         ✕

@@ -40,8 +40,8 @@ afterEach(async () => {
   await rm(dir, { recursive: true, force: true })
 })
 
-describe('типові шляхи', () => {
-  it('без параметрів працює в ~/.maestro', async () => {
+describe('default paths', () => {
+  it('works in ~/.maestro when given no parameters', async () => {
     const previousHome = process.env.HOME
     process.env.HOME = dir
 
@@ -50,7 +50,7 @@ describe('типові шляхи', () => {
       expect(withDefaults.listProjects()).toHaveLength(0)
       expect(withDefaults.getConfig().version).toBe(1)
 
-      // Конфіг мусив лягти саме в підтеку .maestro домашньої теки.
+      // The config must land in the .maestro subdirectory of the home directory.
       await expect(readFile(join(dir, '.maestro', 'config.json'), 'utf8')).resolves.toContain(
         'deviceId'
       )
@@ -60,31 +60,31 @@ describe('типові шляхи', () => {
   })
 })
 
-describe('конфіг', () => {
-  it('на першому запуску створюється з типовими значеннями', () => {
+describe('config', () => {
+  it('is created with defaults on first run', () => {
     expect(service.getConfig().settingSources).toBe('none')
   })
 
-  it('оновлення зберігається й переживає перезапуск', async () => {
+  it('persists updates across a restart', async () => {
     await service.updateConfig({ theme: 'dark', branchPrefix: 'ytsykvas' })
 
     const restarted = await createService(paths(dir))
     expect(restarted.getConfig()).toMatchObject({ theme: 'dark', branchPrefix: 'ytsykvas' })
   })
 
-  it('оновлення повертає новий конфіг', async () => {
+  it('returns the updated config', async () => {
     const updated = await service.updateConfig({ settingSources: 'project' })
     expect(updated.settingSources).toBe('project')
     expect(service.getConfig().settingSources).toBe('project')
   })
 })
 
-describe('проєкти', () => {
-  it('на початку список порожній', () => {
+describe('projects', () => {
+  it('starts with an empty list', () => {
     expect(service.listProjects()).toHaveLength(0)
   })
 
-  it('доданий проєкт з’являється у списку', async () => {
+  it('shows an added project in the list', async () => {
     const repo = join(dir, 'planner')
     await initRepo(repo)
 
@@ -93,7 +93,7 @@ describe('проєкти', () => {
     expect(service.listProjects()).toHaveLength(1)
   })
 
-  it('проєкт переживає перезапуск застосунку', async () => {
+  it('keeps the project across an application restart', async () => {
     const repo = join(dir, 'planner')
     await initRepo(repo)
     await service.addProjectFromPath(repo)
@@ -103,7 +103,7 @@ describe('проєкти', () => {
     expect(restarted.listProjects()[0]?.name).toBe('planner')
   })
 
-  it('бере префікс гілок з конфігу', async () => {
+  it('takes the branch prefix from the config', async () => {
     await service.updateConfig({ branchPrefix: 'ytsykvas' })
     const repo = join(dir, 'planner')
     await initRepo(repo)
@@ -112,22 +112,22 @@ describe('проєкти', () => {
     expect(project.branchPrefix).toBe('ytsykvas')
   })
 
-  it('не додає ту саму теку двічі', async () => {
+  it('does not add the same directory twice', async () => {
     const repo = join(dir, 'planner')
     await initRepo(repo)
     await service.addProjectFromPath(repo)
 
-    await expect(service.addProjectFromPath(repo)).rejects.toThrow(/уже доданий/)
+    await expect(service.addProjectFromPath(repo)).rejects.toThrow(/already added/)
   })
 
-  it('не додає теку, що не є репозиторієм', async () => {
-    const plain = join(dir, 'просто-тека')
+  it('does not add a directory that is not a repository', async () => {
+    const plain = join(dir, 'plain-directory')
     await mkdir(plain)
 
-    await expect(service.addProjectFromPath(plain)).rejects.toThrow(/не є git-репозиторієм/)
+    await expect(service.addProjectFromPath(plain)).rejects.toThrow(/is not a git repository/)
   })
 
-  it('видалення прибирає проєкт зі списку й з диска', async () => {
+  it('removes the project from the list and from disk', async () => {
     const repo = join(dir, 'planner')
     await initRepo(repo)
     const project = await service.addProjectFromPath(repo)
@@ -139,29 +139,29 @@ describe('проєкти', () => {
     expect(restarted.listProjects()).toHaveLength(0)
   })
 
-  it('видалення неіснуючого проєкту не ламає стан', async () => {
-    await expect(service.removeProjectById('немає')).resolves.toBeUndefined()
+  it('removing a missing project does not corrupt state', async () => {
+    await expect(service.removeProjectById('missing')).resolves.toBeUndefined()
     expect(service.listProjects()).toHaveLength(0)
   })
 
-  it('невдале додавання не псує вже збережений стан', async () => {
+  it('a failed add leaves already saved state intact', async () => {
     const repo = join(dir, 'planner')
     await initRepo(repo)
     await service.addProjectFromPath(repo)
 
-    await expect(service.addProjectFromPath(join(dir, 'немає'))).rejects.toThrow()
+    await expect(service.addProjectFromPath(join(dir, 'missing'))).rejects.toThrow()
 
     const restarted = await createService(paths(dir))
     expect(restarted.listProjects()).toHaveLength(1)
   })
 
-  it('приймає власний виконавець git', async () => {
+  it('accepts a custom git executor', async () => {
     const repo = join(dir, 'planner')
     await initRepo(repo)
 
     let calls = 0
     const custom = await createService({
-      ...paths(join(dir, 'окремий')),
+      ...paths(join(dir, 'separate')),
       makeExec: (cwd) => {
         calls++
         return async (args) => {

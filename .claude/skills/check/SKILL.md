@@ -1,51 +1,52 @@
 ---
 name: check
-description: Повна перевірка якості проєкту — форматування, лінт, типи, тести з покриттям — з поясненням кожної помилки простою мовою і виправленням знайденого.
-when_to_use: Перед комітом, після серії змін, або коли треба переконатися, що проєкт у порядку. Також коли користувач питає «чи все гаразд», «нічого не зламалося?».
+description: Full project quality gate — formatting, lint, types, tests with coverage — explaining every failure in plain language and fixing what it finds.
+when_to_use: Before a commit, after a batch of changes, or whenever the user asks whether everything is fine or if something broke.
 argument-hint: '[fix]'
 allowed-tools: Bash(npm run:*), Bash(npx:*), Read, Edit, Glob, Grep
 ---
 
-# Перевірка проєкту
+# Project check
 
-Прогін повного гейту якості з поясненням результату.
+Run the full quality gate and explain the outcome.
 
-## Що робити
+## What to do
 
-1. Запусти `npm run check`.
+1. Run `npm run check`.
 
-2. Якщо все зелене — коротко підтвердь: скільки тестів, який відсоток покриття.
-   Не переказуй увесь вивід.
+2. If everything passes, confirm briefly: how many tests, what coverage.
+   Do not reproduce the whole output.
 
-3. Якщо щось впало — **поясни причину простою мовою**, без жаргону, і виправ.
-   Користувач не знає цього стеку; вивід інструментів сам собою йому нічого
-   не каже.
+3. If something fails, **explain the cause in plain language**, without jargon,
+   and fix it. The user does not know this stack; raw tool output tells them
+   nothing.
 
-## Як пояснювати збої
+Replies to the user are written in Ukrainian; everything written into the
+repository stays English.
 
-Гейт складається з чотирьох кроків, і кожен падає по-своєму:
+## Reading the failures
 
-| Крок            | Що означає збій                                           | Типове виправлення                 |
-| --------------- | --------------------------------------------------------- | ---------------------------------- |
-| `format:check`  | файли не відформатовані                                   | `npx prettier --write .`           |
-| `lint`          | порушено правила якості коду                              | `npx eslint . --fix`, решту вручну |
-| `typecheck`     | типи не сходяться — реальна помилка, не формальність      | розібратися по суті                |
-| `test:coverage` | тест впав **або** покриття `src/core/` просіло нижче 100% | полагодити код чи дописати тест    |
+The gate has four stages, each failing differently:
 
-**Ніколи не знижуй поріг покриття, щоб гейт пройшов.** Поріг у
-`vitest.config.ts` — це запобіжник, а не перешкода (§11.3 docs/PROJECT.md).
-Якщо покриття просіло, значить з'явився неперевірений код у ядрі — його
-й треба покрити.
+| Stage           | What a failure means                                         | Usual fix                          |
+| --------------- | ------------------------------------------------------------ | ---------------------------------- |
+| `format:check`  | files are not formatted                                      | `npx prettier --write .`           |
+| `lint`          | a code-quality rule was broken                               | `npx eslint . --fix`, rest by hand |
+| `typecheck`     | types do not line up — a real defect, not a formality        | investigate properly               |
+| `test:coverage` | a test failed **or** `src/core/` coverage dropped below 100% | fix the code or add the test       |
 
-**Ніколи не вимикай правило лінтера, щоб позбутися помилки.** Виняток можливий,
-але тоді поясни користувачеві, чому саме тут правило недоречне.
+**Never lower the coverage threshold to make the gate pass.** The threshold in
+`vitest.config.ts` is a safety net, not an obstacle (§11.3 docs/PROJECT.md).
+A drop means new untested code in the core — cover it.
 
-## Аргумент
+**Never disable a lint rule to silence an error.** An exception is possible,
+but then explain to the user why the rule does not apply here.
 
-Якщо передано `fix` — виправляй знайдене автоматично й повідом, що змінилося.
-Без аргументу — спершу покажи, що не так, і запитай, чи виправляти, якщо
-виправлення неочевидне.
+## Argument
 
-## Наприкінці
+With `fix`, repair what is found and report what changed. Without it, show the
+problem first and ask before applying a non-obvious fix.
 
-Одним рядком: чи можна комітити. Якщо ні — що саме лишилося.
+## Finish
+
+One line: whether this can be committed. If not, what is left.

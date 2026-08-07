@@ -1,7 +1,7 @@
 {
   "name": "maestro",
   "version": "0.1.0",
-  "description": "Локальний диспетчер паралельних агентних задач для Claude Code",
+  "description": "Local dispatcher for parallel Claude Code agent tasks",
   "main": "./out/main/index.js",
   "private": true,
   "type": "module",
@@ -26,10 +26,12 @@
   },
   "dependencies": {
     "@anthropic-ai/claude-agent-sdk": "^0.3.224",
+    "i18next": "^26.3.6",
     "lucide-react": "^1.30.0",
     "motion": "^13.0.0",
     "react": "^19.2.8",
     "react-dom": "^19.2.8",
+    "react-i18next": "^17.0.11",
     "zod": "^4.4.3",
     "zustand": "^5.0.14"
   },

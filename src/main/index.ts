@@ -3,25 +3,34 @@ import { join } from 'node:path'
 import { app, BrowserWindow, dialog, ipcMain, nativeTheme, shell } from 'electron'
 
 import { describeError } from '../core/persist.js'
+import { ProjectValidationError } from '../core/projects.js'
 import { createService, type MaestroService } from '../core/service.js'
 
-/** Кольори полотна з дизайн-системи (§10.7) — щоб вікно не блимало білим при старті. */
+/** Canvas colours from the design system (§10) — so the window does not flash white on launch. */
 const CANVAS_LIGHT = '#ffffff'
 const CANVAS_DARK = '#0f1115'
 
 /**
- * Результат операції у вигляді значення, а не винятку.
+ * Operation outcome as a value rather than an exception.
  *
- * Помилки ядра осмислені й призначені користувачеві (напр. «тека не є
- * git-репозиторієм»), тому вони мають дійти до UI текстом, а не перетворитися
- * на безлике «Error invoking remote method» (§13 docs/PROJECT.md).
+ * Core errors are meaningful and meant for the user (e.g. "not a git
+ * repository"), so they must reach the UI intact instead of collapsing into
+ * a generic "Error invoking remote method" (§13 docs/PROJECT.md).
+ *
+ * Validation failures also carry a code and params, so the renderer can
+ * render a localised message rather than the raw English fallback.
  */
-type Result<T> = { ok: true; value: T } | { ok: false; error: string }
+type Result<T> =
+  | { ok: true; value: T }
+  | { ok: false; error: string; code?: string; params?: Readonly<Record<string, string>> }
 
 async function attempt<T>(operation: () => Promise<T> | T): Promise<Result<T>> {
   try {
     return { ok: true, value: await operation() }
   } catch (error) {
+    if (error instanceof ProjectValidationError) {
+      return { ok: false, error: error.message, code: error.code, params: error.params }
+    }
     return { ok: false, error: describeError(error) }
   }
 }
@@ -38,8 +47,8 @@ function createWindow(): BrowserWindow {
     minHeight: 620,
     show: false,
     backgroundColor: canvasColor(),
-    // §10.5: hiddenInset лишається, vibrancy свідомо не використовується —
-    // напівпрозорі матеріали конфліктують із суцільними кольорами необруталізму.
+    // §10.5: hiddenInset stays; vibrancy is deliberately unused — translucent
+    // materials make dense text harder to read.
     titleBarStyle: 'hiddenInset',
     trafficLightPosition: { x: 16, y: 18 },
     webPreferences: {
@@ -54,7 +63,7 @@ function createWindow(): BrowserWindow {
     window.show()
   })
 
-  // Зовнішні посилання відкриваються в браузері, а не всередині застосунку.
+  // External links open in the browser, not inside the application.
   window.webContents.setWindowOpenHandler(({ url }) => {
     void shell.openExternal(url)
     return { action: 'deny' }
@@ -70,10 +79,10 @@ function createWindow(): BrowserWindow {
 }
 
 /**
- * Реєструє IPC.
+ * Registers IPC handlers.
  *
- * Обробники навмисно однорядкові: уся логіка живе в сервісі ядра, а цей
- * шар лише переадресовує виклики (§11.1).
+ * They are deliberately one-liners: all logic lives in the core service and
+ * this layer only forwards calls (§11.1).
  */
 function registerIpc(service: MaestroService): void {
   ipcMain.handle('theme:get', () => (nativeTheme.shouldUseDarkColors ? 'dark' : 'light'))
@@ -86,14 +95,15 @@ function registerIpc(service: MaestroService): void {
     attempt(() => service.removeProjectById(projectId))
   )
 
-  // Вибір теки — єдина частина, що належить саме main: діалог дає Electron.
+  // Picking a directory is the one part that genuinely belongs to main:
+  // the dialog is an Electron API.
   ipcMain.handle('projects:add', async (event) => {
     const window = BrowserWindow.fromWebContents(event.sender)
     const picked = window
       ? await dialog.showOpenDialog(window, {
-          title: 'Виберіть репозиторій',
+          title: 'Select a repository',
           properties: ['openDirectory'],
-          buttonLabel: 'Додати'
+          buttonLabel: 'Add'
         })
       : await dialog.showOpenDialog({ properties: ['openDirectory'] })
 

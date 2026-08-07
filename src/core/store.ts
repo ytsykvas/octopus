@@ -1,9 +1,9 @@
 /**
- * Стан застосунку — `~/.maestro/state.json`.
+ * Application state — `~/.maestro/state.json`.
  *
- * Тримає перелік проєктів і воркспейсів. Джерелом правди про git лишається
- * сам git: тут зберігається лише те, чого в ньому немає — прив'язка до
- * сесії агента, статус і порт.
+ * Holds the list of projects and workspaces. Git remains the source of truth
+ * about git; this file only stores what git does not know — the agent session
+ * binding, status and port.
  */
 
 import { z } from 'zod'
@@ -40,7 +40,7 @@ export const WorkspaceSchema = z.object({
   sessionId: z.string().nullable(),
   port: z.number().int().min(PORT_RANGE_START).max(PORT_RANGE_END),
   createdAt: z.iso.datetime(),
-  /** Місце під майбутню багатокористувацькість (§15.3); поки завжди null. */
+  /** Reserved for future multi-user support (§15.3); always null for now. */
   ownerId: z.string().nullable()
 })
 
@@ -56,7 +56,7 @@ export type State = z.infer<typeof StateSchema>
 
 export const EMPTY_STATE: State = { version: 1, projects: [], workspaces: [] }
 
-/** Помилка порушення цілісності стану — дублікат або посилання в нікуди. */
+/** State integrity violation — a duplicate or a dangling reference. */
 export class StateConflictError extends Error {
   constructor(message: string) {
     super(message)
@@ -77,11 +77,11 @@ export async function saveState(
 }
 
 /**
- * Обчислює порт для воркспейсу детерміновано з його id.
+ * Derives a workspace port deterministically from its id.
  *
- * Детермінованість важлива: порт має лишатися тим самим між запусками,
- * щоб закладки в браузері не протухали. Зайняті порти передаються окремо,
- * щоб функція лишалася чистою.
+ * Determinism matters: the port must stay the same across restarts so browser
+ * bookmarks keep working. Taken ports are passed in separately to keep the
+ * function pure.
  */
 export function assignPort(workspaceId: string, taken: readonly number[] = []): number {
   const span = PORT_RANGE_END - PORT_RANGE_START + 1
@@ -97,7 +97,7 @@ export function assignPort(workspaceId: string, taken: readonly number[] = []): 
     if (!busy.has(port)) return port
   }
 
-  throw new StateConflictError('Вільних портів у діапазоні 3000–9000 не лишилося')
+  throw new StateConflictError('No free ports left in the 3000-9000 range')
 }
 
 export function findProject(state: State, projectId: string): Project | undefined {
@@ -108,19 +108,19 @@ export function workspacesOfProject(state: State, projectId: string): Workspace[
   return state.workspaces.filter((workspace) => workspace.projectId === projectId)
 }
 
-/** Додає проєкт. Повторний шлях до репозиторію — конфлікт, а не мовчазна заміна. */
+/** Adds a project. A repeated repository path is a conflict, not a silent replace. */
 export function addProject(state: State, project: Project): State {
   if (state.projects.some((existing) => existing.id === project.id)) {
-    throw new StateConflictError(`Проєкт ${project.id} вже доданий`)
+    throw new StateConflictError(`Project ${project.id} is already added`)
   }
   if (state.projects.some((existing) => existing.repoPath === project.repoPath)) {
-    throw new StateConflictError(`Репозиторій ${project.repoPath} вже доданий як проєкт`)
+    throw new StateConflictError(`Repository ${project.repoPath} is already added as a project`)
   }
 
   return { ...state, projects: [...state.projects, project] }
 }
 
-/** Прибирає проєкт разом з його воркспейсами — осиротілих записів не лишається. */
+/** Removes a project together with its workspaces — no orphans are left behind. */
 export function removeProject(state: State, projectId: string): State {
   return {
     ...state,
@@ -131,13 +131,13 @@ export function removeProject(state: State, projectId: string): State {
 
 export function addWorkspace(state: State, workspace: Workspace): State {
   if (!findProject(state, workspace.projectId)) {
-    throw new StateConflictError(`Проєкт ${workspace.projectId} не існує`)
+    throw new StateConflictError(`Project ${workspace.projectId} does not exist`)
   }
   if (state.workspaces.some((existing) => existing.id === workspace.id)) {
-    throw new StateConflictError(`Воркспейс ${workspace.id} вже існує`)
+    throw new StateConflictError(`Workspace ${workspace.id} already exists`)
   }
   if (state.workspaces.some((existing) => existing.branch === workspace.branch)) {
-    throw new StateConflictError(`Гілка ${workspace.branch} вже зайнята іншим воркспейсом`)
+    throw new StateConflictError(`Branch ${workspace.branch} is already used by another workspace`)
   }
 
   return { ...state, workspaces: [...state.workspaces, workspace] }
@@ -149,7 +149,7 @@ export function updateWorkspace(
   patch: Partial<Omit<Workspace, 'id' | 'projectId'>>
 ): State {
   if (!state.workspaces.some((workspace) => workspace.id === workspaceId)) {
-    throw new StateConflictError(`Воркспейс ${workspaceId} не знайдено`)
+    throw new StateConflictError(`Workspace ${workspaceId} not found`)
   }
 
   return {

@@ -1,8 +1,8 @@
 /**
- * Тести працюють зі **справжнім** git у тимчасовому репозиторії.
+ * These tests drive a **real** git repository in a temporary directory.
  *
- * Причина: парсинг виводу git — найчастіше джерело хибних припущень.
- * Фейковий виконавець перевіряв би лише те, що ми й так вигадали.
+ * Reason: parsing git output is the most common source of wrong assumptions.
+ * A fake executor would only verify what we invented ourselves.
  */
 
 import { execFile } from 'node:child_process'
@@ -15,9 +15,9 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 
 import {
   branchExists,
-  extractStderr,
   currentBranch,
   detectBaseBranch,
+  extractStderr,
   findRepositoryRoot,
   GitError,
   type GitExec,
@@ -32,7 +32,7 @@ const run = promisify(execFile)
 let dir: string
 let exec: GitExec
 
-/** Готує репозиторій з одним комітом на гілці `main`. */
+/** Prepares a repository with a single commit on `main`. */
 async function initRepo(path: string): Promise<void> {
   await run('git', ['init', '-q', '--initial-branch=main'], { cwd: path })
   await run('git', ['config', 'user.email', 'test@example.com'], { cwd: path })
@@ -52,61 +52,61 @@ afterEach(async () => {
 })
 
 describe('gitIn', () => {
-  it('повертає вивід успішної команди', async () => {
+  it('returns the output of a successful command', async () => {
     await initRepo(dir)
     await expect(exec(['rev-parse', '--abbrev-ref', 'HEAD'])).resolves.toContain('main')
   })
 
-  it('кидає GitError зі stderr, а не ковтає причину', async () => {
+  it('throws GitError carrying stderr rather than hiding the cause', async () => {
     await initRepo(dir)
-    await expect(exec(['checkout', 'неіснуюча-гілка'])).rejects.toBeInstanceOf(GitError)
+    await expect(exec(['checkout', 'no-such-branch'])).rejects.toBeInstanceOf(GitError)
   })
 
-  it('повідомлення помилки містить і команду, і причину', async () => {
+  it('includes both the command and the reason in the message', async () => {
     await initRepo(dir)
-    const error = await exec(['checkout', 'нема']).catch((e: unknown) => e)
+    const error = await exec(['checkout', 'missing']).catch((cause: unknown) => cause)
     expect(error).toBeInstanceOf(GitError)
     expect((error as GitError).message).toContain('checkout')
     expect((error as GitError).stderr.length).toBeGreaterThan(0)
   })
 
-  it('кидає GitError, коли git не має де виконатися', async () => {
-    const missing = gitIn(join(dir, 'немає-такої-теки'))
+  it('throws GitError when git has nowhere to run', async () => {
+    const missing = gitIn(join(dir, 'no-such-directory'))
     await expect(missing(['status'])).rejects.toBeInstanceOf(GitError)
   })
 })
 
 describe('extractStderr', () => {
-  it('бере stderr, коли він змістовний', () => {
+  it('prefers stderr when it says something', () => {
     expect(extractStderr({ stderr: 'fatal: not a git repository\n' })).toBe(
       'fatal: not a git repository'
     )
   })
 
-  it('відкочується на повідомлення помилки, коли stderr порожній', () => {
+  it('falls back to the error message when stderr is blank', () => {
     const error = Object.assign(new Error('spawn ENOENT'), { stderr: '   ' })
     expect(extractStderr(error)).toBe('spawn ENOENT')
   })
 
-  it('працює, коли поля stderr немає взагалі — так буває при ENOENT', () => {
+  it('works when stderr is absent entirely — as happens on ENOENT', () => {
     expect(extractStderr(new Error('spawn git ENOENT'))).toBe('spawn git ENOENT')
   })
 })
 
 describe('findRepositoryRoot', () => {
-  it('повертає null, коли git віддав порожній рядок замість шляху', async () => {
+  it('returns null when git answers with an empty path', async () => {
     const silent: GitExec = () => Promise.resolve('  \n')
     await expect(findRepositoryRoot(silent)).resolves.toBeNull()
   })
 
-  it('знаходить корінь репозиторію', async () => {
+  it('finds the repository root', async () => {
     await initRepo(dir)
     const root = await findRepositoryRoot(exec)
     expect(root).toBeTruthy()
     expect(root?.endsWith(dir.split('/').pop() ?? '')).toBe(true)
   })
 
-  it('повертає корінь, навіть якщо вибрано підтеку', async () => {
+  it('returns the root even when a subdirectory was given', async () => {
     await initRepo(dir)
     const sub = join(dir, 'src', 'nested')
     await run('mkdir', ['-p', sub])
@@ -115,30 +115,30 @@ describe('findRepositoryRoot', () => {
     expect(fromSub).toBe(fromRoot)
   })
 
-  it('повертає null для теки поза репозиторієм', async () => {
+  it('returns null for a directory outside any repository', async () => {
     await expect(findRepositoryRoot(exec)).resolves.toBeNull()
   })
 })
 
 describe('hasCommits', () => {
-  it('розрізняє репозиторій з комітом', async () => {
+  it('recognises a repository with a commit', async () => {
     await initRepo(dir)
     await expect(hasCommits(exec)).resolves.toBe(true)
   })
 
-  it('порожній репозиторій не годиться для worktree', async () => {
+  it('rejects an empty repository, which cannot host a worktree', async () => {
     await run('git', ['init', '-q'], { cwd: dir })
     await expect(hasCommits(exec)).resolves.toBe(false)
   })
 })
 
 describe('currentBranch', () => {
-  it('повертає назву поточної гілки', async () => {
+  it('returns the checked-out branch', async () => {
     await initRepo(dir)
     await expect(currentBranch(exec)).resolves.toBe('main')
   })
 
-  it('повертає null у detached HEAD', async () => {
+  it('returns null on a detached HEAD', async () => {
     await initRepo(dir)
     const sha = (await exec(['rev-parse', 'HEAD'])).trim()
     await exec(['checkout', '-q', sha])
@@ -147,33 +147,33 @@ describe('currentBranch', () => {
 })
 
 describe('branchExists', () => {
-  it('знаходить наявну гілку', async () => {
+  it('finds an existing branch', async () => {
     await initRepo(dir)
     await expect(branchExists(exec, 'main')).resolves.toBe(true)
   })
 
-  it('не знаходить неіснуючої', async () => {
+  it('does not find a missing one', async () => {
     await initRepo(dir)
-    await expect(branchExists(exec, 'немає')).resolves.toBe(false)
+    await expect(branchExists(exec, 'missing')).resolves.toBe(false)
   })
 })
 
 describe('detectBaseBranch', () => {
-  it('бере гілку за замовчуванням з origin, якщо вона налаштована', async () => {
+  it('prefers origin default branch when configured', async () => {
     await initRepo(dir)
-    await exec(['branch', 'нетипова-назва'])
+    await exec(['branch', 'unconventional'])
     await exec(['remote', 'add', 'origin', 'https://example.com/repo.git'])
-    await exec(['symbolic-ref', 'refs/remotes/origin/HEAD', 'refs/remotes/origin/нетипова-назва'])
+    await exec(['symbolic-ref', 'refs/remotes/origin/HEAD', 'refs/remotes/origin/unconventional'])
 
-    await expect(detectBaseBranch(exec)).resolves.toBe('нетипова-назва')
+    await expect(detectBaseBranch(exec)).resolves.toBe('unconventional')
   })
 
-  it('за відсутності origin бере main', async () => {
+  it('falls back to main without an origin', async () => {
     await initRepo(dir)
     await expect(detectBaseBranch(exec)).resolves.toBe('main')
   })
 
-  it('розпізнає master у старих репозиторіях', async () => {
+  it('recognises master in older repositories', async () => {
     await run('git', ['init', '-q', '--initial-branch=master'], { cwd: dir })
     await run('git', ['config', 'user.email', 'test@example.com'], { cwd: dir })
     await run('git', ['config', 'user.name', 'Test'], { cwd: dir })
@@ -184,7 +184,7 @@ describe('detectBaseBranch', () => {
     await expect(detectBaseBranch(exec)).resolves.toBe('master')
   })
 
-  it('розпізнає develop, коли інших звичних гілок немає', async () => {
+  it('recognises develop when no other common branch exists', async () => {
     await run('git', ['init', '-q', '--initial-branch=develop'], { cwd: dir })
     await run('git', ['config', 'user.email', 'test@example.com'], { cwd: dir })
     await run('git', ['config', 'user.name', 'Test'], { cwd: dir })
@@ -195,7 +195,7 @@ describe('detectBaseBranch', () => {
     await expect(detectBaseBranch(exec)).resolves.toBe('develop')
   })
 
-  it('відкочується на поточну гілку за нетипової назви', async () => {
+  it('falls back to the current branch for unconventional naming', async () => {
     await run('git', ['init', '-q', '--initial-branch=trunk'], { cwd: dir })
     await run('git', ['config', 'user.email', 'test@example.com'], { cwd: dir })
     await run('git', ['config', 'user.name', 'Test'], { cwd: dir })
@@ -206,18 +206,18 @@ describe('detectBaseBranch', () => {
     await expect(detectBaseBranch(exec)).resolves.toBe('trunk')
   })
 
-  it('ігнорує порожню відповідь origin/HEAD і шукає далі', async () => {
+  it('ignores an empty origin/HEAD answer and keeps looking', async () => {
     const odd: GitExec = (args) => {
       if (args[0] === 'symbolic-ref') return Promise.resolve('origin/\n')
-      if (args[0] === 'rev-parse') return Promise.reject(new Error('немає гілки'))
-      if (args[0] === 'branch') return Promise.resolve('запасна\n')
+      if (args[0] === 'rev-parse') return Promise.reject(new Error('no such branch'))
+      if (args[0] === 'branch') return Promise.resolve('fallback\n')
       return Promise.resolve('')
     }
 
-    await expect(detectBaseBranch(odd)).resolves.toBe('запасна')
+    await expect(detectBaseBranch(odd)).resolves.toBe('fallback')
   })
 
-  it('повертає null, коли визначити нічим', async () => {
+  it('returns null when there is nothing to infer from', async () => {
     await initRepo(dir)
     await exec(['branch', '-m', 'main', 'trunk'])
     const sha = (await exec(['rev-parse', 'HEAD'])).trim()
@@ -228,56 +228,56 @@ describe('detectBaseBranch', () => {
 })
 
 describe('repositoryName', () => {
-  it('бере останню складову шляху', () => {
+  it('takes the last path segment', () => {
     expect(repositoryName('/Users/tsykvas/projects/planner')).toBe('planner')
   })
 
-  it('не спотикається на кінцевому слеші', () => {
+  it('is not confused by a nested path', () => {
     expect(repositoryName('/repos/esl')).toBe('esl')
   })
 })
 
 describe('toSlug', () => {
-  it('лишає вже придатні назви незмінними', () => {
+  it('leaves already-valid names untouched', () => {
     expect(toSlug('planner')).toBe('planner')
     expect(toSlug('my-app_v2')).toBe('my-app_v2')
   })
 
-  it('зводить до нижнього регістру', () => {
+  it('lowercases', () => {
     expect(toSlug('MyApp')).toBe('myapp')
   })
 
-  it('зберігає кирилицю — git приймає UTF-8 у назвах гілок', () => {
-    expect(toSlug('Планувальник')).toBe('планувальник')
-    expect(toSlug('мій проєкт')).toBe('мій-проєкт')
+  it('preserves non-Latin scripts — git accepts UTF-8 in branch names', () => {
+    expect(toSlug('Δοκιμή')).toBe('δοκιμή')
+    expect(toSlug('日本語 プロジェクト')).toBe('日本語-プロジェクト')
   })
 
-  it('замінює пробіли та символи, заборонені git', () => {
+  it('replaces whitespace and characters git forbids', () => {
     expect(toSlug('Family Shopping')).toBe('family-shopping')
     expect(toSlug('a:b?c*d')).toBe('a-b-c-d')
     expect(toSlug('a[b]c')).toBe('a-b-c')
     expect(toSlug('a~b^c')).toBe('a-b-c')
   })
 
-  it('прибирає дефіси й крапки з країв — git не приймає таких гілок', () => {
-    expect(toSlug('--назва--')).toBe('назва')
+  it('trims edge dots and dashes, which git rejects in refs', () => {
+    expect(toSlug('--name--')).toBe('name')
     expect(toSlug('.hidden.')).toBe('hidden')
   })
 
-  it('стискає повтори дефісів і крапок', () => {
+  it('collapses repeated dashes and dots', () => {
     expect(toSlug('a   b')).toBe('a-b')
     expect(toSlug('a..b')).toBe('a.b')
   })
 
-  it('прибирає суфікс .lock, який git резервує за собою', () => {
+  it('drops the .lock suffix that git reserves', () => {
     expect(toSlug('branch.lock')).toBe('branch')
   })
 
-  it('вирізає керуючі символи', () => {
-    expect(toSlug('ab')).toBe('ab')
+  it('strips control characters', () => {
+    expect(toSlug('ab')).toBe('ab')
   })
 
-  it('дає запасну назву, якщо не лишилося нічого придатного', () => {
+  it('falls back to a usable name when nothing valid remains', () => {
     expect(toSlug('~~~')).toBe('project')
     expect(toSlug('')).toBe('project')
   })

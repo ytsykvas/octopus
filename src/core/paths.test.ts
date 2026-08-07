@@ -21,29 +21,29 @@ const ROOT = join(HOME, '.maestro')
 const PROJECT = 'planner'
 
 describe('rootDir', () => {
-  it('кладе теку даних у домашню теку користувача', () => {
+  it('places application data inside the user home directory', () => {
     expect(rootDir(HOME)).toBe(join(HOME, '.maestro'))
   })
 
-  it('типово бере домашню теку поточного користувача', () => {
+  it('defaults to the current user home directory', () => {
     expect(rootDir()).toBe(join(homedir(), '.maestro'))
   })
 })
 
-describe('файли верхнього рівня', () => {
-  it('конфіг лежить у корені даних', () => {
+describe('top-level files', () => {
+  it('keeps config in the data root', () => {
     expect(configFile(ROOT)).toBe(join(ROOT, 'config.json'))
   })
 
-  it('стан лежить у корені даних', () => {
+  it('keeps state in the data root', () => {
     expect(stateFile(ROOT)).toBe(join(ROOT, 'state.json'))
   })
 
-  it('тимчасовий файл стану сусідить зі станом — інакше rename не буде атомарним', () => {
+  it('puts the temp file next to state, otherwise rename would not be atomic', () => {
     expect(stateTempFile(ROOT)).toBe(join(ROOT, 'state.json.tmp'))
   })
 
-  it('типово спираються на rootDir', () => {
+  it('falls back to rootDir when no root is given', () => {
     const root = rootDir()
     expect(configFile()).toBe(join(root, 'config.json'))
     expect(stateFile()).toBe(join(root, 'state.json'))
@@ -51,22 +51,22 @@ describe('файли верхнього рівня', () => {
   })
 })
 
-describe('шляхи проєкту', () => {
-  it('метадані проєкту відокремлені від воркспейсів', () => {
+describe('project paths', () => {
+  it('keeps project metadata separate from workspaces', () => {
     expect(projectDir(PROJECT, ROOT)).toBe(join(ROOT, 'projects', PROJECT))
   })
 
-  it('скрипти лежать усередині теки проєкту', () => {
+  it('nests scripts inside the project directory', () => {
     expect(projectScriptsDir(PROJECT, ROOT)).toBe(join(ROOT, 'projects', PROJECT, 'scripts'))
   })
 
-  it('setup.sh і run.sh лежать поруч у теці скриптів', () => {
+  it('places setup.sh and run.sh side by side', () => {
     const scripts = projectScriptsDir(PROJECT, ROOT)
     expect(setupScript(PROJECT, ROOT)).toBe(join(scripts, 'setup.sh'))
     expect(runScript(PROJECT, ROOT)).toBe(join(scripts, 'run.sh'))
   })
 
-  it('типово спираються на rootDir', () => {
+  it('falls back to rootDir when no root is given', () => {
     const root = rootDir()
     expect(projectDir(PROJECT)).toBe(join(root, 'projects', PROJECT))
     expect(projectScriptsDir(PROJECT)).toBe(join(root, 'projects', PROJECT, 'scripts'))
@@ -75,20 +75,20 @@ describe('шляхи проєкту', () => {
   })
 })
 
-describe('шляхи воркспейсів', () => {
-  it('воркспейси згруповані за проєктом', () => {
+describe('workspace paths', () => {
+  it('groups workspaces by project', () => {
     expect(workspacesDir(PROJECT, ROOT)).toBe(join(ROOT, 'workspaces', PROJECT))
   })
 
-  it('кожен воркспейс має власну теку — це корінь git worktree', () => {
+  it('gives each workspace its own directory — the git worktree root', () => {
     expect(workspacePath(PROJECT, 'kyiv', ROOT)).toBe(join(ROOT, 'workspaces', PROJECT, 'kyiv'))
   })
 
-  it('воркспейси не змішуються з метаданими проєкту', () => {
+  it('keeps workspaces out of the project metadata tree', () => {
     expect(workspacePath(PROJECT, 'kyiv', ROOT)).not.toContain(join(ROOT, 'projects'))
   })
 
-  it('типово спираються на rootDir', () => {
+  it('falls back to rootDir when no root is given', () => {
     const root = rootDir()
     expect(workspacesDir(PROJECT)).toBe(join(root, 'workspaces', PROJECT))
     expect(workspacePath(PROJECT, 'kyiv')).toBe(join(root, 'workspaces', PROJECT, 'kyiv'))
