@@ -5,6 +5,7 @@ import type { Project } from '@core/store.js'
 
 import { useErrorMessage } from '../hooks/useErrorMessage.js'
 import { Button } from './Button.js'
+import { Combobox } from './Combobox.js'
 import { Field } from './Field.js'
 import { Modal } from './Modal.js'
 
@@ -112,19 +113,13 @@ export function ProjectSettings({
         </Field>
 
         <Field label={t('project.baseBranch')} hint={t('project.baseBranchHint')}>
-          <select
+          <Combobox
             value={project.baseBranch}
-            onChange={(event) => {
-              changeBranch(event.target.value)
-            }}
-            className="focus-ring border-line bg-canvas h-7 w-full max-w-sm rounded-[var(--radius-control)] border px-2 font-mono"
-          >
-            {options.map((branch) => (
-              <option key={branch} value={branch}>
-                {branch}
-              </option>
-            ))}
-          </select>
+            options={options}
+            onChange={changeBranch}
+            placeholder={t('project.branchSearch')}
+            emptyLabel={t('project.branchNone')}
+          />
         </Field>
 
         <Field label={t('project.repository')}>

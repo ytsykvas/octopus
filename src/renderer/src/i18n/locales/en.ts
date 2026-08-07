@@ -22,7 +22,15 @@ export const en = {
     renameHint: 'Enter to save, Escape to cancel',
     removeTitle: 'Remove project?',
     removeMessage: 'Remove “{{name}}” from the list?',
-    removeDetail: 'The repository stays on disk exactly where it is — only this entry disappears.',
+    removeDetail: 'The repository stays on disk exactly where it is.',
+    removeDetailWorkspaces_one:
+      'Its workspace is deleted along with its branch. The repository itself stays on disk.',
+    removeDetailWorkspaces_few:
+      'Its {{count}} workspaces are deleted along with their branches. The repository itself stays on disk.',
+    removeDetailWorkspaces_many:
+      'Its {{count}} workspaces are deleted along with their branches. The repository itself stays on disk.',
+    removeDetailWorkspaces_other:
+      'Its {{count}} workspaces are deleted along with their branches. The repository itself stays on disk.',
     removeConfirm: 'Remove',
     removeCancel: 'Cancel',
     settings: 'Settings'
@@ -77,11 +85,18 @@ export const en = {
     baseBranch: 'Base branch',
     baseBranchHint:
       'New workspaces branch from here. Existing ones keep the branch they were created from.',
+    branchSearch: 'Search branches',
+    branchNone: 'No matching branch',
     branchFailed:
       'That branch could not be set. It may have been deleted since this list was read.',
     repository: 'Repository',
     dangerZone: 'Danger zone',
     removeHint: 'Removes the project from octopus. The repository stays on disk.'
+  },
+
+  combobox: {
+    search: 'Search',
+    empty: 'Nothing found'
   },
 
   panel: {

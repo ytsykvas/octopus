@@ -14,6 +14,7 @@ import { promisify } from 'node:util'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 
 import {
+  anyBranchExists,
   branchExists,
   currentBranch,
   detectBaseBranch,
@@ -42,12 +43,29 @@ async function initRepo(path: string): Promise<void> {
   await run('git', ['commit', '-q', '-m', 'first'], { cwd: path })
 }
 
+let remoteDir: string | null = null
+
+/** Gives the repository a remote carrying a branch it has no local copy of. */
+async function addRemote(): Promise<void> {
+  remoteDir = await mkdtemp(join(tmpdir(), 'octopus-git-remote-'))
+
+  await run('git', ['init', '-q', '--bare', '--initial-branch=main', remoteDir])
+  await run('git', ['remote', 'add', 'origin', remoteDir], { cwd: dir })
+  await run('git', ['push', '-q', 'origin', 'main'], { cwd: dir })
+  await run('git', ['push', '-q', 'origin', 'main:develop'], { cwd: dir })
+  await run('git', ['fetch', '-q', 'origin'], { cwd: dir })
+}
+
 beforeEach(async () => {
   dir = await mkdtemp(join(tmpdir(), 'octopus-git-'))
   exec = gitIn(dir)
 })
 
 afterEach(async () => {
+  if (remoteDir !== null) {
+    await rm(remoteDir, { recursive: true, force: true })
+    remoteDir = null
+  }
   await rm(dir, { recursive: true, force: true })
 })
 
@@ -155,6 +173,43 @@ describe('branchExists', () => {
   it('does not find a missing one', async () => {
     await initRepo(dir)
     await expect(branchExists(exec, 'missing')).resolves.toBe(false)
+  })
+
+  // A remote-tracking branch is not a local one, and detectBaseBranch relies
+  // on the distinction when it probes for main/master/develop.
+  it('does not count a remote-tracking branch', async () => {
+    await initRepo(dir)
+    await addRemote()
+    await expect(branchExists(exec, 'origin/develop')).resolves.toBe(false)
+  })
+})
+
+describe('anyBranchExists', () => {
+  it('finds a local branch', async () => {
+    await initRepo(dir)
+    await expect(anyBranchExists(exec, 'main')).resolves.toBe(true)
+  })
+
+  // A project's base branch may be remote-tracking, which is exactly what
+  // `worktree add` accepts and what a fresh clone mostly has.
+  it('finds a remote-tracking branch', async () => {
+    await initRepo(dir)
+    await addRemote()
+    await expect(anyBranchExists(exec, 'origin/develop')).resolves.toBe(true)
+  })
+
+  it('does not find a name that is neither', async () => {
+    await initRepo(dir)
+    await expect(anyBranchExists(exec, 'origin/nothing')).resolves.toBe(false)
+  })
+
+  // Resolving a bare name would match a tag too, which is not a branch and
+  // would drift the moment the tag is moved.
+  it('does not accept a tag', async () => {
+    await initRepo(dir)
+    await run('git', ['tag', 'v1'], { cwd: dir })
+
+    await expect(anyBranchExists(exec, 'v1')).resolves.toBe(false)
   })
 })
 

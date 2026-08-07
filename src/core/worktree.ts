@@ -8,6 +8,7 @@
 import type { GitExec } from './git.js'
 
 const BRANCH_REF_PREFIX = 'refs/heads/'
+const REMOTE_REF_PREFIX = 'refs/remotes/'
 
 export interface Worktree {
   readonly path: string
@@ -97,32 +98,38 @@ export async function deleteBranch(exec: GitExec, branch: string, force = false)
 }
 
 /**
- * Branch names.
+ * Local branch names.
  *
- * Needed twice over: picking a workspace name, where a branch outliving its
- * worktree means the store alone cannot tell which names are taken, and
- * choosing a project's base branch.
- *
- * `includeRemote` adds tracking branches, because a freshly cloned repository
- * often has only `main` locally while `develop` or `staging` exist solely on
- * the remote — and git will happily branch a worktree from either.
+ * Needed when picking a workspace name: a branch outlives the worktree it was
+ * created for, so the store alone does not know which names are still taken.
  */
-export async function listBranches(exec: GitExec, includeRemote = false): Promise<string[]> {
-  const output = await exec([
-    'branch',
-    ...(includeRemote ? ['--all'] : []),
-    '--format=%(refname:short)'
-  ])
+export async function listBranches(exec: GitExec): Promise<string[]> {
+  return parseBranches(await exec(['branch', '--format=%(refname:short)']))
+}
 
-  return (
-    output
-      .split('\n')
-      .map((line) => line.trim())
-      .filter((line) => line !== '')
-      // `origin/HEAD` is a pointer at the remote's default branch, not a branch
-      // of its own; offering it would mean picking a name that moves.
-      .filter((line) => !line.endsWith('/HEAD'))
-  )
+/**
+ * Remote-tracking branch names, such as `origin/develop`.
+ *
+ * These are what a project's base branch is chosen from: they are the shared
+ * history everyone works against, whereas a local branch is one person's copy
+ * that may be behind, ahead, or long abandoned.
+ */
+export async function listRemoteBranches(exec: GitExec): Promise<string[]> {
+  // The full refname, not the short one: `refs/remotes/origin/HEAD` shortens
+  // to plain `origin`, which is indistinguishable from a branch by name alone
+  // and would sit in the list looking like one.
+  const refs = parseBranches(await exec(['branch', '--remotes', '--format=%(refname)']))
+
+  return refs
+    .filter((ref) => !ref.endsWith('/HEAD'))
+    .map((ref) => ref.replace(REMOTE_REF_PREFIX, ''))
+}
+
+function parseBranches(output: string): string[] {
+  return output
+    .split('\n')
+    .map((line) => line.trim())
+    .filter((line) => line !== '')
 }
 
 /** Renames a branch. Works from any worktree of the repository. */

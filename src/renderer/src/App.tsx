@@ -168,11 +168,15 @@ export function App(): React.JSX.Element {
       const project = projects.find((item) => item.id === projectId)
       if (!project) return
 
-      // Removing is one click away from a hover state, so it asks first.
+      // Workspaces go with the project, so the count is part of the question:
+      // "remove a project" reads much smaller than "delete four branches".
+      const count = (workspaces.byProject.get(projectId) ?? []).length
+
       const confirmed = await confirm({
         title: t('sidebar.removeTitle'),
         message: t('sidebar.removeMessage', { name: project.name }),
-        detail: t('sidebar.removeDetail'),
+        detail:
+          count > 0 ? t('sidebar.removeDetailWorkspaces', { count }) : t('sidebar.removeDetail'),
         confirmLabel: t('sidebar.removeConfirm'),
         cancelLabel: t('sidebar.removeCancel'),
         destructive: true

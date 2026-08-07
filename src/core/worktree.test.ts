@@ -21,6 +21,7 @@ import {
   deleteBranch,
   hasUncommittedChanges,
   listBranches,
+  listRemoteBranches,
   listWorktrees,
   parseWorktrees,
   pruneWorktrees,
@@ -287,26 +288,37 @@ describe('listBranches', () => {
     await expect(listBranches(exec)).resolves.toContain('ytsykvas/fix-auth')
   })
 
-  it('leaves remote branches out unless asked', async () => {
+  it('lists local branches only, never remote ones', async () => {
     await addRemote()
     await expect(listBranches(exec)).resolves.toEqual(['main'])
   })
+})
 
-  it('includes tracking branches on request', async () => {
+describe('listRemoteBranches', () => {
+  it('lists tracking branches, including ones with no local copy', async () => {
     await addRemote()
 
-    const branches = await listBranches(exec, true)
-    expect(branches).toContain('main')
+    const branches = await listRemoteBranches(exec)
     expect(branches).toContain('origin/develop')
+    expect(branches).toContain('origin/main')
+  })
+
+  it('returns nothing for a repository with no remote', async () => {
+    await expect(listRemoteBranches(exec)).resolves.toEqual([])
   })
 
   // origin/HEAD is a pointer at whatever the remote calls default, not a
-  // branch — choosing it would mean choosing a name that moves.
-  it('never offers origin/HEAD', async () => {
+  // branch — choosing it would mean choosing a name that moves. Its short form
+  // is bare `origin`, so an assertion against 'origin/HEAD' passes while the
+  // list is still wrong.
+  it('never offers the remote head pointer', async () => {
     await addRemote()
     await run('git', ['remote', 'set-head', 'origin', 'main'], { cwd: dir })
 
-    await expect(listBranches(exec, true)).resolves.not.toContain('origin/HEAD')
+    const branches = await listRemoteBranches(exec)
+    expect(branches).not.toContain('origin')
+    expect(branches).not.toContain('origin/HEAD')
+    expect(branches).toContain('origin/main')
   })
 })
 

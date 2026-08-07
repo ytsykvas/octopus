@@ -29,7 +29,7 @@ import {
   type Workspace,
   workspacesOfProject
 } from './store.js'
-import { listBranches, listWorktrees } from './worktree.js'
+import { listBranches, listRemoteBranches, listWorktrees } from './worktree.js'
 import {
   changeCount,
   countChanges,
@@ -181,10 +181,36 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
 
     async listProjectBranches(projectId) {
       const project = requireProject(projectId)
-      return listBranches(makeExec(project.repoPath), true)
+      const exec = makeExec(project.repoPath)
+
+      // Remote branches are the shared history worth branching from. A
+      // repository added from disk may have no remote at all, though, and an
+      // empty list would leave nothing to choose.
+      const remote = await listRemoteBranches(exec)
+      return remote.length > 0 ? remote : listBranches(exec)
     },
 
     async removeProjectById(projectId) {
+      const project = findProject(state, projectId)
+
+      // The records go either way, so the directories and branches have to go
+      // with them: left behind they are invisible to the app but still occupy
+      // names, and adding the project back would collide with its own debris.
+      if (project) {
+        const repository = makeExec(project.repoPath)
+
+        for (const workspace of workspacesOfProject(state, projectId)) {
+          // Best-effort, one by one: a worktree already deleted from outside
+          // must not stop the rest — or the project — from being removed. The
+          // user has confirmed, so uncommitted work goes too.
+          await removeWorkspace(
+            workspace,
+            { repository, workspace: makeExec(workspace.path) },
+            { force: true, deleteBranch: true }
+          ).catch(() => undefined)
+        }
+      }
+
       await commit(removeProject(state, projectId))
     },
 

@@ -6,7 +6,7 @@
  */
 
 import {
-  branchExists,
+  anyBranchExists,
   detectBaseBranch,
   findRepositoryRoot,
   type GitExec,
@@ -146,7 +146,7 @@ export async function createProject(
  * as a `worktree add` failure that says nothing about project settings.
  */
 export async function assertBranchExists(exec: GitExec, branch: string): Promise<void> {
-  if (await branchExists(exec, branch)) return
+  if (await anyBranchExists(exec, branch)) return
 
   throw new ProjectValidationError(
     'branchMissing',

@@ -1,5 +1,5 @@
 import { execFile } from 'node:child_process'
-import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
+import { access, mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { promisify } from 'node:util'
@@ -404,14 +404,52 @@ describe('projects', () => {
     expect(service.listProjects()[0]?.baseBranch).not.toBe('never-existed')
   })
 
-  it('lists branches to choose a base from, remotes included', async () => {
+  // Remote branches are the shared history; a local branch is one person's
+  // copy that may be behind, ahead or long abandoned.
+  it('offers remote branches to base a project on, not local ones', async () => {
+    const repo = join(dir, 'planner')
+    await initRepo(repo)
+    await run('git', ['branch', 'local-only'], { cwd: repo })
+
+    const remote = join(dir, 'remote.git')
+    await run('git', ['init', '-q', '--bare', '--initial-branch=main', remote])
+    await run('git', ['remote', 'add', 'origin', remote], { cwd: repo })
+    await run('git', ['push', '-q', 'origin', 'main'], { cwd: repo })
+    await run('git', ['push', '-q', 'origin', 'main:develop'], { cwd: repo })
+    await run('git', ['fetch', '-q', 'origin'], { cwd: repo })
+
+    const project = await service.addProjectFromPath(repo)
+    const branches = await service.listProjectBranches(project.id)
+
+    expect(branches).toContain('origin/develop')
+    expect(branches).not.toContain('local-only')
+  })
+
+  // Nothing to choose from would make the field unusable for a repository
+  // that was added from disk and never had a remote.
+  it('falls back to local branches when there is no remote', async () => {
     const repo = join(dir, 'planner')
     await initRepo(repo)
     await run('git', ['branch', 'develop'], { cwd: repo })
     const project = await service.addProjectFromPath(repo)
 
-    const branches = await service.listProjectBranches(project.id)
-    expect(branches).toContain('develop')
+    await expect(service.listProjectBranches(project.id)).resolves.toContain('develop')
+  })
+
+  it('accepts a remote branch as the base', async () => {
+    const repo = join(dir, 'planner')
+    await initRepo(repo)
+
+    const remote = join(dir, 'remote2.git')
+    await run('git', ['init', '-q', '--bare', '--initial-branch=main', remote])
+    await run('git', ['remote', 'add', 'origin', remote], { cwd: repo })
+    await run('git', ['push', '-q', 'origin', 'main:develop'], { cwd: repo })
+    await run('git', ['fetch', '-q', 'origin'], { cwd: repo })
+
+    const project = await service.addProjectFromPath(repo)
+    await service.updateProjectById(project.id, { baseBranch: 'origin/develop' })
+
+    expect(service.listProjects()[0]?.baseBranch).toBe('origin/develop')
   })
 
   it('removes the project from the list and from disk', async () => {
@@ -424,6 +462,70 @@ describe('projects', () => {
 
     const restarted = await createService(paths(dir))
     expect(restarted.listProjects()).toHaveLength(0)
+  })
+
+  // Records alone are not enough: a directory or branch left behind is
+  // invisible to the app but still holds its name, and adding the project back
+  // would collide with its own debris.
+  it('takes the workspaces of a removed project off disk with it', async () => {
+    const repo = join(dir, 'planner')
+    await initRepo(repo)
+    const project = await service.addProjectFromPath(repo)
+
+    const first = await service.createWorkspaceIn(project.id)
+    const second = await service.createWorkspaceIn(project.id)
+
+    await service.removeProjectById(project.id)
+
+    await expect(access(first.path)).rejects.toThrow()
+    await expect(access(second.path)).rejects.toThrow()
+
+    const worktrees = await listWorktrees(gitIn(repo))
+    expect(worktrees).toHaveLength(1)
+
+    const branches = await gitIn(repo)(['branch', '--format=%(refname:short)'])
+    expect(branches).not.toContain(first.name)
+    expect(branches).not.toContain(second.name)
+  })
+
+  it('discards uncommitted work in those workspaces, having been confirmed', async () => {
+    const repo = join(dir, 'planner')
+    await initRepo(repo)
+    const project = await service.addProjectFromPath(repo)
+    const workspace = await service.createWorkspaceIn(project.id)
+    await writeFile(join(workspace.path, 'draft.txt'), 'work\n', 'utf8')
+
+    await service.removeProjectById(project.id)
+
+    expect(service.listProjects()).toHaveLength(0)
+    await expect(access(workspace.path)).rejects.toThrow()
+  })
+
+  // A worktree deleted from outside must not strand the project itself.
+  it('removes the project even when a workspace directory is already gone', async () => {
+    const repo = join(dir, 'planner')
+    await initRepo(repo)
+    const project = await service.addProjectFromPath(repo)
+    const workspace = await service.createWorkspaceIn(project.id)
+    await rm(workspace.path, { recursive: true, force: true })
+
+    await expect(service.removeProjectById(project.id)).resolves.toBeUndefined()
+    expect(service.listProjects()).toHaveLength(0)
+  })
+
+  // The repository itself can be moved or deleted behind the app's back, and
+  // then every git call fails. The project must still be removable, or it is
+  // stuck in the sidebar forever.
+  it('removes the project even when the repository itself is gone', async () => {
+    const repo = join(dir, 'planner')
+    await initRepo(repo)
+    const project = await service.addProjectFromPath(repo)
+    await service.createWorkspaceIn(project.id)
+
+    await rm(repo, { recursive: true, force: true })
+
+    await expect(service.removeProjectById(project.id)).resolves.toBeUndefined()
+    expect(service.listProjects()).toHaveLength(0)
   })
 
   it('removing a missing project does not corrupt state', async () => {

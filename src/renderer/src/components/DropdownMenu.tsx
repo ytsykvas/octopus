@@ -1,4 +1,6 @@
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useRef, useState } from 'react'
+
+import { useDismiss } from '../hooks/useDismiss.js'
 
 export interface MenuAction {
   readonly id: string
@@ -35,26 +37,13 @@ export function DropdownMenu({
   const [open, setOpen] = useState(false)
   const container = useRef<HTMLDivElement>(null)
 
-  useEffect(() => {
-    if (!open) return
-
-    const onPointerDown = (event: MouseEvent): void => {
-      // A click inside the menu is handled by the item itself.
-      if (!container.current?.contains(event.target as Node)) setOpen(false)
-    }
-
-    const onKey = (event: KeyboardEvent): void => {
-      if (event.key === 'Escape') setOpen(false)
-    }
-
-    window.addEventListener('mousedown', onPointerDown)
-    window.addEventListener('keydown', onKey)
-
-    return () => {
-      window.removeEventListener('mousedown', onPointerDown)
-      window.removeEventListener('keydown', onKey)
-    }
-  }, [open])
+  useDismiss(
+    open,
+    container,
+    useCallback(() => {
+      setOpen(false)
+    }, [])
+  )
 
   return (
     <div ref={container} className="relative">

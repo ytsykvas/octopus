@@ -102,6 +102,25 @@ export async function branchExists(exec: GitExec, branch: string): Promise<boole
 }
 
 /**
+ * Whether a name resolves to a branch at all — local or remote-tracking.
+ *
+ * A project's base branch may be either: `git worktree add` is happy to start
+ * from `origin/develop`, and a fresh clone often has nothing else. The two
+ * namespaces are checked explicitly rather than letting git resolve a bare
+ * name, which would also match a tag.
+ */
+export async function anyBranchExists(exec: GitExec, branch: string): Promise<boolean> {
+  if (await branchExists(exec, branch)) return true
+
+  try {
+    await exec(['rev-parse', '--verify', `refs/remotes/${branch}`])
+    return true
+  } catch {
+    return false
+  }
+}
+
+/**
  * Determines the repository's base branch.
  *
  * Order: origin's default branch → common names → current branch. The last
