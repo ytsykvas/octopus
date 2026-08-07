@@ -1,3 +1,4 @@
+import { Bot, GitBranch, Info, type LucideIcon, Monitor, Sparkles } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
@@ -30,13 +31,13 @@ const SECTIONS: readonly {
     | 'settings.sectionAgent'
     | 'settings.sectionAccounts'
     | 'settings.sectionAbout'
-  readonly icon: string
+  readonly Icon: LucideIcon
 }[] = [
-  { id: 'general', labelKey: 'settings.sectionGeneral', icon: '◐' },
-  { id: 'git', labelKey: 'settings.sectionGit', icon: '⑂' },
-  { id: 'agent', labelKey: 'settings.sectionAgent', icon: '✦' },
-  { id: 'accounts', labelKey: 'settings.sectionAccounts', icon: '◉' },
-  { id: 'about', labelKey: 'settings.sectionAbout', icon: 'ⓘ' }
+  { id: 'general', labelKey: 'settings.sectionGeneral', Icon: Monitor },
+  { id: 'git', labelKey: 'settings.sectionGit', Icon: GitBranch },
+  { id: 'agent', labelKey: 'settings.sectionAgent', Icon: Sparkles },
+  { id: 'accounts', labelKey: 'settings.sectionAccounts', Icon: Bot },
+  { id: 'about', labelKey: 'settings.sectionAbout', Icon: Info }
 ]
 
 /**
@@ -85,9 +86,7 @@ export function Settings({ config, onChange, onClose }: SettingsProps): React.JS
                     section === item.id ? 'row-selected font-medium' : 'text-ink-soft'
                   }`}
                 >
-                  <span aria-hidden className="w-4 text-center">
-                    {item.icon}
-                  </span>
+                  <item.Icon aria-hidden size={14} className="shrink-0" />
                   {t(item.labelKey)}
                 </button>
               </li>

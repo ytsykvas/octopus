@@ -1,3 +1,4 @@
+import { PanelRightOpen } from 'lucide-react'
 import { useCallback, useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
@@ -212,10 +213,10 @@ export function App(): React.JSX.Element {
               onClick={() => {
                 setRightPanelOpen(true)
               }}
-              className="text-ink-faint hover:text-ink focus-ring ml-auto rounded px-2 transition-colors"
+              className="text-ink-faint hover:text-ink focus-ring ml-auto rounded p-1 transition-colors"
               title={t('panel.expand')}
             >
-              ←
+              <PanelRightOpen aria-hidden size={14} />
             </button>
           )}
         </header>

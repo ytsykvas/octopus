@@ -1,3 +1,4 @@
+import { CloudDownload, FolderOpen, Pencil, Plus, Settings as SettingsIcon, X } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
@@ -77,7 +78,7 @@ export function Sidebar({
           onClick={onOpenSettings}
           className="row focus-ring text-ink-soft hover:text-ink flex w-full items-center gap-2 px-2 py-1.5"
         >
-          <span aria-hidden>⚙</span>
+          <SettingsIcon aria-hidden size={14} />
           {t('sidebar.settings')}
         </button>
       </div>
@@ -128,12 +129,13 @@ function AddMenu({
           setOpen((current) => !current)
         }}
       >
-        {busy ? '…' : '+'}
+        <Plus aria-hidden size={14} />
       </Button>
 
       {open && (
         <div className="border-line bg-canvas absolute right-0 z-10 mt-1 w-40 rounded-[var(--radius-control)] border p-1 shadow-[var(--shadow-pop)]">
           <MenuItem
+            icon={<FolderOpen aria-hidden size={14} />}
             label={t('sidebar.addFromDisk')}
             onClick={() => {
               setOpen(false)
@@ -141,6 +143,7 @@ function AddMenu({
             }}
           />
           <MenuItem
+            icon={<CloudDownload aria-hidden size={14} />}
             label={t('sidebar.addFromGitHub')}
             onClick={() => {
               setOpen(false)
@@ -153,9 +156,22 @@ function AddMenu({
   )
 }
 
-function MenuItem({ label, onClick }: { label: string; onClick: () => void }): React.JSX.Element {
+function MenuItem({
+  icon,
+  label,
+  onClick
+}: {
+  icon: React.ReactNode
+  label: string
+  onClick: () => void
+}): React.JSX.Element {
   return (
-    <button type="button" onClick={onClick} className="row focus-ring w-full px-2 py-1 text-left">
+    <button
+      type="button"
+      onClick={onClick}
+      className="row focus-ring text-ink-soft hover:text-ink flex w-full items-center gap-2 px-2 py-1 text-left"
+    >
+      {icon}
       {label}
     </button>
   )
@@ -219,18 +235,18 @@ function ProjectRow({
           setEditing(true)
         }}
         title={t('sidebar.renameProject')}
-        className="text-ink-faint hover:text-ink focus-ring shrink-0 rounded px-1 opacity-0 transition-opacity group-hover:opacity-100"
+        className="text-ink-faint hover:text-ink focus-ring shrink-0 rounded p-1 opacity-0 transition-opacity group-hover:opacity-100"
       >
-        ✎
+        <Pencil aria-hidden size={13} />
       </button>
 
       <button
         type="button"
         onClick={onRemove}
         title={t('sidebar.removeProject')}
-        className="text-ink-faint hover:text-danger focus-ring shrink-0 rounded px-1 opacity-0 transition-opacity group-hover:opacity-100"
+        className="text-ink-faint hover:text-danger focus-ring shrink-0 rounded p-1 opacity-0 transition-opacity group-hover:opacity-100"
       >
-        ✕
+        <X aria-hidden size={13} />
       </button>
     </div>
   )

@@ -1,3 +1,4 @@
+import { PanelRightClose } from 'lucide-react'
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
@@ -47,9 +48,9 @@ export function RightPanel({ onCollapse }: RightPanelProps): React.JSX.Element {
           type="button"
           onClick={onCollapse}
           title={t('panel.collapse')}
-          className="text-ink-faint hover:text-ink focus-ring ml-auto rounded px-2 transition-colors"
+          className="text-ink-faint hover:text-ink focus-ring ml-auto rounded p-1 transition-colors"
         >
-          →
+          <PanelRightClose aria-hidden size={14} />
         </button>
       </div>
 
