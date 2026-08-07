@@ -138,7 +138,19 @@ export async function checkAccounts(exec: CommandExec = defaultExec): Promise<Ac
 }
 
 /** Which account a sign-in or sign-out request refers to. */
-export type AccountKind = 'claude' | 'github'
+export const AccountKindSchema = z.enum(['claude', 'github'])
+export type AccountKind = z.infer<typeof AccountKindSchema>
+
+export const AuthActionSchema = z.enum(['login', 'logout'])
+export type AuthAction = z.infer<typeof AuthActionSchema>
+
+/** A rejected sign-in request — the arguments were not what the contract allows. */
+export class InvalidAuthRequestError extends Error {
+  constructor(message: string) {
+    super(message)
+    this.name = 'InvalidAuthRequestError'
+  }
+}
 
 /**
  * The command that signs a user in or out.
@@ -146,7 +158,24 @@ export type AccountKind = 'claude' | 'github'
  * Both CLIs are interactive and need a real terminal, so the app cannot run
  * them itself — it opens Terminal with the command prepared. Returning the
  * argv here keeps that decision testable and out of the Electron layer.
+ *
+ * Arguments are validated at runtime rather than trusted from their types.
+ * They arrive over IPC, where TypeScript guarantees nothing: a compromised or
+ * simply buggy renderer can send anything, and the result ends up in a command
+ * line. This is the same boundary rule the rest of the core follows (§11.3).
  */
-export function authCommand(kind: AccountKind, action: 'login' | 'logout'): readonly string[] {
-  return kind === 'claude' ? ['claude', 'auth', action] : ['gh', 'auth', action]
+export function authCommand(kind: unknown, action: unknown): readonly string[] {
+  const parsedKind = AccountKindSchema.safeParse(kind)
+  if (!parsedKind.success) {
+    throw new InvalidAuthRequestError(`Unknown account: ${JSON.stringify(kind)}`)
+  }
+
+  const parsedAction = AuthActionSchema.safeParse(action)
+  if (!parsedAction.success) {
+    throw new InvalidAuthRequestError(`Unknown action: ${JSON.stringify(action)}`)
+  }
+
+  return parsedKind.data === 'claude'
+    ? ['claude', 'auth', parsedAction.data]
+    : ['gh', 'auth', parsedAction.data]
 }

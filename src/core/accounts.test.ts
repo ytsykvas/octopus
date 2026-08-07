@@ -6,7 +6,8 @@ import {
   checkClaudeAccount,
   checkGitHubAccount,
   type CommandExec,
-  defaultExec
+  defaultExec,
+  InvalidAuthRequestError
 } from './accounts.js'
 
 /** Answers a fixed payload for one command and fails for anything else. */
@@ -165,5 +166,40 @@ describe('authCommand', () => {
 
   it('builds the GitHub sign-out command', () => {
     expect(authCommand('github', 'logout')).toEqual(['gh', 'auth', 'logout'])
+  })
+
+  // These arguments cross an IPC boundary, where TypeScript guarantees
+  // nothing, and the result ends up on a command line. The validation must
+  // survive refactoring, so the attack itself is a test.
+  it('rejects an unknown account instead of passing it through', () => {
+    expect(() => authCommand('evil', 'login')).toThrow(InvalidAuthRequestError)
+  })
+
+  it('rejects an action carrying shell or AppleScript metacharacters', () => {
+    expect(() => authCommand('claude', 'login"; do shell script "rm -rf ~')).toThrow(
+      InvalidAuthRequestError
+    )
+  })
+
+  it('rejects non-string arguments', () => {
+    expect(() => authCommand(null, 'login')).toThrow(InvalidAuthRequestError)
+    expect(() => authCommand('claude', { toString: () => 'login' })).toThrow(
+      InvalidAuthRequestError
+    )
+  })
+
+  it('never emits anything beyond the two fixed command vectors', () => {
+    const allowed = [
+      ['claude', 'auth', 'login'],
+      ['claude', 'auth', 'logout'],
+      ['gh', 'auth', 'login'],
+      ['gh', 'auth', 'logout']
+    ]
+
+    for (const kind of ['claude', 'github']) {
+      for (const action of ['login', 'logout']) {
+        expect(allowed).toContainEqual(authCommand(kind, action))
+      }
+    }
   })
 })

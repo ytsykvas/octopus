@@ -35,6 +35,13 @@ Look at **changed code only** (`git diff`) unless told otherwise.
 
 - External processes through `execFile`, **never** `exec`. Branch names and
   paths come from the user; `exec` would hand them to a shell.
+- **IPC arguments are validated at runtime**, not trusted from their types.
+  TypeScript guarantees nothing across the process boundary, and this app
+  renders agent output, so a renderer compromise must not reach a command
+  line. Anything from IPC that ends up in a process argument, a path or a
+  script gets a zod check first.
+- Nothing is interpolated into a shell command or an AppleScript source
+  string. Pass values as arguments (`execFile` argv, `osascript … -- arg`).
 - Data from disk, git and the SDK is validated with zod at the boundary.
 - Secrets never reach `state.json` or the logs.
 

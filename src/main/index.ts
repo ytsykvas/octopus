@@ -191,17 +191,24 @@ function registerMenu(): void {
  * so the app cannot host them. Handing the prepared command to Terminal is
  * honest about that instead of pretending to sign the user in.
  *
- * Only fixed command vectors from `authCommand` reach this function — no user
- * input is interpolated.
+ * The command is passed to osascript as an **argument**, never interpolated
+ * into the script source. Interpolation would make a stray quote in the input
+ * an AppleScript injection, and the input crosses an IPC boundary where types
+ * guarantee nothing. `authCommand` validates its arguments as well — two
+ * independent layers, because this path ends in command execution.
  */
 async function openInTerminal(argv: readonly string[]): Promise<void> {
-  const command = argv.join(' ')
-
   await execFileAsync('osascript', [
     '-e',
-    `tell application "Terminal" to do script "${command}"`,
+    'on run argv',
     '-e',
-    'tell application "Terminal" to activate'
+    'tell application "Terminal" to do script (item 1 of argv)',
+    '-e',
+    'tell application "Terminal" to activate',
+    '-e',
+    'end run',
+    '--',
+    argv.join(' ')
   ])
 }
 

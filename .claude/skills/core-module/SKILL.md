@@ -64,6 +64,13 @@ tested on strings without any git at all.
 Only `execFile`, **never `exec`**. Branch names and paths come from the user,
 and `exec` hands them to a shell — that is command injection.
 
+**Validate anything arriving over IPC at runtime.** Types vanish at the process
+boundary: a buggy or compromised renderer can send any value, and this app
+renders agent output, so that boundary is a real attack surface. Parse with zod
+before the value reaches a process argument, a path or a script — and never
+interpolate it into a shell command or AppleScript source; pass it as an
+argument instead.
+
 ```ts
 import { execFile } from 'node:child_process'
 import { promisify } from 'node:util'
