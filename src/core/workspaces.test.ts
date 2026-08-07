@@ -83,6 +83,25 @@ describe('createWorkspace', () => {
     expect(workspace.path).toContain(join('workspaces', 'planner', 'anna'))
   })
 
+  // Removal keeps the branch unless the user asks otherwise, so a name can be
+  // free in our records while git still holds it. Reusing it made `worktree
+  // add` fail with "a branch named … already exists" and nothing got created.
+  it('skips a name whose branch outlived its workspace', async () => {
+    const first = await create()
+    await removeWorkspace(first, { repository: exec, workspace: gitIn(first.path) }, {})
+    state = { ...state, workspaces: [] }
+
+    const second = await create()
+    expect(second.name).toBe('maria')
+  })
+
+  it('ignores branches outside the project prefix', async () => {
+    await run('git', ['branch', 'anna'], { cwd: repo })
+
+    const workspace = await create()
+    expect(workspace.name).toBe('anna')
+  })
+
   it('names the first workspace from the start of the pool', async () => {
     const workspace = await create()
     expect(workspace.name).toBe('anna')

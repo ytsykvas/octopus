@@ -20,6 +20,7 @@ import {
   changedFiles,
   deleteBranch,
   hasUncommittedChanges,
+  listBranches,
   listWorktrees,
   parseWorktrees,
   pruneWorktrees,
@@ -252,6 +253,19 @@ describe('changedFiles', () => {
     await writeFile(join(dir, 'new.txt'), 'work\n', 'utf8')
     await exec(['add', '.'])
     await expect(changedFiles(exec)).resolves.toHaveLength(1)
+  })
+})
+
+describe('listBranches', () => {
+  it('lists local branches by short name', async () => {
+    await expect(listBranches(exec)).resolves.toEqual(['main'])
+  })
+
+  // The short name keeps the slashes our `<prefix>/<name>` scheme produces —
+  // stripping them would make every branch look unclaimed.
+  it('keeps slashes in branch names', async () => {
+    await addWorktree(exec, join(dir, 'wt'), 'ytsykvas/fix-auth', 'main')
+    await expect(listBranches(exec)).resolves.toContain('ytsykvas/fix-auth')
   })
 })
 

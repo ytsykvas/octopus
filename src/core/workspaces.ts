@@ -18,6 +18,7 @@ import { assignPort, type Project, type State, type Workspace } from './store.js
 import {
   addWorktree,
   changedFiles,
+  listBranches,
   listWorktrees,
   deleteBranch,
   hasUncommittedChanges,
@@ -103,11 +104,14 @@ export async function createWorkspace(
 
   // Names are picked per project, so every project starts from the top of the
   // pool: two projects may both have an `anna`.
-  const taken = state.workspaces
+  const fromState = state.workspaces
     .filter((workspace) => workspace.projectId === project.id)
     .map((workspace) => workspace.name)
 
-  const name = nextWorkspaceName(taken)
+  // A branch outlives the worktree it was made for — removal keeps it unless
+  // asked otherwise — so the store alone would happily reuse a name git still
+  // holds, and `worktree add` would then fail.
+  const name = nextWorkspaceName([...fromState, ...(await takenByBranches(project, exec))])
 
   // The id, by contrast, must be unique across the app: it is the key for
   // renaming, removal and the jump shortcuts, none of which carry a project.
@@ -136,6 +140,20 @@ export async function createWorkspace(
     createdAt: new Date().toISOString(),
     ownerId: null
   }
+}
+
+/**
+ * Workspace names that existing branches already claim.
+ *
+ * Only branches under the project's prefix count; anything else in the
+ * repository is the user's own and none of our business.
+ */
+async function takenByBranches(project: Project, exec: GitExec): Promise<string[]> {
+  const prefix = `${project.branchPrefix}/`
+
+  return (await listBranches(exec))
+    .filter((branch) => branch.startsWith(prefix))
+    .map((branch) => branch.slice(prefix.length))
 }
 
 /**

@@ -96,6 +96,20 @@ export async function deleteBranch(exec: GitExec, branch: string, force = false)
   await exec(['branch', force ? '-D' : '-d', branch])
 }
 
+/**
+ * Local branch names.
+ *
+ * Needed when picking a workspace name: a branch outlives the worktree it was
+ * created for, so the store alone does not know which names are still taken.
+ */
+export async function listBranches(exec: GitExec): Promise<string[]> {
+  const output = await exec(['branch', '--format=%(refname:short)'])
+  return output
+    .split('\n')
+    .map((line) => line.trim())
+    .filter((line) => line !== '')
+}
+
 /** Renames a branch. Works from any worktree of the repository. */
 export async function renameBranch(exec: GitExec, from: string, to: string): Promise<void> {
   await exec(['branch', '-m', from, to])
