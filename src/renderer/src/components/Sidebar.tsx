@@ -50,19 +50,21 @@ export function Sidebar({
 
   return (
     <aside
-      className={`border-line flex w-60 shrink-0 flex-col border-r ${
-        project ? 'project-tinted' : 'bg-surface'
-      }`}
+      className="border-line bg-surface flex w-60 shrink-0 flex-col border-r"
       style={
         project
           ? ({ '--project-color': `var(--project-${project.color})` } as React.CSSProperties)
           : undefined
       }
     >
+      {/* Left plain: the colour belongs to the project, and this strip is above
+          where the project is named. */}
       <div className="titlebar-drag h-11 shrink-0" />
 
       {project ? (
-        <>
+        // Strongest at the name and fading down the list, so the colour reads
+        // as belonging to the header rather than as a wash over the rows.
+        <div className="project-tinted flex min-h-0 flex-1 flex-col">
           <ProjectHeader
             project={project}
             onEdit={onEditProject}
@@ -101,7 +103,7 @@ export function Sidebar({
               </ul>
             )}
           </nav>
-        </>
+        </div>
       ) : (
         <p className="text-ink-faint flex-1 px-4 py-3 leading-relaxed">{t('sidebar.empty')}</p>
       )}
@@ -140,7 +142,7 @@ function ProjectHeader({
   const { t } = useTranslation()
 
   return (
-    <div className="border-line flex items-start gap-1 border-b px-3 pb-2.5">
+    <div className="border-line flex items-start gap-1 border-b px-3 pt-2 pb-2.5">
       <div className="min-w-0 flex-1">
         <p className="truncate font-medium" title={project.repoPath}>
           {project.name}
