@@ -278,7 +278,15 @@ export function App(): React.JSX.Element {
       </div>
 
       <main className="flex min-w-0 flex-1 flex-col">
-        <header className="titlebar-drag border-line flex h-11 shrink-0 items-center gap-3 border-b px-4">
+        {/* The traffic lights end around 70px from the window edge, past the
+            56px tab strip. With the workspace list open the overhang lands on
+            its empty drag strip; folded away, it lands here, so this header
+            has to step aside. */}
+        <header
+          className={`titlebar-drag border-line flex h-11 shrink-0 items-center gap-3 border-b pr-4 ${
+            sidebarOpen ? 'pl-4' : 'pl-8'
+          }`}
+        >
           <span className="truncate font-medium">{selectedProject?.name ?? t('app.name')}</span>
           {selectedProject && (
             <span className="text-ink-faint truncate font-mono text-[11px]">
