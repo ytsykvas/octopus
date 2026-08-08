@@ -158,11 +158,11 @@ export const uk: Translation = {
     accountsHint:
       'octopus не зберігає облікових даних. Їх тримає CLI у системному сховищі ключів; цей екран лише показує те, що він повідомляє.',
     gitHint:
-      'GitHub потрібен для pull request і перевірок. Облікові дані лишаються в gh CLI, у системному сховищі ключів.',
+      'Підключіть GitHub, щоб додавати проєкти клонуванням ваших репозиторіїв, а також відкривати pull request і читати перевірки. Облікові дані лишаються в gh CLI, у системному сховищі ключів.',
     claudeAccount: 'Claude',
     claudeAccountHint: 'На цьому акаунті працює агент.',
     githubAccount: 'GitHub',
-    githubAccountHint: 'Потрібен для pull request і перевірок.',
+    githubAccountHint: 'Додавання проєктів з GitHub, pull request і перевірки.',
     connected: 'Підключено',
     notConnected: 'Не підключено',
     signIn: 'Увійти',

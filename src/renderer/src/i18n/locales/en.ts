@@ -159,11 +159,11 @@ export const en = {
     accountsHint:
       'octopus never stores credentials. The CLI keeps them in the system keychain; this screen only reports what it says.',
     gitHint:
-      'GitHub is used for pull requests and checks. Credentials stay with the gh CLI, in the system keychain.',
+      'Connect GitHub to add a project by cloning one of your repositories, and to open pull requests and read checks. Credentials stay with the gh CLI, in the system keychain.',
     claudeAccount: 'Claude',
     claudeAccountHint: 'The agent runs on this account.',
     githubAccount: 'GitHub',
-    githubAccountHint: 'Used for pull requests and checks.',
+    githubAccountHint: 'Adding projects from GitHub, pull requests and checks.',
     connected: 'Connected',
     notConnected: 'Not connected',
     signIn: 'Sign in',
