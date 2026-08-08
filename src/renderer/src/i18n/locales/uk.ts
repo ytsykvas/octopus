@@ -53,6 +53,7 @@ export const uk: Translation = {
 
   workspaces: {
     create: 'Новий воркспейс',
+    emptyForProject: 'Поки жодного воркспейсу. Створіть його кнопкою + вище.',
     rename: 'Перейменувати',
     remove: 'Видалити воркспейс',
     missing: 'Теки немає',
@@ -82,6 +83,8 @@ export const uk: Translation = {
     branchNone: 'Немає відповідної гілки',
     branchFailed:
       'Не вдалося встановити цю гілку. Можливо, її видалили після того, як список було прочитано.',
+    color: 'Колір',
+    colorHint: 'Позначає проєкт у смузі табів і тонує сайдбар.',
     repository: 'Репозиторій',
     dangerZone: 'Небезпечна зона',
     removeHint: 'Прибирає проєкт з Octopus. Репозиторій лишається на диску.'

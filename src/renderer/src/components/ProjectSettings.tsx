@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
-import type { Project } from '@core/store.js'
+import { PROJECT_COLORS } from '@core/colors.js'
+import type { Project, ProjectPatch } from '@core/store.js'
 
 import { useErrorMessage } from '../hooks/useErrorMessage.js'
 import { Button } from './Button.js'
@@ -12,7 +13,7 @@ import { Modal } from './Modal.js'
 interface ProjectSettingsProps {
   readonly project: Project
   /** Applies a change; omitted keys are left alone. */
-  readonly onUpdate: (patch: { name?: string; baseBranch?: string }) => Promise<boolean>
+  readonly onUpdate: (patch: ProjectPatch) => Promise<boolean>
   readonly onRemove: () => void
   readonly onClose: () => void
 }
@@ -131,6 +132,29 @@ export function ProjectSettings({
             emptyLabel={t('project.branchNone')}
             display={shortBranch}
           />
+        </Field>
+
+        <Field label={t('project.color')} hint={t('project.colorHint')}>
+          <div className="flex flex-wrap gap-1.5">
+            {PROJECT_COLORS.map((colour) => (
+              <button
+                key={colour}
+                type="button"
+                onClick={() => void onUpdate({ color: colour })}
+                title={colour}
+                aria-pressed={colour === project.color}
+                className={`focus-ring size-6 rounded-full transition-transform hover:scale-110 ${
+                  colour === project.color ? 'ring-ink-faint ring-2 ring-offset-2' : ''
+                }`}
+                // The swatch is the colour, so it cannot come from a class.
+                style={{
+                  backgroundColor: `var(--project-${colour})`,
+                  // Tailwind's offset colour is a variable, not a token here.
+                  ['--tw-ring-offset-color' as string]: 'var(--canvas)'
+                }}
+              />
+            ))}
+          </div>
         </Field>
 
         <Field label={t('project.repository')}>

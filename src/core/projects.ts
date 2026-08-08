@@ -15,6 +15,7 @@ import {
   repositoryName,
   toSlug
 } from './git.js'
+import { nextProjectColor } from './colors.js'
 import type { Project, State } from './store.js'
 
 /**
@@ -133,7 +134,8 @@ export async function createProject(
     name: info.name,
     repoPath: info.root,
     baseBranch: info.baseBranch,
-    branchPrefix
+    branchPrefix,
+    color: nextProjectColor(state.projects.map((project) => project.color))
   }
 }
 

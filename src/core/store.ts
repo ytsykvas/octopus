@@ -8,6 +8,9 @@
 
 import { z } from 'zod'
 
+import { nextProjectColor, type ProjectColor, ProjectColorSchema } from './colors.js'
+
+export { PROJECT_COLORS, type ProjectColor } from './colors.js'
 import { stateFile, stateTempFile } from './paths.js'
 import { readJsonFile, writeJsonFile } from './persist.js'
 
@@ -19,7 +22,16 @@ export const ProjectSchema = z.object({
   name: z.string().min(1),
   repoPath: z.string().min(1),
   baseBranch: z.string().min(1),
-  branchPrefix: z.string().min(1)
+  branchPrefix: z.string().min(1),
+  /**
+   * Optional on disk, always present in memory.
+   *
+   * A default here would give every project written before colours existed
+   * the same one, which is the opposite of what the colour is for. `migrate`
+   * hands out distinct colours instead, and can only do that if it can tell
+   * "had no colour" from "chose blue".
+   */
+  color: ProjectColorSchema.optional()
 })
 
 export const WorkspaceStatusSchema = z.enum([
@@ -50,9 +62,20 @@ export const StateSchema = z.object({
   workspaces: z.array(WorkspaceSchema)
 })
 
-export type Project = z.infer<typeof ProjectSchema>
+/**
+ * A project as the rest of the application sees it — colour always resolved.
+ *
+ * The schema keeps `color` optional because that is how an older file on disk
+ * looks; `migrate` fills it in, and nothing downstream should have to wonder
+ * whether a project has a colour.
+ */
+export type Project = z.infer<typeof ProjectSchema> & { color: ProjectColor }
 export type Workspace = z.infer<typeof WorkspaceSchema>
-export type State = z.infer<typeof StateSchema>
+
+/** State as read from disk, before `migrate` has filled anything in. */
+type StoredState = z.infer<typeof StateSchema>
+
+export type State = Omit<StoredState, 'projects'> & { projects: Project[] }
 
 export const EMPTY_STATE: State = { version: 1, projects: [], workspaces: [] }
 
@@ -76,14 +99,24 @@ export async function loadState(filePath: string = stateFile()): Promise<State> 
  * written before that change are rewritten on load, so only one format is
  * ever in play.
  */
-export function migrate(state: State): State {
+export function migrate(state: StoredState): State {
   const workspaces = state.workspaces.map((workspace) =>
     workspace.id.includes('/')
       ? workspace
       : { ...workspace, id: `${workspace.projectId}/${workspace.id}` }
   )
 
-  return { ...state, workspaces }
+  // Colours are handed out one project at a time, each seeing what the
+  // previous ones took, so a file written before colours existed comes back
+  // with distinct ones rather than a wall of the same default.
+  const assigned: ProjectColor[] = []
+  const projects = state.projects.map((project) => {
+    const color = project.color ?? nextProjectColor(assigned)
+    assigned.push(color)
+    return { ...project, color }
+  })
+
+  return { ...state, projects, workspaces }
 }
 
 export async function saveState(
@@ -145,7 +178,11 @@ export function addProject(state: State, project: Project): State {
  * keyed by the id, and the repository is not ours to move. `branchPrefix`
  * belongs to the config, which is shared across projects.
  */
-export const ProjectPatchSchema = ProjectSchema.pick({ name: true, baseBranch: true }).partial()
+export const ProjectPatchSchema = ProjectSchema.pick({
+  name: true,
+  baseBranch: true,
+  color: true
+}).partial()
 
 export type ProjectPatch = z.infer<typeof ProjectPatchSchema>
 

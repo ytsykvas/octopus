@@ -13,6 +13,7 @@ import {
   findProject,
   loadState,
   migrate,
+  PROJECT_COLORS,
   PORT_RANGE_END,
   PORT_RANGE_START,
   type Project,
@@ -32,7 +33,8 @@ const project: Project = {
   name: 'planner',
   repoPath: '/repos/planner',
   baseBranch: 'main',
-  branchPrefix: 'ytsykvas'
+  branchPrefix: 'ytsykvas',
+  color: 'blue'
 }
 
 function makeWorkspace(overrides: Partial<Workspace> = {}): Workspace {
@@ -121,8 +123,50 @@ describe('migration', () => {
     const legacy: State = { ...withProject, workspaces: [makeWorkspace({ id: 'kyiv' })] }
     const migrated = migrate(legacy)
 
-    expect(migrated.projects).toEqual(legacy.projects)
+    expect(migrated.projects[0]?.name).toBe('planner')
     expect(migrated.workspaces[0]?.branch).toBe('ytsykvas/kyiv')
+  })
+
+  // A default in the schema would give every project written before colours
+  // existed the same one, which is precisely what the colour is meant to avoid.
+  it('gives colourless projects distinct colours', () => {
+    const legacy = {
+      version: 1 as const,
+      projects: [
+        { ...project, color: undefined },
+        { ...project, id: 'esl', repoPath: '/repos/esl', color: undefined },
+        { ...project, id: 'planner-2', repoPath: '/repos/planner-2', color: undefined }
+      ],
+      workspaces: []
+    }
+
+    const colours = migrate(legacy).projects.map((item) => item.color)
+    expect(new Set(colours).size).toBe(3)
+  })
+
+  it('leaves a project that already has a colour alone', () => {
+    const stored = {
+      version: 1 as const,
+      projects: [{ ...project, color: 'teal' as const }],
+      workspaces: []
+    }
+
+    expect(migrate(stored).projects[0]?.color).toBe('teal')
+  })
+
+  // A colour already in use must not be handed out again to the project
+  // sitting next to it in the same list.
+  it('avoids a colour a neighbouring project already holds', () => {
+    const stored = {
+      version: 1 as const,
+      projects: [
+        { ...project, color: PROJECT_COLORS[0] },
+        { ...project, id: 'esl', repoPath: '/repos/esl', color: undefined }
+      ],
+      workspaces: []
+    }
+
+    expect(migrate(stored).projects[1]?.color).not.toBe(PROJECT_COLORS[0])
   })
 })
 

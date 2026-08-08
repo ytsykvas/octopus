@@ -8,6 +8,7 @@ import type { ThemeName } from '@core/types.js'
 
 import { RepositoryPicker } from './components/RepositoryPicker.js'
 import { ProjectSettings } from './components/ProjectSettings.js'
+import { ProjectTabs } from './components/ProjectTabs.js'
 import { RightPanel } from './components/RightPanel.js'
 import { Settings } from './components/Settings.js'
 import { Sidebar } from './components/Sidebar.js'
@@ -118,25 +119,34 @@ export function App(): React.JSX.Element {
     [projects, workspaces]
   )
 
-  // ⌘⇧N creates a workspace in the selected project; ⌘1–⌘9 jump between
-  // them (§10.8).
+  // ⌘⇧N creates a workspace. ⌘1–⌘9 switch project, as they do between tabs
+  // everywhere else; ⌃1–⌃9 move within the current project's workspaces.
   useEffect(() => {
     const onKey = (event: KeyboardEvent): void => {
-      if (!event.metaKey) return
-
-      if (event.shiftKey && event.key.toLowerCase() === 'n') {
+      if (event.metaKey && event.shiftKey && event.key.toLowerCase() === 'n') {
         event.preventDefault()
         if (selectedProjectId !== null) void workspaces.create(selectedProjectId)
         return
       }
 
       const digit = Number.parseInt(event.key, 10)
-      if (!Number.isNaN(digit) && digit >= 1 && digit <= 9) {
-        const target = workspaces.flat[digit - 1]
+      if (Number.isNaN(digit) || digit < 1 || digit > 9) return
+
+      if (event.metaKey) {
+        const project = projects.all[digit - 1]
+        if (project) {
+          event.preventDefault()
+          setSelectedProjectId(project.id)
+          setSelectedWorkspaceId(null)
+        }
+        return
+      }
+
+      if (event.ctrlKey && selectedProjectId !== null) {
+        const target = (workspaces.byProject.get(selectedProjectId) ?? [])[digit - 1]
         if (target) {
           event.preventDefault()
           setSelectedWorkspaceId(target.id)
-          setSelectedProjectId(target.projectId)
         }
       }
     }
@@ -145,7 +155,7 @@ export function App(): React.JSX.Element {
     return () => {
       window.removeEventListener('keydown', onKey)
     }
-  }, [selectedProjectId, workspaces])
+  }, [selectedProjectId, workspaces, projects])
 
   const selectedProject = projects.all.find((project) => project.id === selectedProjectId) ?? null
   const editingProject = projects.all.find((project) => project.id === editingProjectId) ?? null
@@ -164,13 +174,15 @@ export function App(): React.JSX.Element {
 
   return (
     <div className="bg-canvas text-ink flex h-full">
-      <Sidebar
+      <ProjectTabs
         projects={projects.all}
-        selectedProjectId={selectedProjectId}
-        onSelectProject={(id) => {
+        activeProjectId={selectedProjectId}
+        onSelect={(id) => {
           setSelectedProjectId(id)
           setSelectedWorkspaceId(null)
         }}
+        onEdit={setEditingProjectId}
+        onRemove={(id) => void removeProject(id)}
         onAddFromDisk={() => {
           void (async () => {
             const added = await projects.addFromDisk()
@@ -180,16 +192,23 @@ export function App(): React.JSX.Element {
         onAddFromGitHub={() => {
           setPickingRepository(true)
         }}
-        onEditProject={setEditingProjectId}
-        onRemoveProject={(id) => void removeProject(id)}
-        workspaces={workspaces.byProject}
+        busy={projects.busy}
+      />
+
+      <Sidebar
+        project={selectedProject}
+        workspaces={selectedProject ? (workspaces.byProject.get(selectedProject.id) ?? []) : []}
         selectedWorkspaceId={selectedWorkspaceId}
-        onSelectWorkspace={(id) => {
-          setSelectedWorkspaceId(id)
-          const owner = workspaces.flat.find((item) => item.id === id)
-          if (owner) setSelectedProjectId(owner.projectId)
+        onSelectWorkspace={setSelectedWorkspaceId}
+        onEditProject={() => {
+          if (selectedProject) setEditingProjectId(selectedProject.id)
         }}
-        onCreateWorkspace={(id) => void workspaces.create(id)}
+        onRemoveProject={() => {
+          if (selectedProject) void removeProject(selectedProject.id)
+        }}
+        onCreateWorkspace={() => {
+          if (selectedProject) void workspaces.create(selectedProject.id)
+        }}
         onRenameWorkspace={(id, name) => void workspaces.rename(id, name)}
         onRemoveWorkspace={(id) => void workspaces.remove(id)}
         editingWorkspaceId={workspaces.editingId}
@@ -197,7 +216,6 @@ export function App(): React.JSX.Element {
         onOpenSettings={() => {
           setSettingsOpen(true)
         }}
-        busy={projects.busy}
       />
 
       <main className="flex min-w-0 flex-1 flex-col">

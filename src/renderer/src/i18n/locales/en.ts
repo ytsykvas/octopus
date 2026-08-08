@@ -51,6 +51,7 @@ export const en = {
 
   workspaces: {
     create: 'New workspace',
+    emptyForProject: 'No workspaces yet. Add one with the + above.',
     rename: 'Rename',
     remove: 'Remove workspace',
     missing: 'Directory is gone',
@@ -84,6 +85,8 @@ export const en = {
     branchNone: 'No matching branch',
     branchFailed:
       'That branch could not be set. It may have been deleted since this list was read.',
+    color: 'Colour',
+    colorHint: 'Identifies the project in the tab strip and tints this sidebar.',
     repository: 'Repository',
     dangerZone: 'Danger zone',
     removeHint: 'Removes the project from octopus. The repository stays on disk.'

@@ -48,7 +48,8 @@ beforeEach(async () => {
     name: 'planner',
     repoPath: repo,
     baseBranch: 'main',
-    branchPrefix: 'ytsykvas'
+    branchPrefix: 'ytsykvas',
+    color: 'blue'
   }
   state = addProject(EMPTY_STATE, project)
 })

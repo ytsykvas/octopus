@@ -37,6 +37,17 @@
   --danger-bg: #fdeaea;
   --warning-bg: #fdf3e3;
   --info-bg: #e4f4f8;
+
+  /* Project identity. Chosen to stay apart at a glance and to carry white
+     text at full strength — the tab of the active project is filled. */
+  --project-blue: #2563eb;
+  --project-violet: #7c3aed;
+  --project-pink: #db2777;
+  --project-rose: #e11d48;
+  --project-amber: #b45309;
+  --project-green: #16a34a;
+  --project-teal: #0d9488;
+  --project-slate: #52606d;
 }
 
 .dark {
@@ -63,6 +74,16 @@
   --danger-bg: #2b1516;
   --warning-bg: #2b1f0d;
   --info-bg: #0d2429;
+
+  /* Lifted against the dark ground: the light-theme values read as mud here. */
+  --project-blue: #3b82f6;
+  --project-violet: #a78bfa;
+  --project-pink: #f472b6;
+  --project-rose: #fb7185;
+  --project-amber: #fbbf24;
+  --project-green: #4ade80;
+  --project-teal: #2dd4bf;
+  --project-slate: #94a3b8;
 }
 
 @theme inline {
@@ -155,6 +176,13 @@
     border: 1px solid var(--border);
     border-radius: var(--radius-control);
     background-color: var(--canvas);
+  }
+
+  /* Surface carrying a project's colour as a wash rather than a fill: the
+     workspace list is read for long stretches, and a saturated ground behind
+     it tires the eye. `--project-color` is set inline by the component. */
+  .project-tinted {
+    background-color: color-mix(in srgb, var(--project-color) 6%, var(--surface));
   }
 
   .panel {
