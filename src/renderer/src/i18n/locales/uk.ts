@@ -76,6 +76,10 @@ export const uk: Translation = {
 
   project: {
     title: 'Налаштування проєкту',
+    sectionGeneral: 'Загальні',
+    sectionGit: 'Git',
+    sectionScripts: 'Скрипти',
+    sectionDanger: 'Небезпечна зона',
     done: 'Готово',
     name: 'Назва',
     nameHint: 'Показується в сайдбарі. Репозиторій і його теку не змінює.',

@@ -1,3 +1,4 @@
+import { GitBranch, Info, Terminal, TriangleAlert } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
@@ -38,6 +39,23 @@ function shortBranch(branch: string): string {
   return branch.startsWith('origin/') ? branch.slice('origin/'.length) : branch
 }
 
+type SectionId = 'general' | 'git' | 'scripts' | 'danger'
+
+const SECTIONS: readonly {
+  readonly id: SectionId
+  readonly labelKey:
+    | 'project.sectionGeneral'
+    | 'project.sectionGit'
+    | 'project.sectionScripts'
+    | 'project.sectionDanger'
+  readonly Icon: typeof Info
+}[] = [
+  { id: 'general', labelKey: 'project.sectionGeneral', Icon: Info },
+  { id: 'git', labelKey: 'project.sectionGit', Icon: GitBranch },
+  { id: 'scripts', labelKey: 'project.sectionScripts', Icon: Terminal },
+  { id: 'danger', labelKey: 'project.sectionDanger', Icon: TriangleAlert }
+]
+
 export function ProjectSettings({
   project,
   onUpdate,
@@ -47,6 +65,7 @@ export function ProjectSettings({
   const { t } = useTranslation()
   const describeFailure = useErrorMessage()
 
+  const [section, setSection] = useState<SectionId>('general')
   const [name, setName] = useState(project.name)
   const [branches, setBranches] = useState<readonly string[]>([])
   const [error, setError] = useState<string | null>(null)
@@ -95,100 +114,140 @@ export function ProjectSettings({
       onClose={onClose}
       footer={<Button onClick={onClose}>{t('project.done')}</Button>}
     >
-      {/* Modal leaves its body flush so a list can span the full width; a form
-          has to bring its own padding. */}
-      <div className="space-y-5 p-4">
-        {error !== null && (
-          <div className="bg-danger-bg text-danger border-danger/25 rounded-[var(--radius-control)] border px-3 py-2">
-            {error}
-          </div>
-        )}
-
-        <Field label={t('project.name')} hint={t('project.nameHint')}>
-          <input
-            value={name}
-            onChange={(event) => {
-              setName(event.target.value)
-            }}
-            onBlur={commitName}
-            onKeyDown={(event) => {
-              if (event.key === 'Enter') event.currentTarget.blur()
-              if (event.key === 'Escape') setName(project.name)
-            }}
-            className="input focus-ring max-w-sm"
-          />
-        </Field>
-
-        {/* The list is only what the repository offers. A project added before
-            this dialog existed may still sit on a local `main`, and showing
-            that next to `origin/main` would list two entries for what reads as
-            one branch. The button shows the stored value either way, so the
-            difference is visible and one click from fixed. */}
-        <Field label={t('project.baseBranch')} hint={t('project.baseBranchHint')}>
-          <Combobox
-            value={project.baseBranch}
-            options={branches}
-            onChange={changeBranch}
-            placeholder={t('project.branchSearch')}
-            emptyLabel={t('project.branchNone')}
-            display={shortBranch}
-          />
-        </Field>
-
-        <Field label={t('project.color')} hint={t('project.colorHint')}>
-          <div className="flex flex-wrap gap-1.5">
-            {PROJECT_COLORS.map((colour) => (
-              <button
-                key={colour}
-                type="button"
-                onClick={() => void onUpdate({ color: colour })}
-                title={colour}
-                aria-pressed={colour === project.color}
-                className={`focus-ring size-6 rounded-full transition-transform hover:scale-110 ${
-                  colour === project.color ? 'ring-ink-faint ring-2 ring-offset-2' : ''
-                }`}
-                // The swatch is the colour, so it cannot come from a class.
-                style={{
-                  backgroundColor: `var(--project-${colour})`,
-                  // Tailwind's offset colour is a variable, not a token here.
-                  ['--tw-ring-offset-color' as string]: 'var(--canvas)'
-                }}
-              />
+      {/* A rail rather than one long scroll: the sections have nothing to do
+          with each other, and the same shape as the settings window means one
+          way of navigating rather than two. */}
+      <div className="flex min-h-[19rem]">
+        <nav className="border-line bg-surface w-40 shrink-0 border-r p-2">
+          <ul className="space-y-px">
+            {SECTIONS.map((item) => (
+              <li key={item.id}>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSection(item.id)
+                  }}
+                  className={`row focus-ring flex w-full items-center gap-2 px-2 py-1.5 ${
+                    section === item.id
+                      ? 'row-selected font-medium'
+                      : item.id === 'danger'
+                        ? 'text-danger'
+                        : 'text-ink-soft'
+                  }`}
+                >
+                  <item.Icon aria-hidden size={14} className="shrink-0" />
+                  {t(item.labelKey)}
+                </button>
+              </li>
             ))}
-          </div>
-        </Field>
+          </ul>
+        </nav>
 
-        <ScriptEditor
-          projectId={project.id}
-          kind="setup"
-          label={t('project.setupScript')}
-          hint={t('project.setupScriptHint')}
-        />
+        <div className="min-w-0 flex-1 space-y-5 overflow-auto p-4">
+          {error !== null && (
+            <div className="bg-danger-bg text-danger border-danger/25 rounded-[var(--radius-control)] border px-3 py-2">
+              {error}
+            </div>
+          )}
 
-        <ScriptEditor
-          projectId={project.id}
-          kind="run"
-          label={t('project.runScript')}
-          hint={t('project.runScriptHint')}
-        />
+          {section === 'general' && (
+            <>
+              <Field label={t('project.name')} hint={t('project.nameHint')}>
+                <input
+                  value={name}
+                  onChange={(event) => {
+                    setName(event.target.value)
+                  }}
+                  onBlur={commitName}
+                  onKeyDown={(event) => {
+                    if (event.key === 'Enter') event.currentTarget.blur()
+                    if (event.key === 'Escape') setName(project.name)
+                  }}
+                  className="input focus-ring max-w-sm"
+                />
+              </Field>
 
-        <Field label={t('project.repository')}>
-          <p className="text-ink-faint truncate font-mono text-[11px]" title={project.repoPath}>
-            {project.repoPath}
-          </p>
-        </Field>
+              <Field label={t('project.color')} hint={t('project.colorHint')}>
+                <div className="flex flex-wrap gap-1.5">
+                  {PROJECT_COLORS.map((colour) => (
+                    <button
+                      key={colour}
+                      type="button"
+                      onClick={() => void onUpdate({ color: colour })}
+                      title={colour}
+                      aria-pressed={colour === project.color}
+                      className={`focus-ring size-6 rounded-full transition-transform hover:scale-110 ${
+                        colour === project.color ? 'ring-ink-faint ring-2 ring-offset-2' : ''
+                      }`}
+                      // The swatch is the colour, so it cannot come from a class.
+                      style={{
+                        backgroundColor: `var(--project-${colour})`,
+                        // Tailwind's offset colour is a variable, not a token here.
+                        ['--tw-ring-offset-color' as string]: 'var(--canvas)'
+                      }}
+                    />
+                  ))}
+                </div>
+              </Field>
 
-        {/* Destructive actions sit apart and below, so reaching one is a
-            deliberate move rather than a mis-click on the way past. The extra
-            gap above is what makes it read as a separate place. */}
-        <div className="border-danger/25 bg-danger-bg/40 mt-2 space-y-2.5 rounded-[var(--radius-control)] border p-3.5">
-          <p className="text-danger font-medium">{t('project.dangerZone')}</p>
-          <div className="flex items-center justify-between gap-4">
-            <p className="text-ink-faint max-w-sm leading-relaxed">{t('project.removeHint')}</p>
-            <Button variant="destructive" onClick={onRemove}>
-              {t('sidebar.removeProject')}
-            </Button>
-          </div>
+              <Field label={t('project.repository')}>
+                <p
+                  className="text-ink-faint truncate font-mono text-[11px]"
+                  title={project.repoPath}
+                >
+                  {project.repoPath}
+                </p>
+              </Field>
+            </>
+          )}
+
+          {/* The list is only what the repository offers. A project added before
+              this dialog existed may still sit on a local `main`, and showing
+              that next to `origin/main` would list two entries for what reads as
+              one branch. The button shows the stored value either way, so the
+              difference is visible and one click from fixed. */}
+          {section === 'git' && (
+            <Field label={t('project.baseBranch')} hint={t('project.baseBranchHint')}>
+              <Combobox
+                value={project.baseBranch}
+                options={branches}
+                onChange={changeBranch}
+                placeholder={t('project.branchSearch')}
+                emptyLabel={t('project.branchNone')}
+                display={shortBranch}
+              />
+            </Field>
+          )}
+
+          {section === 'scripts' && (
+            <>
+              <ScriptEditor
+                projectId={project.id}
+                kind="setup"
+                label={t('project.setupScript')}
+                hint={t('project.setupScriptHint')}
+              />
+
+              <ScriptEditor
+                projectId={project.id}
+                kind="run"
+                label={t('project.runScript')}
+                hint={t('project.runScriptHint')}
+              />
+            </>
+          )}
+
+          {/* Reaching removal now takes choosing the section it lives in, which
+              is a further step away from a mis-click than a scroll was. */}
+          {section === 'danger' && (
+            <div className="border-danger/25 bg-danger-bg/40 space-y-2.5 rounded-[var(--radius-control)] border p-3.5">
+              <p className="text-danger font-medium">{t('project.dangerZone')}</p>
+              <p className="text-ink-faint leading-relaxed">{t('project.removeHint')}</p>
+              <Button variant="destructive" onClick={onRemove}>
+                {t('sidebar.removeProject')}
+              </Button>
+            </div>
+          )}
         </div>
       </div>
     </Modal>

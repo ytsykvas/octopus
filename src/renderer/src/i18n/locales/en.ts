@@ -77,6 +77,10 @@ export const en = {
 
   project: {
     title: 'Project settings',
+    sectionGeneral: 'General',
+    sectionGit: 'Git',
+    sectionScripts: 'Scripts',
+    sectionDanger: 'Danger zone',
     done: 'Done',
     name: 'Name',
     nameHint: 'Shown in the sidebar. The repository and its folder are untouched.',
