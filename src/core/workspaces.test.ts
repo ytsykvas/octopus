@@ -6,7 +6,7 @@ import { promisify } from 'node:util'
 
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 
-import { type GitExec, gitIn } from './git.js'
+import { GitError, type GitExec, gitIn } from './git.js'
 import { NAME_POOL_SIZE, type Random, WORKSPACE_NAMES } from './names.js'
 import { addProject, EMPTY_STATE, type Project, type State, type Workspace } from './store.js'
 import { listWorktrees } from './worktree.js'
@@ -281,6 +281,23 @@ describe('renameWorkspace', () => {
     )
 
     expect((error as WorkspaceError).code).toBe('branchExists')
+  })
+
+  // Every git failure used to be reported as "that branch already exists",
+  // which blamed the new name for whatever actually went wrong. Renaming the
+  // branch from a terminal is the case that exposed it: the name asked for is
+  // free, and the truth is that the old branch is gone.
+  it('propagates the git failure instead of blaming the new name', async () => {
+    const workspace = await create()
+
+    await exec(['branch', '-m', workspace.branch, 'moved-by-hand'])
+
+    const error = await renameWorkspace(workspace, project, 'fix auth', exec).catch(
+      (cause: unknown) => cause
+    )
+
+    expect(error).toBeInstanceOf(GitError)
+    expect((error as GitError).stderr).toContain(workspace.branch)
   })
 })
 

@@ -11,7 +11,7 @@
 
 import { access } from 'node:fs/promises'
 
-import { type GitExec, toSlug } from './git.js'
+import { anyBranchExists, type GitExec, toSlug } from './git.js'
 import { nextWorkspaceName, type Random } from './names.js'
 import { workspacePath } from './paths.js'
 import { assignPort, type Project, type State, type Workspace } from './store.js'
@@ -207,11 +207,17 @@ export async function renameWorkspace(
     return { name: trimmed, branch }
   }
 
-  try {
-    await renameBranch(exec, workspace.branch, branch)
-  } catch {
+  // Asked before the attempt, so a failure can be named. Mapping every
+  // rejection to "already exists" blamed the new name for whatever went wrong —
+  // including the branch being renamed from a terminal, where the truth is that
+  // the old one is gone.
+  if (await anyBranchExists(exec, branch)) {
     throw new WorkspaceError('branchExists', { branch }, `Branch ${branch} already exists.`)
   }
+
+  // Anything else propagates with git's own stderr, which says more than a
+  // guess would.
+  await renameBranch(exec, workspace.branch, branch)
 
   return { name: trimmed, branch }
 }

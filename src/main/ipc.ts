@@ -196,12 +196,18 @@ export function registerIpc(
     return { ok: true, value: picked.canceled ? null : (chosen ?? null) }
   })
 
-  host.handle('projects:addFromGitHub', async (event, repository: RemoteRepository) => {
-    const destination = await resolveCloneDirectory(service, event, host)
-    if (destination === null) return { ok: true, value: null }
+  // Inside `attempt`, not before it: resolving the destination writes the
+  // choice to the config, and a failed write would otherwise reject across IPC
+  // as an opaque Electron error the renderer cannot explain.
+  host.handle('projects:addFromGitHub', (event, repository: RemoteRepository) =>
+    attempt(async () => {
+      const destination = await resolveCloneDirectory(service, event, host)
+      // Cancelling the destination prompt is a decision, not a failure.
+      if (destination === null) return null
 
-    return attempt(() => service.addProjectFromGitHub(repository, destination))
-  })
+      return service.addProjectFromGitHub(repository, destination)
+    })
+  )
 
   // Picking a directory is the one part that genuinely belongs to main:
   // the dialog is an Electron API.

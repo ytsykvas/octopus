@@ -403,6 +403,29 @@ describe('directory pickers', () => {
     expect(await invoke('projects:addFromGitHub', REPOSITORY)).toMatchObject({ ok: true })
     expect(cloning.listProjects()).toHaveLength(1)
   })
+
+  // Remembering the choice writes to the config, and that write can fail.
+  // It used to happen outside `attempt`, so the failure crossed IPC as a throw
+  // — an opaque Electron error the renderer could say nothing about.
+  it('reports a failure to remember the clone directory', async () => {
+    const destination = join(dir, 'clones')
+    const configDir = join(dir, 'config')
+    await mkdir(destination, { recursive: true })
+    await mkdir(configDir, { recursive: true })
+
+    await useService({
+      configFilePath: join(configDir, 'config.json'),
+      commandExec: cloningExec
+    })
+
+    // A file where the config directory was: the next write has nowhere to go.
+    await rm(configDir, { recursive: true, force: true })
+    await writeFile(configDir, 'not a directory\n', 'utf8')
+
+    bench.picked = { canceled: false, filePaths: [destination] }
+
+    expect(await invoke('projects:addFromGitHub', REPOSITORY)).toMatchObject({ ok: false })
+  })
 })
 
 describe('adding a project from disk', () => {
