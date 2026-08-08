@@ -1,4 +1,4 @@
-import { PanelRightOpen } from 'lucide-react'
+import { PanelRightOpen, Settings as SettingsIcon } from 'lucide-react'
 import { useCallback, useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
@@ -186,43 +186,59 @@ export function App(): React.JSX.Element {
 
   return (
     <div className="bg-canvas text-ink flex h-full">
-      <ProjectTabs
-        projects={projects.all}
-        activeProjectId={selectedProjectId}
-        onSelect={(id) => {
-          setSelectedProjectId(id)
-          setSelectedWorkspaceId(null)
-        }}
-        onEdit={setEditingProjectId}
-        onRemove={(id) => void removeProject(id)}
-        onAddFromDisk={() => {
-          void (async () => {
-            const added = await projects.addFromDisk()
-            if (added) setSelectedProjectId(added.id)
-          })()
-        }}
-        onAddFromGitHub={() => {
-          setPickingRepository(true)
-        }}
-        busy={projects.busy}
-      />
+      {/* Tabs and workspaces are one column, so Settings can sit in the corner
+          of the window rather than inset by the width of the tab strip. */}
+      <div className="flex min-h-0 shrink-0 flex-col">
+        <div className="flex min-h-0 flex-1">
+          <ProjectTabs
+            projects={projects.all}
+            activeProjectId={selectedProjectId}
+            onSelect={(id) => {
+              setSelectedProjectId(id)
+              setSelectedWorkspaceId(null)
+            }}
+            onEdit={setEditingProjectId}
+            onRemove={(id) => void removeProject(id)}
+            onAddFromDisk={() => {
+              void (async () => {
+                const added = await projects.addFromDisk()
+                if (added) setSelectedProjectId(added.id)
+              })()
+            }}
+            onAddFromGitHub={() => {
+              setPickingRepository(true)
+            }}
+            busy={projects.busy}
+          />
 
-      <Sidebar
-        project={selectedProject}
-        workspaces={selectedProject ? (workspaces.byProject.get(selectedProject.id) ?? []) : []}
-        selectedWorkspaceId={selectedWorkspaceId}
-        onSelectWorkspace={setSelectedWorkspaceId}
-        onCreateWorkspace={() => {
-          if (selectedProject) void workspaces.create(selectedProject.id)
-        }}
-        onRenameWorkspace={(id, name) => void workspaces.rename(id, name)}
-        onRemoveWorkspace={(id) => void workspaces.remove(id)}
-        editingWorkspaceId={workspaces.editingId}
-        onEditingWorkspaceChange={workspaces.setEditingId}
-        onOpenSettings={() => {
-          setSettingsOpen(true)
-        }}
-      />
+          <Sidebar
+            project={selectedProject}
+            workspaces={selectedProject ? (workspaces.byProject.get(selectedProject.id) ?? []) : []}
+            selectedWorkspaceId={selectedWorkspaceId}
+            onSelectWorkspace={setSelectedWorkspaceId}
+            onCreateWorkspace={() => {
+              if (selectedProject) void workspaces.create(selectedProject.id)
+            }}
+            onRenameWorkspace={(id, name) => void workspaces.rename(id, name)}
+            onRemoveWorkspace={(id) => void workspaces.remove(id)}
+            editingWorkspaceId={workspaces.editingId}
+            onEditingWorkspaceChange={workspaces.setEditingId}
+          />
+        </div>
+
+        <div className="border-line bg-surface border-t border-r p-2">
+          <button
+            type="button"
+            onClick={() => {
+              setSettingsOpen(true)
+            }}
+            className="row focus-ring text-ink-soft hover:text-ink flex w-full items-center gap-2 px-2 py-1.5"
+          >
+            <SettingsIcon aria-hidden size={14} />
+            {t('sidebar.settings')}
+          </button>
+        </div>
+      </div>
 
       <main className="flex min-w-0 flex-1 flex-col">
         <header className="titlebar-drag border-line flex h-11 shrink-0 items-center gap-3 border-b px-4">

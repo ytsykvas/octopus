@@ -1,4 +1,4 @@
-import { Plus, Settings as SettingsIcon } from 'lucide-react'
+import { Plus } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 
 import type { Project } from '@core/store.js'
@@ -15,7 +15,6 @@ interface SidebarProps {
   readonly onCreateWorkspace: () => void
   readonly onRenameWorkspace: (workspaceId: string, name: string) => void
   readonly onRemoveWorkspace: (workspaceId: string) => void
-  readonly onOpenSettings: () => void
   /** Workspace whose name is being edited — set right after creation. */
   readonly editingWorkspaceId: string | null
   readonly onEditingWorkspaceChange: (workspaceId: string | null) => void
@@ -37,7 +36,6 @@ export function Sidebar({
   onCreateWorkspace,
   onRenameWorkspace,
   onRemoveWorkspace,
-  onOpenSettings,
   editingWorkspaceId,
   onEditingWorkspaceChange
 }: SidebarProps): React.JSX.Element {
@@ -97,17 +95,6 @@ export function Sidebar({
       ) : (
         <p className="text-ink-faint flex-1 px-4 py-3 leading-relaxed">{t('sidebar.empty')}</p>
       )}
-
-      <div className="border-line border-t p-2">
-        <button
-          type="button"
-          onClick={onOpenSettings}
-          className="row focus-ring text-ink-soft hover:text-ink flex w-full items-center gap-2 px-2 py-1.5"
-        >
-          <SettingsIcon aria-hidden size={14} />
-          {t('sidebar.settings')}
-        </button>
-      </div>
     </aside>
   )
 }
