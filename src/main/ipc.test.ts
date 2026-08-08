@@ -31,7 +31,7 @@ const run = promisify(execFile)
 /**
  * A stand-in for the Electron surface the IPC layer touches.
  *
- * Four small objects instead of a framework — which is the point of injecting
+ * Five small functions instead of a framework — which is the point of injecting
  * them: the whole channel table can be exercised without a window.
  */
 interface Harness {
