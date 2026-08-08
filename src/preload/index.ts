@@ -6,6 +6,7 @@ import type { Config } from '@core/config.js'
 import type { RemoteRepository } from '@core/github.js'
 import type { Workspace } from '@core/store.js'
 import type { RemoveOptions, WorkspaceView } from '@core/workspaces.js'
+import type { InstructionKind } from '@core/instructions.js'
 import type { ScriptKind } from '@core/scripts.js'
 import type { Project, ProjectPatch } from '@core/store.js'
 import type { ThemeName } from '@core/types.js'
@@ -162,6 +163,17 @@ const api = {
 
     saveScript: (projectId: string, kind: ScriptKind, contents: string): Promise<Result<void>> =>
       ipcRenderer.invoke('scripts:save', projectId, kind, contents) as Promise<Result<void>>,
+
+    /** Guidance for the agent; a missing one comes back as a template. */
+    readInstruction: (projectId: string, kind: InstructionKind): Promise<Result<string>> =>
+      ipcRenderer.invoke('instructions:read', projectId, kind) as Promise<Result<string>>,
+
+    saveInstruction: (
+      projectId: string,
+      kind: InstructionKind,
+      contents: string
+    ): Promise<Result<void>> =>
+      ipcRenderer.invoke('instructions:save', projectId, kind, contents) as Promise<Result<void>>,
 
     /** Where each script lives, or null where none has been written. */
     scriptPaths: (projectId: string): Promise<Result<Record<ScriptKind, string | null>>> =>

@@ -1,4 +1,4 @@
-import { GitBranch, Info, Terminal, TriangleAlert } from 'lucide-react'
+import { BookText, GitBranch, Info, Terminal, TriangleAlert } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
@@ -12,7 +12,7 @@ import { Combobox } from './Combobox.js'
 import { Field } from './Field.js'
 import { Modal } from './Modal.js'
 import { SectionRail } from './SectionRail.js'
-import { ScriptEditor } from './ScriptEditor.js'
+import { FileEditor } from './FileEditor.js'
 
 interface ProjectSettingsProps {
   readonly project: Project
@@ -22,7 +22,7 @@ interface ProjectSettingsProps {
   readonly onClose: () => void
 }
 
-type SectionId = 'general' | 'git' | 'scripts' | 'danger'
+type SectionId = 'general' | 'git' | 'scripts' | 'instructions' | 'danger'
 
 const SECTIONS: readonly {
   readonly id: SectionId
@@ -30,6 +30,7 @@ const SECTIONS: readonly {
     | 'project.sectionGeneral'
     | 'project.sectionGit'
     | 'project.sectionScripts'
+    | 'project.sectionInstructions'
     | 'project.sectionDanger'
   readonly Icon: typeof Info
   readonly destructive?: boolean
@@ -37,6 +38,7 @@ const SECTIONS: readonly {
   { id: 'general', labelKey: 'project.sectionGeneral', Icon: Info },
   { id: 'git', labelKey: 'project.sectionGit', Icon: GitBranch },
   { id: 'scripts', labelKey: 'project.sectionScripts', Icon: Terminal },
+  { id: 'instructions', labelKey: 'project.sectionInstructions', Icon: BookText },
   { id: 'danger', labelKey: 'project.sectionDanger', Icon: TriangleAlert, destructive: true }
 ]
 
@@ -194,20 +196,52 @@ export function ProjectSettings({
 
           {section === 'scripts' && (
             <>
-              <ScriptEditor
-                projectId={project.id}
-                kind="setup"
+              <FileEditor
                 label={t('project.setupScript')}
                 hint={t('project.setupScriptHint')}
+                placeholder="#!/bin/sh"
+                read={async () => {
+                  const result = await window.octopus.projects.readScript(project.id, 'setup')
+                  return result.ok ? result.value : null
+                }}
+                save={(contents) =>
+                  void window.octopus.projects.saveScript(project.id, 'setup', contents)
+                }
               />
 
-              <ScriptEditor
-                projectId={project.id}
-                kind="run"
+              <FileEditor
                 label={t('project.runScript')}
                 hint={t('project.runScriptHint')}
+                placeholder="#!/bin/sh"
+                read={async () => {
+                  const result = await window.octopus.projects.readScript(project.id, 'run')
+                  return result.ok ? result.value : null
+                }}
+                save={(contents) =>
+                  void window.octopus.projects.saveScript(project.id, 'run', contents)
+                }
               />
             </>
+          )}
+
+          {/* Nothing reads this yet — pull requests are still ahead. It is here
+              because the conventions are worth writing down while the project
+              is being set up, not scrambled for at the moment a PR is opened. */}
+          {section === 'instructions' && (
+            <FileEditor
+              label={t('project.pullRequestInstruction')}
+              hint={t('project.pullRequestInstructionHint')}
+              read={async () => {
+                const result = await window.octopus.projects.readInstruction(
+                  project.id,
+                  'pullRequest'
+                )
+                return result.ok ? result.value : null
+              }}
+              save={(contents) =>
+                void window.octopus.projects.saveInstruction(project.id, 'pullRequest', contents)
+              }
+            />
           )}
 
           {/* Reaching removal now takes choosing the section it lives in, which

@@ -11,6 +11,7 @@ import { type Config, loadConfig, saveConfig } from './config.js'
 import { cloneRepository, listRepositories, type RemoteRepository } from './github.js'
 import type { GitExec } from './git.js'
 import { gitIn } from './git.js'
+import { type InstructionKind, readInstruction, writeInstruction } from './instructions.js'
 import { configFile, rootDir, stateFile, stateTempFile } from './paths.js'
 import { assertBranchExists, createProject, orderBaseBranches } from './projects.js'
 import { readScript, type ScriptKind, scriptExists, scriptPath, writeScript } from './scripts.js'
@@ -86,6 +87,10 @@ export interface OctopusService {
    * it to a shell, and only the core knows where the data root is.
    */
   projectScriptPaths(projectId: string): Promise<Record<ScriptKind, string | null>>
+
+  /** Guidance handed to the agent, or a starting template if none is written. */
+  readProjectInstruction(projectId: string, kind: InstructionKind): Promise<string>
+  saveProjectInstruction(projectId: string, kind: InstructionKind, contents: string): Promise<void>
 
   /** Workspaces of a project, reconciled with what git actually has. */
   listWorkspaces(projectId: string): Promise<WorkspaceView[]>
@@ -221,6 +226,16 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
           : null
 
       return { setup: await resolve('setup'), run: await resolve('run') }
+    },
+
+    async readProjectInstruction(projectId, kind) {
+      requireProject(projectId)
+      return readInstruction(kind, projectId, dataRoot)
+    },
+
+    async saveProjectInstruction(projectId, kind, contents) {
+      requireProject(projectId)
+      await writeInstruction(kind, projectId, contents, dataRoot)
     },
 
     async removeProjectById(projectId) {

@@ -686,3 +686,46 @@ describe('project scripts', () => {
     expect(paths.setup).toContain(join('projects', id, 'scripts'))
   })
 })
+
+describe('project instructions', () => {
+  async function withProject(): Promise<string> {
+    const repo = join(dir, 'planner')
+    await initRepo(repo)
+    return (await service.addProjectFromPath(repo)).id
+  }
+
+  it('offers a template before anything has been written', async () => {
+    const id = await withProject()
+    await expect(service.readProjectInstruction(id, 'pullRequest')).resolves.toContain(
+      'Pull request'
+    )
+  })
+
+  it('reads back what was saved', async () => {
+    const id = await withProject()
+    await service.saveProjectInstruction(id, 'pullRequest', 'Always link the issue.\n')
+
+    await expect(service.readProjectInstruction(id, 'pullRequest')).resolves.toBe(
+      'Always link the issue.\n'
+    )
+  })
+
+  it('keeps one project instructions out of another', async () => {
+    const first = await withProject()
+
+    const other = join(dir, 'esl')
+    await initRepo(other)
+    const second = (await service.addProjectFromPath(other)).id
+
+    await service.saveProjectInstruction(first, 'pullRequest', 'first\n')
+
+    await expect(service.readProjectInstruction(second, 'pullRequest')).resolves.toContain(
+      'Pull request'
+    )
+  })
+
+  it('refuses a project that does not exist', async () => {
+    await expect(service.readProjectInstruction('missing', 'pullRequest')).rejects.toThrow()
+    await expect(service.saveProjectInstruction('missing', 'pullRequest', 'x')).rejects.toThrow()
+  })
+})

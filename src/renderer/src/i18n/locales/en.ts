@@ -80,6 +80,7 @@ export const en = {
     sectionGeneral: 'General',
     sectionGit: 'Git',
     sectionScripts: 'Scripts',
+    sectionInstructions: 'Instructions',
     sectionDanger: 'Danger zone',
     done: 'Done',
     name: 'Name',
@@ -99,6 +100,9 @@ export const en = {
     runScript: 'Server script',
     runScriptHint:
       'Starts the dev server. $OCTOPUS_PORT is set to the workspace\u2019s own port, so several can serve at once. Saved as run.sh.',
+    pullRequestInstruction: 'Pull request descriptions',
+    pullRequestInstructionHint:
+      'Handed to the agent when it writes a pull request for this project. Nothing reads it yet — pull requests are still ahead.',
     repository: 'Repository',
     dangerZone: 'Danger zone',
     removeHint: 'Removes the project from octopus. The repository stays on disk.'

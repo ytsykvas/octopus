@@ -49,6 +49,16 @@ export function projectScriptsDir(projectId: ProjectId, root: string = rootDir()
   return join(projectDir(projectId, root), 'scripts')
 }
 
+/** Directory holding a project's instruction files for the agent. */
+export function projectInstructionsDir(projectId: ProjectId, root: string = rootDir()): string {
+  return join(projectDir(projectId, root), 'instructions')
+}
+
+/** How the agent should write a pull request description for this project. */
+export function pullRequestInstruction(projectId: ProjectId, root: string = rootDir()): string {
+  return join(projectInstructionsDir(projectId, root), 'pull-request.md')
+}
+
 /** Script run right after `git worktree add`. */
 export function setupScript(projectId: ProjectId, root: string = rootDir()): string {
   return join(projectScriptsDir(projectId, root), 'setup.sh')

@@ -8,6 +8,7 @@ import { describeError } from '../core/persist.js'
 import { GitHubError, type RemoteRepository } from '../core/github.js'
 import { ProjectValidationError } from '../core/projects.js'
 import { type RemoveOptions, WorkspaceError } from '../core/workspaces.js'
+import { InstructionBodySchema, InstructionKindSchema } from '../core/instructions.js'
 import { ScriptBodySchema, ScriptKindSchema } from '../core/scripts.js'
 import { ProjectPatchSchema } from '../core/store.js'
 import { createService, type OctopusService } from '../core/service.js'
@@ -176,6 +177,22 @@ function registerIpc(service: OctopusService, terminals: TerminalManager): void 
 
   ipcMain.handle('scripts:paths', (_event, projectId: string) =>
     attempt(() => service.projectScriptPaths(projectId))
+  )
+
+  ipcMain.handle('instructions:read', (_event, projectId: string, kind: unknown) =>
+    attempt(() => service.readProjectInstruction(projectId, InstructionKindSchema.parse(kind)))
+  )
+
+  ipcMain.handle(
+    'instructions:save',
+    (_event, projectId: string, kind: unknown, contents: unknown) =>
+      attempt(() =>
+        service.saveProjectInstruction(
+          projectId,
+          InstructionKindSchema.parse(kind),
+          InstructionBodySchema.parse(contents)
+        )
+      )
   )
 
   ipcMain.handle('projects:remove', (_event, projectId: string) =>

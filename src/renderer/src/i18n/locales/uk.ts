@@ -79,6 +79,7 @@ export const uk: Translation = {
     sectionGeneral: 'Загальні',
     sectionGit: 'Git',
     sectionScripts: 'Скрипти',
+    sectionInstructions: 'Інструкції',
     sectionDanger: 'Небезпечна зона',
     done: 'Готово',
     name: 'Назва',
@@ -97,6 +98,9 @@ export const uk: Translation = {
     runScript: 'Скрипт сервера',
     runScriptHint:
       'Запускає dev-сервер. $OCTOPUS_PORT — власний порт воркспейсу, тож кілька можуть працювати одночасно. Зберігається як run.sh.',
+    pullRequestInstruction: 'Опис pull request',
+    pullRequestInstructionHint:
+      'Передається агенту, коли він писатиме pull request для цього проєкту. Поки не використовується — pull request ще попереду.',
     repository: 'Репозиторій',
     dangerZone: 'Небезпечна зона',
     removeHint: 'Прибирає проєкт з Octopus. Репозиторій лишається на диску.'
