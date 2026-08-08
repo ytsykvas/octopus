@@ -144,7 +144,7 @@ function ProjectTab({
               active
                 ? { backgroundColor: 'var(--project-color)', color: '#fff' }
                 : {
-                    backgroundColor: 'color-mix(in srgb, var(--project-color) 16%, transparent)',
+                    backgroundColor: 'color-mix(in srgb, var(--project-color) 26%, transparent)',
                     color: 'var(--project-color)'
                   }
             }

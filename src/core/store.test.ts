@@ -238,6 +238,20 @@ describe('projects', () => {
     expect(updated.projects[0]?.name).toBe('planner')
   })
 
+  // The patch type grew a field and the update forgot to apply it, so the
+  // colour picker looked like it did nothing at all.
+  it('changes the colour', () => {
+    const updated = updateProject(withProject, 'planner', { color: 'teal' })
+    expect(updated.projects[0]?.color).toBe('teal')
+  })
+
+  it('changes the colour without disturbing the name or branch', () => {
+    const updated = updateProject(withProject, 'planner', { color: 'amber' })
+
+    expect(updated.projects[0]?.name).toBe('planner')
+    expect(updated.projects[0]?.baseBranch).toBe('main')
+  })
+
   it('accepts an empty patch as a no-op', () => {
     expect(updateProject(withProject, 'planner', {}).projects[0]).toEqual(withProject.projects[0])
   })

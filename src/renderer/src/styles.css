@@ -182,7 +182,7 @@
      workspace list is read for long stretches, and a saturated ground behind
      it tires the eye. `--project-color` is set inline by the component. */
   .project-tinted {
-    background-color: color-mix(in srgb, var(--project-color) 6%, var(--surface));
+    background-color: color-mix(in srgb, var(--project-color) 12%, var(--surface));
   }
 
   .panel {

@@ -213,6 +213,7 @@ export function updateProject(state: State, projectId: string, patch: ProjectPat
       project.id === projectId
         ? {
             ...project,
+            ...(patch.color !== undefined && { color: patch.color }),
             ...(name !== undefined && { name }),
             ...(baseBranch !== undefined && { baseBranch })
           }
