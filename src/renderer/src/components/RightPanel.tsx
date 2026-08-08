@@ -5,6 +5,7 @@ import { useTranslation } from 'react-i18next'
 import type { WorkspaceView } from '@core/workspaces.js'
 
 import { ResizeHandle } from './ResizeHandle.js'
+import { ScriptRunner } from './ScriptRunner.js'
 import { WorkspaceTerminals } from './WorkspaceTerminals.js'
 
 /**
@@ -12,14 +13,16 @@ import { WorkspaceTerminals } from './WorkspaceTerminals.js'
  *
  * The changes tab gets its content with the diff viewer; the terminal is live.
  */
-type RightTab = 'diff' | 'terminal'
+type RightTab = 'diff' | 'terminal' | 'build' | 'server'
 
 const TABS: readonly {
   readonly id: RightTab
-  readonly labelKey: 'panel.changes' | 'panel.terminal'
+  readonly labelKey: 'panel.changes' | 'panel.terminal' | 'scripts.build' | 'scripts.server'
 }[] = [
   { id: 'diff', labelKey: 'panel.changes' },
-  { id: 'terminal', labelKey: 'panel.terminal' }
+  { id: 'terminal', labelKey: 'panel.terminal' },
+  { id: 'build', labelKey: 'scripts.build' },
+  { id: 'server', labelKey: 'scripts.server' }
 ]
 
 /** Matches the lower bound on `rightPanelWidth` in the config schema. */
@@ -41,6 +44,9 @@ function maxWidthFor(windowWidth: number): number {
 interface RightPanelProps {
   readonly workspaces: readonly WorkspaceView[]
   readonly activeWorkspaceId: string | null
+  /** Absolute paths of the project's scripts; null when never written. */
+  readonly scriptPaths: { readonly setup: string | null; readonly run: string | null }
+  readonly onEditScripts: () => void
   readonly width: number
   /** Persists the width; called when a drag ends, not during it. */
   readonly onWidthChange: (width: number) => void
@@ -50,6 +56,8 @@ interface RightPanelProps {
 export function RightPanel({
   workspaces,
   activeWorkspaceId,
+  scriptPaths,
+  onEditScripts,
   width,
   onWidthChange,
   onCollapse
@@ -60,6 +68,8 @@ export function RightPanel({
   // the width once the drag is over.
   const [dragWidth, setDragWidth] = useState<number | null>(null)
   const [maxWidth, setMaxWidth] = useState(() => maxWidthFor(window.innerWidth))
+
+  const active = workspaces.find((workspace) => workspace.id === activeWorkspaceId) ?? null
 
   // The ceiling moves with the window: shrinking it must not leave the pane
   // covering the centre, and growing it should make the extra room available.
@@ -120,17 +130,32 @@ export function RightPanel({
         </button>
       </div>
 
-      {/* The terminal gets no padding and no scroll container of its own:
-          xterm scrolls itself, and padding throws off its column count. The
-          changes tab keeps both. */}
-      {tab === 'diff' ? (
+      {/* Anything holding a terminal gets no padding and no scroll container
+          of its own: xterm scrolls itself, and padding throws off its column
+          count. The changes tab keeps both. */}
+      {tab === 'diff' && (
         <div className="flex-1 overflow-auto p-4">
           <p className="text-ink-faint leading-relaxed">{t('panel.changesPlaceholder')}</p>
         </div>
-      ) : (
+      )}
+
+      {tab === 'terminal' && (
         <div className="flex min-h-0 flex-1 flex-col">
           <WorkspaceTerminals workspaces={workspaces} activeId={activeWorkspaceId} />
         </div>
+      )}
+
+      {(tab === 'build' || tab === 'server') && (
+        <ScriptRunner
+          // Remounted per workspace and per tab: a run belongs to one
+          // workspace, and carrying its output to another would be a lie.
+          key={`${tab}-${activeWorkspaceId ?? 'none'}`}
+          workspace={active}
+          kind={tab === 'build' ? 'setup' : 'run'}
+          scriptPath={tab === 'build' ? scriptPaths.setup : scriptPaths.run}
+          port={active?.port ?? 0}
+          onOpenSettings={onEditScripts}
+        />
       )}
     </section>
   )

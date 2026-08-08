@@ -9,6 +9,7 @@ import { Button } from './Button.js'
 import { Combobox } from './Combobox.js'
 import { Field } from './Field.js'
 import { Modal } from './Modal.js'
+import { ScriptEditor } from './ScriptEditor.js'
 
 interface ProjectSettingsProps {
   readonly project: Project
@@ -156,6 +157,20 @@ export function ProjectSettings({
             ))}
           </div>
         </Field>
+
+        <ScriptEditor
+          projectId={project.id}
+          kind="setup"
+          label={t('project.setupScript')}
+          hint={t('project.setupScriptHint')}
+        />
+
+        <ScriptEditor
+          projectId={project.id}
+          kind="run"
+          label={t('project.runScript')}
+          hint={t('project.runScriptHint')}
+        />
 
         <Field label={t('project.repository')}>
           <p className="text-ink-faint truncate font-mono text-[11px]" title={project.repoPath}>

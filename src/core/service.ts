@@ -13,6 +13,7 @@ import type { GitExec } from './git.js'
 import { gitIn } from './git.js'
 import { configFile, rootDir, stateFile, stateTempFile } from './paths.js'
 import { assertBranchExists, createProject, orderBaseBranches } from './projects.js'
+import { readScript, type ScriptKind, scriptExists, scriptPath, writeScript } from './scripts.js'
 import {
   addProject,
   addWorkspace,
@@ -74,6 +75,17 @@ export interface OctopusService {
   removeProjectById(projectId: string): Promise<void>
   /** Branches the project's repository offers as a base, remotes included. */
   listProjectBranches(projectId: string): Promise<string[]>
+
+  /** Contents of a project script, or a starting template if none exists. */
+  readProjectScript(projectId: string, kind: ScriptKind): Promise<string>
+  saveProjectScript(projectId: string, kind: ScriptKind, contents: string): Promise<void>
+  /**
+   * Absolute path of each script, or null where none has been written.
+   *
+   * A path rather than a flag: the tab has to show which file it runs and hand
+   * it to a shell, and only the core knows where the data root is.
+   */
+  projectScriptPaths(projectId: string): Promise<Record<ScriptKind, string | null>>
 
   /** Workspaces of a project, reconciled with what git actually has. */
   listWorkspaces(projectId: string): Promise<WorkspaceView[]>
@@ -188,6 +200,27 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
       // empty list would leave nothing to choose.
       const remote = await listRemoteBranches(exec)
       return orderBaseBranches(remote.length > 0 ? remote : await listBranches(exec))
+    },
+
+    async readProjectScript(projectId, kind) {
+      requireProject(projectId)
+      return readScript(kind, projectId, dataRoot)
+    },
+
+    async saveProjectScript(projectId, kind, contents) {
+      requireProject(projectId)
+      await writeScript(kind, projectId, contents, dataRoot)
+    },
+
+    async projectScriptPaths(projectId) {
+      requireProject(projectId)
+
+      const resolve = async (kind: ScriptKind): Promise<string | null> =>
+        (await scriptExists(kind, projectId, dataRoot))
+          ? scriptPath(kind, projectId, dataRoot)
+          : null
+
+      return { setup: await resolve('setup'), run: await resolve('run') }
     },
 
     async removeProjectById(projectId) {

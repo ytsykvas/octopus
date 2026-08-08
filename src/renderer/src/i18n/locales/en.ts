@@ -89,6 +89,12 @@ export const en = {
       'That branch could not be set. It may have been deleted since this list was read.',
     color: 'Colour',
     colorHint: 'Identifies the project in the tab strip and tints this sidebar.',
+    setupScript: 'Build script',
+    setupScriptHint:
+      'Runs in a new workspace: copy an .env, install dependencies, anything a fresh checkout needs. Saved as setup.sh.',
+    runScript: 'Server script',
+    runScriptHint:
+      'Starts the dev server. $OCTOPUS_PORT is set to the workspace\u2019s own port, so several can serve at once. Saved as run.sh.',
     repository: 'Repository',
     dangerZone: 'Danger zone',
     removeHint: 'Removes the project from octopus. The repository stays on disk.'
@@ -97,6 +103,24 @@ export const en = {
   combobox: {
     search: 'Search',
     empty: 'Nothing found'
+  },
+
+  scripts: {
+    build: 'Build',
+    server: 'Server',
+    run: 'Run',
+    runAgain: 'Run again',
+    restart: 'Restart',
+    stop: 'Stop',
+    edit: 'Write the script',
+    noWorkspace: 'Select a workspace to run this in.',
+    noSetup:
+      'No build script yet. It runs in a fresh workspace — copying an .env, installing dependencies, whatever a checkout needs before work can start.',
+    noRun:
+      'No server script yet. It starts the dev server, and receives a port of its own so several workspaces can serve at once.',
+    placeholder: '#!/bin/sh',
+    setupIdle: 'Runs setup.sh in this workspace.',
+    runIdle: 'Starts the dev server for this workspace.'
   },
 
   panel: {

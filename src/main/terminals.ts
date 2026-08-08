@@ -35,7 +35,7 @@ export class TerminalManager {
     const pty = spawn(shell, [...buildTerminalArgv(spec)], {
       name: 'xterm-256color',
       cwd: resolveCwd(spec.cwd, homedir()),
-      env: buildTerminalEnv(),
+      env: buildTerminalEnv(process.env, spec.env),
       cols: spec.cols,
       rows: spec.rows
     })

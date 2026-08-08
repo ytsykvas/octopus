@@ -9,6 +9,8 @@ interface TerminalProps {
   readonly cwd: string
   /** Command to run; omit for an interactive shell. */
   readonly command?: readonly string[]
+  /** Extra environment for the session — how a script learns its port. */
+  readonly env?: Readonly<Record<string, string>>
   readonly onExit?: (exitCode: number | null) => void
 }
 
@@ -22,7 +24,7 @@ interface TerminalProps {
  * xterm.js only renders and forwards keystrokes; the pseudo-terminal itself
  * lives in the main process (§11.1).
  */
-export function Terminal({ cwd, command, onExit }: TerminalProps): React.JSX.Element {
+export function Terminal({ cwd, command, env, onExit }: TerminalProps): React.JSX.Element {
   const host = useRef<HTMLDivElement>(null)
   // Kept in a ref so the effect below never re-runs on a changed callback,
   // which would tear the session down mid-login.
@@ -78,6 +80,7 @@ export function Terminal({ cwd, command, onExit }: TerminalProps): React.JSX.Ele
       const result = await window.octopus.terminal.create({
         cwd,
         command: command ? [...command] : [],
+        env: env ? { ...env } : {},
         cols: term.cols,
         rows: term.rows
       })

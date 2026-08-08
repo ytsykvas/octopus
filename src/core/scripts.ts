@@ -1,0 +1,119 @@
+/**
+ * Per-project shell scripts (§12.2).
+ *
+ * Two of them: `setup.sh` runs once a worktree exists — copying `.env`,
+ * installing dependencies — and `run.sh` starts the dev server, receiving the
+ * workspace's port as `$OCTOPUS_PORT`.
+ *
+ * They are plain shell files on disk rather than a string in the config. A
+ * build step grows conditionals and loops soon enough, and a text field is a
+ * poor place to keep one; a file can also be run, read and edited outside the
+ * app, which is the point of not owning the workflow (§4).
+ */
+
+import { chmod, mkdir, readFile, writeFile } from 'node:fs/promises'
+import { dirname } from 'node:path'
+
+import { z } from 'zod'
+
+import { projectScriptsDir, runScript, setupScript } from './paths.js'
+import type { ProjectId } from './types.js'
+
+export const ScriptKindSchema = z.enum(['setup', 'run'])
+export type ScriptKind = z.infer<typeof ScriptKindSchema>
+
+/**
+ * A script body as accepted from the renderer.
+ *
+ * Bounded because it lands in an executable file: there is no legitimate
+ * setup script measured in megabytes, and a size limit is cheaper than
+ * discovering the disk filled up.
+ */
+export const ScriptBodySchema = z.string().max(64_000)
+
+/** Environment variable carrying the port `run.sh` should listen on. */
+export const PORT_VARIABLE = 'OCTOPUS_PORT'
+
+/**
+ * Starting point for a script that has never been written.
+ *
+ * A comment rather than an empty file: the first thing anyone needs to know is
+ * which directory it runs in and, for the server, where the port comes from.
+ */
+const TEMPLATES: Record<ScriptKind, string> = {
+  setup: `#!/bin/sh
+# Runs in a new workspace directory, once its worktree exists.
+# Use it for whatever a fresh checkout needs before work can start.
+
+# cp ../../.env .env
+# npm install
+`,
+  run: `#!/bin/sh
+# Starts the dev server for this workspace.
+# $${PORT_VARIABLE} is set for you — each workspace gets its own port, so
+# several can run at once.
+
+# npm run dev -- --port "$${PORT_VARIABLE}"
+`
+}
+
+export function scriptPath(kind: ScriptKind, projectId: ProjectId, root?: string): string {
+  return kind === 'setup' ? setupScript(projectId, root) : runScript(projectId, root)
+}
+
+/**
+ * A script's contents, or the template when it does not exist yet.
+ *
+ * A missing script is the normal state of a new project, not a failure, so it
+ * reads as an editable starting point rather than an error.
+ */
+export async function readScript(
+  kind: ScriptKind,
+  projectId: ProjectId,
+  root?: string
+): Promise<string> {
+  try {
+    return await readFile(scriptPath(kind, projectId, root), 'utf8')
+  } catch {
+    return TEMPLATES[kind]
+  }
+}
+
+/**
+ * Writes a script and makes it executable.
+ *
+ * The executable bit matters: the script is run directly, and a file saved
+ * without it fails with "permission denied" — a message that says nothing
+ * about what actually needs doing.
+ */
+export async function writeScript(
+  kind: ScriptKind,
+  projectId: ProjectId,
+  contents: string,
+  root?: string
+): Promise<void> {
+  const path = scriptPath(kind, projectId, root)
+
+  await mkdir(dirname(path), { recursive: true })
+  await writeFile(path, contents, 'utf8')
+  await chmod(path, 0o755)
+}
+
+/** Whether a script has been written for this project. */
+export async function scriptExists(
+  kind: ScriptKind,
+  projectId: ProjectId,
+  root?: string
+): Promise<boolean> {
+  try {
+    await readFile(scriptPath(kind, projectId, root), 'utf8')
+    return true
+  } catch {
+    return false
+  }
+}
+
+/** Directory holding both scripts — shown so they can be edited outside too. */
+export function scriptsDirectory(projectId: ProjectId, root?: string): string {
+  return projectScriptsDir(projectId, root)
+}

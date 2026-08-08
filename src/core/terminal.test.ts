@@ -134,3 +134,24 @@ describe('resolveCwd leaves alone what is not ours', () => {
     expect(resolveCwd('./x', '/home/u')).toBe('./x')
   })
 })
+
+describe('buildTerminalEnv with extra variables', () => {
+  it('adds what the caller passes', () => {
+    expect(buildTerminalEnv({}, { OCTOPUS_PORT: '3123' }).OCTOPUS_PORT).toBe('3123')
+  })
+
+  // The caller's variable is the specific instruction; an inherited one of the
+  // same name is the general case and loses.
+  it('lets the extra win over an inherited value', () => {
+    const env = buildTerminalEnv({ OCTOPUS_PORT: 'stale' }, { OCTOPUS_PORT: '3123' })
+    expect(env.OCTOPUS_PORT).toBe('3123')
+  })
+
+  it('still sets TERM when extras are given', () => {
+    expect(buildTerminalEnv({}, { X: '1' }).TERM).toBe('xterm-256color')
+  })
+
+  it('changes nothing when no extras are given', () => {
+    expect(buildTerminalEnv({ A: 'b' }).A).toBe('b')
+  })
+})

@@ -8,6 +8,7 @@ import { describeError } from '../core/persist.js'
 import { GitHubError, type RemoteRepository } from '../core/github.js'
 import { ProjectValidationError } from '../core/projects.js'
 import { type RemoveOptions, WorkspaceError } from '../core/workspaces.js'
+import { ScriptBodySchema, ScriptKindSchema } from '../core/scripts.js'
 import { ProjectPatchSchema } from '../core/store.js'
 import { createService, type OctopusService } from '../core/service.js'
 import { TerminalSpecSchema } from '../core/terminal.js'
@@ -155,6 +156,26 @@ function registerIpc(service: OctopusService, terminals: TerminalManager): void 
 
   ipcMain.handle('projects:branches', (_event, projectId: string) =>
     attempt(() => service.listProjectBranches(projectId))
+  )
+
+  // The kind and the body both arrive from the renderer, and the body becomes
+  // an executable file — neither is taken on trust.
+  ipcMain.handle('scripts:read', (_event, projectId: string, kind: unknown) =>
+    attempt(() => service.readProjectScript(projectId, ScriptKindSchema.parse(kind)))
+  )
+
+  ipcMain.handle('scripts:save', (_event, projectId: string, kind: unknown, contents: unknown) =>
+    attempt(() =>
+      service.saveProjectScript(
+        projectId,
+        ScriptKindSchema.parse(kind),
+        ScriptBodySchema.parse(contents)
+      )
+    )
+  )
+
+  ipcMain.handle('scripts:paths', (_event, projectId: string) =>
+    attempt(() => service.projectScriptPaths(projectId))
   )
 
   ipcMain.handle('projects:remove', (_event, projectId: string) =>

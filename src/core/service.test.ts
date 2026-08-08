@@ -618,3 +618,71 @@ describe('projects', () => {
     expect(calls).toBeGreaterThan(0)
   })
 })
+
+describe('project scripts', () => {
+  async function withProject(): Promise<string> {
+    const repo = join(dir, 'planner')
+    await initRepo(repo)
+    return (await service.addProjectFromPath(repo)).id
+  }
+
+  it('offers a template before anything has been written', async () => {
+    const id = await withProject()
+    await expect(service.readProjectScript(id, 'setup')).resolves.toContain('#!/bin/sh')
+  })
+
+  it('tells the server template where its port comes from', async () => {
+    const id = await withProject()
+    await expect(service.readProjectScript(id, 'run')).resolves.toContain('OCTOPUS_PORT')
+  })
+
+  it('reads back what was saved', async () => {
+    const id = await withProject()
+    await service.saveProjectScript(id, 'setup', 'npm ci\n')
+
+    await expect(service.readProjectScript(id, 'setup')).resolves.toBe('npm ci\n')
+  })
+
+  // A path rather than a flag: the tab shows which file it runs and hands it
+  // to a shell, and only the core knows where the data root is.
+  it('reports no path until a script exists, then its location', async () => {
+    const id = await withProject()
+
+    await expect(service.projectScriptPaths(id)).resolves.toEqual({ setup: null, run: null })
+
+    await service.saveProjectScript(id, 'run', 'echo serving\n')
+    const paths = await service.projectScriptPaths(id)
+
+    expect(paths.setup).toBeNull()
+    expect(paths.run).toContain('run.sh')
+  })
+
+  it('keeps each project\u2019s scripts to itself', async () => {
+    const first = await withProject()
+
+    const other = join(dir, 'esl')
+    await initRepo(other)
+    const second = (await service.addProjectFromPath(other)).id
+
+    await service.saveProjectScript(first, 'setup', 'first\n')
+
+    await expect(service.readProjectScript(second, 'setup')).resolves.toContain('#!/bin/sh')
+  })
+
+  it('refuses to touch scripts of a project that does not exist', async () => {
+    await expect(service.readProjectScript('missing', 'setup')).rejects.toThrow()
+    await expect(service.saveProjectScript('missing', 'setup', 'x')).rejects.toThrow()
+    await expect(service.projectScriptPaths('missing')).rejects.toThrow()
+  })
+
+  // The scripts live under the data root, not in the repository — a workspace
+  // is a checkout of someone's project, not a place to leave our files.
+  it('keeps scripts out of the repository', async () => {
+    const id = await withProject()
+    await service.saveProjectScript(id, 'setup', 'x\n')
+
+    const paths = await service.projectScriptPaths(id)
+    expect(paths.setup).not.toContain(join(dir, 'planner', '.git'))
+    expect(paths.setup).toContain(join('projects', id, 'scripts'))
+  })
+})

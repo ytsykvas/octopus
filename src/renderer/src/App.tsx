@@ -35,6 +35,10 @@ export function App(): React.JSX.Element {
   const [pickingRepository, setPickingRepository] = useState(false)
   const [selectedWorkspaceId, setSelectedWorkspaceId] = useState<string | null>(null)
   const [editingProjectId, setEditingProjectId] = useState<string | null>(null)
+  const [scriptPaths, setScriptPaths] = useState<{ setup: string | null; run: string | null }>({
+    setup: null,
+    run: null
+  })
 
   const projects = useProjects(confirm, setError)
   const workspaces = useWorkspaces(projects.all, confirm, setError)
@@ -87,6 +91,27 @@ export function App(): React.JSX.Element {
       void i18n.changeLanguage(config.language)
     }
   }, [config, i18n])
+
+  // Re-read whenever the project changes or its settings close, since that is
+  // where a script gets written for the first time.
+  useEffect(() => {
+    const controller = new AbortController()
+
+    void (async () => {
+      if (selectedProjectId === null) {
+        setScriptPaths({ setup: null, run: null })
+        return
+      }
+
+      const result = await window.octopus.projects.scriptPaths(selectedProjectId)
+      if (controller.signal.aborted) return
+      if (result.ok) setScriptPaths(result.value)
+    })()
+
+    return () => {
+      controller.abort()
+    }
+  }, [selectedProjectId, editingProjectId])
 
   const updateConfig = useCallback(
     async (patch: Partial<Config>) => {
@@ -249,6 +274,10 @@ export function App(): React.JSX.Element {
         <RightPanel
           workspaces={workspaces.flat}
           activeWorkspaceId={selectedWorkspaceId}
+          scriptPaths={scriptPaths}
+          onEditScripts={() => {
+            if (selectedProject) setEditingProjectId(selectedProject.id)
+          }}
           width={config?.rightPanelWidth ?? 360}
           onWidthChange={(rightPanelWidth) => void updateConfig({ rightPanelWidth })}
           onCollapse={() => {

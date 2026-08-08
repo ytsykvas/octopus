@@ -23,7 +23,15 @@ export const TerminalSpecSchema = z.object({
    */
   command: z.array(z.string()).default([]),
   cols: z.number().int().min(1).max(1000).default(80),
-  rows: z.number().int().min(1).max(1000).default(24)
+  rows: z.number().int().min(1).max(1000).default(24),
+  /**
+   * Extra environment for the session.
+   *
+   * How `run.sh` learns its port. Passed as environment rather than as an
+   * argument so the script can be run by hand outside the app and behave the
+   * same, with `OCTOPUS_PORT=3123 ./run.sh`.
+   */
+  env: z.record(z.string(), z.string()).default({})
 })
 
 export type TerminalSpec = z.infer<typeof TerminalSpecSchema>
@@ -88,7 +96,8 @@ export function buildTerminalArgv(spec: TerminalSpec): readonly string[] {
  * without it many tools fall back to unformatted output or misbehave.
  */
 export function buildTerminalEnv(
-  base: Readonly<Record<string, string | undefined>> = process.env
+  base: Readonly<Record<string, string | undefined>> = process.env,
+  extra: Readonly<Record<string, string>> = {}
 ): Record<string, string> {
   const env: Record<string, string> = {}
 
@@ -99,5 +108,7 @@ export function buildTerminalEnv(
   env.TERM = 'xterm-256color'
   env.COLORTERM = 'truecolor'
 
-  return env
+  // Applied last: a script's own variables are the specific instruction, and
+  // an inherited value of the same name is the general one.
+  return { ...env, ...extra }
 }
