@@ -204,6 +204,10 @@ export function App(): React.JSX.Element {
             onSelect={(id) => {
               setSelectedProjectId(id)
               setSelectedWorkspaceId(null)
+              // Picking a project is asking to see it, and folded away there is
+              // nothing to see — so the list comes back rather than the click
+              // appearing to do nothing.
+              setSidebarOpen(true)
             }}
             onEdit={setEditingProjectId}
             onRemove={(id) => void removeProject(id)}
