@@ -6,7 +6,8 @@ import {
   MoreHorizontal,
   Pencil,
   Plus,
-  Settings as SettingsIcon
+  Settings as SettingsIcon,
+  Trash2
 } from 'lucide-react'
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
@@ -28,6 +29,7 @@ interface SidebarProps {
   readonly onAddFromDisk: () => void
   readonly onAddFromGitHub: () => void
   readonly onEditProject: (projectId: string) => void
+  readonly onRemoveProject: (projectId: string) => void
   readonly onCreateWorkspace: (projectId: string) => void
   readonly onRenameWorkspace: (workspaceId: string, name: string) => void
   readonly onRemoveWorkspace: (workspaceId: string) => void
@@ -51,6 +53,7 @@ export function Sidebar({
   onAddFromDisk,
   onAddFromGitHub,
   onEditProject,
+  onRemoveProject,
   onCreateWorkspace,
   onRenameWorkspace,
   onRemoveWorkspace,
@@ -105,6 +108,9 @@ export function Sidebar({
                   }}
                   onEdit={() => {
                     onEditProject(project.id)
+                  }}
+                  onRemove={() => {
+                    onRemoveProject(project.id)
                   }}
                   onCreateWorkspace={() => {
                     onCreateWorkspace(project.id)
@@ -241,6 +247,7 @@ interface ProjectRowProps {
   readonly workspaceCount: number
   readonly onSelect: () => void
   readonly onEdit: () => void
+  readonly onRemove: () => void
   readonly onCreateWorkspace: () => void
 }
 
@@ -251,6 +258,7 @@ function ProjectRow({
   workspaceCount,
   onSelect,
   onEdit,
+  onRemove,
   onCreateWorkspace
 }: ProjectRowProps): React.JSX.Element {
   const { t } = useTranslation()
@@ -292,7 +300,7 @@ function ProjectRow({
         <Plus aria-hidden size={13} />
       </button>
 
-      {/* Editing lives behind a menu: it is occasional, and a second button on
+      {/* Both live behind a menu: occasional actions, and a button each on
           every row was more noise than the list could carry. */}
       <DropdownMenu
         trigger={({ onClick, open }) => (
@@ -313,6 +321,13 @@ function ProjectRow({
             label: t('sidebar.editProject'),
             icon: <Pencil aria-hidden size={13} />,
             onSelect: onEdit
+          },
+          {
+            id: 'remove',
+            label: t('sidebar.removeProject'),
+            icon: <Trash2 aria-hidden size={13} />,
+            destructive: true,
+            onSelect: onRemove
           }
         ]}
       />

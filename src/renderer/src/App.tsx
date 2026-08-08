@@ -181,6 +181,7 @@ export function App(): React.JSX.Element {
           setPickingRepository(true)
         }}
         onEditProject={setEditingProjectId}
+        onRemoveProject={(id) => void removeProject(id)}
         workspaces={workspaces.byProject}
         selectedWorkspaceId={selectedWorkspaceId}
         onSelectWorkspace={(id) => {
