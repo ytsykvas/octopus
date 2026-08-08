@@ -55,6 +55,11 @@ bug rather than a test problem.
 For each, ask: **what would have to break for this to go red?** If the answer is
 "nothing", the test is decoration.
 
+`not.toThrow()` is not automatically decoration. Where the contract _is_
+tolerance — disposing a session twice, resizing one that has ended — it is the
+whole assertion, and `src/main/terminals.test.ts` uses it correctly. The
+question is whether tolerance is the promise being made.
+
 ### 3. Fields and branches added without a test
 
 ```bash
@@ -75,9 +80,14 @@ produce a bare key, an unfilled placeholder or an empty string.
 ### 5. Tests written against the implementation
 
 `it('calls onUpdate')` breaks the moment the call moves and says nothing about
-behaviour. In the renderer specifically: **any query by class name is wrong** —
+behaviour. In the renderer specifically: **a query by class name is almost always wrong** —
 it asserts styling, breaks on every refactor and proves nothing about what a
 person can do.
+
+Two exceptions, and only these: a class that is an interface rather than a look
+(`.dark` on `<html>` is the theme switch, and `App.test.tsx` is right to assert
+it), and reaching a native element with no accessible handle — `querySelector`
+on a `<dialog>` to fire a `cancel` event. Anything else is styling.
 
 ## Writing what is missing
 

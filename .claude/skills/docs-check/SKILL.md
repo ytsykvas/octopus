@@ -54,11 +54,23 @@ Then compare against the claims each document makes:
 These are the claims that quietly become wrong:
 
 ```bash
-grep -c "host.handle(" src/main/ipc.ts          # ipc.md says how many channels
-ls src/core/*.ts | grep -v test                 # core.md lists the modules
-grep -c "^  --project-" src/renderer/src/styles.css   # ui.md says fifteen colours
-grep -n "thresholds" -A 5 vitest.config.ts      # testing.md quotes the threshold
+grep -c "host.handle(" src/main/ipc.ts              # ipc.md gives a channel count
+ls src/core/*.ts | grep -v test                     # core.md lists the modules
+grep -n "thresholds" -A 5 vitest.shared.ts          # testing.md quotes the threshold
 ```
+
+The palette needs care — counting `--project-` in the stylesheet gives 32, since
+each colour is declared once per theme and `--project-ink` is a text colour, not
+one of them. The list in the core is the answer:
+
+```bash
+node -e "const s=require('fs').readFileSync('src/core/colors.ts','utf8');
+  console.log(s.match(/PROJECT_COLORS = \[([^\]]+)\]/s)[1].split(',').filter(Boolean).length)"
+```
+
+That is the shape of the trap in general: **verify the check before believing
+what it says about the document.** A miscount here reports drift that is not
+there, and sends someone to edit a document that was right.
 
 ### 4. Does anything contradict the code?
 
