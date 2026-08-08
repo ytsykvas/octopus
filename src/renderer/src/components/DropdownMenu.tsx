@@ -1,10 +1,12 @@
-import { useCallback, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 
 import { useDismiss } from '../hooks/useDismiss.js'
 
 export interface MenuAction {
   readonly id: string
   readonly label: string
+  /** A second line explaining what the item does. */
+  readonly description?: string
   readonly icon?: React.ReactNode
   /** Renders the item in the danger colour — for actions that destroy something. */
   readonly destructive?: boolean
@@ -18,16 +20,22 @@ interface DropdownMenuProps {
     open: boolean
   }) => React.ReactNode
   readonly actions: readonly MenuAction[]
-  /** Aligns the panel; `right` keeps it inside a narrow sidebar. */
+  /** Which edge of the trigger the panel lines up with. */
   readonly align?: 'left' | 'right'
 }
 
+const PANEL_WIDTH = 232
+/** Gap between trigger and panel, and the smallest margin to a window edge. */
+const GAP = 6
+
 /**
- * A small popup menu.
+ * A popup menu.
  *
- * Shared rather than repeated: the dismiss-on-outside-click and
- * dismiss-on-Escape behaviour is easy to write slightly differently each time,
- * and a menu that ignores Escape feels broken.
+ * Positioned against the window rather than its trigger. The obvious
+ * `absolute` panel is clipped by any scrolling ancestor, and the project tab
+ * strip is exactly that — the menu came out sliced to the width of a 56px
+ * column. Fixed coordinates cost a measurement and dismissal on scroll, and
+ * buy a menu that is the size it says it is wherever it is opened from.
  */
 export function DropdownMenu({
   trigger,
@@ -35,32 +43,70 @@ export function DropdownMenu({
   align = 'right'
 }: DropdownMenuProps): React.JSX.Element {
   const [open, setOpen] = useState(false)
+  const [position, setPosition] = useState<{ top: number; left: number } | null>(null)
   const container = useRef<HTMLDivElement>(null)
 
-  useDismiss(
-    open,
-    container,
-    useCallback(() => {
-      setOpen(false)
-    }, [])
-  )
+  const close = useCallback(() => {
+    setOpen(false)
+  }, [])
+
+  useDismiss(open, container, close)
+
+  // Fixed coordinates are a snapshot: anything that moves the trigger leaves
+  // the panel floating where the trigger used to be, so it closes instead.
+  useEffect(() => {
+    if (!open) return
+
+    window.addEventListener('scroll', close, true)
+    window.addEventListener('resize', close)
+
+    return () => {
+      window.removeEventListener('scroll', close, true)
+      window.removeEventListener('resize', close)
+    }
+  }, [open, close])
+
+  const openAt = (element: HTMLElement): void => {
+    const rect = element.getBoundingClientRect()
+    const height = actions.length * 40 + 8
+
+    setPosition({
+      // Flips above the trigger when there is no room below — near the bottom
+      // of a tab strip that is most of the time.
+      top:
+        rect.bottom + GAP + height > window.innerHeight
+          ? Math.max(GAP, rect.top - height - GAP)
+          : rect.bottom + GAP,
+      left: Math.min(
+        Math.max(GAP, align === 'right' ? rect.right - PANEL_WIDTH : rect.left),
+        window.innerWidth - PANEL_WIDTH - GAP
+      )
+    })
+
+    setOpen(true)
+  }
 
   return (
-    <div ref={container} className="relative">
+    <div ref={container} className="contents">
       {trigger({
         open,
         onClick: (event) => {
           event.stopPropagation()
-          setOpen((current) => !current)
+
+          if (open) {
+            setOpen(false)
+            return
+          }
+
+          openAt(event.currentTarget as HTMLElement)
         }
       })}
 
-      {open && (
+      {open && position && (
         <div
           role="menu"
-          className={`border-line bg-canvas absolute z-20 mt-1 w-44 rounded-[var(--radius-control)] border p-1 shadow-[var(--shadow-pop)] ${
-            align === 'right' ? 'right-0' : 'left-0'
-          }`}
+          style={{ top: position.top, left: position.left, width: PANEL_WIDTH }}
+          className="border-line bg-canvas fixed z-50 rounded-[var(--radius-panel)] border p-1 shadow-[var(--shadow-pop)]"
         >
           {actions.map((action) => (
             <button
@@ -71,14 +117,24 @@ export function DropdownMenu({
                 setOpen(false)
                 action.onSelect()
               }}
-              className={`row focus-ring flex w-full items-center gap-2 px-2 py-1 text-left ${
+              className={`row focus-ring flex w-full items-center gap-2.5 px-2.5 py-1.5 text-left ${
                 action.destructive === true
                   ? 'text-danger hover:bg-danger-bg'
                   : 'text-ink-soft hover:text-ink'
               }`}
             >
-              {action.icon}
-              {action.label}
+              <span className="flex size-4 shrink-0 items-center justify-center">
+                {action.icon}
+              </span>
+
+              <span className="min-w-0 flex-1">
+                <span className="block truncate">{action.label}</span>
+                {action.description !== undefined && (
+                  <span className="text-ink-faint block truncate text-[11px]">
+                    {action.description}
+                  </span>
+                )}
+              </span>
             </button>
           ))}
         </div>

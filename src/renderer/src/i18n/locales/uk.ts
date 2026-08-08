@@ -16,6 +16,8 @@ export const uk: Translation = {
     empty: 'Поки порожньо. Додайте репозиторій кнопкою «+».',
     addProject: 'Додати репозиторій',
     addFromDisk: 'З диска…',
+    addFromDiskHint: 'Репозиторій, який уже є на цьому комп’ютері',
+    addFromGitHubHint: 'Клонувати з вашого акаунта GitHub',
     addFromGitHub: 'З GitHub…',
     removeProject: 'Прибрати проєкт',
     editProject: 'Редагувати…',

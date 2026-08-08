@@ -14,6 +14,8 @@ export const en = {
     empty: 'Nothing here yet. Add a repository with the "+" button.',
     addProject: 'Add repository',
     addFromDisk: 'From disk…',
+    addFromDiskHint: 'A repository already on this machine',
+    addFromGitHubHint: 'Clone one from your GitHub account',
     addFromGitHub: 'From GitHub…',
     removeProject: 'Remove project',
     editProject: 'Edit…',

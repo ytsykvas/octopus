@@ -81,13 +81,15 @@ export function ProjectTabs({
             {
               id: 'disk',
               label: t('sidebar.addFromDisk'),
-              icon: <FolderOpen aria-hidden size={14} />,
+              description: t('sidebar.addFromDiskHint'),
+              icon: <FolderOpen aria-hidden size={15} />,
               onSelect: onAddFromDisk
             },
             {
               id: 'github',
               label: t('sidebar.addFromGitHub'),
-              icon: <CloudDownload aria-hidden size={14} />,
+              description: t('sidebar.addFromGitHubHint'),
+              icon: <CloudDownload aria-hidden size={15} />,
               onSelect: onAddFromGitHub
             }
           ]}
