@@ -98,7 +98,10 @@ export function Modal({
           </button>
         </header>
 
-        <div className="min-h-0 flex-1 overflow-auto">{children}</div>
+        {/* A flex column, not a plain block: a sectioned dialog's body asks for
+            the full height with `flex-1`, and against a block parent that does
+            nothing — the rail then ends wherever its last entry does. */}
+        <div className="flex min-h-0 flex-1 flex-col overflow-auto">{children}</div>
 
         {footer !== undefined && (
           <footer className="border-line flex shrink-0 items-center justify-end gap-2 border-t px-4 py-3">
