@@ -105,6 +105,10 @@ export const en = {
     empty: 'Nothing found'
   },
 
+  modal: {
+    close: 'Close'
+  },
+
   scripts: {
     build: 'Build',
     server: 'Server',

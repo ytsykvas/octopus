@@ -1,4 +1,6 @@
+import { X } from 'lucide-react'
 import { useEffect, useRef } from 'react'
+import { useTranslation } from 'react-i18next'
 
 interface ModalProps {
   readonly title: string
@@ -29,6 +31,7 @@ export function Modal({
   footer,
   size = 'md'
 }: ModalProps): React.JSX.Element {
+  const { t } = useTranslation()
   const dialog = useRef<HTMLDialogElement>(null)
 
   useEffect(() => {
@@ -56,8 +59,20 @@ export function Modal({
       className={`bg-canvas text-ink border-line m-auto rounded-[var(--radius-panel)] border p-0 shadow-[var(--shadow-modal)] backdrop:bg-black/40 ${WIDTHS[size]}`}
     >
       <div className="flex max-h-[min(34rem,calc(100vh-8rem))] flex-col">
-        <header className="border-line flex shrink-0 items-center justify-between border-b px-4 py-3">
-          <h2 className="font-medium">{title}</h2>
+        <header className="border-line flex shrink-0 items-center gap-3 border-b px-4 py-3">
+          <h2 className="min-w-0 flex-1 truncate font-medium">{title}</h2>
+
+          {/* Now that the backdrop no longer dismisses, a visible way out has
+              to exist for anyone not reaching for Escape. */}
+          <button
+            type="button"
+            onClick={onClose}
+            title={t('modal.close')}
+            aria-label={t('modal.close')}
+            className="text-ink-faint hover:text-ink focus-ring -mr-1 shrink-0 rounded p-1 transition-colors"
+          >
+            <X aria-hidden size={14} />
+          </button>
         </header>
 
         <div className="min-h-0 flex-1 overflow-auto">{children}</div>

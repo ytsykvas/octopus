@@ -103,6 +103,10 @@ export const uk: Translation = {
     empty: 'Нічого не знайдено'
   },
 
+  modal: {
+    close: 'Закрити'
+  },
+
   scripts: {
     build: 'Білд',
     server: 'Сервер',
