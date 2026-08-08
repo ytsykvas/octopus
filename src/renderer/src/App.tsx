@@ -184,18 +184,6 @@ export function App(): React.JSX.Element {
   const selectedProject = projects.all.find((project) => project.id === selectedProjectId) ?? null
   const editingProject = projects.all.find((project) => project.id === editingProjectId) ?? null
 
-  if (settingsOpen && config) {
-    return (
-      <Settings
-        config={config}
-        onChange={updateConfig}
-        onClose={() => {
-          setSettingsOpen(false)
-        }}
-      />
-    )
-  }
-
   return (
     <div className="bg-canvas text-ink flex h-full">
       <ProjectTabs
@@ -282,6 +270,16 @@ export function App(): React.JSX.Element {
           onWidthChange={(rightPanelWidth) => void updateConfig({ rightPanelWidth })}
           onCollapse={() => {
             setRightPanelOpen(false)
+          }}
+        />
+      )}
+
+      {settingsOpen && config && (
+        <Settings
+          config={config}
+          onChange={updateConfig}
+          onClose={() => {
+            setSettingsOpen(false)
           }}
         />
       )}

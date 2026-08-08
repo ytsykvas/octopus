@@ -150,7 +150,6 @@ export const uk: Translation = {
 
   settings: {
     title: 'Налаштування',
-    close: 'Закрити',
     sectionGeneral: 'Загальні',
     sectionGit: 'Git',
     sectionAgent: 'Агент',

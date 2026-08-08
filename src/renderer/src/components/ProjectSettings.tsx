@@ -10,6 +10,7 @@ import { Button } from './Button.js'
 import { Combobox } from './Combobox.js'
 import { Field } from './Field.js'
 import { Modal } from './Modal.js'
+import { SectionRail } from './SectionRail.js'
 import { ScriptEditor } from './ScriptEditor.js'
 
 interface ProjectSettingsProps {
@@ -49,11 +50,12 @@ const SECTIONS: readonly {
     | 'project.sectionScripts'
     | 'project.sectionDanger'
   readonly Icon: typeof Info
+  readonly destructive?: boolean
 }[] = [
   { id: 'general', labelKey: 'project.sectionGeneral', Icon: Info },
   { id: 'git', labelKey: 'project.sectionGit', Icon: GitBranch },
   { id: 'scripts', labelKey: 'project.sectionScripts', Icon: Terminal },
-  { id: 'danger', labelKey: 'project.sectionDanger', Icon: TriangleAlert }
+  { id: 'danger', labelKey: 'project.sectionDanger', Icon: TriangleAlert, destructive: true }
 ]
 
 export function ProjectSettings({
@@ -119,30 +121,11 @@ export function ProjectSettings({
           with each other, and the same shape as the settings window means one
           way of navigating rather than two. */}
       <div className="flex min-h-[26rem]">
-        <nav className="border-line bg-surface w-40 shrink-0 border-r p-2">
-          <ul className="space-y-px">
-            {SECTIONS.map((item) => (
-              <li key={item.id}>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setSection(item.id)
-                  }}
-                  className={`row focus-ring flex w-full items-center gap-2 px-2 py-1.5 ${
-                    section === item.id
-                      ? 'row-selected font-medium'
-                      : item.id === 'danger'
-                        ? 'text-danger'
-                        : 'text-ink-soft'
-                  }`}
-                >
-                  <item.Icon aria-hidden size={14} className="shrink-0" />
-                  {t(item.labelKey)}
-                </button>
-              </li>
-            ))}
-          </ul>
-        </nav>
+        <SectionRail
+          sections={SECTIONS.map((item) => ({ ...item, label: t(item.labelKey) }))}
+          active={section}
+          onSelect={setSection}
+        />
 
         <div className="min-w-0 flex-1 space-y-6 overflow-auto p-6">
           {error !== null && (

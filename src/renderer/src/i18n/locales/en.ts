@@ -152,7 +152,6 @@ export const en = {
 
   settings: {
     title: 'Settings',
-    close: 'Close',
     sectionGeneral: 'General',
     sectionGit: 'Git',
     sectionAgent: 'Agent',

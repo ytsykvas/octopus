@@ -1,5 +1,5 @@
 import { Bot, GitBranch, Info, type LucideIcon, Monitor, Sparkles } from 'lucide-react'
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import type {
@@ -11,6 +11,8 @@ import type {
 
 import { Button } from './Button.js'
 import { Field } from './Field.js'
+import { Modal } from './Modal.js'
+import { SectionRail } from './SectionRail.js'
 import { AccountCard } from './settings/AccountCard.js'
 import { AuthTerminal } from './settings/AuthTerminal.js'
 import { ClaudeSection } from './settings/ClaudeSection.js'
@@ -42,8 +44,12 @@ const SECTIONS: readonly {
 ]
 
 /**
- * Settings, split into sections with a navigation rail — the shape macOS
- * System Settings uses, so the layout is already familiar.
+ * Settings, split into sections with a navigation rail.
+ *
+ * A dialog rather than a full-screen page: settings are something you glance at
+ * and adjust, and replacing the whole window to change a theme loses sight of
+ * the thing being changed. It also means the project dialog and this one behave
+ * the same way, down to the close button.
  *
  * Changes apply immediately; there is no Save button. For a local tool with a
  * handful of options a confirmation step only adds friction.
@@ -54,60 +60,26 @@ export function Settings({ config, onChange, onClose }: SettingsProps): React.JS
   // Shared between the Claude and Git sections, which show the same accounts.
   const accounts = useAccounts()
 
-  useEffect(() => {
-    const onKey = (event: KeyboardEvent): void => {
-      if (event.key === 'Escape') onClose()
-    }
-    window.addEventListener('keydown', onKey)
-    return () => {
-      window.removeEventListener('keydown', onKey)
-    }
-  }, [onClose])
-
   return (
-    <div className="bg-canvas absolute inset-0 z-10 flex flex-col">
-      <header className="titlebar-drag border-line flex h-11 shrink-0 items-center justify-between border-b px-4 pl-24">
-        <span className="font-medium">{t('settings.title')}</span>
-        <Button variant="quiet" size="sm" onClick={onClose}>
-          {t('settings.close')}
-        </Button>
-      </header>
+    <Modal size="lg" title={t('settings.title')} onClose={onClose}>
+      <div className="flex min-h-[26rem]">
+        <SectionRail
+          sections={SECTIONS.map((item) => ({ ...item, label: t(item.labelKey) }))}
+          active={section}
+          onSelect={setSection}
+        />
 
-      <div className="flex min-h-0 flex-1">
-        <nav className="border-line bg-surface w-48 shrink-0 border-r p-2">
-          <ul className="space-y-px">
-            {SECTIONS.map((item) => (
-              <li key={item.id}>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setSection(item.id)
-                  }}
-                  className={`row focus-ring flex w-full items-center gap-2 px-2 py-1.5 ${
-                    section === item.id ? 'row-selected font-medium' : 'text-ink-soft'
-                  }`}
-                >
-                  <item.Icon aria-hidden size={14} className="shrink-0" />
-                  {t(item.labelKey)}
-                </button>
-              </li>
-            ))}
-          </ul>
-        </nav>
-
-        <div className="flex-1 overflow-auto">
-          <div className="max-w-2xl space-y-6 p-8">
-            {section === 'general' && <GeneralSection config={config} onChange={onChange} />}
-            {section === 'git' && (
-              <GitSection config={config} onChange={onChange} accounts={accounts} />
-            )}
-            {section === 'agent' && <AgentSection config={config} onChange={onChange} />}
-            {section === 'accounts' && <ClaudeSection accounts={accounts} />}
-            {section === 'about' && <AboutSection config={config} />}
-          </div>
+        <div className="min-w-0 flex-1 space-y-6 overflow-auto p-6">
+          {section === 'general' && <GeneralSection config={config} onChange={onChange} />}
+          {section === 'git' && (
+            <GitSection config={config} onChange={onChange} accounts={accounts} />
+          )}
+          {section === 'agent' && <AgentSection config={config} onChange={onChange} />}
+          {section === 'accounts' && <ClaudeSection accounts={accounts} />}
+          {section === 'about' && <AboutSection config={config} />}
         </div>
       </div>
-    </div>
+    </Modal>
   )
 }
 
