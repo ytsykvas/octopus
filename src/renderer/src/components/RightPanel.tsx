@@ -112,8 +112,13 @@ export function RightPanel({
             onClick={() => {
               setTab(item.id)
             }}
-            className={`focus-ring h-7 rounded-[var(--radius-control)] px-2.5 font-medium transition-colors ${
-              tab === item.id ? 'bg-muted text-ink' : 'text-ink-soft hover:text-ink'
+            // Distinguished by hue, not by brightness. The muted fill it used
+            // to carry sits at 1.09:1 against the pane behind it — a difference
+            // that measures as barely there and looks it.
+            className={`focus-ring h-7 rounded-[var(--radius-control)] border px-2.5 font-medium transition-colors ${
+              tab === item.id
+                ? 'border-accent/35 bg-accent/15 text-accent'
+                : 'text-ink-soft hover:bg-muted hover:text-ink border-transparent'
             }`}
           >
             {t(item.labelKey)}
