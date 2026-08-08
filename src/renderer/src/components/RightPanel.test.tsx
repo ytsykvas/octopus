@@ -213,4 +213,22 @@ describe('RightPanel', () => {
     expect(screen.getByText('Select a workspace to run this in.')).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Run' })).not.toBeInTheDocument()
   })
+
+  // A session belongs to its workspace, not to whether its tab is on screen.
+  // Looking at the diff used to kill every terminal in the project.
+  it('leaves the workspace terminals running while another tab is shown', async () => {
+    const user = userEvent.setup()
+    renderPanel({ workspaces: [anna], activeWorkspaceId: anna.id })
+
+    await user.click(screen.getByRole('button', { name: 'Terminal' }))
+    await waitFor(() => {
+      expect(window.octopus.terminal.create).toHaveBeenCalledTimes(1)
+    })
+
+    await user.click(screen.getByRole('button', { name: 'Changes' }))
+    expect(window.octopus.terminal.dispose).not.toHaveBeenCalled()
+
+    await user.click(screen.getByRole('button', { name: 'Terminal' }))
+    expect(window.octopus.terminal.create).toHaveBeenCalledTimes(1)
+  })
 })

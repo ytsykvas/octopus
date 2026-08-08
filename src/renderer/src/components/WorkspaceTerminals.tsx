@@ -9,6 +9,14 @@ interface WorkspaceTerminalsProps {
   readonly workspaces: readonly WorkspaceView[]
   /** Workspace whose terminal is on screen; null when none is selected. */
   readonly activeId: string | null
+  /**
+   * Whether the terminal tab is the one being shown.
+   *
+   * A session starts when its tab is looked at, and outlives the tab being
+   * hidden. Without the distinction, switching workspace while reading the
+   * diff would spawn shells nobody asked for.
+   */
+  readonly visible: boolean
 }
 
 /**
@@ -24,7 +32,8 @@ interface WorkspaceTerminalsProps {
  */
 export function WorkspaceTerminals({
   workspaces,
-  activeId
+  activeId,
+  visible
 }: WorkspaceTerminalsProps): React.JSX.Element {
   const { t } = useTranslation()
   const [openedIds, setOpenedIds] = useState<readonly string[]>([])
@@ -34,7 +43,7 @@ export function WorkspaceTerminals({
   // state derived from a prop, and it matters here: an effect would run after
   // the paint, so opening a workspace would show an empty pane for one frame
   // before its terminal appeared.
-  if (activeId !== lastActiveId) {
+  if (visible && activeId !== lastActiveId) {
     setLastActiveId(activeId)
     if (activeId !== null && !openedIds.includes(activeId)) {
       setOpenedIds([...openedIds, activeId])
@@ -50,12 +59,16 @@ export function WorkspaceTerminals({
       (workspace): workspace is WorkspaceView => workspace !== undefined && !workspace.missing
     )
 
-  if (activeId === null) {
-    return <p className="text-ink-faint p-4 leading-relaxed">{t('panel.terminalPlaceholder')}</p>
-  }
-
   return (
     <div className="relative flex-1">
+      {/* Shown over the terminals rather than instead of them. Returning a
+          different element here would unmount every session — and clicking the
+          already-active project clears the selection, so a stray click used to
+          kill a dev server. */}
+      {activeId === null && (
+        <p className="text-ink-faint p-4 leading-relaxed">{t('panel.terminalPlaceholder')}</p>
+      )}
+
       {opened.map((workspace) => (
         <div
           key={workspace.id}

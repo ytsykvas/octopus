@@ -144,11 +144,16 @@ export function RightPanel({
         </div>
       )}
 
-      {tab === 'terminal' && (
-        <div className="flex min-h-0 flex-1 flex-col">
-          <WorkspaceTerminals workspaces={workspaces} activeId={activeWorkspaceId} />
-        </div>
-      )}
+      {/* Hidden, never unmounted: a session belongs to the workspace, not to
+          whether its tab happens to be on screen. Switching to Changes used to
+          kill every terminal in the project. */}
+      <div className={`flex min-h-0 flex-1 flex-col ${tab === 'terminal' ? '' : 'hidden'}`}>
+        <WorkspaceTerminals
+          workspaces={workspaces}
+          activeId={activeWorkspaceId}
+          visible={tab === 'terminal'}
+        />
+      </div>
 
       {(tab === 'build' || tab === 'server') && (
         <ScriptRunner

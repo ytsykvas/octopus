@@ -1,4 +1,9 @@
+import { execFile } from 'node:child_process'
+import { promisify } from 'node:util'
+
 import { describe, expect, it } from 'vitest'
+
+const run = promisify(execFile)
 
 import {
   buildTerminalArgv,
@@ -83,12 +88,12 @@ describe('buildTerminalArgv', () => {
 
   it('runs a command through an interactive login shell', () => {
     const spec = TerminalSpecSchema.parse({ cwd: '/tmp', command: ['gh', 'auth', 'login'] })
-    expect(buildTerminalArgv(spec)).toEqual(['-i', '-c', 'gh auth login'])
+    expect(buildTerminalArgv(spec)).toEqual(['-i', '-c', "'gh' 'auth' 'login'"])
   })
 
   it('keeps multi-word commands intact', () => {
     const spec = TerminalSpecSchema.parse({ cwd: '/tmp', command: ['claude', 'auth', 'status'] })
-    expect(buildTerminalArgv(spec)).toEqual(['-i', '-c', 'claude auth status'])
+    expect(buildTerminalArgv(spec)).toEqual(['-i', '-c', "'claude' 'auth' 'status'"])
   })
 })
 
@@ -153,5 +158,67 @@ describe('buildTerminalEnv with extra variables', () => {
 
   it('changes nothing when no extras are given', () => {
     expect(buildTerminalEnv({ A: 'b' }).A).toBe('b')
+  })
+})
+
+describe('buildTerminalArgv against a hostile command', () => {
+  // The path of a script carries a project id, which comes from a repository's
+  // directory name — and a repository cloned from GitHub brings that name from
+  // whoever wrote it. `toSlug` only removes what git forbids in a ref, so shell
+  // metacharacters survive all the way here.
+  const HOSTILE = [
+    '/tmp/my-repo;-touch-pwned/run.sh',
+    '/tmp/app$(whoami)/run.sh',
+    '/tmp/a|b/run.sh',
+    '/tmp/x&y/run.sh',
+    "/tmp/it's-mine/run.sh",
+    '/tmp/back`tick`/run.sh',
+    '/tmp/with space/run.sh'
+  ]
+
+  for (const path of HOSTILE) {
+    // Asked of a real shell rather than of my idea of quoting: `printf` echoes
+    // back exactly the words it was given, so anything the shell expanded,
+    // split or executed shows up as a difference.
+    it(`reaches a shell as one literal word: ${JSON.stringify(path)}`, async () => {
+      const argv = buildTerminalArgv({
+        cwd: '/tmp',
+        command: ['printf', '%s', path],
+        env: {},
+        cols: 80,
+        rows: 24
+      })
+
+      const { stdout } = await run('/bin/sh', ['-c', argv[2] ?? ''])
+      expect(stdout).toBe(path)
+    })
+  }
+
+  it('keeps a multi-word command as separate words', () => {
+    const argv = buildTerminalArgv({
+      cwd: '/tmp',
+      command: ['gh', 'auth', 'login'],
+      env: {},
+      cols: 80,
+      rows: 24
+    })
+
+    expect(argv[2]).toBe("'gh' 'auth' 'login'")
+  })
+
+  // A quote is the one character single quotes cannot contain, so the word is
+  // closed, the quote escaped, and the word reopened. Asked of a real shell,
+  // because writing this assertion by hand is exactly where it went wrong.
+  it('escapes a quote rather than ending the word early', async () => {
+    const argv = buildTerminalArgv({
+      cwd: '/tmp',
+      command: ['printf', '%s', "it's"],
+      env: {},
+      cols: 80,
+      rows: 24
+    })
+
+    const { stdout } = await run('/bin/sh', ['-c', argv[2] ?? ''])
+    expect(stdout).toBe("it's")
   })
 })

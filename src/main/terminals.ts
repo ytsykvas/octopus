@@ -55,6 +55,15 @@ export class TerminalManager {
       target.send('terminal:exit', { id, exitCode: signal ? null : exitCode })
     })
 
+    // Closing a window destroys its WebContents without unmounting React, so
+    // the cleanup in `Terminal.tsx` never runs and never asks for disposal.
+    // On macOS the application outlives its last window, so without this the
+    // shell — and anything it started, a dev server included — keeps running
+    // with nothing left to talk to.
+    target.once('destroyed', () => {
+      this.dispose(id)
+    })
+
     this.sessions.set(id, pty)
     return id
   }

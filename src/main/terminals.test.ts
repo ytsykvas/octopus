@@ -72,18 +72,33 @@ vi.mock('node-pty', () => ({
 const { TerminalManager } = await import('./terminals.js')
 
 /** Stands in for a renderer's WebContents. */
-function target(): { sent: [string, unknown][]; destroyed: boolean } & {
+function target(): {
+  sent: [string, unknown][]
+  destroyed: boolean
   send: (channel: string, payload: unknown) => void
   isDestroyed: () => boolean
+  once: (event: string, handler: () => void) => void
+  /** Pretends the window was closed. */
+  close: () => void
 } {
+  const listeners: (() => void)[] = []
+
   const state = {
     sent: [] as [string, unknown][],
     destroyed: false,
     send(channel: string, payload: unknown) {
       state.sent.push([channel, payload])
     },
-    isDestroyed: () => state.destroyed
+    isDestroyed: () => state.destroyed,
+    once(event: string, handler: () => void) {
+      if (event === 'destroyed') listeners.push(handler)
+    },
+    close() {
+      state.destroyed = true
+      for (const handler of listeners) handler()
+    }
   }
+
   return state
 }
 
@@ -125,7 +140,9 @@ describe('creating a session', () => {
     manager.create({ ...SPEC, command: ['gh', 'auth', 'login'] }, renderer as never)
 
     expect(spawned[0]?.args).toContain('-i')
-    expect(spawned[0]?.args.join(' ')).toContain('gh auth login')
+    // Each word is quoted: a path can carry shell metacharacters, and a
+    // repository cloned from GitHub brings its name from whoever wrote it.
+    expect(spawned[0]?.args.join(' ')).toContain("'gh' 'auth' 'login'")
   })
 
   it('starts an interactive shell when no command is given', () => {
@@ -251,6 +268,31 @@ describe('disposal', () => {
     expect(() => {
       manager.dispose('term-999')
     }).not.toThrow()
+  })
+
+  // Closing a window destroys its WebContents without unmounting React, so the
+  // cleanup in Terminal.tsx never runs. On macOS the app outlives its last
+  // window, and the shell would keep running with nothing to talk to.
+  it('kills the sessions of a window that closes', () => {
+    manager.create(SPEC, renderer as never)
+    manager.create(SPEC, renderer as never)
+
+    renderer.close()
+
+    expect(spawned.every((pty) => pty.killed)).toBe(true)
+    expect(manager.size).toBe(0)
+  })
+
+  it('leaves the sessions of other windows alone', () => {
+    const other = target()
+    manager.create(SPEC, renderer as never)
+    manager.create(SPEC, other as never)
+
+    renderer.close()
+
+    expect(spawned[0]?.killed).toBe(true)
+    expect(spawned[1]?.killed).toBe(false)
+    expect(manager.size).toBe(1)
   })
 
   it('kills every session when the application quits', () => {

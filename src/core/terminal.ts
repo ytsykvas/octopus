@@ -76,17 +76,34 @@ export function resolveCwd(cwd: string, home: string): string {
 }
 
 /**
+ * Wraps one argument so a shell reads it as a single literal word.
+ *
+ * Single quotes disable every expansion a shell performs, which is the whole
+ * point; a single quote inside the value is the one thing they cannot contain,
+ * so it is closed, escaped and reopened.
+ */
+function shellQuote(argument: string): string {
+  return `'${argument.replaceAll("'", "'\\''")}'`
+}
+
+/**
  * Turns a spec into the argv a pseudo-terminal should run.
  *
  * A command is executed through the login shell rather than directly, so the
  * user's PATH and shell configuration apply — `gh` and `claude` are usually
  * installed somewhere only the shell profile knows about.
  *
+ * Each argument is quoted rather than joined with spaces. The path of a script
+ * contains a project id, which comes from a repository's directory name, and
+ * `toSlug` lets `;`, `$(`, `|` and `&` through — it only strips what git
+ * forbids in a ref. A repository cloned from GitHub brings that name with it,
+ * so an unquoted join would run whatever its author put there.
+ *
  * `-i` (interactive) is deliberate: both auth flows prompt for input.
  */
 export function buildTerminalArgv(spec: TerminalSpec): readonly string[] {
   if (spec.command.length === 0) return []
-  return ['-i', '-c', spec.command.join(' ')]
+  return ['-i', '-c', spec.command.map(shellQuote).join(' ')]
 }
 
 /**
