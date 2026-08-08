@@ -120,7 +120,7 @@ export function ProjectSettings({
       {/* A rail rather than one long scroll: the sections have nothing to do
           with each other, and the same shape as the settings window means one
           way of navigating rather than two. */}
-      <div className="flex min-h-[26rem]">
+      <div className="flex min-h-[30rem]">
         <SectionRail
           sections={SECTIONS.map((item) => ({ ...item, label: t(item.labelKey) }))}
           active={section}

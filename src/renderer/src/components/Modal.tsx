@@ -27,8 +27,10 @@ const WIDTHS = {
  */
 const HEIGHTS = {
   sm: 'max-h-[min(24rem,calc(100vh-8rem))]',
-  md: 'max-h-[min(34rem,calc(100vh-8rem))]',
-  lg: 'max-h-[min(46rem,calc(100vh-6rem))]'
+  md: 'max-h-[min(42rem,calc(100vh-6rem))]',
+  // Deliberately close to the window: the sectioned dialogs hold script bodies
+  // and terminals, and the ceiling was the thing limiting them, not the width.
+  lg: 'max-h-[min(58rem,calc(100vh-4rem))]'
 } as const
 
 /**
