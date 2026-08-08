@@ -1,4 +1,9 @@
-import { PanelRightOpen, Settings as SettingsIcon } from 'lucide-react'
+import {
+  PanelLeftClose,
+  PanelLeftOpen,
+  PanelRightOpen,
+  Settings as SettingsIcon
+} from 'lucide-react'
 import { useCallback, useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
@@ -32,6 +37,9 @@ export function App(): React.JSX.Element {
   const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [rightPanelOpen, setRightPanelOpen] = useState(true)
+  // Not persisted, matching the right pane: which panes are folded away is a
+  // preference for the current session rather than a setting.
+  const [sidebarOpen, setSidebarOpen] = useState(true)
   const [pickingRepository, setPickingRepository] = useState(false)
   const [selectedWorkspaceId, setSelectedWorkspaceId] = useState<string | null>(null)
   const [editingProjectId, setEditingProjectId] = useState<string | null>(null)
@@ -211,33 +219,56 @@ export function App(): React.JSX.Element {
             busy={projects.busy}
           />
 
-          <Sidebar
-            project={selectedProject}
-            workspaces={selectedProject ? (workspaces.byProject.get(selectedProject.id) ?? []) : []}
-            selectedWorkspaceId={selectedWorkspaceId}
-            onSelectWorkspace={setSelectedWorkspaceId}
-            onCreateWorkspace={() => {
-              if (selectedProject) void workspaces.create(selectedProject.id)
-            }}
-            onRenameWorkspace={(id, name) => void workspaces.rename(id, name)}
-            onRemoveWorkspace={(id) => void workspaces.remove(id)}
-            editingWorkspaceId={workspaces.editingId}
-            onEditingWorkspaceChange={workspaces.setEditingId}
-            width={config?.sidebarWidth ?? 240}
-            onWidthChange={(sidebarWidth) => void updateConfig({ sidebarWidth })}
-          />
+          {sidebarOpen && (
+            <Sidebar
+              project={selectedProject}
+              workspaces={
+                selectedProject ? (workspaces.byProject.get(selectedProject.id) ?? []) : []
+              }
+              selectedWorkspaceId={selectedWorkspaceId}
+              onSelectWorkspace={setSelectedWorkspaceId}
+              onCreateWorkspace={() => {
+                if (selectedProject) void workspaces.create(selectedProject.id)
+              }}
+              onRenameWorkspace={(id, name) => void workspaces.rename(id, name)}
+              onRemoveWorkspace={(id) => void workspaces.remove(id)}
+              editingWorkspaceId={workspaces.editingId}
+              onEditingWorkspaceChange={workspaces.setEditingId}
+              width={config?.sidebarWidth ?? 240}
+              onWidthChange={(sidebarWidth) => void updateConfig({ sidebarWidth })}
+            />
+          )}
         </div>
 
-        <div className="border-line bg-surface border-t border-r p-2">
+        <div className="border-line bg-surface space-y-px border-t border-r p-2">
+          <button
+            type="button"
+            onClick={() => {
+              setSidebarOpen((open) => !open)
+            }}
+            title={sidebarOpen ? t('sidebar.collapse') : t('sidebar.expand')}
+            className="row focus-ring text-ink-faint hover:text-ink flex w-full items-center gap-2 px-2 py-1.5"
+          >
+            {sidebarOpen ? (
+              <PanelLeftClose aria-hidden size={14} />
+            ) : (
+              <PanelLeftOpen aria-hidden size={14} />
+            )}
+            {/* Collapsed, the column is only as wide as the tab strip, so the
+                labels go and the titles carry the meaning. */}
+            {sidebarOpen && t('sidebar.collapse')}
+          </button>
+
           <button
             type="button"
             onClick={() => {
               setSettingsOpen(true)
             }}
+            title={t('sidebar.settings')}
             className="row focus-ring text-ink-soft hover:text-ink flex w-full items-center gap-2 px-2 py-1.5"
           >
             <SettingsIcon aria-hidden size={14} />
-            {t('sidebar.settings')}
+            {sidebarOpen && t('sidebar.settings')}
           </button>
         </div>
       </div>

@@ -34,6 +34,8 @@ export const en = {
       'Its {{count}} workspaces are deleted along with their branches. The repository itself stays on disk.',
     removeConfirm: 'Remove',
     removeCancel: 'Cancel',
+    collapse: 'Hide workspaces',
+    expand: 'Show workspaces',
     settings: 'Settings'
   },
 
