@@ -45,15 +45,13 @@ export function Modal({
     <dialog
       ref={dialog}
       aria-label={title}
-      // `cancel` covers Escape; `close` covers everything else the browser does.
+      // `cancel` is Escape. A click on the backdrop deliberately does nothing:
+      // these dialogs hold edits and confirmations, and a stray click beside
+      // one should not discard what is in it. Closing is what the footer button
+      // and Escape are for — both of them things you mean to do.
       onCancel={(event) => {
         event.preventDefault()
         onClose()
-      }}
-      onClick={(event) => {
-        // A click landing on the dialog itself is the backdrop: the content
-        // sits in a child element and stops the event there.
-        if (event.target === dialog.current) onClose()
       }}
       className={`bg-canvas text-ink border-line m-auto rounded-[var(--radius-panel)] border p-0 shadow-[var(--shadow-modal)] backdrop:bg-black/40 ${WIDTHS[size]}`}
     >
