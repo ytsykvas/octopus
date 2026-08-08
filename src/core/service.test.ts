@@ -1,5 +1,5 @@
 import { execFile } from 'node:child_process'
-import { access, mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
+import { access, mkdir, mkdtemp, readFile, rename, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { promisify } from 'node:util'
@@ -269,8 +269,10 @@ describe('workspaces', () => {
     const listed = await broken.listWorkspaces(projectId)
     expect(listed).toHaveLength(1)
     expect(listed[0]?.id).toBe(workspace.id)
-    // With no worktrees reported, the workspace reads as missing.
-    expect(listed[0]?.missing).toBe(true)
+    // Not missing: git said nothing, which is not the same as saying the
+    // worktree is gone. This assertion used to read `true`, and in doing so
+    // fixed the bug in place — a failure to ask closed every terminal.
+    expect(listed[0]?.missing).toBe(false)
   })
 
   it('falls back to the default root when none is configured', async () => {
@@ -580,6 +582,24 @@ describe('projects', () => {
     await inside(['checkout', '-q', '--detach', head])
 
     await expect(service.listWorkspaces(project.id)).resolves.toHaveLength(1)
+  })
+
+  // A repository that was moved answers nothing to `git worktree list`. That
+  // says nothing about whether the worktrees are still there, and reporting
+  // them as removed makes the UI close their terminals.
+  it('does not report intact workspaces as removed when git cannot be read', async () => {
+    const repo = join(dir, 'planner')
+    await initRepo(repo)
+    const project = await service.addProjectFromPath(repo)
+    const workspace = await service.createWorkspaceIn(project.id)
+
+    await rename(repo, join(dir, 'planner-moved'))
+
+    // The workspace directory is untouched.
+    await expect(access(workspace.path)).resolves.toBeUndefined()
+
+    const listed = await service.listWorkspaces(project.id)
+    expect(listed[0]?.missing).toBe(false)
   })
 
   it('removing a missing project does not corrupt state', async () => {

@@ -22,6 +22,7 @@ import {
   listWorktrees,
   deleteBranch,
   hasUncommittedChanges,
+  isBranchMerged,
   removeWorktree,
   renameBranch,
   type Worktree
@@ -29,7 +30,13 @@ import {
 
 /** Machine-readable reason an operation was refused; the UI localises these. */
 export type WorkspaceErrorCode =
-  'branchExists' | 'pathExists' | 'uncommittedChanges' | 'nameEmpty' | 'worktreeMissing'
+  | 'branchExists'
+  | 'pathExists'
+  | 'uncommittedChanges'
+  /** The branch holds commits the base branch does not. */
+  | 'branchUnmerged'
+  | 'nameEmpty'
+  | 'worktreeMissing'
 
 export class WorkspaceError extends Error {
   constructor(
@@ -214,6 +221,14 @@ export interface RemoveOptions {
   readonly force?: boolean
   /** Also delete the branch, losing any commits that were never merged. */
   readonly deleteBranch?: boolean
+  /**
+   * The branch to measure "merged" against, when one is being deleted.
+   *
+   * Supplied so the check can happen before anything is destroyed. Without it
+   * the branch is deleted with `-D`, which is what removing a whole project
+   * does — there, the user has already agreed to lose the lot.
+   */
+  readonly baseBranch?: string
 }
 
 /**
@@ -250,12 +265,28 @@ export async function removeWorkspace(
     )
   }
 
+  // Both checks happen before anything is destroyed. `git branch -d` refuses an
+  // unmerged branch, and refusing after the worktree is gone leaves the caller
+  // with half an operation: the directory deleted, the branch still there, and
+  // an error about the branch.
+  if (options.deleteBranch === true && !force && options.baseBranch !== undefined) {
+    const merged = await isBranchMerged(exec.repository, workspace.branch, options.baseBranch)
+
+    if (!merged) {
+      throw new WorkspaceError(
+        'branchUnmerged',
+        { name: workspace.name, branch: workspace.branch },
+        `${workspace.branch} has commits that are not in ${options.baseBranch}.`
+      )
+    }
+  }
+
   await removeWorktree(exec.repository, workspace.path, force)
 
   if (options.deleteBranch === true) {
-    // Forced removal implies the user accepted losing work, so an unmerged
-    // branch is not a reason to stop here.
-    await deleteBranch(exec.repository, workspace.branch, force)
+    // Forced by this point: either the caller asked for force, or the branch
+    // was shown to be merged above. Anything else has already thrown.
+    await deleteBranch(exec.repository, workspace.branch, true)
   }
 }
 
@@ -306,9 +337,22 @@ export async function rollbackWorkspace(workspace: Workspace, exec: GitExec): Pr
  */
 export function reconcile(
   workspaces: readonly Workspace[],
-  worktrees: readonly Worktree[],
+  worktrees: readonly Worktree[] | null,
   changes: ReadonlyMap<string, number> = new Map()
 ): WorkspaceView[] {
+  // `null` means git could not be asked — the repository was moved, renamed or
+  // is otherwise unreadable. That says nothing about whether the worktrees are
+  // still there, so nothing is marked missing: the alternative is claiming
+  // every workspace has been removed, and the UI acts on that by closing their
+  // terminals.
+  if (worktrees === null) {
+    return workspaces.map((workspace) => ({
+      ...workspace,
+      missing: false,
+      changedFiles: changes.get(workspace.id) ?? 0
+    }))
+  }
+
   // A prunable entry is one git still lists but whose directory is gone, so it
   // counts as missing rather than as present.
   const present = new Set(

@@ -231,6 +231,8 @@ export const uk: Translation = {
     listFailed: 'GitHub повернув щось неочікуване.',
     cloneFailed: 'Не вдалося клонувати {{repository}}.',
     alreadyExists: '{{path}} уже існує. Додайте його з диска.',
+    branchUnmerged:
+      '{{branch}} має коміти, яких немає в базовій гілці. Зніміть прапорець видалення гілки або спершу злийте її.',
     branchExists: 'Гілка {{branch}} уже існує.',
     pathExists: '{{path}} уже існує.',
     uncommittedChanges: 'У {{name}} є незакомічені зміни.',

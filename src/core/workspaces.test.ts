@@ -285,6 +285,61 @@ describe('renameWorkspace', () => {
 })
 
 describe('removeWorkspace', () => {
+  // The refusal used to come after the worktree was gone: `git branch -d`
+  // declines an unmerged branch, so the caller was left with the directory
+  // destroyed, the branch still there, and an error about the branch.
+  it('refuses an unmerged branch before destroying anything', async () => {
+    const workspace = await create()
+    const inside = gitIn(workspace.path)
+
+    await writeFile(join(workspace.path, 'work.txt'), 'work\n', 'utf8')
+    await inside(['add', '.'])
+    await inside(['commit', '-q', '-m', 'committed, never merged'])
+
+    const error = await removeWorkspace(
+      workspace,
+      { repository: exec, workspace: inside },
+      { deleteBranch: true, baseBranch: 'main' }
+    ).catch((cause: unknown) => cause)
+
+    expect((error as WorkspaceError).code).toBe('branchUnmerged')
+
+    // Nothing was destroyed: the worktree and the branch are both still there.
+    await expect(listWorktrees(exec)).resolves.toHaveLength(2)
+    await expect(exec(['branch', '--list', workspace.branch])).resolves.toContain(workspace.name)
+  })
+
+  it('deletes a merged branch without complaint', async () => {
+    const workspace = await create()
+
+    await removeWorkspace(
+      workspace,
+      { repository: exec, workspace: gitIn(workspace.path) },
+      { deleteBranch: true, baseBranch: 'main' }
+    )
+
+    await expect(exec(['branch', '--list', workspace.branch])).resolves.toBe('')
+  })
+
+  // Removing a project agrees to lose everything in it, so an unmerged branch
+  // is not a reason to stop half way.
+  it('deletes an unmerged branch when forced', async () => {
+    const workspace = await create()
+    const inside = gitIn(workspace.path)
+
+    await writeFile(join(workspace.path, 'work.txt'), 'work\n', 'utf8')
+    await inside(['add', '.'])
+    await inside(['commit', '-q', '-m', 'committed, never merged'])
+
+    await removeWorkspace(
+      workspace,
+      { repository: exec, workspace: inside },
+      { force: true, deleteBranch: true, baseBranch: 'main' }
+    )
+
+    await expect(exec(['branch', '--list', workspace.branch])).resolves.toBe('')
+  })
+
   it('removes the worktree and keeps the branch by default', async () => {
     const workspace = await create()
 
@@ -427,6 +482,28 @@ describe('reconcile', () => {
     expect(worktrees.map((item) => item.path)).toContain(workspace.path)
 
     expect(reconcile([workspace], worktrees)[0]?.missing).toBe(true)
+  })
+
+  // `null` is "git could not be asked", which is not the same as "git reports
+  // nothing". The first says nothing about the worktrees; the second says they
+  // are gone.
+  it('reports nothing as missing when git could not be asked', () => {
+    const workspace = { id: 'planner/anna', path: '/tmp/anna' } as Workspace
+
+    const views = reconcile([workspace], null, new Map([['planner/anna', 3]]))
+
+    expect(views[0]?.missing).toBe(false)
+    expect(views[0]?.changedFiles).toBe(3)
+  })
+
+  it('reports a workspace as missing when git reports an empty list', () => {
+    const workspace = { id: 'planner/anna', path: '/tmp/anna' } as Workspace
+    expect(reconcile([workspace], [])[0]?.missing).toBe(true)
+  })
+
+  it('falls back to no changes when git could not be asked at all', () => {
+    const workspace = { id: 'planner/anna', path: '/tmp/anna' } as Workspace
+    expect(reconcile([workspace], null)[0]?.changedFiles).toBe(0)
   })
 
   it('keeps the record rather than dropping it — the discrepancy must be visible', () => {

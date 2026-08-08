@@ -270,8 +270,11 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
       if (stored.length === 0) return []
 
       // git is the source of truth about worktrees; the store only holds what
-      // git does not know. A failure to read it must not blank the list.
-      const worktrees = await listWorktrees(makeExec(project.repoPath)).catch(() => [])
+      // git does not know. `null` on failure, not an empty list: a repository
+      // that was moved or renamed answers nothing, and treating that as "no
+      // worktrees" marked every workspace missing — which the UI acts on by
+      // closing their terminals.
+      const worktrees = await listWorktrees(makeExec(project.repoPath)).catch(() => null)
       const changes = await countChanges(stored, makeExec)
 
       return reconcile(stored, worktrees, changes)
@@ -308,7 +311,9 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
       await removeWorkspace(
         workspace,
         { repository: makeExec(project.repoPath), workspace: makeExec(workspace.path) },
-        options
+        // The base branch travels with the request so "is this merged" can be
+        // answered before the worktree is destroyed rather than after.
+        { ...options, baseBranch: project.baseBranch }
       )
 
       await commit(removeWorkspaceRecord(state, workspaceId))

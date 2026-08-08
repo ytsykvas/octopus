@@ -109,6 +109,28 @@ export async function pruneWorktrees(exec: GitExec): Promise<void> {
   await exec(['worktree', 'prune'])
 }
 
+/**
+ * Whether every commit on `branch` is already in `base`.
+ *
+ * Asked before a worktree is destroyed, not after: `git branch -d` refuses an
+ * unmerged branch, and by then the directory is gone and the refusal is a
+ * failure in the middle of an operation rather than instead of one.
+ */
+export async function isBranchMerged(
+  exec: GitExec,
+  branch: string,
+  base: string
+): Promise<boolean> {
+  try {
+    await exec(['merge-base', '--is-ancestor', branch, base])
+    return true
+  } catch {
+    // A non-zero exit means "not an ancestor". It also means base is unknown,
+    // which is the same answer for our purposes: we cannot show it is merged.
+    return false
+  }
+}
+
 /** Deletes a branch; `force` allows dropping one that was never merged. */
 export async function deleteBranch(exec: GitExec, branch: string, force = false): Promise<void> {
   await exec(['branch', force ? '-D' : '-d', branch])

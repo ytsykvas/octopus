@@ -232,6 +232,8 @@ export const en = {
     listFailed: 'GitHub returned something unexpected.',
     cloneFailed: 'Could not clone {{repository}}.',
     alreadyExists: '{{path}} already exists. Add it from disk instead.',
+    branchUnmerged:
+      '{{branch}} has commits that are not in the base branch. Remove it with the branch checkbox cleared, or merge it first.',
     branchExists: 'A branch named {{branch}} already exists.',
     pathExists: '{{path}} already exists.',
     uncommittedChanges: '{{name}} has uncommitted changes.',

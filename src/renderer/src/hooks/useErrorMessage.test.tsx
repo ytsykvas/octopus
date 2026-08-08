@@ -22,6 +22,7 @@ const CODES: readonly {
   { code: 'listFailed' },
   { code: 'cloneFailed', parameter: ['repository', 'ytsykvas/planner'] },
   { code: 'alreadyExists', parameter: ['path', '/Users/someone/code/planner'] },
+  { code: 'branchUnmerged', parameter: ['branch', 'ytsykvas/anna'] },
   { code: 'branchExists', parameter: ['branch', 'ytsykvas/anna'] },
   { code: 'pathExists', parameter: ['path', '/tmp/planner/anna'] },
   { code: 'uncommittedChanges', parameter: ['name', 'anna'] },
