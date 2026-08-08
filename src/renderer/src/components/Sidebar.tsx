@@ -78,10 +78,6 @@ export function Sidebar({
         }}
       />
 
-      {/* Left plain: the colour belongs to the project, and this strip is above
-          where the project is named. */}
-      <div className="titlebar-drag h-11 shrink-0" />
-
       {project ? (
         // Strongest at the name and fading down the list, so the colour reads
         // as belonging to the header rather than as a wash over the rows.

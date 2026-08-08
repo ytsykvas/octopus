@@ -43,9 +43,6 @@ export function ProjectTabs({
 
   return (
     <nav className="bg-surface flex w-14 shrink-0 flex-col">
-      {/* Clears the traffic lights, and keeps the window draggable up here. */}
-      <div className="titlebar-drag h-11 w-full shrink-0" />
-
       <div className="flex flex-1 flex-col gap-1 overflow-y-auto pb-1 pl-2.5">
         {projects.map((project) => (
           <ProjectTab

@@ -193,147 +193,145 @@ export function App(): React.JSX.Element {
   const editingProject = projects.all.find((project) => project.id === editingProjectId) ?? null
 
   return (
-    <div className="bg-canvas text-ink flex h-full">
-      {/* Tabs and workspaces are one column, so Settings can sit in the corner
+    <div className="bg-canvas text-ink flex h-full flex-col">
+      {/* One strip across the window rather than one per pane. The traffic
+          lights sit at its left, and nothing behind them belongs to a project:
+          a pane's colour reaching up here made the window look like it started
+          in the wrong place. */}
+      <header className="titlebar-drag border-line flex h-11 shrink-0 items-center gap-3 border-b pr-3 pl-[5.5rem]">
+        <span className="truncate font-medium">{selectedProject?.name ?? t('app.name')}</span>
+        {selectedProject && (
+          <span className="text-ink-faint truncate font-mono text-[11px]">
+            {selectedProject.repoPath}
+          </span>
+        )}
+
+        {!rightPanelOpen && (
+          <button
+            type="button"
+            onClick={() => {
+              setRightPanelOpen(true)
+            }}
+            className="text-ink-faint hover:text-ink focus-ring ml-auto rounded p-1 transition-colors"
+            title={t('panel.expand')}
+          >
+            <PanelRightOpen aria-hidden size={14} />
+          </button>
+        )}
+      </header>
+
+      <div className="flex min-h-0 flex-1">
+        {/* Tabs and workspaces are one column, so Settings can sit in the corner
           of the window rather than inset by the width of the tab strip. */}
-      <div className="flex min-h-0 shrink-0 flex-col">
-        <div className="flex min-h-0 flex-1">
-          <ProjectTabs
-            projects={projects.all}
-            activeProjectId={selectedProjectId}
-            onSelect={(id) => {
-              setSelectedProjectId(id)
-              setSelectedWorkspaceId(null)
-              // Picking a project is asking to see it, and folded away there is
-              // nothing to see — so the list comes back rather than the click
-              // appearing to do nothing.
-              setSidebarOpen(true)
-            }}
-            onEdit={setEditingProjectId}
-            onRemove={(id) => void removeProject(id)}
-            onAddFromDisk={() => {
-              void (async () => {
-                const added = await projects.addFromDisk()
-                if (added) setSelectedProjectId(added.id)
-              })()
-            }}
-            onAddFromGitHub={() => {
-              setPickingRepository(true)
-            }}
-            busy={projects.busy}
-          />
-
-          {sidebarOpen && (
-            <Sidebar
-              project={selectedProject}
-              workspaces={
-                selectedProject ? (workspaces.byProject.get(selectedProject.id) ?? []) : []
-              }
-              selectedWorkspaceId={selectedWorkspaceId}
-              onSelectWorkspace={setSelectedWorkspaceId}
-              onCreateWorkspace={() => {
-                if (selectedProject) void workspaces.create(selectedProject.id)
+        <div className="flex min-h-0 shrink-0 flex-col">
+          <div className="flex min-h-0 flex-1">
+            <ProjectTabs
+              projects={projects.all}
+              activeProjectId={selectedProjectId}
+              onSelect={(id) => {
+                setSelectedProjectId(id)
+                setSelectedWorkspaceId(null)
+                // Picking a project is asking to see it, and folded away there is
+                // nothing to see — so the list comes back rather than the click
+                // appearing to do nothing.
+                setSidebarOpen(true)
               }}
-              onRenameWorkspace={(id, name) => void workspaces.rename(id, name)}
-              onRemoveWorkspace={(id) => void workspaces.remove(id)}
-              editingWorkspaceId={workspaces.editingId}
-              onEditingWorkspaceChange={workspaces.setEditingId}
-              width={config?.sidebarWidth ?? 240}
-              onWidthChange={(sidebarWidth) => void updateConfig({ sidebarWidth })}
+              onEdit={setEditingProjectId}
+              onRemove={(id) => void removeProject(id)}
+              onAddFromDisk={() => {
+                void (async () => {
+                  const added = await projects.addFromDisk()
+                  if (added) setSelectedProjectId(added.id)
+                })()
+              }}
+              onAddFromGitHub={() => {
+                setPickingRepository(true)
+              }}
+              busy={projects.busy}
             />
-          )}
-        </div>
 
-        <div className="border-line bg-surface space-y-px border-t border-r p-2">
-          <button
-            type="button"
-            onClick={() => {
-              setSidebarOpen((open) => !open)
-            }}
-            title={sidebarOpen ? t('sidebar.collapse') : t('sidebar.expand')}
-            className="row focus-ring text-ink-faint hover:text-ink flex w-full items-center gap-2 px-2 py-1.5"
-          >
-            {sidebarOpen ? (
-              <PanelLeftClose aria-hidden size={14} />
-            ) : (
-              <PanelLeftOpen aria-hidden size={14} />
+            {sidebarOpen && (
+              <Sidebar
+                project={selectedProject}
+                workspaces={
+                  selectedProject ? (workspaces.byProject.get(selectedProject.id) ?? []) : []
+                }
+                selectedWorkspaceId={selectedWorkspaceId}
+                onSelectWorkspace={setSelectedWorkspaceId}
+                onCreateWorkspace={() => {
+                  if (selectedProject) void workspaces.create(selectedProject.id)
+                }}
+                onRenameWorkspace={(id, name) => void workspaces.rename(id, name)}
+                onRemoveWorkspace={(id) => void workspaces.remove(id)}
+                editingWorkspaceId={workspaces.editingId}
+                onEditingWorkspaceChange={workspaces.setEditingId}
+                width={config?.sidebarWidth ?? 240}
+                onWidthChange={(sidebarWidth) => void updateConfig({ sidebarWidth })}
+              />
             )}
-            {/* Collapsed, the column is only as wide as the tab strip, so the
-                labels go and the titles carry the meaning. */}
-            {sidebarOpen && t('sidebar.collapse')}
-          </button>
+          </div>
 
-          <button
-            type="button"
-            onClick={() => {
-              setSettingsOpen(true)
-            }}
-            title={t('sidebar.settings')}
-            className="row focus-ring text-ink-soft hover:text-ink flex w-full items-center gap-2 px-2 py-1.5"
-          >
-            <SettingsIcon aria-hidden size={14} />
-            {sidebarOpen && t('sidebar.settings')}
-          </button>
-        </div>
-      </div>
-
-      <main className="flex min-w-0 flex-1 flex-col">
-        {/* The traffic lights end around 70px from the window edge, past the
-            56px tab strip. With the workspace list open the overhang lands on
-            its empty drag strip; folded away, it lands here, so this header
-            has to step aside. */}
-        <header
-          className={`titlebar-drag border-line flex h-11 shrink-0 items-center gap-3 border-b pr-4 ${
-            sidebarOpen ? 'pl-4' : 'pl-8'
-          }`}
-        >
-          <span className="truncate font-medium">{selectedProject?.name ?? t('app.name')}</span>
-          {selectedProject && (
-            <span className="text-ink-faint truncate font-mono text-[11px]">
-              {selectedProject.repoPath}
-            </span>
-          )}
-
-          {!rightPanelOpen && (
+          <div className="border-line bg-surface space-y-px border-t border-r p-2">
             <button
               type="button"
               onClick={() => {
-                setRightPanelOpen(true)
+                setSidebarOpen((open) => !open)
               }}
-              className="text-ink-faint hover:text-ink focus-ring ml-auto rounded p-1 transition-colors"
-              title={t('panel.expand')}
+              title={sidebarOpen ? t('sidebar.collapse') : t('sidebar.expand')}
+              className="row focus-ring text-ink-faint hover:text-ink flex w-full items-center gap-2 px-2 py-1.5"
             >
-              <PanelRightOpen aria-hidden size={14} />
+              {sidebarOpen ? (
+                <PanelLeftClose aria-hidden size={14} />
+              ) : (
+                <PanelLeftOpen aria-hidden size={14} />
+              )}
+              {/* Collapsed, the column is only as wide as the tab strip, so the
+                labels go and the titles carry the meaning. */}
+              {sidebarOpen && t('sidebar.collapse')}
             </button>
-          )}
-        </header>
 
-        <div className="flex-1 overflow-auto p-6">
-          {error !== null && (
-            <div className="bg-danger-bg text-danger border-danger/25 mb-5 rounded-[var(--radius-control)] border px-3 py-2">
-              {error}
-            </div>
-          )}
-
-          <CenterPane project={selectedProject} hasProjects={projects.all.length > 0} />
+            <button
+              type="button"
+              onClick={() => {
+                setSettingsOpen(true)
+              }}
+              title={t('sidebar.settings')}
+              className="row focus-ring text-ink-soft hover:text-ink flex w-full items-center gap-2 px-2 py-1.5"
+            >
+              <SettingsIcon aria-hidden size={14} />
+              {sidebarOpen && t('sidebar.settings')}
+            </button>
+          </div>
         </div>
-      </main>
 
-      {rightPanelOpen && (
-        <RightPanel
-          workspaces={workspaces.flat}
-          activeWorkspaceId={selectedWorkspaceId}
-          scriptPaths={scriptPaths}
-          onEditScripts={() => {
-            if (selectedProject) setEditingProjectId(selectedProject.id)
-          }}
-          width={config?.rightPanelWidth ?? 360}
-          onWidthChange={(rightPanelWidth) => void updateConfig({ rightPanelWidth })}
-          onCollapse={() => {
-            setRightPanelOpen(false)
-          }}
-        />
-      )}
+        <main className="flex min-w-0 flex-1 flex-col">
+          <div className="flex-1 overflow-auto p-6">
+            {error !== null && (
+              <div className="bg-danger-bg text-danger border-danger/25 mb-5 rounded-[var(--radius-control)] border px-3 py-2">
+                {error}
+              </div>
+            )}
+
+            <CenterPane project={selectedProject} hasProjects={projects.all.length > 0} />
+          </div>
+        </main>
+
+        {rightPanelOpen && (
+          <RightPanel
+            workspaces={workspaces.flat}
+            activeWorkspaceId={selectedWorkspaceId}
+            scriptPaths={scriptPaths}
+            onEditScripts={() => {
+              if (selectedProject) setEditingProjectId(selectedProject.id)
+            }}
+            width={config?.rightPanelWidth ?? 360}
+            onWidthChange={(rightPanelWidth) => void updateConfig({ rightPanelWidth })}
+            onCollapse={() => {
+              setRightPanelOpen(false)
+            }}
+          />
+        )}
+      </div>
 
       {settingsOpen && config && (
         <Settings
