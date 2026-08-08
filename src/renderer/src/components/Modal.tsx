@@ -8,13 +8,27 @@ interface ModalProps {
   readonly children: React.ReactNode
   /** Optional row of controls pinned to the bottom. */
   readonly footer?: React.ReactNode
-  /** `sm` for a question, `md` for a list or form. */
-  readonly size?: 'sm' | 'md'
+  /** `sm` for a question, `md` for a list, `lg` for a form with sections. */
+  readonly size?: 'sm' | 'md' | 'lg'
 }
 
 const WIDTHS = {
   sm: 'w-[min(26rem,calc(100vw-4rem))]',
-  md: 'w-[min(46rem,calc(100vw-4rem))]'
+  md: 'w-[min(46rem,calc(100vw-4rem))]',
+  lg: 'w-[min(62rem,calc(100vw-4rem))]'
+} as const
+
+/**
+ * How tall the body may grow before it scrolls.
+ *
+ * A question needs little and looks wrong stretched; a sectioned form with
+ * script bodies in it needs most of the window, and capping it at the height of
+ * a dialog meant for two lines of text is what made everything feel cramped.
+ */
+const HEIGHTS = {
+  sm: 'max-h-[min(24rem,calc(100vh-8rem))]',
+  md: 'max-h-[min(34rem,calc(100vh-8rem))]',
+  lg: 'max-h-[min(46rem,calc(100vh-6rem))]'
 } as const
 
 /**
@@ -58,7 +72,7 @@ export function Modal({
       }}
       className={`bg-canvas text-ink border-line m-auto rounded-[var(--radius-panel)] border p-0 shadow-[var(--shadow-modal)] backdrop:bg-black/40 ${WIDTHS[size]}`}
     >
-      <div className="flex max-h-[min(34rem,calc(100vh-8rem))] flex-col">
+      <div className={`flex flex-col ${HEIGHTS[size]}`}>
         <header className="border-line flex shrink-0 items-center gap-3 border-b px-4 py-3">
           <h2 className="min-w-0 flex-1 truncate font-medium">{title}</h2>
 

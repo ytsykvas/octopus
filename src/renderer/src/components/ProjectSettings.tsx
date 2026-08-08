@@ -110,6 +110,7 @@ export function ProjectSettings({
 
   return (
     <Modal
+      size="lg"
       title={t('project.title')}
       onClose={onClose}
       footer={<Button onClick={onClose}>{t('project.done')}</Button>}
@@ -117,7 +118,7 @@ export function ProjectSettings({
       {/* A rail rather than one long scroll: the sections have nothing to do
           with each other, and the same shape as the settings window means one
           way of navigating rather than two. */}
-      <div className="flex min-h-[19rem]">
+      <div className="flex min-h-[26rem]">
         <nav className="border-line bg-surface w-40 shrink-0 border-r p-2">
           <ul className="space-y-px">
             {SECTIONS.map((item) => (
@@ -143,7 +144,7 @@ export function ProjectSettings({
           </ul>
         </nav>
 
-        <div className="min-w-0 flex-1 space-y-5 overflow-auto p-4">
+        <div className="min-w-0 flex-1 space-y-6 overflow-auto p-6">
           {error !== null && (
             <div className="bg-danger-bg text-danger border-danger/25 rounded-[var(--radius-control)] border px-3 py-2">
               {error}
