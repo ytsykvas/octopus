@@ -1,7 +1,8 @@
-import { Plus } from 'lucide-react'
+import { GitBranch, Plus } from 'lucide-react'
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
+import { shortBranchName } from '@core/branches.js'
 import type { Project } from '@core/store.js'
 import type { WorkspaceView } from '@core/workspaces.js'
 
@@ -142,13 +143,26 @@ function ProjectHeader({
 }): React.JSX.Element {
   const { t } = useTranslation()
 
+  // A stronger line than elsewhere: this one sits on the project's colour
+  // wash, where the ordinary border — chosen against a neutral surface — all
+  // but disappears.
   return (
-    <div className="border-line flex items-start gap-1 border-b px-3 pt-2 pb-2.5">
+    <div className="border-line-strong flex items-start gap-1 border-b px-3 pt-2 pb-2.5">
       <div className="min-w-0 flex-1">
         <p className="truncate font-medium" title={project.repoPath}>
           {project.name}
         </p>
-        <p className="text-ink-faint truncate font-mono text-[11px]">{project.baseBranch}</p>
+
+        {/* The icon says "branch" so the line beneath the name is not read as a
+            path. The full ref stays in the title, for when origin/ is the part
+            you actually want. */}
+        <p
+          className="text-ink-faint flex items-center gap-1 text-[11px]"
+          title={project.baseBranch}
+        >
+          <GitBranch aria-hidden size={11} className="shrink-0" />
+          <span className="truncate font-mono">{shortBranchName(project.baseBranch)}</span>
+        </p>
       </div>
 
       <button

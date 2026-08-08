@@ -2,6 +2,7 @@ import { GitBranch, Info, Terminal, TriangleAlert } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
+import { shortBranchName } from '@core/branches.js'
 import { PROJECT_COLORS } from '@core/colors.js'
 import type { Project, ProjectPatch } from '@core/store.js'
 
@@ -19,25 +20,6 @@ interface ProjectSettingsProps {
   readonly onUpdate: (patch: ProjectPatch) => Promise<boolean>
   readonly onRemove: () => void
   readonly onClose: () => void
-}
-
-/**
- * Everything about one project in one place.
- *
- * Changes save as they are made, like the settings window: nothing here is a
- * multi-step edit, and a Save button would invite closing the dialog with work
- * still pending.
- */
-/**
- * Drops the remote prefix for display.
- *
- * Every entry in the list carries the same `origin/`, so it is noise in all of
- * them at once. Only `origin/` is stripped, not any first segment: the list
- * falls back to local branches when a repository has no remote, and `feature/x`
- * must not be shown as `x`.
- */
-function shortBranch(branch: string): string {
-  return branch.startsWith('origin/') ? branch.slice('origin/'.length) : branch
 }
 
 type SectionId = 'general' | 'git' | 'scripts' | 'danger'
@@ -58,6 +40,13 @@ const SECTIONS: readonly {
   { id: 'danger', labelKey: 'project.sectionDanger', Icon: TriangleAlert, destructive: true }
 ]
 
+/**
+ * Everything about one project in one place.
+ *
+ * Changes save as they are made, like the settings window: nothing here is a
+ * multi-step edit, and a Save button would invite closing the dialog with work
+ * still pending.
+ */
 export function ProjectSettings({
   project,
   onUpdate,
@@ -198,7 +187,7 @@ export function ProjectSettings({
                 onChange={changeBranch}
                 placeholder={t('project.branchSearch')}
                 emptyLabel={t('project.branchNone')}
-                display={shortBranch}
+                display={shortBranchName}
               />
             </Field>
           )}
