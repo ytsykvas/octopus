@@ -2,67 +2,14 @@ import { join } from 'node:path'
 
 import { app, BrowserWindow, dialog, ipcMain, Menu, nativeTheme, shell } from 'electron'
 
-import { type AccountKind, checkAccounts, signOut } from '../core/accounts.js'
-import type { Config, ThemePreference } from '../core/config.js'
 import { describeError } from '../core/persist.js'
-import { GitHubError, type RemoteRepository } from '../core/github.js'
-import { ProjectValidationError } from '../core/projects.js'
-import { type RemoveOptions, WorkspaceError } from '../core/workspaces.js'
-import { InstructionBodySchema, InstructionKindSchema } from '../core/instructions.js'
-import { ScriptBodySchema, ScriptKindSchema } from '../core/scripts.js'
-import { ProjectPatchSchema } from '../core/store.js'
 import { createService, type OctopusService } from '../core/service.js'
-import { TerminalSpecSchema } from '../core/terminal.js'
 import type { ThemeName } from '../core/types.js'
+import { registerIpc } from './ipc.js'
+import { canvasColor, resolveTheme } from './theme.js'
 import { TerminalManager } from './terminals.js'
 
 /** Canvas colours from the design system (§10) — so the window does not flash white on launch. */
-const CANVAS_LIGHT = '#ffffff'
-const CANVAS_DARK = '#0f1115'
-
-/**
- * Operation outcome as a value rather than an exception.
- *
- * Core errors are meaningful and meant for the user (e.g. "not a git
- * repository"), so they must reach the UI intact instead of collapsing into
- * a generic "Error invoking remote method" (§13 docs/PROJECT.md).
- *
- * Validation failures also carry a code and params, so the renderer can
- * render a localised message rather than the raw English fallback.
- */
-type Result<T> =
-  | { ok: true; value: T }
-  | { ok: false; error: string; code?: string; params?: Readonly<Record<string, string>> }
-
-async function attempt<T>(operation: () => Promise<T> | T): Promise<Result<T>> {
-  try {
-    return { ok: true, value: await operation() }
-  } catch (error) {
-    if (
-      error instanceof ProjectValidationError ||
-      error instanceof GitHubError ||
-      error instanceof WorkspaceError
-    ) {
-      return { ok: false, error: error.message, code: error.code, params: error.params }
-    }
-    return { ok: false, error: describeError(error) }
-  }
-}
-
-/**
- * Resolves the effective theme.
- *
- * The config wins over the system: 'system' defers to macOS, while an
- * explicit choice is honoured regardless of what the OS is doing.
- */
-function resolveTheme(preference: ThemePreference): ThemeName {
-  if (preference === 'system') return nativeTheme.shouldUseDarkColors ? 'dark' : 'light'
-  return preference
-}
-
-function canvasColor(theme: ThemeName): string {
-  return theme === 'dark' ? CANVAS_DARK : CANVAS_LIGHT
-}
 
 function createWindow(theme: ThemeName): BrowserWindow {
   const window = new BrowserWindow({
@@ -104,166 +51,6 @@ function createWindow(theme: ThemeName): BrowserWindow {
 }
 
 /**
- * Registers IPC handlers.
- *
- * They are deliberately one-liners: all logic lives in the core service and
- * this layer only forwards calls (§11.1).
- */
-function registerIpc(service: OctopusService, terminals: TerminalManager): void {
-  ipcMain.handle('theme:get', () => resolveTheme(service.getConfig().theme))
-
-  ipcMain.handle('config:get', () => attempt(() => service.getConfig()))
-
-  ipcMain.handle('config:update', (_event, patch: Partial<Config>) =>
-    attempt(async () => {
-      const updated = await service.updateConfig(patch)
-      broadcastTheme(resolveTheme(updated.theme))
-      return updated
-    })
-  )
-
-  ipcMain.handle('projects:list', () => attempt(() => service.listProjects()))
-
-  ipcMain.handle('accounts:status', () => attempt(() => checkAccounts()))
-
-  // Signing out asks nothing, so it runs silently rather than in a terminal.
-  ipcMain.handle('accounts:signOut', (_event, kind: AccountKind, login: string | null) =>
-    attempt(() => signOut(kind, login))
-  )
-
-  // Terminal sessions. The spec is validated rather than trusted: it arrives
-  // over IPC and ends up as a working directory and a command line.
-  ipcMain.handle('terminal:create', (event, spec: unknown) =>
-    attempt(() => terminals.create(TerminalSpecSchema.parse(spec), event.sender))
-  )
-
-  ipcMain.handle('terminal:write', (_event, id: string, data: string) => {
-    terminals.write(id, data)
-  })
-
-  ipcMain.handle('terminal:resize', (_event, id: string, cols: number, rows: number) => {
-    terminals.resize(id, cols, rows)
-  })
-
-  ipcMain.handle('terminal:dispose', (_event, id: string) => {
-    terminals.dispose(id)
-  })
-
-  // The patch is validated rather than trusted: it arrives from the renderer
-  // and its base branch reaches a git command.
-  ipcMain.handle('projects:update', (_event, projectId: string, patch: unknown) =>
-    attempt(() => service.updateProjectById(projectId, ProjectPatchSchema.parse(patch)))
-  )
-
-  ipcMain.handle('projects:branches', (_event, projectId: string) =>
-    attempt(() => service.listProjectBranches(projectId))
-  )
-
-  // The kind and the body both arrive from the renderer, and the body becomes
-  // an executable file — neither is taken on trust.
-  ipcMain.handle('scripts:read', (_event, projectId: string, kind: unknown) =>
-    attempt(() => service.readProjectScript(projectId, ScriptKindSchema.parse(kind)))
-  )
-
-  ipcMain.handle('scripts:save', (_event, projectId: string, kind: unknown, contents: unknown) =>
-    attempt(() =>
-      service.saveProjectScript(
-        projectId,
-        ScriptKindSchema.parse(kind),
-        ScriptBodySchema.parse(contents)
-      )
-    )
-  )
-
-  ipcMain.handle('scripts:paths', (_event, projectId: string) =>
-    attempt(() => service.projectScriptPaths(projectId))
-  )
-
-  ipcMain.handle('instructions:read', (_event, projectId: string, kind: unknown) =>
-    attempt(() => service.readProjectInstruction(projectId, InstructionKindSchema.parse(kind)))
-  )
-
-  ipcMain.handle(
-    'instructions:save',
-    (_event, projectId: string, kind: unknown, contents: unknown) =>
-      attempt(() =>
-        service.saveProjectInstruction(
-          projectId,
-          InstructionKindSchema.parse(kind),
-          InstructionBodySchema.parse(contents)
-        )
-      )
-  )
-
-  ipcMain.handle('projects:remove', (_event, projectId: string) =>
-    attempt(() => service.removeProjectById(projectId))
-  )
-
-  ipcMain.handle('projects:listRemote', () => attempt(() => service.listRemoteRepositories()))
-
-  ipcMain.handle('workspaces:list', (_event, projectId: string) =>
-    attempt(() => service.listWorkspaces(projectId))
-  )
-
-  ipcMain.handle('workspaces:create', (_event, projectId: string) =>
-    attempt(() => service.createWorkspaceIn(projectId))
-  )
-
-  ipcMain.handle('workspaces:rename', (_event, workspaceId: string, name: string) =>
-    attempt(() => service.renameWorkspaceById(workspaceId, name))
-  )
-
-  ipcMain.handle('workspaces:remove', (_event, workspaceId: string, options: RemoveOptions) =>
-    attempt(() => service.removeWorkspaceById(workspaceId, options))
-  )
-
-  ipcMain.handle('workspaces:hasChanges', (_event, workspaceId: string) =>
-    attempt(() => service.workspaceHasChanges(workspaceId))
-  )
-
-  // Choosing a directory needs Electron's dialog, so it lives here.
-  ipcMain.handle('dialog:pickDirectory', async (event, title: string) => {
-    const window = BrowserWindow.fromWebContents(event.sender)
-    const options: Electron.OpenDialogOptions = {
-      title,
-      properties: ['openDirectory', 'createDirectory']
-    }
-
-    const picked = window
-      ? await dialog.showOpenDialog(window, options)
-      : await dialog.showOpenDialog(options)
-
-    const [chosen] = picked.filePaths
-    return { ok: true, value: picked.canceled ? null : (chosen ?? null) }
-  })
-
-  ipcMain.handle('projects:addFromGitHub', async (event, repository: RemoteRepository) => {
-    const destination = await resolveCloneDirectory(service, event)
-    if (destination === null) return { ok: true, value: null }
-
-    return attempt(() => service.addProjectFromGitHub(repository, destination))
-  })
-
-  // Picking a directory is the one part that genuinely belongs to main:
-  // the dialog is an Electron API.
-  ipcMain.handle('projects:add', async (event) => {
-    const window = BrowserWindow.fromWebContents(event.sender)
-    const picked = window
-      ? await dialog.showOpenDialog(window, {
-          title: 'Select a repository',
-          properties: ['openDirectory'],
-          buttonLabel: 'Add'
-        })
-      : await dialog.showOpenDialog({ properties: ['openDirectory'] })
-
-    const [path] = picked.filePaths
-    if (picked.canceled || !path) return { ok: true, value: null }
-
-    return attempt(() => service.addProjectFromPath(path))
-  })
-}
-
-/**
  * Native menu.
  *
  * Exists mainly for ⌘, — on macOS that is where users expect settings, and
@@ -299,36 +86,6 @@ function registerMenu(): void {
   ]
 
   Menu.setApplicationMenu(Menu.buildFromTemplate(template))
-}
-
-/**
- * Where a cloned repository should land.
- *
- * A configured directory is used silently; otherwise the user picks one and
- * the choice is remembered, so the question is asked once rather than on
- * every clone.
- */
-async function resolveCloneDirectory(
-  service: OctopusService,
-  event: Electron.IpcMainInvokeEvent
-): Promise<string | null> {
-  const configured = service.getConfig().cloneDirectory
-  if (configured !== '') return configured
-
-  const window = BrowserWindow.fromWebContents(event.sender)
-  const picked = window
-    ? await dialog.showOpenDialog(window, {
-        title: 'Where should repositories be cloned?',
-        properties: ['openDirectory', 'createDirectory'],
-        buttonLabel: 'Clone here'
-      })
-    : await dialog.showOpenDialog({ properties: ['openDirectory', 'createDirectory'] })
-
-  const [chosen] = picked.filePaths
-  if (picked.canceled || chosen === undefined) return null
-
-  await service.updateConfig({ cloneDirectory: chosen })
-  return chosen
 }
 
 function broadcastTheme(theme: ThemeName): void {
@@ -374,14 +131,28 @@ async function start(): Promise<void> {
     terminals.disposeAll()
   })
 
-  registerIpc(service, terminals)
+  registerIpc(service, terminals, {
+    // The cast goes through `unknown`: the injected signature is deliberately
+    // narrower than Electron's, which types its arguments as `any`.
+    handle: (channel, handler) => {
+      ipcMain.handle(channel, handler as unknown as Parameters<typeof ipcMain.handle>[1])
+    },
+    showOpenDialog: async (options, parent) =>
+      parent
+        ? dialog.showOpenDialog(parent as BrowserWindow, options)
+        : dialog.showOpenDialog(options),
+    windowFor: (event) =>
+      BrowserWindow.fromWebContents((event as Electron.IpcMainInvokeEvent).sender),
+    prefersDark: () => nativeTheme.shouldUseDarkColors,
+    broadcastTheme
+  })
   watchSystemTheme(service)
   registerMenu()
-  createWindow(resolveTheme(service.getConfig().theme))
+  createWindow(resolveTheme(service.getConfig().theme, nativeTheme.shouldUseDarkColors))
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) {
-      createWindow(resolveTheme(service.getConfig().theme))
+      createWindow(resolveTheme(service.getConfig().theme, nativeTheme.shouldUseDarkColors))
     }
   })
 }

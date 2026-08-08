@@ -59,6 +59,9 @@ export function Modal({
 
   useEffect(() => {
     const element = dialog.current
+    // The ref is attached by the time an effect runs; the guard exists because
+    // its type says otherwise, and no render can reach the other branch.
+    /* v8 ignore next */
     if (!element) return
 
     element.showModal()

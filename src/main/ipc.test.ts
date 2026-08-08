@@ -1,0 +1,655 @@
+import { execFile } from 'node:child_process'
+import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
+import { promisify } from 'node:util'
+
+import { afterEach, beforeEach, describe, expect, it, type Mock, vi } from 'vitest'
+
+import type * as AccountsModule from '../core/accounts.js'
+import { type AccountsStatus, checkAccounts, type CommandExec, signOut } from '../core/accounts.js'
+import type { RemoteRepository } from '../core/github.js'
+import { createService, type OctopusService, type ServiceOptions } from '../core/service.js'
+import type { ThemeName, Workspace } from '../core/types.js'
+import { type IpcHost, registerIpc, type PickedDirectory } from './ipc.js'
+import type { Result } from './result.js'
+import type { TerminalManager } from './terminals.js'
+
+/**
+ * The account calls are the one part of the table that cannot run for real:
+ * `accounts:status` shells out to `claude` and `gh`, and `accounts:signOut`
+ * would drop whoever runs the suite from their own CLI session.
+ */
+vi.mock('../core/accounts.js', async (importOriginal) => ({
+  ...(await importOriginal<typeof AccountsModule>()),
+  checkAccounts: vi.fn(),
+  signOut: vi.fn()
+}))
+
+const run = promisify(execFile)
+
+/**
+ * A stand-in for the Electron surface the IPC layer touches.
+ *
+ * Four small objects instead of a framework — which is the point of injecting
+ * them: the whole channel table can be exercised without a window.
+ */
+interface Harness {
+  readonly host: IpcHost
+  readonly handlers: Map<string, (event: unknown, ...args: unknown[]) => unknown>
+  readonly broadcasts: ThemeName[]
+  picked: PickedDirectory
+  prefersDark: boolean
+  /** null once the window a call came from has closed, as Electron reports it. */
+  window: unknown
+}
+
+function harness(): Harness {
+  const handlers = new Map<string, (event: unknown, ...args: unknown[]) => unknown>()
+  const broadcasts: ThemeName[] = []
+
+  const state: Harness = {
+    handlers,
+    broadcasts,
+    picked: { canceled: true, filePaths: [] },
+    prefersDark: false,
+    window: {},
+    host: {
+      handle: (channel, handler) => {
+        handlers.set(channel, handler as (event: unknown, ...args: unknown[]) => unknown)
+      },
+      showOpenDialog: () => Promise.resolve(state.picked),
+      windowFor: () => state.window,
+      prefersDark: () => state.prefersDark,
+      broadcastTheme: (theme) => broadcasts.push(theme)
+    }
+  }
+
+  return state
+}
+
+/**
+ * The session methods as plain spies.
+ *
+ * A PTY is a real process, so the manager is stubbed — and these three
+ * channels forward without answering, so a spy is the only observable effect.
+ */
+interface TerminalSpies {
+  readonly write: Mock<(id: string, data: string) => void>
+  readonly resize: Mock<(id: string, cols: number, rows: number) => void>
+  readonly dispose: Mock<(id: string) => void>
+}
+
+function terminalsStub(): { manager: TerminalManager; sessions: TerminalSpies } {
+  const sessions: TerminalSpies = {
+    write: vi.fn(),
+    resize: vi.fn(),
+    dispose: vi.fn()
+  }
+
+  return {
+    manager: {
+      create: vi.fn(() => 'term-1'),
+      ...sessions,
+      disposeAll: vi.fn(),
+      size: 0
+    } as unknown as TerminalManager,
+    sessions
+  }
+}
+
+let dir: string
+let service: OctopusService
+let terminals: TerminalManager
+let sessions: TerminalSpies
+let bench: Harness
+
+/** Invokes a channel the way the renderer would. */
+function invoke(channel: string, ...args: unknown[]): Promise<unknown> {
+  const handler = bench.handlers.get(channel)
+  if (!handler) throw new Error(`no handler registered for ${channel}`)
+  return Promise.resolve(handler({ sender: {} }, ...args))
+}
+
+/**
+ * Creates a workspace through the channel and hands back the record.
+ *
+ * The later assertions need its id and path, and a failure here should say so
+ * rather than surface as an undefined property three lines down.
+ */
+async function createWorkspace(projectId: string): Promise<Workspace> {
+  const result = (await invoke('workspaces:create', projectId)) as Result<Workspace>
+  if (!result.ok) throw new Error(result.error)
+  return result.value
+}
+
+function servicePaths(root: string): ServiceOptions {
+  return {
+    stateFilePath: join(root, 'state.json'),
+    stateTempFilePath: join(root, 'state.json.tmp'),
+    configFilePath: join(root, 'config.json'),
+    // Without this, worktrees would land in the real ~/.octopus.
+    dataRoot: join(root, 'data')
+  }
+}
+
+/**
+ * Points the channel table at a service the test builds for itself.
+ *
+ * Needed where a handler reaches `gh`: the executor is a constructor argument,
+ * so the only way to keep the real one out is to build another service.
+ */
+async function useService(options: Partial<ServiceOptions>): Promise<OctopusService> {
+  const replacement = await createService({ ...servicePaths(dir), ...options })
+  registerIpc(replacement, terminals, bench.host)
+  return replacement
+}
+
+/** A real repository, since every project handler reaches actual git. */
+async function initRepo(path: string): Promise<void> {
+  await mkdir(path, { recursive: true })
+  await run('git', ['init', '-q', '--initial-branch=main'], { cwd: path })
+  await run('git', ['config', 'user.email', 'test@example.com'], { cwd: path })
+  await run('git', ['config', 'user.name', 'Test'], { cwd: path })
+  await writeFile(join(path, 'README.md'), '# test\n', 'utf8')
+  await run('git', ['add', '.'], { cwd: path })
+  await run('git', ['commit', '-q', '-m', 'first'], { cwd: path })
+}
+
+/** A project added the way the renderer would, so its id is a real one. */
+async function addProject(name = 'planner'): Promise<string> {
+  const repo = join(dir, name)
+  await initRepo(repo)
+  const project = await service.addProjectFromPath(repo)
+  return project.id
+}
+
+const REPOSITORY: RemoteRepository = {
+  name: 'planner',
+  nameWithOwner: 'ytsykvas/planner',
+  description: null,
+  isPrivate: false,
+  updatedAt: '2026-08-08T00:00:00Z',
+  defaultBranchRef: { name: 'main' }
+}
+
+/**
+ * A `gh` that builds a real repository where a clone would land.
+ *
+ * An executor that merely reported success would prove nothing: the project is
+ * validated against git immediately afterwards.
+ */
+const cloningExec: CommandExec = async (_command, args) => {
+  if (args[0] === 'repo' && args[1] === 'clone') {
+    const target = args[3]
+    if (target !== undefined) await initRepo(target)
+  }
+  return ''
+}
+
+const CONNECTED: AccountsStatus = {
+  claude: {
+    connected: true,
+    email: 'dev@example.com',
+    authMethod: 'oauth',
+    subscriptionType: 'max',
+    orgName: null
+  },
+  github: { connected: false, login: null, name: null }
+}
+
+beforeEach(async () => {
+  dir = await mkdtemp(join(tmpdir(), 'octopus-ipc-'))
+  service = await createService(servicePaths(dir))
+
+  vi.mocked(checkAccounts).mockReset().mockResolvedValue(CONNECTED)
+  vi.mocked(signOut).mockReset().mockResolvedValue(true)
+
+  bench = harness()
+  const stub = terminalsStub()
+  terminals = stub.manager
+  sessions = stub.sessions
+  registerIpc(service, terminals, bench.host)
+})
+
+afterEach(async () => {
+  await rm(dir, { recursive: true, force: true })
+})
+
+describe('channel table', () => {
+  // The renderer calls these by name. A channel that stops being registered
+  // fails at runtime with nothing but "no handler", far from the cause.
+  const EXPECTED = [
+    'theme:get',
+    'config:get',
+    'config:update',
+    'projects:list',
+    'projects:add',
+    'projects:update',
+    'projects:remove',
+    'projects:branches',
+    'projects:listRemote',
+    'projects:addFromGitHub',
+    'scripts:read',
+    'scripts:save',
+    'scripts:paths',
+    'instructions:read',
+    'instructions:save',
+    'workspaces:list',
+    'workspaces:create',
+    'workspaces:rename',
+    'workspaces:remove',
+    'workspaces:hasChanges',
+    'terminal:create',
+    'terminal:write',
+    'terminal:resize',
+    'terminal:dispose',
+    'accounts:status',
+    'accounts:signOut',
+    'dialog:pickDirectory'
+  ]
+
+  it('registers every channel the preload bridge calls', () => {
+    for (const channel of EXPECTED) {
+      expect(bench.handlers.has(channel)).toBe(true)
+    }
+  })
+
+  it('registers each channel once', () => {
+    expect(bench.handlers.size).toBe(EXPECTED.length)
+  })
+})
+
+describe('theme', () => {
+  it('follows the system when the config says system', async () => {
+    bench.prefersDark = true
+    await expect(invoke('theme:get')).resolves.toBe('dark')
+
+    bench.prefersDark = false
+    await expect(invoke('theme:get')).resolves.toBe('light')
+  })
+
+  // Every window has to hear about it, or one of them keeps the old palette.
+  it('broadcasts the resolved theme when the config changes', async () => {
+    await invoke('config:update', { theme: 'dark' })
+    expect(bench.broadcasts).toContain('dark')
+  })
+})
+
+describe('validation at the boundary', () => {
+  // These arrive from the renderer and end up in a file, a command line or a
+  // working directory. Types guarantee nothing across the process boundary.
+  it('rejects a project patch with an unknown colour', async () => {
+    const result = await invoke('projects:update', 'nothing', { color: 'chartreuse' })
+    expect(result).toMatchObject({ ok: false })
+  })
+
+  it('rejects a script kind it does not know', async () => {
+    const result = await invoke('scripts:read', 'nothing', 'malicious')
+    expect(result).toMatchObject({ ok: false })
+  })
+
+  it('rejects an instruction body that is not a string', async () => {
+    const result = await invoke('instructions:save', 'nothing', 'pullRequest', { not: 'a string' })
+    expect(result).toMatchObject({ ok: false })
+  })
+
+  it('rejects a terminal spec without a working directory', async () => {
+    const result = await invoke('terminal:create', { command: ['ls'] })
+    expect(result).toMatchObject({ ok: false })
+  })
+})
+
+describe('failures come back as results', () => {
+  // A throw would cross IPC as an opaque Electron error with the message
+  // mangled, so the renderer could say nothing useful about it.
+  it('answers with ok:false rather than throwing', async () => {
+    await expect(invoke('workspaces:create', 'no-such-project')).resolves.toMatchObject({
+      ok: false
+    })
+  })
+
+  it('carries a code the renderer can localise', async () => {
+    const result = await invoke('projects:update', 'no-such-project', { name: 'x' })
+    expect(result).toMatchObject({ ok: false })
+  })
+})
+
+describe('directory pickers', () => {
+  it('reports null when the picker is cancelled, which is not an error', async () => {
+    bench.picked = { canceled: true, filePaths: [] }
+    await expect(invoke('dialog:pickDirectory', 'Pick')).resolves.toEqual({
+      ok: true,
+      value: null
+    })
+  })
+
+  it('reports the chosen path', async () => {
+    bench.picked = { canceled: false, filePaths: ['/tmp/chosen'] }
+    await expect(invoke('dialog:pickDirectory', 'Pick')).resolves.toEqual({
+      ok: true,
+      value: '/tmp/chosen'
+    })
+  })
+
+  // A picker that reports no path is not a choice either, however it answers
+  // the cancelled flag — the renderer must not receive an undefined value.
+  it('reports null when the picker answers without a path', async () => {
+    bench.picked = { canceled: false, filePaths: [] }
+    await expect(invoke('dialog:pickDirectory', 'Pick')).resolves.toEqual({
+      ok: true,
+      value: null
+    })
+  })
+
+  // The window can be gone by the time the call lands; the dialog then opens
+  // unparented rather than the call failing.
+  it('still opens the dialog when the window has closed', async () => {
+    bench.window = null
+    bench.picked = { canceled: false, filePaths: ['/tmp/chosen'] }
+
+    await expect(invoke('dialog:pickDirectory', 'Pick')).resolves.toEqual({
+      ok: true,
+      value: '/tmp/chosen'
+    })
+  })
+
+  // Cancelling the destination prompt means "not now", so nothing is added.
+  it('adds no project when the clone destination is cancelled', async () => {
+    bench.picked = { canceled: true, filePaths: [] }
+
+    const result = await invoke('projects:addFromGitHub', REPOSITORY)
+
+    expect(result).toEqual({ ok: true, value: null })
+    expect(service.listProjects()).toHaveLength(0)
+  })
+
+  it('adds no project when the destination prompt answers without a path', async () => {
+    bench.picked = { canceled: false, filePaths: [] }
+
+    await expect(invoke('projects:addFromGitHub', REPOSITORY)).resolves.toEqual({
+      ok: true,
+      value: null
+    })
+  })
+
+  // Asked once, then never again: the answer is written to the config.
+  it('remembers the clone directory the user picks', async () => {
+    const destination = join(dir, 'clones')
+    await mkdir(destination, { recursive: true })
+
+    const cloning = await useService({ commandExec: cloningExec })
+    bench.window = null
+    bench.picked = { canceled: false, filePaths: [destination] }
+
+    expect(await invoke('projects:addFromGitHub', REPOSITORY)).toMatchObject({
+      ok: true,
+      value: { name: 'planner' }
+    })
+    expect(cloning.getConfig().cloneDirectory).toBe(destination)
+  })
+
+  it('clones into the configured directory without asking', async () => {
+    const destination = join(dir, 'clones')
+    await mkdir(destination, { recursive: true })
+
+    const cloning = await useService({ commandExec: cloningExec })
+    await invoke('config:update', { cloneDirectory: destination })
+
+    // The picker would answer "cancelled", so a clone that happens anyway
+    // proves the configured directory was used instead of a prompt.
+    bench.picked = { canceled: true, filePaths: [] }
+
+    expect(await invoke('projects:addFromGitHub', REPOSITORY)).toMatchObject({ ok: true })
+    expect(cloning.listProjects()).toHaveLength(1)
+  })
+})
+
+describe('adding a project from disk', () => {
+  it('adds nothing when the picker is cancelled', async () => {
+    bench.picked = { canceled: true, filePaths: [] }
+
+    await expect(invoke('projects:add')).resolves.toEqual({ ok: true, value: null })
+    expect(service.listProjects()).toHaveLength(0)
+  })
+
+  it('adds nothing when the picker answers without a path', async () => {
+    bench.picked = { canceled: false, filePaths: [] }
+
+    await expect(invoke('projects:add')).resolves.toEqual({ ok: true, value: null })
+    expect(service.listProjects()).toHaveLength(0)
+  })
+
+  it('adds the repository that was chosen', async () => {
+    const repo = join(dir, 'planner')
+    await initRepo(repo)
+
+    bench.window = null
+    bench.picked = { canceled: false, filePaths: [repo] }
+
+    expect(await invoke('projects:add')).toMatchObject({ ok: true, value: { name: 'planner' } })
+    expect(service.listProjects()).toHaveLength(1)
+  })
+
+  // Picking any directory is easy; only a repository can hold worktrees, so
+  // the refusal has to reach the renderer as something it can explain.
+  it('refuses a directory that is not a repository', async () => {
+    const notes = join(dir, 'notes')
+    await mkdir(notes, { recursive: true })
+
+    bench.picked = { canceled: false, filePaths: [notes] }
+
+    await expect(invoke('projects:add')).resolves.toMatchObject({ ok: false })
+    expect(service.listProjects()).toHaveLength(0)
+  })
+})
+
+describe('reads that forward to the service', () => {
+  it('answers config:get with the stored config', async () => {
+    await expect(invoke('config:get')).resolves.toMatchObject({
+      ok: true,
+      value: { version: 1, theme: 'system' }
+    })
+  })
+
+  it('lists the projects that have been added', async () => {
+    await addProject()
+
+    expect(await invoke('projects:list')).toMatchObject({
+      ok: true,
+      value: [{ name: 'planner' }]
+    })
+  })
+
+  // A repository added from disk has no remote, so the local branches are the
+  // only thing left to offer as a base.
+  it('offers the local branches when there is no remote', async () => {
+    const projectId = await addProject()
+
+    await expect(invoke('projects:branches', projectId)).resolves.toEqual({
+      ok: true,
+      value: ['main']
+    })
+  })
+
+  it('lists the repositories gh reports', async () => {
+    await useService({ commandExec: () => Promise.resolve(JSON.stringify([REPOSITORY])) })
+
+    await expect(invoke('projects:listRemote')).resolves.toMatchObject({
+      ok: true,
+      value: [{ nameWithOwner: 'ytsykvas/planner' }]
+    })
+  })
+})
+
+describe('scripts and instructions of a real project', () => {
+  // A script nobody has written is the normal state of a new project, so the
+  // editor opens on a template rather than on a failure.
+  it('reads a template for a script nobody has written yet', async () => {
+    const projectId = await addProject()
+
+    await expect(invoke('scripts:read', projectId, 'setup')).resolves.toMatchObject({
+      ok: true,
+      value: expect.stringContaining('#!/bin/sh')
+    })
+  })
+
+  it('reads back the script it saved', async () => {
+    const projectId = await addProject()
+
+    expect(
+      await invoke('scripts:save', projectId, 'run', '#!/bin/sh\necho started\n')
+    ).toMatchObject({ ok: true })
+
+    await expect(invoke('scripts:read', projectId, 'run')).resolves.toMatchObject({
+      ok: true,
+      value: expect.stringContaining('echo started')
+    })
+  })
+
+  // The tab shows the file it runs, so a script that was never written must
+  // report no path at all rather than one that does not exist.
+  it('reports a path only for a script that exists', async () => {
+    const projectId = await addProject()
+
+    await expect(invoke('scripts:paths', projectId)).resolves.toEqual({
+      ok: true,
+      value: { setup: null, run: null }
+    })
+
+    await invoke('scripts:save', projectId, 'setup', '#!/bin/sh\nnpm install\n')
+
+    await expect(invoke('scripts:paths', projectId)).resolves.toMatchObject({
+      ok: true,
+      value: { setup: expect.stringContaining('setup.sh'), run: null }
+    })
+  })
+
+  it('reads a template for an instruction nobody has written yet', async () => {
+    const projectId = await addProject()
+
+    await expect(invoke('instructions:read', projectId, 'pullRequest')).resolves.toMatchObject({
+      ok: true,
+      value: expect.stringContaining('Pull request')
+    })
+  })
+
+  it('reads back the instruction it saved', async () => {
+    const projectId = await addProject()
+
+    await invoke('instructions:save', projectId, 'pullRequest', 'Lead with the why.')
+
+    await expect(invoke('instructions:read', projectId, 'pullRequest')).resolves.toEqual({
+      ok: true,
+      value: 'Lead with the why.'
+    })
+  })
+})
+
+describe('workspaces of a real project', () => {
+  it('lists nothing before one is created', async () => {
+    const projectId = await addProject()
+
+    await expect(invoke('workspaces:list', projectId)).resolves.toEqual({ ok: true, value: [] })
+  })
+
+  it('renames a workspace and lists it under the new name', async () => {
+    const projectId = await addProject()
+    const workspace = await createWorkspace(projectId)
+
+    expect(await invoke('workspaces:rename', workspace.id, 'fix auth')).toMatchObject({ ok: true })
+
+    await expect(invoke('workspaces:list', projectId)).resolves.toMatchObject({
+      ok: true,
+      value: [{ name: 'fix auth' }]
+    })
+  })
+
+  // The renderer asks before it removes, so the refusal and the forced removal
+  // are both part of one flow and have to work in that order.
+  it('refuses to remove uncommitted work until it is forced', async () => {
+    const projectId = await addProject()
+    const workspace = await createWorkspace(projectId)
+
+    await expect(invoke('workspaces:hasChanges', workspace.id)).resolves.toEqual({
+      ok: true,
+      value: false
+    })
+
+    await writeFile(join(workspace.path, 'draft.txt'), 'work\n', 'utf8')
+
+    await expect(invoke('workspaces:hasChanges', workspace.id)).resolves.toEqual({
+      ok: true,
+      value: true
+    })
+    expect(await invoke('workspaces:remove', workspace.id, {})).toMatchObject({
+      ok: false,
+      code: 'uncommittedChanges'
+    })
+
+    expect(await invoke('workspaces:remove', workspace.id, { force: true })).toMatchObject({
+      ok: true
+    })
+    await expect(invoke('workspaces:list', projectId)).resolves.toEqual({ ok: true, value: [] })
+  })
+
+  // Workspaces left behind would keep their directories and branches while
+  // being invisible to the app, and adding the project back would collide.
+  it('removes a project along with its workspaces', async () => {
+    const projectId = await addProject()
+    await invoke('workspaces:create', projectId)
+
+    expect(await invoke('projects:remove', projectId)).toMatchObject({ ok: true })
+    expect(service.listProjects()).toHaveLength(0)
+    await expect(invoke('workspaces:list', projectId)).resolves.toEqual({ ok: true, value: [] })
+  })
+})
+
+describe('terminal sessions', () => {
+  it('forwards keystrokes to the session they were typed into', async () => {
+    await invoke('terminal:write', 'term-1', 'ls\n')
+
+    expect(sessions.write).toHaveBeenCalledWith('term-1', 'ls\n')
+  })
+
+  it('forwards both dimensions of a resize', async () => {
+    await invoke('terminal:resize', 'term-1', 120, 40)
+
+    expect(sessions.resize).toHaveBeenCalledWith('term-1', 120, 40)
+  })
+
+  // An undisposed session keeps a shell process alive after its tab is gone.
+  it('disposes the session it is asked to', async () => {
+    await invoke('terminal:dispose', 'term-1')
+
+    expect(sessions.dispose).toHaveBeenCalledWith('term-1')
+  })
+})
+
+describe('accounts', () => {
+  it('reports what the account check found', async () => {
+    await expect(invoke('accounts:status')).resolves.toMatchObject({
+      ok: true,
+      value: {
+        claude: { connected: true, email: 'dev@example.com' },
+        github: { connected: false }
+      }
+    })
+  })
+
+  // `gh` prompts for an account unless it is told which one to drop, so the
+  // login has to survive the trip across IPC rather than being dropped here.
+  it('passes the account and the login through to the sign-out', async () => {
+    await expect(invoke('accounts:signOut', 'github', 'ytsykvas')).resolves.toEqual({
+      ok: true,
+      value: true
+    })
+    expect(vi.mocked(signOut)).toHaveBeenCalledWith('github', 'ytsykvas')
+  })
+
+  it('answers with a result when the sign-out fails', async () => {
+    vi.mocked(signOut).mockRejectedValue(new Error('no such account'))
+
+    await expect(invoke('accounts:signOut', 'github', null)).resolves.toMatchObject({ ok: false })
+  })
+})

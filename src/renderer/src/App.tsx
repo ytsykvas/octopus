@@ -259,6 +259,10 @@ export function App(): React.JSX.Element {
                 selectedWorkspaceId={selectedWorkspaceId}
                 onSelectWorkspace={setSelectedWorkspaceId}
                 onCreateWorkspace={() => {
+                  // The button that calls this lives in the project header,
+                  // which only renders with a project — the guard is for the
+                  // type, and no interaction reaches its other branch.
+                  /* v8 ignore next */
                   if (selectedProject) void workspaces.create(selectedProject.id)
                 }}
                 onRenameWorkspace={(id, name) => void workspaces.rename(id, name)}

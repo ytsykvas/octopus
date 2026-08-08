@@ -36,6 +36,9 @@ export function Terminal({ cwd, command, env, onExit }: TerminalProps): React.JS
 
   useEffect(() => {
     const container = host.current
+    // Same as in Modal: attached before the effect runs, guarded only because
+    // the ref's type admits null.
+    /* v8 ignore next */
     if (!container) return
 
     const styles = getComputedStyle(document.documentElement)
