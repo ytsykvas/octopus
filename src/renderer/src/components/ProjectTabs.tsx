@@ -42,11 +42,11 @@ export function ProjectTabs({
   const { t } = useTranslation()
 
   return (
-    <nav className="border-line bg-surface flex w-14 shrink-0 flex-col items-center border-r">
+    <nav className="bg-surface flex w-14 shrink-0 flex-col">
       {/* Clears the traffic lights, and keeps the window draggable up here. */}
       <div className="titlebar-drag h-11 w-full shrink-0" />
 
-      <div className="flex flex-1 flex-col items-center gap-1.5 overflow-auto py-1">
+      <div className="flex flex-1 flex-col gap-1 overflow-y-auto py-1 pl-2.5">
         {projects.map((project) => (
           <ProjectTab
             key={project.id}
@@ -72,7 +72,7 @@ export function ProjectTabs({
               disabled={busy}
               onClick={onClick}
               title={t('sidebar.addProject')}
-              className="text-ink-faint hover:border-ink-faint hover:text-ink focus-ring border-line flex size-9 items-center justify-center rounded-[10px] border border-dashed transition-colors disabled:opacity-50"
+              className="text-ink-faint hover:border-ink-faint hover:text-ink focus-ring border-line mt-1 flex size-9 items-center justify-center rounded-[10px] border border-dashed transition-colors disabled:opacity-50"
             >
               <Plus aria-hidden size={16} />
             </button>
@@ -119,16 +119,6 @@ function ProjectTab({
       className="relative"
       style={{ '--project-color': `var(--project-${project.color})` } as React.CSSProperties}
     >
-      {/* The marker sits on the strip's edge rather than on the tile, so the
-          active project is findable without comparing fills. */}
-      {active && (
-        <span
-          aria-hidden
-          className="absolute top-1/2 -left-[13px] h-5 w-[3px] -translate-y-1/2 rounded-r-full"
-          style={{ backgroundColor: 'var(--project-color)' }}
-        />
-      )}
-
       <DropdownMenu
         align="left"
         trigger={({ onClick }) => (
@@ -141,13 +131,23 @@ function ProjectTab({
             }}
             title={`${project.name} — ${project.baseBranch}`}
             aria-current={active ? 'true' : undefined}
-            className="focus-ring flex size-9 items-center justify-center rounded-[10px] text-[13px] font-semibold transition-[background-color,color]"
+            // The active tab runs to the right edge of the strip and squares
+            // off there, so it reads as the sidebar reaching back rather than
+            // as a button sitting next to it.
+            className={`focus-ring flex h-9 items-center justify-center text-[13px] font-semibold transition-[background-color,color] ${
+              active ? 'w-[46px] rounded-l-[10px]' : 'w-9 rounded-[10px]'
+            }`}
             style={
               active
-                ? { backgroundColor: 'var(--project-color)', color: 'var(--project-ink)' }
-                : {
-                    backgroundColor: 'color-mix(in srgb, var(--project-color) 26%, transparent)',
+                ? {
+                    // Matches the top of the sidebar's gradient exactly: the
+                    // two surfaces meet with nothing between them.
+                    backgroundColor: 'color-mix(in srgb, var(--project-color) 18%, var(--surface))',
                     color: 'var(--project-color)'
+                  }
+                : {
+                    backgroundColor: 'color-mix(in srgb, var(--project-color) 14%, transparent)',
+                    color: 'color-mix(in srgb, var(--project-color) 70%, var(--ink-faint))'
                   }
             }
           >
