@@ -337,3 +337,41 @@ describe('toSlug', () => {
     expect(toSlug('')).toBe('project')
   })
 })
+
+describe('toSlug produces something git will accept as a branch', () => {
+  // git rejects a good deal: `.lock` endings, `..`, leading dashes, control
+  // characters, and its own special tokens. A slug that slips through becomes
+  // a workspace that cannot be created at all, and the failure surfaces far
+  // from the name that caused it.
+  const HOSTILE = [
+    'feature.lock',
+    '.hidden',
+    'trailing.',
+    'a..b',
+    '-leading-dash',
+    'has space',
+    'tilde~1',
+    'caret^2',
+    'colon:name',
+    'question?',
+    'star*',
+    'bracket[1]',
+    'back\\slash',
+    'at@{sign}',
+    'emoji 🎉 name',
+    'CAPS',
+    '...',
+    '@',
+    'ім’я з апострофом'
+  ]
+
+  for (const input of HOSTILE) {
+    it(`turns ${JSON.stringify(input)} into a usable branch name`, async () => {
+      await initRepo(dir)
+      const branch = `ytsykvas/${toSlug(input)}`
+
+      await exec(['branch', branch])
+      await expect(exec(['branch', '--list', branch])).resolves.toContain(branch)
+    })
+  }
+})

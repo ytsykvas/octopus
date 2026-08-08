@@ -15,6 +15,15 @@ export interface Worktree {
   /** Branch name without the `refs/heads/` prefix; null when HEAD is detached. */
   readonly branch: string | null
   readonly head: string
+  /**
+   * git still lists this worktree, but its directory is gone.
+   *
+   * Deleting a worktree directory by hand does not remove git's record of it —
+   * the entry stays, flagged `prunable`, until someone prunes. Without reading
+   * that flag a workspace whose directory has been deleted looks perfectly
+   * healthy.
+   */
+  readonly prunable: boolean
 }
 
 /**
@@ -37,15 +46,21 @@ export function parseWorktrees(output: string): Worktree[] {
   let path: string | null = null
   let head = ''
   let branch: string | null = null
+  let prunable = false
 
   const flush = (): void => {
-    if (path !== null) worktrees.push({ path, head, branch })
+    if (path !== null) worktrees.push({ path, head, branch, prunable })
     path = null
     head = ''
     branch = null
+    prunable = false
   }
 
-  for (const line of output.split('\n')) {
+  for (const raw of output.split('\n')) {
+    // Trailing \r: the format is line-based, and a stray carriage return would
+    // otherwise end up inside a branch name.
+    const line = raw.replace(/\r$/, '')
+
     if (line.startsWith('worktree ')) {
       flush()
       path = line.slice('worktree '.length)
@@ -54,6 +69,8 @@ export function parseWorktrees(output: string): Worktree[] {
     } else if (line.startsWith('branch ')) {
       const ref = line.slice('branch '.length)
       branch = ref.startsWith(BRANCH_REF_PREFIX) ? ref.slice(BRANCH_REF_PREFIX.length) : ref
+    } else if (line === 'prunable' || line.startsWith('prunable ')) {
+      prunable = true
     }
   }
 

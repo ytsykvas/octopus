@@ -528,6 +528,60 @@ describe('projects', () => {
     expect(service.listProjects()).toHaveLength(0)
   })
 
+  it('keeps giving out distinct ports as workspaces pile up', async () => {
+    const repo = join(dir, 'planner')
+    await initRepo(repo)
+    const project = await service.addProjectFromPath(repo)
+
+    const ports = new Set<number>()
+    for (let i = 0; i < 5; i++) ports.add((await service.createWorkspaceIn(project.id)).port)
+
+    expect(ports.size).toBe(5)
+  })
+
+  // Renaming to the same slug is a no-op for git, and must not be mistaken for
+  // a failed rename that leaves the record pointing at a branch that moved.
+  it('renaming to a different case keeps the branch and the directory', async () => {
+    const repo = join(dir, 'planner')
+    await initRepo(repo)
+    const project = await service.addProjectFromPath(repo)
+    const workspace = await service.createWorkspaceIn(project.id)
+
+    await service.renameWorkspaceById(workspace.id, workspace.name.toUpperCase())
+
+    const listed = await service.listWorkspaces(project.id)
+    expect(listed[0]?.branch).toBe(workspace.branch)
+    expect(listed[0]?.missing).toBe(false)
+  })
+
+  // git keeps listing a worktree whose directory was deleted by hand, flagged
+  // prunable. Trusting the list alone showed it as healthy.
+  it('reports a workspace whose directory was deleted behind our back', async () => {
+    const repo = join(dir, 'planner')
+    await initRepo(repo)
+    const project = await service.addProjectFromPath(repo)
+    const workspace = await service.createWorkspaceIn(project.id)
+
+    await rm(workspace.path, { recursive: true, force: true })
+
+    const listed = await service.listWorkspaces(project.id)
+    expect(listed).toHaveLength(1)
+    expect(listed[0]?.missing).toBe(true)
+  })
+
+  it('a detached workspace still reconciles rather than throwing', async () => {
+    const repo = join(dir, 'planner')
+    await initRepo(repo)
+    const project = await service.addProjectFromPath(repo)
+    const workspace = await service.createWorkspaceIn(project.id)
+
+    const inside = gitIn(workspace.path)
+    const head = (await inside(['rev-parse', 'HEAD'])).trim()
+    await inside(['checkout', '-q', '--detach', head])
+
+    await expect(service.listWorkspaces(project.id)).resolves.toHaveLength(1)
+  })
+
   it('removing a missing project does not corrupt state', async () => {
     await expect(service.removeProjectById('missing')).resolves.toBeUndefined()
     expect(service.listProjects()).toHaveLength(0)

@@ -114,3 +114,46 @@ describe('writeJsonFile', () => {
     await expect(readFile(file, 'utf8')).resolves.toMatch(/\n$/)
   })
 })
+
+describe('surviving a bad file', () => {
+  const Shape = z.object({ a: z.string() })
+
+  it('creates missing parent directories rather than failing', async () => {
+    const nested = join(dir, 'deep', 'nested', 'f.json')
+    await writeJsonFile(nested, Shape, { a: 'x' }, `${nested}.tmp`)
+
+    await expect(readJsonFile(nested, Shape, { a: '' })).resolves.toEqual({ a: 'x' })
+  })
+
+  it('rejects valid JSON of the wrong shape instead of trusting it', async () => {
+    const file = join(dir, 'shape.json')
+    await writeFile(file, JSON.stringify({ a: 42 }), 'utf8')
+
+    await expect(readJsonFile(file, Shape, { a: '' })).rejects.toThrow(InvalidFileError)
+  })
+
+  it('rejects an empty file rather than reading it as absent', async () => {
+    const file = join(dir, 'empty.json')
+    await writeFile(file, '', 'utf8')
+
+    await expect(readJsonFile(file, Shape, { a: '' })).rejects.toThrow(InvalidFileError)
+  })
+
+  // A crash between writing the temp file and renaming it leaves the temp
+  // behind; the next write has to be able to proceed regardless.
+  it('overwrites a temp file left by an interrupted write', async () => {
+    const file = join(dir, 'f.json')
+    const temp = `${file}.tmp`
+    await writeFile(temp, 'garbage from last time', 'utf8')
+
+    await writeJsonFile(file, Shape, { a: 'fresh' }, temp)
+    await expect(readJsonFile(file, Shape, { a: '' })).resolves.toEqual({ a: 'fresh' })
+  })
+
+  it('leaves no temp file behind once the write lands', async () => {
+    const file = join(dir, 'f.json')
+    await writeJsonFile(file, Shape, { a: 'x' }, `${file}.tmp`)
+
+    await expect(readFile(`${file}.tmp`, 'utf8')).rejects.toThrow()
+  })
+})

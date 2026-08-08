@@ -71,7 +71,9 @@ afterEach(async () => {
 describe('parseWorktrees', () => {
   it('reads a single worktree', () => {
     const output = 'worktree /repo\nHEAD abc123\nbranch refs/heads/main\n'
-    expect(parseWorktrees(output)).toEqual([{ path: '/repo', head: 'abc123', branch: 'main' }])
+    expect(parseWorktrees(output)).toEqual([
+      { path: '/repo', head: 'abc123', branch: 'main', prunable: false }
+    ])
   })
 
   it('reads several blocks separated by blank lines', () => {
@@ -102,6 +104,42 @@ describe('parseWorktrees', () => {
 
   it('returns nothing for empty output', () => {
     expect(parseWorktrees('')).toEqual([])
+  })
+
+  it('reads the prunable flag, with or without a reason after it', () => {
+    const bare = 'worktree /repo/wt\nHEAD abc\nbranch refs/heads/x\nprunable\n'
+    const withReason =
+      'worktree /repo/wt\nHEAD abc\nbranch refs/heads/x\nprunable gitdir file points to non-existent location\n'
+
+    expect(parseWorktrees(bare)[0]?.prunable).toBe(true)
+    expect(parseWorktrees(withReason)[0]?.prunable).toBe(true)
+  })
+
+  it('reports a healthy worktree as not prunable', () => {
+    const out = 'worktree /repo\nHEAD abc\nbranch refs/heads/main\n'
+    expect(parseWorktrees(out)[0]?.prunable).toBe(false)
+  })
+
+  // The flag belongs to one block, not to every block after it.
+  it('does not carry the flag into the next worktree', () => {
+    const out = [
+      'worktree /repo/gone',
+      'HEAD abc',
+      'branch refs/heads/x',
+      'prunable',
+      '',
+      'worktree /repo/here',
+      'HEAD def',
+      'branch refs/heads/y',
+      ''
+    ].join('\n')
+
+    expect(parseWorktrees(out).map((item) => item.prunable)).toEqual([true, false])
+  })
+
+  it('strips a trailing carriage return rather than folding it into a branch', () => {
+    const out = 'worktree /repo\r\nHEAD abc\r\nbranch refs/heads/main\r\n'
+    expect(parseWorktrees(out)[0]?.branch).toBe('main')
   })
 
   it('passes through a ref that is not under refs/heads', () => {

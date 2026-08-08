@@ -415,6 +415,20 @@ describe('reconcile', () => {
     expect(reconcile([workspace], withoutIt)[0]?.missing).toBe(true)
   })
 
+  // Deleting the directory by hand does not remove git's record: the entry
+  // stays, flagged prunable. Reading only the paths made such a workspace look
+  // healthy — and the earlier test passed only because it filtered the list
+  // itself, a situation git never produces.
+  it('marks a workspace git still lists but has flagged prunable', async () => {
+    const workspace = await create()
+    await rm(workspace.path, { recursive: true, force: true })
+
+    const worktrees = await listWorktrees(exec)
+    expect(worktrees.map((item) => item.path)).toContain(workspace.path)
+
+    expect(reconcile([workspace], worktrees)[0]?.missing).toBe(true)
+  })
+
   it('keeps the record rather than dropping it — the discrepancy must be visible', () => {
     const workspace = { id: 'anna', path: '/gone' } as Workspace
     expect(reconcile([workspace], [])).toHaveLength(1)

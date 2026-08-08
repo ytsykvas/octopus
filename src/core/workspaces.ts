@@ -309,11 +309,15 @@ export function reconcile(
   worktrees: readonly Worktree[],
   changes: ReadonlyMap<string, number> = new Map()
 ): WorkspaceView[] {
-  const known = new Set(worktrees.map((worktree) => worktree.path))
+  // A prunable entry is one git still lists but whose directory is gone, so it
+  // counts as missing rather than as present.
+  const present = new Set(
+    worktrees.filter((worktree) => !worktree.prunable).map((worktree) => worktree.path)
+  )
 
   return workspaces.map((workspace) => ({
     ...workspace,
-    missing: !known.has(workspace.path),
+    missing: !present.has(workspace.path),
     changedFiles: changes.get(workspace.id) ?? 0
   }))
 }

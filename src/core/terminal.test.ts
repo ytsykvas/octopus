@@ -119,3 +119,18 @@ describe('buildTerminalEnv', () => {
     expect(buildTerminalEnv().TERM).toBe('xterm-256color')
   })
 })
+
+describe('resolveCwd leaves alone what is not ours', () => {
+  // `~user` is another account's home, which only a shell can resolve.
+  it('does not touch ~user', () => {
+    expect(resolveCwd('~other/x', '/home/u')).toBe('~other/x')
+  })
+
+  it('does not touch a tilde inside a path', () => {
+    expect(resolveCwd('/a/~b', '/home/u')).toBe('/a/~b')
+  })
+
+  it('does not touch a relative path', () => {
+    expect(resolveCwd('./x', '/home/u')).toBe('./x')
+  })
+})

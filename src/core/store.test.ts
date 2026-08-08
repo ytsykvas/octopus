@@ -192,6 +192,30 @@ describe('assignPort', () => {
     expect(assignPort('kyiv')).not.toBe(assignPort('lviv'))
   })
 
+  it('is stable for the same id, so a restart keeps the port', () => {
+    expect(assignPort('planner/anna')).toBe(assignPort('planner/anna'))
+  })
+
+  it('stays in range for an id that is empty or non-Latin', () => {
+    for (const id of ['', 'проєкт/гілка', '🎉']) {
+      const port = assignPort(id)
+      expect(port).toBeGreaterThanOrEqual(PORT_RANGE_START)
+      expect(port).toBeLessThanOrEqual(PORT_RANGE_END)
+    }
+  })
+
+  // The hash collides long before the range fills; what matters is that a
+  // collision walks on to a free port rather than handing out a taken one.
+  it('never hands out a port already in use', () => {
+    const ports = new Set<number>()
+
+    for (let i = 0; i < 500; i++) {
+      const port = assignPort(`planner/w-${String(i)}`, [...ports])
+      expect(ports.has(port)).toBe(false)
+      ports.add(port)
+    }
+  })
+
   it('throws when the whole range is taken', () => {
     const span = PORT_RANGE_END - PORT_RANGE_START + 1
     const all = Array.from({ length: span }, (_, i) => PORT_RANGE_START + i)
