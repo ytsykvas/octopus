@@ -18,9 +18,8 @@ import { useProjects } from './hooks/useProjects.js'
 import { useWorkspaces } from './hooks/useWorkspaces.js'
 
 /**
- * Three-pane layout modelled on Conductor (§10.8 docs/PROJECT.md):
- * workspaces on the left, agent chat in the middle, diff and terminal on
- * the right.
+ * Window layout (§10.8 docs/PROJECT.md): a project tab strip, then the active
+ * project's workspaces, the agent chat, and diff and terminal on the right.
  */
 export function App(): React.JSX.Element {
   const { t, i18n } = useTranslation()

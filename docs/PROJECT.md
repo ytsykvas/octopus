@@ -90,13 +90,13 @@ task → workspace → agent works → diff → PR → merge → archive
 
 ## 6. Settled decisions
 
-| Decision                              | Rationale                                                                                                                                                                                |
-| ------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Agent — Claude Code only              | direct integration through the Agent SDK instead of an abstraction over several agents                                                                                                   |
-| Distribution outside the App Store    | the sandbox (Guideline 2.4.5) forbids executing third-party binaries and writing outside the container (2.5.2); child processes do not inherit security-scoped access. Unsigned at first |
-| Layout — three panes, as in Conductor | its UI is proven by daily use and draws no complaints; the structure of the space is copied, the visual style is our own (§10.8)                                                         |
-| Stack — Electron + TS + React         | see sections 7–9                                                                                                                                                                         |
-| Repository language — English         | code, comments, tests, documentation; user-facing strings are localised, English being the default (§10.9)                                                                               |
+| Decision                                      | Rationale                                                                                                                                                                                                    |
+| --------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Agent — Claude Code only                      | direct integration through the Agent SDK instead of an abstraction over several agents                                                                                                                       |
+| Distribution outside the App Store            | the sandbox (Guideline 2.4.5) forbids executing third-party binaries and writing outside the container (2.5.2); child processes do not inherit security-scoped access. Unsigned at first                     |
+| Layout — a project tab strip plus three panes | Conductor's UI is proven by daily use; the structure of the space is copied, the visual style is our own. Projects moved to a strip because one tree for projects and workspaces outgrows the window (§10.8) |
+| Stack — Electron + TS + React                 | see sections 7–9                                                                                                                                                                                             |
+| Repository language — English                 | code, comments, tests, documentation; user-facing strings are localised, English being the default (§10.9)                                                                                                   |
 
 ---
 
@@ -281,32 +281,35 @@ Colours always go through tokens, never raw hex, otherwise the dark theme breaks
 Conductor's layout is the model — proven by daily use and free of complaints. What is copied is the **structure of the space**, not the styling.
 
 ```
-┌────────────────┬──────────────────────────┬─────────────────────┐
-│   WORKSPACES   │        AGENT CHAT        │  CHANGES / TERMINAL │
-│                │                          │                     │
-│  planner       │  agent: reading auth.rb  │  ▸ app/user.rb      │
-│   ● kyiv       │  ✓ Edit user.rb          │  + def call         │
-│   ○ berlin     │  ✓ Bash rspec            │  -   old_impl       │
-│                │                          │  +   new_impl       │
-│  esl           │                          │                     │
-│   ○ dili       │  > prompt…               │  [changes][terminal]│
-└────────────────┴──────────────────────────┴─────────────────────┘
+┌────┬──────────────┬──────────────────────────┬─────────────────────┐
+│    │  truthnode   │        AGENT CHAT        │  CHANGES / TERMINAL │
+│ TR │  origin/main │                          │                     │
+│    ├──────────────┤  agent: reading auth.rb  │  ▸ app/user.rb      │
+│ RT │  ● anna      │  ✓ Edit user.rb          │  + def call         │
+│    │  ○ maria     │  ✓ Bash rspec            │  -   old_impl       │
+│ ES │  ○ sofia     │                          │  +   new_impl       │
+│    │              │                          │                     │
+│ +  │              │  > prompt…               │  [changes][terminal]│
+└────┴──────────────┴──────────────────────────┴─────────────────────┘
 ```
 
-**Left pane — workspaces.** Grouped by project. Each row shows agent status. A workspace is recognised primarily **by its branch name**; the directory name (a city) is the secondary identifier.
+**Tab strip — projects.** Two initials and a colour each. The colour is stored on the project rather than derived from its name: a hash would repaint the project the moment it was renamed, and constancy is what makes it recognisable. Fifteen colours, each measured for contrast in both themes.
+
+**Second pane — workspaces of the active project.** Carries a gradient wash of that project's colour, strongest at the project name and fading down the list, so "where am I" reads peripherally rather than by reading names. A workspace is recognised primarily **by its branch name**; the directory name is the secondary identifier.
 
 **Centre — agent chat.** The main working area: the session event stream and the input field.
 
-**Right pane — changes and terminal** in tabs. Shows what the agent did and gives manual access to the workspace.
+**Right pane — changes and terminal** in tabs. Shows what the agent did and gives manual access to the workspace. Draggable, and its width persists.
 
 #### Shortcuts
 
 | Combination | Action              |
 | ----------- | ------------------- |
 | `⌘⇧N`       | new workspace       |
+| `⌘1`–`⌘9`   | switch project      |
+| `⌃1`–`⌃9`   | jump to a workspace |
 | `⌘⇧D`       | changes             |
 | `⌘⇧P`       | pull request        |
-| `⌘1`–`⌘9`   | jump to a workspace |
 
 The right pane collapses — three columns do not fit on a narrow screen.
 
@@ -585,7 +588,7 @@ The terminal moved into scope early: account sign-in needs an interactive sessio
 
 ## 17. Open questions
 
-- **Workspace naming** — cities as in Conductor, task-derived names, or generated from the prompt text.
+- **Workspace naming** — given names drawn at random from a pool of 256, task-derived names, or generated from the prompt text.
 - **Tool permissions** — which are automatic, which prompt, whether per-project profiles are needed.
 - **Cross-platform** — whether Linux stays in the plans (affects CI only, not architecture).
 - **Task sources** — creating a workspace from a GitHub issue or a Linear ticket, as Conductor does.

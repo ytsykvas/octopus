@@ -74,6 +74,13 @@ assert on properties.
 Only `execFile`, **never `exec`**. Branch names and paths come from the user,
 and `exec` hands them to a shell — that is command injection.
 
+**Apply every field a patch carries.** An update that lists fields explicitly —
+`...(name !== undefined && { name })` — protects against writing back stale
+values, and pays for it by failing silently when a new field is added to the
+type but not to the update. The colour picker looked inert for exactly this
+reason: the value crossed IPC, passed validation, and was dropped on the last
+line. A test per field is the only thing that catches it.
+
 **Validate anything arriving over IPC at runtime.** Types vanish at the process
 boundary: a buggy or compromised renderer can send any value, and this app
 renders agent output, so that boundary is a real attack surface. Parse with zod
@@ -185,6 +192,34 @@ diagnosing is worse than no repro.
 
 Reproduce the reported bug as a test **before** fixing it. Each of the naming
 bugs above now has one, and each would have caught its own regression.
+
+## 100% coverage is not the same as tested
+
+Every line in `src/core/` is executed by a test, and that has never been the
+question. What it does not tell you is whether the test put the system into a
+state the real world produces.
+
+The worked example: a workspace whose directory was deleted by hand kept
+reporting as healthy. `reconcile` compared paths, and git — which keeps listing
+such a worktree, flagged `prunable` — said the path was there. The test passed
+because it **filtered the worktree out of the list itself**, modelling a
+situation git never creates. Both were at 100%.
+
+So when a function reads external output, ask what that output actually looks
+like in the awkward case, and go and get it:
+
+```bash
+git worktree list --porcelain   # after rm -rf on the worktree
+```
+
+Then assert against that. The probes worth keeping from the last audit:
+
+| Ask                                       | Because                                                                                                             |
+| ----------------------------------------- | ------------------------------------------------------------------------------------------------------------------- |
+| what does a hostile name become           | `toSlug` output goes straight into `git branch`, which rejects `.lock`, `..`, leading `-`, `@{`, control characters |
+| what happens on collision                 | a port hash collides long before the range fills                                                                    |
+| what does a half-written file look like   | a crash between temp-write and rename leaves the temp behind                                                        |
+| what does the tool print on a stale entry | `prunable`, `locked` and `bare` lines the parser had never seen                                                     |
 
 Remember default parameters: to cover the default branch, call the function
 both **with** and **without** the argument.

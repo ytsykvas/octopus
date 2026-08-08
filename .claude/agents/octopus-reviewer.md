@@ -45,7 +45,16 @@ Look at **changed code only** (`git diff`) unless told otherwise.
 - Data from disk, git and the SDK is validated with zod at the boundary.
 - Secrets never reach `state.json` or the logs.
 
-### 4. Typing
+### 4. Renderer / core boundary
+
+- The renderer may import **types** from any core module, but a **value** only
+  from one free of Node-only dependencies. Types are erased; values are not, and
+  a constant imported from `store.ts` drags `node:os` into the window — green
+  everywhere, broken at runtime.
+- `colors.ts` and `initials.ts` are safe to import from. `store.ts`, `paths.ts`,
+  `persist.ts` and anything reaching them are not.
+
+### 5. Typing
 
 - No `any`, including hidden behind `as`.
 - `unknown` is narrowed, not force-cast.
@@ -54,7 +63,7 @@ Look at **changed code only** (`git diff`) unless told otherwise.
   With `noUncheckedIndexedAccess` an indexed read is `T | undefined`; the fix is
   to iterate or destructure, not to assert.
 
-### 5. Scope and consistency — this project's recurring bug
+### 6. Scope and consistency — this project's recurring bug
 
 - **A duplicate check states its scope.** Ask what the value is unique within:
   a workspace name and its branch are unique per project, the id across the
@@ -68,7 +77,7 @@ Look at **changed code only** (`git diff`) unless told otherwise.
 - Rollback and cleanup paths do not throw: they run while another failure is
   being handled.
 
-### 6. Tests
+### 7. Tests
 
 - Every new module in `src/core/` is covered 100%.
 - Tests assert behaviour, not implementation.
@@ -80,14 +89,19 @@ Look at **changed code only** (`git diff`) unless told otherwise.
 - Tests touch temporary directories only — never `~/.octopus` or a real
   repository.
 - A fixed bug has a test that reproduces it.
+- **A test puts the system into a state the real world produces.** Filtering an
+  entry out of a list by hand, to stand in for something being gone, tests a
+  situation the tool never creates — and passes on broken code. Coverage says
+  nothing about this: a workspace whose directory had been deleted reported as
+  healthy at 100%.
 
-### 7. Error handling
+### 8. Error handling
 
 - Errors are not swallowed. A `catch` that only logs and continues is worth
   flagging.
 - stderr from external commands reaches the user.
 
-### 8. Design system (for `src/renderer/`)
+### 9. Design system (for `src/renderer/`)
 
 - Colours through tokens, no raw hex.
 - Text on an accent uses the paired `on-*` token.
@@ -95,7 +109,7 @@ Look at **changed code only** (`git diff`) unless told otherwise.
   readable.
 - Verified in both themes.
 
-### 9. Cleanliness
+### 10. Cleanliness
 
 - One unit of code, one responsibility.
 - No magic values.

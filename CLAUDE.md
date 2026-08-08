@@ -42,6 +42,12 @@ src/renderer/  UI (React + Tailwind + i18next)
 **The main rule:** `core/` knows nothing about the UI. A hook blocks importing
 `electron` there.
 
+**The rule in the other direction:** the renderer may import _types_ from any
+core module, but a **value** only from one that pulls in nothing Node-only.
+`colors.ts` and `initials.ts` are safe; `store.ts` reaches `node:os` through
+`paths.ts`, and importing a constant from it broke the window at runtime while
+every check stayed green — types are erased, values are not.
+
 ## Project infrastructure
 
 **Skills** (`.claude/skills/`) load automatically when relevant:
@@ -110,10 +116,15 @@ than pasting tool output.
 
 ## Known traps
 
-**`src/main/` and `src/preload/` do not hot-reload.** Only the renderer does.
-A change to the main process, IPC or preload reaches the app only after
-`npm run dev` is restarted — until then the user is testing the old build, and
-a fix that looks ineffective may simply not be loaded. Verified, not assumed.
+**`src/main/`, `src/preload/` and everything in `src/core/` they import do not
+hot-reload.** Only the renderer does. A change there reaches the app only after
+`npm run dev` is restarted — until then the old build is what runs, and a fix
+that looks ineffective may simply not be loaded. Verified, not assumed.
+
+Restart it yourself after touching those, before handing the app back. A schema
+widened in `core/` while `main/` still validates against the old one produces an
+error message listing values that no longer match the source — confusing to read
+and entirely self-inflicted.
 
 **The running app holds the state in memory.** Editing `~/.octopus/state.json`
 from the outside while it runs makes the two disagree, and the app will happily

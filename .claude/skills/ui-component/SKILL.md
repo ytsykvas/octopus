@@ -116,9 +116,32 @@ forces scrolling.
 confirmation is asking about). Extend it rather than adding new button
 components.
 
-`Modal`, `DropdownMenu`, `Combobox` (a select with search), `Field` and
-`NameEditor` already exist. `Modal` deliberately leaves its body without
-padding so a list can span the full width — a form inside it brings its own.
+Existing pieces, worth checking before writing another: `Modal`,
+`DropdownMenu`, `Combobox` (a select with search), `Field`, `NameEditor`,
+`ResizeHandle`, `Terminal`.
+
+`Modal` deliberately leaves its body without padding so a list can span the
+full width — a form inside it brings its own.
+
+`DropdownMenu` positions its panel against the **window**, not its trigger.
+An `absolute` panel is clipped by any scrolling ancestor, and the project tab
+strip is one — the menu came out sliced to the width of a 56px column. The cost
+is that the coordinates are a snapshot, so the menu closes on scroll or resize.
+
+## Colour that carries meaning
+
+A project's colour comes from `--project-<name>`, declared once per theme, and
+is applied by setting `--project-color` inline on a container. That inline style
+is the one sanctioned exception: the value is dynamic, but it still resolves to
+a token.
+
+Two rules that are easy to get wrong:
+
+- **Text on a filled colour uses `--project-ink`**, not `#fff`. The dark theme
+  uses brighter values on purpose, and white on them is barely legible.
+- **Measure contrast, do not judge it.** Five colours looked fine and sat
+  between 3.3:1 and 4.1:1 against white — under the 4.5:1 body text needs. A
+  short script comparing relative luminance settles it in seconds.
 
 ## Themes
 
