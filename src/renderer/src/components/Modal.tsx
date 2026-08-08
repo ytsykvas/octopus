@@ -28,9 +28,16 @@ const WIDTHS = {
 const HEIGHTS = {
   sm: 'max-h-[min(24rem,calc(100vh-8rem))]',
   md: 'max-h-[min(42rem,calc(100vh-6rem))]',
-  // Deliberately close to the window: the sectioned dialogs hold script bodies
-  // and terminals, and the ceiling was the thing limiting them, not the width.
-  lg: 'max-h-[min(58rem,calc(100vh-4rem))]'
+  /*
+   * Fixed, not a ceiling.
+   *
+   * A sectioned dialog whose height follows its contents resizes every time a
+   * section changes — General is three fields, Scripts is two textareas — and
+   * the close button moves out from under the cursor between one click and the
+   * next. One height for every section costs some empty space in the short ones
+   * and buys a dialog that stays where you put it.
+   */
+  lg: 'h-[min(52rem,calc(100vh-4rem))]'
 } as const
 
 /**

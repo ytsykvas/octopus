@@ -62,7 +62,7 @@ export function Settings({ config, onChange, onClose }: SettingsProps): React.JS
 
   return (
     <Modal size="lg" title={t('settings.title')} onClose={onClose}>
-      <div className="flex min-h-[30rem]">
+      <div className="flex min-h-0 flex-1">
         <SectionRail
           sections={SECTIONS.map((item) => ({ ...item, label: t(item.labelKey) }))}
           active={section}

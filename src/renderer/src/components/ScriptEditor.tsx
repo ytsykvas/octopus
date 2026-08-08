@@ -60,7 +60,7 @@ export function ScriptEditor({
       <textarea
         value={body}
         spellCheck={false}
-        rows={12}
+        rows={16}
         onChange={(event) => {
           setBody(event.target.value)
         }}
