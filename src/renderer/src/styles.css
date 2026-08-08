@@ -38,15 +38,23 @@
   --warning-bg: #fdf3e3;
   --info-bg: #e4f4f8;
 
-  /* Project identity. Chosen to stay apart at a glance and to carry white
-     text at full strength — the tab of the active project is filled. */
+  /* Project identity. Spread around the wheel so neighbours in the tab strip
+     stay distinguishable, and dark enough that white text sits on them. */
+  --project-ink: #ffffff;
   --project-blue: #2563eb;
-  --project-violet: #7c3aed;
-  --project-pink: #db2777;
-  --project-rose: #e11d48;
+  --project-sky: #0369a1;
+  --project-cyan: #0e7490;
+  --project-teal: #0f766e;
+  --project-green: #15803d;
+  --project-lime: #4d7c0f;
   --project-amber: #b45309;
-  --project-green: #16a34a;
-  --project-teal: #0d9488;
+  --project-orange: #c2410c;
+  --project-red: #dc2626;
+  --project-rose: #e11d48;
+  --project-pink: #db2777;
+  --project-fuchsia: #c026d3;
+  --project-violet: #7c3aed;
+  --project-indigo: #4f46e5;
   --project-slate: #52606d;
 }
 
@@ -75,14 +83,23 @@
   --warning-bg: #2b1f0d;
   --info-bg: #0d2429;
 
-  /* Lifted against the dark ground: the light-theme values read as mud here. */
-  --project-blue: #3b82f6;
-  --project-violet: #a78bfa;
-  --project-pink: #f472b6;
-  --project-rose: #fb7185;
-  --project-amber: #fbbf24;
-  --project-green: #4ade80;
+  /* Lifted against the dark ground — the light values read as mud here. That
+     brightness is also why text on a filled tab goes dark rather than white. */
+  --project-ink: #0f1115;
+  --project-blue: #60a5fa;
+  --project-sky: #38bdf8;
+  --project-cyan: #22d3ee;
   --project-teal: #2dd4bf;
+  --project-green: #4ade80;
+  --project-lime: #a3e635;
+  --project-amber: #fbbf24;
+  --project-orange: #fb923c;
+  --project-red: #f87171;
+  --project-rose: #fb7185;
+  --project-pink: #f472b6;
+  --project-fuchsia: #e879f9;
+  --project-violet: #a78bfa;
+  --project-indigo: #818cf8;
   --project-slate: #94a3b8;
 }
 

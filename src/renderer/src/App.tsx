@@ -200,12 +200,6 @@ export function App(): React.JSX.Element {
         workspaces={selectedProject ? (workspaces.byProject.get(selectedProject.id) ?? []) : []}
         selectedWorkspaceId={selectedWorkspaceId}
         onSelectWorkspace={setSelectedWorkspaceId}
-        onEditProject={() => {
-          if (selectedProject) setEditingProjectId(selectedProject.id)
-        }}
-        onRemoveProject={() => {
-          if (selectedProject) void removeProject(selectedProject.id)
-        }}
         onCreateWorkspace={() => {
           if (selectedProject) void workspaces.create(selectedProject.id)
         }}

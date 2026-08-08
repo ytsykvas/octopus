@@ -17,12 +17,19 @@ import { z } from 'zod'
  */
 export const PROJECT_COLORS = [
   'blue',
-  'violet',
-  'pink',
-  'rose',
-  'amber',
-  'green',
+  'sky',
+  'cyan',
   'teal',
+  'green',
+  'lime',
+  'amber',
+  'orange',
+  'red',
+  'rose',
+  'pink',
+  'fuchsia',
+  'violet',
+  'indigo',
   'slate'
 ] as const
 

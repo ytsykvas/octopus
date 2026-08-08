@@ -1,10 +1,9 @@
-import { MoreHorizontal, Pencil, Plus, Settings as SettingsIcon, Trash2 } from 'lucide-react'
+import { Plus, Settings as SettingsIcon } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 
 import type { Project } from '@core/store.js'
 import type { WorkspaceView } from '@core/workspaces.js'
 
-import { DropdownMenu } from './DropdownMenu.js'
 import { WorkspaceRow } from './WorkspaceRow.js'
 
 interface SidebarProps {
@@ -13,8 +12,6 @@ interface SidebarProps {
   readonly workspaces: readonly WorkspaceView[]
   readonly selectedWorkspaceId: string | null
   readonly onSelectWorkspace: (workspaceId: string) => void
-  readonly onEditProject: () => void
-  readonly onRemoveProject: () => void
   readonly onCreateWorkspace: () => void
   readonly onRenameWorkspace: (workspaceId: string, name: string) => void
   readonly onRemoveWorkspace: (workspaceId: string) => void
@@ -37,8 +34,6 @@ export function Sidebar({
   workspaces,
   selectedWorkspaceId,
   onSelectWorkspace,
-  onEditProject,
-  onRemoveProject,
   onCreateWorkspace,
   onRenameWorkspace,
   onRemoveWorkspace,
@@ -65,12 +60,7 @@ export function Sidebar({
         // Strongest at the name and fading down the list, so the colour reads
         // as belonging to the header rather than as a wash over the rows.
         <div className="project-tinted flex min-h-0 flex-1 flex-col">
-          <ProjectHeader
-            project={project}
-            onEdit={onEditProject}
-            onRemove={onRemoveProject}
-            onCreateWorkspace={onCreateWorkspace}
-          />
+          <ProjectHeader project={project} onCreateWorkspace={onCreateWorkspace} />
 
           <nav className="flex-1 overflow-auto px-2 py-2">
             {workspaces.length === 0 ? (
@@ -123,20 +113,17 @@ export function Sidebar({
 }
 
 /**
- * Which project this list belongs to, and what can be done to it.
+ * Which project this list belongs to.
  *
  * The name is here rather than on the tab because the tab has room for two
- * letters; this is where the project is actually identified.
+ * letters. Editing and removal are not: they live on the tab's own menu, and
+ * offering them twice within one glance is noise, not convenience.
  */
 function ProjectHeader({
   project,
-  onEdit,
-  onRemove,
   onCreateWorkspace
 }: {
   project: Project
-  onEdit: () => void
-  onRemove: () => void
   onCreateWorkspace: () => void
 }): React.JSX.Element {
   const { t } = useTranslation()
@@ -158,34 +145,6 @@ function ProjectHeader({
       >
         <Plus aria-hidden size={14} />
       </button>
-
-      <DropdownMenu
-        trigger={({ onClick }) => (
-          <button
-            type="button"
-            onClick={onClick}
-            title={t('sidebar.projectActions')}
-            className="text-ink-faint hover:text-ink focus-ring shrink-0 rounded p-1 transition-colors"
-          >
-            <MoreHorizontal aria-hidden size={14} />
-          </button>
-        )}
-        actions={[
-          {
-            id: 'edit',
-            label: t('sidebar.editProject'),
-            icon: <Pencil aria-hidden size={13} />,
-            onSelect: onEdit
-          },
-          {
-            id: 'remove',
-            label: t('sidebar.removeProject'),
-            icon: <Trash2 aria-hidden size={13} />,
-            destructive: true,
-            onSelect: onRemove
-          }
-        ]}
-      />
     </div>
   )
 }

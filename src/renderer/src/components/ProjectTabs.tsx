@@ -144,7 +144,7 @@ function ProjectTab({
             className="focus-ring flex size-9 items-center justify-center rounded-[10px] text-[13px] font-semibold transition-[background-color,color]"
             style={
               active
-                ? { backgroundColor: 'var(--project-color)', color: '#fff' }
+                ? { backgroundColor: 'var(--project-color)', color: 'var(--project-ink)' }
                 : {
                     backgroundColor: 'color-mix(in srgb, var(--project-color) 26%, transparent)',
                     color: 'var(--project-color)'
