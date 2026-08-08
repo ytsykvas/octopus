@@ -143,6 +143,26 @@ Two rules that are easy to get wrong:
   between 3.3:1 and 4.1:1 against white — under the 4.5:1 body text needs. A
   short script comparing relative luminance settles it in seconds.
 
+## Selection is a relationship, not a highlight
+
+The obvious way to show which project is active is to make its tab the
+brightest thing on the strip. Browser tabs do the opposite, and they are right:
+the active tab is the panel reaching back, not a button shouting next to it.
+
+So the active tab takes exactly the colour the sidebar's gradient starts with,
+runs to the strip's right edge, squares off there, and the dividing line is
+removed so the two surfaces meet. Inactive tabs step back rather than compete.
+
+Two consequences worth carrying to anything else built this way:
+
+- **Surfaces that are meant to join must start at the same coordinate.** Four
+  pixels of padding above the first tab was enough to break the effect
+  outright. When two elements share an edge, their offsets are one decision,
+  not two.
+- **Delete the redundant signal.** The strip had a marker beside the active
+  tab; once the tab visibly joined the panel, the marker was a second answer to
+  a question already answered — which reads as noise, not as emphasis.
+
 ## Themes
 
 Nothing to do if you use tokens: `.dark` on `<html>` swaps every value at once.
