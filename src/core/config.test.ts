@@ -103,6 +103,7 @@ describe('loadConfig', () => {
     const config = await loadConfig(file)
     expect(config.language).toBe('en')
     expect(config.rightPanelWidth).toBe(360)
+    expect(config.sidebarWidth).toBe(240)
     expect(config.branchPrefix).toBe('ytsykvas')
   })
 })
@@ -161,5 +162,28 @@ describe('toSdkSettingSources', () => {
 
   it('maps all to the full set of sources', () => {
     expect(toSdkSettingSources('all')).toEqual(['user', 'project', 'local'])
+  })
+})
+
+describe('sidebarWidth', () => {
+  // Below the floor the project name in the header is all ellipsis, which
+  // reads as broken rather than as narrow.
+  it('rejects a width outside the usable range', () => {
+    const base = createDefaultConfig('ytsykvas', NOW, () => UUID)
+
+    expect(ConfigSchema.safeParse({ ...base, sidebarWidth: 80 }).success).toBe(false)
+    expect(ConfigSchema.safeParse({ ...base, sidebarWidth: 900 }).success).toBe(false)
+  })
+
+  it('accepts the bounds themselves', () => {
+    const base = createDefaultConfig('ytsykvas', NOW, () => UUID)
+
+    expect(ConfigSchema.safeParse({ ...base, sidebarWidth: 180 }).success).toBe(true)
+    expect(ConfigSchema.safeParse({ ...base, sidebarWidth: 560 }).success).toBe(true)
+  })
+
+  it('rejects a fractional width', () => {
+    const base = createDefaultConfig('ytsykvas', NOW, () => UUID)
+    expect(ConfigSchema.safeParse({ ...base, sidebarWidth: 240.5 }).success).toBe(false)
   })
 })

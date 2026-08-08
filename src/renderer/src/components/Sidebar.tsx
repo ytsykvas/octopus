@@ -1,10 +1,16 @@
 import { Plus } from 'lucide-react'
+import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import type { Project } from '@core/store.js'
 import type { WorkspaceView } from '@core/workspaces.js'
 
+import { ResizeHandle } from './ResizeHandle.js'
 import { WorkspaceRow } from './WorkspaceRow.js'
+
+/** Matches the bounds on `sidebarWidth` in the config schema. */
+const MIN_WIDTH = 180
+const MAX_WIDTH = 560
 
 interface SidebarProps {
   /** The project whose workspaces are listed; null when none is selected. */
@@ -13,6 +19,9 @@ interface SidebarProps {
   readonly selectedWorkspaceId: string | null
   readonly onSelectWorkspace: (workspaceId: string) => void
   readonly onCreateWorkspace: () => void
+  readonly width: number
+  /** Persists the width; called when a drag ends, not during it. */
+  readonly onWidthChange: (width: number) => void
   readonly onRenameWorkspace: (workspaceId: string, name: string) => void
   readonly onRemoveWorkspace: (workspaceId: string) => void
   /** Workspace whose name is being edited — set right after creation. */
@@ -34,22 +43,40 @@ export function Sidebar({
   selectedWorkspaceId,
   onSelectWorkspace,
   onCreateWorkspace,
+  width,
+  onWidthChange,
   onRenameWorkspace,
   onRemoveWorkspace,
   editingWorkspaceId,
   onEditingWorkspaceChange
 }: SidebarProps): React.JSX.Element {
   const { t } = useTranslation()
+  // The pane follows the cursor from local state; the config only hears about
+  // the width once the drag is over.
+  const [dragWidth, setDragWidth] = useState<number | null>(null)
 
   return (
     <aside
-      className="border-line bg-surface flex w-60 shrink-0 flex-col border-r"
-      style={
-        project
+      className="border-line bg-surface relative flex shrink-0 flex-col border-r"
+      style={{
+        width: dragWidth ?? width,
+        ...(project
           ? ({ '--project-color': `var(--project-${project.color})` } as React.CSSProperties)
-          : undefined
-      }
+          : {})
+      }}
     >
+      <ResizeHandle
+        grows="right"
+        width={dragWidth ?? width}
+        min={MIN_WIDTH}
+        max={MAX_WIDTH}
+        onResize={setDragWidth}
+        onCommit={(committed) => {
+          setDragWidth(null)
+          onWidthChange(committed)
+        }}
+      />
+
       {/* Left plain: the colour belongs to the project, and this strip is above
           where the project is named. */}
       <div className="titlebar-drag h-11 shrink-0" />

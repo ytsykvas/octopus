@@ -66,6 +66,15 @@ export const ConfigSchema = z.object({
   rightPanelWidth: z.number().int().min(280).max(4000).default(360),
 
   /**
+   * Width of the workspace list in pixels.
+   *
+   * The lower bound is where the project name stops having room beside the
+   * buttons in its header: below it the name is all ellipsis, and the row reads
+   * as broken rather than as narrow.
+   */
+  sidebarWidth: z.number().int().min(180).max(560).default(240),
+
+  /**
    * Stable device identifier (§15.3).
    * Unused for now — reserved for future licensing.
    */
@@ -96,6 +105,7 @@ export function createDefaultConfig(
     language: 'en',
     cloneDirectory: '',
     rightPanelWidth: 360,
+    sidebarWidth: 240,
     deviceId: uuid(),
     installedAt: now.toISOString()
   }

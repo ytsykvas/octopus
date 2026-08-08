@@ -9,6 +9,12 @@ interface ResizeHandleProps {
   readonly onResize: (width: number) => void
   /** Called once the drag ends — the moment worth persisting. */
   readonly onCommit: (width: number) => void
+  /**
+   * Which way dragging makes the pane wider.
+   *
+   * `right` for a pane on the left of the window, `left` for one on the right.
+   */
+  readonly grows?: 'left' | 'right'
 }
 
 /** How far one arrow key moves the edge. */
@@ -25,7 +31,8 @@ export function ResizeHandle({
   min,
   max,
   onResize,
-  onCommit
+  onCommit,
+  grows = 'left'
 }: ResizeHandleProps): React.JSX.Element {
   const { t } = useTranslation()
   // The pointer handlers live on window for the length of a drag, so they read
@@ -41,10 +48,16 @@ export function ResizeHandle({
   const startDrag = (event: React.PointerEvent): void => {
     event.preventDefault()
 
+    // Measured as a delta from where the drag began rather than from a window
+    // edge: the same handle then works on either side, and a pane that does not
+    // start at the window edge — the workspace list sits past the tab strip —
+    // needs no special case.
+    const startX = event.clientX
+    const startWidth = latest.current
+
     const onMove = (move: PointerEvent): void => {
-      // Measured from the right edge of the window: the pane is anchored there,
-      // so this holds regardless of how wide the window is.
-      const next = clamp(window.innerWidth - move.clientX)
+      const travelled = move.clientX - startX
+      const next = clamp(startWidth + (grows === 'right' ? travelled : -travelled))
       latest.current = next
       onResize(next)
     }
@@ -83,18 +96,20 @@ export function ResizeHandle({
       tabIndex={0}
       onPointerDown={startDrag}
       onKeyDown={(event) => {
-        // Left widens: the pane is on the right, so its edge moves left.
+        // The arrow that widens is the one pointing away from the pane.
         if (event.key === 'ArrowLeft') {
           event.preventDefault()
-          nudge(STEP)
+          nudge(grows === 'right' ? -STEP : STEP)
         } else if (event.key === 'ArrowRight') {
           event.preventDefault()
-          nudge(-STEP)
+          nudge(grows === 'right' ? STEP : -STEP)
         }
       }}
       // Wider than it looks: a 1px target is hard to hit, so the hit area is
       // padded while only the centre line is painted.
-      className="hover:bg-accent/40 focus-visible:bg-accent/60 group absolute top-0 -left-1 z-10 h-full w-2 cursor-col-resize transition-colors focus:outline-none"
+      className={`hover:bg-accent/40 focus-visible:bg-accent/60 absolute top-0 z-10 h-full w-2 cursor-col-resize transition-colors focus:outline-none ${
+        grows === 'right' ? '-right-1' : '-left-1'
+      }`}
     />
   )
 }

@@ -223,6 +223,8 @@ export function App(): React.JSX.Element {
             onRemoveWorkspace={(id) => void workspaces.remove(id)}
             editingWorkspaceId={workspaces.editingId}
             onEditingWorkspaceChange={workspaces.setEditingId}
+            width={config?.sidebarWidth ?? 240}
+            onWidthChange={(sidebarWidth) => void updateConfig({ sidebarWidth })}
           />
         </div>
 
