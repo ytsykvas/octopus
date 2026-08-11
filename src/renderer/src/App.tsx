@@ -1,10 +1,4 @@
-import {
-  PanelLeftClose,
-  PanelLeftOpen,
-  PanelRightClose,
-  PanelRightOpen,
-  Settings as SettingsIcon
-} from 'lucide-react'
+import { PanelRightClose, PanelRightOpen, Settings as SettingsIcon } from 'lucide-react'
 import { useCallback, useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
@@ -257,6 +251,10 @@ export function App(): React.JSX.Element {
                 setPickingRepository(true)
               }}
               busy={projects.busy}
+              sidebarOpen={sidebarOpen}
+              onToggleSidebar={() => {
+                setSidebarOpen((open) => !open)
+              }}
             />
 
             {sidebarOpen && (
@@ -284,25 +282,10 @@ export function App(): React.JSX.Element {
             )}
           </div>
 
-          <div className="border-line bg-surface space-y-px border-t border-r p-2">
-            <button
-              type="button"
-              onClick={() => {
-                setSidebarOpen((open) => !open)
-              }}
-              title={sidebarOpen ? t('sidebar.collapse') : t('sidebar.expand')}
-              className="row focus-ring text-ink-faint hover:text-ink flex w-full items-center gap-2 px-2 py-1.5"
-            >
-              {sidebarOpen ? (
-                <PanelLeftClose aria-hidden size={14} />
-              ) : (
-                <PanelLeftOpen aria-hidden size={14} />
-              )}
-              {/* Collapsed, the column is only as wide as the tab strip, so the
-                labels go and the titles carry the meaning. */}
-              {sidebarOpen && t('sidebar.collapse')}
-            </button>
-
+          {/* Folding the list away moved to the foot of the tab strip, which is
+              the part of this column that stays put. What is left here is the
+              one thing that belongs to the window rather than to a project. */}
+          <div className="border-line bg-surface border-t border-r p-2">
             <button
               type="button"
               onClick={() => {
@@ -312,6 +295,8 @@ export function App(): React.JSX.Element {
               className="row focus-ring text-ink-soft hover:text-ink flex w-full items-center gap-2 px-2 py-1.5"
             >
               <SettingsIcon aria-hidden size={14} />
+              {/* Folded, the column is only as wide as the tab strip, so the
+                  label goes and the title carries the meaning. */}
               {sidebarOpen && t('sidebar.settings')}
             </button>
           </div>
@@ -346,6 +331,7 @@ export function App(): React.JSX.Element {
           <RightPanel
             workspaces={workspaces.flat}
             activeWorkspaceId={selectedWorkspaceId}
+            color={selectedProject?.color ?? null}
             scriptPaths={scriptPaths}
             onEditScripts={() => {
               if (selectedProject) setEditingProjectId(selectedProject.id)

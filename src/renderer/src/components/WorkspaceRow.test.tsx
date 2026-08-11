@@ -48,6 +48,20 @@ describe('WorkspaceRow', () => {
     expect(screen.getByText('anna')).toBeInTheDocument()
   })
 
+  // The row that is open is drawn as a lifted surface with a coloured mark down
+  // its edge, and neither reaches a screen reader.
+  it('announces the workspace that is open', () => {
+    renderRow({ workspace: workspace({ name: 'anna' }), selected: true })
+
+    expect(screen.getByRole('button', { current: true })).toHaveTextContent('anna')
+  })
+
+  it('marks nothing as current while the row is not the open one', () => {
+    renderRow({ selected: false })
+
+    expect(screen.queryByRole('button', { current: true })).toBeNull()
+  })
+
   it('shows the branch on hover', () => {
     renderRow({ workspace: workspace({ branch: 'ytsykvas/anna' }) })
 

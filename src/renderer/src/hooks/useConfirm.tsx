@@ -12,8 +12,14 @@ export interface ConfirmRequest {
   readonly cancelLabel: string
   /** Colours the confirm button as dangerous and shows a warning mark. */
   readonly destructive?: boolean
-  /** An extra opt-in choice, off by default — its value comes back on confirm. */
-  readonly checkbox?: { readonly label: string }
+  /**
+   * An extra choice whose value comes back on confirm.
+   *
+   * `checked` is where it starts, off unless the caller says otherwise: a box
+   * that begins ticked is for the answer people give nearly every time, and
+   * only for one they can see and undo before confirming.
+   */
+  readonly checkbox?: { readonly label: string; readonly checked?: boolean }
 }
 
 export interface ConfirmResult {
@@ -45,7 +51,9 @@ export function useConfirm(): Confirmation {
 
   const confirm = useCallback((next: ConfirmRequest) => {
     setRequest(next)
-    setChecked(false)
+    // Reset to this question's own starting state rather than to off: a tick
+    // left over from the previous one would arm an action nobody chose.
+    setChecked(next.checkbox?.checked ?? false)
     return new Promise<ConfirmResult>((resolve) => {
       settle.current = resolve
     })

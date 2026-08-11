@@ -1,10 +1,19 @@
-import { CloudDownload, FolderOpen, Pencil, Plus, Trash2 } from 'lucide-react'
+import {
+  CloudDownload,
+  FolderOpen,
+  PanelLeftClose,
+  PanelLeftOpen,
+  Pencil,
+  Plus,
+  Trash2
+} from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 
 import { initials } from '@core/initials.js'
 import type { Project } from '@core/store.js'
 
 import { DropdownMenu } from './DropdownMenu.js'
+import { ProjectGlyph } from './ProjectGlyph.js'
 
 interface ProjectTabsProps {
   readonly projects: readonly Project[]
@@ -15,6 +24,9 @@ interface ProjectTabsProps {
   readonly onAddFromDisk: () => void
   readonly onAddFromGitHub: () => void
   readonly busy: boolean
+  /** Whether the workspace list beside the strip is showing. */
+  readonly sidebarOpen: boolean
+  readonly onToggleSidebar: () => void
 }
 
 /**
@@ -25,9 +37,10 @@ interface ProjectTabsProps {
  * answers "which project" and the sidebar answers "which workspace", and
  * neither has to grow past the height of the window.
  *
- * A tab is two letters and a colour. The letters collide readily — two
- * repositories starting the same way give the same pair — which is why the
- * colour exists and why the full name is a hover away.
+ * A tab is a colour and either two letters or an icon. The letters collide
+ * readily — two repositories starting the same way give the same pair — which
+ * is why an icon can be chosen instead, and why the full name is a hover away
+ * either way.
  */
 export function ProjectTabs({
   projects,
@@ -37,7 +50,9 @@ export function ProjectTabs({
   onRemove,
   onAddFromDisk,
   onAddFromGitHub,
-  busy
+  busy,
+  sidebarOpen,
+  onToggleSidebar
 }: ProjectTabsProps): React.JSX.Element {
   const { t } = useTranslation()
 
@@ -92,6 +107,24 @@ export function ProjectTabs({
           ]}
         />
       </div>
+
+      {/* Folding the list away is about the column beside this one, and this is
+          the part of the window that survives the fold — so the control that
+          brings it back is here rather than in the pane it hides. Outside the
+          scrolling list above, so it stays reachable however many projects
+          there are. */}
+      <button
+        type="button"
+        onClick={onToggleSidebar}
+        title={sidebarOpen ? t('sidebar.collapse') : t('sidebar.expand')}
+        className="text-ink-faint hover:bg-muted hover:text-ink focus-ring mb-2 ml-2.5 flex size-9 shrink-0 items-center justify-center rounded-[10px] transition-colors"
+      >
+        {sidebarOpen ? (
+          <PanelLeftClose aria-hidden size={16} />
+        ) : (
+          <PanelLeftOpen aria-hidden size={16} />
+        )}
+      </button>
     </nav>
   )
 }
@@ -148,7 +181,10 @@ function ProjectTab({
                   }
             }
           >
-            {initials(project.name)}
+            {/* An icon replaces the initials rather than joining them: 36px
+                holds one or the other, and the initials are the fallback for a
+                project nobody has picked a picture for. */}
+            {project.icon ? <ProjectGlyph name={project.icon} size={17} /> : initials(project.name)}
           </button>
         )}
         actions={[

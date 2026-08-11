@@ -29,6 +29,7 @@ function renderPanel(overrides: Partial<Props> = {}): {
   const props: Props = {
     workspaces: [],
     activeWorkspaceId: null,
+    color: null,
     scriptPaths: { setup: null, run: null },
     onEditScripts: vi.fn(),
     width: 360,
@@ -45,6 +46,14 @@ function renderPanel(overrides: Partial<Props> = {}): {
   }
 }
 
+/** The pane itself: a `<section>`, which carries no role to reach it by. */
+function pane(): HTMLElement {
+  const section = screen.getByRole('button', { name: 'Changes' }).closest('section')
+  if (!section) throw new Error('The pane is not in the document')
+
+  return section
+}
+
 describe('RightPanel', () => {
   beforeEach(() => {
     stubTerminalHost()
@@ -52,6 +61,41 @@ describe('RightPanel', () => {
 
   afterEach(() => {
     window.innerWidth = WINDOW_WIDTH
+  })
+
+  // The pane identifies its project the way the tab strip, the sidebar and the
+  // sent bubble do; the stylesheet turns the variable into the tab's fill.
+  it('carries the colour of the project that is open', () => {
+    renderPanel({ color: 'teal' })
+
+    expect(pane()).toHaveStyle({ '--project-color': 'var(--project-teal)' })
+  })
+
+  it('follows the colour when another project is opened', () => {
+    const { rerender } = renderPanel({ color: 'teal' })
+
+    rerender({ color: 'amber' })
+
+    expect(pane()).toHaveStyle({ '--project-color': 'var(--project-amber)' })
+  })
+
+  // Setting the variable to nothing would leave the tab with an invalid
+  // colour-mix and no fill at all, so it has to stay unset instead.
+  it('sets no colour before a project is chosen', () => {
+    renderPanel()
+
+    expect(pane().style.getPropertyValue('--project-color')).toBe('')
+  })
+
+  it('paints the chosen tab and no other', async () => {
+    renderPanel()
+
+    expect(screen.getByRole('button', { name: 'Changes' })).toHaveClass('tab-selected')
+
+    await userEvent.click(screen.getByRole('button', { name: 'Terminal' }))
+
+    expect(screen.getByRole('button', { name: 'Changes' })).not.toHaveClass('tab-selected')
+    expect(screen.getByRole('button', { name: 'Terminal' })).toHaveClass('tab-selected')
   })
 
   it('offers all four tabs', () => {

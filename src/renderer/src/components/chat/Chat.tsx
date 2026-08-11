@@ -1,3 +1,4 @@
+import { GitBranch } from 'lucide-react'
 import { useEffect, useRef } from 'react'
 import { useTranslation } from 'react-i18next'
 
@@ -77,8 +78,13 @@ export function Chat({ workspace, color }: ChatProps): React.JSX.Element {
       style={{ '--project-color': `var(--project-${color})` } as React.CSSProperties}
     >
       <header className="border-line flex h-9 shrink-0 items-center gap-3 border-b px-6">
-        <span className="truncate font-medium">{workspace.name}</span>
-        <span className="text-ink-faint truncate font-mono text-[11px]">{workspace.branch}</span>
+        {/* The branch alone, marked as one. A workspace branch is made from
+            the workspace name, so `anna ytsykvas/anna` was the same word twice
+            — and the branch is what a workspace is identified by anyway. */}
+        <span className="text-ink-soft flex min-w-0 items-center gap-1.5">
+          <GitBranch aria-hidden size={13} className="shrink-0" />
+          <span className="truncate font-mono text-[11px]">{workspace.branch}</span>
+        </span>
 
         <span className="ml-auto flex shrink-0 items-center gap-3">
           <RateLimit limit={rateLimit} />

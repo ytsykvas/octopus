@@ -30,6 +30,8 @@ function renderTabs(overrides: Partial<ProjectTabsProps> = {}): ProjectTabsProps
     onAddFromDisk: vi.fn(),
     onAddFromGitHub: vi.fn(),
     busy: false,
+    sidebarOpen: true,
+    onToggleSidebar: vi.fn(),
     ...overrides
   }
 
@@ -49,6 +51,22 @@ describe('ProjectTabs', () => {
     renderTabs({ projects: [project({ id: 'truthnode', name: 'truthnode' })] })
 
     expect(screen.getByRole('button', { name: 'TR' })).toBeInTheDocument()
+  })
+
+  // Two letters collide readily; an icon is the way out of that, and 36px hold
+  // one or the other rather than both.
+  it('shows the chosen icon in place of the initials', () => {
+    renderTabs({ projects: [project({ name: 'planner', icon: 'rocket' })] })
+
+    const tab = screen.getByTitle('planner — origin/main')
+    expect(tab).not.toHaveTextContent('PL')
+    expect(tab.querySelector('svg')).toBeInTheDocument()
+  })
+
+  it('falls back to the initials for a project with no icon', () => {
+    renderTabs({ projects: [project({ name: 'planner', icon: null })] })
+
+    expect(screen.getByRole('button', { name: 'PL' })).toBeInTheDocument()
   })
 
   // Two letters collide readily, so the full name and its base branch have to
@@ -182,6 +200,39 @@ describe('ProjectTabs', () => {
     await user.click(screen.getByRole('menuitem', { name: 'Remove project' }))
 
     expect(props.onRemove).toHaveBeenCalledWith('ledger')
+  })
+
+  // The strip is what survives the fold, so the way back has to live here
+  // rather than in the column it hides.
+  it('folds the workspace list away', async () => {
+    const user = userEvent.setup()
+    const props = renderTabs({ sidebarOpen: true })
+
+    await user.click(screen.getByRole('button', { name: 'Hide workspaces' }))
+
+    expect(props.onToggleSidebar).toHaveBeenCalledTimes(1)
+  })
+
+  it('offers to bring the workspace list back once it is folded away', async () => {
+    const user = userEvent.setup()
+    const props = renderTabs({ sidebarOpen: false })
+
+    expect(screen.queryByRole('button', { name: 'Hide workspaces' })).toBeNull()
+    await user.click(screen.getByRole('button', { name: 'Show workspaces' }))
+
+    expect(props.onToggleSidebar).toHaveBeenCalledTimes(1)
+  })
+
+  // The list of projects scrolls once there are more than fit; a control inside
+  // that box would scroll out of reach along with them.
+  it('keeps the fold out of the scrolling list of projects', () => {
+    renderTabs()
+
+    const fold = screen.getByRole('button', { name: 'Hide workspaces' })
+    const strip = fold.closest('nav')
+
+    expect(fold.parentElement).toBe(strip)
+    expect(screen.getByRole('button', { name: 'PL' }).parentElement).not.toBe(strip)
   })
 
   it('still offers to add a repository when there are no projects', () => {

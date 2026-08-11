@@ -153,6 +153,13 @@ function tab(letters: string): HTMLElement {
   return screen.getByRole('button', { name: letters })
 }
 
+/** The right pane: a `<section>`, which carries no role to reach it by. */
+function rightPane(): HTMLElement {
+  const section = screen.getByRole('button', { name: 'Changes' }).closest('section')
+  if (!section) throw new Error('the right pane is not in the window')
+  return section
+}
+
 /** The draggable edges, in the order they sit in the window. */
 function edges(): { readonly list: HTMLElement; readonly panel: HTMLElement } {
   const [list, panel] = screen.getAllByRole('separator', { name: 'Resize panel' })
@@ -251,6 +258,25 @@ describe('App', () => {
     expect(tab('PL')).toBeInTheDocument()
     expect(await screen.findByText('anna')).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Changes' })).toBeInTheDocument()
+  })
+
+  // The pane is composed here, and the colour it wears comes from the project
+  // this component picked — a wiring the pane's own tests cannot see.
+  it('gives the right pane the colour of the project that is open', async () => {
+    givenTwoProjects()
+    const user = await openApp()
+
+    await user.click(await screen.findByRole('button', { name: 'LE' }))
+
+    expect(rightPane()).toHaveStyle({ '--project-color': 'var(--project-green)' })
+  })
+
+  it('leaves the right pane its default colour while no project is open', async () => {
+    givenTwoProjects()
+    await openApp()
+
+    expect(await screen.findByRole('button', { name: 'Changes' })).toBeInTheDocument()
+    expect(rightPane().style.getPropertyValue('--project-color')).toBe('')
   })
 
   it('hides the workspace list when it is folded away', async () => {
@@ -744,7 +770,9 @@ describe('App', () => {
     expect(window.octopus.workspaces.rename).toHaveBeenCalledWith('ledger/carol', 'invoices')
   })
 
-  it('removes a workspace from its menu', async () => {
+  // Confirming without touching the dialog takes the branch with it: a
+  // workspace is one task, and the branch behind a finished one is finished too.
+  it('removes a workspace from its menu, branch and all', async () => {
     givenTwoProjects()
     const user = await openApp()
     await user.click(await screen.findByRole('button', { name: 'LE' }))
@@ -753,6 +781,25 @@ describe('App', () => {
     await user.click(screen.getByRole('button', { name: 'More' }))
     await user.click(screen.getByRole('menuitem', { name: 'Remove workspace' }))
     await user.click(await screen.findByRole('button', { name: 'Remove' }))
+
+    expect(window.octopus.workspaces.remove).toHaveBeenCalledWith('ledger/carol', {
+      force: false,
+      deleteBranch: true
+    })
+  })
+
+  // The default is in front of the user and one click undoes it — which is the
+  // only thing that makes a destructive default acceptable.
+  it('keeps the branch when that box is unticked', async () => {
+    givenTwoProjects()
+    const user = await openApp()
+    await user.click(await screen.findByRole('button', { name: 'LE' }))
+    await screen.findByText('carol')
+
+    await user.click(screen.getByRole('button', { name: 'More' }))
+    await user.click(screen.getByRole('menuitem', { name: 'Remove workspace' }))
+    await user.click(await screen.findByRole('checkbox'))
+    await user.click(screen.getByRole('button', { name: 'Remove' }))
 
     expect(window.octopus.workspaces.remove).toHaveBeenCalledWith('ledger/carol', {
       force: false,

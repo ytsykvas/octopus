@@ -293,13 +293,13 @@ Conductor's layout is the model — proven by daily use and free of complaints. 
 └────┴──────────────┴──────────────────────────┴─────────────────────┘
 ```
 
-**Tab strip — projects.** Two initials and a colour each. The colour is stored on the project rather than derived from its name: a hash would repaint the project the moment it was renamed, and constancy is what makes it recognisable. Fifteen colours, each measured for contrast in both themes.
+**Tab strip — projects.** A colour each, and either two initials or an icon chosen in the project's settings. The colour is stored on the project rather than derived from its name: a hash would repaint the project the moment it was renamed, and constancy is what makes it recognisable. Fifteen colours, each measured for contrast in both themes. The initials are the fallback rather than the goal — two letters collide as soon as two repositories start alike, and 36px hold a picture or a pair of letters, not both.
 
 **Second pane — workspaces of the active project.** Carries a gradient wash of that project's colour, strongest at the project name and fading down the list, so "where am I" reads peripherally rather than by reading names. A workspace is recognised primarily **by its branch name**; the directory name is the secondary identifier.
 
 **Centre — agent chat.** The main working area: the session event stream and the input field.
 
-**Right pane — changes and terminal** in tabs. Shows what the agent did and gives manual access to the workspace. Draggable, and its width persists.
+**Right pane — changes and terminal** in tabs. Shows what the agent did and gives manual access to the workspace. Draggable, and its width persists. Its active tab carries the open project's colour, falling back to the accent while no project is open.
 
 #### Shortcuts
 

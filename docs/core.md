@@ -18,6 +18,7 @@ Nothing but zod behind them, so a **value** can cross into the window.
 | [`branches.ts`](../src/core/branches.ts) | how a branch name is shown — `origin/` is noise          |
 | [`colors.ts`](../src/core/colors.ts)     | the project palette, and which colour a new project gets |
 | [`initials.ts`](../src/core/initials.ts) | the two characters on a project tab                      |
+| [`icons.ts`](../src/core/icons.ts)       | the icons a project may be marked with instead           |
 | [`chats.ts`](../src/core/chats.ts)       | what a chat is, and how much it may do without asking    |
 | [`events.ts`](../src/core/events.ts)     | `AgentEvent` — the only shape the UI sees of the SDK     |
 | [`names.ts`](../src/core/names.ts)       | workspace names, drawn at random from 256                |

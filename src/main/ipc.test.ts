@@ -299,6 +299,39 @@ describe('validation at the boundary', () => {
     expect(result).toMatchObject({ ok: false })
   })
 
+  // The patch schema lists its fields one by one, and zod drops what is not
+  // listed without a word — which is how the colour picker once spent a week
+  // looking inert. An icon has to survive the crossing, not merely be sent.
+  it('carries a chosen icon through to the stored project', async () => {
+    const projectId = await addProject()
+
+    await invoke('projects:update', projectId, { icon: 'rocket' })
+
+    expect(await invoke('projects:list')).toMatchObject({
+      ok: true,
+      value: [{ id: projectId, icon: 'rocket' }]
+    })
+  })
+
+  // `null` is how the dialog puts the initials back. Were it refused here, the
+  // icon could be chosen but never taken off again.
+  it('carries the clearing of an icon through as well', async () => {
+    const projectId = await addProject()
+    await invoke('projects:update', projectId, { icon: 'rocket' })
+
+    await invoke('projects:update', projectId, { icon: null })
+
+    expect(await invoke('projects:list')).toMatchObject({
+      ok: true,
+      value: [{ id: projectId, icon: null }]
+    })
+  })
+
+  it('rejects a project patch with an icon nothing can draw', async () => {
+    const result = await invoke('projects:update', 'nothing', { icon: 'unicorn' })
+    expect(result).toMatchObject({ ok: false })
+  })
+
   it('rejects a script kind it does not know', async () => {
     const result = await invoke('scripts:read', 'nothing', 'malicious')
     expect(result).toMatchObject({ ok: false })

@@ -61,6 +61,10 @@ export function WorkspaceRow({
         }}
         className="focus-ring flex min-w-0 flex-1 items-center gap-2 rounded-[var(--radius-control)] text-left"
         title={workspace.missing ? t('workspaces.missingHint') : workspace.branch}
+        // Selection is a surface and a 2px mark, neither of which a screen
+        // reader can see — and the project tab and the settings rail already
+        // announce it this way.
+        aria-current={selected ? 'true' : undefined}
       >
         <StatusMark workspace={workspace} />
         <span className={`truncate ${workspace.missing ? 'text-ink-faint line-through' : ''}`}>

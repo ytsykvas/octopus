@@ -11,8 +11,8 @@
 │ OC ├──────────────┤                          │                      │
 │    │  ● anna      │                          │                      │
 │ +  │  ○ maria     │                          │                      │
+│ ⊟  │              │                          │                      │
 ├────┴──────────────┤                          │                      │
-│ ⊟  Hide           │                          │                      │
 │ ⚙  Settings       │                          │                      │
 └───────────────────┴──────────────────────────┴──────────────────────┘
   tabs   workspaces           centre                 right pane
@@ -27,10 +27,23 @@ so nothing depends on how wide the tab strip happens to be.
 puts both in one tree, which outgrows the window and makes a click mean two
 things — select and fold. Splitting them means neither list grows with the other.
 
+**The fold sits at the foot of the strip**, as an icon. The strip is the part of
+that column which survives folding, so the control that brings the list back
+belongs to it rather than to the pane it hides — and it sits below the scrolling
+list of projects, or it would scroll out of reach once there are enough of them.
+What stays in the corner underneath is Settings, which belongs to the window
+rather than to any project.
+
 **The centre is the agent chat**, scoped to the selected workspace: its worktree
 is the agent's working directory and its branch is where the work lands. A
 different workspace is a different conversation, not a continuation. Without one
 the pane says which to pick rather than offering an input with nowhere to run.
+
+Its header says which workspace by naming the **branch**, marked with a branch
+icon, and nothing else. It used to carry the name as well: a workspace branch is
+made from the workspace name, so `anna ytsykvas/anna` was the same word twice —
+and the branch is what a workspace is identified by anyway. The icon is there
+because nothing else in the pane says what that string is.
 
 The chat draws **one row per event**, not one bubble per turn. A turn is mostly
 tool calls, and folding them into the prose hides the part that says what the
@@ -108,6 +121,14 @@ it was renamed, and constancy is what makes it recognisable.
 Applied by setting `--project-color` inline on a container. That inline style is
 the sanctioned exception: the value is dynamic, but still resolves to a token.
 
+The colour is one half of a project's mark; the other is what sits inside the
+tab. By default that is two initials, which collide readily — two repositories
+starting the same way give the same pair — so a project can be given an icon
+instead, chosen in its settings dialog. The ids live in
+[`icons.ts`](../src/core/icons.ts) and the renderer maps each to a drawing in
+`ProjectGlyph`, typed as a full `Record` so an id with nothing to draw fails the
+type check rather than leaving a hole in the strip.
+
 Two rules that are easy to get wrong:
 
 - **Text on a filled colour uses `--project-ink`**, not `#fff`. The dark theme
@@ -129,9 +150,38 @@ consequences generalise:
 - **delete the redundant signal** — once the tab visibly joined the panel, the
   marker beside it was a second answer to a question already answered.
 
-Where selection cannot be shown by relationship, show it by **hue, not
-brightness**. The right pane's active tab used a muted fill that measured
-1.09:1 against the pane behind it: two greys a fraction apart, invisible.
+The right pane's tabs are built the same way and for the same reason. They sit
+on the line that closes their row, and the chosen one breaks through it —
+`items-end` puts them on the line, `-mb-px` and a transparent border let the
+tab's own fill paint over it — so the tab reads as the view below reaching up.
+The fill is the open project's colour and there is no outline: a drawn edge made
+the tab look like a box resting on the row rather than part of it.
+
+Its earlier shape is the lesson worth keeping. A muted fill measured 1.09:1
+against the pane behind it — two greys a fraction apart, invisible — so where
+selection cannot be shown by relationship, show it by **hue, not brightness**.
+
+`.tab-selected` reads `var(--project-color, var(--accent))`, and the pane sets
+the variable only when a project is open, so with none every fallback resolves to
+the accent. A fallback is what makes the variable optional; setting it to an
+empty value instead would leave `color-mix` invalid and the tab with no fill at
+all.
+
+### Selection can also be a surface
+
+The workspace list is the case where neither of those works. Its ground is
+already a wash of the project's colour, so a second colour on top — the row used
+a fill of the blue accent — read as a foreign object rather than as "this one":
+two unrelated colours in the same 200 pixels.
+
+So `.row-selected` lifts the chosen row out of the wash onto the plain canvas,
+and the only colour left is the 2px mark down its left edge, in the project's
+hue. `.row:hover` has to be restated for the selected row, or the cursor
+repaints what selection has already said.
+
+None of that reaches a screen reader, so whatever is chosen — a workspace row, a
+project tab, a rail item — also carries `aria-current`. That attribute is the
+only handle a test has on selection as well: the rest of it is a class.
 
 ### The one place colours are read as values
 
@@ -166,7 +216,13 @@ rather than as pixel art.
 ## Ready-made classes
 
 `.panel` · `.row` / `.row-selected` · `.input` · `.section-label` ·
-`.focus-ring` · `.titlebar-drag` · `.project-tinted`
+`.focus-ring` · `.titlebar-drag` · `.project-tinted` · `.bubble-sent` ·
+`.tab-selected`
+
+The last three are where a project's colour turns into a surface, and they are
+classes rather than inline styles on purpose: the component says _which_ project,
+the stylesheet says _how_ the colour is used, so the three places it appears
+cannot drift apart.
 
 The second copy of a run of utility classes belongs here. Six copies of the
 field styling had already drifted by a few pixels of height.
@@ -179,10 +235,17 @@ field styling had already drifted by a few pixels of height.
 | `DropdownMenu`                                                  | positioned against the **window**, not its trigger — an absolute panel is clipped by any scrolling ancestor, and the tab strip is one                                                        |
 | `Combobox`                                                      | a select with search; a native one stops being usable around thirty entries                                                                                                                  |
 | `SectionRail`                                                   | the rail shared by both settings dialogs                                                                                                                                                     |
+| `ProjectGlyph`                                                  | a project's icon, `aria-hidden`: wherever it appears the element around it is already named                                                                                                  |
 | `Field`, `FileEditor`, `NameEditor`, `ResizeHandle`, `Terminal` |                                                                                                                                                                                              |
 
 `Button` has four variants: `accent`, `quiet`, `danger` (subdued destructive),
 `destructive` (filled, for the action a confirmation is asking about).
+
+`useConfirm` can carry one extra choice as a checkbox, and it may start ticked —
+removing a workspace offers to delete its branch, already marked, because a
+workspace is one task and the branch behind a finished one is finished too. That
+is the only shape a destructive default may take: on screen, in the dialog the
+user is already reading, and undone with one click before they confirm.
 
 ## State
 

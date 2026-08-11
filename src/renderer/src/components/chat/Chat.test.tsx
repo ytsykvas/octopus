@@ -68,11 +68,21 @@ describe('a workspace nobody has written in', () => {
     expect(octopus().chats.open).not.toHaveBeenCalled()
   })
 
-  it('shows the workspace and the branch it works on', async () => {
+  // `anna ytsykvas/anna` was the same word twice: a workspace branch is made
+  // from the workspace name, so the branch already carries it.
+  it('says which branch the work lands on, and not the name twice', async () => {
     await openChat()
 
-    expect(screen.getByText('anna')).toBeInTheDocument()
     expect(screen.getByText('ytsykvas/anna')).toBeInTheDocument()
+    expect(screen.queryByText('anna')).toBeNull()
+  })
+
+  // Nothing else in this pane says that string is a branch.
+  it('marks the branch as one', async () => {
+    await openChat()
+
+    const header = screen.getByText('ytsykvas/anna').parentElement
+    expect(header?.querySelector('svg')).toBeInTheDocument()
   })
 
   // The record is created by the first message, so until then there is nothing

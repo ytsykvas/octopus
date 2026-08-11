@@ -127,7 +127,13 @@ export function useWorkspaces(
         confirmLabel: t('workspaces.removeConfirm'),
         cancelLabel: t('workspaces.removeCancel'),
         destructive: true,
-        checkbox: { label: t('workspaces.removeBranch', { branch: workspace.branch }) }
+        // Ticked to begin with: a workspace is one task, and once it is done
+        // with, the branch behind it is too. Leaving it behind is the rarer
+        // choice, and the one still worth a click.
+        checkbox: {
+          label: t('workspaces.removeBranch', { branch: workspace.branch }),
+          checked: true
+        }
       })
 
       if (!answer.confirmed) return

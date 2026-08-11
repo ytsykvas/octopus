@@ -71,6 +71,8 @@ over its own content.
 
 - `.panel` — surface with border and 10px radius;
 - `.row` / `.row-selected` — list row with hover and selection;
+- `.project-tinted` / `.bubble-sent` / `.tab-selected` — where a project's
+  colour turns into a surface;
 - `.input` — text field, and anything shaped like one;
 - `.section-label` — section heading (11px, weight 600, muted);
 - `.focus-ring` — visible keyboard focus;
@@ -162,6 +164,14 @@ Two consequences worth carrying to anything else built this way:
 - **Delete the redundant signal.** The strip had a marker beside the active
   tab; once the tab visibly joined the panel, the marker was a second answer to
   a question already answered — which reads as noise, not as emphasis.
+- **On ground that already carries a colour, selection is a surface.** The
+  workspace list is washed in the project's hue, and the selected row used a
+  fill of the blue accent: two unrelated colours in the same 200px, and the
+  accent read as a foreign object. `.row-selected` lifts the row onto the plain
+  canvas instead, leaving colour to a 2px mark in the project's own hue.
+- **Announce it as well as draw it.** A lifted surface and a mark reach nobody
+  using a screen reader, so the chosen row, tab and rail item all carry
+  `aria-current` — which is also the only handle a test has on selection.
 
 ## Themes
 

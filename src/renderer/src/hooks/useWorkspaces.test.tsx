@@ -366,6 +366,23 @@ describe('useWorkspaces', () => {
       })
     })
 
+    // A workspace is one task; once it is done with, the branch behind it is
+    // too. The box is in front of the user and one click undoes it.
+    it('asks with the branch already marked for deletion', async () => {
+      workspacesPerProject({ planner: [anna] })
+      const confirm = accepts()
+      const projects = [planner]
+
+      const { result } = renderHook(() => useWorkspaces(projects, confirm, vi.fn<OnError>()))
+      await waitFor(() => {
+        expect(result.current.flat).toEqual([anna])
+      })
+
+      await act(() => result.current.remove('planner/anna'))
+
+      expect(confirm.mock.calls[0]?.[0].checkbox?.checked).toBe(true)
+    })
+
     it('deletes the branch as well when that box is ticked', async () => {
       workspacesPerProject({ planner: [anna] })
       const projects = [planner]

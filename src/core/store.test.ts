@@ -83,6 +83,22 @@ describe('load and save', () => {
     await expect(loadState(file)).resolves.toEqual(state)
   })
 
+  it('reads a chosen icon back', async () => {
+    const marked = updateProject(withProject, 'planner', { icon: 'rocket' })
+    await saveState(marked, file, `${file}.tmp`)
+
+    await expect(loadState(file)).resolves.toEqual(marked)
+  })
+
+  // Every project on disk predates icons, and a state file that refused to load
+  // over a missing key would lose the whole list.
+  it('loads a project written before icons existed', async () => {
+    await writeFile(file, JSON.stringify(withProject), 'utf8')
+
+    const loaded = await loadState(file)
+    expect(loaded.projects[0]?.icon).toBeUndefined()
+  })
+
   it('throws on a corrupt file rather than silently emptying the workspace list', async () => {
     await writeFile(file, '{ broken', 'utf8')
     await expect(loadState(file)).rejects.toBeInstanceOf(InvalidFileError)
@@ -281,6 +297,27 @@ describe('projects', () => {
 
     expect(updated.projects[0]?.name).toBe('planner')
     expect(updated.projects[0]?.baseBranch).toBe('main')
+  })
+
+  it('marks the project with an icon', () => {
+    const updated = updateProject(withProject, 'planner', { icon: 'rocket' })
+    expect(updated.projects[0]?.icon).toBe('rocket')
+  })
+
+  // `null` is how the dialog says "back to the initials"; anything that treated
+  // it as "no value supplied" would make the icon impossible to take off again.
+  it('clears the icon when the patch carries null', () => {
+    const marked = updateProject(withProject, 'planner', { icon: 'rocket' })
+    const cleared = updateProject(marked, 'planner', { icon: null })
+
+    expect(cleared.projects[0]?.icon).toBeNull()
+  })
+
+  it('keeps the icon when the patch says nothing about it', () => {
+    const marked = updateProject(withProject, 'planner', { icon: 'rocket' })
+    const renamed = updateProject(marked, 'planner', { name: 'Weekly planner' })
+
+    expect(renamed.projects[0]?.icon).toBe('rocket')
   })
 
   it('accepts an empty patch as a no-op', () => {

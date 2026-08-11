@@ -4,6 +4,8 @@ import { useTranslation } from 'react-i18next'
 
 import { shortBranchName } from '@core/branches.js'
 import { PROJECT_COLORS } from '@core/colors.js'
+import { PROJECT_ICONS } from '@core/icons.js'
+import { initials } from '@core/initials.js'
 import type { Project, ProjectPatch } from '@core/store.js'
 
 import { useErrorMessage } from '../hooks/useErrorMessage.js'
@@ -11,6 +13,7 @@ import { Button } from './Button.js'
 import { Combobox } from './Combobox.js'
 import { Field } from './Field.js'
 import { Modal } from './Modal.js'
+import { ProjectGlyph } from './ProjectGlyph.js'
 import { SectionRail } from './SectionRail.js'
 import { FileEditor } from './FileEditor.js'
 
@@ -143,7 +146,11 @@ export function ProjectSettings({
               </Field>
 
               <Field label={t('project.color')} hint={t('project.colorHint')}>
-                <div className="flex flex-wrap gap-1.5">
+                <div
+                  role="group"
+                  aria-label={t('project.color')}
+                  className="flex max-w-xs flex-wrap gap-1.5"
+                >
                   {PROJECT_COLORS.map((colour) => (
                     <button
                       key={colour}
@@ -161,6 +168,43 @@ export function ProjectSettings({
                         ['--tw-ring-offset-color' as string]: 'var(--canvas)'
                       }}
                     />
+                  ))}
+                </div>
+              </Field>
+
+              {/* The icon replaces the initials on the tab, so the initials are
+                  the first choice in the row: taking a picture off is the same
+                  kind of decision as putting one on, not a reset hidden
+                  elsewhere. */}
+              <Field label={t('project.icon')} hint={t('project.iconHint')}>
+                <div
+                  role="group"
+                  aria-label={t('project.icon')}
+                  className="flex max-w-sm flex-wrap gap-1.5"
+                  style={
+                    { '--project-color': `var(--project-${project.color})` } as React.CSSProperties
+                  }
+                >
+                  <IconChoice
+                    label={t('project.iconNone')}
+                    selected={!project.icon}
+                    onSelect={() => void onUpdate({ icon: null })}
+                  >
+                    <span className="text-[13px] font-semibold">{initials(project.name)}</span>
+                  </IconChoice>
+
+                  {PROJECT_ICONS.map((icon) => (
+                    <IconChoice
+                      key={icon}
+                      // The id itself, as the colour swatches do: these are
+                      // names of pictures, and a translated list of sixty-four
+                      // of them would be a glossary nobody reads.
+                      label={icon}
+                      selected={icon === project.icon}
+                      onSelect={() => void onUpdate({ icon })}
+                    >
+                      <ProjectGlyph name={icon} size={18} />
+                    </IconChoice>
                   ))}
                 </div>
               </Field>
@@ -258,5 +302,50 @@ export function ProjectSettings({
         </div>
       </div>
     </Modal>
+  )
+}
+
+/**
+ * One cell of the icon row — a picture, or the initials that stand in for none.
+ *
+ * The chosen one is tinted with the project's own colour rather than a generic
+ * highlight, so the cell shows what the tab will actually look like.
+ */
+function IconChoice({
+  label,
+  selected,
+  onSelect,
+  children
+}: {
+  readonly label: string
+  readonly selected: boolean
+  readonly onSelect: () => void
+  readonly children: React.ReactNode
+}): React.JSX.Element {
+  return (
+    <button
+      type="button"
+      onClick={onSelect}
+      title={label}
+      // Named explicitly: the initials cell would otherwise be announced as the
+      // two letters inside it, which says nothing about what clicking it does.
+      aria-label={label}
+      aria-pressed={selected}
+      // The same 36px the tab is: the cell is a preview of it, and a picture
+      // picked at half the size it will be worn is picked half blind.
+      className={`focus-ring flex size-9 items-center justify-center rounded-[var(--radius-control)] transition-colors ${
+        selected ? '' : 'text-ink-soft hover:bg-muted hover:text-ink'
+      }`}
+      style={
+        selected
+          ? {
+              backgroundColor: 'color-mix(in srgb, var(--project-color) 16%, transparent)',
+              color: 'var(--project-color)'
+            }
+          : undefined
+      }
+    >
+      {children}
+    </button>
   )
 }

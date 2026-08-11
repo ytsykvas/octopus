@@ -217,6 +217,33 @@ describe('useConfirm', () => {
     expect(answer).toHaveBeenCalledWith({ confirmed: false, checked: false })
   })
 
+  // The one case a box starts ticked: an answer given nearly every time, in
+  // front of the user and undone with one click before they confirm.
+  it('offers a checkbox already ticked when the question asks for it', async () => {
+    const { answer, user } = await ask({
+      ...QUESTION,
+      checkbox: { label: 'Also delete the branch', checked: true }
+    })
+
+    expect(screen.getByRole('checkbox', { name: 'Also delete the branch' })).toBeChecked()
+
+    await user.click(screen.getByRole('button', { name: 'Delete' }))
+
+    expect(answer).toHaveBeenCalledWith({ confirmed: true, checked: true })
+  })
+
+  it('takes the tick off a box that started ticked', async () => {
+    const { answer, user } = await ask({
+      ...QUESTION,
+      checkbox: { label: 'Also delete the branch', checked: true }
+    })
+
+    await user.click(screen.getByRole('checkbox', { name: 'Also delete the branch' }))
+    await user.click(screen.getByRole('button', { name: 'Delete' }))
+
+    expect(answer).toHaveBeenCalledWith({ confirmed: true, checked: false })
+  })
+
   // A tick left over from the previous question would arm an extra action
   // nobody chose this time round.
   it('starts the next question with the checkbox cleared', async () => {
@@ -230,6 +257,20 @@ describe('useConfirm', () => {
     await askAgain()
 
     expect(screen.getByRole('checkbox', { name: 'Also delete the branch' })).not.toBeChecked()
+  })
+
+  // The reset follows the new question rather than clearing to off: a box the
+  // next question wants ticked has to come up ticked, whatever the last one did.
+  it('starts the next question from its own default', async () => {
+    const { user, askAgain } = await ask({
+      ...QUESTION,
+      checkbox: { label: 'Also delete the branch' }
+    })
+
+    await user.click(screen.getByRole('button', { name: 'Delete' }))
+    await askAgain({ ...QUESTION, checkbox: { label: 'Also delete the branch', checked: true } })
+
+    expect(screen.getByRole('checkbox', { name: 'Also delete the branch' })).toBeChecked()
   })
 
   it('answers a destructive question the same way as any other', async () => {

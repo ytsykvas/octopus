@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
+import type { ProjectColor } from '@core/colors.js'
 import type { WorkspaceView } from '@core/workspaces.js'
 
 import { ResizeHandle } from './ResizeHandle.js'
@@ -70,6 +71,8 @@ function maxWidthFor(windowWidth: number, minWidth: number): number {
 interface RightPanelProps {
   readonly workspaces: readonly WorkspaceView[]
   readonly activeWorkspaceId: string | null
+  /** The open project's colour; null before one is chosen. */
+  readonly color: ProjectColor | null
   /** Absolute paths of the project's scripts; null when never written. */
   readonly scriptPaths: { readonly setup: string | null; readonly run: string | null }
   readonly onEditScripts: () => void
@@ -81,6 +84,7 @@ interface RightPanelProps {
 export function RightPanel({
   workspaces,
   activeWorkspaceId,
+  color,
   scriptPaths,
   onEditScripts,
   width,
@@ -127,7 +131,13 @@ export function RightPanel({
 
   return (
     <section
-      style={{ width: applied }}
+      style={{
+        width: applied,
+        // Set on the pane rather than on the tab it currently paints, so the
+        // stylesheet owns how the colour is used and anything else in here can
+        // reach for it later.
+        ...(color ? ({ '--project-color': `var(--project-${color})` } as React.CSSProperties) : {})
+      }}
       className="border-line bg-surface relative flex shrink-0 flex-col border-l"
     >
       <ResizeHandle
@@ -141,7 +151,12 @@ export function RightPanel({
         }}
       />
 
-      <div ref={tabs} className="border-line flex h-11 shrink-0 items-center gap-1 border-b px-2">
+      {/* Browser tabs rather than a row of buttons: the tabs sit on the line
+          that closes the row, and the chosen one breaks through it, so it reads
+          as the view below reaching up — the same relationship the project
+          strip has with the sidebar. `items-end` and `-mb-px` are what put them
+          on the line rather than above it. */}
+      <div ref={tabs} className="border-line flex h-11 shrink-0 items-end gap-0.5 border-b px-2">
         {TABS.map((item) => (
           <button
             key={item.id}
@@ -151,10 +166,11 @@ export function RightPanel({
             }}
             // Distinguished by hue, not by brightness. The muted fill it used
             // to carry sits at 1.09:1 against the pane behind it — a difference
-            // that measures as barely there and looks it.
-            className={`focus-ring h-7 rounded-[var(--radius-control)] border px-2.5 font-medium transition-colors ${
+            // that measures as barely there and looks it. The hue is the open
+            // project's, falling back to the accent when none is open.
+            className={`focus-ring -mb-px h-8 rounded-t-[8px] border px-3 font-medium transition-colors ${
               tab === item.id
-                ? 'border-accent/35 bg-accent/15 text-accent'
+                ? 'tab-selected'
                 : 'text-ink-soft hover:bg-muted hover:text-ink border-transparent'
             }`}
           >

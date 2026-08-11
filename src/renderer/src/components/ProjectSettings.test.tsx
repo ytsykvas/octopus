@@ -1,8 +1,9 @@
-import { render, screen } from '@testing-library/react'
+import { render, screen, within } from '@testing-library/react'
 import userEvent, { type UserEvent } from '@testing-library/user-event'
 import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { PROJECT_COLORS } from '@core/colors.js'
+import { PROJECT_ICONS } from '@core/icons.js'
 import type { Project } from '@core/store.js'
 
 import type { Result } from '../../../preload/index.js'
@@ -47,6 +48,15 @@ async function openSection(user: UserEvent, label: string): Promise<void> {
 
 function nameField(): HTMLElement {
   return screen.getByRole('textbox')
+}
+
+/** The two pickers both mark a chosen cell, so a query has to say which row. */
+function palette(): HTMLElement {
+  return screen.getByRole('group', { name: 'Colour' })
+}
+
+function iconRow(): HTMLElement {
+  return screen.getByRole('group', { name: 'Icon' })
 }
 
 /** A call the test answers when it chooses, standing in for slow IPC. */
@@ -175,15 +185,64 @@ describe('ProjectSettings', () => {
   it('marks the colour the project already carries', async () => {
     await renderDialog({ project: project({ color: 'amber' }) })
 
-    expect(screen.getByRole('button', { pressed: true })).toHaveAccessibleName('amber')
+    expect(within(palette()).getByRole('button', { pressed: true })).toHaveAccessibleName('amber')
   })
 
   it('offers the whole palette to choose from', async () => {
     await renderDialog()
 
     // Every swatch but the project's own is on offer.
-    expect(screen.getAllByRole('button', { pressed: false })).toHaveLength(
+    expect(within(palette()).getAllByRole('button', { pressed: false })).toHaveLength(
       PROJECT_COLORS.length - 1
+    )
+  })
+
+  it('offers every icon, plus the initials that stand in for none', async () => {
+    await renderDialog()
+
+    expect(within(iconRow()).getAllByRole('button')).toHaveLength(PROJECT_ICONS.length + 1)
+  })
+
+  it('marks the project with the icon that was clicked', async () => {
+    const user = userEvent.setup()
+    const props = await renderDialog()
+
+    await user.click(within(iconRow()).getByRole('button', { name: 'rocket' }))
+
+    expect(props.onUpdate).toHaveBeenCalledExactlyOnceWith({ icon: 'rocket' })
+  })
+
+  // Without this the icon could be swapped but never taken off again.
+  it('puts the initials back when they are chosen', async () => {
+    const user = userEvent.setup()
+    const props = await renderDialog({ project: project({ icon: 'rocket' }) })
+
+    await user.click(within(iconRow()).getByRole('button', { name: 'Initials' }))
+
+    expect(props.onUpdate).toHaveBeenCalledExactlyOnceWith({ icon: null })
+  })
+
+  // The cell is a preview of the tab it turns back into, so it has to show the
+  // project's own letters rather than a generic label.
+  it('previews the initials the tab falls back to', async () => {
+    await renderDialog({ project: project({ name: 'tsykvas-rails-template' }) })
+
+    expect(within(iconRow()).getByText('TR')).toBeInTheDocument()
+  })
+
+  it('marks the icon the project already carries', async () => {
+    await renderDialog({ project: project({ icon: 'flame' }) })
+
+    expect(within(iconRow()).getByRole('button', { pressed: true })).toHaveAccessibleName('flame')
+  })
+
+  // A project with no icon shows its initials on the tab, so that is what the
+  // row has to report as chosen.
+  it('marks the initials as chosen while no icon is set', async () => {
+    await renderDialog()
+
+    expect(within(iconRow()).getByRole('button', { pressed: true })).toHaveAccessibleName(
+      'Initials'
     )
   })
 

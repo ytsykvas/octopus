@@ -229,6 +229,24 @@
     border-color: color-mix(in srgb, var(--project-color, var(--border)) 30%, var(--border));
   }
 
+  /* The chosen tab in the right pane, carrying the project's colour the way the
+     strip and the sent bubble do — identity reads alike wherever it appears.
+
+     `--project-color` is set inline by the pane, and the fallbacks are the
+     accent it used to be painted with: with no project open the tab row looks
+     exactly as it did rather than losing its fill to an invalid colour-mix. */
+  .tab-selected {
+    background-color: color-mix(in srgb, var(--project-color, var(--accent)) 16%, var(--surface));
+    color: var(--project-color, var(--accent));
+    /* No outline: the fill alone is the shape, and a drawn edge around it made
+       the tab read as a box sitting on the row rather than as part of it.
+       The border is kept transparent rather than removed so the geometry does
+       not shift — and with the default `border-box` clipping the fill paints
+       under it, which is what covers the row's line along the bottom edge and
+       joins the tab to the view below. */
+    border-color: transparent;
+  }
+
   .panel {
     background-color: var(--surface);
     border: 1px solid var(--border);
@@ -247,14 +265,27 @@
     background-color: var(--muted);
   }
 
-  /* Selection has to read against the sidebar's own tint, so it carries a
-     left marker as well as a fill — colour alone was too quiet there. */
+  /* Selection is a surface, not a colour.
+     The workspace list is already washed in the project's own hue, and a fill
+     of the blue accent on top of it read as a foreign object rather than as
+     "this one" — two unrelated colours in the same 200px. So the chosen row
+     lifts out of the wash onto the plain canvas, the way a selected row does
+     in the settings rail, and the only colour left is a 2px mark. */
   .row-selected {
     position: relative;
-    background-color: color-mix(in srgb, var(--accent) 16%, transparent);
+    background-color: var(--canvas);
     color: var(--ink);
   }
 
+  /* The cursor must not repaint what selection has already said. Hover is a
+     stronger selector than the class it would cover, so it is restated. */
+  .row-selected:hover {
+    background-color: var(--canvas);
+  }
+
+  /* The project's hue where there is one — the marker is the one place the
+     colour still helps — and the accent in the settings rail, which belongs to
+     no project. */
   .row-selected::before {
     content: '';
     position: absolute;
@@ -263,7 +294,7 @@
     left: 0;
     width: 2px;
     border-radius: 1px;
-    background-color: var(--accent);
+    background-color: var(--project-color, var(--accent));
   }
 
   .focus-ring:focus-visible {

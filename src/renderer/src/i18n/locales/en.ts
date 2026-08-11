@@ -96,6 +96,9 @@ export const en = {
       'That branch could not be set. It may have been deleted since this list was read.',
     color: 'Colour',
     colorHint: 'Identifies the project in the tab strip and tints this sidebar.',
+    icon: 'Icon',
+    iconHint: 'Stands on the project tab in place of the initials.',
+    iconNone: 'Initials',
     setupScript: 'Build script',
     setupScriptHint:
       'Runs in a new workspace: copy an .env, install dependencies, anything a fresh checkout needs. Saved as setup.sh.',
@@ -156,10 +159,10 @@ export const en = {
 
     noWorkspaceTitle: 'Select a workspace',
     noWorkspaceBody:
-      'A conversation belongs to a workspace: its worktree is where the agent works, and its branch is where the work lands.',
+      'Every conversation belongs to one workspace. The agent works on that workspace\u2019s own copy of the project, and what it changes lands on that workspace\u2019s branch.',
     emptyTitle: 'Start the conversation',
     emptyBody:
-      'The first message starts an agent session in this worktree. The branch already exists — nothing here renames it.',
+      'The first message starts an agent session in this worktree. The branch already exists.',
 
     mode: 'Permissions',
     modeDefault: 'Ask first',

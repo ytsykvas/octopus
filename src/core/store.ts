@@ -10,9 +10,11 @@ import { z } from 'zod'
 
 import { type Chat, ChatSchema } from './chats.js'
 import { nextProjectColor, type ProjectColor, ProjectColorSchema } from './colors.js'
+import { ProjectIconSchema } from './icons.js'
 
 export { type Chat, ChatSchema } from './chats.js'
 export { PROJECT_COLORS, type ProjectColor } from './colors.js'
+export { PROJECT_ICONS, type ProjectIcon } from './icons.js'
 import { stateFile, stateTempFile } from './paths.js'
 import { readJsonFile, writeJsonFile } from './persist.js'
 
@@ -33,7 +35,15 @@ export const ProjectSchema = z.object({
    * hands out distinct colours instead, and can only do that if it can tell
    * "had no colour" from "chose blue".
    */
-  color: ProjectColorSchema.optional()
+  color: ProjectColorSchema.optional(),
+  /**
+   * Absent or `null` means the tab falls back to the project's initials.
+   *
+   * Unlike the colour, no icon is the reasonable default: a picture that was
+   * not chosen says nothing about the project. `null` is accepted alongside
+   * "absent" because that is what clearing a chosen icon writes.
+   */
+  icon: ProjectIconSchema.nullable().optional()
 })
 
 export const WorkspaceStatusSchema = z.enum([
@@ -188,7 +198,8 @@ export function addProject(state: State, project: Project): State {
 export const ProjectPatchSchema = ProjectSchema.pick({
   name: true,
   baseBranch: true,
-  color: true
+  color: true,
+  icon: true
 }).partial()
 
 export type ProjectPatch = z.infer<typeof ProjectPatchSchema>
@@ -221,6 +232,9 @@ export function updateProject(state: State, projectId: string, patch: ProjectPat
         ? {
             ...project,
             ...(patch.color !== undefined && { color: patch.color }),
+            // `null` is a value here, not an absence: it is how the dialog says
+            // "back to the initials". Only `undefined` means "leave it alone".
+            ...(patch.icon !== undefined && { icon: patch.icon }),
             ...(name !== undefined && { name }),
             ...(baseBranch !== undefined && { baseBranch })
           }
