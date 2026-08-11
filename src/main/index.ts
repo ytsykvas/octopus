@@ -3,7 +3,7 @@ import { join } from 'node:path'
 import { app, BrowserWindow, dialog, ipcMain, Menu, nativeTheme, shell } from 'electron'
 
 import { describeError } from '../core/persist.js'
-import { createService, type OctopusService } from '../core/service.js'
+import { type ChatEvent, createService, type OctopusService } from '../core/service.js'
 import type { ThemeName } from '../core/types.js'
 import { registerIpc } from './ipc.js'
 import { canvasColor, resolveTheme } from './theme.js'
@@ -95,6 +95,12 @@ function broadcastTheme(theme: ThemeName): void {
   }
 }
 
+function broadcastChatEvent(event: ChatEvent): void {
+  for (const window of BrowserWindow.getAllWindows()) {
+    window.webContents.send('chats:event', event)
+  }
+}
+
 /**
  * Follows the OS appearance.
  *
@@ -129,6 +135,9 @@ async function start(): Promise<void> {
   const terminals = new TerminalManager()
   app.on('will-quit', () => {
     terminals.disposeAll()
+    // Each live session holds a child process of its own; unclosed, they
+    // outlive the application exactly as an orphaned pseudo-terminal would.
+    void service.closeChats()
   })
 
   registerIpc(service, terminals, {
@@ -144,7 +153,8 @@ async function start(): Promise<void> {
     windowFor: (event) =>
       BrowserWindow.fromWebContents((event as Electron.IpcMainInvokeEvent).sender),
     prefersDark: () => nativeTheme.shouldUseDarkColors,
-    broadcastTheme
+    broadcastTheme,
+    broadcastChatEvent
   })
   watchSystemTheme(service)
   registerMenu()

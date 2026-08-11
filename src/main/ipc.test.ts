@@ -4,12 +4,15 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { promisify } from 'node:util'
 
+import type { Query, SDKMessage } from '@anthropic-ai/claude-agent-sdk'
 import { afterEach, beforeEach, describe, expect, it, type Mock, vi } from 'vitest'
 
 import type * as AccountsModule from '../core/accounts.js'
 import { type AccountsStatus, checkAccounts, type CommandExec, signOut } from '../core/accounts.js'
+import type { QueryFn } from '../core/agent.js'
 import type { RemoteRepository } from '../core/github.js'
 import { createService, type OctopusService, type ServiceOptions } from '../core/service.js'
+import type { ChatEvent } from '../core/service.js'
 import type { ThemeName, Workspace } from '../core/types.js'
 import { type IpcHost, registerIpc, type PickedDirectory } from './ipc.js'
 import type { Result } from './result.js'
@@ -31,13 +34,14 @@ const run = promisify(execFile)
 /**
  * A stand-in for the Electron surface the IPC layer touches.
  *
- * Five small functions instead of a framework — which is the point of injecting
+ * Six small functions instead of a framework — which is the point of injecting
  * them: the whole channel table can be exercised without a window.
  */
 interface Harness {
   readonly host: IpcHost
   readonly handlers: Map<string, (event: unknown, ...args: unknown[]) => unknown>
   readonly broadcasts: ThemeName[]
+  readonly chatEvents: ChatEvent[]
   picked: PickedDirectory
   prefersDark: boolean
   /** null once the window a call came from has closed, as Electron reports it. */
@@ -47,10 +51,12 @@ interface Harness {
 function harness(): Harness {
   const handlers = new Map<string, (event: unknown, ...args: unknown[]) => unknown>()
   const broadcasts: ThemeName[] = []
+  const chatEvents: ChatEvent[] = []
 
   const state: Harness = {
     handlers,
     broadcasts,
+    chatEvents,
     picked: { canceled: true, filePaths: [] },
     prefersDark: false,
     window: {},
@@ -61,7 +67,8 @@ function harness(): Harness {
       showOpenDialog: () => Promise.resolve(state.picked),
       windowFor: () => state.window,
       prefersDark: () => state.prefersDark,
-      broadcastTheme: (theme) => broadcasts.push(theme)
+      broadcastTheme: (theme) => broadcasts.push(theme),
+      broadcastChatEvent: (event) => chatEvents.push(event)
     }
   }
 
@@ -240,6 +247,14 @@ describe('channel table', () => {
     'workspaces:rename',
     'workspaces:remove',
     'workspaces:hasChanges',
+    'chats:list',
+    'chats:open',
+    'chats:history',
+    'chats:send',
+    'chats:interrupt',
+    'chats:mode',
+    'chats:permission',
+    'chats:rateLimit',
     'terminal:create',
     'terminal:write',
     'terminal:resize',
@@ -676,3 +691,163 @@ describe('accounts', () => {
     await expect(invoke('accounts:signOut', 'github', null)).resolves.toMatchObject({ ok: false })
   })
 })
+
+describe('the agent chat', () => {
+  it('lists nothing for a workspace nobody has written in, and creates none', async () => {
+    const projectId = await addProject()
+    const workspace = await createWorkspace(projectId)
+
+    await expect(invoke('chats:list', workspace.id)).resolves.toEqual({ ok: true, value: [] })
+  })
+
+  it('opens a chat and lists it afterwards', async () => {
+    const projectId = await addProject()
+    const workspace = await createWorkspace(projectId)
+
+    const opened = await invoke('chats:open', workspace.id)
+    expect(opened).toMatchObject({ ok: true, value: { workspaceId: workspace.id } })
+
+    await expect(invoke('chats:list', workspace.id)).resolves.toMatchObject({
+      ok: true,
+      value: [{ workspaceId: workspace.id }]
+    })
+  })
+
+  it('answers with a result rather than throwing across IPC', async () => {
+    await expect(invoke('chats:open', 'planner/nowhere')).resolves.toMatchObject({
+      ok: false,
+      code: 'worktreeMissing'
+    })
+  })
+
+  it('reads back an empty history for a chat that has said nothing', async () => {
+    const projectId = await addProject()
+    const workspace = await createWorkspace(projectId)
+    const opened = await invoke('chats:open', workspace.id)
+
+    await expect(invoke('chats:history', chatIdOf(opened))).resolves.toEqual({
+      ok: true,
+      value: []
+    })
+  })
+
+  // The message becomes a prompt and the mode reaches a running session, so
+  // neither is taken on trust from the renderer.
+  it('rejects a message that is empty or absurdly long', async () => {
+    const projectId = await addProject()
+    const workspace = await createWorkspace(projectId)
+    const opened = await invoke('chats:open', workspace.id)
+    const chatId = chatIdOf(opened)
+
+    await expect(invoke('chats:send', chatId, '')).resolves.toMatchObject({ ok: false })
+    await expect(invoke('chats:send', chatId, 'x'.repeat(100_001))).resolves.toMatchObject({
+      ok: false
+    })
+  })
+
+  it('rejects a permission mode it does not know', async () => {
+    const projectId = await addProject()
+    const workspace = await createWorkspace(projectId)
+    const opened = await invoke('chats:open', workspace.id)
+
+    await expect(
+      invoke('chats:mode', chatIdOf(opened), 'bypassPermissions')
+    ).resolves.toMatchObject({ ok: false })
+
+    await expect(invoke('chats:mode', chatIdOf(opened), 'plan')).resolves.toEqual({
+      ok: true,
+      value: undefined
+    })
+  })
+
+  it('rejects an answer that is not one of the three the card offers', async () => {
+    await expect(invoke('chats:permission', 'r-1', 'perhaps')).resolves.toMatchObject({
+      ok: false
+    })
+  })
+
+  // Unknown means already answered, or the session it belonged to is gone.
+  it('accepts an answer to a request nobody is waiting on', async () => {
+    await expect(invoke('chats:permission', 'r-1', 'allow')).resolves.toEqual({
+      ok: true,
+      value: undefined
+    })
+  })
+
+  it('treats stopping a chat with no session as nothing to do', async () => {
+    const projectId = await addProject()
+    const workspace = await createWorkspace(projectId)
+    const opened = await invoke('chats:open', workspace.id)
+
+    await expect(invoke('chats:interrupt', chatIdOf(opened))).resolves.toEqual({
+      ok: true,
+      value: undefined
+    })
+  })
+
+  // Nothing has run yet, so there is nothing to report — and an API key
+  // session never reports one at all.
+  it('answers with no rate limit before any turn has run', async () => {
+    await expect(invoke('chats:rateLimit')).resolves.toEqual({ ok: true, value: null })
+  })
+
+  // Events keep arriving long after the call that started them returned, and a
+  // second window on the same workspace should see the same conversation, so
+  // they are broadcast rather than answered back to whoever asked.
+  it('broadcasts agent events to every window', async () => {
+    const projectId = await addProject()
+    const workspace = await createWorkspace(projectId)
+
+    // Built after the workspace exists, so the replacement reads it back from
+    // the state file the first service wrote.
+    await useService({ query: answeringQuery('there') })
+
+    const opened = await invoke('chats:open', workspace.id)
+
+    await invoke('chats:send', chatIdOf(opened), 'hello')
+
+    await vi.waitFor(() => {
+      expect(bench.chatEvents.map((entry) => entry.event)).toContainEqual({
+        type: 'text',
+        text: 'there'
+      })
+    })
+  })
+})
+
+/** The chat id out of a successful `chats:open`. */
+function chatIdOf(result: unknown): string {
+  const answer = result as Result<{ id: string }>
+  if (!answer.ok) throw new Error(answer.error)
+  return answer.value.id
+}
+
+/**
+ * An Agent SDK that says one thing and stops.
+ *
+ * Enough to prove an event made the trip from the core to the window; the
+ * mapping itself is covered where it lives, in `agent.test.ts`.
+ */
+function answeringQuery(text: string): QueryFn {
+  return () => {
+    async function* stream(): AsyncGenerator<SDKMessage> {
+      // Yields on the next tick, as a real session does — a generator that
+      // answers before `startSession` has returned is not a shape the SDK has.
+      await Promise.resolve()
+
+      yield {
+        type: 'assistant',
+        message: { content: [{ type: 'text', text }] },
+        parent_tool_use_id: null,
+        uuid: 'u-1',
+        session_id: 'sess-1'
+      } as unknown as SDKMessage
+    }
+
+    return Object.assign(stream(), {
+      interrupt: () => Promise.resolve(undefined),
+      setPermissionMode: () => Promise.resolve(),
+      close: () => undefined
+    }) as unknown as Query
+  }
+}

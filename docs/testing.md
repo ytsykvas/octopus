@@ -65,6 +65,44 @@ Questions worth asking, from the audit that found the above:
 | what does a half-written file look like      | a crash between temp-write and rename leaves the temp behind                                                        |
 | what does the tool print about a stale entry | `prunable`, `locked` and `bare` lines the parser had never seen                                                     |
 
+## A type declaration is not a payload
+
+The same lesson as the one above, met again where there is no `--porcelain` to
+run: the shape a library's types **allow** and the shape that **arrives** are
+different documents.
+
+Both misses came from one live session, and both fixtures had been written
+faithfully from the declarations:
+
+| Field                         | The types say             | What arrived                                    |
+| ----------------------------- | ------------------------- | ----------------------------------------------- |
+| `rate_limit_info.resetsAt`    | `number`, no unit given   | seconds — read as milliseconds it is 1970       |
+| `rate_limit_info.utilization` | `number` optional         | absent; the header was built to show a per cent |
+| `usage.input_tokens`          | the prompt's input tokens | `2`, beside 17,392 cached — the prompt was 25k  |
+
+The last one is the dangerous kind: a number that looks perfectly reasonable and
+is wrong by four orders of magnitude. Nothing would have failed.
+
+So when a mapping reads someone else's payload, **run the thing once and print
+what it sent** — a throwaway script against a temporary directory is enough —
+then paste that payload into the test verbatim. `agent.test.ts` marks the one
+that came from a live session, because a fixture composed from the declaration
+alone tests a message the SDK does not send.
+
+## Faking what must not run
+
+`query` from the Agent SDK spawns a child process and talks to a model, so it is
+a parameter of `startSession` and of `createService` rather than an import — the
+same shape as `GitExec`. The fake keeps only what the code depends on: an async
+iterable with `interrupt`, `setPermissionMode` and `close`.
+
+**Never call `query()` from a test.**
+
+A fake earns its keep only if it can fail. `setPermissionMode` on the fake once
+discarded its argument while the test asserted the call merely resolved: deleting
+the line from the service left the suite green. If the promise being made is
+delivery, the fake has to record what it was told.
+
 ## Core tests drive real git
 
 Not a mock. Each test builds a repository in a temporary directory and runs
@@ -109,7 +147,7 @@ not have, and `node-pty` spawns a real shell.
 ## Main and preload
 
 `registerIpc` takes its Electron surface as a parameter, so `ipc.test.ts`
-supplies five small functions and drives all 27 channels without a window.
+supplies six small functions and drives all 35 channels without a window.
 
 Two lists are load-bearing: `EXPECTED` in `ipc.test.ts` and `CALLS` in
 `preload/index.test.ts`. A channel name that drifts between the two sides fails

@@ -2,6 +2,7 @@ import { Bot, GitBranch, Info, type LucideIcon, Monitor, Sparkles } from 'lucide
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
+import type { PermissionMode } from '@core/chats.js'
 import type {
   Config,
   LanguagePreference,
@@ -11,6 +12,7 @@ import type {
 
 import { Button } from './Button.js'
 import { Field } from './Field.js'
+import { Mascot } from './Mascot.js'
 import { Modal } from './Modal.js'
 import { SectionRail } from './SectionRail.js'
 import { AccountCard } from './settings/AccountCard.js'
@@ -199,29 +201,108 @@ function AgentSection({ config, onChange }: SectionProps): React.JSX.Element {
   const { t } = useTranslation()
 
   return (
-    <Field label={t('settings.settingSources')} hint={t('settings.settingSourcesHint')}>
-      <RadioList<SettingSourcesMode>
-        value={config.settingSources}
-        options={[
-          {
-            value: 'none',
-            label: t('settings.settingSourcesNone'),
-            hint: t('settings.settingSourcesNoneHint')
-          },
-          {
-            value: 'project',
-            label: t('settings.settingSourcesProject'),
-            hint: t('settings.settingSourcesProjectHint')
-          },
-          {
-            value: 'all',
-            label: t('settings.settingSourcesAll'),
-            hint: t('settings.settingSourcesAllHint')
-          }
-        ]}
-        onChange={(settingSources) => void onChange({ settingSources })}
-      />
-    </Field>
+    <div className="space-y-6">
+      <Field label={t('settings.settingSources')} hint={t('settings.settingSourcesHint')}>
+        <RadioList<SettingSourcesMode>
+          value={config.settingSources}
+          options={[
+            {
+              value: 'none',
+              label: t('settings.settingSourcesNone'),
+              hint: t('settings.settingSourcesNoneHint')
+            },
+            {
+              value: 'project',
+              label: t('settings.settingSourcesProject'),
+              hint: t('settings.settingSourcesProjectHint')
+            },
+            {
+              value: 'all',
+              label: t('settings.settingSourcesAll'),
+              hint: t('settings.settingSourcesAllHint')
+            }
+          ]}
+          onChange={(settingSources) => void onChange({ settingSources })}
+        />
+      </Field>
+
+      <div className="border-line border-t pt-6">
+        <Field label={t('settings.permissionMode')} hint={t('settings.permissionModeHint')}>
+          <RadioList<PermissionMode>
+            value={config.permissionMode}
+            options={[
+              {
+                value: 'default',
+                label: t('settings.permissionAsk'),
+                hint: t('settings.permissionAskHint')
+              },
+              {
+                value: 'acceptEdits',
+                label: t('settings.permissionAcceptEdits'),
+                hint: t('settings.permissionAcceptEditsHint')
+              },
+              {
+                value: 'plan',
+                label: t('settings.permissionPlan'),
+                hint: t('settings.permissionPlanHint')
+              }
+            ]}
+            onChange={(permissionMode) => void onChange({ permissionMode })}
+          />
+        </Field>
+      </div>
+
+      <AlwaysAllowed tools={config.alwaysAllowedTools} onChange={onChange} />
+    </div>
+  )
+}
+
+/**
+ * Tools the user has answered "always" for.
+ *
+ * Shown rather than only stored: an answer given once in a chat, weeks ago,
+ * quietly changes what every future session may do without asking. Listing it
+ * here is what makes that answer something the user can take back (§4).
+ */
+function AlwaysAllowed({
+  tools,
+  onChange
+}: {
+  tools: readonly string[]
+  onChange: (patch: Partial<Config>) => Promise<void>
+}): React.JSX.Element {
+  const { t } = useTranslation()
+
+  return (
+    <div className="border-line border-t pt-6">
+      <Field label={t('settings.alwaysAllowed')} hint={t('settings.alwaysAllowedHint')}>
+        {tools.length === 0 ? (
+          <p className="text-ink-faint">{t('settings.alwaysAllowedEmpty')}</p>
+        ) : (
+          <ul className="max-w-lg space-y-1">
+            {tools.map((tool) => (
+              <li
+                key={tool}
+                className="border-line flex items-center justify-between gap-3 rounded-[var(--radius-control)] border px-3 py-1.5"
+              >
+                <span className="font-mono text-[11px]">{tool}</span>
+                <Button
+                  variant="danger"
+                  size="sm"
+                  onClick={() =>
+                    void onChange({
+                      alwaysAllowedTools: tools.filter((existing) => existing !== tool)
+                    })
+                  }
+                >
+                  {t('settings.alwaysAllowedRemove')}
+                </Button>
+              </li>
+            ))}
+          </ul>
+        )}
+      </Field>
+    </div>
   )
 }
 
@@ -235,6 +316,14 @@ function AboutSection({ config }: { config: Config }): React.JSX.Element {
         label={t('settings.installedAt')}
         value={new Date(config.installedAt).toLocaleString()}
       />
+
+      {/* The space is on a wrapper, not on the image: `size-20` sets the box,
+          and padding inside it would eat the picture rather than move it.
+          No separator either — a rule would read as the start of another group
+          of settings, and there is nothing here to set. */}
+      <div className="pt-8">
+        <Mascot className="mx-auto block size-20" />
+      </div>
     </div>
   )
 }

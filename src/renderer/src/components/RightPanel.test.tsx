@@ -33,7 +33,6 @@ function renderPanel(overrides: Partial<Props> = {}): {
     onEditScripts: vi.fn(),
     width: 360,
     onWidthChange: vi.fn(),
-    onCollapse: vi.fn(),
     ...overrides
   }
 
@@ -138,12 +137,41 @@ describe('RightPanel', () => {
     expect(screen.getByRole('button', { name: 'Run' })).toBeInTheDocument()
   })
 
-  it('collapses on request', async () => {
-    const { props } = renderPanel()
+  // The control moved to the window header: the button that folds the pane
+  // away is the one that brings it back, and the second could not live inside
+  // a pane that is no longer on screen.
+  it('carries no control of its own for folding away', () => {
+    renderPanel()
 
-    await userEvent.click(screen.getByRole('button', { name: 'Collapse panel' }))
+    expect(screen.queryByRole('button', { name: 'Collapse panel' })).not.toBeInTheDocument()
+  })
 
-    expect(props.onCollapse).toHaveBeenCalled()
+  // The pane does not shrink, so a tab row wider than it pushed the whole
+  // window out and put a horizontal scrollbar under the application. The floor
+  // is measured because the labels change width with the language — a number
+  // picked against English left the Ukrainian ones overflowing.
+  it('will not narrow past the width its tabs need', async () => {
+    // jsdom lays nothing out, so the buttons are given a width to be measured.
+    vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockReturnValue({
+      width: 90,
+      height: 28,
+      top: 0,
+      left: 0,
+      right: 0,
+      bottom: 0,
+      x: 0,
+      y: 0,
+      toJSON: () => ({})
+    })
+
+    renderPanel({ width: 280 })
+
+    await waitFor(() => {
+      // Four buttons of 90, and jsdom reports padding and gaps as zero — so the
+      // floor is exactly 360. Asserting the number rather than "more than
+      // before" is what would catch the measurement itself going wrong.
+      expect(screen.getByRole('separator')).toHaveAttribute('aria-valuemin', '360')
+    })
   })
 
   // The pane follows the cursor throughout, but the width worth keeping is

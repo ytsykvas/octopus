@@ -18,17 +18,20 @@ Nothing but zod behind them, so a **value** can cross into the window.
 | [`branches.ts`](../src/core/branches.ts) | how a branch name is shown — `origin/` is noise          |
 | [`colors.ts`](../src/core/colors.ts)     | the project palette, and which colour a new project gets |
 | [`initials.ts`](../src/core/initials.ts) | the two characters on a project tab                      |
+| [`chats.ts`](../src/core/chats.ts)       | what a chat is, and how much it may do without asking    |
+| [`events.ts`](../src/core/events.ts)     | `AgentEvent` — the only shape the UI sees of the SDK     |
 | [`names.ts`](../src/core/names.ts)       | workspace names, drawn at random from 256                |
 | [`types.ts`](../src/core/types.ts)       | shared identifiers                                       |
 
 ### Storage
 
-| Module                                 | What it decides                                 |
-| -------------------------------------- | ----------------------------------------------- |
-| [`paths.ts`](../src/core/paths.ts)     | every path under `~/.octopus`, in one place     |
-| [`persist.ts`](../src/core/persist.ts) | atomic writes, validated reads, honest failures |
-| [`config.ts`](../src/core/config.ts)   | settings and their bounds                       |
-| [`store.ts`](../src/core/store.ts)     | projects and workspaces, and the migrations     |
+| Module                                       | What it decides                                    |
+| -------------------------------------------- | -------------------------------------------------- |
+| [`paths.ts`](../src/core/paths.ts)           | every path under `~/.octopus`, in one place        |
+| [`persist.ts`](../src/core/persist.ts)       | atomic writes, validated reads, honest failures    |
+| [`config.ts`](../src/core/config.ts)         | settings and their bounds                          |
+| [`store.ts`](../src/core/store.ts)           | projects, workspaces and chats, and the migrations |
+| [`transcript.ts`](../src/core/transcript.ts) | chat history as append-only JSONL                  |
 
 ### git
 
@@ -48,6 +51,7 @@ Nothing but zod behind them, so a **value** can cross into the window.
 | [`terminal.ts`](../src/core/terminal.ts)         | what a pty should run, where, with which environment |
 | [`scripts.ts`](../src/core/scripts.ts)           | `setup.sh` and `run.sh`                              |
 | [`instructions.ts`](../src/core/instructions.ts) | prose handed to the agent                            |
+| [`agent.ts`](../src/core/agent.ts)               | the Agent SDK: session lifecycle and event mapping   |
 
 ### The façade
 
@@ -110,6 +114,51 @@ handled, and a second must not replace the first.
 stale value — and silently drops any field added to the type but not to the
 update. That is why the colour picker did nothing for a while. A test per field
 is the only thing that catches it.
+
+### The SDK is reached through one function
+
+`agent.ts` takes `query` as a parameter, the same way `git.ts` takes an
+executor. That is what lets the whole chat — a message sent, events mapped, a
+permission answered, a session closed — be tested without a child process, a
+network call or a model. `query()` is never called from a test.
+
+The mapping itself is a pure function from `SDKMessage` to `AgentEvent[]`, kept
+apart from the session for the same reason: the SDK's union has some forty
+variants and grows between releases, and a variant we do not draw maps to
+nothing rather than to a placeholder.
+
+### What the types leave unsaid is measured, not guessed
+
+Two fields on the way in carry no unit in the SDK's types, and both were checked
+against a real session rather than assumed:
+
+- `rate_limit_info.resetsAt` is a bare number. It arrives in **seconds**.
+  `toIsoTimestamp` still accepts either, because seconds and milliseconds differ
+  by three orders of magnitude and telling them apart is a check, not a guess.
+- `usage.input_tokens` counts only what was **not** cached. A measured turn
+  reported 2 beside 17,392 read from cache and 7,825 written to it, so
+  `promptTokens` sums all three. The bare field would have understated the
+  prompt by four orders of magnitude — a number that looks fine and is wrong.
+
+The same session showed `utilization` absent from the event entirely, which is
+why the header is built to say nothing rather than to hold space for it.
+
+### One writer at a time
+
+`persist.ts` writes to a fixed temporary path and renames it, so two saves in
+flight race for that one file — the first rename wins and the second fails with
+`ENOENT`. Agent events arrive from a callback nobody awaits, so a status change
+from the agent and one the user asked for genuinely do land together. `commit`
+serialises them, and takes a **function** of the current state rather than a
+finished one: a queued write computed from a stale snapshot would silently undo
+whatever landed while it waited.
+
+Transcript appends have their own chain. They do not read the state, so making
+them wait for a save would only slow the log down — what they need is order.
+
+Nothing inside a `commit` may call `commit` again: it would queue behind the
+write it is already part of, and wait for itself. That deadlock cost an
+afternoon.
 
 ### Errors are not swallowed
 

@@ -8,8 +8,10 @@
 
 import { z } from 'zod'
 
+import { type Chat, ChatSchema } from './chats.js'
 import { nextProjectColor, type ProjectColor, ProjectColorSchema } from './colors.js'
 
+export { type Chat, ChatSchema } from './chats.js'
 export { PROJECT_COLORS, type ProjectColor } from './colors.js'
 import { stateFile, stateTempFile } from './paths.js'
 import { readJsonFile, writeJsonFile } from './persist.js'
@@ -49,7 +51,6 @@ export const WorkspaceSchema = z.object({
   branch: z.string().min(1),
   path: z.string().min(1),
   status: WorkspaceStatusSchema,
-  sessionId: z.string().nullable(),
   port: z.number().int().min(PORT_RANGE_START).max(PORT_RANGE_END),
   createdAt: z.iso.datetime(),
   /** Reserved for future multi-user support (§15.3); always null for now. */
@@ -59,7 +60,13 @@ export const WorkspaceSchema = z.object({
 export const StateSchema = z.object({
   version: z.literal(1),
   projects: z.array(ProjectSchema),
-  workspaces: z.array(WorkspaceSchema)
+  workspaces: z.array(WorkspaceSchema),
+  /**
+   * Defaulted rather than required, so a state file written before chats
+   * existed still loads. The version stays at 1 for the same reason: a field
+   * that can be absent needs a default, not a migration.
+   */
+  chats: z.array(ChatSchema).default([])
 })
 
 /**
@@ -77,7 +84,7 @@ type StoredState = z.infer<typeof StateSchema>
 
 export type State = Omit<StoredState, 'projects'> & { projects: Project[] }
 
-export const EMPTY_STATE: State = { version: 1, projects: [], workspaces: [] }
+export const EMPTY_STATE: State = { version: 1, projects: [], workspaces: [], chats: [] }
 
 /** State integrity violation — a duplicate or a dangling reference. */
 export class StateConflictError extends Error {
@@ -224,10 +231,13 @@ export function updateProject(state: State, projectId: string, patch: ProjectPat
 
 /** Removes a project together with its workspaces — no orphans are left behind. */
 export function removeProject(state: State, projectId: string): State {
+  const dropped = new Set(workspacesOfProject(state, projectId).map((workspace) => workspace.id))
+
   return {
     ...state,
     projects: state.projects.filter((project) => project.id !== projectId),
-    workspaces: state.workspaces.filter((workspace) => workspace.projectId !== projectId)
+    workspaces: state.workspaces.filter((workspace) => workspace.projectId !== projectId),
+    chats: state.chats.filter((chat) => !dropped.has(chat.workspaceId))
   }
 }
 
@@ -276,6 +286,49 @@ export function updateWorkspace(
 export function removeWorkspace(state: State, workspaceId: string): State {
   return {
     ...state,
-    workspaces: state.workspaces.filter((workspace) => workspace.id !== workspaceId)
+    workspaces: state.workspaces.filter((workspace) => workspace.id !== workspaceId),
+    chats: state.chats.filter((chat) => chat.workspaceId !== workspaceId)
+  }
+}
+
+export function chatsOfWorkspace(state: State, workspaceId: string): Chat[] {
+  return state.chats.filter((chat) => chat.workspaceId === workspaceId)
+}
+
+export function findChat(state: State, chatId: string): Chat | undefined {
+  return state.chats.find((chat) => chat.id === chatId)
+}
+
+/** Adds a chat. Its workspace must exist — a chat with nowhere to run is a bug. */
+export function addChat(state: State, chat: Chat): State {
+  if (!state.workspaces.some((workspace) => workspace.id === chat.workspaceId)) {
+    throw new StateConflictError(`Workspace ${chat.workspaceId} does not exist`)
+  }
+  if (state.chats.some((existing) => existing.id === chat.id)) {
+    throw new StateConflictError(`Chat ${chat.id} already exists`)
+  }
+
+  return { ...state, chats: [...state.chats, chat] }
+}
+
+/**
+ * Updates a chat's mutable fields.
+ *
+ * `workspaceId` is absent from the patch on purpose: a conversation belongs to
+ * the branch it happened on, and moving it would leave its transcript
+ * describing files that are not there.
+ */
+export function updateChat(
+  state: State,
+  chatId: string,
+  patch: Partial<Omit<Chat, 'id' | 'workspaceId'>>
+): State {
+  if (!state.chats.some((chat) => chat.id === chatId)) {
+    throw new StateConflictError(`Chat ${chatId} not found`)
+  }
+
+  return {
+    ...state,
+    chats: state.chats.map((chat) => (chat.id === chatId ? { ...chat, ...patch } : chat))
   }
 }

@@ -7,7 +7,8 @@ else joins a home directory by hand.
 ```
 ~/.octopus/
   config.json                        settings
-  state.json                         projects and workspaces
+  state.json                         projects, workspaces and chats
+  chats/<chatId>.jsonl               one conversation each, append-only
   projects/<projectId>/
     scripts/setup.sh                 runs in a new workspace
     scripts/run.sh                   starts the dev server
@@ -35,15 +36,17 @@ paths alone reported such a workspace as healthy. The parser reads the flag now.
 
 Validated by `ConfigSchema` in [`config.ts`](../src/core/config.ts).
 
-| Field                             | Meaning                                                           |
-| --------------------------------- | ----------------------------------------------------------------- |
-| `version`                         | format version, for future migrations                             |
-| `branchPrefix`                    | branches are `<prefix>/<workspace>`                               |
-| `cloneDirectory`                  | where GitHub clones land; empty means "ask, then remember"        |
-| `settingSources`                  | what the agent may load — `none` is the transparency default (§4) |
-| `theme`, `language`               | appearance                                                        |
-| `rightPanelWidth`, `sidebarWidth` | pane widths, in pixels                                            |
-| `deviceId`, `installedAt`         | reserved for licensing (§15.3), unused                            |
+| Field                             | Meaning                                                            |
+| --------------------------------- | ------------------------------------------------------------------ |
+| `version`                         | format version, for future migrations                              |
+| `branchPrefix`                    | branches are `<prefix>/<workspace>`                                |
+| `cloneDirectory`                  | where GitHub clones land; empty means "ask, then remember"         |
+| `settingSources`                  | what the agent may load — `none` is the transparency default (§4)  |
+| `permissionMode`                  | what a new chat may do before asking                               |
+| `alwaysAllowedTools`              | tools the user answered "always" for, listed so they can be undone |
+| `theme`, `language`               | appearance                                                         |
+| `rightPanelWidth`, `sidebarWidth` | pane widths, in pixels                                             |
+| `deviceId`, `installedAt`         | reserved for licensing (§15.3), unused                             |
 
 **Every new field carries `.default()`.** Without one, adding a field rejects
 every config written by an earlier build as malformed — which is what happened
@@ -57,7 +60,10 @@ A **project** is a repository that has been added: `id`, `name`, `repoPath`,
 `baseBranch`, `branchPrefix`, `color`.
 
 A **workspace** is a git worktree: `id`, `projectId`, `name`, `branch`, `path`,
-`status`, `sessionId`, `port`, `createdAt`, `ownerId`.
+`status`, `port`, `createdAt`, `ownerId`.
+
+A **chat** is a conversation with one agent inside one workspace: `id`,
+`workspaceId`, `agent`, `sessionId`, `model`, `permissionMode`, `createdAt`.
 
 Three identifiers, and confusing them has caused three separate bugs:
 
@@ -79,6 +85,44 @@ move` fails whenever anything is running inside it — a dev server, an open
 terminal, an editor. So a renamed workspace may live in `anna/` while its branch
 is `ytsykvas/fix-auth`. The UI identifies a workspace by its branch, which is
 what appears in a pull request.
+
+### The chat owns the session, not the workspace
+
+`sessionId` used to sit on the workspace. It moved because the shape decided
+what the application could become: one session per workspace makes a second
+agent in the same worktree a migration, while one per chat makes it another
+record. The UI shows a single chat today; the store already allows more, and
+`agent` is a one-member enum for the same reason.
+
+A chat is created by the **first message**, not by the workspace. A workspace
+nobody has spoken to has no record and no transcript, so the state describes
+what happened rather than what might.
+
+### Transcripts
+
+The SDK's `resume` restores what the _model_ remembers, which is not what the
+screen has to draw. Without a record of our own a chat comes back empty after a
+restart while its session is very much alive.
+
+One JSONL file per chat, appended to as events arrive. Append-only because the
+alternative is rewriting a growing document on every event — an hour-old chat
+would spend most of its time serialising its own past. A line that does not
+parse is skipped rather than thrown on: a crash mid-write leaves a truncated
+last line, and losing the conversation over a partial byte is worse.
+
+Streaming fragments are **not** stored. The finished block follows immediately
+after, and keeping both would replay every answer twice on the next launch.
+
+The filename is the chat id, a uuid, and the directory is flat. A chat outlives
+the name its workspace had when it started, so filing it under that name would
+either strand the file on a rename or require moving it.
+
+### What is deliberately not stored
+
+The subscription's rate limit lives in the service's memory and never reaches
+`state.json`. It describes the account at this moment and expires on its own, so
+a reading restored from disk after a night is worse than none: it would be drawn
+with full confidence and be wrong. It is re-learned from the first turn that runs.
 
 ### Ports
 

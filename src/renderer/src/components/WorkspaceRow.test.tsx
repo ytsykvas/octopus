@@ -14,7 +14,6 @@ function workspace(overrides: Partial<WorkspaceView> = {}): WorkspaceView {
     branch: 'ytsykvas/anna',
     path: '/tmp/planner/anna',
     status: 'idle',
-    sessionId: null,
     port: 3100,
     createdAt: '2026-08-08T00:00:00.000Z',
     ownerId: null,

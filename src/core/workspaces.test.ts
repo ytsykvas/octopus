@@ -158,10 +158,9 @@ describe('createWorkspace', () => {
     expect(second.port).not.toBe(first.port)
   })
 
-  it('starts idle with no agent session', async () => {
+  it('starts idle', async () => {
     const workspace = await create()
     expect(workspace.status).toBe('idle')
-    expect(workspace.sessionId).toBeNull()
   })
 
   it('refuses when the directory is already occupied', async () => {

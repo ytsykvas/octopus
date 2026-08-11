@@ -66,6 +66,7 @@ describe('the exposed bridge', () => {
   it('groups its methods rather than flattening everything', () => {
     expect(Object.keys(api).sort()).toEqual([
       'accounts',
+      'chats',
       'config',
       'dialog',
       'projects',
@@ -127,6 +128,22 @@ describe('channel names', () => {
       () => method('workspaces', 'hasChanges')('w' as never),
       'workspaces:hasChanges'
     ],
+    ['chats.list', () => method('chats', 'list')('w' as never), 'chats:list'],
+    ['chats.open', () => method('chats', 'open')('w' as never), 'chats:open'],
+    ['chats.history', () => method('chats', 'history')('c' as never), 'chats:history'],
+    ['chats.send', () => method('chats', 'send')('c' as never, 'hi' as never), 'chats:send'],
+    ['chats.interrupt', () => method('chats', 'interrupt')('c' as never), 'chats:interrupt'],
+    [
+      'chats.setPermissionMode',
+      () => method('chats', 'setPermissionMode')('c' as never, 'plan' as never),
+      'chats:mode'
+    ],
+    [
+      'chats.answerPermission',
+      () => method('chats', 'answerPermission')('r' as never, 'allow' as never),
+      'chats:permission'
+    ],
+    ['chats.rateLimit', () => method('chats', 'rateLimit')(), 'chats:rateLimit'],
     ['accounts.status', () => method('accounts', 'status')(), 'accounts:status'],
     [
       'dialog.pickDirectory',
@@ -278,5 +295,25 @@ describe('the rest of the surface', () => {
 
     listener()
     expect(handler).toHaveBeenCalledWith()
+  })
+  it('chats.onEvent delivers the envelope and unsubscribes', () => {
+    const handler = vi.fn()
+    const stop = method('chats', 'onEvent')(handler as never) as () => void
+
+    const listener = on.mock.calls.find(([channel]) => channel === 'chats:event')?.[1] as (
+      event: unknown,
+      payload: unknown
+    ) => void
+
+    const envelope = {
+      chatId: 'chat-1',
+      workspaceId: 'planner/kyiv',
+      event: { type: 'text', text: 'there' }
+    }
+    listener({}, envelope)
+    expect(handler).toHaveBeenCalledWith(envelope)
+
+    stop()
+    expect(off).toHaveBeenCalledWith('chats:event', expect.any(Function))
   })
 })

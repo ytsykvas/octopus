@@ -144,7 +144,6 @@ export async function createWorkspace(
     branch,
     path: await canonicalPath(exec, branch, path),
     status: 'idle',
-    sessionId: null,
     port: assignPort(
       id,
       state.workspaces.map((workspace) => workspace.port)

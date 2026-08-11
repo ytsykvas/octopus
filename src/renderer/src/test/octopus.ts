@@ -1,6 +1,7 @@
 import { vi } from 'vitest'
 
 import type { AccountsStatus } from '@core/accounts.js'
+import type { Chat } from '@core/chats.js'
 import type { Config } from '@core/config.js'
 import type { Workspace } from '@core/store.js'
 
@@ -48,6 +49,17 @@ export function installOctopusStub(): Api {
       onData: vi.fn(subscription),
       onExit: vi.fn(subscription)
     },
+    chats: {
+      list: vi.fn(() => ok([])),
+      open: vi.fn(() => ok(chatFixture())),
+      history: vi.fn(() => ok([])),
+      send: vi.fn(() => ok(undefined)),
+      interrupt: vi.fn(() => ok(undefined)),
+      setPermissionMode: vi.fn(() => ok(undefined)),
+      answerPermission: vi.fn(() => ok(undefined)),
+      rateLimit: vi.fn(() => ok(null)),
+      onEvent: vi.fn(subscription)
+    },
     workspaces: {
       list: vi.fn(() => ok([])),
       create: vi.fn(() => ok(workspaceFixture())),
@@ -86,12 +98,26 @@ export function octopus(): Api {
   return window.octopus
 }
 
+function chatFixture(): Chat {
+  return {
+    id: 'chat-1',
+    workspaceId: 'planner/kyiv',
+    agent: 'claude',
+    sessionId: null,
+    model: null,
+    permissionMode: 'default',
+    createdAt: '2026-08-08T00:00:00.000Z'
+  }
+}
+
 function defaultConfig(): Config {
   return {
     version: 1 as const,
     branchPrefix: 'ytsykvas',
     cloneDirectory: '',
     settingSources: 'none' as const,
+    permissionMode: 'default' as const,
+    alwaysAllowedTools: [],
     theme: 'system' as const,
     language: 'en' as const,
     rightPanelWidth: 360,
@@ -131,7 +157,6 @@ function workspaceFixture(): Workspace {
     branch: 'ytsykvas/anna',
     path: '/tmp/planner/anna',
     status: 'idle' as const,
-    sessionId: null,
     port: 3100,
     createdAt: '2026-08-08T00:00:00.000Z',
     ownerId: null

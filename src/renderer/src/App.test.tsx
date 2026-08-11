@@ -44,6 +44,8 @@ function config(overrides: Partial<Config> = {}): Config {
     branchPrefix: 'ytsykvas',
     cloneDirectory: '',
     settingSources: 'none',
+    permissionMode: 'default',
+    alwaysAllowedTools: [],
     theme: 'system',
     language: 'en',
     rightPanelWidth: 360,
@@ -222,11 +224,9 @@ describe('App', () => {
     await user.click(await screen.findByRole('button', { name: 'LE' }))
 
     expect(screen.getByText('/Users/someone/code/ledger')).toBeInTheDocument()
-    expect(
-      screen.getByText(
-        'Base branch origin/main. The agent chat appears here once workspaces exist.'
-      )
-    ).toBeInTheDocument()
+    // The centre is the chat once a project is open, and a chat without a
+    // workspace has nowhere to run — so it says which one to pick.
+    expect(await screen.findByText('Select a workspace')).toBeInTheDocument()
   })
 
   it('lists the workspaces of the project that is open', async () => {
@@ -430,13 +430,16 @@ describe('App', () => {
     expect(window.octopus.workspaces.create).not.toHaveBeenCalled()
   })
 
-  it('folds the right pane away and offers it back from the title bar', async () => {
+  // One control in one place. The button that folds the pane away could not
+  // live inside it: once folded, there would be nothing left to click.
+  it('folds the right pane away and back from one button in the title bar', async () => {
     const user = await openApp()
+    const bar = screen.getByRole('banner')
 
-    await user.click(screen.getByRole('button', { name: 'Collapse panel' }))
+    await user.click(within(bar).getByRole('button', { name: 'Collapse panel' }))
     expect(screen.queryByRole('button', { name: 'Changes' })).not.toBeInTheDocument()
 
-    await user.click(screen.getByRole('button', { name: 'Show panel' }))
+    await user.click(within(bar).getByRole('button', { name: 'Show panel' }))
     expect(screen.getByRole('button', { name: 'Changes' })).toBeInTheDocument()
   })
 

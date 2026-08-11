@@ -8,6 +8,7 @@ import { randomUUID } from 'node:crypto'
 
 import { z } from 'zod'
 
+import { type PermissionMode, PermissionModeSchema } from './chats.js'
 import { configFile } from './paths.js'
 import { readJsonFile, writeJsonFile } from './persist.js'
 
@@ -43,6 +44,26 @@ export const ConfigSchema = z.object({
   cloneDirectory: z.string().default(''),
 
   settingSources: SettingSourcesModeSchema,
+
+  /**
+   * How much a new chat lets the agent do before asking.
+   *
+   * Global rather than per workspace: the answer is a working habit, and being
+   * asked it again on every new branch is the kind of friction that gets a
+   * setting turned all the way off.
+   */
+  permissionMode: PermissionModeSchema.default('default'),
+
+  /**
+   * Tools the user has answered "always" for.
+   *
+   * Kept here rather than inside the SDK's own permission rules, because
+   * `settingSources` may well be `none` — in which case the SDK has nowhere to
+   * write them, and the answer would be forgotten the moment the session ends.
+   * A list in the config is also a list the user can read and shorten (§4).
+   */
+  alwaysAllowedTools: z.array(z.string()).default([]),
+
   theme: ThemePreferenceSchema,
 
   /**
@@ -97,10 +118,14 @@ export function createDefaultConfig(
   now: Date = new Date(),
   uuid: () => string = randomUUID
 ): Config {
+  const permissionMode: PermissionMode = 'default'
+
   return {
     version: 1,
     branchPrefix,
     settingSources: 'none',
+    permissionMode,
+    alwaysAllowedTools: [],
     theme: 'system',
     language: 'en',
     cloneDirectory: '',
@@ -129,12 +154,21 @@ export async function saveConfig(config: Config, filePath: string = configFile()
 }
 
 /**
+ * A setting source as the SDK names it.
+ *
+ * Spelled out rather than imported from the SDK so this module stays free of
+ * it: the config is read by the preload bridge, and a dependency here would
+ * follow it there.
+ */
+export type SettingSourceName = 'user' | 'project' | 'local'
+
+/**
  * Maps the config mode onto the Agent SDK's `settingSources` value.
  *
  * The empty array is exactly what stops the SDK from quietly picking up
  * `CLAUDE.md` and user settings behind our back (§12.3).
  */
-export function toSdkSettingSources(mode: SettingSourcesMode): string[] {
+export function toSdkSettingSources(mode: SettingSourcesMode): SettingSourceName[] {
   switch (mode) {
     case 'none':
       return []

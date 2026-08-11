@@ -171,6 +171,16 @@
   ::selection {
     background-color: color-mix(in srgb, var(--accent) 25%, transparent);
   }
+
+  /* Scrollbars follow the theme like everything else.
+     Left to the platform they are painted for a light page, so on the dark
+     canvas a pale bar sat down the side of the chat — the one piece of chrome
+     that ignored the palette. `scrollbar-color` inherits, so declaring it once
+     on the root reaches every scrolling box, xterm's viewport included. */
+  :root {
+    scrollbar-color: var(--border-strong) transparent;
+    scrollbar-width: thin;
+  }
 }
 
 @layer components {
@@ -204,6 +214,19 @@
       color-mix(in srgb, var(--project-color) 18%, var(--surface)),
       color-mix(in srgb, var(--project-color) 3%, var(--surface))
     );
+  }
+
+  /* A message you sent, carrying the project's colour the same way the sidebar
+     and the active tab do — an 18% wash, so identity reads alike everywhere.
+     A saturated fill was available and deliberately not used: the palette is
+     tuned to sit under two initials, and these bubbles hold prose.
+
+     `--project-color` is set inline by the chat. The fallbacks resolve to the
+     plain surface, so a bubble drawn before a project is open looks exactly as
+     it did rather than losing its background to an invalid colour-mix. */
+  .bubble-sent {
+    background-color: color-mix(in srgb, var(--project-color, var(--muted)) 18%, var(--muted));
+    border-color: color-mix(in srgb, var(--project-color, var(--border)) 30%, var(--border));
   }
 
   .panel {

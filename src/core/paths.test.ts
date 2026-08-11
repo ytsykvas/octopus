@@ -4,6 +4,8 @@ import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 
 import {
+  chatsDir,
+  chatTranscript,
   configFile,
   projectDir,
   projectScriptsDir,
@@ -92,5 +94,23 @@ describe('workspace paths', () => {
     const root = rootDir()
     expect(workspacesDir(PROJECT)).toBe(join(root, 'workspaces', PROJECT))
     expect(workspacePath(PROJECT, 'kyiv')).toBe(join(root, 'workspaces', PROJECT, 'kyiv'))
+  })
+})
+
+describe('chat transcripts', () => {
+  it('keeps every transcript in one directory', () => {
+    expect(chatsDir(ROOT)).toBe(join(ROOT, 'chats'))
+  })
+
+  // Flat rather than nested under the workspace: a chat outlives the name its
+  // workspace had when it started, and renaming must not strand the file.
+  it('names the file after the chat and nothing else', () => {
+    expect(chatTranscript('9f3c-1', ROOT)).toBe(join(ROOT, 'chats', '9f3c-1.jsonl'))
+  })
+
+  it('falls back to rootDir when no root is given', () => {
+    const root = rootDir()
+    expect(chatsDir()).toBe(join(root, 'chats'))
+    expect(chatTranscript('9f3c-1')).toBe(join(root, 'chats', '9f3c-1.jsonl'))
   })
 })

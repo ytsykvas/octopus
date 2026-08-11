@@ -438,7 +438,7 @@ const q = query({
   prompt: userInputStream, // async generator — follow-ups without a restart
   options: {
     cwd: workspace.path,
-    resume: workspace.sessionId, // continues after an application restart
+    resume: chat.sessionId, // continues after an application restart
     settingSources: [], // ← nothing is loaded implicitly
     systemPrompt: { type: 'preset', preset: 'claude_code' },
     canUseTool: async (req) => {
@@ -451,7 +451,7 @@ const q = query({
 **`settingSources: []` is the technical answer to the main complaint about Conductor.** The SDK loads no settings and no `CLAUDE.md` implicitly; everything entering the context is added by us, deliberately. The config exposes a switch: nothing / `project` / `user + project + local`.
 
 Session control: `interrupt()`, `setModel()`, `setPermissionMode()`, `streamInput()`, `close()`.
-The `sessionId` from `SDKSystemMessage` is persisted — that is what enables resuming after a restart.
+The `sessionId` from `SDKSystemMessage` is persisted — that is what enables resuming after a restart. It is stored on the **chat**, not the workspace: one session per workspace would make a second agent in the same worktree a migration, while one per chat makes it another record (§17).
 
 ### 12.4 On-disk layout
 
@@ -489,12 +489,15 @@ Everything under one directory (Conductor spreads across `~/conductor` and `~/.c
       persist.ts     atomic JSON with zod validation
       config.ts      settings, setting-source switch, licensing hooks
       store.ts       projects and workspaces, port assignment
-      types.ts       Workspace, Project, AgentEvent, WorkspaceStatus
+      types.ts       Workspace, Project, WorkspaceStatus, identifiers
+      events.ts      AgentEvent — the SDK's shapes stop here
       git.ts         git operations
       projects.ts    repository validation, project records
       service.ts     core facade for the IPC layer
-      worktree.ts    (next) worktree operations
-      agent.ts       (next) Agent SDK, event mapping
+      worktree.ts    worktree operations
+      agent.ts       Agent SDK, session lifecycle, event mapping
+      chats.ts       what a chat is
+      transcript.ts  chat history as append-only JSONL
     main/index.ts    window + IPC
     preload/index.ts contextBridge, typed API
     renderer/
@@ -548,7 +551,7 @@ A short-lived token keeps control: a cancelled subscription or a refund revokes 
 
 ### 15.3 What is reserved now (zero cost)
 
-- **`src/core/entitlements.ts`** — a single point answering "is this allowed". In stage 1 it is a stub always returning `{ status: 'unlimited' }`. What matters is that every future feature gate goes **through it from day one** rather than being scattered through the code later.
+- **`src/core/entitlements.ts`** — a single point answering "is this allowed". Not written yet: the file was described here as an existing stub for a while, which is the sort of claim that sends a reader looking for something that was never there. What it is for still holds — when the first gate appears, it goes **through one place from day one** rather than being scattered later.
 - **`deviceId`** in `config.json` — a stable UUID generated on first run. Unused today; later the anchor for licence binding and trial accounting.
 - **`installedAt`** — first-run timestamp, needed to count the trial.
 - **Room for `ownerId`** in the state types — no structure hardcodes the assumption of exactly one user.
@@ -589,10 +592,10 @@ The terminal moved into scope early: account sign-in needs an interactive sessio
 ## 17. Open questions
 
 - **Workspace naming** — given names drawn at random from a pool of 256, task-derived names, or generated from the prompt text.
-- **Tool permissions** — which are automatic, which prompt, whether per-project profiles are needed.
+- **Tool permissions** — settled for now: the read-only tools are automatic, everything else prompts in the chat, and an answer of "always" is stored per tool in the config where it can be taken back. The mode a new chat starts in is a global setting, so the question is not asked again on each new branch. Open: whether per-project profiles are needed, and whether "always" should narrow to an argument (`Bash(npm test:*)`) rather than a whole tool.
 - **Cross-platform** — whether Linux stays in the plans (affects CI only, not architecture).
 - **Task sources** — creating a workspace from a GitHub issue or a Linear ticket, as Conductor does.
 - **Code review** — inline comments on a diff that become attachments to the prompt.
-- **Several agents per workspace** — whether parallel runs in one directory are needed.
-- **What the list shows** — agent status, change count, CI state, session cost.
+- **Several agents per workspace** — the store already allows it: a chat owns the session, and `agent` is an enum with one member. Open is whether the interface should offer it, and what two agents editing the same files at once actually does. Conductor allows it and warns about exactly that.
+- **What the list shows** — agent status, change count, CI state. Not session cost: the SDK's `total_cost_usd` is what the same tokens would have cost through the API, which a subscription never pays, and its own documentation calls it "an estimate, not a billing statement". Shown in an interface it is a made-up number in a currency. If usage is worth surfacing at all it belongs as tokens or as distance to a rate limit, not as dollars.
 - **Monetisation model** — whether $20 stays as full access (see the note in §15.5), and whether a separate auth service is warranted at all given the risks in §15.6.

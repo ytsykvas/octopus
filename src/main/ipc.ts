@@ -11,10 +11,11 @@ import type { OpenDialogOptions, WebContents } from 'electron'
 
 import type { Config } from '../core/config.js'
 import { type AccountKind, checkAccounts, signOut } from '../core/accounts.js'
+import { ChatMessageSchema, PermissionAnswerSchema, PermissionModeSchema } from '../core/chats.js'
 import type { RemoteRepository } from '../core/github.js'
 import { InstructionBodySchema, InstructionKindSchema } from '../core/instructions.js'
 import { ScriptBodySchema, ScriptKindSchema } from '../core/scripts.js'
-import type { OctopusService } from '../core/service.js'
+import type { ChatEvent, OctopusService } from '../core/service.js'
 import { ProjectPatchSchema } from '../core/store.js'
 import { TerminalSpecSchema } from '../core/terminal.js'
 import type { ThemeName } from '../core/types.js'
@@ -60,6 +61,14 @@ export interface IpcHost {
   readonly prefersDark: () => boolean
   /** Sends a theme change to every open window. */
   readonly broadcastTheme: (theme: ThemeName) => void
+  /**
+   * Sends an agent event to every open window.
+   *
+   * A broadcast rather than a reply to whoever sent the message: events keep
+   * arriving long after the call that started them returned, and a second
+   * window looking at the same workspace should see the same conversation.
+   */
+  readonly broadcastChatEvent: (event: ChatEvent) => void
 }
 
 /**
@@ -181,6 +190,44 @@ export function registerIpc(
   host.handle('workspaces:hasChanges', (_event, workspaceId: string) =>
     attempt(() => service.workspaceHasChanges(workspaceId))
   )
+
+  // The agent chat. Everything the renderer sends here reaches a model or a
+  // stored record, so each argument is validated rather than trusted.
+  service.onAgentEvent(host.broadcastChatEvent)
+
+  // Listing does not create, opening does. The distinction is what keeps a
+  // workspace nobody has spoken to free of a record and a transcript file.
+  host.handle('chats:list', (_event, workspaceId: string) =>
+    attempt(() => service.listChats(workspaceId))
+  )
+
+  host.handle('chats:open', (_event, workspaceId: string) =>
+    attempt(() => service.openChat(workspaceId))
+  )
+
+  host.handle('chats:history', (_event, chatId: string) =>
+    attempt(() => service.chatHistory(chatId))
+  )
+
+  host.handle('chats:send', (_event, chatId: string, text: unknown) =>
+    attempt(() => service.sendToChat(chatId, ChatMessageSchema.parse(text)))
+  )
+
+  host.handle('chats:interrupt', (_event, chatId: string) =>
+    attempt(() => service.interruptChat(chatId))
+  )
+
+  host.handle('chats:mode', (_event, chatId: string, mode: unknown) =>
+    attempt(() => service.setChatPermissionMode(chatId, PermissionModeSchema.parse(mode)))
+  )
+
+  host.handle('chats:permission', (_event, requestId: string, answer: unknown) =>
+    attempt(() => service.answerPermission(requestId, PermissionAnswerSchema.parse(answer)))
+  )
+
+  // Read once when a window opens. Afterwards the figure arrives on its own,
+  // in the same stream as everything else the agent says.
+  host.handle('chats:rateLimit', () => attempt(() => service.getRateLimit()))
 
   // Choosing a directory needs Electron's dialog, so it lives here.
   host.handle('dialog:pickDirectory', async (event, title: string) => {

@@ -1,6 +1,7 @@
 import {
   PanelLeftClose,
   PanelLeftOpen,
+  PanelRightClose,
   PanelRightOpen,
   Settings as SettingsIcon
 } from 'lucide-react'
@@ -8,10 +9,11 @@ import { useCallback, useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import type { Config } from '@core/config.js'
-import type { Project } from '@core/store.js'
 import type { ThemeName } from '@core/types.js'
 
+import { Chat } from './components/chat/Chat.js'
 import { RepositoryPicker } from './components/RepositoryPicker.js'
+import { Placeholder } from './components/Placeholder.js'
 import { ProjectSettings } from './components/ProjectSettings.js'
 import { ProjectTabs } from './components/ProjectTabs.js'
 import { RightPanel } from './components/RightPanel.js'
@@ -206,18 +208,25 @@ export function App(): React.JSX.Element {
           </span>
         )}
 
-        {!rightPanelOpen && (
-          <button
-            type="button"
-            onClick={() => {
-              setRightPanelOpen(true)
-            }}
-            className="text-ink-faint hover:text-ink focus-ring ml-auto rounded p-1 transition-colors"
-            title={t('panel.expand')}
-          >
+        {/* One control in one place, rather than a collapse inside the pane and
+            an expand out here: the button that folds something away should be
+            the button that brings it back, or the second one has to be hunted
+            for in a pane that is no longer on screen. */}
+        <button
+          type="button"
+          onClick={() => {
+            setRightPanelOpen((open) => !open)
+          }}
+          className="text-ink-faint hover:text-ink focus-ring ml-auto rounded p-1 transition-colors"
+          title={rightPanelOpen ? t('panel.collapse') : t('panel.expand')}
+          aria-label={rightPanelOpen ? t('panel.collapse') : t('panel.expand')}
+        >
+          {rightPanelOpen ? (
+            <PanelRightClose aria-hidden size={14} />
+          ) : (
             <PanelRightOpen aria-hidden size={14} />
-          </button>
-        )}
+          )}
+        </button>
       </header>
 
       <div className="flex min-h-0 flex-1">
@@ -309,15 +318,28 @@ export function App(): React.JSX.Element {
         </div>
 
         <main className="flex min-w-0 flex-1 flex-col">
-          <div className="flex-1 overflow-auto p-6">
-            {error !== null && (
-              <div className="bg-danger-bg text-danger border-danger/25 mb-5 rounded-[var(--radius-control)] border px-3 py-2">
-                {error}
-              </div>
-            )}
+          {error !== null && (
+            <div className="bg-danger-bg text-danger border-danger/25 m-6 mb-0 rounded-[var(--radius-control)] border px-3 py-2">
+              {error}
+            </div>
+          )}
 
-            <CenterPane project={selectedProject} hasProjects={projects.all.length > 0} />
-          </div>
+          {/* The chat needs the full height of the pane — a padded, scrolling
+              wrapper around it would give it two scrollbars, one of which
+              would carry the composer off the bottom of the window. */}
+          {projects.all.length === 0 || !selectedProject ? (
+            // No padded wrapper: the placeholder brings its own frame and
+            // centres itself, so one here would centre it inside a box already
+            // inset from the pane and leave it sitting low.
+            <CenterPane hasProjects={projects.all.length > 0} />
+          ) : (
+            <Chat
+              workspace={
+                workspaces.flat.find((workspace) => workspace.id === selectedWorkspaceId) ?? null
+              }
+              color={selectedProject.color}
+            />
+          )}
         </main>
 
         {rightPanelOpen && (
@@ -330,9 +352,6 @@ export function App(): React.JSX.Element {
             }}
             width={config?.rightPanelWidth ?? 360}
             onWidthChange={(rightPanelWidth) => void updateConfig({ rightPanelWidth })}
-            onCollapse={() => {
-              setRightPanelOpen(false)
-            }}
           />
         )}
       </div>
@@ -384,13 +403,8 @@ export function App(): React.JSX.Element {
   )
 }
 
-function CenterPane({
-  project,
-  hasProjects
-}: {
-  project: Project | null
-  hasProjects: boolean
-}): React.JSX.Element {
+/** What the centre shows before there is a project to talk to the agent about. */
+function CenterPane({ hasProjects }: { hasProjects: boolean }): React.JSX.Element {
   const { t } = useTranslation()
 
   if (!hasProjects) {
@@ -399,30 +413,7 @@ function CenterPane({
     )
   }
 
-  if (!project) {
-    return (
-      <Placeholder title={t('center.noSelectionTitle')}>{t('center.noSelectionBody')}</Placeholder>
-    )
-  }
-
   return (
-    <Placeholder title={project.name}>
-      {t('center.projectBody', { branch: project.baseBranch })}
-    </Placeholder>
-  )
-}
-
-function Placeholder({
-  title,
-  children
-}: {
-  title: string
-  children: React.ReactNode
-}): React.JSX.Element {
-  return (
-    <div className="panel mx-auto flex min-h-56 max-w-lg flex-col items-center justify-center p-10 text-center">
-      <p className="mb-2 text-[15px] font-semibold">{title}</p>
-      <p className="text-ink-soft leading-relaxed">{children}</p>
-    </div>
+    <Placeholder title={t('center.noSelectionTitle')}>{t('center.noSelectionBody')}</Placeholder>
   )
 }

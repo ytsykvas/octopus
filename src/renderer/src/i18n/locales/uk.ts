@@ -145,13 +145,58 @@ export const uk: Translation = {
     resize: 'Змінити ширину панелі'
   },
 
+  chat: {
+    placeholder: 'Попросіть агента щось зробити в цьому воркспейсі…',
+    send: 'Надіслати',
+    stop: 'Спинити',
+    working: 'Працює…',
+    thinking: 'Міркує',
+
+    noWorkspaceTitle: 'Оберіть воркспейс',
+    noWorkspaceBody:
+      'Розмова належить воркспейсу: у його робочому дереві працює агент, а на його гілку лягає результат.',
+    emptyTitle: 'Почніть розмову',
+    emptyBody:
+      'Перше повідомлення запускає сесію агента в цьому робочому дереві. Гілка вже існує — тут її ніхто не перейменовує.',
+
+    mode: 'Дозволи',
+    modeDefault: 'Питати',
+    modePlan: 'Лише план',
+    modeAcceptEdits: 'Правки без питань',
+
+    permissionTitle: 'Агент хоче скористатися {{tool}}',
+    permissionAnswered: 'Відповідь уже дано.',
+    allow: 'Дозволити',
+    always: 'Завжди дозволяти',
+    deny: 'Відхилити',
+
+    duration: '{{seconds}} с',
+    tokens_one: '{{tokens}} токен',
+    tokens_few: '{{tokens}} токени',
+    tokens_many: '{{tokens}} токенів',
+    tokens_other: '{{tokens}} токенів',
+
+    endedInterrupted: 'спинено',
+    endedLimit: 'уперлось у ліміт',
+    endedTooLong: 'розмова завелика',
+    endedBlocked: 'зупинив хук',
+    endedFailed: 'завершилось помилкою',
+
+    usage: 'Витрата підписки',
+    usageResets: 'скинеться через {{time}}',
+    usageWarning: 'близько до ліміту',
+    usageReached: 'ліміт вичерпано',
+    hours: 'г',
+    minutes: 'хв',
+    soon: 'ось-ось'
+  },
+
   center: {
     noProjectsTitle: 'Почніть з репозиторію',
     noProjectsBody:
       'Додайте проєкт у лівій панелі. Усередині нього створюються воркспейси — кожен з власною гілкою, текою й сесією агента.',
     noSelectionTitle: 'Виберіть проєкт',
-    noSelectionBody: 'Оберіть зі списку ліворуч.',
-    projectBody: 'Базова гілка {{branch}}. Чат з агентом з’явиться тут, щойно будуть воркспейси.'
+    noSelectionBody: 'Оберіть зі списку ліворуч.'
   },
 
   settings: {
@@ -191,6 +236,24 @@ export const uk: Translation = {
     settingSourcesAll: 'Усе',
     settingSourcesAllHint:
       'Підтягує користувацькі, проєктні й локальні налаштування — як звичайний CLI.',
+
+    permissionMode: 'Що дозволено новому чату',
+    permissionModeHint:
+      'Початковий стан для кожного воркспейсу, щоб питання не поставало на кожній новій гілці. Окремий чат усе одно можна перемкнути.',
+    permissionAsk: 'Питати',
+    permissionAskHint:
+      'Читання відбувається мовчки; запис файлу чи запуск команди чекає на відповідь.',
+    permissionAcceptEdits: 'Правки без питань',
+    permissionAcceptEditsHint:
+      'Зміни у файлах проходять без запиту. Команди все одно чекають — вони виходять за межі робочого дерева.',
+    permissionPlan: 'Лише план',
+    permissionPlanHint: 'Агент пропонує підхід і нічого не змінює, доки ви не погодитесь.',
+
+    alwaysAllowed: 'Відповідь «завжди»',
+    alwaysAllowedHint:
+      'Інструменти, які ви пропустили назавжди. Про них більше не питають у жодному воркспейсі, доки не приберете їх тут.',
+    alwaysAllowedEmpty: 'Поки що порожньо.',
+    alwaysAllowedRemove: 'Питати знову',
 
     accountsHint:
       'octopus не зберігає облікових даних. Їх тримає CLI у системному сховищі ключів; цей екран лише показує те, що він повідомляє.',

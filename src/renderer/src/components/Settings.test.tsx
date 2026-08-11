@@ -17,6 +17,8 @@ function config(overrides: Partial<Config> = {}): Config {
     branchPrefix: 'ytsykvas',
     cloneDirectory: '',
     settingSources: 'none',
+    permissionMode: 'default',
+    alwaysAllowedTools: [],
     theme: 'system',
     language: 'en',
     rightPanelWidth: 360,
@@ -114,6 +116,55 @@ describe('Settings', () => {
     await user.click(screen.getByRole('button', { name: /^Everything/ }))
 
     expect(props.onChange).toHaveBeenCalledExactlyOnceWith({ settingSources: 'all' })
+  })
+
+  // Global rather than per workspace: being asked the same question on every
+  // new branch is the friction that gets a setting turned all the way off.
+  it('sets what a new chat may do without asking', async () => {
+    const user = userEvent.setup()
+    const props = await renderSettings()
+
+    await openSection(user, 'Agent')
+    await user.click(screen.getByRole('button', { name: /^Accept edits/ }))
+
+    expect(props.onChange).toHaveBeenCalledExactlyOnceWith({ permissionMode: 'acceptEdits' })
+  })
+
+  it('says nothing has been waved through yet', async () => {
+    const user = userEvent.setup()
+    await renderSettings()
+
+    await openSection(user, 'Agent')
+
+    expect(screen.getByText('Nothing yet.')).toBeInTheDocument()
+  })
+
+  // An answer given once in a chat weeks ago quietly changes what every future
+  // session may do. Listing it here is what makes it something to take back.
+  it('lists the tools answered "always" and takes one back', async () => {
+    const user = userEvent.setup()
+    const props = await renderSettings({ config: config({ alwaysAllowedTools: ['Edit', 'Bash'] }) })
+
+    await openSection(user, 'Agent')
+    expect(screen.getByText('Edit')).toBeInTheDocument()
+
+    const [first] = screen.getAllByRole('button', { name: 'Ask again' })
+    if (!first) throw new Error('no way to take an answer back')
+    await user.click(first)
+
+    expect(props.onChange).toHaveBeenCalledExactlyOnceWith({ alwaysAllowedTools: ['Bash'] })
+  })
+
+  it('signs off the About section with the mascot', async () => {
+    const user = userEvent.setup()
+    await renderSettings()
+
+    await openSection(user, 'About')
+
+    const image = screen.getByRole('dialog').querySelector('img')
+    expect(image?.getAttribute('src')).toContain('octopus')
+    // Decoration: it is hidden from anything reading the screen aloud.
+    expect(screen.queryByRole('img')).not.toBeInTheDocument()
   })
 
   // The account sits above the branch prefix and the clone destination because

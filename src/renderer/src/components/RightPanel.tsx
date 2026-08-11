@@ -1,5 +1,4 @@
-import { PanelRightClose } from 'lucide-react'
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import type { WorkspaceView } from '@core/workspaces.js'
@@ -25,8 +24,35 @@ const TABS: readonly {
   { id: 'server', labelKey: 'scripts.server' }
 ]
 
-/** Matches the lower bound on `rightPanelWidth` in the config schema. */
+/**
+ * Floor before the tabs are measured, and the lower bound the config schema
+ * holds. The real floor is whatever the tab row needs — see `measureTabs`.
+ */
 const MIN_WIDTH = 280
+
+/**
+ * How narrow the pane can be before its tabs stop fitting.
+ *
+ * Measured rather than chosen: the labels change width with the language, and
+ * a number picked against English left the Ukrainian ones overflowing. The pane
+ * does not shrink, so anything sticking out of it pushed the whole window wider
+ * and put a horizontal scrollbar under the application.
+ *
+ * Everything is read back from the DOM — padding, gap, each button — so it
+ * cannot drift from the classes that produce them.
+ */
+function measureTabs(row: HTMLElement): number {
+  const styles = getComputedStyle(row)
+  const side = Number.parseFloat(styles.paddingLeft) + Number.parseFloat(styles.paddingRight)
+  const gap = Number.parseFloat(styles.columnGap) || 0
+
+  const buttons = [...row.children].reduce(
+    (total, button) => total + button.getBoundingClientRect().width,
+    0
+  )
+
+  return Math.ceil(side + buttons + gap * Math.max(0, row.children.length - 1))
+}
 
 /**
  * Room the rest of the window keeps: the sidebar (`w-64`) plus enough centre
@@ -37,8 +63,8 @@ const MIN_WIDTH = 280
 const SIDEBAR_WIDTH = 256
 const MIN_CENTRE_WIDTH = 360
 
-function maxWidthFor(windowWidth: number): number {
-  return Math.max(MIN_WIDTH, windowWidth - SIDEBAR_WIDTH - MIN_CENTRE_WIDTH)
+function maxWidthFor(windowWidth: number, minWidth: number): number {
+  return Math.max(minWidth, windowWidth - SIDEBAR_WIDTH - MIN_CENTRE_WIDTH)
 }
 
 interface RightPanelProps {
@@ -50,7 +76,6 @@ interface RightPanelProps {
   readonly width: number
   /** Persists the width; called when a drag ends, not during it. */
   readonly onWidthChange: (width: number) => void
-  readonly onCollapse: () => void
 }
 
 export function RightPanel({
@@ -59,15 +84,16 @@ export function RightPanel({
   scriptPaths,
   onEditScripts,
   width,
-  onWidthChange,
-  onCollapse
+  onWidthChange
 }: RightPanelProps): React.JSX.Element {
-  const { t } = useTranslation()
+  const { t, i18n } = useTranslation()
   const [tab, setTab] = useState<RightTab>('diff')
   // The pane follows the cursor from local state; the config only hears about
   // the width once the drag is over.
   const [dragWidth, setDragWidth] = useState<number | null>(null)
-  const [maxWidth, setMaxWidth] = useState(() => maxWidthFor(window.innerWidth))
+  const [windowWidth, setWindowWidth] = useState(() => window.innerWidth)
+  const [minWidth, setMinWidth] = useState(MIN_WIDTH)
+  const tabs = useRef<HTMLDivElement>(null)
 
   const active = workspaces.find((workspace) => workspace.id === activeWorkspaceId) ?? null
 
@@ -75,7 +101,7 @@ export function RightPanel({
   // covering the centre, and growing it should make the extra room available.
   useEffect(() => {
     const onResize = (): void => {
-      setMaxWidth(maxWidthFor(window.innerWidth))
+      setWindowWidth(window.innerWidth)
     }
 
     window.addEventListener('resize', onResize)
@@ -84,9 +110,20 @@ export function RightPanel({
     }
   }, [])
 
+  // Re-measured on a language change, which is when the labels get longer.
+  useEffect(() => {
+    const row = tabs.current
+    // Attached before effects run; guarded only because the ref's type admits null.
+    /* v8 ignore next */
+    if (!row) return
+
+    setMinWidth(Math.max(MIN_WIDTH, measureTabs(row)))
+  }, [i18n.language])
+
+  const maxWidth = maxWidthFor(windowWidth, minWidth)
   // Clamped on the way out rather than on the way in, so a width saved on a
   // wide display is kept in the config and comes back when the window does.
-  const applied = Math.min(dragWidth ?? width, maxWidth)
+  const applied = Math.min(Math.max(dragWidth ?? width, minWidth), maxWidth)
 
   return (
     <section
@@ -95,7 +132,7 @@ export function RightPanel({
     >
       <ResizeHandle
         width={applied}
-        min={MIN_WIDTH}
+        min={minWidth}
         max={maxWidth}
         onResize={setDragWidth}
         onCommit={(committed) => {
@@ -104,7 +141,7 @@ export function RightPanel({
         }}
       />
 
-      <div className="border-line flex h-11 shrink-0 items-center gap-1 border-b px-2">
+      <div ref={tabs} className="border-line flex h-11 shrink-0 items-center gap-1 border-b px-2">
         {TABS.map((item) => (
           <button
             key={item.id}
@@ -124,15 +161,6 @@ export function RightPanel({
             {t(item.labelKey)}
           </button>
         ))}
-
-        <button
-          type="button"
-          onClick={onCollapse}
-          title={t('panel.collapse')}
-          className="text-ink-faint hover:text-ink focus-ring ml-auto rounded p-1 transition-colors"
-        >
-          <PanelRightClose aria-hidden size={14} />
-        </button>
       </div>
 
       {/* Anything holding a terminal gets no padding and no scroll container

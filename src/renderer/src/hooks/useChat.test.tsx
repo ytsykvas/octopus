@@ -1,0 +1,88 @@
+import { act, renderHook, waitFor } from '@testing-library/react'
+import { describe, expect, it, vi } from 'vitest'
+
+import type { Chat } from '@core/chats.js'
+import type { ChatEntry } from '@core/transcript.js'
+
+import type { Failure, Result } from '../../../preload/index.js'
+import { chat } from '../test/chat.js'
+import { octopus } from '../test/octopus.js'
+import { useChat } from './useChat.js'
+
+/** The English fallback is enough here; the mapping is `useErrorMessage`'s job. */
+const describeFailure = (failure: Failure): string => failure.error
+
+/** A promise the test resolves by hand, so it can act while one is in flight. */
+function held<T>(): { promise: Promise<T>; resolve: (value: T) => void } {
+  let resolve: (value: T) => void = () => undefined
+  const promise = new Promise<T>((settle) => {
+    resolve = settle
+  })
+
+  return { promise, resolve }
+}
+
+describe('without a workspace', () => {
+  // The pane shows a placeholder instead, so nothing here is reachable through
+  // the UI — but the hook is an API, and an API that misbehaves when handed a
+  // null is one somebody will eventually hand a null.
+  it('asks the bridge for nothing and does nothing when driven', async () => {
+    const { result } = renderHook(() => useChat(null, describeFailure))
+
+    expect(result.current.loading).toBe(false)
+    expect(octopus().chats.list).not.toHaveBeenCalled()
+
+    await act(async () => {
+      await result.current.send('hello')
+      await result.current.interrupt()
+      await result.current.setMode('plan')
+    })
+
+    expect(octopus().chats.open).not.toHaveBeenCalled()
+    expect(octopus().chats.interrupt).not.toHaveBeenCalled()
+    expect(octopus().chats.setPermissionMode).not.toHaveBeenCalled()
+  })
+})
+
+describe('a load that outlives the hook', () => {
+  // Switching workspace quickly, or closing the pane mid-read. Applying the
+  // answer then would set state on something that is gone.
+  it('is dropped when the chat lookup comes back too late', async () => {
+    const lookup = held<Result<Chat[]>>()
+    vi.mocked(octopus().chats.list).mockReturnValue(lookup.promise)
+
+    const { unmount } = renderHook(() => useChat('planner/anna', describeFailure))
+    unmount()
+
+    await act(async () => {
+      lookup.resolve({ ok: true, value: [chat()] })
+      await lookup.promise
+    })
+
+    expect(octopus().chats.history).not.toHaveBeenCalled()
+  })
+
+  it('is dropped when the history comes back too late', async () => {
+    vi.mocked(octopus().chats.list).mockResolvedValue({ ok: true, value: [chat()] })
+
+    const history = held<Result<ChatEntry[]>>()
+    vi.mocked(octopus().chats.history).mockReturnValue(history.promise)
+
+    const { result, unmount } = renderHook(() => useChat('planner/anna', describeFailure))
+    await waitFor(() => {
+      expect(octopus().chats.history).toHaveBeenCalled()
+    })
+
+    unmount()
+
+    await act(async () => {
+      history.resolve({
+        ok: true,
+        value: [{ role: 'user', at: '2026-08-11T09:00:00.000Z', text: 'too late' }]
+      })
+      await history.promise
+    })
+
+    expect(result.current.entries).toEqual([])
+  })
+})

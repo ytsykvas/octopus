@@ -6,10 +6,14 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 
 import { InvalidFileError } from './persist.js'
 import {
+  addChat,
   addProject,
   addWorkspace,
   assignPort,
+  type Chat,
+  chatsOfWorkspace,
   EMPTY_STATE,
+  findChat,
   findProject,
   loadState,
   migrate,
@@ -23,6 +27,7 @@ import {
   saveState,
   type State,
   StateConflictError,
+  updateChat,
   updateWorkspace,
   type Workspace,
   workspacesOfProject
@@ -46,7 +51,6 @@ function makeWorkspace(overrides: Partial<Workspace> = {}): Workspace {
     branch: 'ytsykvas/kyiv',
     path: '/ws/planner/kyiv',
     status: 'idle',
-    sessionId: null,
     port: 3100,
     createdAt: '2026-08-07T12:00:00.000Z',
     ownerId: null,
@@ -137,7 +141,8 @@ describe('migration', () => {
         { ...project, id: 'esl', repoPath: '/repos/esl', color: undefined },
         { ...project, id: 'planner-2', repoPath: '/repos/planner-2', color: undefined }
       ],
-      workspaces: []
+      workspaces: [],
+      chats: []
     }
 
     const colours = migrate(legacy).projects.map((item) => item.color)
@@ -148,7 +153,8 @@ describe('migration', () => {
     const stored = {
       version: 1 as const,
       projects: [{ ...project, color: 'teal' as const }],
-      workspaces: []
+      workspaces: [],
+      chats: []
     }
 
     expect(migrate(stored).projects[0]?.color).toBe('teal')
@@ -163,7 +169,8 @@ describe('migration', () => {
         { ...project, color: PROJECT_COLORS[0] },
         { ...project, id: 'esl', repoPath: '/repos/esl', color: undefined }
       ],
-      workspaces: []
+      workspaces: [],
+      chats: []
     }
 
     expect(migrate(stored).projects[1]?.color).not.toBe(PROJECT_COLORS[0])
@@ -374,10 +381,10 @@ describe('workspaces', () => {
 
   it('updates only the fields passed in', () => {
     const state = addWorkspace(withProject, makeWorkspace())
-    const after = updateWorkspace(state, 'planner/kyiv', { status: 'running', sessionId: 'sess-1' })
+    const after = updateWorkspace(state, 'planner/kyiv', { status: 'running', port: 3200 })
     expect(after.workspaces[0]).toMatchObject({
       status: 'running',
-      sessionId: 'sess-1',
+      port: 3200,
       branch: 'ytsykvas/kyiv'
     })
   })
@@ -415,5 +422,122 @@ describe('workspaces', () => {
   it('removing a missing one breaks nothing', () => {
     const state = addWorkspace(withProject, makeWorkspace())
     expect(removeWorkspace(state, 'missing').workspaces).toHaveLength(1)
+  })
+})
+
+describe('chats', () => {
+  function makeChat(overrides: Partial<Chat> = {}): Chat {
+    return {
+      id: 'chat-1',
+      workspaceId: 'planner/kyiv',
+      agent: 'claude',
+      sessionId: null,
+      model: null,
+      permissionMode: 'default',
+      createdAt: '2026-08-11T09:00:00.000Z',
+      ...overrides
+    }
+  }
+
+  const withWorkspace: State = addWorkspace(withProject, makeWorkspace())
+
+  it('starts with none', () => {
+    expect(chatsOfWorkspace(withWorkspace, 'planner/kyiv')).toEqual([])
+  })
+
+  it('adds a chat to its workspace', () => {
+    const state = addChat(withWorkspace, makeChat())
+
+    expect(chatsOfWorkspace(state, 'planner/kyiv')).toHaveLength(1)
+    expect(findChat(state, 'chat-1')).toEqual(makeChat())
+  })
+
+  it('answers nothing for an id it does not have', () => {
+    expect(findChat(withWorkspace, 'chat-nothing')).toBeUndefined()
+  })
+
+  // A chat with nowhere to run is a bug in the caller, not a state to render.
+  it('refuses a chat whose workspace does not exist', () => {
+    expect(() => addChat(withProject, makeChat())).toThrow(StateConflictError)
+  })
+
+  it('refuses to add the same chat twice', () => {
+    const state = addChat(withWorkspace, makeChat())
+
+    expect(() => addChat(state, makeChat())).toThrow(StateConflictError)
+  })
+
+  // The session id is what makes a conversation survive a restart, so writing
+  // it back is the single most important update this makes.
+  it('records the session id', () => {
+    const state = updateChat(addChat(withWorkspace, makeChat()), 'chat-1', {
+      sessionId: 'sess-9'
+    })
+
+    expect(findChat(state, 'chat-1')?.sessionId).toBe('sess-9')
+  })
+
+  it('leaves fields the patch does not mention alone', () => {
+    const state = updateChat(addChat(withWorkspace, makeChat()), 'chat-1', {
+      permissionMode: 'plan'
+    })
+
+    expect(findChat(state, 'chat-1')).toMatchObject({
+      permissionMode: 'plan',
+      createdAt: '2026-08-11T09:00:00.000Z'
+    })
+  })
+
+  it('leaves the other chats of the workspace alone', () => {
+    const two = addChat(addChat(withWorkspace, makeChat()), makeChat({ id: 'chat-2' }))
+    const state = updateChat(two, 'chat-2', { sessionId: 'sess-9' })
+
+    expect(findChat(state, 'chat-1')?.sessionId).toBeNull()
+    expect(findChat(state, 'chat-2')?.sessionId).toBe('sess-9')
+  })
+
+  it('refuses to update a chat that is not there', () => {
+    expect(() => updateChat(withWorkspace, 'chat-nothing', { model: 'x' })).toThrow(
+      StateConflictError
+    )
+  })
+
+  it('keeps two workspaces of the same project apart', () => {
+    const both = addWorkspace(
+      withWorkspace,
+      makeWorkspace({ id: 'planner/lviv', name: 'lviv', branch: 'ytsykvas/lviv', port: 3101 })
+    )
+    const state = addChat(
+      addChat(both, makeChat()),
+      makeChat({ id: 'chat-2', workspaceId: 'planner/lviv' })
+    )
+
+    expect(chatsOfWorkspace(state, 'planner/lviv').map((chat) => chat.id)).toEqual(['chat-2'])
+  })
+
+  // A transcript outliving its workspace would be unreachable: nothing in the
+  // state points at it any more.
+  it('goes when its workspace goes', () => {
+    const state = removeWorkspace(addChat(withWorkspace, makeChat()), 'planner/kyiv')
+
+    expect(state.chats).toEqual([])
+  })
+
+  it('goes when its project goes', () => {
+    const state = removeProject(addChat(withWorkspace, makeChat()), 'planner')
+
+    expect(state.chats).toEqual([])
+  })
+
+  // A state file written before chats existed must still load; that is why the
+  // field carries a default rather than a version bump.
+  it('loads a state file that predates chats', async () => {
+    await writeFile(
+      file,
+      JSON.stringify({ version: 1, projects: [project], workspaces: [] }),
+      'utf8'
+    )
+
+    await expect(loadState(file)).resolves.toMatchObject({ chats: [] })
   })
 })

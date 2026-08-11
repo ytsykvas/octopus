@@ -1,6 +1,9 @@
 import { contextBridge, ipcRenderer } from 'electron'
 
 import type { AccountKind, AccountsStatus } from '@core/accounts.js'
+import type { Chat, PermissionMode } from '@core/chats.js'
+import type { ChatEvent, PermissionAnswer, RateLimit } from '@core/service.js'
+import type { ChatEntry } from '@core/transcript.js'
 import type { TerminalExit, TerminalOutput, TerminalSpec } from '@core/terminal.js'
 import type { Config } from '@core/config.js'
 import type { RemoteRepository } from '@core/github.js'
@@ -99,6 +102,49 @@ const api = {
       ipcRenderer.on('terminal:exit', listener)
       return () => {
         ipcRenderer.off('terminal:exit', listener)
+      }
+    }
+  },
+
+  chats: {
+    /** Chats of a workspace; empty when nobody has written yet. Creates nothing. */
+    list: (workspaceId: string): Promise<Result<Chat[]>> =>
+      ipcRenderer.invoke('chats:list', workspaceId) as Promise<Result<Chat[]>>,
+
+    /** The workspace's chat, created on first use. */
+    open: (workspaceId: string): Promise<Result<Chat>> =>
+      ipcRenderer.invoke('chats:open', workspaceId) as Promise<Result<Chat>>,
+
+    /** Everything said in this chat before now. */
+    history: (chatId: string): Promise<Result<ChatEntry[]>> =>
+      ipcRenderer.invoke('chats:history', chatId) as Promise<Result<ChatEntry[]>>,
+
+    /** Sends a message. The answer arrives through `onEvent`, not here. */
+    send: (chatId: string, text: string): Promise<Result<void>> =>
+      ipcRenderer.invoke('chats:send', chatId, text) as Promise<Result<void>>,
+
+    /** Stops the current turn; the session stays open for the next message. */
+    interrupt: (chatId: string): Promise<Result<void>> =>
+      ipcRenderer.invoke('chats:interrupt', chatId) as Promise<Result<void>>,
+
+    setPermissionMode: (chatId: string, mode: PermissionMode): Promise<Result<void>> =>
+      ipcRenderer.invoke('chats:mode', chatId, mode) as Promise<Result<void>>,
+
+    /** Answers a pending permission request; the agent is blocked until it arrives. */
+    answerPermission: (requestId: string, answer: PermissionAnswer): Promise<Result<void>> =>
+      ipcRenderer.invoke('chats:permission', requestId, answer) as Promise<Result<void>>,
+
+    /** The last rate limit any session reported; `null` before one has. */
+    rateLimit: (): Promise<Result<RateLimit | null>> =>
+      ipcRenderer.invoke('chats:rateLimit') as Promise<Result<RateLimit | null>>,
+
+    onEvent: (handler: (event: ChatEvent) => void): (() => void) => {
+      const listener = (_event: unknown, chatEvent: ChatEvent): void => {
+        handler(chatEvent)
+      }
+      ipcRenderer.on('chats:event', listener)
+      return () => {
+        ipcRenderer.off('chats:event', listener)
       }
     }
   },

@@ -11,7 +11,7 @@
 import { homedir } from 'node:os'
 import { join } from 'node:path'
 
-import type { ProjectId, WorkspaceId } from './types.js'
+import type { ChatId, ProjectId, WorkspaceId } from './types.js'
 
 const ROOT_DIR_NAME = '.octopus'
 
@@ -67,6 +67,22 @@ export function setupScript(projectId: ProjectId, root: string = rootDir()): str
 /** Script that starts the dev server; receives `$OCTOPUS_PORT`. */
 export function runScript(projectId: ProjectId, root: string = rootDir()): string {
   return join(projectScriptsDir(projectId, root), 'run.sh')
+}
+
+/** Directory holding every chat transcript. */
+export function chatsDir(root: string = rootDir()): string {
+  return join(root, 'chats')
+}
+
+/**
+ * One chat's transcript: `~/.octopus/chats/<chatId>.jsonl`.
+ *
+ * Flat rather than nested under the project, because a chat outlives the
+ * workspace name it started under — renaming a workspace would otherwise
+ * either move the file or leave it filed under a name nothing refers to.
+ */
+export function chatTranscript(chatId: ChatId, root: string = rootDir()): string {
+  return join(chatsDir(root), `${chatId}.jsonl`)
 }
 
 /** Directory holding every workspace of a project. */

@@ -28,7 +28,7 @@ daemon later — the same reason the layer exists at all.
 
 If a core operation needs a window, a dialog or a menu, the decision stays in
 core as a pure function and `main/` supplies the Electron part. `main/ipc.ts`
-is the worked example: it takes `IpcHost` — five functions — rather than
+is the worked example: it takes `IpcHost` — six functions — rather than
 importing `ipcMain`, `dialog`, `BrowserWindow` and `nativeTheme`.
 
 ### The renderer may import types from core, but values only from safe modules
@@ -45,6 +45,22 @@ externalises Node built-ins and the window had no `homedir`.
 Safe to import as values: `colors.ts`, `initials.ts`, `branches.ts` — they
 depend on nothing but zod. Anything reaching `paths.ts`, `persist.ts` or
 `node:*` is not.
+
+### The Agent SDK stops at `events.ts`
+
+The SDK's `SDKMessage` is a union of some forty variants that grows between
+releases. Nothing outside [`core/agent.ts`](../src/core/agent.ts) ever sees one:
+`mapMessage` turns it into the flat `AgentEvent` of
+[`core/events.ts`](../src/core/events.ts), and that is what the service stores,
+the bridge carries and the interface draws.
+
+Without the boundary every SDK upgrade would be a UI change. With it, a new
+message kind maps to nothing until somebody decides what it should look like.
+
+`query` is a **parameter**, not an import, in the same spirit as `GitExec`: the
+whole chat — a message sent, events mapped, a permission answered, a session
+closed — is exercised without a child process or a network call. `query()` is
+never called from a test.
 
 ### `main/` stays thin
 
@@ -81,13 +97,13 @@ mangled; the `code` is what lets the UI show a localised message instead.
 ## Where state lives
 
 `git` is the source of truth about git. `~/.octopus/state.json` holds only what
-git cannot know: the agent session, the port, the label. When the two disagree —
+git cannot know: the chats and their agent sessions, the port, the label. When the two disagree —
 a worktree directory deleted by hand — the app reports the workspace as missing
 rather than quietly agreeing with either side. See [data.md](data.md).
 
 ## What is deliberately absent
 
-No state management library: the state is two hooks and some `useState`. No
+No state management library: the state is four hooks and some `useState`. No
 component library: the components are in `src/renderer/src/components` and are
 read as often as they are used. No backend — everything is local, and §5 of
 [PROJECT.md](PROJECT.md) explains why that is a goal rather than a stage.

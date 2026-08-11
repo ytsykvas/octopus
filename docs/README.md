@@ -17,8 +17,8 @@ as they are; the code says what they do, and stays the authority on that.
 ## The shortest possible summary
 
 octopus runs several Claude Code sessions at once. Each task gets a git
-worktree, a branch, a port and — soon — an agent session of its own, so tasks
-never see each other.
+worktree, a branch, a port and an agent session of its own, so tasks never see
+each other.
 
 ```
 src/core/      all logic, headless, no Electron. 100% covered.

@@ -147,13 +147,60 @@ export const en = {
     resize: 'Resize panel'
   },
 
+  chat: {
+    placeholder: 'Ask the agent to do something in this workspace…',
+    send: 'Send',
+    stop: 'Stop',
+    working: 'Working…',
+    thinking: 'Thinking',
+
+    noWorkspaceTitle: 'Select a workspace',
+    noWorkspaceBody:
+      'A conversation belongs to a workspace: its worktree is where the agent works, and its branch is where the work lands.',
+    emptyTitle: 'Start the conversation',
+    emptyBody:
+      'The first message starts an agent session in this worktree. The branch already exists — nothing here renames it.',
+
+    mode: 'Permissions',
+    modeDefault: 'Ask first',
+    modePlan: 'Plan only',
+    modeAcceptEdits: 'Accept edits',
+
+    permissionTitle: 'The agent wants to use {{tool}}',
+    permissionAnswered: 'Already answered.',
+    allow: 'Allow',
+    always: 'Always allow',
+    deny: 'Decline',
+
+    duration: '{{seconds}}s',
+    // Ukrainian needs `few` and `many` as well; i18next picks the form that
+    // applies to the active language and ignores the rest.
+    tokens_one: '{{tokens}} token',
+    tokens_few: '{{tokens}} tokens',
+    tokens_many: '{{tokens}} tokens',
+    tokens_other: '{{tokens}} tokens',
+
+    endedInterrupted: 'stopped',
+    endedLimit: 'hit a limit',
+    endedTooLong: 'conversation too long',
+    endedBlocked: 'stopped by a hook',
+    endedFailed: 'ended with an error',
+
+    usage: 'Subscription usage',
+    usageResets: 'resets in {{time}}',
+    usageWarning: 'close to the limit',
+    usageReached: 'limit reached',
+    hours: 'h',
+    minutes: 'm',
+    soon: 'now'
+  },
+
   center: {
     noProjectsTitle: 'Start with a repository',
     noProjectsBody:
       'Add a project in the left panel. Workspaces are created inside it — each with its own branch, directory and agent session.',
     noSelectionTitle: 'Select a project',
-    noSelectionBody: 'Pick one from the list on the left.',
-    projectBody: 'Base branch {{branch}}. The agent chat appears here once workspaces exist.'
+    noSelectionBody: 'Pick one from the list on the left.'
   },
 
   settings: {
@@ -192,6 +239,24 @@ export const en = {
     settingSourcesProjectHint: "Loads the repository's own CLAUDE.md and settings.",
     settingSourcesAll: 'Everything',
     settingSourcesAllHint: 'Loads user, project and local settings, as the plain CLI would.',
+
+    permissionMode: 'What a new chat may do',
+    permissionModeHint:
+      'The starting point for every workspace, so the question is not asked again on each new branch. A chat can still be switched on its own.',
+    permissionAsk: 'Ask first',
+    permissionAskHint:
+      'Reading is silent; writing a file or running a command waits for an answer.',
+    permissionAcceptEdits: 'Accept edits',
+    permissionAcceptEditsHint:
+      'File changes go through without asking. Commands still wait — they leave the worktree.',
+    permissionPlan: 'Plan only',
+    permissionPlanHint: 'The agent proposes an approach and changes nothing until you agree.',
+
+    alwaysAllowed: 'Answered "always"',
+    alwaysAllowedHint:
+      'Tools you have waved through. They are never asked about again, in any workspace, until removed here.',
+    alwaysAllowedEmpty: 'Nothing yet.',
+    alwaysAllowedRemove: 'Ask again',
 
     accountsHint:
       'octopus never stores credentials. The CLI keeps them in the system keychain; this screen only reports what it says.',

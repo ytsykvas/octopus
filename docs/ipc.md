@@ -1,7 +1,7 @@
 # IPC
 
 Every call from the interface to the rest of the application goes through one
-of 27 channels. The table lives in [`src/main/ipc.ts`](../src/main/ipc.ts); the
+of 35 channels. The table lives in [`src/main/ipc.ts`](../src/main/ipc.ts); the
 renderer never names a channel itself, it calls
 [`src/preload/index.ts`](../src/preload/index.ts).
 
@@ -66,6 +66,28 @@ The only channel outside this shape is `theme:get`, which cannot fail.
 | `workspaces:remove`     | `id`, `options` | `force` discards uncommitted work      |
 | `workspaces:hasChanges` | `id`            | asked before offering to remove        |
 
+### The agent chat
+
+| Channel            | Arguments             | Notes                                                 |
+| ------------------ | --------------------- | ----------------------------------------------------- |
+| `chats:list`       | `workspaceId`         | empty until someone writes; creates nothing           |
+| `chats:open`       | `workspaceId`         | the chat, created on first use                        |
+| `chats:history`    | `chatId`              | the transcript, as it will be redrawn after a restart |
+| `chats:send`       | `chatId`, `text`      | answers immediately; the reply arrives as events      |
+| `chats:interrupt`  | `chatId`              | stops the turn, leaves the session open               |
+| `chats:mode`       | `chatId`, `mode`      | applies to the running session as well as the record  |
+| `chats:permission` | `requestId`, `answer` | the agent is blocked until this arrives               |
+| `chats:rateLimit`  | —                     | the last reading; `null` before a turn has run        |
+
+Events flow the other way, on `chats:event`, carrying `{ chatId, workspaceId,
+event }`. A **broadcast**, not a reply to whoever asked: events keep arriving
+long after the call that started them returned, and a second window on the same
+workspace should see the same conversation.
+
+Listing and opening are separate on purpose. A workspace nobody has spoken to
+should have no record and no transcript file, so the pane looks the chat up
+without creating one — the first message is what brings it into being.
+
 ### Terminals
 
 | Channel            | Arguments            | Notes                                                     |
@@ -92,13 +114,16 @@ with zod before it goes anywhere.** TypeScript guarantees nothing across a
 process boundary: the renderer is a separate process that displays agent
 output, and a compromised or simply buggy one must not reach a command line.
 
-| Argument               | Schema                                           |
-| ---------------------- | ------------------------------------------------ |
-| project patch          | `ProjectPatchSchema`                             |
-| script kind, body      | `ScriptKindSchema`, `ScriptBodySchema`           |
-| instruction kind, body | `InstructionKindSchema`, `InstructionBodySchema` |
-| terminal spec          | `TerminalSpecSchema`                             |
-| account kind           | `AccountKindSchema`                              |
+| Argument               | Schema                                             |
+| ---------------------- | -------------------------------------------------- |
+| project patch          | `ProjectPatchSchema`                               |
+| script kind, body      | `ScriptKindSchema`, `ScriptBodySchema`             |
+| instruction kind, body | `InstructionKindSchema`, `InstructionBodySchema`   |
+| terminal spec          | `TerminalSpecSchema`                               |
+| account kind           | `AccountKindSchema`                                |
+| chat message           | `ChatMessageSchema` — bounded; it becomes a prompt |
+| permission mode        | `PermissionModeSchema`                             |
+| permission answer      | `PermissionAnswerSchema`                           |
 
 Two related rules, both learned the hard way:
 
@@ -120,7 +145,7 @@ Two related rules, both learned the hard way:
 ## Why the Electron surface is injected
 
 `registerIpc` takes an `IpcHost` — `handle`, `showOpenDialog`, `windowFor`,
-`prefersDark`, `broadcastTheme` — instead of importing Electron. A test then
-supplies five small functions rather than a framework, and the whole table can
-be exercised without a window. It is the same reasoning that keeps the core
-headless, applied to the process that talks to it.
+`prefersDark`, `broadcastTheme`, `broadcastChatEvent` — instead of importing
+Electron. A test then supplies six small functions rather than a framework, and
+the whole table can be exercised without a window. It is the same reasoning that
+keeps the core headless, applied to the process that talks to it.
