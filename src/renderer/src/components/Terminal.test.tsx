@@ -25,7 +25,7 @@ const { FakeXTerm, FakeFitAddon } = vi.hoisted(() => {
     focused = false
     disposed = false
 
-    constructor(readonly options: { readonly theme: Record<string, string> }) {
+    constructor(public options: { theme: Record<string, string> }) {
       FakeXTerm.instances.push(this)
     }
 
@@ -104,6 +104,7 @@ afterEach(() => {
   // than at the end of it, so a failed assertion cannot leave them behind.
   document.documentElement.style.removeProperty('--canvas')
   document.documentElement.style.removeProperty('--ink')
+  document.documentElement.classList.remove('dark')
 })
 
 /** The emulator the component under test just built. */
@@ -414,5 +415,36 @@ describe('Terminal', () => {
       background: '#101216',
       foreground: '#e7e9ee'
     })
+  })
+
+  // Reading once at mount was the bug: a terminal opened before the stored
+  // preference came back over IPC read the light defaults and stayed white in
+  // a dark window, and switching theme afterwards left it behind.
+  it('follows the theme when it changes underneath it', async () => {
+    document.documentElement.style.setProperty('--canvas', '#ffffff')
+
+    render(<Terminal cwd="/tmp/planner/anna" />)
+    await sessionStarted()
+    expect(emulator().options.theme).toMatchObject({ background: '#ffffff' })
+
+    document.documentElement.style.setProperty('--canvas', '#0f1115')
+    document.documentElement.classList.add('dark')
+
+    await waitFor(() => {
+      expect(emulator().options.theme).toMatchObject({ background: '#0f1115' })
+    })
+  })
+
+  it('stops watching the theme when it goes away', async () => {
+    document.documentElement.style.setProperty('--canvas', '#ffffff')
+    const view = render(<Terminal cwd="/tmp/planner/anna" />)
+    await sessionStarted()
+
+    view.unmount()
+    document.documentElement.style.setProperty('--canvas', '#0f1115')
+    document.documentElement.classList.add('dark')
+    await Promise.resolve()
+
+    expect(emulator().options.theme).toMatchObject({ background: '#ffffff' })
   })
 })

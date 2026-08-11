@@ -1,8 +1,29 @@
 import { FitAddon } from '@xterm/addon-fit'
-import { Terminal as XTerm } from '@xterm/xterm'
+import { type ITheme, Terminal as XTerm } from '@xterm/xterm'
 import { useEffect, useRef } from 'react'
 
 import '@xterm/xterm/css/xterm.css'
+
+/**
+ * The design tokens, as values.
+ *
+ * The one place in the interface that needs colours in JavaScript rather than
+ * in CSS: xterm paints to a canvas, which no stylesheet reaches. Read from the
+ * computed styles so there is still a single source — the token — rather than
+ * a second copy of the palette living here.
+ */
+function readTheme(): ITheme {
+  const styles = getComputedStyle(document.documentElement)
+  const read = (token: string, fallback: string): string =>
+    styles.getPropertyValue(token).trim() || fallback
+
+  return {
+    background: read('--canvas', '#ffffff'),
+    foreground: read('--ink', '#16181d'),
+    cursor: read('--accent', '#2563eb'),
+    selectionBackground: read('--muted', '#eef0f4')
+  }
+}
 
 interface TerminalProps {
   /** Working directory for the session. */
@@ -41,23 +62,34 @@ export function Terminal({ cwd, command, env, onExit }: TerminalProps): React.JS
     /* v8 ignore next */
     if (!container) return
 
-    const styles = getComputedStyle(document.documentElement)
-    const read = (token: string, fallback: string): string =>
-      styles.getPropertyValue(token).trim() || fallback
-
     const term = new XTerm({
-      fontFamily: read('--font-mono', 'ui-monospace, monospace'),
+      fontFamily:
+        getComputedStyle(document.documentElement).getPropertyValue('--font-mono').trim() ||
+        'ui-monospace, monospace',
       fontSize: 12,
       lineHeight: 1.3,
       cursorBlink: true,
       // Colours come from the design tokens, so the terminal follows the theme.
-      theme: {
-        background: read('--canvas', '#ffffff'),
-        foreground: read('--ink', '#16181d'),
-        cursor: read('--accent', '#2563eb'),
-        selectionBackground: read('--muted', '#eef0f4')
-      }
+      theme: readTheme()
     })
+
+    /**
+     * Told again whenever the theme changes.
+     *
+     * Reading once at mount was not enough, twice over. A terminal opened in a
+     * light window kept its light colours through a switch to dark — and one
+     * mounted before the stored preference had come back over IPC read the
+     * light defaults and stayed that way in a dark window, which is how a
+     * white terminal turned up in a dark application.
+     *
+     * The class on the root element is the whole mechanism the theme switches
+     * by, so watching it catches every cause without the theme having to be
+     * threaded down through four components to reach here.
+     */
+    const themes = new MutationObserver(() => {
+      term.options.theme = readTheme()
+    })
+    themes.observe(document.documentElement, { attributes: true, attributeFilter: ['class'] })
 
     const fit = new FitAddon()
     term.loadAddon(fit)
@@ -114,6 +146,7 @@ export function Terminal({ cwd, command, env, onExit }: TerminalProps): React.JS
 
     return () => {
       lifetime.abort()
+      themes.disconnect()
       observer.disconnect()
       unsubscribeData()
       unsubscribeExit()
