@@ -13,6 +13,14 @@ interface RepositoryPickerProps {
   /** Where clones land; empty means the destination has not been chosen yet. */
   readonly cloneDirectory: string
   readonly onCloneDirectoryChange: (path: string) => void
+  /**
+   * Takes the user to where the GitHub account is connected.
+   *
+   * Required rather than optional: the only reason this modal can show nothing
+   * is an account it cannot reach, and leaving a caller free to omit the way
+   * out is how the dead end got here in the first place.
+   */
+  readonly onOpenSettings: () => void
 }
 
 /**
@@ -25,7 +33,8 @@ export function RepositoryPicker({
   onPicked,
   onCancel,
   cloneDirectory,
-  onCloneDirectoryChange
+  onCloneDirectoryChange,
+  onOpenSettings
 }: RepositoryPickerProps): React.JSX.Element {
   const { t } = useTranslation()
   const describeFailure = useErrorMessage()
@@ -33,6 +42,10 @@ export function RepositoryPicker({
   const [repositories, setRepositories] = useState<readonly RemoteRepository[] | null>(null)
   const [query, setQuery] = useState('')
   const [error, setError] = useState<string | null>(null)
+  // Kept beside the message, which is already localised prose by the time it
+  // lands in `error` — the code is gone, and only the code says whether
+  // Settings would help. A failed clone is not fixed by signing in again.
+  const [disconnected, setDisconnected] = useState(false)
   const [cloning, setCloning] = useState<string | null>(null)
 
   useEffect(() => {
@@ -47,6 +60,7 @@ export function RepositoryPicker({
       } else {
         setRepositories([])
         setError(describeFailure(result))
+        setDisconnected(result.code === 'notConnected')
       }
     })()
 
@@ -139,8 +153,17 @@ export function RepositoryPicker({
 
       <div className="p-3">
         {error !== null && (
-          <div className="bg-danger-bg text-danger border-danger/25 mb-3 rounded-[var(--radius-control)] border px-3 py-2">
-            {error}
+          <div className="bg-danger-bg text-danger border-danger/25 mb-3 flex items-center justify-between gap-3 rounded-[var(--radius-control)] border px-3 py-2">
+            <span>{error}</span>
+
+            {/* Only for a failure signing in would actually fix. Offering it on
+                a failed clone would send the user somewhere that changes
+                nothing, which is worse than saying nothing at all. */}
+            {disconnected && (
+              <Button size="sm" onClick={onOpenSettings} className="shrink-0">
+                {t('repositories.connect')}
+              </Button>
+            )}
           </div>
         )}
 

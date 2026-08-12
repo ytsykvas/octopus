@@ -108,6 +108,26 @@ describe('Settings', () => {
     expect(screen.getByText('Theme')).toBeInTheDocument()
   })
 
+  // Sending someone here to connect GitHub is pointless if they land on the
+  // theme picker and have to go hunting for the section that matters.
+  it('opens on the section it was asked for', async () => {
+    await renderSettings({ initialSection: 'git' })
+
+    expect(screen.getByText('Branch prefix')).toBeInTheDocument()
+    expect(screen.queryByText('Theme')).not.toBeInTheDocument()
+  })
+
+  // The section asked for is a starting point, not a cage. Pinning the rail to
+  // it would be the obvious way to "fix" the prop into a controlled value.
+  it('still lets the rail move on from the section it opened on', async () => {
+    const user = userEvent.setup()
+    await renderSettings({ initialSection: 'git' })
+
+    await openSection(user, 'General')
+
+    expect(screen.getByText('Theme')).toBeInTheDocument()
+  })
+
   it('changes what the agent is allowed to load', async () => {
     const user = userEvent.setup()
     const props = await renderSettings()

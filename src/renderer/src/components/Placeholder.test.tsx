@@ -27,4 +27,25 @@ describe('an empty pane', () => {
 
     expect(screen.queryByRole('img')).not.toBeInTheDocument()
   })
+
+  // The body renders inside a paragraph, so actions cannot ride along with it:
+  // a button inside a `<p>` is markup the browser silently rearranges. That
+  // they land outside it is the whole reason the slot exists.
+  it('puts the actions beneath the words rather than inside them', () => {
+    render(
+      <Placeholder title="Start with a repository" actions={<button type="button">Add</button>}>
+        Add one from this machine.
+      </Placeholder>
+    )
+
+    const button = screen.getByRole('button', { name: 'Add' })
+    expect(button).toBeInTheDocument()
+    expect(button.closest('p')).toBeNull()
+  })
+
+  it('offers nothing to click when it was given no actions', () => {
+    render(<Placeholder title="Select a project">Pick one.</Placeholder>)
+
+    expect(screen.queryByRole('button')).not.toBeInTheDocument()
+  })
 })

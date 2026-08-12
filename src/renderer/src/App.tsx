@@ -1,17 +1,24 @@
-import { PanelRightClose, PanelRightOpen, Settings as SettingsIcon } from 'lucide-react'
+import {
+  CloudDownload,
+  FolderOpen,
+  PanelRightClose,
+  PanelRightOpen,
+  Settings as SettingsIcon
+} from 'lucide-react'
 import { useCallback, useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import type { Config } from '@core/config.js'
 import type { ThemeName } from '@core/types.js'
 
+import { Button } from './components/Button.js'
 import { Chat } from './components/chat/Chat.js'
 import { RepositoryPicker } from './components/RepositoryPicker.js'
 import { Placeholder } from './components/Placeholder.js'
 import { ProjectSettings } from './components/ProjectSettings.js'
 import { ProjectTabs } from './components/ProjectTabs.js'
 import { RightPanel } from './components/RightPanel.js'
-import { Settings } from './components/Settings.js'
+import { type SectionId, Settings } from './components/Settings.js'
 import { Sidebar } from './components/Sidebar.js'
 import { useConfirm } from './hooks/useConfirm.js'
 import { useErrorMessage } from './hooks/useErrorMessage.js'
@@ -29,7 +36,10 @@ export function App(): React.JSX.Element {
 
   const [theme, setTheme] = useState<ThemeName>('light')
   const [config, setConfig] = useState<Config | null>(null)
-  const [settingsOpen, setSettingsOpen] = useState(false)
+  // The section, not a boolean: "connect GitHub" has to land on Git, and a
+  // dialog that opens on Appearance instead has sent the user nowhere useful.
+  // `null` is closed.
+  const [settingsSection, setSettingsSection] = useState<SectionId | null>(null)
   const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [rightPanelOpen, setRightPanelOpen] = useState(true)
@@ -37,6 +47,10 @@ export function App(): React.JSX.Element {
   // preference for the current session rather than a setting.
   const [sidebarOpen, setSidebarOpen] = useState(true)
   const [pickingRepository, setPickingRepository] = useState(false)
+  // Every control that reaches the check is disabled while it runs, which is
+  // also what stops a second one starting: React flushes a click's state update
+  // before the next click is delivered, so the button is already dead by then.
+  const [checkingGitHub, setCheckingGitHub] = useState(false)
   const [selectedWorkspaceId, setSelectedWorkspaceId] = useState<string | null>(null)
   const [editingProjectId, setEditingProjectId] = useState<string | null>(null)
   const [scriptPaths, setScriptPaths] = useState<{ setup: string | null; run: string | null }>({
@@ -84,7 +98,7 @@ export function App(): React.JSX.Element {
   useEffect(
     () =>
       window.octopus.settings.onOpen(() => {
-        setSettingsOpen(true)
+        setSettingsSection('general')
       }),
     []
   )
@@ -146,6 +160,39 @@ export function App(): React.JSX.Element {
     },
     [projects, workspaces]
   )
+
+  /**
+   * Adds a project from a directory on this machine, and opens it.
+   *
+   * Lifted out of the tab strip's menu so the empty centre pane can offer the
+   * same two ways in. One implementation, or the two entry points drift.
+   */
+  const addFromDisk = useCallback(async () => {
+    const added = await projects.addFromDisk()
+    if (added) setSelectedProjectId(added.id)
+  }, [projects])
+
+  /**
+   * Adds a project from GitHub, or sends the user to connect an account first.
+   *
+   * Checked on the click rather than held in state: the account can be
+   * connected in Settings a moment from now, and a cached answer would be
+   * confidently wrong exactly when the user has just fixed the problem.
+   */
+  const addFromGitHub = useCallback(async () => {
+    setCheckingGitHub(true)
+
+    try {
+      const result = await window.octopus.accounts.status()
+      // A failed check and a signed-out account are one case here. `gh` missing,
+      // `gh` signed out and a reply that does not parse all arrive as
+      // `connected: false`, and Settings is where every one of them is fixed.
+      if (result.ok && result.value.github.connected) setPickingRepository(true)
+      else setSettingsSection('git')
+    } finally {
+      setCheckingGitHub(false)
+    }
+  }, [])
 
   // ⌘⇧N creates a workspace. ⌘1–⌘9 switch project, as they do between tabs
   // everywhere else; ⌃1–⌃9 move within the current project's workspaces.
@@ -241,16 +288,9 @@ export function App(): React.JSX.Element {
               }}
               onEdit={setEditingProjectId}
               onRemove={(id) => void removeProject(id)}
-              onAddFromDisk={() => {
-                void (async () => {
-                  const added = await projects.addFromDisk()
-                  if (added) setSelectedProjectId(added.id)
-                })()
-              }}
-              onAddFromGitHub={() => {
-                setPickingRepository(true)
-              }}
-              busy={projects.busy}
+              onAddFromDisk={() => void addFromDisk()}
+              onAddFromGitHub={() => void addFromGitHub()}
+              busy={projects.busy || checkingGitHub}
               sidebarOpen={sidebarOpen}
               onToggleSidebar={() => {
                 setSidebarOpen((open) => !open)
@@ -289,7 +329,7 @@ export function App(): React.JSX.Element {
             <button
               type="button"
               onClick={() => {
-                setSettingsOpen(true)
+                setSettingsSection('general')
               }}
               title={t('sidebar.settings')}
               className="row focus-ring text-ink-soft hover:text-ink flex w-full items-center gap-2 px-2 py-1.5"
@@ -316,7 +356,13 @@ export function App(): React.JSX.Element {
             // No padded wrapper: the placeholder brings its own frame and
             // centres itself, so one here would centre it inside a box already
             // inset from the pane and leave it sitting low.
-            <CenterPane hasProjects={projects.all.length > 0} />
+            <CenterPane
+              hasProjects={projects.all.length > 0}
+              busy={projects.busy || checkingGitHub}
+              checkingGitHub={checkingGitHub}
+              onAddFromDisk={() => void addFromDisk()}
+              onAddFromGitHub={() => void addFromGitHub()}
+            />
           ) : (
             <Chat
               workspace={
@@ -342,12 +388,13 @@ export function App(): React.JSX.Element {
         )}
       </div>
 
-      {settingsOpen && config && (
+      {settingsSection !== null && config && (
         <Settings
           config={config}
           onChange={updateConfig}
+          initialSection={settingsSection}
           onClose={() => {
-            setSettingsOpen(false)
+            setSettingsSection(null)
           }}
         />
       )}
@@ -383,23 +430,70 @@ export function App(): React.JSX.Element {
           onCancel={() => {
             setPickingRepository(false)
           }}
+          onOpenSettings={() => {
+            // Closed first: both are native dialogs, and opening the second on
+            // top of the first stacks two modal layers over each other.
+            setPickingRepository(false)
+            setSettingsSection('git')
+          }}
         />
       )}
     </div>
   )
 }
 
-/** What the centre shows before there is a project to talk to the agent about. */
-function CenterPane({ hasProjects }: { hasProjects: boolean }): React.JSX.Element {
+interface CenterPaneProps {
+  readonly hasProjects: boolean
+  readonly busy: boolean
+  readonly checkingGitHub: boolean
+  readonly onAddFromDisk: () => void
+  readonly onAddFromGitHub: () => void
+}
+
+/**
+ * What the centre shows before there is a project to talk to the agent about.
+ *
+ * It carries the same two ways in as the tab strip's menu, because this is the
+ * screen a first run lands on, and telling someone where the button is while
+ * having room for the button is a strange thing to do.
+ */
+function CenterPane({
+  hasProjects,
+  busy,
+  checkingGitHub,
+  onAddFromDisk,
+  onAddFromGitHub
+}: CenterPaneProps): React.JSX.Element {
   const { t } = useTranslation()
+
+  const actions = (
+    <>
+      {/* Accent only on a first run, where adding is the whole task. Once
+          projects exist the tabs are a click away and the likelier intent, so
+          neither button competes with them. */}
+      <Button variant={hasProjects ? 'quiet' : 'accent'} disabled={busy} onClick={onAddFromDisk}>
+        <FolderOpen aria-hidden size={13} />
+        {t('center.addFromDisk')}
+      </Button>
+
+      <Button variant="quiet" disabled={busy} onClick={onAddFromGitHub}>
+        <CloudDownload aria-hidden size={13} />
+        {checkingGitHub ? t('center.checkingGitHub') : t('center.addFromGitHub')}
+      </Button>
+    </>
+  )
 
   if (!hasProjects) {
     return (
-      <Placeholder title={t('center.noProjectsTitle')}>{t('center.noProjectsBody')}</Placeholder>
+      <Placeholder title={t('center.noProjectsTitle')} actions={actions}>
+        {t('center.noProjectsBody')}
+      </Placeholder>
     )
   }
 
   return (
-    <Placeholder title={t('center.noSelectionTitle')}>{t('center.noSelectionBody')}</Placeholder>
+    <Placeholder title={t('center.noSelectionTitle')} actions={actions}>
+      {t('center.noSelectionBody')}
+    </Placeholder>
   )
 }

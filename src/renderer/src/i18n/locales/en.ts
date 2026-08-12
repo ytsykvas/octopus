@@ -50,7 +50,8 @@ export const en = {
     add: 'Add',
     cloning: 'Cloning {{name}}…',
     cloneInto: 'Cloning into',
-    cloneIntoUnset: 'You will be asked where to clone.'
+    cloneIntoUnset: 'You will be asked where to clone.',
+    connect: 'Connect GitHub…'
   },
 
   workspaces: {
@@ -201,9 +202,12 @@ export const en = {
   center: {
     noProjectsTitle: 'Start with a repository',
     noProjectsBody:
-      'Add a project in the left panel. Workspaces are created inside it — each with its own branch, directory and agent session.',
+      'Add one from this machine, or clone it from GitHub. Workspaces are created inside it — each with its own branch, directory and agent session.',
     noSelectionTitle: 'Select a project',
-    noSelectionBody: 'Pick one from the list on the left.'
+    noSelectionBody: 'Pick one from the list on the left, or add another repository.',
+    addFromDisk: 'Add from disk…',
+    addFromGitHub: 'Add from GitHub…',
+    checkingGitHub: 'Checking GitHub…'
   },
 
   settings: {

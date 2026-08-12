@@ -3,6 +3,7 @@ import userEvent from '@testing-library/user-event'
 import { StrictMode } from 'react'
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest'
 
+import type { AccountsStatus } from '@core/accounts.js'
 import type { Config } from '@core/config.js'
 import type { RemoteRepository } from '@core/github.js'
 import type { ScriptKind } from '@core/scripts.js'
@@ -12,6 +13,7 @@ import type { WorkspaceView } from '@core/workspaces.js'
 
 import type { Result } from '../../preload/index.js'
 import { stubDialogElement } from './test/dialog.js'
+import { disconnectedAccounts } from './test/octopus.js'
 import { workspaceView } from './test/workspaces.js'
 import { App } from './App.js'
 import i18n, { DEFAULT_LANGUAGE } from './i18n/index.js'
@@ -167,10 +169,29 @@ function edges(): { readonly list: HTMLElement; readonly panel: HTMLElement } {
   return { list, panel }
 }
 
+/**
+ * An account the picker can actually list from.
+ *
+ * The shared stub reports GitHub as disconnected, which is the right default
+ * for a fresh machine but the wrong one for a test about the picker — without
+ * this the window sends the user to Settings instead, and the picker that never
+ * opens looks like a broken picker rather than a stated precondition.
+ */
+function givenGitHubConnected(): void {
+  vi.mocked(window.octopus.accounts.status).mockResolvedValue({
+    ok: true,
+    value: {
+      ...disconnectedAccounts(),
+      github: { connected: true, login: 'ytsykvas', name: 'Yurii' }
+    }
+  })
+}
+
 /** Opens the GitHub picker the way the tab strip offers it. */
 async function openRepositoryPicker(
   user: ReturnType<typeof userEvent.setup>
 ): Promise<HTMLElement> {
+  givenGitHubConnected()
   await user.click(screen.getByRole('button', { name: 'Add repository' }))
   await user.click(screen.getByRole('menuitem', { name: /From GitHub/ }))
   return screen.findByRole('dialog', { name: 'Add from GitHub' })
@@ -201,6 +222,41 @@ describe('App', () => {
     await openApp()
 
     expect(await screen.findByText('Start with a repository')).toBeInTheDocument()
+  })
+
+  // The screen a first run lands on had the instructions and none of the
+  // buttons, which is a strange thing to do with a pane this empty.
+  it('offers both ways in from the empty centre', async () => {
+    await openApp()
+    await screen.findByText('Start with a repository')
+
+    expect(screen.getByRole('button', { name: 'Add from disk…' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Add from GitHub…' })).toBeInTheDocument()
+  })
+
+  it('opens the project added from the empty centre', async () => {
+    vi.mocked(window.octopus.projects.add).mockResolvedValue({ ok: true, value: LEDGER })
+    vi.mocked(window.octopus.projects.list)
+      .mockResolvedValueOnce({ ok: true, value: [] })
+      .mockResolvedValue({ ok: true, value: [LEDGER] })
+    const user = await openApp()
+    await screen.findByText('Start with a repository')
+
+    await user.click(screen.getByRole('button', { name: 'Add from disk…' }))
+
+    expect(await screen.findByText('/Users/someone/code/ledger')).toBeInTheDocument()
+  })
+
+  // Projects exist but none is open: the tabs are the likelier answer, so the
+  // buttons stay, quietly, rather than the pane going back to being a dead end.
+  it('still offers both ways in once projects exist but none is open', async () => {
+    givenTwoProjects()
+
+    await openApp()
+    await screen.findByText('Select a project')
+
+    expect(screen.getByRole('button', { name: 'Add from disk…' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Add from GitHub…' })).toBeInTheDocument()
   })
 
   it('shows a tab for every project', async () => {
@@ -817,6 +873,88 @@ describe('App', () => {
     const picker = await openRepositoryPicker(user)
 
     expect(within(picker).getByText('someone/ledger')).toBeInTheDocument()
+  })
+
+  it('opens the GitHub picker from the empty centre when the account is connected', async () => {
+    givenGitHubConnected()
+    vi.mocked(window.octopus.projects.listRemote).mockResolvedValue({
+      ok: true,
+      value: [LEDGER_REPOSITORY]
+    })
+    const user = await openApp()
+    await screen.findByText('Start with a repository')
+
+    await user.click(screen.getByRole('button', { name: 'Add from GitHub…' }))
+
+    const picker = await screen.findByRole('dialog', { name: 'Add from GitHub' })
+    expect(within(picker).getByText('someone/ledger')).toBeInTheDocument()
+  })
+
+  // A picker listing nothing is a worse answer than the dialog that can fix it.
+  // Landing on Git rather than merely opening Settings is the point: the
+  // account is there, and Appearance would be a dead end with extra steps.
+  it('sends an unconnected user to the Git settings instead of an empty picker', async () => {
+    const user = await openApp()
+    await screen.findByText('Start with a repository')
+
+    await user.click(screen.getByRole('button', { name: 'Add from GitHub…' }))
+
+    const settings = await screen.findByRole('dialog', { name: 'Settings' })
+    expect(within(settings).getByText('Branch prefix')).toBeInTheDocument()
+    expect(within(settings).queryByText('Theme')).not.toBeInTheDocument()
+    expect(screen.queryByRole('dialog', { name: 'Add from GitHub' })).not.toBeInTheDocument()
+  })
+
+  // `gh` missing and `gh` signed out are the same problem wearing two faces,
+  // and both are fixed in the same place.
+  it('sends the user to the Git settings when the check itself fails', async () => {
+    vi.mocked(window.octopus.accounts.status).mockResolvedValue({
+      ok: false,
+      error: 'gh: command not found'
+    })
+    const user = await openApp()
+    await screen.findByText('Start with a repository')
+
+    await user.click(screen.getByRole('button', { name: 'Add from GitHub…' }))
+
+    const settings = await screen.findByRole('dialog', { name: 'Settings' })
+    expect(within(settings).getByText('Branch prefix')).toBeInTheDocument()
+  })
+
+  // Every check spawns a `gh` process, so the button says what it is doing and
+  // stops accepting clicks while it does — the label alone would not.
+  it('checks the account once while the answer is still on its way', async () => {
+    const check = pending<Result<AccountsStatus>>()
+    vi.mocked(window.octopus.accounts.status).mockReturnValue(check.promise)
+    const user = await openApp()
+    await screen.findByText('Start with a repository')
+
+    const button = screen.getByRole('button', { name: 'Add from GitHub…' })
+    await user.click(button)
+    await user.click(screen.getByRole('button', { name: 'Checking GitHub…' }))
+
+    expect(window.octopus.accounts.status).toHaveBeenCalledTimes(1)
+    await act(async () => {
+      await check.settle({ ok: true, value: disconnectedAccounts() })
+    })
+  })
+
+  // The pre-flight check cannot catch a token that expires between the click
+  // and the listing, so the picker keeps its own way out.
+  it('reaches the Git settings from the picker, closing it on the way', async () => {
+    vi.mocked(window.octopus.projects.listRemote).mockResolvedValue({
+      ok: false,
+      error: 'gh is not signed in',
+      code: 'notConnected'
+    })
+    const user = await openApp()
+    const picker = await openRepositoryPicker(user)
+
+    await user.click(within(picker).getByRole('button', { name: 'Connect GitHub…' }))
+
+    const settings = await screen.findByRole('dialog', { name: 'Settings' })
+    expect(within(settings).getByText('Branch prefix')).toBeInTheDocument()
+    expect(screen.queryByRole('dialog', { name: 'Add from GitHub' })).not.toBeInTheDocument()
   })
 
   it('closes the GitHub picker again', async () => {

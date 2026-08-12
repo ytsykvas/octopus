@@ -78,6 +78,7 @@ async function renderPicker(overrides: Partial<PickerProps> = {}): Promise<Picke
     onCancel: vi.fn(),
     cloneDirectory: '',
     onCloneDirectoryChange: vi.fn(),
+    onOpenSettings: vi.fn(),
     ...overrides
   }
 
@@ -273,6 +274,43 @@ describe('RepositoryPicker', () => {
     expect(screen.queryByText('No repositories found.')).not.toBeInTheDocument()
   })
 
+  // Telling someone the account is in Settings while giving them no way there
+  // is how this modal used to end.
+  it('offers the way to Settings when the account is the problem', async () => {
+    vi.mocked(window.octopus.projects.listRemote).mockResolvedValue({
+      ok: false,
+      error: 'gh is not signed in',
+      code: 'notConnected'
+    })
+    const user = userEvent.setup()
+    const props = await renderPicker()
+    await screen.findByText('Could not reach GitHub. Check the account in Settings.')
+
+    await user.click(screen.getByRole('button', { name: 'Connect GitHub…' }))
+
+    expect(props.onOpenSettings).toHaveBeenCalledTimes(1)
+  })
+
+  // Signing in again fixes nothing about a clone that failed, so pointing at
+  // Settings would only cost the user a detour.
+  it('keeps Settings out of a failure that has nothing to do with the account', async () => {
+    offer(repository())
+    vi.mocked(window.octopus.projects.addFromGitHub).mockResolvedValue({
+      ok: false,
+      error: 'git exited with 128',
+      code: 'cloneFailed',
+      params: { repository: 'ytsykvas/planner' }
+    })
+    const user = userEvent.setup()
+    await renderPicker()
+    await screen.findByText('ytsykvas/planner')
+
+    await user.click(addButtonFor('ytsykvas/planner'))
+    await screen.findByText('Could not clone ytsykvas/planner.')
+
+    expect(screen.queryByRole('button', { name: 'Connect GitHub…' })).not.toBeInTheDocument()
+  })
+
   // Cloning takes a while, and a second one started meanwhile would race the
   // first for the same destination directory.
   it('names the repository being cloned and blocks a second clone meanwhile', async () => {
@@ -378,6 +416,7 @@ describe('RepositoryPicker', () => {
         onCancel={vi.fn()}
         cloneDirectory=""
         onCloneDirectoryChange={vi.fn()}
+        onOpenSettings={vi.fn()}
       />
     )
     await screen.findByRole('dialog')

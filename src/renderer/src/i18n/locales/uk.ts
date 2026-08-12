@@ -52,7 +52,8 @@ export const uk: Translation = {
     add: 'Додати',
     cloning: 'Клонуємо {{name}}…',
     cloneInto: 'Клонуємо в',
-    cloneIntoUnset: 'Спитаємо, куди клонувати.'
+    cloneIntoUnset: 'Спитаємо, куди клонувати.',
+    connect: 'Підключити GitHub…'
   },
 
   workspaces: {
@@ -196,9 +197,12 @@ export const uk: Translation = {
   center: {
     noProjectsTitle: 'Почніть з репозиторію',
     noProjectsBody:
-      'Додайте проєкт у лівій панелі. Усередині нього створюються воркспейси — кожен з власною гілкою, текою й сесією агента.',
+      'Додайте його з цього комп’ютера або клонуйте з GitHub. Усередині нього створюються воркспейси — кожен з власною гілкою, текою й сесією агента.',
     noSelectionTitle: 'Виберіть проєкт',
-    noSelectionBody: 'Оберіть зі списку ліворуч.'
+    noSelectionBody: 'Оберіть зі списку ліворуч або додайте ще один репозиторій.',
+    addFromDisk: 'Додати з диска…',
+    addFromGitHub: 'Додати з GitHub…',
+    checkingGitHub: 'Перевіряємо GitHub…'
   },
 
   settings: {

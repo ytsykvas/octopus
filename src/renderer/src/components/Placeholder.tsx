@@ -3,6 +3,14 @@ import { Mascot } from './Mascot.js'
 interface PlaceholderProps {
   readonly title: string
   readonly children: React.ReactNode
+  /**
+   * Buttons offering the way out of the empty state.
+   *
+   * A slot of its own rather than part of `children`, which renders inside a
+   * paragraph — a button there would be a block element inside a `<p>`, which
+   * the browser silently reshapes into markup nobody wrote.
+   */
+  readonly actions?: React.ReactNode
 }
 
 /**
@@ -16,7 +24,7 @@ interface PlaceholderProps {
  * octopus" before "Select a project" would add a word and no information —
  * the title beneath it already says everything the image is there to soften.
  */
-export function Placeholder({ title, children }: PlaceholderProps): React.JSX.Element {
+export function Placeholder({ title, children, actions }: PlaceholderProps): React.JSX.Element {
   return (
     <div className="flex min-h-0 flex-1 items-center justify-center p-6">
       <div className="panel flex max-w-md flex-col items-center p-8 text-center">
@@ -24,6 +32,10 @@ export function Placeholder({ title, children }: PlaceholderProps): React.JSX.El
 
         <p className="mb-2 text-[15px] font-semibold">{title}</p>
         <p className="text-ink-soft leading-relaxed">{children}</p>
+
+        {actions !== undefined && (
+          <div className="mt-5 flex flex-wrap items-center justify-center gap-2">{actions}</div>
+        )}
       </div>
     </div>
   )

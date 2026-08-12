@@ -24,9 +24,18 @@ interface SettingsProps {
   readonly config: Config
   readonly onChange: (patch: Partial<Config>) => Promise<void>
   readonly onClose: () => void
+  /**
+   * Which section to land on, for callers sending the user somewhere specific —
+   * "connect GitHub" means nothing if it opens on Appearance.
+   *
+   * Read once, when the dialog mounts. That is only correct because App renders
+   * it conditionally, so closing unmounts it and the next open reads the prop
+   * afresh. Hoist it out of that conditional and this silently stops working.
+   */
+  readonly initialSection?: SectionId
 }
 
-type SectionId = 'general' | 'git' | 'agent' | 'accounts' | 'about'
+export type SectionId = 'general' | 'git' | 'agent' | 'accounts' | 'about'
 
 const SECTIONS: readonly {
   readonly id: SectionId
@@ -56,9 +65,14 @@ const SECTIONS: readonly {
  * Changes apply immediately; there is no Save button. For a local tool with a
  * handful of options a confirmation step only adds friction.
  */
-export function Settings({ config, onChange, onClose }: SettingsProps): React.JSX.Element {
+export function Settings({
+  config,
+  onChange,
+  onClose,
+  initialSection
+}: SettingsProps): React.JSX.Element {
   const { t } = useTranslation()
-  const [section, setSection] = useState<SectionId>('general')
+  const [section, setSection] = useState<SectionId>(initialSection ?? 'general')
   // Shared between the Claude and Git sections, which show the same accounts.
   const accounts = useAccounts()
 
