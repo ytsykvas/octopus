@@ -198,9 +198,27 @@ theme having to be threaded down four components to reach a leaf.
 ## Empty panes
 
 `Placeholder` is the one component for "nothing here yet": the mascot, a title,
-a line saying what to do. One component rather than a copy per pane — the centre
-and the chat each had their own and they had already drifted a few pixels apart,
-on the screen a first-time user reads most carefully.
+a line saying what to do, and optionally the buttons that do it. One component
+rather than a copy per pane — the centre and the chat each had their own and
+they had already drifted a few pixels apart, on the screen a first-time user
+reads most carefully.
+
+Those buttons go in `actions`, not in the body. The body renders inside a `<p>`,
+so a button passed as `children` becomes a block element inside a paragraph, and
+the browser silently rearranges it into markup nobody wrote. The slot is a
+sibling of that paragraph for exactly this reason.
+
+Prefer offering the action to describing it. The centre pane spent a while
+telling a first-time user to add a repository in the left panel while having
+room for the button that adds one — an empty pane is usually a pane with space
+for the way out of it.
+
+The same goes for a message that names somewhere else. "Check the account in
+Settings" stood in the repository picker for a while with no way to reach
+Settings, which leaves the reader to close the dialog and go hunting. If a
+string names a place, something beside it should go there — and only when going
+there would help: the picker offers it for an unreachable account and not for a
+failed clone, because signing in again fixes one and not the other.
 
 The mascot comes from `Mascot`, which also signs off the About section in
 settings. A component rather than a repeated `<img>` so the decision it carries
@@ -235,6 +253,7 @@ field styling had already drifted by a few pixels of height.
 | `DropdownMenu`                                                  | positioned against the **window**, not its trigger — an absolute panel is clipped by any scrolling ancestor, and the tab strip is one                                                        |
 | `Combobox`                                                      | a select with search; a native one stops being usable around thirty entries                                                                                                                  |
 | `SectionRail`                                                   | the rail shared by both settings dialogs                                                                                                                                                     |
+| `Settings`                                                      | `initialSection` opens it where the caller needs it. Read once, on mount — correct only because `App` renders the dialog conditionally, so a close unmounts it                               |
 | `ProjectGlyph`                                                  | a project's icon, `aria-hidden`: wherever it appears the element around it is already named                                                                                                  |
 | `Field`, `FileEditor`, `NameEditor`, `ResizeHandle`, `Terminal` |                                                                                                                                                                                              |
 
