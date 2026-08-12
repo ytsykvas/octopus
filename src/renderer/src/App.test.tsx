@@ -905,6 +905,36 @@ describe('App', () => {
     expect(screen.queryByRole('dialog', { name: 'Add from GitHub' })).not.toBeInTheDocument()
   })
 
+  // The centre and the tab strip share one handler, but not one wiring. Without
+  // this, the menu could be reconnected straight to the picker — the way it used
+  // to be — and every other test here would stay green.
+  it('sends an unconnected user to the Git settings from the add menu too', async () => {
+    const user = await openApp()
+
+    await user.click(screen.getByRole('button', { name: 'Add repository' }))
+    await user.click(screen.getByRole('menuitem', { name: /From GitHub/ }))
+
+    const settings = await screen.findByRole('dialog', { name: 'Settings' })
+    expect(within(settings).getByText('Branch prefix')).toBeInTheDocument()
+    expect(screen.queryByRole('dialog', { name: 'Add from GitHub' })).not.toBeInTheDocument()
+  })
+
+  // The centre button disables itself, but the menu is a second door into the
+  // same check, and it has to close while one is running.
+  it('closes the add menu to a second check while one is running', async () => {
+    const check = pending<Result<AccountsStatus>>()
+    vi.mocked(window.octopus.accounts.status).mockReturnValue(check.promise)
+    const user = await openApp()
+    await screen.findByText('Start with a repository')
+
+    await user.click(screen.getByRole('button', { name: 'Add from GitHub…' }))
+
+    expect(screen.getByRole('button', { name: 'Add repository' })).toBeDisabled()
+    await act(async () => {
+      await check.settle({ ok: true, value: disconnectedAccounts() })
+    })
+  })
+
   // `gh` missing and `gh` signed out are the same problem wearing two faces,
   // and both are fixed in the same place.
   it('sends the user to the Git settings when the check itself fails', async () => {
