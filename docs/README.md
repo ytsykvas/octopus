@@ -4,15 +4,16 @@ Written for whoever changes this code next — a person returning after a month,
 or an agent seeing it for the first time. It explains **why** things are shaped
 as they are; the code says what they do, and stays the authority on that.
 
-| Document                           | Read it when                                                                                |
-| ---------------------------------- | ------------------------------------------------------------------------------------------- |
-| [PROJECT.md](PROJECT.md)           | you want the original intent: what this is, what it refuses to be, why the stack was chosen |
-| [architecture.md](architecture.md) | you are adding anything and need to know which layer it belongs to                          |
-| [core.md](core.md)                 | you are touching `src/core` — the modules, their contracts, the invariants                  |
-| [ipc.md](ipc.md)                   | you are adding a channel or wondering where a call ends up                                  |
-| [data.md](data.md)                 | you are changing what lives in `~/.octopus`, or adding a stored field                       |
-| [ui.md](ui.md)                     | you are building a component, picking a colour, or laying something out                     |
-| [testing.md](testing.md)           | you are writing tests, or a test is failing and you doubt the test                          |
+| Document                           | Read it when                                                                                             |
+| ---------------------------------- | -------------------------------------------------------------------------------------------------------- |
+| [PROJECT.md](PROJECT.md)           | you want the original intent: what this is, what it refuses to be, why the stack was chosen              |
+| [architecture.md](architecture.md) | you are adding anything and need to know which layer it belongs to                                       |
+| [core.md](core.md)                 | you are touching `src/core` — the modules, their contracts, the invariants                               |
+| [ipc.md](ipc.md)                   | you are adding a channel or wondering where a call ends up                                               |
+| [data.md](data.md)                 | you are changing what lives in `~/.octopus`, or adding a stored field                                    |
+| [ui.md](ui.md)                     | you are building a component, picking a colour, or laying something out                                  |
+| [testing.md](testing.md)           | you are writing tests, or a test is failing and you doubt the test                                       |
+| [tasks/](tasks/)                   | you have finished something and want the next thing, or you just found work and need somewhere to put it |
 
 ## The shortest possible summary
 

@@ -52,13 +52,16 @@ every check stayed green — types are erased, values are not.
 
 **Skills** (`.claude/skills/`) load automatically when relevant:
 
-| Skill          | Trigger                                       |
-| -------------- | --------------------------------------------- |
-| `core-module`  | automatically when touching `src/core/**`     |
-| `ui-component` | automatically when touching `src/renderer/**` |
-| `agent-sdk`    | when integrating with the Claude Agent SDK    |
-| `/check`       | manual — quality gate with plain explanations |
-| `/ship`        | manual — gate plus a conventional commit      |
+| Skill             | Trigger                                                                |
+| ----------------- | ---------------------------------------------------------------------- |
+| `core-module`     | automatically when touching `src/core/**`                              |
+| `ui-component`    | automatically when touching `src/renderer/**`                          |
+| `agent-sdk`       | when integrating with the Claude Agent SDK                             |
+| `conductor-study` | when Conductor comes up, or before building a feature it already ships |
+| `docs-check`      | when docs may have fallen behind the code                              |
+| `test-check`      | when the suite may have gaps coverage cannot see                       |
+| `/check`          | manual — quality gate with plain explanations                          |
+| `/ship`           | manual — gate plus a conventional commit                               |
 
 **Subagent** `octopus-reviewer` reviews against this project's standards.
 
@@ -69,6 +72,25 @@ every check stayed green — types are erased, values are not.
 
 So formatting never needs a manual run, and the main architectural invariant
 cannot be broken by accident.
+
+## Findings that are not the current task
+
+Work almost always turns up something else: a bug two layers away, a promise in
+the docs the code never kept, a feature the change makes obvious.
+
+**Write it to `docs/tasks/` as its own markdown file and carry on.** Do not fold
+it into the change in hand. A commit that does two things cannot be reviewed as
+either, and the task that was actually asked for is the one that ends up
+unfinished.
+
+Then **say what was recorded**, in the reply. A note filed silently is a note
+nobody reads.
+
+The exception is a one-line fix in a file already open — writing the note costs
+more than the fix, so just fix it.
+
+`docs/tasks/README.md` holds the convention: what a file carries, why there is
+no status field, and why a finished task is deleted rather than marked done.
 
 ## Standards (details in §11.3 of docs/PROJECT.md)
 
