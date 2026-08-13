@@ -94,7 +94,9 @@ alone tests a message the SDK does not send.
 `query` from the Agent SDK spawns a child process and talks to a model, so it is
 a parameter of `startSession` and of `createService` rather than an import — the
 same shape as `GitExec`. The fake keeps only what the code depends on: an async
-iterable with `interrupt`, `setPermissionMode` and `close`.
+iterable with `interrupt` and `close`, and the control requests the session
+makes: `setPermissionMode`, `applyFlagSettings`, `setModel`, `supportedModels`
+and the two usage readings.
 
 **Never call `query()` from a test.**
 
@@ -147,7 +149,7 @@ not have, and `node-pty` spawns a real shell.
 ## Main and preload
 
 `registerIpc` takes its Electron surface as a parameter, so `ipc.test.ts`
-supplies six small functions and drives all 35 channels without a window.
+supplies six small functions and drives all 41 channels without a window.
 
 Two lists are load-bearing: `EXPECTED` in `ipc.test.ts` and `CALLS` in
 `preload/index.test.ts`. A channel name that drifts between the two sides fails

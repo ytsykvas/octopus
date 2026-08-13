@@ -313,17 +313,6 @@ const CHANGE_TONES: Record<ChangeLine['sign'], string> = {
 }
 
 /**
- * What a tool call did to a file.
- *
- * The arguments carry it already — an `Edit` is handed the text it replaces and
- * the text it writes — so this needs nothing from disk and draws the same on a
- * conversation read back after a restart.
- *
- * No line numbers: `old_string` is a fragment, and real ones would need the file
- * as it stood at the time, which is not something we have. A number that is
- * nearly right is worse than none in a place the eye trusts.
- */
-/**
  * The lines of a change, numbered where a number can be justified.
  *
  * A removed line belongs to the file as it was, and that is not something we
@@ -362,6 +351,14 @@ interface NumberedLine extends ChangeLine {
   readonly number: number | null
 }
 
+/**
+ * What a tool call did to a file.
+ *
+ * The arguments carry it already — an `Edit` is handed the text it replaces and
+ * the text it writes — so this needs nothing from disk and draws the same on a
+ * conversation read back after a restart. The lines it landed among are the one
+ * thing the arguments cannot carry, which is why `context` arrives separately.
+ */
 function ChangeBlock({
   name,
   change,
