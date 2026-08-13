@@ -105,6 +105,12 @@ Two rules there are worth keeping:
   A workspace nobody has spoken to, an API-key session with no plan windows and
   a CLI too old to answer all get the composer as it was. An empty rule above
   the field would be chrome asserting that a measurement exists.
+- **The reading never enters the log.** It arrives on the same stream as the
+  agent's own output, and was appended there like anything else for a while:
+  that wiped the answer being typed out, and left a row that draws nothing in
+  the middle of a run of tool calls — splitting one fold into two, with a break
+  the reader cannot see. `isEphemeral` in `core/events.ts` names the three
+  events that are not part of the conversation, and the log drops all three.
 - **A refusal is named beside the numbers, never over them.** The first attempt
   had the account's status replace the percentages, which is what the old header
   chip did — fair there, where one number gave way to a word. Here it covered
@@ -185,6 +191,13 @@ way to one; what the agent did next was start editing files.
 Dismissing sends whatever is in the field, empty or not. The agent is blocked on
 this answer, so a dismissal that resolved nothing would leave the conversation
 waiting on a question no longer on screen.
+
+**The footer names what the next message will actually run in.** A conversation
+with no record yet has no stored mode, and the record is created from the
+settings — so that is what the pickers show until it exists, handed down from
+`App`, which is where the config is read. Showing the schema's own defaults
+instead made the control lie about exactly one message: the first, which is the
+one the user has not sent yet and is looking straight at.
 
 **The footer's permission control is two things, not one**, and they are two
 stored fields. `plan` is not a third degree of permission but a state the

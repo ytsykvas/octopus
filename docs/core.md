@@ -162,8 +162,42 @@ Nothing inside a `commit` may call `commit` again: it would queue behind the
 write it is already part of, and wait for itself. That deadlock cost an
 afternoon.
 
+### A question nobody can answer is withdrawn
+
+`canUseTool` blocks the agent on a promise, so an open permission request is a
+turn held open. Every way a turn can end withdraws the chat's questions:
+stopping it, the session closing with its workspace, and the `result` or `error`
+that ends it on its own. `abandonPermissions` resolves each as a refusal and
+drops it — resolving rather than dropping, because the promise is what holds the
+tool call, and a refusal is the only answer that cannot start work nobody
+approved. It carries `ABANDONED` rather than `DENIED`: the agent reads a
+refusal's message as instruction, and nobody declined anything.
+
+Only an answer used to remove one, which let the map outlive the sessions in it.
+That was invisible until `pendingPermission` began handing the first entry it
+finds for a chat to whatever window opens the conversation — at which point a
+question the user had stopped instead of answering came back with live buttons
+on it.
+
+The other half of the same rule: the entry is removed where the answer is
+**given**, after the writes that can fail. Removing it first meant a config
+write that failed left the agent blocked on a question nothing could ask again —
+the window had dropped its copy, and `pendingPermission` had none.
+
+Only the session's own stream reaches `handleEvent`; a background write that
+failed is reported straight to the listeners by `report`. That is what makes the
+`error` case safe to withdraw on.
+
 ### Errors are not swallowed
 
 If git fails, stderr reaches the user. A `catch` is justified when the fallback
 is genuinely correct — not to make a coverage gap disappear. If the alternative
 is a clearer error one line later, let it through.
+
+Two failures in one chain are two decisions. Asking the agent for its model list
+is fire-and-forget: a list that cannot be **read** is swallowed, since it is a
+convenience for the picker and failing a message over it would report the wrong
+problem — but a list that cannot be **written** is a failed write like any
+other, and goes into the chat through `background`. Handling only the first left
+the second uncaught in the main process, where Electron answers with a modal
+about a JavaScript error over an application that is otherwise fine.
