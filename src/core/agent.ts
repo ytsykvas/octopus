@@ -251,6 +251,15 @@ export function toAgentModels(models: readonly ModelInfo[]): AgentModel[] {
 export const DENIED = 'The user declined this action in octopus.'
 
 /**
+ * What a question withdrawn rather than answered says.
+ *
+ * Not `DENIED`: the agent reads a refusal's message as instruction, and here
+ * nobody declined anything — the turn the question belonged to ended first, so
+ * saying "the user declined" would teach it something untrue about the user.
+ */
+export const ABANDONED = 'The turn this question belonged to ended before it was answered.'
+
+/**
  * Starts a session and streams its events.
  *
  * The prompt is a stream rather than a string: that is what allows follow-up

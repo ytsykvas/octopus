@@ -12,6 +12,7 @@ import { query as defaultQuery } from '@anthropic-ai/claude-agent-sdk'
 
 import { type CommandExec, defaultExec } from './accounts.js'
 import {
+  ABANDONED,
   type AgentSession,
   type ContextUsage,
   DENIED,
@@ -491,6 +492,12 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
       background(chat, setStatus(chat.workspaceId, 'error'))
     }
 
+    // A turn that has ended cannot answer for a tool it never ran. Only the
+    // session's own stream reaches here — a background write that failed is
+    // reported straight to the listeners by `report` — so this cannot withdraw
+    // a question a live turn is still waiting on.
+    if (event.type === 'result' || event.type === 'error') abandonPermissions(chat.id)
+
     emit({ chatId: chat.id, workspaceId: chat.workspaceId, event })
   }
 
@@ -550,6 +557,28 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
   }
 
   /**
+   * Lets go of every question one chat is blocked on.
+   *
+   * A request used to outlive the turn that raised it. Nothing but an answer
+   * removed it, so a question the user had stopped instead of answering stayed
+   * in the map — and `pendingPermission` hands the first one it finds to
+   * whatever window opens that conversation next, which brought the cancelled
+   * card back with live buttons on it.
+   *
+   * Resolved rather than merely dropped: the promise this returns to the SDK is
+   * what holds the tool call, and a refusal is the only answer that cannot
+   * start work nobody approved.
+   */
+  function abandonPermissions(chatId: string): void {
+    for (const [requestId, request] of pending) {
+      if (request.chatId !== chatId) continue
+
+      pending.delete(requestId)
+      request.resolve({ allow: false, message: ABANDONED })
+    }
+  }
+
+  /**
    * Stores a change to either half of the mode and pushes the result live.
    *
    * Both halves go through here because the session only understands the two
@@ -580,8 +609,9 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
       sessions.delete(chat.id)
 
       // A session that ends mid-tool leaves an edit nobody will ever answer
-      // for. Cleared with it, so this cannot become the leak `pending` is —
-      // and only this chat's, since the map is the whole service's.
+      // for, and a question nobody will ever answer at all. Both go with it,
+      // and only this chat's, since the maps are the whole service's.
+      abandonPermissions(chat.id)
       for (const [toolUseId, edit] of editsInFlight) {
         if (edit.chatId === chat.id) editsInFlight.delete(toolUseId)
       }
@@ -877,6 +907,11 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
 
     async interruptChat(chatId) {
       const chat = requireChat(chatId)
+
+      // Before the interrupt rather than after it: stopping a turn is how a
+      // question gets abandoned in the first place, and an interrupt that
+      // throws must still leave nothing behind to be asked again.
+      abandonPermissions(chatId)
 
       // Nothing running is not a failure — the button is simply ahead of the
       // agent, which finished between the render and the click.

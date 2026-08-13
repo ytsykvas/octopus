@@ -8,7 +8,7 @@ import type { ModelInfo, Query, SDKMessage } from '@anthropic-ai/claude-agent-sd
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import type { CommandExec } from './accounts.js'
-import { DENIED, type QueryFn, READ_ONLY_TOOLS } from './agent.js'
+import { ABANDONED, DENIED, type QueryFn, READ_ONLY_TOOLS } from './agent.js'
 import type { RemoteRepository } from './github.js'
 import { gitIn } from './git.js'
 import { WORKSPACE_NAMES } from './names.js'
@@ -2072,6 +2072,106 @@ describe('the agent chat', () => {
       const { service } = await withWorkspace()
 
       await expect(service.answerPermission('r-nothing', 'allow')).resolves.toBeUndefined()
+    })
+
+    /*
+     * A question used to outlive the turn that raised it: only an answer took
+     * it out of the map, so stopping the turn instead of answering left it
+     * there — and `pendingPermission` hands the first one it finds to whatever
+     * window opens the conversation next. The cancelled card came back with
+     * live buttons on it, and the composer with it, until the app restarted.
+     *
+     * The refusal is not `DENIED`: nobody declined anything, and the agent
+     * reads that message as instruction.
+     */
+    it('lets go of a question the stopped turn will never answer', async () => {
+      const { service, workspaceId, events } = await withWorkspace()
+      const chat = await service.openChat(workspaceId)
+      await service.sendToChat(chat.id, 'delete it')
+
+      const decision = agent().ask('Bash', { command: 'rm -rf build' })
+      await waitForRequest(events)
+
+      await service.interruptChat(chat.id)
+
+      await expect(decision).resolves.toMatchObject({ behavior: 'deny', message: ABANDONED })
+      expect(service.pendingPermission(chat.id)).toBeNull()
+    })
+
+    it('leaves the question another conversation is blocked on alone', async () => {
+      const { service, projectId, workspaceId, events } = await withWorkspace()
+      const first = await service.openChat(workspaceId)
+      await service.sendToChat(first.id, 'edit it')
+
+      const second = await service.createWorkspaceIn(projectId)
+      const other = await service.openChat(second.id)
+      await service.sendToChat(other.id, 'edit it too')
+
+      void agents[0]?.ask('Edit')
+      void agents[1]?.ask('Edit')
+      await vi.waitFor(() => {
+        expect(events.filter((entry) => entry.event.type === 'permission_request')).toHaveLength(2)
+      })
+
+      await service.interruptChat(first.id)
+
+      expect(service.pendingPermission(first.id)).toBeNull()
+      expect(service.pendingPermission(other.id)).not.toBeNull()
+    })
+
+    // The turn can also end on its own while the question is open — the SDK
+    // gives up on the tool call, and nothing would ever answer for it.
+    it('withdraws a question the finished turn never answered', async () => {
+      const { service, workspaceId, events } = await withWorkspace()
+      const chat = await service.openChat(workspaceId)
+      await service.sendToChat(chat.id, 'edit it')
+
+      const decision = agent().ask('Edit')
+      await waitForRequest(events)
+
+      agent().emit(resultMessage)
+
+      await expect(decision).resolves.toMatchObject({ behavior: 'deny' })
+      expect(service.pendingPermission(chat.id)).toBeNull()
+
+      await vi.waitFor(async () => {
+        const [workspace] = await service.listWorkspaces('planner')
+        expect(workspace?.status).toBe('idle')
+      })
+    })
+
+    it('withdraws it when the session dies with the question open', async () => {
+      const { service, workspaceId, events } = await withWorkspace()
+      const chat = await service.openChat(workspaceId)
+      await service.sendToChat(chat.id, 'edit it')
+
+      const decision = agent().ask('Edit')
+      await waitForRequest(events)
+
+      agent().finish(new Error('claude exited with code 1'))
+
+      await expect(decision).resolves.toMatchObject({ behavior: 'deny' })
+      expect(service.pendingPermission(chat.id)).toBeNull()
+
+      await vi.waitFor(async () => {
+        const [workspace] = await service.listWorkspaces('planner')
+        expect(workspace?.status).toBe('error')
+      })
+    })
+
+    // The workspace is going, and with it the chat — so there is nothing left
+    // to ask, and the answer has to be given here or not at all.
+    it('lets go of the questions of a workspace being removed', async () => {
+      const { service, workspaceId, events } = await withWorkspace()
+      const chat = await service.openChat(workspaceId)
+      await service.sendToChat(chat.id, 'edit it')
+
+      const decision = agent().ask('Edit')
+      await waitForRequest(events)
+
+      await service.removeWorkspaceById(workspaceId, { force: true })
+
+      await expect(decision).resolves.toMatchObject({ behavior: 'deny' })
     })
   })
 
