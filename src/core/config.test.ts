@@ -151,6 +151,54 @@ describe('saveConfig', () => {
   })
 })
 
+/*
+ * Reproduced from a real config before it was fixed.
+ *
+ * `ExitPlanMode` sat in this list, so the plan the agent handed back was
+ * approved by the SDK itself — no question, no dialog, no record that planning
+ * had ended, and the agent went straight on to editing files. The list is the
+ * one that reaches the SDK, so an entry here does not merely pre-answer our
+ * question, it stops the question being asked.
+ */
+describe('standing approvals', () => {
+  const withTools = (tools: string[]): Config => ({
+    ...createDefaultConfig('ytsykvas', NOW, () => UUID),
+    alwaysAllowedTools: tools
+  })
+
+  it('strips the plan tool from a config that already holds it', async () => {
+    await writeFile(
+      file,
+      JSON.stringify({
+        ...createDefaultConfig('ytsykvas', NOW, () => UUID),
+        alwaysAllowedTools: ['Bash', 'ExitPlanMode', 'Monitor']
+      }),
+      'utf8'
+    )
+
+    await expect(loadConfig(file)).resolves.toMatchObject({
+      alwaysAllowedTools: ['Bash', 'Monitor']
+    })
+  })
+
+  // Cleaned on the way out too, so the entry stops existing rather than being
+  // filtered forever — and the list the settings screen shows stays honest.
+  it('writes it back out of the file', async () => {
+    await saveConfig(withTools(['ExitPlanMode', 'Bash']), file)
+
+    const written: unknown = JSON.parse(await readFile(file, 'utf8'))
+    expect(written).toMatchObject({ alwaysAllowedTools: ['Bash'] })
+  })
+
+  it('leaves every other standing approval alone', async () => {
+    await saveConfig(withTools(['Bash', 'AskUserQuestion', 'Monitor']), file)
+
+    await expect(loadConfig(file)).resolves.toMatchObject({
+      alwaysAllowedTools: ['Bash', 'AskUserQuestion', 'Monitor']
+    })
+  })
+})
+
 describe('toSdkSettingSources', () => {
   it('maps none to an empty array — the SDK cannot pick up CLAUDE.md silently', () => {
     expect(toSdkSettingSources('none')).toEqual([])

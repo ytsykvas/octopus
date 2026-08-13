@@ -134,10 +134,32 @@ describe('channel names', () => {
     ['chats.send', () => method('chats', 'send')('c' as never, 'hi' as never), 'chats:send'],
     ['chats.interrupt', () => method('chats', 'interrupt')('c' as never), 'chats:interrupt'],
     [
-      'chats.setPermissionMode',
-      () => method('chats', 'setPermissionMode')('c' as never, 'plan' as never),
+      'chats.setWorkingMode',
+      () => method('chats', 'setWorkingMode')('c' as never, 'acceptEdits' as never),
       'chats:mode'
     ],
+    [
+      'chats.setPlanMode',
+      () => method('chats', 'setPlanMode')('c' as never, true as never),
+      'chats:planMode'
+    ],
+    [
+      'chats.setEffort',
+      () => method('chats', 'setEffort')('c' as never, 'xhigh' as never),
+      'chats:effort'
+    ],
+    [
+      'chats.setModel',
+      () => method('chats', 'setModel')('c' as never, 'claude-opus-5' as never),
+      'chats:model'
+    ],
+    ['chats.models', () => method('chats', 'models')(), 'chats:models'],
+    [
+      'chats.pendingPermission',
+      () => method('chats', 'pendingPermission')('c' as never),
+      'chats:pending'
+    ],
+    ['chats.usage', () => method('chats', 'usage')('c' as never), 'chats:usage'],
     [
       'chats.answerPermission',
       () => method('chats', 'answerPermission')('r' as never, 'allow' as never),

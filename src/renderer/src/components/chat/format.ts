@@ -20,6 +20,28 @@ export function formatTokens(count: number): string {
   return Number(withDecimal) < 10 ? `${withDecimal}k` : `${String(Math.round(thousands))}k`
 }
 
+/** Below this a share is unremarkable; at it, worth noticing. */
+const NOTICEABLE = 75
+/** At this, worth acting on before it decides for you. */
+const PRESSING = 90
+
+/**
+ * The colour a share is drawn in as it fills.
+ *
+ * One function for every reading in the strip, so the context window and the
+ * subscription cannot disagree about what counts as high — two gauges side by
+ * side turning colour at different points reads as one of them being broken.
+ *
+ * Not tied to the agent's own auto-compaction threshold, which sounds like the
+ * natural boundary and is not: measured against a live session it sits at
+ * 96.7% of the window, which is long past the point where knowing helps.
+ */
+export function usageTone(percentage: number): 'text-ink-faint' | 'text-warning' | 'text-danger' {
+  if (percentage >= PRESSING) return 'text-danger'
+  if (percentage >= NOTICEABLE) return 'text-warning'
+  return 'text-ink-faint'
+}
+
 /**
  * How long until a moment, coarsely: `3г 12хв`, `47хв`, `зараз`.
  *

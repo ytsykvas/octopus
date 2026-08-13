@@ -17,7 +17,8 @@ function config(overrides: Partial<Config> = {}): Config {
     branchPrefix: 'ytsykvas',
     cloneDirectory: '',
     settingSources: 'none',
-    permissionMode: 'default',
+    workingMode: 'default',
+    effort: null,
     alwaysAllowedTools: [],
     theme: 'system',
     language: 'en',
@@ -147,7 +148,31 @@ describe('Settings', () => {
     await openSection(user, 'Agent')
     await user.click(screen.getByRole('button', { name: /^Accept edits/ }))
 
-    expect(props.onChange).toHaveBeenCalledExactlyOnceWith({ permissionMode: 'acceptEdits' })
+    expect(props.onChange).toHaveBeenCalledExactlyOnceWith({ workingMode: 'acceptEdits' })
+  })
+
+  // The composer changes one conversation; this is what every new one starts
+  // from, so a working habit does not have to be re-chosen on every branch.
+  it('sets the effort a new chat starts on', async () => {
+    const user = userEvent.setup()
+    const props = await renderSettings()
+
+    await openSection(user, 'Agent')
+    await user.click(screen.getByRole('button', { name: /^Very high/ }))
+
+    expect(props.onChange).toHaveBeenCalledExactlyOnceWith({ effort: 'xhigh' })
+  })
+
+  // Null is the stored form of "leave it to the agent"; a radio list cannot
+  // hold null, so the sentinel has to be turned back at the boundary.
+  it('stores no effort at all when the agent is to decide', async () => {
+    const user = userEvent.setup()
+    const props = await renderSettings({ config: config({ effort: 'max' }) })
+
+    await openSection(user, 'Agent')
+    await user.click(screen.getByRole('button', { name: /^Agent decides/ }))
+
+    expect(props.onChange).toHaveBeenCalledExactlyOnceWith({ effort: null })
   })
 
   it('says nothing has been waved through yet', async () => {

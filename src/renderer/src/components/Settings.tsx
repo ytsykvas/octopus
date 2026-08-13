@@ -2,7 +2,7 @@ import { Bot, GitBranch, Info, type LucideIcon, Monitor, Sparkles } from 'lucide
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
-import type { PermissionMode } from '@core/chats.js'
+import type { Effort, WorkingMode } from '@core/chats.js'
 import type {
   Config,
   LanguagePreference,
@@ -211,6 +211,14 @@ function GitSection({
   )
 }
 
+/**
+ * "Leave it to the agent", as a value a radio list can hold.
+ *
+ * The stored setting is `null`, which no list of options can carry — the same
+ * sentinel the composer's own effort picker uses, for the same reason.
+ */
+const AGENT_EFFORT = 'auto'
+
 function AgentSection({ config, onChange }: SectionProps): React.JSX.Element {
   const { t } = useTranslation()
 
@@ -241,9 +249,13 @@ function AgentSection({ config, onChange }: SectionProps): React.JSX.Element {
       </Field>
 
       <div className="border-line border-t pt-6">
+        {/* Planning is deliberately not a third choice here. Whether to plan is
+            a judgement about one task, made with the toggle in the composer; a
+            standing answer to it is not a habit but a way of never being asked
+            the question. */}
         <Field label={t('settings.permissionMode')} hint={t('settings.permissionModeHint')}>
-          <RadioList<PermissionMode>
-            value={config.permissionMode}
+          <RadioList<WorkingMode>
+            value={config.workingMode}
             options={[
               {
                 value: 'default',
@@ -254,14 +266,32 @@ function AgentSection({ config, onChange }: SectionProps): React.JSX.Element {
                 value: 'acceptEdits',
                 label: t('settings.permissionAcceptEdits'),
                 hint: t('settings.permissionAcceptEditsHint')
-              },
-              {
-                value: 'plan',
-                label: t('settings.permissionPlan'),
-                hint: t('settings.permissionPlanHint')
               }
             ]}
-            onChange={(permissionMode) => void onChange({ permissionMode })}
+            onChange={(workingMode) => void onChange({ workingMode })}
+          />
+        </Field>
+      </div>
+
+      <div className="border-line border-t pt-6">
+        <Field label={t('settings.effort')} hint={t('settings.effortHint')}>
+          <RadioList<Effort | typeof AGENT_EFFORT>
+            value={config.effort ?? AGENT_EFFORT}
+            options={[
+              {
+                value: AGENT_EFFORT,
+                label: t('chat.effortAuto'),
+                hint: t('settings.effortAutoHint')
+              },
+              { value: 'low', label: t('chat.effortLow') },
+              { value: 'medium', label: t('chat.effortMedium') },
+              { value: 'high', label: t('chat.effortHigh') },
+              { value: 'xhigh', label: t('chat.effortXhigh') },
+              { value: 'max', label: t('chat.effortMax') }
+            ]}
+            onChange={(value) => {
+              void onChange({ effort: value === AGENT_EFFORT ? null : value })
+            }}
           />
         </Field>
       </div>
@@ -389,7 +419,8 @@ function RadioList<T extends string>({
   onChange
 }: {
   value: T
-  options: readonly { value: T; label: string; hint: string }[]
+  /** The hint is optional: a scale whose labels are the whole story needs none. */
+  options: readonly { value: T; label: string; hint?: string }[]
   onChange: (value: T) => void
 }): React.JSX.Element {
   return (
@@ -406,7 +437,9 @@ function RadioList<T extends string>({
           }`}
         >
           <span className="font-medium">{option.label}</span>
-          <span className="text-ink-faint mt-0.5 block leading-relaxed">{option.hint}</span>
+          {option.hint !== undefined && (
+            <span className="text-ink-faint mt-0.5 block leading-relaxed">{option.hint}</span>
+          )}
         </button>
       ))}
     </div>

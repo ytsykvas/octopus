@@ -7,6 +7,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { InvalidFileError } from './persist.js'
 import {
   addChat,
+  AgentModelSchema,
   addProject,
   addWorkspace,
   assignPort,
@@ -17,10 +18,12 @@ import {
   findProject,
   loadState,
   migrate,
+  modelsUnchanged,
   PROJECT_COLORS,
   PORT_RANGE_END,
   PORT_RANGE_START,
   type Project,
+  rememberModels,
   removeProject,
   removeWorkspace,
   updateProject,
@@ -158,7 +161,8 @@ describe('migration', () => {
         { ...project, id: 'planner-2', repoPath: '/repos/planner-2', color: undefined }
       ],
       workspaces: [],
-      chats: []
+      chats: [],
+      knownModels: []
     }
 
     const colours = migrate(legacy).projects.map((item) => item.color)
@@ -170,7 +174,8 @@ describe('migration', () => {
       version: 1 as const,
       projects: [{ ...project, color: 'teal' as const }],
       workspaces: [],
-      chats: []
+      chats: [],
+      knownModels: []
     }
 
     expect(migrate(stored).projects[0]?.color).toBe('teal')
@@ -186,7 +191,8 @@ describe('migration', () => {
         { ...project, id: 'esl', repoPath: '/repos/esl', color: undefined }
       ],
       workspaces: [],
-      chats: []
+      chats: [],
+      knownModels: []
     }
 
     expect(migrate(stored).projects[1]?.color).not.toBe(PROJECT_COLORS[0])
@@ -470,7 +476,9 @@ describe('chats', () => {
       agent: 'claude',
       sessionId: null,
       model: null,
-      permissionMode: 'default',
+      effort: null,
+      workingMode: 'default',
+      planMode: false,
       createdAt: '2026-08-11T09:00:00.000Z',
       ...overrides
     }
@@ -516,11 +524,11 @@ describe('chats', () => {
 
   it('leaves fields the patch does not mention alone', () => {
     const state = updateChat(addChat(withWorkspace, makeChat()), 'chat-1', {
-      permissionMode: 'plan'
+      planMode: true
     })
 
     expect(findChat(state, 'chat-1')).toMatchObject({
-      permissionMode: 'plan',
+      planMode: true,
       createdAt: '2026-08-11T09:00:00.000Z'
     })
   })
@@ -576,5 +584,36 @@ describe('chats', () => {
     )
 
     await expect(loadState(file)).resolves.toMatchObject({ chats: [] })
+  })
+})
+
+describe('the remembered model list', () => {
+  const opus = { value: 'claude-opus-5', displayName: 'Opus 5', description: '' }
+  const model = AgentModelSchema.parse(opus)
+
+  it('starts empty', () => {
+    expect(EMPTY_STATE.knownModels).toEqual([])
+  })
+
+  it('replaces the list rather than adding to it', () => {
+    const first = rememberModels(EMPTY_STATE, [model])
+    const second = rememberModels(first, [])
+
+    expect(second.knownModels).toEqual([])
+  })
+
+  it('recognises a list that says exactly the same thing', () => {
+    const stored = rememberModels(EMPTY_STATE, [model])
+
+    expect(modelsUnchanged(stored, [model])).toBe(true)
+    expect(modelsUnchanged(stored, [{ ...model, displayName: 'Opus five' }])).toBe(false)
+  })
+
+  // A state file from before the field existed has to load: the reader throws
+  // on a mismatch, so a missing default would stop the app opening.
+  it('loads a state written before models were remembered', async () => {
+    await writeFile(file, JSON.stringify({ ...withProject, chats: [] }), 'utf8')
+
+    await expect(loadState(file)).resolves.toMatchObject({ knownModels: [] })
   })
 })

@@ -162,11 +162,47 @@ export const uk: Translation = {
     emptyTitle: 'Почніть розмову',
     emptyBody: 'Перше повідомлення запускає сесію агента в цьому робочому дереві. Гілка вже існує.',
 
+    context: 'Контекст',
+    contextTitle: 'Вікно контексту — {{used}} з {{total}}',
+    windowFiveHour: '5 год',
+    windowFiveHourTitle: 'П’ятигодинне вікно',
+    windowWeek: 'Тиждень',
+    windowWeekTitle: 'Тижневе вікно',
+
+    model: 'Модель',
+    modelAuto: 'Вирішує агент',
+
+    effort: 'Зусилля',
+    effortAuto: 'Вирішує агент',
+    effortLow: 'Низьке',
+    effortMedium: 'Середнє',
+    effortHigh: 'Високе',
+    effortXhigh: 'Дуже високе',
+    effortMax: 'Максимальне',
+    effortUnsupported: 'Ця модель не приймає налаштування зусилля.',
+
     mode: 'Дозволи',
     modeDefault: 'Питати',
-    modePlan: 'Лише план',
     modeAcceptEdits: 'Правки без питань',
+    modeAfterPlan: 'Що агент робитиме, коли план буде схвалено.',
+    planMode: 'План',
+    planModeHint: 'Спершу продумати підхід. Доки ви його не схвалите, агент нічого не виконує.',
 
+    toolSteps_one: '{{count}} дія',
+    toolSteps_few: '{{count}} дії',
+    toolSteps_many: '{{count}} дій',
+    toolSteps_other: '{{count}} дій',
+
+    plan: 'План',
+    executePlan: 'Виконати',
+    executePlanMessage: 'Виконай план «{{title}}».',
+    copy: 'Копіювати',
+    copied: 'Скопійовано',
+    copyFailed: 'Не вдалося',
+    planReady: 'План готовий',
+    planExecute: 'Виконати',
+    planFeedback: 'Щось іще треба уточнити?',
+    planFeedbackPlaceholder: 'Напишіть, і агент доопрацює план',
     permissionTitle: 'Агент хоче скористатися {{tool}}',
     permissionAnswered: 'Відповідь уже дано.',
     allow: 'Дозволити',
@@ -185,9 +221,7 @@ export const uk: Translation = {
     endedBlocked: 'зупинив хук',
     endedFailed: 'завершилось помилкою',
 
-    usage: 'Витрата підписки',
     usageResets: 'скинеться через {{time}}',
-    usageWarning: 'близько до ліміту',
     usageReached: 'ліміт вичерпано',
     hours: 'г',
     minutes: 'хв',
@@ -243,6 +277,11 @@ export const uk: Translation = {
     settingSourcesAllHint:
       'Підтягує користувацькі, проєктні й локальні налаштування — як звичайний CLI.',
 
+    effort: 'Зусилля за замовчуванням',
+    effortHint:
+      'Скільки міркувань просить нова розмова. Кожну потім можна змінити окремо, просто в композері.',
+    effortAutoHint: 'Обирає агент — так і буде, якщо нічого не задано.',
+
     permissionMode: 'Що дозволено новому чату',
     permissionModeHint:
       'Початковий стан для кожного воркспейсу, щоб питання не поставало на кожній новій гілці. Окремий чат усе одно можна перемкнути.',
@@ -252,8 +291,6 @@ export const uk: Translation = {
     permissionAcceptEdits: 'Правки без питань',
     permissionAcceptEditsHint:
       'Зміни у файлах проходять без запиту. Команди все одно чекають — вони виходять за межі робочого дерева.',
-    permissionPlan: 'Лише план',
-    permissionPlanHint: 'Агент пропонує підхід і нічого не змінює, доки ви не погодитесь.',
 
     alwaysAllowed: 'Відповідь «завжди»',
     alwaysAllowedHint:

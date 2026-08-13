@@ -1,12 +1,16 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { describe, expect, it, vi } from 'vitest'
+import { beforeAll, describe, expect, it, vi } from 'vitest'
 
 import type { WorkspaceView } from '@core/workspaces.js'
 
 import { CHAT_ID, emitAgentEvent, givenChat } from '../../test/chat.js'
+import { stubDialogElement } from '../../test/dialog.js'
 import { octopus } from '../../test/octopus.js'
 import { Chat } from './Chat.js'
+
+// The plan's approval is a dialog now, and jsdom implements none of `<dialog>`.
+beforeAll(stubDialogElement)
 
 function workspace(overrides: Partial<WorkspaceView> = {}): WorkspaceView {
   return {
@@ -36,14 +40,15 @@ async function openChat(target: WorkspaceView | null = workspace()): Promise<voi
 /**
  * Renders a pane whose chat already exists, and waits until it is loaded.
  *
- * The picker is the signal: it is disabled until there is a record to change,
- * so an enabled one means the chat has arrived — and events for it are no
- * longer being dropped as belonging to some other chat.
+ * The history call is the signal. It used to be the mode picker becoming
+ * enabled — but the picker is now enabled from the start, since the mode of the
+ * first message is exactly the one worth choosing, so that signal would be true
+ * before the chat had arrived and every test after it would race the load.
  */
 async function openLoadedChat(): Promise<void> {
   await openChat()
   await waitFor(() => {
-    expect(screen.getByRole('combobox', { name: 'Permissions' })).toBeEnabled()
+    expect(octopus().chats.history).toHaveBeenCalled()
   })
 }
 
@@ -85,12 +90,12 @@ describe('a workspace nobody has written in', () => {
     expect(header?.querySelector('svg')).toBeInTheDocument()
   })
 
-  // The record is created by the first message, so until then there is nothing
-  // whose mode could be changed.
-  it('offers no mode to change yet', async () => {
+  // The mode the first message runs under is the one most worth choosing, so
+  // the control is live before there is a record — picking one creates it.
+  it('offers the mode before there is anything to change', async () => {
     await openChat()
 
-    expect(screen.getByRole('combobox', { name: 'Permissions' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Permissions' })).toBeEnabled()
   })
 })
 
@@ -155,6 +160,21 @@ describe('sending the first message', () => {
 
     expect(await screen.findByText(/no such workspace/)).toBeInTheDocument()
     expect(octopus().chats.send).not.toHaveBeenCalled()
+  })
+
+  // A setting also creates the record, so it meets the same failure — and
+  // storing a choice against a chat that does not exist would be worse than
+  // saying it did not take.
+  it('says so when a setting could not create the record either', async () => {
+    const user = userEvent.setup()
+    vi.mocked(octopus().chats.open).mockResolvedValue({ ok: false, error: 'no such workspace' })
+    await openChat()
+
+    await user.click(screen.getByRole('button', { name: 'Effort' }))
+    await user.click(screen.getByRole('menuitemradio', { name: 'Low' }))
+
+    expect(await screen.findByText(/no such workspace/)).toBeInTheDocument()
+    expect(octopus().chats.setEffort).not.toHaveBeenCalled()
   })
 
   it('says so when the message could not be sent', async () => {
@@ -364,7 +384,9 @@ describe('answering a permission request', () => {
     emitAgentEvent(request)
     await user.click(screen.getByRole('button', { name: 'Allow' }))
 
-    expect(octopus().chats.answerPermission).toHaveBeenCalledWith('r-1', 'allow')
+    // No third argument: words only accompany a refusal, and only the plan
+    // dialog offers anywhere to write them.
+    expect(octopus().chats.answerPermission).toHaveBeenCalledWith('r-1', 'allow', undefined)
     await waitFor(() => {
       expect(screen.queryByRole('button', { name: 'Allow' })).not.toBeInTheDocument()
     })
@@ -406,52 +428,305 @@ describe('answering a permission request', () => {
   })
 })
 
-describe('the permission mode', () => {
-  it('shows the mode the chat is in and changes it', async () => {
-    const user = userEvent.setup()
-    givenChat([], { permissionMode: 'acceptEdits' })
-    await openChat()
+describe('deciding on a plan', () => {
+  const PLAN = '# Normalising the locales\n\nUse `en.ts` as the source.'
 
-    const picker = await screen.findByRole('combobox', { name: 'Permissions' })
-    await waitFor(() => {
-      expect(picker).toHaveValue('acceptEdits')
-    })
+  const planRequest = {
+    type: 'permission_request' as const,
+    requestId: 'r-plan',
+    toolName: 'ExitPlanMode',
+    input: { plan: PLAN }
+  }
 
-    await user.selectOptions(picker, 'plan')
-
-    expect(octopus().chats.setPermissionMode).toHaveBeenCalledWith(CHAT_ID, 'plan')
-    expect(picker).toHaveValue('plan')
-  })
-
-  // The narrowing is not ceremony: the value arrives as a bare string, and a
-  // mode the core does not know would be stored and then fail to apply.
-  it('ignores a value that is not a mode', async () => {
+  it('opens the dialog rather than a card in the log', async () => {
     givenChat()
     await openLoadedChat()
 
-    fireEvent.change(screen.getByRole('combobox', { name: 'Permissions' }), {
-      target: { value: 'bypassPermissions' }
+    emitAgentEvent(planRequest)
+
+    expect(await screen.findByText('Normalising the locales')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Allow' })).not.toBeInTheDocument()
+  })
+
+  /*
+   * The whole point of the change, end to end.
+   *
+   * Approving the plan has to answer the request *and* put the toggle out —
+   * the core clears the stored field, but nothing tells a window that a record
+   * changed, so a Plan button still lit over an agent that has started editing
+   * is exactly the state this was reported as.
+   */
+  it('answers and stops showing the chat as planning', async () => {
+    const user = userEvent.setup()
+    givenChat([], { planMode: true, workingMode: 'acceptEdits' })
+    await openLoadedChat()
+
+    expect(screen.getByRole('button', { name: 'Plan' })).toHaveAttribute('aria-pressed', 'true')
+
+    emitAgentEvent(planRequest)
+    await user.click(await screen.findByRole('button', { name: 'Execute' }))
+
+    expect(octopus().chats.answerPermission).toHaveBeenCalledWith('r-plan', 'allow', undefined)
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: 'Plan' })).toHaveAttribute('aria-pressed', 'false')
+    })
+  })
+
+  /*
+   * Coming back to a plan that was set aside.
+   *
+   * The request it belonged to was answered when the dialog closed, so there
+   * is nothing left to approve — this is an ordinary message, and it names the
+   * plan because a conversation may hold several by the time anyone returns to
+   * one.
+   */
+  it('asks for a plan in the log to be carried out, by name', async () => {
+    const user = userEvent.setup()
+    givenChat([
+      {
+        role: 'agent',
+        at: '2026-08-13T09:00:00.000Z',
+        event: {
+          type: 'tool_use',
+          toolUseId: 'call-1',
+          name: 'ExitPlanMode',
+          input: { plan: '# Normalising the locales\n\nUse `en.ts` as the source.' }
+        }
+      }
+    ])
+    await openLoadedChat()
+
+    await user.click(screen.getByRole('button', { name: 'Execute' }))
+
+    await waitFor(() => {
+      expect(octopus().chats.send).toHaveBeenCalledWith(
+        CHAT_ID,
+        'Carry out the plan “Normalising the locales”.'
+      )
+    })
+  })
+
+  /*
+   * Reported from a running app: the footer said "without asking" and the agent
+   * asked about every edit.
+   *
+   * Turning planning off is what hands the session the mode the footer names —
+   * the same handover approving through the dialog performs. Sent without it,
+   * the message went out with the conversation still recorded as planning, and
+   * the agent worked in whatever mode it had fallen back to.
+   *
+   * Before the message, not after: the mode has to be in force by the time the
+   * agent reads the instruction.
+   */
+  it('stops planning before asking for the work, so the footer is telling the truth', async () => {
+    const user = userEvent.setup()
+    givenChat(
+      [
+        {
+          role: 'agent',
+          at: '2026-08-13T09:00:00.000Z',
+          event: {
+            type: 'tool_use',
+            toolUseId: 'call-1',
+            name: 'ExitPlanMode',
+            input: { plan: '# Normalising the locales' }
+          }
+        }
+      ],
+      { planMode: true, workingMode: 'acceptEdits' }
+    )
+    await openLoadedChat()
+
+    await user.click(screen.getByRole('button', { name: 'Execute' }))
+
+    await waitFor(() => {
+      expect(octopus().chats.send).toHaveBeenCalled()
+    })
+    expect(octopus().chats.setPlanMode).toHaveBeenCalledWith(CHAT_ID, false)
+
+    const stopped = vi.mocked(octopus().chats.setPlanMode).mock.invocationCallOrder[0] ?? 0
+    const sent = vi.mocked(octopus().chats.send).mock.invocationCallOrder[0] ?? 0
+    expect(stopped).toBeLessThan(sent)
+
+    expect(screen.getByRole('button', { name: 'Plan' })).toHaveAttribute('aria-pressed', 'false')
+  })
+
+  // Sending it back is not leaving planning: the agent is still working the
+  // problem, and the toggle has to go on saying so.
+  it('sends the note back and stays planning', async () => {
+    const user = userEvent.setup()
+    givenChat([], { planMode: true })
+    await openLoadedChat()
+
+    emitAgentEvent(planRequest)
+    // Enter sends it, the composer's own convention — there is no second
+    // button any more, and writing here is what carrying on planning is.
+    await user.type(
+      await screen.findByLabelText('Anything to work out first?'),
+      'Add a step for the tests{Enter}'
+    )
+
+    expect(octopus().chats.answerPermission).toHaveBeenCalledWith(
+      'r-plan',
+      'deny',
+      'Add a step for the tests'
+    )
+    expect(screen.getByRole('button', { name: 'Plan' })).toHaveAttribute('aria-pressed', 'true')
+  })
+})
+
+describe('the permission mode', () => {
+  const picker = (): HTMLElement => screen.getByRole('button', { name: 'Permissions' })
+
+  it('shows the mode the chat is in and changes it', async () => {
+    const user = userEvent.setup()
+    givenChat([], { workingMode: 'acceptEdits' })
+    await openLoadedChat()
+
+    await waitFor(() => {
+      expect(picker()).toHaveTextContent('Accept edits')
     })
 
-    expect(octopus().chats.setPermissionMode).not.toHaveBeenCalled()
+    await user.click(picker())
+    await user.click(screen.getByRole('menuitemradio', { name: 'Ask first' }))
+
+    expect(octopus().chats.setWorkingMode).toHaveBeenCalledWith(CHAT_ID, 'default')
+    expect(picker()).toHaveTextContent('Ask first')
+  })
+
+  // The core deliberately leaves `bypassPermissions` out, and planning is a
+  // toggle of its own now — so this list is two entries and nothing else.
+  it('offers only the two degrees of permission', async () => {
+    const user = userEvent.setup()
+    givenChat()
+    await openLoadedChat()
+
+    await user.click(picker())
+
+    expect(screen.getAllByRole('menuitemradio')).toHaveLength(2)
+    expect(screen.queryByRole('menuitemradio', { name: /bypass/i })).not.toBeInTheDocument()
+  })
+
+  // Its own stored field now, rather than a third value crowding the one the
+  // picker above writes to.
+  it('turns planning on for the chat without disturbing the permissions', async () => {
+    const user = userEvent.setup()
+    givenChat([], { workingMode: 'acceptEdits' })
+    await openLoadedChat()
+
+    await user.click(screen.getByRole('button', { name: 'Plan' }))
+
+    await waitFor(() => {
+      expect(octopus().chats.setPlanMode).toHaveBeenCalledWith(CHAT_ID, true)
+    })
+    expect(octopus().chats.setWorkingMode).not.toHaveBeenCalled()
+  })
+
+  // The record is created by the choice itself — that is what makes the mode of
+  // the first message choosable at all.
+  it('creates the record when a mode is chosen before anything is sent', async () => {
+    const user = userEvent.setup()
+    await openChat()
+
+    await user.click(screen.getByRole('button', { name: 'Plan' }))
+
+    await waitFor(() => {
+      expect(octopus().chats.open).toHaveBeenCalledWith('planner/anna')
+    })
+    expect(octopus().chats.setPlanMode).toHaveBeenCalledWith(CHAT_ID, true)
+  })
+
+  it('sends the model to the chat it belongs to', async () => {
+    const user = userEvent.setup()
+    vi.mocked(octopus().chats.models).mockResolvedValue({
+      ok: true,
+      value: [
+        {
+          value: 'claude-opus-5',
+          displayName: 'Opus 5',
+          description: '',
+          supportsEffort: null,
+          supportedEffortLevels: null
+        }
+      ]
+    })
+    givenChat()
+    await openLoadedChat()
+    await screen.findByRole('button', { name: 'Model' })
+
+    await user.click(screen.getByRole('button', { name: 'Model' }))
+    await user.click(await screen.findByRole('menuitemradio', { name: 'Opus 5' }))
+
+    await waitFor(() => {
+      expect(octopus().chats.setModel).toHaveBeenCalledWith(CHAT_ID, 'claude-opus-5')
+    })
+  })
+
+  it('keeps the old model on screen when the change failed', async () => {
+    const user = userEvent.setup()
+    vi.mocked(octopus().chats.models).mockResolvedValue({
+      ok: true,
+      value: [
+        {
+          value: 'claude-opus-5',
+          displayName: 'Opus 5',
+          description: '',
+          supportsEffort: null,
+          supportedEffortLevels: null
+        }
+      ]
+    })
+    vi.mocked(octopus().chats.setModel).mockResolvedValue({ ok: false, error: 'no such chat' })
+    givenChat()
+    await openLoadedChat()
+
+    await user.click(await screen.findByRole('button', { name: 'Model' }))
+    await user.click(await screen.findByRole('menuitemradio', { name: 'Opus 5' }))
+
+    expect(await screen.findByText(/no such chat/)).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Model' })).toHaveTextContent('Agent decides')
+  })
+
+  it('sends the effort to the chat it belongs to', async () => {
+    const user = userEvent.setup()
+    givenChat()
+    await openLoadedChat()
+
+    await user.click(screen.getByRole('button', { name: 'Effort' }))
+    await user.click(screen.getByRole('menuitemradio', { name: 'Very high' }))
+
+    await waitFor(() => {
+      expect(octopus().chats.setEffort).toHaveBeenCalledWith(CHAT_ID, 'xhigh')
+    })
+    expect(screen.getByRole('button', { name: 'Effort' })).toHaveTextContent('Very high')
+  })
+
+  it('keeps the old effort on screen when the change failed', async () => {
+    const user = userEvent.setup()
+    vi.mocked(octopus().chats.setEffort).mockResolvedValue({ ok: false, error: 'no such chat' })
+    givenChat()
+    await openLoadedChat()
+
+    await user.click(screen.getByRole('button', { name: 'Effort' }))
+    await user.click(screen.getByRole('menuitemradio', { name: 'Low' }))
+
+    expect(await screen.findByText(/no such chat/)).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Effort' })).toHaveTextContent('Agent decides')
   })
 
   it('keeps the old mode on screen when the change failed', async () => {
     const user = userEvent.setup()
-    vi.mocked(octopus().chats.setPermissionMode).mockResolvedValue({
+    vi.mocked(octopus().chats.setWorkingMode).mockResolvedValue({
       ok: false,
       error: 'no such chat'
     })
     givenChat()
-    await openChat()
+    await openLoadedChat()
 
-    const picker = await screen.findByRole('combobox', { name: 'Permissions' })
-    await waitFor(() => {
-      expect(picker).toBeEnabled()
-    })
-    await user.selectOptions(picker, 'plan')
+    await user.click(picker())
+    await user.click(screen.getByRole('menuitemradio', { name: 'Accept edits' }))
 
     expect(await screen.findByText(/no such chat/)).toBeInTheDocument()
-    expect(picker).toHaveValue('default')
+    expect(picker()).toHaveTextContent('Ask first')
   })
 })

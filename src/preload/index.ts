@@ -1,8 +1,14 @@
 import { contextBridge, ipcRenderer } from 'electron'
 
 import type { AccountKind, AccountsStatus } from '@core/accounts.js'
-import type { Chat, PermissionMode } from '@core/chats.js'
-import type { ChatEvent, PermissionAnswer, RateLimit } from '@core/service.js'
+import type { AgentModel, Chat, Effort, WorkingMode } from '@core/chats.js'
+import type {
+  ChatEvent,
+  PermissionAnswer,
+  PermissionRequest,
+  RateLimit,
+  SessionUsage
+} from '@core/service.js'
 import type { ChatEntry } from '@core/transcript.js'
 import type { TerminalExit, TerminalOutput, TerminalSpec } from '@core/terminal.js'
 import type { Config } from '@core/config.js'
@@ -127,12 +133,51 @@ const api = {
     interrupt: (chatId: string): Promise<Result<void>> =>
       ipcRenderer.invoke('chats:interrupt', chatId) as Promise<Result<void>>,
 
-    setPermissionMode: (chatId: string, mode: PermissionMode): Promise<Result<void>> =>
+    /** Sets how freely the chat works once it is working. */
+    setWorkingMode: (chatId: string, mode: WorkingMode): Promise<Result<void>> =>
       ipcRenderer.invoke('chats:mode', chatId, mode) as Promise<Result<void>>,
 
-    /** Answers a pending permission request; the agent is blocked until it arrives. */
-    answerPermission: (requestId: string, answer: PermissionAnswer): Promise<Result<void>> =>
-      ipcRenderer.invoke('chats:permission', requestId, answer) as Promise<Result<void>>,
+    /** Turns planning on or off for the chat. */
+    setPlanMode: (chatId: string, planning: boolean): Promise<Result<void>> =>
+      ipcRenderer.invoke('chats:planMode', chatId, planning) as Promise<Result<void>>,
+
+    /** Sets how much thinking the chat asks for; null returns it to the agent. */
+    setEffort: (chatId: string, effort: Effort | null): Promise<Result<void>> =>
+      ipcRenderer.invoke('chats:effort', chatId, effort) as Promise<Result<void>>,
+
+    /** Sets the model the chat runs on; null returns the choice to the agent. */
+    setModel: (chatId: string, model: string | null): Promise<Result<void>> =>
+      ipcRenderer.invoke('chats:model', chatId, model) as Promise<Result<void>>,
+
+    /** Models the agent last reported; empty until a session has run once. */
+    models: (): Promise<Result<readonly AgentModel[]>> =>
+      ipcRenderer.invoke('chats:models') as Promise<Result<readonly AgentModel[]>>,
+
+    /**
+     * What the chat's agent is blocked on, or `null` when it is not blocked.
+     *
+     * Asked on opening a conversation, because the event announcing it goes
+     * out once: a window that was not there to hear it would otherwise show a
+     * chat that stays busy for ever.
+     */
+    pendingPermission: (chatId: string): Promise<Result<PermissionRequest | null>> =>
+      ipcRenderer.invoke('chats:pending', chatId) as Promise<Result<PermissionRequest | null>>,
+
+    /** How full the context is and how much of the subscription is gone. */
+    usage: (chatId: string): Promise<Result<SessionUsage>> =>
+      ipcRenderer.invoke('chats:usage', chatId) as Promise<Result<SessionUsage>>,
+
+    /**
+     * Answers a pending permission request; the agent is blocked until it arrives.
+     *
+     * `feedback` accompanies a refusal and reaches the agent as the reason.
+     */
+    answerPermission: (
+      requestId: string,
+      answer: PermissionAnswer,
+      feedback?: string
+    ): Promise<Result<void>> =>
+      ipcRenderer.invoke('chats:permission', requestId, answer, feedback) as Promise<Result<void>>,
 
     /** The last rate limit any session reported; `null` before one has. */
     rateLimit: (): Promise<Result<RateLimit | null>> =>

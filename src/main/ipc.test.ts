@@ -253,6 +253,12 @@ describe('channel table', () => {
     'chats:send',
     'chats:interrupt',
     'chats:mode',
+    'chats:planMode',
+    'chats:effort',
+    'chats:model',
+    'chats:models',
+    'chats:pending',
+    'chats:usage',
     'chats:permission',
     'chats:rateLimit',
     'terminal:create',
@@ -787,10 +793,105 @@ describe('the agent chat', () => {
       invoke('chats:mode', chatIdOf(opened), 'bypassPermissions')
     ).resolves.toMatchObject({ ok: false })
 
-    await expect(invoke('chats:mode', chatIdOf(opened), 'plan')).resolves.toEqual({
+    // Planning is its own channel now, so the mode channel refuses it too —
+    // the field it writes to holds two values and this is where that is kept.
+    await expect(invoke('chats:mode', chatIdOf(opened), 'plan')).resolves.toMatchObject({
+      ok: false
+    })
+
+    await expect(invoke('chats:mode', chatIdOf(opened), 'acceptEdits')).resolves.toEqual({
       ok: true,
       value: undefined
     })
+  })
+
+  it('takes planning as the boolean it now is', async () => {
+    const projectId = await addProject()
+    const workspace = await createWorkspace(projectId)
+    const opened = await invoke('chats:open', workspace.id)
+
+    await expect(invoke('chats:planMode', chatIdOf(opened), 'plan')).resolves.toMatchObject({
+      ok: false
+    })
+
+    await expect(invoke('chats:planMode', chatIdOf(opened), true)).resolves.toEqual({
+      ok: true,
+      value: undefined
+    })
+  })
+
+  // Null is a value here rather than a missing argument: it is how the picker
+  // says "leave the choice to the agent", so the channel has to accept it.
+  it('rejects an effort it does not know, and accepts none at all', async () => {
+    const projectId = await addProject()
+    const workspace = await createWorkspace(projectId)
+    const opened = await invoke('chats:open', workspace.id)
+
+    await expect(invoke('chats:effort', chatIdOf(opened), 'ludicrous')).resolves.toMatchObject({
+      ok: false
+    })
+
+    await expect(invoke('chats:effort', chatIdOf(opened), 'xhigh')).resolves.toEqual({
+      ok: true,
+      value: undefined
+    })
+
+    await expect(invoke('chats:effort', chatIdOf(opened), null)).resolves.toEqual({
+      ok: true,
+      value: undefined
+    })
+  })
+
+  // Null is the picker's way of handing the choice back; an empty string is a
+  // model nobody can run, and it arrives from the same place.
+  it('rejects an empty model, accepting a name or none at all', async () => {
+    const projectId = await addProject()
+    const workspace = await createWorkspace(projectId)
+    const opened = await invoke('chats:open', workspace.id)
+
+    await expect(invoke('chats:model', chatIdOf(opened), '')).resolves.toMatchObject({ ok: false })
+
+    await expect(invoke('chats:model', chatIdOf(opened), 'claude-opus-5')).resolves.toEqual({
+      ok: true,
+      value: undefined
+    })
+
+    await expect(invoke('chats:model', chatIdOf(opened), null)).resolves.toEqual({
+      ok: true,
+      value: undefined
+    })
+  })
+
+  it('reports no models before a session has ever run', async () => {
+    await expect(invoke('chats:models')).resolves.toEqual({ ok: true, value: [] })
+  })
+
+  it('reports no usage for a chat that has no session', async () => {
+    const projectId = await addProject()
+    const workspace = await createWorkspace(projectId)
+    const opened = await invoke('chats:open', workspace.id)
+
+    await expect(invoke('chats:usage', chatIdOf(opened))).resolves.toEqual({
+      ok: true,
+      value: { context: null, subscription: null }
+    })
+  })
+
+  // What a window asks on opening a conversation, because the event announcing
+  // a blocked tool goes out once and is gone.
+  it('reports nothing pending for a chat whose agent is not blocked', async () => {
+    const projectId = await addProject()
+    const workspace = await createWorkspace(projectId)
+    const opened = await invoke('chats:open', workspace.id)
+
+    await expect(invoke('chats:pending', chatIdOf(opened))).resolves.toEqual({
+      ok: true,
+      value: null
+    })
+  })
+
+  it('refuses to answer for a chat that does not exist', async () => {
+    await expect(invoke('chats:pending', 'chat-nothing')).resolves.toMatchObject({ ok: false })
   })
 
   it('rejects an answer that is not one of the three the card offers', async () => {

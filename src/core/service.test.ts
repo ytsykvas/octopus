@@ -4,11 +4,11 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { promisify } from 'node:util'
 
-import type { Query, SDKMessage } from '@anthropic-ai/claude-agent-sdk'
+import type { ModelInfo, Query, SDKMessage } from '@anthropic-ai/claude-agent-sdk'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import type { CommandExec } from './accounts.js'
-import { type QueryFn, READ_ONLY_TOOLS } from './agent.js'
+import { DENIED, type QueryFn, READ_ONLY_TOOLS } from './agent.js'
 import type { RemoteRepository } from './github.js'
 import { gitIn } from './git.js'
 import { WORKSPACE_NAMES } from './names.js'
@@ -772,11 +772,46 @@ describe('the agent chat', () => {
     readonly closed: () => number
     /** Permission modes the session was switched to, in order. */
     readonly modes: () => string[]
+    /** Settings pushed onto the running session — where effort lands. */
+    readonly flagSettings: () => { effortLevel?: string }[]
+    /** Models asked for mid-session; `undefined` is "back to the default". */
+    readonly requestedModels: () => (string | undefined)[]
     readonly options: () => Record<string, unknown>
+  }
+
+  /** Both responses as build 2.1.228 actually sent them, trimmed. */
+  const CONTEXT_RESPONSE = {
+    totalTokens: 23_921,
+    maxTokens: 1_000_000,
+    rawMaxTokens: 1_000_000,
+    percentage: 2,
+    autoCompactThreshold: 967_000,
+    isAutoCompactEnabled: true
+  }
+
+  const USAGE_RESPONSE = {
+    subscription_type: 'max',
+    rate_limits_available: true,
+    rate_limits: {
+      five_hour: { utilization: 18, resets_at: '2026-08-12T19:50:00.149775+00:00' },
+      seven_day: { utilization: 84, resets_at: '2026-08-12T22:00:00.149796+00:00' }
+    }
   }
 
   /** Every session the service started, newest last. */
   let agents: FakeAgent[]
+
+  /**
+   * What the agent answers when asked which models the account may use.
+   *
+   * A variable rather than a parameter because the ask happens inside
+   * `startFor`, which no test calls directly — it is reached by sending a
+   * message, and the answer has to be in place before that.
+   */
+  let offered: () => Promise<ModelInfo[]>
+  /** What the session answers about its context window, and the account's. */
+  let contextAnswer: () => Promise<unknown>
+  let usageAnswer: () => Promise<unknown>
 
   function fakeQuery(): QueryFn {
     return (params) => {
@@ -786,6 +821,8 @@ describe('the agent chat', () => {
       let done = false
       let failure: Error | null = null
       const modes: string[] = []
+      const flagSettings: { effortLevel?: string }[] = []
+      const requestedModels: (string | undefined)[] = []
       let interrupted = 0
       let closed = 0
 
@@ -840,6 +877,8 @@ describe('the agent chat', () => {
         },
         interrupted: () => interrupted,
         closed: () => closed,
+        flagSettings: () => flagSettings,
+        requestedModels: () => requestedModels,
         modes: () => modes,
         options: () => options
       })
@@ -849,6 +888,17 @@ describe('the agent chat', () => {
           interrupted++
           return Promise.resolve(undefined)
         },
+        applyFlagSettings: (settings: { effortLevel?: string }) => {
+          flagSettings.push(settings)
+          return Promise.resolve()
+        },
+        setModel: (model: string | undefined) => {
+          requestedModels.push(model)
+          return Promise.resolve()
+        },
+        supportedModels: () => offered(),
+        getContextUsage: () => contextAnswer(),
+        usage_EXPERIMENTAL_MAY_CHANGE_DO_NOT_RELY_ON_THIS_API_YET: () => usageAnswer(),
         setPermissionMode: (mode: string) => {
           modes.push(mode)
           return Promise.resolve()
@@ -879,6 +929,29 @@ describe('the agent chat', () => {
       message: { content: [{ type: 'text', text }] },
       parent_tool_use_id: null,
       uuid: 'u-1',
+      session_id: 'sess-1'
+    } as unknown as SDKMessage
+  }
+
+  function toolCallMessage(id: string, name: string, input: unknown): SDKMessage {
+    return {
+      type: 'assistant',
+      message: { content: [{ type: 'tool_use', id, name, input }] },
+      parent_tool_use_id: null,
+      uuid: 'u-tool',
+      session_id: 'sess-1'
+    } as unknown as SDKMessage
+  }
+
+  /** A tool's answer travels in the user role — the SDK models it as given *to* the model. */
+  function toolResultMessage(id: string, ok: boolean): SDKMessage {
+    return {
+      type: 'user',
+      message: {
+        content: [{ type: 'tool_result', tool_use_id: id, is_error: !ok, content: 'done' }]
+      },
+      parent_tool_use_id: null,
+      uuid: 'u-result',
       session_id: 'sess-1'
     } as unknown as SDKMessage
   }
@@ -922,6 +995,154 @@ describe('the agent chat', () => {
 
   beforeEach(() => {
     agents = []
+    offered = () => Promise.resolve([])
+    contextAnswer = () => Promise.resolve(CONTEXT_RESPONSE)
+    usageAnswer = () => Promise.resolve(USAGE_RESPONSE)
+  })
+
+  describe('what a session says about usage', () => {
+    it('answers nothing about context before a session exists, and starts none', async () => {
+      const { service, workspaceId } = await withWorkspace()
+      const chat = await service.openChat(workspaceId)
+
+      await expect(service.sessionUsage(chat.id)).resolves.toEqual({
+        context: null,
+        subscription: null
+      })
+      expect(agents).toHaveLength(0)
+    })
+
+    it('reports both readings once a session is running', async () => {
+      const { service, workspaceId } = await withWorkspace()
+      const chat = await service.openChat(workspaceId)
+      await service.sendToChat(chat.id, 'work')
+
+      await expect(service.sessionUsage(chat.id)).resolves.toEqual({
+        context: { percentage: 2, usedTokens: 23_921, maxTokens: 1_000_000 },
+        subscription: {
+          fiveHour: { utilization: 18, resetsAt: '2026-08-12T19:50:00.149775+00:00' },
+          sevenDay: { utilization: 84, resetsAt: '2026-08-12T22:00:00.149796+00:00' }
+        }
+      })
+    })
+
+    // The subscription belongs to the account, so a workspace nobody has
+    // spoken to should still show what another one's turn just learned.
+    it('lends the account figure to a chat that has no session', async () => {
+      const { service, projectId, workspaceId } = await withWorkspace()
+      const spoken = await service.openChat(workspaceId)
+      await service.sendToChat(spoken.id, 'work')
+      await service.sessionUsage(spoken.id)
+
+      const other = await service.createWorkspaceIn(projectId)
+      const silent = await service.openChat(other.id)
+
+      const usage = await service.sessionUsage(silent.id)
+      expect(usage.subscription?.sevenDay?.utilization).toBe(84)
+      expect(usage.context).toBeNull()
+    })
+
+    // Blanking the figure because one request was refused would report a change
+    // in the account that never happened.
+    it('keeps the last good reading when a later one fails', async () => {
+      const { service, workspaceId } = await withWorkspace()
+      const chat = await service.openChat(workspaceId)
+      await service.sendToChat(chat.id, 'work')
+      await service.sessionUsage(chat.id)
+
+      usageAnswer = () => Promise.reject(new Error('unknown control request'))
+
+      const usage = await service.sessionUsage(chat.id)
+      expect(usage.subscription?.fiveHour?.utilization).toBe(18)
+    })
+
+    it('refuses a chat that does not exist', async () => {
+      const { service } = await withWorkspace()
+
+      await expect(service.sessionUsage('nope')).rejects.toThrow()
+    })
+
+    // A reading is a moment, not a record. Nothing about it belongs on disk.
+    it('writes nothing to the state file', async () => {
+      const { service, workspaceId } = await withWorkspace()
+      const chat = await service.openChat(workspaceId)
+      await service.sendToChat(chat.id, 'work')
+      const before = await readFile(join(dir, 'state.json'), 'utf8')
+
+      await service.sessionUsage(chat.id)
+
+      await expect(readFile(join(dir, 'state.json'), 'utf8')).resolves.toBe(before)
+    })
+  })
+
+  describe('the models the account may use', () => {
+    const OPUS: ModelInfo = { value: 'claude-opus-5', displayName: 'Opus 5', description: '' }
+
+    it('knows none until a session has run', async () => {
+      const { service } = await withWorkspace()
+
+      expect(service.knownModels()).toEqual([])
+    })
+
+    // The agent can only be asked while a session is open, so the list is
+    // remembered — otherwise the picker would be empty until the first message,
+    // which is exactly when the choice matters most.
+    it('remembers what the agent reported when a session started', async () => {
+      const { service, workspaceId } = await withWorkspace()
+      offered = () => Promise.resolve([OPUS])
+      const chat = await service.openChat(workspaceId)
+
+      await service.sendToChat(chat.id, 'work')
+
+      await vi.waitFor(() => {
+        expect(service.knownModels()).toHaveLength(1)
+      })
+      expect(service.knownModels()[0]?.displayName).toBe('Opus 5')
+    })
+
+    it('keeps the list across a restart', async () => {
+      const { service, workspaceId } = await withWorkspace()
+      offered = () => Promise.resolve([OPUS])
+      const chat = await service.openChat(workspaceId)
+      await service.sendToChat(chat.id, 'work')
+      await vi.waitFor(() => {
+        expect(service.knownModels()).toHaveLength(1)
+      })
+
+      const restarted = await createService({ ...paths(dir), query: fakeQuery() })
+
+      expect(restarted.knownModels()[0]?.value).toBe('claude-opus-5')
+    })
+
+    // Starting a session is not a reason to write to disk. Every message after
+    // the first would otherwise rewrite the same list back over itself.
+    it('writes nothing when the list has not changed', async () => {
+      const { service, workspaceId } = await withWorkspace()
+      offered = () => Promise.resolve([OPUS])
+      const chat = await service.openChat(workspaceId)
+      await service.sendToChat(chat.id, 'work')
+      await vi.waitFor(() => {
+        expect(service.knownModels()).toHaveLength(1)
+      })
+
+      const before = await readFile(join(dir, 'state.json'), 'utf8')
+      await service.interruptChat(chat.id)
+      await service.sendToChat(chat.id, 'again')
+
+      await expect(readFile(join(dir, 'state.json'), 'utf8')).resolves.toBe(before)
+    })
+
+    // The list is a convenience. A message must not fail because the names of
+    // the models could not be read — the session itself already reports its own
+    // failures through the event stream.
+    it('sends the message anyway when the models cannot be read', async () => {
+      const { service, workspaceId } = await withWorkspace()
+      offered = () => Promise.reject(new Error('no such control request'))
+      const chat = await service.openChat(workspaceId)
+
+      await expect(service.sendToChat(chat.id, 'work')).resolves.toBeUndefined()
+      expect(service.knownModels()).toEqual([])
+    })
   })
 
   describe('the record', () => {
@@ -945,11 +1166,20 @@ describe('the agent chat', () => {
 
     it('starts in the mode the global setting names', async () => {
       const { service, workspaceId } = await withWorkspace()
-      await service.updateConfig({ permissionMode: 'acceptEdits' })
+      await service.updateConfig({ workingMode: 'acceptEdits' })
 
       const chat = await service.openChat(workspaceId)
 
-      expect(chat.permissionMode).toBe('acceptEdits')
+      expect(chat.workingMode).toBe('acceptEdits')
+    })
+
+    it('starts on the effort the global setting names', async () => {
+      const { service, workspaceId } = await withWorkspace()
+      await service.updateConfig({ effort: 'high' })
+
+      const chat = await service.openChat(workspaceId)
+
+      expect(chat.effort).toBe('high')
     })
 
     it('refuses a workspace that does not exist', async () => {
@@ -1442,6 +1672,362 @@ describe('the agent chat', () => {
       expect(service.getConfig().alwaysAllowedTools).toEqual(['Edit', 'Write'])
     })
 
+    /*
+     * Approving a plan is the moment planning ends, and both halves of that
+     * have to happen or the interface starts lying: the stored record, so the
+     * next session does not begin by planning all over again, and the running
+     * session, so the work the plan describes can actually start.
+     *
+     * The mode it hands over to is the one chosen in the composer's footer —
+     * that is what the footer is for, and until this it was read by nothing.
+     */
+    it('leaves planning for the chosen mode when a plan is approved', async () => {
+      const { service, workspaceId, events } = await withWorkspace()
+      const chat = await service.openChat(workspaceId)
+      await service.setChatWorkingMode(chat.id, 'acceptEdits')
+      await service.setChatPlanMode(chat.id, true)
+      await service.sendToChat(chat.id, 'plan it')
+
+      const decision = agent().ask('ExitPlanMode', { plan: '# Do the thing' })
+      await service.answerPermission(await waitForRequest(events), 'allow')
+
+      await expect(decision).resolves.toEqual({
+        behavior: 'allow',
+        updatedInput: { plan: '# Do the thing' },
+        updatedPermissions: [{ type: 'setMode', mode: 'acceptEdits', destination: 'session' }]
+      })
+      expect(service.listChats(workspaceId)[0]?.planMode).toBe(false)
+      // The other half is untouched: leaving planning is not a reason to
+      // forget how freely the agent was told it may work.
+      expect(service.listChats(workspaceId)[0]?.workingMode).toBe('acceptEdits')
+    })
+
+    // The stored half is the one that outlived the session and made a
+    // conversation revert to planning on its next turn.
+    it('writes the end of planning to disk, not only to the session', async () => {
+      const { service, workspaceId, events } = await withWorkspace()
+      const chat = await service.openChat(workspaceId)
+      await service.setChatPlanMode(chat.id, true)
+      await service.sendToChat(chat.id, 'plan it')
+
+      void agent().ask('ExitPlanMode', { plan: 'a plan' })
+      await service.answerPermission(await waitForRequest(events), 'allow')
+
+      const stored: unknown = JSON.parse(await readFile(join(dir, 'state.json'), 'utf8'))
+      expect(stored).toMatchObject({ chats: [{ id: chat.id, planMode: false }] })
+    })
+
+    /*
+     * The way the whole feature was silently switched off once already.
+     *
+     * A standing "always" on the plan tool puts it in the list handed to the
+     * SDK, which then approves every later plan itself and never calls back —
+     * so there is no question, no dialog, no record that planning ended, and
+     * the agent goes straight to editing. `config.ts` strips it on read; this
+     * stops it being written in the first place.
+     */
+    it('never takes a standing answer for approving plans', async () => {
+      const { service, workspaceId, events } = await withWorkspace()
+      const chat = await service.openChat(workspaceId)
+      await service.sendToChat(chat.id, 'plan it')
+
+      const decision = agent().ask('ExitPlanMode', { plan: 'a plan' })
+      await service.answerPermission(await waitForRequest(events), 'always')
+
+      // Approved this once, as asked — but not for ever.
+      await expect(decision).resolves.toMatchObject({ behavior: 'allow' })
+      expect(service.getConfig().alwaysAllowedTools).toEqual([])
+    })
+
+    // Every other approval leaves the mode exactly as it was. Only the plan
+    // tool means "planning is over"; `Edit` means "yes, edit that file".
+    it('changes no mode when an ordinary tool is approved', async () => {
+      const { service, workspaceId, events } = await withWorkspace()
+      const chat = await service.openChat(workspaceId)
+      await service.setChatPlanMode(chat.id, true)
+      await service.sendToChat(chat.id, 'edit it')
+
+      const decision = agent().ask('Edit', { file_path: '/a.rb' })
+      await service.answerPermission(await waitForRequest(events), 'allow')
+
+      await expect(decision).resolves.not.toHaveProperty('updatedPermissions')
+      expect(service.listChats(workspaceId)[0]?.planMode).toBe(true)
+    })
+
+    // What the plan dialog's "keep planning" sends. The agent reads a refusal's
+    // message as instruction, so this is how a correction reaches it without
+    // the turn having to end first.
+    it('sends the words written with a refusal on to the agent', async () => {
+      const { service, workspaceId, events } = await withWorkspace()
+      const chat = await service.openChat(workspaceId)
+      await service.sendToChat(chat.id, 'plan it')
+
+      const decision = agent().ask('ExitPlanMode', { plan: 'a plan' })
+      await service.answerPermission(
+        await waitForRequest(events),
+        'deny',
+        '  Add a step for the tests  '
+      )
+
+      await expect(decision).resolves.toEqual({
+        behavior: 'deny',
+        message: 'Add a step for the tests'
+      })
+    })
+
+    // Blank is not a message. Sent as one it would reach the agent as an empty
+    // reason, which reads as a refusal with nothing behind it.
+    it('falls back to its own wording when a refusal carries no words', async () => {
+      const { service, workspaceId, events } = await withWorkspace()
+      const chat = await service.openChat(workspaceId)
+      await service.sendToChat(chat.id, 'delete it')
+
+      const decision = agent().ask('Bash', { command: 'rm -rf /' })
+      await service.answerPermission(await waitForRequest(events), 'deny', '   ')
+
+      await expect(decision).resolves.toEqual({ behavior: 'deny', message: DENIED })
+    })
+
+    /*
+     * How a window that missed the question finds it again.
+     *
+     * The event announcing a blocked tool goes out once. A window opened after
+     * it — or one that switched workspace and came back, which clears what it
+     * was holding — had no way to learn the agent was waiting, so the chat sat
+     * on "working" for ever and the only answer nobody could give was the one
+     * it needed. Seen for real: a plan waited half an hour that way.
+     */
+    it('can still say what the agent is blocked on after the event has gone', async () => {
+      const { service, workspaceId, events } = await withWorkspace()
+      const chat = await service.openChat(workspaceId)
+      await service.sendToChat(chat.id, 'plan it')
+
+      const decision = agent().ask('ExitPlanMode', { plan: 'a plan' })
+      const requestId = await waitForRequest(events)
+
+      // Everything the dialog needs to ask the question a second time.
+      expect(service.pendingPermission(chat.id)).toEqual({
+        requestId,
+        toolName: 'ExitPlanMode',
+        input: { plan: 'a plan' }
+      })
+
+      // And answering it still works, which is the point of recovering it.
+      await service.answerPermission(requestId, 'allow')
+      await expect(decision).resolves.toMatchObject({ behavior: 'allow' })
+      expect(service.pendingPermission(chat.id)).toBeNull()
+    })
+
+    it('says nothing for a chat whose agent is waiting on nothing', async () => {
+      const { service, workspaceId } = await withWorkspace()
+      const chat = await service.openChat(workspaceId)
+
+      expect(service.pendingPermission(chat.id)).toBeNull()
+    })
+
+    // Two workspaces run at once, and each window asks about its own.
+    it('never hands one chat the question another is blocked on', async () => {
+      const { service, projectId, workspaceId, events } = await withWorkspace()
+      const first = await service.openChat(workspaceId)
+      await service.sendToChat(first.id, 'edit it')
+
+      void agent().ask('Edit', { file_path: '/a.rb' })
+      await waitForRequest(events)
+
+      const second = await service.createWorkspaceIn(projectId)
+      const other = await service.openChat(second.id)
+
+      expect(service.pendingPermission(first.id)).not.toBeNull()
+      expect(service.pendingPermission(other.id)).toBeNull()
+    })
+
+    it('refuses a chat that does not exist', async () => {
+      const { service } = await withWorkspace()
+
+      expect(() => service.pendingPermission('chat-nothing')).toThrow(WorkspaceError)
+    })
+
+    /*
+     * The lines around a change, read while the file still says what the edit
+     * made it say.
+     *
+     * Looked up when the conversation is drawn they would be wrong: a later
+     * edit shifts every line after it, so the context would surround wherever
+     * that text has since ended up. Recorded once, it stays true.
+     */
+    it('records the lines around an edit that worked', async () => {
+      const { service, workspaceId, events } = await withWorkspace()
+      const chat = await service.openChat(workspaceId)
+      const [workspace] = await service.listWorkspaces(service.listProjects()[0]?.id ?? '')
+      await writeFile(
+        join(workspace?.path ?? '', 'notes.txt'),
+        'one\ntwo\nCHANGED\nfour\nfive\n',
+        'utf8'
+      )
+      await service.sendToChat(chat.id, 'edit it')
+
+      agent().emit(
+        toolCallMessage('c-1', 'Edit', {
+          file_path: 'notes.txt',
+          old_string: 'three',
+          new_string: 'CHANGED'
+        })
+      )
+      agent().emit(toolResultMessage('c-1', true))
+
+      await vi.waitFor(() => {
+        expect(events.some((entry) => entry.event.type === 'change_context')).toBe(true)
+      })
+
+      const recorded = events.find((entry) => entry.event.type === 'change_context')
+      expect(recorded?.event).toEqual({
+        type: 'change_context',
+        toolUseId: 'c-1',
+        context: { before: ['one', 'two'], after: ['four', 'five'], startLine: 3 }
+      })
+    })
+
+    // Nothing was written, so there is nothing to be around.
+    it('records nothing for an edit that failed', async () => {
+      const { service, workspaceId, events } = await withWorkspace()
+      const chat = await service.openChat(workspaceId)
+      await service.sendToChat(chat.id, 'edit it')
+
+      agent().emit(
+        toolCallMessage('c-1', 'Edit', {
+          file_path: 'notes.txt',
+          old_string: 'a',
+          new_string: 'b'
+        })
+      )
+      agent().emit(toolResultMessage('c-1', false))
+
+      await vi.waitFor(() => {
+        expect(events.some((entry) => entry.event.type === 'tool_result')).toBe(true)
+      })
+      expect(events.some((entry) => entry.event.type === 'change_context')).toBe(false)
+    })
+
+    /*
+     * A session that ends mid-tool leaves an edit nobody will ever answer for.
+     *
+     * Cleared with the session rather than left to accumulate — `pending` has
+     * exactly this leak already, and one is enough. Seen from outside: the
+     * workspace goes, a late result arrives for its edit, and nothing is
+     * recorded for a file that is no longer there.
+     */
+    it('forgets an edit whose session was closed under it', async () => {
+      const { service, projectId, workspaceId, events } = await withWorkspace()
+      const chat = await service.openChat(workspaceId)
+      await service.sendToChat(chat.id, 'edit it')
+
+      const session = agent()
+      session.emit(
+        toolCallMessage('c-1', 'Edit', {
+          file_path: 'notes.txt',
+          old_string: 'a',
+          new_string: 'b'
+        })
+      )
+      await vi.waitFor(() => {
+        expect(events.some((entry) => entry.event.type === 'tool_use')).toBe(true)
+      })
+
+      await service.removeWorkspaceById(workspaceId, { force: true })
+      session.emit(toolResultMessage('c-1', true))
+
+      await expect(service.listWorkspaces(projectId)).resolves.toHaveLength(0)
+      expect(events.some((entry) => entry.event.type === 'change_context')).toBe(false)
+    })
+
+    // The context is a courtesy: the file may have moved on between the edit
+    // and the read, and a wrong one would show a change among lines it never
+    // touched.
+    it('records nothing when the lines cannot be found', async () => {
+      const { service, workspaceId, events } = await withWorkspace()
+      const chat = await service.openChat(workspaceId)
+      await service.sendToChat(chat.id, 'edit it')
+
+      agent().emit(
+        toolCallMessage('c-1', 'Edit', {
+          file_path: 'missing.txt',
+          old_string: 'a',
+          new_string: 'b'
+        })
+      )
+      agent().emit(toolResultMessage('c-1', true))
+
+      await vi.waitFor(() => {
+        expect(events.some((entry) => entry.event.type === 'tool_result')).toBe(true)
+      })
+      expect(events.some((entry) => entry.event.type === 'change_context')).toBe(false)
+    })
+
+    // The map is the whole service's, so closing one workspace must not take
+    // another's edit with it. Two run at once by design.
+    it('keeps an edit belonging to a workspace that is still open', async () => {
+      const { service, projectId, workspaceId, events } = await withWorkspace()
+      const closing = await service.openChat(workspaceId)
+      await service.sendToChat(closing.id, 'edit it')
+      agents[0]?.emit(
+        toolCallMessage('c-closing', 'Edit', {
+          file_path: 'notes.txt',
+          old_string: 'a',
+          new_string: 'b'
+        })
+      )
+      // Awaited: the edit has to be on the books before its workspace goes, or
+      // the closing has nothing of its own to forget and the test proves half
+      // of what it claims.
+      await vi.waitFor(() => {
+        expect(events.some((entry) => entry.event.type === 'tool_use')).toBe(true)
+      })
+
+      const second = await service.createWorkspaceIn(projectId)
+      const kept = await service.openChat(second.id)
+      await writeFile(join(second.path, 'notes.txt'), 'one\nCHANGED\nthree\n', 'utf8')
+      await service.sendToChat(kept.id, 'edit it')
+
+      const session = agents[1]
+      if (!session) throw new Error('the second session was not started')
+      session.emit(
+        toolCallMessage('c-1', 'Edit', {
+          file_path: 'notes.txt',
+          old_string: 'two',
+          new_string: 'CHANGED'
+        })
+      )
+      // Both of them, counted: waiting for "a tool call" would be satisfied by
+      // the first one and the second might not be on the books yet.
+      await vi.waitFor(() => {
+        expect(events.filter((entry) => entry.event.type === 'tool_use')).toHaveLength(2)
+      })
+
+      await service.removeWorkspaceById(workspaceId, { force: true })
+      session.emit(toolResultMessage('c-1', true))
+
+      await vi.waitFor(() => {
+        expect(events.some((entry) => entry.event.type === 'change_context')).toBe(true)
+      })
+    })
+
+    // The file *is* the change, so there are no lines around it to show.
+    it('records nothing for a file written whole', async () => {
+      const { service, workspaceId, events } = await withWorkspace()
+      const chat = await service.openChat(workspaceId)
+      await service.sendToChat(chat.id, 'write it')
+
+      agent().emit(
+        toolCallMessage('c-1', 'Write', { file_path: 'notes.txt', content: 'all of it' })
+      )
+      agent().emit(toolResultMessage('c-1', true))
+
+      await vi.waitFor(() => {
+        expect(events.some((entry) => entry.event.type === 'tool_result')).toBe(true)
+      })
+      expect(events.some((entry) => entry.event.type === 'change_context')).toBe(false)
+    })
+
     it('pre-approves the read-only tools and whatever the user allowed', async () => {
       const { service, workspaceId } = await withWorkspace()
       await service.updateConfig({ alwaysAllowedTools: ['Bash'] })
@@ -1494,9 +2080,11 @@ describe('the agent chat', () => {
       const { service, workspaceId } = await withWorkspace()
       const chat = await service.openChat(workspaceId)
 
-      await service.setChatPermissionMode(chat.id, 'plan')
+      await service.setChatWorkingMode(chat.id, 'acceptEdits')
+      await service.setChatPlanMode(chat.id, true)
 
-      expect(service.listChats(workspaceId)[0]?.permissionMode).toBe('plan')
+      expect(service.listChats(workspaceId)[0]?.workingMode).toBe('acceptEdits')
+      expect(service.listChats(workspaceId)[0]?.planMode).toBe(true)
     })
 
     // Not merely that the call resolves: the point of the change is that it
@@ -1506,9 +2094,111 @@ describe('the agent chat', () => {
       const chat = await service.openChat(workspaceId)
       await service.sendToChat(chat.id, 'work')
 
-      await service.setChatPermissionMode(chat.id, 'plan')
+      await service.setChatPlanMode(chat.id, true)
 
       expect(agent().modes()).toEqual(['plan'])
+    })
+
+    it('remembers the model the chat was set to, and tells a running session', async () => {
+      const { service, workspaceId } = await withWorkspace()
+      const chat = await service.openChat(workspaceId)
+      await service.sendToChat(chat.id, 'work')
+
+      await service.setChatModel(chat.id, 'claude-opus-5')
+
+      expect(service.listChats(workspaceId)[0]?.model).toBe('claude-opus-5')
+      expect(agent().requestedModels()).toEqual(['claude-opus-5'])
+    })
+
+    it('starts the next session on the model the chat is now on', async () => {
+      const { service, workspaceId } = await withWorkspace()
+      const chat = await service.openChat(workspaceId)
+      await service.setChatModel(chat.id, 'claude-sonnet-5')
+
+      await service.sendToChat(chat.id, 'work')
+
+      expect(agent().options().model).toBe('claude-sonnet-5')
+    })
+
+    it('remembers the effort the chat was set to', async () => {
+      const { service, workspaceId } = await withWorkspace()
+      const chat = await service.openChat(workspaceId)
+
+      await service.setChatEffort(chat.id, 'xhigh')
+
+      expect(service.listChats(workspaceId)[0]?.effort).toBe('xhigh')
+    })
+
+    it('reaches a running session with the effort too', async () => {
+      const { service, workspaceId } = await withWorkspace()
+      const chat = await service.openChat(workspaceId)
+      await service.sendToChat(chat.id, 'work')
+
+      await service.setChatEffort(chat.id, 'low')
+
+      expect(agent().flagSettings()).toEqual([{ effortLevel: 'low' }])
+    })
+
+    // Clearing the override means "whatever the agent would choose", which it
+    // can only do at the start of a session. The record still changes, so the
+    // next one obeys — but the turn in flight is left alone rather than being
+    // sent a level nobody asked for.
+    it('writes a cleared effort without pushing one at the running session', async () => {
+      const { service, workspaceId } = await withWorkspace()
+      const chat = await service.openChat(workspaceId)
+      await service.setChatEffort(chat.id, 'max')
+      await service.sendToChat(chat.id, 'work')
+
+      await service.setChatEffort(chat.id, null)
+
+      expect(service.listChats(workspaceId)[0]?.effort).toBeNull()
+      expect(agent().flagSettings()).toEqual([])
+    })
+
+    it('starts the next session with the effort the chat is now on', async () => {
+      const { service, workspaceId } = await withWorkspace()
+      const chat = await service.openChat(workspaceId)
+      await service.setChatEffort(chat.id, 'medium')
+
+      await service.sendToChat(chat.id, 'work')
+
+      expect(agent().options().effort).toBe('medium')
+    })
+
+    /*
+     * The record is what the session runs under, checked on every message.
+     *
+     * The CLI moves out of plan mode by itself once a plan is settled, and no
+     * message announces it. Set only at the start and on a user's change, the
+     * session drifted: a chat recorded as `acceptEdits` asked about every edit
+     * because the CLI had dropped it to `default`.
+     */
+    it('puts a running session back into the mode the record names', async () => {
+      const { service, workspaceId } = await withWorkspace()
+      const chat = await service.openChat(workspaceId)
+      await service.setChatWorkingMode(chat.id, 'acceptEdits')
+
+      await service.sendToChat(chat.id, 'first')
+      // Nothing pushed: a session built moments ago carries the mode already.
+      expect(agent().options().permissionMode).toBe('acceptEdits')
+      expect(agent().modes()).toEqual([])
+
+      await service.sendToChat(chat.id, 'second')
+
+      expect(agent().modes()).toEqual(['acceptEdits'])
+    })
+
+    // Planning is the user's standing answer, not the CLI's. A toggle that
+    // switched itself off would be worse than a turn planned once too often.
+    it('puts it back into planning too, whatever the CLI decided', async () => {
+      const { service, workspaceId } = await withWorkspace()
+      const chat = await service.openChat(workspaceId)
+      await service.sendToChat(chat.id, 'first')
+      await service.setChatPlanMode(chat.id, true)
+
+      await service.sendToChat(chat.id, 'second')
+
+      expect(agent().modes()).toEqual(['plan', 'plan'])
     })
 
     // The session options are assembled key by key, which is how a field gets
@@ -1517,7 +2207,7 @@ describe('the agent chat', () => {
     it('starts the next session in the mode the chat is now in', async () => {
       const { service, workspaceId } = await withWorkspace()
       const chat = await service.openChat(workspaceId)
-      await service.setChatPermissionMode(chat.id, 'plan')
+      await service.setChatPlanMode(chat.id, true)
 
       await service.sendToChat(chat.id, 'work')
 
@@ -1540,9 +2230,10 @@ describe('the agent chat', () => {
     it('refuses a chat that does not exist', async () => {
       const { service } = await withWorkspace()
 
-      await expect(service.setChatPermissionMode('chat-nothing', 'plan')).rejects.toThrow(
+      await expect(service.setChatWorkingMode('chat-nothing', 'acceptEdits')).rejects.toThrow(
         WorkspaceError
       )
+      await expect(service.setChatPlanMode('chat-nothing', true)).rejects.toThrow(WorkspaceError)
     })
   })
 
@@ -1624,6 +2315,12 @@ describe('the agent chat', () => {
         Object.assign(silence(), {
           interrupt: () => Promise.resolve(undefined),
           setPermissionMode: () => Promise.resolve(),
+          applyFlagSettings: () => Promise.resolve(),
+          setModel: () => Promise.resolve(),
+          supportedModels: () => Promise.resolve([]),
+          getContextUsage: () => Promise.reject(new Error('no session')),
+          usage_EXPERIMENTAL_MAY_CHANGE_DO_NOT_RELY_ON_THIS_API_YET: () =>
+            Promise.reject(new Error('no session')),
           close: () => {
             throw new Error('the process would not die')
           }

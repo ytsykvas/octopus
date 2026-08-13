@@ -12,6 +12,7 @@
  */
 
 import type {
+  ModelInfo,
   Options,
   Query,
   SDKAssistantMessage,
@@ -21,7 +22,7 @@ import type {
   SettingSource
 } from '@anthropic-ai/claude-agent-sdk'
 
-import type { PermissionMode } from './chats.js'
+import type { AgentModel, Effort, PermissionMode } from './chats.js'
 import type { AgentEvent } from './events.js'
 import { describeError } from './persist.js'
 
@@ -59,6 +60,8 @@ export interface SessionOptions {
   readonly permissionMode: PermissionMode
   /** Model override; null leaves the choice to the agent. */
   readonly model: string | null
+  /** Effort override; null leaves the choice to the agent. */
+  readonly effort: Effort | null
   /** Tools allowed without asking, on top of the agent's own rules. */
   readonly allowedTools: readonly string[]
 }
@@ -69,11 +72,26 @@ export interface PermissionAsk {
   readonly input: unknown
 }
 
+/**
+ * The answer to a permission request.
+ *
+ * Richer than the boolean it replaces, because two of the three things an
+ * answer can carry have no room in one:
+ *
+ * - a refusal says **why**, and the agent reads that as instruction — it is how
+ *   "not quite, do X instead" reaches it without a second turn;
+ * - approving a plan is also the moment planning ends, and `setMode` is how the
+ *   session is told, on the same reply that releases the tool call.
+ */
+export type PermissionOutcome =
+  | { readonly allow: true; readonly setMode?: PermissionMode }
+  | { readonly allow: false; readonly message: string }
+
 export interface SessionHooks {
   readonly query: QueryFn
   readonly onEvent: (event: AgentEvent) => void
-  /** Answers a permission request; `false` denies it. */
-  readonly askPermission: (ask: PermissionAsk) => Promise<boolean>
+  /** Answers a permission request. */
+  readonly askPermission: (ask: PermissionAsk) => Promise<PermissionOutcome>
 }
 
 export interface AgentSession {
@@ -81,12 +99,156 @@ export interface AgentSession {
   send: (text: string) => void
   interrupt: () => Promise<void>
   setPermissionMode: (mode: PermissionMode) => Promise<void>
+  setEffort: (effort: Effort) => Promise<void>
+  /** Changes the model for what follows; null hands the choice back. */
+  setModel: (model: string | null) => Promise<void>
+  /** What this account may use, as the agent reported when the session began. */
+  models: () => Promise<AgentModel[]>
+  /** How full this conversation's context window is, or null if it cannot say. */
+  contextUsage: () => Promise<ContextUsage | null>
+  /** How much of the subscription's windows is gone, or null if it cannot say. */
+  subscriptionUsage: () => Promise<SubscriptionUsage | null>
   /** Ends the session, killing the process the SDK spawned. */
   close: () => Promise<void>
 }
 
-/** Message the SDK sends back when the user refuses. */
-const DENIED = 'The user declined this action in octopus.'
+/** How full a conversation's context window is. */
+export interface ContextUsage {
+  /** Whole percent, as the agent itself rounds it. */
+  readonly percentage: number
+  readonly usedTokens: number
+  readonly maxTokens: number
+}
+
+/** One subscription window. */
+export interface UsageWindow {
+  /** Share of the window used, 0–100. */
+  readonly utilization: number
+  readonly resetsAt: string | null
+}
+
+export interface SubscriptionUsage {
+  readonly fiveHour: UsageWindow | null
+  readonly sevenDay: UsageWindow | null
+}
+
+/**
+ * Control methods the CLI on the other end may not have.
+ *
+ * Two different failures, and this one line covers both — which is why it must
+ * not be "simplified" to `any`:
+ *
+ * - if the SDK **renames** a method, `Pick` stops compiling and the build fails
+ *   pointing here. The SDK asks for exactly that: it says of the usage call
+ *   that "the method name will change when the API is stabilized".
+ * - if the **CLI binary is a different version from the typed package** — and it
+ *   is versioned separately, under `~/.local/share/claude/versions` — the
+ *   property is simply absent at runtime, and the guard below returns null.
+ */
+type UsageCapable = Partial<
+  Pick<Query, 'getContextUsage' | 'usage_EXPERIMENTAL_MAY_CHANGE_DO_NOT_RELY_ON_THIS_API_YET'>
+>
+
+/**
+ * How full the context window is, or null when the agent will not say.
+ *
+ * Null rather than a throw: this fills a gauge, and a reading that failed is
+ * not a reason to fail whatever asked for it.
+ *
+ * Measured against a live session rather than assumed: the response is far
+ * wider than the type declares — a hundred grid squares for the CLI's own bar
+ * chart, a category breakdown, memory files, MCP tools. Three fields are taken
+ * and the rest deliberately stops here.
+ */
+export async function readContextUsage(conversation: Query): Promise<ContextUsage | null> {
+  const ask = (conversation as UsageCapable).getContextUsage
+  if (typeof ask !== 'function') return null
+
+  try {
+    const usage = await ask.call(conversation)
+    return {
+      percentage: usage.percentage,
+      usedTokens: usage.totalTokens,
+      maxTokens: usage.maxTokens
+    }
+  } catch {
+    return null
+  }
+}
+
+/** One window of the response, or null when it carries no share. */
+function toUsageWindow(
+  window: { utilization: number | null; resets_at: string | null } | null | undefined
+): UsageWindow | null {
+  if (window?.utilization == null) return null
+  return { utilization: window.utilization, resetsAt: window.resets_at }
+}
+
+/**
+ * The subscription's five-hour and weekly windows, or null when there are none.
+ *
+ * The only place both windows exist at once. The pushed `rate_limit_event`
+ * carries one window per message and usually no share at all, so it cannot
+ * answer this however long you listen.
+ *
+ * Null covers every way that can fail, and they are all ordinary: an older CLI
+ * without the method, a rejected control request, and an API-key or Bedrock
+ * session, where `rate_limits_available` is false because plan windows do not
+ * apply. Both windows empty collapses to null too, so a caller tests one thing.
+ *
+ * Everything else is dropped, and a live response shows why that matters: it
+ * carried nine more windows than the type declares — `seven_day_cowork`,
+ * `tangelo`, `iguana_necktie` and others — plus dollar fields on every one.
+ */
+export async function readSubscriptionUsage(
+  conversation: Query
+): Promise<SubscriptionUsage | null> {
+  const ask = (conversation as UsageCapable)
+    .usage_EXPERIMENTAL_MAY_CHANGE_DO_NOT_RELY_ON_THIS_API_YET
+  if (typeof ask !== 'function') return null
+
+  try {
+    const usage = await ask.call(conversation)
+    if (!usage.rate_limits_available || !usage.rate_limits) return null
+
+    const fiveHour = toUsageWindow(usage.rate_limits.five_hour)
+    const sevenDay = toUsageWindow(usage.rate_limits.seven_day)
+
+    return fiveHour === null && sevenDay === null ? null : { fiveHour, sevenDay }
+  } catch {
+    return null
+  }
+}
+
+/**
+ * The SDK's model descriptions, narrowed to what a picker needs.
+ *
+ * Pure, so it is testable against literals — the same reasoning as
+ * `mapMessage`, and the same job: an SDK shape stops here.
+ *
+ * `description` may be absent in practice even though the type says otherwise,
+ * which is why the schema defaults it; the effort fields are genuinely optional
+ * and become null rather than false, because "did not say" and "says no" lead
+ * to different pickers.
+ */
+export function toAgentModels(models: readonly ModelInfo[]): AgentModel[] {
+  return models.map((model) => ({
+    value: model.value,
+    displayName: model.displayName,
+    description: model.description,
+    supportedEffortLevels: model.supportedEffortLevels ? [...model.supportedEffortLevels] : null,
+    supportsEffort: model.supportsEffort ?? null
+  }))
+}
+
+/**
+ * What a refusal says when the user gave no words of their own.
+ *
+ * Exported because the answer is now composed where it is decided rather than
+ * here: a refusal may carry the user's own note instead, and this is the
+ * fallback for when it does not.
+ */
+export const DENIED = 'The user declined this action in octopus.'
 
 /**
  * Starts a session and streams its events.
@@ -107,6 +269,7 @@ export function startSession(options: SessionOptions, hooks: SessionHooks): Agen
       // the SDK reads a present `resume` as a session to look for.
       ...(options.resume !== null && { resume: options.resume }),
       ...(options.model !== null && { model: options.model }),
+      ...(options.effort !== null && { effort: options.effort }),
       settingSources: [...options.settingSources],
       systemPrompt: { type: 'preset', preset: 'claude_code' },
       permissionMode: options.permissionMode,
@@ -114,10 +277,25 @@ export function startSession(options: SessionOptions, hooks: SessionHooks): Agen
       // What makes text appear while it is being written rather than in one
       // block at the end of a turn.
       includePartialMessages: true,
-      canUseTool: async (toolName, toolInput) =>
-        (await hooks.askPermission({ toolName, input: toolInput }))
-          ? { behavior: 'allow', updatedInput: toolInput }
-          : { behavior: 'deny', message: DENIED }
+      canUseTool: async (toolName, toolInput) => {
+        const outcome = await hooks.askPermission({ toolName, input: toolInput })
+        if (!outcome.allow) return { behavior: 'deny', message: outcome.message }
+
+        return {
+          behavior: 'allow',
+          updatedInput: toolInput,
+          // The SDK's own way to change mode on an approval, and the reason it
+          // is done here rather than by a control request afterwards: this
+          // reply is what releases the tool call, so anything sent separately
+          // races the work it was meant to govern. Verified against a live
+          // session — without this the very next edit asks again.
+          ...(outcome.setMode !== undefined && {
+            updatedPermissions: [
+              { type: 'setMode', mode: outcome.setMode, destination: 'session' } as const
+            ]
+          })
+        }
+      }
     }
   })
 
@@ -127,6 +305,12 @@ export function startSession(options: SessionOptions, hooks: SessionHooks): Agen
   // and a stream that does not would hang removing a workspace.
   void (async () => {
     try {
+      // Runs to the end of the stream, and must keep doing so. Leaving this
+      // loop early — after a `result`, say, which looks like the end of the
+      // work — ends the generator and closes the transport underneath it, and
+      // from then on every control request fails with "ProcessTransport is not
+      // ready for writing": no model change, no context reading, no usage.
+      // Measured by walking into it while probing the usage calls.
       for await (const message of conversation) {
         for (const event of mapMessage(message)) hooks.onEvent(event)
       }
@@ -149,6 +333,37 @@ export function startSession(options: SessionOptions, hooks: SessionHooks): Agen
 
     async setPermissionMode(mode) {
       await conversation.setPermissionMode(mode)
+    },
+
+    async setModel(model) {
+      // `undefined` is how the SDK is told to go back to its own default;
+      // passing null would be asking for a model called null.
+      await conversation.setModel(model ?? undefined)
+    },
+
+    async models() {
+      return toAgentModels(await conversation.supportedModels())
+    },
+
+    contextUsage() {
+      return readContextUsage(conversation)
+    },
+
+    subscriptionUsage() {
+      return readSubscriptionUsage(conversation)
+    },
+
+    async setEffort(effort) {
+      // There is no `setEffort`; `effort` is a start-time option and this is
+      // the only way to move it on a running session.
+      //
+      // Two things about it that look wrong and are not. It shallow-merges
+      // top-level keys, so a second setting sent later would not join this one
+      // — both would have to go in one call. And the persisted `effortLevel`
+      // excludes `max` while this parameter allows it, because `max` lasts for
+      // the session and the CLI never writes it to a settings file; we keep it
+      // on the chat instead, and the next session asks for it at start-up.
+      await conversation.applyFlagSettings({ effortLevel: effort })
     },
 
     close() {

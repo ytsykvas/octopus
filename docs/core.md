@@ -26,13 +26,14 @@ Nothing but zod behind them, so a **value** can cross into the window.
 
 ### Storage
 
-| Module                                       | What it decides                                    |
-| -------------------------------------------- | -------------------------------------------------- |
-| [`paths.ts`](../src/core/paths.ts)           | every path under `~/.octopus`, in one place        |
-| [`persist.ts`](../src/core/persist.ts)       | atomic writes, validated reads, honest failures    |
-| [`config.ts`](../src/core/config.ts)         | settings and their bounds                          |
-| [`store.ts`](../src/core/store.ts)           | projects, workspaces and chats, and the migrations |
-| [`transcript.ts`](../src/core/transcript.ts) | chat history as append-only JSONL                  |
+| Module                                             | What it decides                                                |
+| -------------------------------------------------- | -------------------------------------------------------------- |
+| [`paths.ts`](../src/core/paths.ts)                 | every path under `~/.octopus`, in one place                    |
+| [`persist.ts`](../src/core/persist.ts)             | atomic writes, validated reads, honest failures                |
+| [`config.ts`](../src/core/config.ts)               | settings and their bounds                                      |
+| [`store.ts`](../src/core/store.ts)                 | projects, workspaces and chats, and the migrations             |
+| [`transcript.ts`](../src/core/transcript.ts)       | chat history as append-only JSONL                              |
+| [`changeContext.ts`](../src/core/changeContext.ts) | the lines an edit landed among, read while they are still true |
 
 ### git
 

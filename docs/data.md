@@ -36,21 +36,32 @@ paths alone reported such a workspace as healthy. The parser reads the flag now.
 
 Validated by `ConfigSchema` in [`config.ts`](../src/core/config.ts).
 
-| Field                             | Meaning                                                            |
-| --------------------------------- | ------------------------------------------------------------------ |
-| `version`                         | format version, for future migrations                              |
-| `branchPrefix`                    | branches are `<prefix>/<workspace>`                                |
-| `cloneDirectory`                  | where GitHub clones land; empty means "ask, then remember"         |
-| `settingSources`                  | what the agent may load — `none` is the transparency default (§4)  |
-| `permissionMode`                  | what a new chat may do before asking                               |
-| `alwaysAllowedTools`              | tools the user answered "always" for, listed so they can be undone |
-| `theme`, `language`               | appearance                                                         |
-| `rightPanelWidth`, `sidebarWidth` | pane widths, in pixels                                             |
-| `deviceId`, `installedAt`         | reserved for licensing (§15.3), unused                             |
+| Field                             | Meaning                                                              |
+| --------------------------------- | -------------------------------------------------------------------- |
+| `version`                         | format version, for future migrations                                |
+| `branchPrefix`                    | branches are `<prefix>/<workspace>`                                  |
+| `cloneDirectory`                  | where GitHub clones land; empty means "ask, then remember"           |
+| `settingSources`                  | what the agent may load — `none` is the transparency default (§4)    |
+| `workingMode`                     | what a new chat may do before asking; planning is not one of them    |
+| `effort`                          | how much thinking a new chat asks for; `null` leaves it to the agent |
+| `alwaysAllowedTools`              | tools the user answered "always" for, listed so they can be undone   |
+| `theme`, `language`               | appearance                                                           |
+| `rightPanelWidth`, `sidebarWidth` | pane widths, in pixels                                               |
+| `deviceId`, `installedAt`         | reserved for licensing (§15.3), unused                               |
 
-**Every new field carries `.default()`.** Without one, adding a field rejects
-every config written by an earlier build as malformed — which is what happened
-when `language` was introduced.
+`alwaysAllowedTools` is filtered on the way in **and on the way out**, and never
+holds `ExitPlanMode`. That list is handed to the SDK, so an entry there is not
+merely a pre-answered question — it stops the question being asked at all. With
+the plan tool in it the agent's plan was approved by the SDK itself: no dialog,
+no record that planning had ended, and the toggle still lit over an agent
+editing files. It went unnoticed for a day. `NEVER_STANDING` in `config.ts` is
+what strips it.
+
+**Every new field carries `.default()`** — here, in `StateSchema` and in
+`ChatSchema` alike. `readJsonFile` throws on a mismatch rather than falling
+back, so a field without one does not lose the value: it stops the application
+opening until someone edits JSON by hand. This is what happened when `language`
+was introduced.
 
 ## `state.json`
 
@@ -62,8 +73,23 @@ A **project** is a repository that has been added: `id`, `name`, `repoPath`,
 A **workspace** is a git worktree: `id`, `projectId`, `name`, `branch`, `path`,
 `status`, `port`, `createdAt`, `ownerId`.
 
+`knownModels` is not a record of anything the user did: it is what the agent
+last said this account may use, kept only so the model picker works before the
+first message — the agent can be asked solely while a session is open. It is
+replaced whole at the next session start, and it lives here rather than in
+`config.json` because that file is written unqueued and would race the user's
+own edits.
+
 A **chat** is a conversation with one agent inside one workspace: `id`,
-`workspaceId`, `agent`, `sessionId`, `model`, `permissionMode`, `createdAt`.
+`workspaceId`, `agent`, `sessionId`, `model`, `effort`, `workingMode`,
+`planMode`, `createdAt`.
+
+The last two were one three-valued `permissionMode` until approving a plan had
+to put the conversation back into a mode, and there was none to go back to —
+planning had overwritten it. They are separate now, and the session's mode is
+computed from both by `sessionMode` in `chats.ts`. No migration was written:
+the schema is a plain object, so zod drops the key it no longer knows, and both
+new fields default.
 
 Three identifiers, and confusing them has caused three separate bugs:
 
@@ -94,9 +120,17 @@ agent in the same worktree a migration, while one per chat makes it another
 record. The UI shows a single chat today; the store already allows more, and
 `agent` is a one-member enum for the same reason.
 
-A chat is created by the **first message**, not by the workspace. A workspace
-nobody has spoken to has no record and no transcript, so the state describes
-what happened rather than what might.
+A chat is created by the **first thing done to it**, not by the workspace: the
+first message, or choosing a setting in the composer before sending one. A
+workspace nobody has touched has no record and no transcript, so the state
+describes what happened rather than what might.
+
+Settings count because a choice has to be kept somewhere, and it belongs to the
+conversation rather than to the application. The controls were in the header
+until they moved into the composer, disabled until a record existed — which made
+the mode of the first message the one mode nobody could pick. Opening is
+idempotent and writes no transcript (only appending an entry does that), so the
+record costs one row.
 
 ### Transcripts
 
@@ -113,6 +147,15 @@ last line, and losing the conversation over a partial byte is worse.
 Streaming fragments are **not** stored. The finished block follows immediately
 after, and keeping both would replay every answer twice on the next launch.
 
+One kind of entry arrives **after** the one it describes. The lines around a
+change are read from the file once the edit succeeds, and a file read is not
+something the event handler can wait for without letting later events overtake
+earlier ones — so `change_context` is written whenever the read returns, and
+carries the `toolUseId` it belongs to. Whatever draws the log pairs them up by
+that id rather than by position, and treats the entry as invisible where it
+lands: it may fall in the middle of a run of later tool calls, and a break the
+reader cannot see is worse than none.
+
 The filename is the chat id, a uuid, and the directory is flat. A chat outlives
 the name its workspace had when it started, so filing it under that name would
 either strand the file on a rename or require moving it.
@@ -123,6 +166,13 @@ The subscription's rate limit lives in the service's memory and never reaches
 `state.json`. It describes the account at this moment and expires on its own, so
 a reading restored from disk after a night is worse than none: it would be drawn
 with full confidence and be wrong. It is re-learned from the first turn that runs.
+
+The same goes for the two figures the composer's attic shows, which are pulled
+from a running agent rather than pushed. **The context share is not kept at all**,
+not even in memory: it describes a live child process, and once that process ends
+the next one rebuilds a context we never observed. **The subscription windows are
+cached beside the rate limit** — they belong to the account, so a workspace with
+no session of its own can still show what another workspace's turn learned.
 
 ### Ports
 

@@ -8,11 +8,11 @@
 
 import { z } from 'zod'
 
-import { type Chat, ChatSchema } from './chats.js'
+import { type AgentModel, AgentModelSchema, type Chat, ChatSchema } from './chats.js'
 import { nextProjectColor, type ProjectColor, ProjectColorSchema } from './colors.js'
 import { ProjectIconSchema } from './icons.js'
 
-export { type Chat, ChatSchema } from './chats.js'
+export { type AgentModel, AgentModelSchema, type Chat, ChatSchema } from './chats.js'
 export { PROJECT_COLORS, type ProjectColor } from './colors.js'
 export { PROJECT_ICONS, type ProjectIcon } from './icons.js'
 import { stateFile, stateTempFile } from './paths.js'
@@ -76,7 +76,22 @@ export const StateSchema = z.object({
    * existed still loads. The version stays at 1 for the same reason: a field
    * that can be absent needs a default, not a migration.
    */
-  chats: z.array(ChatSchema).default([])
+  chats: z.array(ChatSchema).default([]),
+  /**
+   * Models the agent last said the account may use.
+   *
+   * Here rather than in `config.json` for two reasons. The config is written
+   * unqueued, so a list saved whenever a session starts would race the user's
+   * own edit in Settings and drop a field; this file is written through
+   * `commit`, which serialises. And the config is a file §4 promises the user
+   * can read and shorten — a cache the application writes for itself is not a
+   * setting.
+   *
+   * Remembered only so the picker is usable before the first message, since the
+   * agent can list its models solely while a session is running. Replaced whole
+   * at the next session start.
+   */
+  knownModels: z.array(AgentModelSchema).default([])
 })
 
 /**
@@ -94,7 +109,13 @@ type StoredState = z.infer<typeof StateSchema>
 
 export type State = Omit<StoredState, 'projects'> & { projects: Project[] }
 
-export const EMPTY_STATE: State = { version: 1, projects: [], workspaces: [], chats: [] }
+export const EMPTY_STATE: State = {
+  version: 1,
+  projects: [],
+  workspaces: [],
+  chats: [],
+  knownModels: []
+}
 
 /** State integrity violation — a duplicate or a dangling reference. */
 export class StateConflictError extends Error {
@@ -345,4 +366,20 @@ export function updateChat(
     ...state,
     chats: state.chats.map((chat) => (chat.id === chatId ? { ...chat, ...patch } : chat))
   }
+}
+
+/**
+ * Replaces the remembered model list.
+ *
+ * Wholesale rather than merged: the agent reports what the account may use
+ * *now*, and keeping an entry it stopped naming would leave a withdrawn model
+ * in the picker forever.
+ */
+export function rememberModels(state: State, models: readonly AgentModel[]): State {
+  return { ...state, knownModels: [...models] }
+}
+
+/** Whether the remembered list already says exactly this — a write to avoid. */
+export function modelsUnchanged(state: State, models: readonly AgentModel[]): boolean {
+  return JSON.stringify(state.knownModels) === JSON.stringify(models)
 }

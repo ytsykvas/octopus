@@ -166,4 +166,33 @@ describe('DropdownMenu', () => {
     const panel = screen.getByRole('menu')
     expect(Number.parseInt(panel.style.top, 10)).toBeLessThan(window.innerHeight - 20)
   })
+
+  // A menu of choices is a different thing from a menu of commands, and the
+  // role is what carries that difference to anything reading the screen.
+  describe('a menu of choices', () => {
+    it('announces the items as a group with one of them current', async () => {
+      const user = userEvent.setup()
+      renderMenu([
+        { id: 'plan', label: 'Plan only', selected: true, onSelect: vi.fn() },
+        { id: 'default', label: 'Ask first', selected: false, onSelect: vi.fn() }
+      ])
+
+      await user.click(triggerButton())
+
+      expect(screen.getByRole('menuitemradio', { name: 'Plan only' })).toBeChecked()
+      expect(screen.getByRole('menuitemradio', { name: 'Ask first' })).not.toBeChecked()
+    })
+
+    // Commands and choices live in the same component, and a command that
+    // started announcing itself as a radio would be a quiet regression.
+    it('leaves an ordinary action an ordinary action', async () => {
+      const user = userEvent.setup()
+      renderMenu([{ id: 'rename', label: 'Rename', onSelect: vi.fn() }])
+
+      await user.click(triggerButton())
+
+      expect(screen.getByRole('menuitem', { name: 'Rename' })).toBeInTheDocument()
+      expect(screen.queryByRole('menuitemradio')).not.toBeInTheDocument()
+    })
+  })
 })

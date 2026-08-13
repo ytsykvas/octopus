@@ -6,18 +6,21 @@ import {
   ChatSchema,
   newChat,
   PERMISSION_MODES,
-  PermissionAnswerSchema
+  PermissionAnswerSchema,
+  sessionMode,
+  WORKING_MODES
 } from './chats.js'
 
 describe('a new chat', () => {
   const options = {
     id: 'chat-1',
     agent: 'claude' as const,
-    permissionMode: 'default' as const,
+    workingMode: 'default' as const,
+    effort: null,
     createdAt: '2026-08-11T09:00:00.000Z'
   }
 
-  it('starts with no session and no model override', () => {
+  it('starts with no session and nothing overridden', () => {
     const chat = newChat('planner/kyiv', options)
 
     expect(chat).toEqual({
@@ -26,9 +29,62 @@ describe('a new chat', () => {
       agent: 'claude',
       sessionId: null,
       model: null,
-      permissionMode: 'default',
+      effort: null,
+      workingMode: 'default',
+      planMode: false,
       createdAt: '2026-08-11T09:00:00.000Z'
     })
+  })
+
+  it('carries the effort it was created with', () => {
+    expect(newChat('planner/kyiv', { ...options, effort: 'max' }).effort).toBe('max')
+  })
+
+  // A record written before the field existed has to load, because the reader
+  // throws on a mismatch rather than falling back — a missing default would
+  // stop the app opening, not lose a value.
+  it('reads a record written before effort existed', () => {
+    const { effort, ...older } = newChat('planner/kyiv', options)
+    void effort
+
+    const parsed = ChatSchema.safeParse(older)
+    expect(parsed.success).toBe(true)
+    expect(parsed.data?.effort).toBeNull()
+  })
+
+  /*
+   * The claim that made splitting the field safe without writing a migration,
+   * asserted rather than assumed: records on disk right now hold the old
+   * three-valued `permissionMode`, and one of them holds `plan`.
+   *
+   * A plain object schema drops the key it no longer knows and both new fields
+   * default, so the conversation that was stuck planning — which was the bug —
+   * comes back as an ordinary one that is not.
+   */
+  it('reads a record written before the mode was split', () => {
+    const { workingMode, planMode, ...older } = newChat('planner/kyiv', options)
+    void workingMode
+    void planMode
+
+    for (const stored of ['default', 'acceptEdits', 'plan']) {
+      const parsed = ChatSchema.safeParse({ ...older, permissionMode: stored })
+
+      expect(parsed.success).toBe(true)
+      expect(parsed.data?.workingMode).toBe('default')
+      expect(parsed.data?.planMode).toBe(false)
+      expect(parsed.data).not.toHaveProperty('permissionMode')
+    }
+  })
+
+  // Two fields, one union: the SDK takes a single mode, and this is the only
+  // place that decides which half of the pair wins.
+  it('folds the two halves back into the mode a session starts in', () => {
+    expect(sessionMode({ planMode: false, workingMode: 'default' })).toBe('default')
+    expect(sessionMode({ planMode: false, workingMode: 'acceptEdits' })).toBe('acceptEdits')
+    expect(sessionMode({ planMode: true, workingMode: 'default' })).toBe('plan')
+    // Planning wins: the agent runs no tools at all, so there is nothing for
+    // "accept edits" to accept until the plan is approved.
+    expect(sessionMode({ planMode: true, workingMode: 'acceptEdits' })).toBe('plan')
   })
 
   it('is a valid record', () => {
@@ -36,9 +92,15 @@ describe('a new chat', () => {
   })
 
   it('carries the mode it was created with', () => {
-    const planning = newChat('planner/kyiv', { ...options, permissionMode: 'plan' })
+    const free = newChat('planner/kyiv', { ...options, workingMode: 'acceptEdits' })
 
-    expect(planning.permissionMode).toBe('plan')
+    expect(free.workingMode).toBe('acceptEdits')
+  })
+
+  // Planning is asked for about a task, not inherited from a setting, so a
+  // fresh conversation is never already in it.
+  it('never starts out planning', () => {
+    expect(newChat('planner/kyiv', { ...options, workingMode: 'acceptEdits' }).planMode).toBe(false)
   })
 })
 
@@ -56,10 +118,18 @@ describe('permission modes', () => {
     expect(PERMISSION_MODES).toEqual(['default', 'plan', 'acceptEdits'])
   })
 
+  // The stored half is the SDK's union minus planning, and it has to stay a
+  // subset of it: a value here the SDK does not know is a session that never
+  // starts, found at runtime rather than at the build.
+  it('stores every mode but planning, and nothing the SDK would not take', () => {
+    expect(WORKING_MODES).toEqual(['default', 'acceptEdits'])
+    for (const mode of WORKING_MODES) expect(PERMISSION_MODES).toContain(mode)
+  })
+
   // §4 puts transparency above convenience, and a mode where nothing is ever
   // shown is the one setting reading the screen cannot undo.
   it('does not offer bypassing permissions', () => {
-    expect(ChatSchema.shape.permissionMode.safeParse('bypassPermissions').success).toBe(false)
+    expect(ChatSchema.shape.workingMode.safeParse('bypassPermissions').success).toBe(false)
   })
 })
 

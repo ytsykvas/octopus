@@ -8,9 +8,30 @@ import { randomUUID } from 'node:crypto'
 
 import { z } from 'zod'
 
-import { type PermissionMode, PermissionModeSchema } from './chats.js'
+import {
+  type Effort,
+  EffortSchema,
+  EXIT_PLAN_MODE,
+  type WorkingMode,
+  WorkingModeSchema
+} from './chats.js'
 import { configFile } from './paths.js'
 import { readJsonFile, writeJsonFile } from './persist.js'
+
+/**
+ * Tools no standing approval may ever cover.
+ *
+ * `ExitPlanMode` is how the agent hands a finished plan back, so a standing
+ * "always" on it accepts every future plan unread — planning undone by one
+ * click, and silently: the approval never reaches the application at all,
+ * because this list is passed to the SDK, which then decides on its own and
+ * never calls back. No dialog, no record that planning ended, a toggle still
+ * lit over an agent that has started editing.
+ *
+ * It got into one of these lists before there was anything to stop it, which is
+ * why this strips rather than merely refuses.
+ */
+const NEVER_STANDING: readonly string[] = [EXIT_PLAN_MODE]
 
 /**
  * Which setting sources the agent is allowed to load.
@@ -51,8 +72,23 @@ export const ConfigSchema = z.object({
    * Global rather than per workspace: the answer is a working habit, and being
    * asked it again on every new branch is the kind of friction that gets a
    * setting turned all the way off.
+   *
+   * Planning is deliberately not one of the choices, though the old
+   * `permissionMode` this replaces offered it. Whether to plan is a judgement
+   * about one task — is it broad enough to want the approach agreed first —
+   * and a standing answer to that question is not a working habit but a way of
+   * never being asked it.
    */
-  permissionMode: PermissionModeSchema.default('default'),
+  workingMode: WorkingModeSchema.default('default'),
+
+  /**
+   * How much thinking a new chat asks for; null leaves the choice to the agent.
+   *
+   * Global for the same reason as the mode above, and null by default because
+   * the SDK already has an answer — picking one of our own here would be us
+   * overriding it in every chat while looking like we had not chosen at all.
+   */
+  effort: EffortSchema.nullable().default(null),
 
   /**
    * Tools the user has answered "always" for.
@@ -61,8 +97,15 @@ export const ConfigSchema = z.object({
    * `settingSources` may well be `none` — in which case the SDK has nowhere to
    * write them, and the answer would be forgotten the moment the session ends.
    * A list in the config is also a list the user can read and shorten (§4).
+   *
+   * Filtered rather than merely validated, and the schema is used on the way
+   * out as well as in, so a config holding one of these is cleaned the next
+   * time it is written.
    */
-  alwaysAllowedTools: z.array(z.string()).default([]),
+  alwaysAllowedTools: z
+    .array(z.string())
+    .default([])
+    .transform((tools) => tools.filter((tool) => !NEVER_STANDING.includes(tool))),
 
   theme: ThemePreferenceSchema,
 
@@ -118,13 +161,15 @@ export function createDefaultConfig(
   now: Date = new Date(),
   uuid: () => string = randomUUID
 ): Config {
-  const permissionMode: PermissionMode = 'default'
+  const workingMode: WorkingMode = 'default'
+  const effort: Effort | null = null
 
   return {
     version: 1,
     branchPrefix,
     settingSources: 'none',
-    permissionMode,
+    workingMode,
+    effort,
     alwaysAllowedTools: [],
     theme: 'system',
     language: 'en',

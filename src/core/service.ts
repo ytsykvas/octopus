@@ -11,8 +11,26 @@ import { randomUUID } from 'node:crypto'
 import { query as defaultQuery } from '@anthropic-ai/claude-agent-sdk'
 
 import { type CommandExec, defaultExec } from './accounts.js'
-import { type AgentSession, type QueryFn, READ_ONLY_TOOLS, startSession } from './agent.js'
-import { type Chat, newChat, type PermissionMode } from './chats.js'
+import {
+  type AgentSession,
+  type ContextUsage,
+  DENIED,
+  type PermissionOutcome,
+  type QueryFn,
+  READ_ONLY_TOOLS,
+  startSession,
+  type SubscriptionUsage
+} from './agent.js'
+import {
+  type AgentModel,
+  type Chat,
+  type Effort,
+  EXIT_PLAN_MODE,
+  newChat,
+  sessionMode,
+  type WorkingMode
+} from './chats.js'
+import { type EditTarget, readChangeContext, readEditTarget } from './changeContext.js'
 import { type Config, loadConfig, saveConfig, toSdkSettingSources } from './config.js'
 import { type AgentEvent, isEphemeral } from './events.js'
 import { cloneRepository, listRepositories, type RemoteRepository } from './github.js'
@@ -32,7 +50,9 @@ import {
   findChat,
   findProject,
   loadState,
+  modelsUnchanged,
   type Project,
+  rememberModels,
   removeProject,
   type ProjectPatch,
   removeWorkspace as removeWorkspaceRecord,
@@ -98,10 +118,38 @@ export type PermissionAnswer = 'allow' | 'always' | 'deny'
 /** How much of the subscription's window is gone, as last reported. */
 export type RateLimit = Extract<AgentEvent, { type: 'rate_limit' }>
 
+/**
+ * The two readings a running session can be asked for.
+ *
+ * One object rather than two calls: they are wanted at the same moments, and
+ * splitting them would double the round trips to say one thing.
+ */
+export interface SessionUsage {
+  readonly context: ContextUsage | null
+  readonly subscription: SubscriptionUsage | null
+}
+
 /** A permission request the agent is still blocked on. */
-interface PendingPermission {
-  readonly resolve: (allowed: boolean) => void
+/**
+ * A question the agent is blocked on, as anyone asking after the fact sees it.
+ *
+ * The same three fields the event carried. A window that was not listening when
+ * it went out — opened later, or switched away and back — has no other way to
+ * learn that the conversation is waiting on it.
+ */
+export interface PermissionRequest {
+  readonly requestId: string
   readonly toolName: string
+  readonly input: unknown
+}
+
+interface PendingPermission {
+  readonly resolve: (outcome: PermissionOutcome) => void
+  readonly toolName: string
+  /** Kept so the question can be asked again, not merely answered. */
+  readonly input: unknown
+  /** Which conversation is blocked — approving a plan reads its mode back. */
+  readonly chatId: string
   readonly workspaceId: string
 }
 
@@ -159,9 +207,46 @@ export interface OctopusService {
   sendToChat(chatId: string, text: string): Promise<void>
   /** Stops the current turn; the session stays open. */
   interruptChat(chatId: string): Promise<void>
-  setChatPermissionMode(chatId: string, mode: PermissionMode): Promise<void>
+  /** Sets how freely the chat works once it is working. */
+  setChatWorkingMode(chatId: string, mode: WorkingMode): Promise<void>
+  /** Turns planning on or off for the chat. */
+  setChatPlanMode(chatId: string, planning: boolean): Promise<void>
+  /** Sets how much thinking the chat asks for; null returns it to the agent. */
+  setChatEffort(chatId: string, effort: Effort | null): Promise<void>
+  /** Sets the model the chat runs on; null returns the choice to the agent. */
+  setChatModel(chatId: string, model: string | null): Promise<void>
+  /**
+   * What a live session says about its context window and the account's windows.
+   *
+   * Both are pulled from the running agent rather than pushed, so a chat with
+   * no session answers `context: null` — and the subscription figure falls back
+   * to whatever another chat last learned, since it describes the account.
+   */
+  sessionUsage(chatId: string): Promise<SessionUsage>
+  /**
+   * What the chat's agent is blocked on, or null when it is not blocked.
+   *
+   * Asked rather than only announced, because the announcement happens once.
+   * A window that opens afterwards — or comes back to a workspace it had
+   * switched away from — otherwise shows a conversation that looks busy for
+   * ever while the answer it needs is one nobody can give.
+   */
+  pendingPermission(chatId: string): PermissionRequest | null
+  /**
+   * Models the agent last reported, for the picker.
+   *
+   * Empty until a session has run once — the agent can only be asked while one
+   * is open, so there is nothing to report before that.
+   */
+  knownModels(): readonly AgentModel[]
   /** Answers a pending permission request. Unknown ids are ignored. */
-  answerPermission(requestId: string, answer: PermissionAnswer): Promise<void>
+  /**
+   * Answers a blocked tool call.
+   *
+   * `feedback` accompanies a refusal and reaches the agent as the reason — the
+   * one place the user can steer without waiting for the turn to end.
+   */
+  answerPermission(requestId: string, answer: PermissionAnswer, feedback?: string): Promise<void>
   /**
    * The last rate limit any session reported, or null before one has.
    *
@@ -201,9 +286,24 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
   const listeners = new Set<(event: ChatEvent) => void>()
   const pending = new Map<string, PendingPermission>()
 
+  /**
+   * Edits the agent has announced but not yet finished, keyed by tool call.
+   *
+   * The call says which file and what text; whether it worked is only known
+   * when the result arrives, and the file is only worth reading once it has.
+   * Entries are removed as they are answered and with the session that made
+   * them, so this cannot grow.
+   */
+  const editsInFlight = new Map<string, EditTarget & { readonly chatId: string }>()
+
   // One reading for the whole service, not one per chat: the limit belongs to
   // the account, and whichever session reports it is reporting the same thing.
   let rateLimit: RateLimit | null = null
+
+  // The same reasoning, for the figures pulled rather than pushed. It is what
+  // lets a workspace nobody has spoken to — and so has no session to ask —
+  // still show what another workspace's turn learned a minute ago.
+  let subscriptionUsage: SubscriptionUsage | null = null
 
   /**
    * State writes, run one after another.
@@ -364,6 +464,25 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
       background(chat, setStatus(chat.workspaceId, 'waiting_permission'))
     }
 
+    // An edit announced. Remembered rather than acted on: whether it worked is
+    // only known when the result arrives, and the file is only worth reading
+    // once it has.
+    if (event.type === 'tool_use') {
+      const edit = readEditTarget(event.name, event.input)
+      if (edit) editsInFlight.set(event.toolUseId, { ...edit, chatId: chat.id })
+    }
+
+    if (event.type === 'tool_result') {
+      const edit = editsInFlight.get(event.toolUseId)
+      editsInFlight.delete(event.toolUseId)
+
+      // Read now, while the file still says what the edit made it say. Looked
+      // up when the conversation is drawn it would be wrong: a later edit
+      // shifts every line after it, so the lines around a change would be the
+      // lines around wherever that text has since ended up.
+      if (edit && event.ok) background(chat, recordContext(chat, event.toolUseId, edit))
+    }
+
     if (event.type === 'result') {
       background(chat, setStatus(chat.workspaceId, event.ok ? 'idle' : 'error'))
     }
@@ -373,6 +492,26 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
     }
 
     emit({ chatId: chat.id, workspaceId: chat.workspaceId, event })
+  }
+
+  /**
+   * Reads the lines around a finished edit and announces them.
+   *
+   * Fed back through `handleEvent`, so it is recorded and emitted like anything
+   * else. Silence when the context cannot be had — the file gone, the text no
+   * longer unique — is deliberate: this is a courtesy, and a wrong one would
+   * show a change sitting among lines it never touched.
+   */
+  async function recordContext(chat: Chat, toolUseId: string, edit: EditTarget): Promise<void> {
+    const workspace = state.workspaces.find((item) => item.id === chat.workspaceId)
+    // Unreachable: an edit is forgotten with the session that made it, so one
+    // still in flight has a workspace to belong to. The guard is here because
+    // the lookup's type says otherwise.
+    /* v8 ignore next */
+    if (!workspace) return
+
+    const context = await readChangeContext(workspace.path, edit.path, edit.written)
+    if (context) handleEvent(chat, { type: 'change_context', toolUseId, context })
   }
 
   /** Lets a write started from an event handler finish without anyone awaiting it. */
@@ -389,15 +528,43 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
    * exactly what the SDK wants: `canUseTool` blocks the tool call, so the agent
    * waits rather than guessing.
    */
-  async function askPermission(chat: Chat, toolName: string, input: unknown): Promise<boolean> {
-    if (config.alwaysAllowedTools.includes(toolName)) return true
+  async function askPermission(
+    chat: Chat,
+    toolName: string,
+    input: unknown
+  ): Promise<PermissionOutcome> {
+    if (config.alwaysAllowedTools.includes(toolName)) return { allow: true }
 
     const requestId = uuid()
     handleEvent(chat, { type: 'permission_request', requestId, toolName, input })
 
-    return new Promise<boolean>((resolve) => {
-      pending.set(requestId, { resolve, toolName, workspaceId: chat.workspaceId })
+    return new Promise<PermissionOutcome>((resolve) => {
+      pending.set(requestId, {
+        resolve,
+        toolName,
+        input,
+        chatId: chat.id,
+        workspaceId: chat.workspaceId
+      })
     })
+  }
+
+  /**
+   * Stores a change to either half of the mode and pushes the result live.
+   *
+   * Both halves go through here because the session only understands the two
+   * folded together: turning planning off has to send `acceptEdits` if that is
+   * what the other half says, not merely "not planning".
+   */
+  async function applyMode(chatId: string, patch: Partial<Chat>): Promise<void> {
+    requireChat(chatId)
+    await commit((current) => updateChat(current, chatId, patch))
+
+    // Applied to the running session too, so the choice takes effect on the
+    // current turn rather than only on the next one. Read back after the write
+    // rather than merged by hand: the session wants both halves, and only one
+    // of them is in the patch.
+    await sessions.get(chatId)?.setPermissionMode(sessionMode(requireChat(chatId)))
   }
 
   /**
@@ -412,6 +579,13 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
       const session = sessions.get(chat.id)
       sessions.delete(chat.id)
 
+      // A session that ends mid-tool leaves an edit nobody will ever answer
+      // for. Cleared with it, so this cannot become the leak `pending` is —
+      // and only this chat's, since the map is the whole service's.
+      for (const [toolUseId, edit] of editsInFlight) {
+        if (edit.chatId === chat.id) editsInFlight.delete(toolUseId)
+      }
+
       // Best effort, one at a time: a session that fails to close must not
       // stop the workspace from being removed.
       await session?.close().catch(() => undefined)
@@ -425,8 +599,9 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
         cwd: workspace.path,
         resume: chat.sessionId,
         settingSources: toSdkSettingSources(config.settingSources),
-        permissionMode: chat.permissionMode,
+        permissionMode: sessionMode(chat),
         model: chat.model,
+        effort: chat.effort,
         // The read-only set and the user's own answers are the only things
         // pre-approved; everything else reaches `askPermission`.
         allowedTools: [...READ_ONLY_TOOLS, ...config.alwaysAllowedTools]
@@ -443,6 +618,19 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
     )
 
     sessions.set(chat.id, session)
+
+    // Fire-and-forget, and the failure is deliberately swallowed. The list is a
+    // convenience for the picker; a session that cannot start already says so
+    // through the event stream, and failing a message because the model names
+    // could not be read would be reporting the wrong problem.
+    void session.models().then(
+      async (models) => {
+        if (modelsUnchanged(state, models)) return
+        await commit((current) => rememberModels(current, models))
+      },
+      () => undefined
+    )
+
     return session
   }
 
@@ -634,7 +822,8 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
         agent: 'claude',
         // The global setting is the starting point; the chat may then diverge
         // from it without changing what the next workspace inherits.
-        permissionMode: config.permissionMode,
+        workingMode: config.workingMode,
+        effort: config.effort,
         createdAt: now()
       })
 
@@ -659,7 +848,28 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
       // than lost along with the failure.
       await appendEntry(chatId, { role: 'user', at: now(), text }, dataRoot)
 
-      const session = sessions.get(chatId) ?? startFor(chat, workspace)
+      /*
+       * The record is what the session runs under, re-asserted rather than
+       * assumed.
+       *
+       * The agent's own CLI changes mode by itself — it leaves plan mode once a
+       * plan is settled — and announces nothing when it does: no message in the
+       * SDK carries a mode except the one at startup. Set only at the start and
+       * on a user's change, the session drifted, and the footer ended up
+       * promising "without asking" over an agent asking about every edit.
+       *
+       * The toggle wins over whatever the CLI decided. A setting that turns
+       * itself off is worse than a turn planned once more than needed.
+       *
+       * A session started just now already has it, from the options it was
+       * built with. Not caught: this governs what the agent may do without
+       * asking, and sending into a mode we could not set is the fault being
+       * fixed here.
+       */
+      const running = sessions.get(chatId)
+      if (running) await running.setPermissionMode(sessionMode(chat))
+
+      const session = running ?? startFor(chat, workspace)
       session.send(text)
 
       await setStatus(workspace.id, 'running')
@@ -674,34 +884,119 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
       await setStatus(chat.workspaceId, 'idle')
     },
 
-    async setChatPermissionMode(chatId, mode) {
-      requireChat(chatId)
-      await commit((current) => updateChat(current, chatId, { permissionMode: mode }))
-
-      // Applied to the running session too, so the choice takes effect on the
-      // current turn rather than only on the next one.
-      await sessions.get(chatId)?.setPermissionMode(mode)
+    async setChatWorkingMode(chatId, mode) {
+      await applyMode(chatId, { workingMode: mode })
     },
 
-    async answerPermission(requestId, answer) {
+    async setChatPlanMode(chatId, planning) {
+      await applyMode(chatId, { planMode: planning })
+    },
+
+    async setChatEffort(chatId, effort) {
+      requireChat(chatId)
+      await commit((current) => updateChat(current, chatId, { effort }))
+
+      // Only a level can be applied to a running session; clearing the override
+      // means "whatever the agent would choose", which it can only do at the
+      // start. The record is written either way, so the next session obeys.
+      if (effort !== null) await sessions.get(chatId)?.setEffort(effort)
+    },
+
+    async setChatModel(chatId, model) {
+      requireChat(chatId)
+      await commit((current) => updateChat(current, chatId, { model }))
+
+      await sessions.get(chatId)?.setModel(model)
+    },
+
+    knownModels() {
+      return state.knownModels
+    },
+
+    pendingPermission(chatId) {
+      requireChat(chatId)
+
+      for (const [requestId, request] of pending) {
+        if (request.chatId === chatId) {
+          return { requestId, toolName: request.toolName, input: request.input }
+        }
+      }
+
+      return null
+    },
+
+    async answerPermission(requestId, answer, feedback) {
       const request = pending.get(requestId)
       // Unknown means already answered, or the session it belonged to is gone.
       if (!request) return
 
       pending.delete(requestId)
 
-      if (answer === 'always') {
+      if (answer === 'deny') {
+        // The user's own words when there are any: the agent reads a refusal's
+        // message as instruction, which is how "not quite, do this instead"
+        // reaches it without costing a turn.
+        const note = feedback?.trim() ?? ''
+        request.resolve({ allow: false, message: note === '' ? DENIED : note })
+        await setStatus(request.workspaceId, 'idle')
+        return
+      }
+
+      // Approving a plan is never a standing answer. `config.ts` explains why
+      // at length; the short of it is that the list reaches the SDK, which then
+      // approves every later plan without telling us — so the dialog, the
+      // record and the toggle all stop happening at once.
+      const leaving = request.toolName === EXIT_PLAN_MODE
+
+      if (answer === 'always' && !leaving) {
         await applyConfig({
           alwaysAllowedTools: [...new Set([...config.alwaysAllowedTools, request.toolName])]
         })
       }
 
-      request.resolve(answer !== 'deny')
-      await setStatus(request.workspaceId, answer === 'deny' ? 'idle' : 'running')
+      // Approving a plan is the moment planning ends. Both halves of that have
+      // to happen or the interface starts lying: the record, so the next
+      // session does not start by planning again, and the running session, so
+      // the work the plan describes can actually begin.
+      if (leaving) {
+        await commit((current) => updateChat(current, request.chatId, { planMode: false }))
+      }
+
+      const chat = findChat(state, request.chatId)
+      request.resolve({
+        allow: true,
+        ...(leaving && chat && { setMode: chat.workingMode })
+      })
+      await setStatus(request.workspaceId, 'running')
     },
 
     getRateLimit() {
       return rateLimit
+    },
+
+    async sessionUsage(chatId) {
+      requireChat(chatId)
+
+      const session = sessions.get(chatId)
+      // Deliberately not started. Spawning an agent to fill a gauge would also
+      // create a record for a workspace nobody has spoken to, which is the very
+      // thing `openChat`'s laziness exists to avoid.
+      if (!session) return { context: null, subscription: subscriptionUsage }
+
+      // Together rather than in turn: the subscription reading crosses the
+      // network, the context one does not, and asked in sequence the fast one
+      // would wait on the slow one for no reason.
+      const [context, subscription] = await Promise.all([
+        session.contextUsage(),
+        session.subscriptionUsage()
+      ])
+
+      // A reading that failed leaves the last good one standing. Blanking the
+      // figure because one request was refused would report a change in the
+      // account that never happened.
+      if (subscription) subscriptionUsage = subscription
+
+      return { context, subscription: subscriptionUsage }
     },
 
     onAgentEvent(handler) {

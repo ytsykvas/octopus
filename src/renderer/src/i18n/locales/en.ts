@@ -167,9 +167,47 @@ export const en = {
 
     mode: 'Permissions',
     modeDefault: 'Ask first',
-    modePlan: 'Plan only',
     modeAcceptEdits: 'Accept edits',
+    modeAfterPlan: 'What the agent may do once the plan is approved.',
+    planMode: 'Plan',
+    planModeHint: 'Work out an approach first. The agent runs no tools until you approve it.',
 
+    context: 'Context',
+    contextTitle: 'Context window — {{used}} of {{total}}',
+    windowFiveHour: '5h',
+    windowFiveHourTitle: 'Five-hour window',
+    windowWeek: 'Week',
+    windowWeekTitle: 'Weekly window',
+
+    model: 'Model',
+    modelAuto: 'Agent decides',
+
+    effort: 'Effort',
+    effortAuto: 'Agent decides',
+    effortLow: 'Low',
+    effortMedium: 'Medium',
+    effortHigh: 'High',
+    effortXhigh: 'Very high',
+    effortMax: 'Maximum',
+    effortUnsupported: 'This model does not take an effort setting.',
+
+    // Ukrainian needs `few` and `many` as well; i18next picks the form that
+    // applies to the active language and ignores the rest.
+    toolSteps_one: '{{count}} step',
+    toolSteps_few: '{{count}} steps',
+    toolSteps_many: '{{count}} steps',
+    toolSteps_other: '{{count}} steps',
+
+    plan: 'Plan',
+    executePlan: 'Execute',
+    executePlanMessage: 'Carry out the plan “{{title}}”.',
+    copy: 'Copy',
+    copied: 'Copied',
+    copyFailed: 'Copy failed',
+    planReady: 'The plan is ready',
+    planExecute: 'Execute',
+    planFeedback: 'Anything to work out first?',
+    planFeedbackPlaceholder: 'Write here and the agent will revise the plan',
     permissionTitle: 'The agent wants to use {{tool}}',
     permissionAnswered: 'Already answered.',
     allow: 'Allow',
@@ -190,9 +228,7 @@ export const en = {
     endedBlocked: 'stopped by a hook',
     endedFailed: 'ended with an error',
 
-    usage: 'Subscription usage',
     usageResets: 'resets in {{time}}',
-    usageWarning: 'close to the limit',
     usageReached: 'limit reached',
     hours: 'h',
     minutes: 'm',
@@ -247,6 +283,11 @@ export const en = {
     settingSourcesAll: 'Everything',
     settingSourcesAllHint: 'Loads user, project and local settings, as the plain CLI would.',
 
+    effort: 'Default effort',
+    effortHint:
+      'How much thinking a new conversation asks for. Each one can then be changed on its own, from the composer.',
+    effortAutoHint: 'The agent picks, which is what it does when nothing is set.',
+
     permissionMode: 'What a new chat may do',
     permissionModeHint:
       'The starting point for every workspace, so the question is not asked again on each new branch. A chat can still be switched on its own.',
@@ -256,8 +297,6 @@ export const en = {
     permissionAcceptEdits: 'Accept edits',
     permissionAcceptEditsHint:
       'File changes go through without asking. Commands still wait — they leave the worktree.',
-    permissionPlan: 'Plan only',
-    permissionPlanHint: 'The agent proposes an approach and changes nothing until you agree.',
 
     alwaysAllowed: 'Answered "always"',
     alwaysAllowedHint:

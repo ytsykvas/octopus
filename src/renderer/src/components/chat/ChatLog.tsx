@@ -1,14 +1,26 @@
-import { Check, ChevronRight, ShieldAlert, TriangleAlert, Wrench } from 'lucide-react'
+import {
+  Check,
+  ChevronRight,
+  Map,
+  Pencil,
+  Play,
+  ShieldAlert,
+  TriangleAlert,
+  Wrench
+} from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 
-import { type AgentEvent, type TurnOutcome, turnOutcome } from '@core/events.js'
+import { type AgentEvent, type ChangeContext, type TurnOutcome, turnOutcome } from '@core/events.js'
 import type { PermissionAnswer } from '@core/service.js'
 import type { ChatEntry } from '@core/transcript.js'
 
 import { Button } from '../Button.js'
 import type { Streaming } from '../../hooks/useChat.js'
 import { formatTokens } from './format.js'
-import { describeToolInput } from './toolSummary.js'
+import type { Change, ChangeLine } from './changeSummary.js'
+import { Markdown } from './Markdown.js'
+import { groupToolRuns, toolCount } from './toolRuns.js'
+import { describeToolInput, readPlan } from './toolSummary.js'
 
 /**
  * What each ending is called on screen.
@@ -37,6 +49,8 @@ interface ChatLogProps {
   readonly busy: boolean
   readonly pendingRequestId: string | null
   readonly onAnswer: (requestId: string, answer: PermissionAnswer) => void
+  /** Asks for a plan already in the log to be carried out. */
+  readonly onExecutePlan: (plan: string) => void
 }
 
 /**
@@ -51,24 +65,42 @@ export function ChatLog({
   streaming,
   busy,
   pendingRequestId,
-  onAnswer
+  onAnswer,
+  onExecutePlan
 }: ChatLogProps): React.JSX.Element {
   const { t } = useTranslation()
   const streamingAnything = streaming.text !== '' || streaming.thinking !== ''
 
   return (
-    <div className="mx-auto flex w-full max-w-3xl flex-col gap-3 px-6 py-5">
-      {entries.map((entry, index) => (
-        // The index is the key because the log is append-only: nothing is ever
-        // reordered or removed, so a position identifies a row for its whole
-        // life. Two identical events in a row have nothing else to tell apart.
-        <EntryRow
-          key={index}
-          entry={entry}
-          pendingRequestId={pendingRequestId}
-          onAnswer={onAnswer}
-        />
-      ))}
+    <div className="mx-auto flex w-full max-w-6xl flex-col gap-3 px-6 py-5">
+      {/* The position is the key because the log is append-only: nothing is
+          ever reordered or removed, so where a block starts identifies it for
+          its whole life. Two identical rows have nothing else to tell apart. */}
+      {groupToolRuns(entries).map((block) => {
+        if (block.kind === 'tools') return <ToolRun key={block.at} entries={block.entries} />
+
+        if (block.kind === 'change') {
+          return (
+            <ChangeBlock
+              key={block.at}
+              name={block.name}
+              change={block.change}
+              context={block.context}
+            />
+          )
+        }
+
+        return (
+          <EntryRow
+            key={block.at}
+            entry={block.entry}
+            busy={busy}
+            pendingRequestId={pendingRequestId}
+            onAnswer={onAnswer}
+            onExecutePlan={onExecutePlan}
+          />
+        )
+      })}
 
       {streaming.thinking !== '' && <Thinking text={streaming.thinking} />}
       {streaming.text !== '' && <Prose text={streaming.text} />}
@@ -87,25 +119,42 @@ export function ChatLog({
 
 function EntryRow({
   entry,
+  busy,
   pendingRequestId,
-  onAnswer
+  onAnswer,
+  onExecutePlan
 }: {
   entry: ChatEntry
+  busy: boolean
   pendingRequestId: string | null
   onAnswer: (requestId: string, answer: PermissionAnswer) => void
+  onExecutePlan: (plan: string) => void
 }): React.JSX.Element | null {
   if (entry.role === 'user') return <UserMessage text={entry.text} />
-  return <AgentRow event={entry.event} pendingRequestId={pendingRequestId} onAnswer={onAnswer} />
+
+  return (
+    <AgentRow
+      event={entry.event}
+      busy={busy}
+      pendingRequestId={pendingRequestId}
+      onAnswer={onAnswer}
+      onExecutePlan={onExecutePlan}
+    />
+  )
 }
 
 function AgentRow({
   event,
+  busy,
   pendingRequestId,
-  onAnswer
+  onAnswer,
+  onExecutePlan
 }: {
   event: AgentEvent
+  busy: boolean
   pendingRequestId: string | null
   onAnswer: (requestId: string, answer: PermissionAnswer) => void
+  onExecutePlan: (plan: string) => void
 }): React.JSX.Element | null {
   switch (event.type) {
     case 'text':
@@ -117,13 +166,29 @@ function AgentRow({
       // reasoning, and those are read back on every launch.
       return event.text.trim() === '' ? null : <Thinking text={event.text} />
 
-    case 'tool_use':
+    case 'tool_use': {
+      // The plan branch lives here rather than inside the row, because a folded
+      // run never holds one — `groupToolRuns` keeps plans out — and threading
+      // the buttons through a component that cannot draw them was noise.
+      const plan = readPlan(event.name, event.input)
+      if (plan !== null) return <Plan text={plan} busy={busy} onExecute={onExecutePlan} />
+
+      // A call that changed a file never arrives here: `groupToolRuns` pulls it
+      // out into a block of its own, so that it can carry the context recorded
+      // for it — which arrives later in the log than the call does.
       return <ToolCall name={event.name} input={event.input} />
+    }
 
     case 'tool_result':
       return event.ok ? null : <ToolFailure content={event.content} />
 
     case 'permission_request':
+      // A plan's request has nothing left to say here. The plan itself is
+      // already above, drawn from the `ExitPlanMode` call that carried it, and
+      // the question about it is asked in a dialog — a card would be the same
+      // text a second time with buttons that duplicate the dialog's.
+      if (readPlan(event.toolName, event.input) !== null) return null
+
       return (
         <PermissionCard
           toolName={event.toolName}
@@ -159,6 +224,14 @@ function AgentRow({
   }
 }
 
+/**
+ * What the user said, left exactly as they typed it.
+ *
+ * The one place markup stays text. These characters came from the composer, and
+ * drawing their asterisks as bold would make the log disagree with what the
+ * person wrote — the agent's prose is the model's output to render, this is the
+ * user's own words to quote.
+ */
 function UserMessage({ text }: { text: string }): React.JSX.Element {
   return (
     <div className="bubble-sent self-end rounded-[var(--radius-panel)] border px-3 py-2 whitespace-pre-wrap">
@@ -167,8 +240,18 @@ function UserMessage({ text }: { text: string }): React.JSX.Element {
   )
 }
 
+/**
+ * What the agent said, drawn the way it wrote it.
+ *
+ * The model writes markdown, and shown as characters that is punctuation in the
+ * way of the words: `**7/10**` read as asterisks, a command came with its
+ * backticks, a list was a column of hyphens.
+ *
+ * The user's own message deliberately does not go through this — see
+ * `UserMessage`.
+ */
 function Prose({ text }: { text: string }): React.JSX.Element {
-  return <div className="leading-relaxed whitespace-pre-wrap">{text}</div>
+  return <Markdown text={text} />
 }
 
 function Thinking({ text }: { text: string }): React.JSX.Element {
@@ -180,10 +263,147 @@ function Thinking({ text }: { text: string }): React.JSX.Element {
         <ChevronRight aria-hidden className="mr-1 inline align-[-2px]" size={12} />
         {t('chat.thinking')}
       </summary>
-      <div className="border-line mt-1 border-l pl-3 leading-relaxed whitespace-pre-wrap">
-        {text}
+      {/* The same prose with the same markup, so drawn the same way. Being
+          folded away is not a reason for it to be wrong. */}
+      <div className="border-line mt-1 border-l pl-3">
+        <Markdown text={text} />
       </div>
     </details>
+  )
+}
+
+/**
+ * A stretch of tool calls, folded into the count of them.
+ *
+ * A turn is mostly tool calls — a rename went through fifty-nine — and one line
+ * each buried the two things worth reading: what the agent said, and what it
+ * changed. Closed by default, because the answer to "what did it do" is the
+ * work itself and this is the working out.
+ *
+ * The same disclosure as reasoning above, for the same reason: available to
+ * anyone who wants it, in the way of nobody who does not.
+ */
+function ToolRun({ entries }: { entries: readonly ChatEntry[] }): React.JSX.Element {
+  const { t } = useTranslation()
+  const steps = toolCount(entries)
+
+  return (
+    <details className="text-ink-faint">
+      <summary className="focus-ring cursor-pointer list-none select-none">
+        <ChevronRight aria-hidden className="mr-1 inline align-[-2px]" size={12} />
+        {t('chat.toolSteps', { count: steps })}
+      </summary>
+
+      <div className="border-line mt-1 flex flex-col gap-1 border-l pl-3">
+        {entries.map((entry, index) =>
+          entry.role === 'agent' && entry.event.type === 'tool_use' ? (
+            <ToolCall key={index} name={entry.event.name} input={entry.event.input} />
+          ) : null
+        )}
+      </div>
+    </details>
+  )
+}
+
+/** How each kind of line is tinted. Tokens only, so both themes hold. */
+const CHANGE_TONES: Record<ChangeLine['sign'], string> = {
+  '+': 'bg-success-bg text-success',
+  '-': 'bg-danger-bg text-danger',
+  ' ': 'text-ink-soft'
+}
+
+/**
+ * What a tool call did to a file.
+ *
+ * The arguments carry it already — an `Edit` is handed the text it replaces and
+ * the text it writes — so this needs nothing from disk and draws the same on a
+ * conversation read back after a restart.
+ *
+ * No line numbers: `old_string` is a fragment, and real ones would need the file
+ * as it stood at the time, which is not something we have. A number that is
+ * nearly right is worse than none in a place the eye trusts.
+ */
+/**
+ * The lines of a change, numbered where a number can be justified.
+ *
+ * A removed line belongs to the file as it was, and that is not something we
+ * kept — so its gutter stays empty. Numbering it from the new file would be out
+ * by every line the change added, and a line number is read as fact.
+ *
+ * Without context the numbers are left off entirely rather than started from
+ * one: an edit does not begin at the top of its file, and saying so would be
+ * the same lie more confidently told.
+ */
+function numbered(change: Change, context: ChangeContext | null): readonly NumberedLine[] {
+  if (!context) return change.lines.map((line) => ({ ...line, number: null }))
+
+  const lines: NumberedLine[] = context.before.map((text, offset) => ({
+    sign: ' ' as const,
+    text,
+    number: context.startLine - context.before.length + offset
+  }))
+
+  // The unchanged and added lines are the file as it now stands, in order, so
+  // they take the numbers in turn. A removed line takes none and holds none up.
+  let number = context.startLine
+  for (const line of change.lines) {
+    lines.push({ ...line, number: line.sign === '-' ? null : number })
+    if (line.sign !== '-') number++
+  }
+
+  for (const [offset, text] of context.after.entries()) {
+    lines.push({ sign: ' ', text, number: number + offset })
+  }
+
+  return lines
+}
+
+interface NumberedLine extends ChangeLine {
+  readonly number: number | null
+}
+
+function ChangeBlock({
+  name,
+  change,
+  context
+}: {
+  name: string
+  change: Change
+  context: ChangeContext | null
+}): React.JSX.Element {
+  return (
+    <div className="border-line min-w-0 rounded-[var(--radius-control)] border">
+      <div className="border-line text-ink-soft flex min-w-0 items-baseline gap-2 border-b px-2.5 py-1.5">
+        <Pencil aria-hidden className="shrink-0 self-center" size={12} />
+        <span className="font-medium">{name}</span>
+        <span className="text-ink-faint truncate font-mono text-[11px]" title={change.path}>
+          {change.path}
+        </span>
+
+        <span className="ml-auto shrink-0 font-mono text-[11px]">
+          {change.added > 0 && <span className="text-success">+{change.added}</span>}
+          {change.added > 0 && change.removed > 0 && ' '}
+          {change.removed > 0 && <span className="text-danger">−{change.removed}</span>}
+        </span>
+      </div>
+
+      {/* Capped rather than folded: the median change is two lines, so a click
+          to see it would cost more than it saves — but a file written whole
+          runs to hundreds, and that must not push the conversation away. */}
+      <div className="max-h-64 overflow-auto py-1 font-mono text-[11px] leading-relaxed">
+        {numbered(change, context).map((line, index) => (
+          <div key={index} className={`flex gap-2 px-2.5 ${CHANGE_TONES[line.sign]}`}>
+            <span className="text-ink-faint w-8 shrink-0 text-right tabular-nums select-none">
+              {line.number}
+            </span>
+            <span className="min-w-0 whitespace-pre-wrap">
+              {line.sign === ' ' ? ' ' : line.sign}
+              {line.text}
+            </span>
+          </div>
+        ))}
+      </div>
+    </div>
   )
 }
 
@@ -199,6 +419,64 @@ function ToolCall({ name, input }: { name: string; input: unknown }): React.JSX.
           {target}
         </span>
       )}
+    </div>
+  )
+}
+
+/**
+ * The plan the agent worked out, shown as what it is.
+ *
+ * It arrives as an argument to `ExitPlanMode` rather than as prose, which is
+ * why it used to vanish: drawn as an ordinary tool call it was a row saying
+ * "ExitPlanMode" and nothing else, while the answer to the whole turn sat
+ * inside it unread.
+ *
+ * Given its own frame rather than the tool row's single line, because it is
+ * the substance of the turn — usually several paragraphs — and the one thing
+ * the reader has to weigh before approving anything.
+ */
+function Plan({
+  text,
+  busy,
+  onExecute
+}: {
+  text: string
+  busy: boolean
+  onExecute: (plan: string) => void
+}): React.JSX.Element {
+  const { t } = useTranslation()
+
+  return (
+    <div className="border-line rounded-[var(--radius-panel)] border">
+      {/* A header of its own rather than a first line inside the padding: the
+          plan runs to several screens, and a title that shares a box with the
+          prose under it stops looking like a title by the second paragraph.
+          A separator and no fill, as the composer's own strips do. */}
+      <div className="border-line flex items-center gap-2 border-b px-3 py-1.5 font-medium">
+        <Map aria-hidden className="text-accent shrink-0" size={14} />
+        {t('chat.plan')}
+
+        {/* The way back to a plan that was set aside. The dialog asks once, and
+            once it is closed the block in the log is all that is left — so
+            changing your mind about a plan you can still read meant retyping
+            the request. Absent while the agent is working: it would be queued
+            behind the turn, and the plan may be the very thing being redone. */}
+        <Button
+          className="ml-auto"
+          size="sm"
+          disabled={busy}
+          onClick={() => {
+            onExecute(text)
+          }}
+        >
+          <Play aria-hidden size={11} />
+          {t('chat.executePlan')}
+        </Button>
+      </div>
+
+      <div className="px-3 py-2.5">
+        <Markdown text={text} />
+      </div>
     </div>
   )
 }
@@ -254,6 +532,7 @@ function PermissionCard({
           >
             {t('chat.allow')}
           </Button>
+
           <Button
             size="sm"
             onClick={() => {
@@ -262,6 +541,7 @@ function PermissionCard({
           >
             {t('chat.always')}
           </Button>
+
           <Button
             variant="danger"
             size="sm"

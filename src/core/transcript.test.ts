@@ -4,6 +4,7 @@ import { join } from 'node:path'
 
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 
+import type { AgentEvent } from './events.js'
 import { chatTranscript } from './paths.js'
 import { appendEntry, type ChatEntry, readTranscript, removeTranscript } from './transcript.js'
 
@@ -134,6 +135,52 @@ describe('a damaged file', () => {
 
     await expect(readTranscript('chat-1', root)).resolves.toHaveLength(1)
   })
+})
+
+/*
+ * A reader that skips what it cannot parse is forgiving, and that is the danger.
+ *
+ * `readTranscript` drops a line whose schema does not match rather than
+ * failing, so an event written today with a shape that cannot be read back
+ * would not break anything — it would silently stop existing the next time the
+ * conversation was opened, and nothing would say so. Every kind of event worth
+ * keeping therefore has to be shown making the round trip.
+ */
+describe('every kind of event survives being written and read', () => {
+  const events: AgentEvent[] = [
+    { type: 'session_started', sessionId: 'sess-1' },
+    { type: 'text', text: 'Looking at auth.rb' },
+    { type: 'thinking', text: 'weighing it up' },
+    { type: 'tool_use', toolUseId: 'c-1', name: 'Edit', input: { file_path: '/a.ts' } },
+    { type: 'tool_result', toolUseId: 'c-1', ok: true, content: 'done' },
+    {
+      type: 'change_context',
+      toolUseId: 'c-1',
+      context: { before: ['one'], after: ['three'], startLine: 2 }
+    },
+    { type: 'permission_request', requestId: 'r-1', toolName: 'Bash', input: { command: 'ls' } },
+    {
+      type: 'result',
+      ok: true,
+      costUsd: null,
+      durationMs: 900,
+      inputTokens: 10,
+      outputTokens: 2,
+      terminalReason: 'completed'
+    },
+    { type: 'error', message: 'claude exited with code 1' }
+  ]
+
+  it.each(events.map((event) => [event.type, event] as const))(
+    'reads back a %s exactly as it was written',
+    async (_type, event) => {
+      await appendEntry('chat-1', { role: 'agent', at: AT, event }, root)
+
+      await expect(readTranscript('chat-1', root)).resolves.toEqual([
+        { role: 'agent', at: AT, event }
+      ])
+    }
+  )
 })
 
 describe('removal', () => {

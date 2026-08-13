@@ -1,13 +1,18 @@
-import type { Query, SDKMessage, SDKUserMessage } from '@anthropic-ai/claude-agent-sdk'
+import type { ModelInfo, Query, SDKMessage, SDKUserMessage } from '@anthropic-ai/claude-agent-sdk'
 import { describe, expect, it, vi } from 'vitest'
 
 import {
   type AgentSession,
+  DENIED,
   mapMessage,
+  type PermissionOutcome,
   READ_ONLY_TOOLS,
   type SessionOptions,
   promptTokens,
+  readContextUsage,
+  readSubscriptionUsage,
   startSession,
+  toAgentModels,
   toIsoTimestamp
 } from './agent.js'
 import type { AgentEvent } from './events.js'
@@ -31,12 +36,19 @@ interface FakeQuery {
   readonly options: () => Record<string, unknown>
   readonly interrupted: () => number
   readonly modes: () => string[]
+  /** Settings pushed onto a running session — where effort changes land. */
+  readonly flagSettings: () => { effortLevel?: string }[]
+  /** Models asked for mid-session; `undefined` is "back to the default". */
+  readonly requestedModels: () => (string | undefined)[]
   readonly closed: () => number
 }
 
 function fakeAgent(
   overrides: Partial<SessionOptions> = {},
-  hooks: { askPermission?: (name: string) => Promise<boolean> } = {}
+  hooks: {
+    askPermission?: (name: string) => Promise<PermissionOutcome>
+    models?: ModelInfo[]
+  } = {}
 ): { agent: FakeQuery; events: AgentEvent[] } {
   const queued: SDKMessage[] = []
   let deliver: (() => void) | null = null
@@ -46,11 +58,27 @@ function fakeAgent(
   const events: AgentEvent[] = []
   const received: SDKUserMessage[] = []
   const modes: string[] = []
+  const flagSettings: { effortLevel?: string }[] = []
+  const requestedModels: (string | undefined)[] = []
+  const offeredModels = hooks.models ?? []
   let interrupted = 0
   let closed = 0
+  let transportClosed = false
   let captured: Record<string, unknown> = {}
 
   async function* stream(): AsyncGenerator<SDKMessage> {
+    try {
+      yield* messages()
+    } finally {
+      // A consumer that leaves the loop early runs this. The real SDK closes
+      // its transport at the same moment, and every control request after it
+      // fails — so the fake refuses them too, or a `break` added to
+      // `startSession` would go unnoticed.
+      if (!done) transportClosed = true
+    }
+  }
+
+  async function* messages(): AsyncGenerator<SDKMessage> {
     while (!done || queued.length > 0) {
       const next = queued.shift()
       if (next) {
@@ -67,6 +95,12 @@ function fakeAgent(
     if (failure) throw failure
   }
 
+  /** What a control request answers: the value, or the real error verbatim. */
+  const whileOpen = <T>(value: T): Promise<T> =>
+    transportClosed
+      ? Promise.reject(new Error('ProcessTransport is not ready for writing'))
+      : Promise.resolve(value)
+
   const conversation = Object.assign(stream(), {
     interrupt: () => {
       interrupted++
@@ -76,6 +110,17 @@ function fakeAgent(
       modes.push(mode)
       return Promise.resolve()
     },
+    applyFlagSettings: (settings: { effortLevel?: string }) => {
+      flagSettings.push(settings)
+      return Promise.resolve()
+    },
+    setModel: (model: string | undefined) => {
+      requestedModels.push(model)
+      return Promise.resolve()
+    },
+    supportedModels: () => whileOpen(offeredModels),
+    getContextUsage: () => whileOpen(CONTEXT_RESPONSE),
+    usage_EXPERIMENTAL_MAY_CHANGE_DO_NOT_RELY_ON_THIS_API_YET: () => whileOpen(USAGE_RESPONSE),
     close: () => {
       closed++
     }
@@ -88,6 +133,7 @@ function fakeAgent(
       settingSources: [],
       permissionMode: 'default',
       model: null,
+      effort: null,
       allowedTools: [...READ_ONLY_TOOLS],
       ...overrides
     },
@@ -103,7 +149,8 @@ function fakeAgent(
         return conversation
       },
       onEvent: (event) => events.push(event),
-      askPermission: ({ toolName }) => hooks.askPermission?.(toolName) ?? Promise.resolve(true)
+      askPermission: ({ toolName }) =>
+        hooks.askPermission?.(toolName) ?? Promise.resolve({ allow: true } as const)
     }
   )
 
@@ -130,6 +177,8 @@ function fakeAgent(
       options: () => captured,
       interrupted: () => interrupted,
       modes: () => modes,
+      flagSettings: () => flagSettings,
+      requestedModels: () => requestedModels,
       closed: () => closed
     }
   }
@@ -577,6 +626,48 @@ describe('a session', () => {
     expect(events).toEqual([{ type: 'error', message: 'claude exited with code 1' }])
   })
 
+  it('changes the model of a running session', async () => {
+    const { agent } = fakeAgent()
+
+    await agent.session.setModel('claude-opus-5')
+
+    expect(agent.requestedModels()).toEqual(['claude-opus-5'])
+  })
+
+  // Null is our word for "no override". The SDK's is `undefined`; asking it for
+  // a model called null would be asking for a model that does not exist.
+  it('hands the choice back to the agent as nothing rather than as null', async () => {
+    const { agent } = fakeAgent()
+
+    await agent.session.setModel(null)
+
+    expect(agent.requestedModels()).toEqual([undefined])
+  })
+
+  // The SDK has no `setEffort`: `effort` is a start-time option, and flag
+  // settings are the only way to move it on a session already running.
+  it('moves the effort of a running session through its flag settings', async () => {
+    const { agent } = fakeAgent()
+
+    await agent.session.setEffort('max')
+
+    expect(agent.flagSettings()).toEqual([{ effortLevel: 'max' }])
+  })
+
+  it('asks for an effort at start-up when the chat has one', () => {
+    const { agent } = fakeAgent({ effort: 'xhigh' })
+
+    expect(agent.options().effort).toBe('xhigh')
+  })
+
+  // Absent rather than null: the SDK reads a present key as an answer, and
+  // "the agent decides" is the absence of one.
+  it('says nothing about effort when the chat has none', () => {
+    const { agent } = fakeAgent()
+
+    expect(agent.options()).not.toHaveProperty('effort')
+  })
+
   it('forwards interrupt and mode changes to the SDK', async () => {
     const { agent } = fakeAgent()
 
@@ -615,6 +706,9 @@ describe('a session that will not close', () => {
     const conversation = Object.assign(silence(), {
       interrupt: () => Promise.resolve(undefined),
       setPermissionMode: () => Promise.resolve(),
+      applyFlagSettings: () => Promise.resolve(),
+      setModel: () => Promise.resolve(),
+      supportedModels: () => Promise.resolve([]),
       close: () => {
         throw new Error('the process would not die')
       }
@@ -627,12 +721,13 @@ describe('a session that will not close', () => {
         settingSources: [],
         permissionMode: 'default',
         model: null,
+        effort: null,
         allowedTools: []
       },
       {
         query: () => conversation,
         onEvent: () => undefined,
-        askPermission: () => Promise.resolve(true)
+        askPermission: () => Promise.resolve({ allow: true } as const)
       }
     )
 
@@ -651,7 +746,7 @@ describe('permissions', () => {
   }
 
   it('allows a tool the user approved, keeping the arguments', async () => {
-    const { agent } = fakeAgent({}, { askPermission: () => Promise.resolve(true) })
+    const { agent } = fakeAgent({}, { askPermission: () => Promise.resolve({ allow: true }) })
 
     await expect(permissionCall(agent)('Edit', { file_path: '/a.rb' })).resolves.toEqual({
       behavior: 'allow',
@@ -659,11 +754,58 @@ describe('permissions', () => {
     })
   })
 
-  it('denies with a message the agent can read', async () => {
-    const { agent } = fakeAgent({}, { askPermission: () => Promise.resolve(false) })
+  // The SDK's own way to change mode on an approval, and the reason approving
+  // a plan can hand the session to the mode chosen for the work that follows.
+  // Verified against a live session before being written down: without this
+  // field the very next edit asks again.
+  it('carries a mode change on an approval that asks for one', async () => {
+    const { agent } = fakeAgent(
+      {},
+      { askPermission: () => Promise.resolve({ allow: true, setMode: 'acceptEdits' }) }
+    )
 
-    await expect(permissionCall(agent)('Bash', { command: 'rm -rf /' })).resolves.toMatchObject({
-      behavior: 'deny'
+    await expect(permissionCall(agent)('ExitPlanMode', { plan: 'do it' })).resolves.toEqual({
+      behavior: 'allow',
+      updatedInput: { plan: 'do it' },
+      updatedPermissions: [{ type: 'setMode', mode: 'acceptEdits', destination: 'session' }]
+    })
+  })
+
+  // Absent rather than present and empty: the SDK reads the key as a set of
+  // updates to apply, and every ordinary approval would otherwise carry one.
+  it('says nothing about permissions on an ordinary approval', async () => {
+    const { agent } = fakeAgent({}, { askPermission: () => Promise.resolve({ allow: true }) })
+
+    const result = await permissionCall(agent)('Edit', { file_path: '/a.rb' })
+
+    expect(result).not.toHaveProperty('updatedPermissions')
+  })
+
+  it('denies with a message the agent can read', async () => {
+    const { agent } = fakeAgent(
+      {},
+      { askPermission: () => Promise.resolve({ allow: false, message: DENIED }) }
+    )
+
+    await expect(permissionCall(agent)('Bash', { command: 'rm -rf /' })).resolves.toEqual({
+      behavior: 'deny',
+      message: DENIED
+    })
+  })
+
+  // The refusal's message is instruction, not an apology: this is how "not
+  // quite, do this instead" reaches the agent without costing a turn.
+  it('sends the words the user wrote when a refusal carries them', async () => {
+    const { agent } = fakeAgent(
+      {},
+      {
+        askPermission: () => Promise.resolve({ allow: false, message: 'Add a step for the tests' })
+      }
+    )
+
+    await expect(permissionCall(agent)('ExitPlanMode', { plan: 'do it' })).resolves.toEqual({
+      behavior: 'deny',
+      message: 'Add a step for the tests'
     })
   })
 
@@ -678,7 +820,7 @@ describe('permissions', () => {
   })
 
   it('asks about a tool through the hook it was given', async () => {
-    const asked = vi.fn(() => Promise.resolve(true))
+    const asked = vi.fn(() => Promise.resolve<PermissionOutcome>({ allow: true }))
     const { agent } = fakeAgent({}, { askPermission: asked })
 
     await permissionCall(agent)('Write', { file_path: '/b.rb' })
@@ -729,5 +871,238 @@ describe('how large the prompt was', () => {
         cache_creation_input_tokens: 0
       })
     ).toBe(0)
+  })
+})
+
+describe('the models the account may use', () => {
+  it('asks the running session, since that is the only thing that knows', async () => {
+    const { agent } = fakeAgent(
+      {},
+      {
+        models: [
+          {
+            value: 'claude-opus-5',
+            displayName: 'Opus 5',
+            description: 'The capable one',
+            supportsEffort: true,
+            supportedEffortLevels: ['high', 'max']
+          }
+        ]
+      }
+    )
+
+    await expect(agent.session.models()).resolves.toEqual([
+      {
+        value: 'claude-opus-5',
+        displayName: 'Opus 5',
+        description: 'The capable one',
+        supportsEffort: true,
+        supportedEffortLevels: ['high', 'max']
+      }
+    ])
+  })
+
+  // "Did not say" and "says no" lead to different pickers: the first offers
+  // every level, the second offers none. Collapsing both to false would quietly
+  // grey out the control for every model that simply stayed quiet.
+  it('keeps silence about effort apart from a refusal', () => {
+    const [quiet, refusing] = toAgentModels([
+      { value: 'a', displayName: 'A', description: '' },
+      { value: 'b', displayName: 'B', description: '', supportsEffort: false }
+    ])
+
+    expect(quiet?.supportsEffort).toBeNull()
+    expect(quiet?.supportedEffortLevels).toBeNull()
+    expect(refusing?.supportsEffort).toBe(false)
+  })
+
+  // The SDK reports more about a model than a picker has any use for, and
+  // letting those fields through would put an SDK shape in the window.
+  it('drops what the interface does not need', () => {
+    const [model] = toAgentModels([
+      {
+        value: 'a',
+        displayName: 'A',
+        description: '',
+        resolvedModel: 'claude-a-1',
+        supportsFastMode: true,
+        supportsAutoMode: true,
+        supportsAdaptiveThinking: true
+      }
+    ])
+
+    expect(model).toEqual({
+      value: 'a',
+      displayName: 'A',
+      description: '',
+      supportsEffort: null,
+      supportedEffortLevels: null
+    })
+  })
+})
+
+/**
+ * Both responses as a live CLI actually sent them, trimmed of what we drop.
+ *
+ * Copied from one throwaway session against build 2.1.228 rather than written
+ * from the type declarations. This SDK has already cost three bugs on that
+ * difference, and it cost a fourth here: the payload carries nine windows the
+ * declaration never mentions — `seven_day_cowork`, `tangelo`, `iguana_necktie`,
+ * `nimbus_quill` and more — plus dollar fields on every one of them.
+ */
+const CONTEXT_RESPONSE = {
+  totalTokens: 23_921,
+  maxTokens: 1_000_000,
+  rawMaxTokens: 1_000_000,
+  percentage: 2,
+  autoCompactThreshold: 967_000,
+  isAutoCompactEnabled: true,
+  categories: [{ name: 'System prompt', tokens: 3313, color: 'promptBorder' }],
+  gridRows: [],
+  model: 'claude-opus-5[1m]',
+  memoryFiles: [],
+  mcpTools: [],
+  apiUsage: null
+} as unknown as Awaited<ReturnType<Query['getContextUsage']>>
+
+const USAGE_RESPONSE = {
+  subscription_type: 'max',
+  rate_limits_available: true,
+  rate_limits: {
+    five_hour: { utilization: 18, resets_at: '2026-08-12T19:50:00.149775+00:00' },
+    seven_day: { utilization: 84, resets_at: '2026-08-12T22:00:00.149796+00:00' },
+    seven_day_opus: null,
+    seven_day_sonnet: null,
+    nimbus_quill: { utilization: 0, resets_at: null },
+    extra_usage: { is_enabled: false, monthly_limit: null, used_credits: null, utilization: null }
+  }
+} as unknown as Awaited<
+  ReturnType<Query['usage_EXPERIMENTAL_MAY_CHANGE_DO_NOT_RELY_ON_THIS_API_YET']>
+>
+
+/** A `Query` that answers control requests however the test says. */
+function queryAnswering(overrides: Record<string, unknown>): Query {
+  return overrides as unknown as Query
+}
+
+describe('reading how full the context window is', () => {
+  it('takes the three figures worth showing and leaves the rest', async () => {
+    const usage = await readContextUsage(
+      queryAnswering({ getContextUsage: () => Promise.resolve(CONTEXT_RESPONSE) })
+    )
+
+    expect(usage).toEqual({ percentage: 2, usedTokens: 23_921, maxTokens: 1_000_000 })
+  })
+
+  // The typed package and the CLI binary are versioned separately, so a method
+  // the types promise can simply not be there.
+  it('says nothing when the CLI has no such control request', async () => {
+    await expect(readContextUsage(queryAnswering({}))).resolves.toBeNull()
+  })
+
+  it('says nothing when the request is refused', async () => {
+    const refusing = queryAnswering({
+      getContextUsage: () => Promise.reject(new Error('not ready for writing'))
+    })
+
+    await expect(readContextUsage(refusing)).resolves.toBeNull()
+  })
+})
+
+describe('reading how much of the subscription is gone', () => {
+  const asking = (response: unknown): Query =>
+    queryAnswering({
+      usage_EXPERIMENTAL_MAY_CHANGE_DO_NOT_RELY_ON_THIS_API_YET: () => Promise.resolve(response)
+    })
+
+  it('takes both windows and nothing else', async () => {
+    await expect(readSubscriptionUsage(asking(USAGE_RESPONSE))).resolves.toEqual({
+      fiveHour: { utilization: 18, resetsAt: '2026-08-12T19:50:00.149775+00:00' },
+      sevenDay: { utilization: 84, resetsAt: '2026-08-12T22:00:00.149796+00:00' }
+    })
+  })
+
+  it('says nothing when the CLI has no such control request', async () => {
+    await expect(readSubscriptionUsage(queryAnswering({}))).resolves.toBeNull()
+  })
+
+  it('says nothing when the request is refused', async () => {
+    const refusing = queryAnswering({
+      usage_EXPERIMENTAL_MAY_CHANGE_DO_NOT_RELY_ON_THIS_API_YET: () =>
+        Promise.reject(new Error('unknown control request'))
+    })
+
+    await expect(readSubscriptionUsage(refusing)).resolves.toBeNull()
+  })
+
+  // An API key, Bedrock or Vertex session has no plan windows at all, and the
+  // agent says so rather than reporting zeros.
+  it('says nothing when the account has no plan windows', async () => {
+    const noPlan = asking({ rate_limits_available: false, rate_limits: null })
+
+    await expect(readSubscriptionUsage(noPlan)).resolves.toBeNull()
+  })
+
+  it('says nothing when the windows are there but empty', async () => {
+    const empty = asking({ rate_limits_available: true, rate_limits: {} })
+
+    await expect(readSubscriptionUsage(empty)).resolves.toBeNull()
+  })
+
+  // One window can carry no share while the other does; the reading should not
+  // collapse to nothing over the half that is missing.
+  it('keeps the window that has a share when the other has none', async () => {
+    const partial = asking({
+      rate_limits_available: true,
+      rate_limits: {
+        five_hour: { utilization: null, resets_at: null },
+        seven_day: { utilization: 84, resets_at: null }
+      }
+    })
+
+    await expect(readSubscriptionUsage(partial)).resolves.toEqual({
+      fiveHour: null,
+      sevenDay: { utilization: 84, resetsAt: null }
+    })
+  })
+})
+
+describe('the session, asked about usage', () => {
+  it('answers both questions from the conversation it holds', async () => {
+    const { agent } = fakeAgent()
+
+    await expect(agent.session.contextUsage()).resolves.toMatchObject({ percentage: 2 })
+    await expect(agent.session.subscriptionUsage()).resolves.toMatchObject({
+      sevenDay: { utilization: 84 }
+    })
+  })
+})
+
+// The read loop must run to the end of the stream. Leaving it early — after a
+// `result`, which looks like the end of the work — closes the transport, and
+// every control request afterwards fails. Walked into while probing the usage
+// calls; this is what would notice it being walked into again.
+describe('the stream the session reads', () => {
+  it('still answers control requests after a turn has ended', async () => {
+    const { agent } = fakeAgent()
+
+    agent.emit({
+      type: 'result',
+      subtype: 'success',
+      is_error: false,
+      duration_ms: 10,
+      total_cost_usd: 0,
+      usage: {
+        input_tokens: 1,
+        output_tokens: 1,
+        cache_read_input_tokens: 0,
+        cache_creation_input_tokens: 0
+      },
+      session_id: 's-1'
+    } as unknown as SDKMessage)
+    await settle()
+
+    await expect(agent.session.contextUsage()).resolves.toMatchObject({ percentage: 2 })
+    await expect(agent.session.models()).resolves.toEqual([])
   })
 })

@@ -55,7 +55,13 @@ export function installOctopusStub(): Api {
       history: vi.fn(() => ok([])),
       send: vi.fn(() => ok(undefined)),
       interrupt: vi.fn(() => ok(undefined)),
-      setPermissionMode: vi.fn(() => ok(undefined)),
+      setWorkingMode: vi.fn(() => ok(undefined)),
+      setPlanMode: vi.fn(() => ok(undefined)),
+      setEffort: vi.fn(() => ok(undefined)),
+      setModel: vi.fn(() => ok(undefined)),
+      models: vi.fn(() => ok([])),
+      pendingPermission: vi.fn(() => ok(null)),
+      usage: vi.fn(() => ok({ context: null, subscription: null })),
       answerPermission: vi.fn(() => ok(undefined)),
       rateLimit: vi.fn(() => ok(null)),
       onEvent: vi.fn(subscription)
@@ -105,7 +111,9 @@ function chatFixture(): Chat {
     agent: 'claude',
     sessionId: null,
     model: null,
-    permissionMode: 'default',
+    effort: null,
+    workingMode: 'default',
+    planMode: false,
     createdAt: '2026-08-08T00:00:00.000Z'
   }
 }
@@ -116,7 +124,8 @@ function defaultConfig(): Config {
     branchPrefix: 'ytsykvas',
     cloneDirectory: '',
     settingSources: 'none' as const,
-    permissionMode: 'default' as const,
+    workingMode: 'default' as const,
+    effort: null,
     alwaysAllowedTools: [],
     theme: 'system' as const,
     language: 'en' as const,

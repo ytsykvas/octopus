@@ -15,8 +15,10 @@ function fromAgent(event: AgentEvent): ChatEntry {
 
 function renderLog(overrides: Partial<React.ComponentProps<typeof ChatLog>> = {}): {
   onAnswer: ReturnType<typeof vi.fn>
+  onExecutePlan: ReturnType<typeof vi.fn>
 } {
   const onAnswer = vi.fn()
+  const onExecutePlan = vi.fn()
 
   render(
     <ChatLog
@@ -25,11 +27,12 @@ function renderLog(overrides: Partial<React.ComponentProps<typeof ChatLog>> = {}
       busy={false}
       pendingRequestId={null}
       onAnswer={onAnswer}
+      onExecutePlan={onExecutePlan}
       {...overrides}
     />
   )
 
-  return { onAnswer }
+  return { onAnswer, onExecutePlan }
 }
 
 describe('what the log shows', () => {
@@ -43,6 +46,71 @@ describe('what the log shows', () => {
 
     expect(screen.getByText('add a test')).toBeInTheDocument()
     expect(screen.getByText('Looking at auth.rb')).toBeInTheDocument()
+  })
+
+  /*
+   * The model writes markdown, and shown as characters that is punctuation in
+   * the way of the words: `**7/10**` read as asterisks, a command came with its
+   * backticks, a list was a column of hyphens.
+   */
+  it('draws what the agent wrote as the agent wrote it', () => {
+    const { container } = render(
+      <ChatLog
+        entries={[
+          fromAgent({
+            type: 'text',
+            text: '**7/10**\n\n- checked the code\n- ran `npm run check`'
+          })
+        ]}
+        streaming={{ text: '', thinking: '' }}
+        busy={false}
+        pendingRequestId={null}
+        onAnswer={vi.fn()}
+        onExecutePlan={vi.fn()}
+      />
+    )
+
+    expect(container.querySelector('strong')?.textContent).toBe('7/10')
+    expect(container.querySelectorAll('li')).toHaveLength(2)
+    expect(screen.getByText('npm run check').tagName).toBe('CODE')
+    expect(screen.queryByText(/\*\*/)).not.toBeInTheDocument()
+  })
+
+  // The whole of the previous change, arriving on ordinary answers: an answer
+  // with a command in it becomes one you can take the command out of.
+  it('gives a fenced block in an answer its copy button', () => {
+    renderLog({ entries: [fromAgent({ type: 'text', text: '```sh\nnpm run dev\n```' })] })
+
+    expect(screen.getByRole('button', { name: 'Copy' })).toBeInTheDocument()
+  })
+
+  // The buffer is drawn by the same component, so this would be easy to leave
+  // behind — and it is what the reader looks at for most of a turn.
+  it('draws it the same way while it is still arriving', () => {
+    const { container } = render(
+      <ChatLog
+        entries={[]}
+        streaming={{ text: '**still writing**', thinking: '' }}
+        busy
+        pendingRequestId={null}
+        onAnswer={vi.fn()}
+        onExecutePlan={vi.fn()}
+      />
+    )
+
+    expect(container.querySelector('strong')?.textContent).toBe('still writing')
+  })
+
+  /*
+   * The one place markup stays text.
+   *
+   * These characters came from the composer, and drawing their asterisks as
+   * bold would make the log disagree with what the person wrote.
+   */
+  it('leaves what the user typed exactly as they typed it', () => {
+    renderLog({ entries: [{ role: 'user', at: AT, text: 'is it **bold** or not?' }] })
+
+    expect(screen.getByText('is it **bold** or not?')).toBeInTheDocument()
   })
 
   // The row has to say what the agent did to the working tree, not just that
@@ -69,6 +137,172 @@ describe('what the log shows', () => {
     })
 
     expect(screen.getByText('TodoWrite')).toBeInTheDocument()
+  })
+
+  /*
+   * A rename went through fifty-nine tool calls, and one line each buried the
+   * two things worth reading: what the agent said, and what it changed.
+   *
+   * Folded rather than dropped — the same disclosure reasoning uses, closed to
+   * begin with. `toBeVisible` is the assertion that matters, since the rows are
+   * in the document either way.
+   */
+  it('folds a run of tool calls into the count of them', async () => {
+    const user = userEvent.setup()
+    renderLog({
+      entries: [
+        fromAgent({
+          type: 'tool_use',
+          toolUseId: 'c-1',
+          name: 'Grep',
+          input: { pattern: 'octopus' }
+        }),
+        fromAgent({ type: 'tool_result', toolUseId: 'c-1', ok: true, content: 'lots' }),
+        fromAgent({
+          type: 'tool_use',
+          toolUseId: 'c-2',
+          name: 'Read',
+          input: { file_path: '/a.ts' }
+        })
+      ]
+    })
+
+    const summary = screen.getByText('2 steps')
+    expect(screen.getByText('Grep')).not.toBeVisible()
+
+    await user.click(summary)
+
+    expect(screen.getByText('Grep')).toBeVisible()
+    expect(screen.getByText('/a.ts')).toBeVisible()
+  })
+
+  /*
+   * The log used to say a file was edited and never what the edit did.
+   *
+   * Drawn without opening anything, and outside the fold: the searching above
+   * it is working out, this is the answer. The counts matter most — they are
+   * what gets trusted at a glance, so a diff that miscounts is a lie in the
+   * place most likely to be read.
+   */
+  it('shows what an edit changed, in the open', () => {
+    renderLog({
+      entries: [
+        fromAgent({ type: 'tool_use', toolUseId: 'c-1', name: 'Grep', input: { pattern: 'x' } }),
+        fromAgent({ type: 'tool_use', toolUseId: 'c-2', name: 'Grep', input: { pattern: 'y' } }),
+        fromAgent({
+          type: 'tool_use',
+          toolUseId: 'c-3',
+          name: 'Edit',
+          input: {
+            file_path: '/src/core/service.ts',
+            old_string: 'one\ntwo\nthree',
+            new_string: 'one\nTWO\nthree'
+          }
+        })
+      ]
+    })
+
+    expect(screen.getByText('/src/core/service.ts')).toBeVisible()
+    expect(screen.getByText('-two')).toBeVisible()
+    expect(screen.getByText('+TWO')).toBeVisible()
+    expect(screen.getByText('+1')).toBeVisible()
+    expect(screen.getByText('−1')).toBeVisible()
+
+    // The searching either side of it is still folded away.
+    expect(screen.getByText('2 steps')).toBeInTheDocument()
+  })
+
+  /*
+   * The numbers are the part to guard hardest.
+   *
+   * A line number is read as fact, and one out by the length of a removed run
+   * would be the most quietly wrong thing on the screen. The removed line takes
+   * none at all: it belongs to the file as it was, which is not something we
+   * kept.
+   */
+  it('numbers the context and what replaced it, but not what was removed', () => {
+    renderLog({
+      entries: [
+        fromAgent({
+          type: 'tool_use',
+          toolUseId: 'c-1',
+          name: 'Edit',
+          input: { file_path: '/a.ts', old_string: 'two', new_string: 'TWO\nEXTRA' }
+        }),
+        fromAgent({
+          type: 'change_context',
+          toolUseId: 'c-1',
+          context: { before: ['one'], after: ['four'], startLine: 2 }
+        })
+      ]
+    })
+
+    // The row is the number and the line together, so this reads as it looks.
+    const row = (text: string): string => screen.getByText(text).parentElement?.textContent ?? ''
+
+    expect(row('one')).toBe('1 one')
+    // Gone from the file, so there is no line of the file to point at.
+    expect(row('-two')).toBe('-two')
+    expect(row('+TWO')).toBe('2+TWO')
+    expect(row('+EXTRA')).toBe('3+EXTRA')
+    expect(row('four')).toBe('4 four')
+  })
+
+  // An older transcript, or a file since changed. The change is drawn without
+  // numbers rather than with invented ones.
+  it('leaves the numbers off when the surrounding lines were never recorded', () => {
+    renderLog({
+      entries: [
+        fromAgent({
+          type: 'tool_use',
+          toolUseId: 'c-1',
+          name: 'Edit',
+          input: { file_path: '/a.ts', old_string: 'one', new_string: 'two' }
+        })
+      ]
+    })
+
+    const row = (text: string): string => screen.getByText(text).parentElement?.textContent ?? ''
+
+    expect(row('-one')).toBe('-one')
+    expect(row('+two')).toBe('+two')
+  })
+
+  // What stood there before is not in the call, so a `Write` says only what it
+  // knows: everything is new.
+  it('shows a written file as all additions', () => {
+    renderLog({
+      entries: [
+        fromAgent({
+          type: 'tool_use',
+          toolUseId: 'c-1',
+          name: 'Write',
+          input: { file_path: '/a.ts', content: 'one\ntwo\n' }
+        })
+      ]
+    })
+
+    expect(screen.getByText('+2')).toBeVisible()
+    expect(screen.queryByText('−0')).not.toBeInTheDocument()
+    expect(screen.getByText('+one')).toBeVisible()
+  })
+
+  // Folded into "1 step", a lone call would be more work to read than the row
+  // it replaced.
+  it('leaves a lone tool call in the open', () => {
+    renderLog({
+      entries: [
+        fromAgent({
+          type: 'tool_use',
+          toolUseId: 'c-1',
+          name: 'Read',
+          input: { file_path: '/a.ts' }
+        })
+      ]
+    })
+
+    expect(screen.getByText('Read')).toBeVisible()
+    expect(screen.queryByText(/step/)).not.toBeInTheDocument()
   })
 
   // A successful Read returns the file; pasting that into the chat would bury
@@ -328,5 +562,166 @@ describe('a permission request', () => {
     })
 
     expect(screen.getByText('The agent wants to use TodoWrite')).toBeInTheDocument()
+  })
+})
+
+// The complaint that started this: "plan mode does not work, the chat shows no
+// plan". It did work — the plan was arriving inside an `ExitPlanMode` call and
+// being drawn as a bare tool row, so it never reached the screen.
+describe('a plan the agent worked out', () => {
+  const PLAN = '# Add a farewell\n\nOne more export in greet.js.'
+
+  it('is shown as prose rather than as a tool nobody can read', () => {
+    renderLog({
+      entries: [
+        {
+          role: 'agent',
+          at: '2026-08-13T09:00:00.000Z',
+          event: {
+            type: 'tool_use',
+            toolUseId: 'call-1',
+            name: 'ExitPlanMode',
+            input: { plan: PLAN }
+          }
+        }
+      ]
+    })
+
+    expect(screen.getByText(/One more export in greet\.js/)).toBeInTheDocument()
+    expect(screen.queryByText('ExitPlanMode')).not.toBeInTheDocument()
+  })
+
+  /*
+   * The way back to a plan that was set aside.
+   *
+   * The dialog asks once; closing it answers the request, and after that the
+   * block in the log is all that survives. Changing your mind then meant
+   * typing the whole request again.
+   */
+  it('offers to carry the plan out', async () => {
+    const user = userEvent.setup()
+    const { onExecutePlan } = renderLog({
+      entries: [
+        fromAgent({
+          type: 'tool_use',
+          toolUseId: 'call-1',
+          name: 'ExitPlanMode',
+          input: { plan: PLAN }
+        })
+      ]
+    })
+
+    await user.click(screen.getByRole('button', { name: 'Execute' }))
+
+    expect(onExecutePlan).toHaveBeenCalledExactlyOnceWith(PLAN)
+  })
+
+  // It would be queued behind the turn in flight — and that turn may be the
+  // agent already redoing the very plan being pointed at.
+  it('does not offer it while the agent is working', () => {
+    renderLog({
+      busy: true,
+      entries: [
+        fromAgent({
+          type: 'tool_use',
+          toolUseId: 'call-1',
+          name: 'ExitPlanMode',
+          input: { plan: PLAN }
+        })
+      ]
+    })
+
+    expect(screen.getByRole('button', { name: 'Execute' })).toBeDisabled()
+  })
+
+  it('leaves every other tool call as the one line it was', () => {
+    renderLog({
+      entries: [
+        {
+          role: 'agent',
+          at: '2026-08-13T09:00:00.000Z',
+          event: {
+            type: 'tool_use',
+            toolUseId: 'call-1',
+            name: 'Read',
+            input: { file_path: '/a.ts' }
+          }
+        }
+      ]
+    })
+
+    expect(screen.getByText('Read')).toBeInTheDocument()
+    expect(screen.getByText('/a.ts')).toBeInTheDocument()
+  })
+
+  /*
+   * The plan is drawn once, from the tool call that carried it, and the
+   * request to leave planning adds nothing to the log at all.
+   *
+   * Both events are recorded, so before this the plan appeared twice — once as
+   * itself and once inside a permission card, with a second set of buttons
+   * under it. The question is asked in a dialog now.
+   */
+  it('says nothing twice when the request to leave planning arrives', () => {
+    renderLog({
+      pendingRequestId: 'req-1',
+      entries: [
+        {
+          role: 'agent',
+          at: '2026-08-13T09:00:00.000Z',
+          event: {
+            type: 'permission_request',
+            requestId: 'req-1',
+            toolName: 'ExitPlanMode',
+            input: { plan: PLAN }
+          }
+        }
+      ]
+    })
+
+    expect(screen.queryByText('Normalising the locales')).not.toBeInTheDocument()
+    expect(screen.queryByRole('button')).not.toBeInTheDocument()
+    expect(screen.queryByText(/wants to use/)).not.toBeInTheDocument()
+  })
+})
+
+describe('deciding on an ordinary tool', () => {
+  function requestAwaitingAnswer(): ReturnType<typeof renderLog> {
+    return renderLog({
+      pendingRequestId: 'req-1',
+      entries: [
+        {
+          role: 'agent',
+          at: '2026-08-13T09:00:00.000Z',
+          event: {
+            type: 'permission_request',
+            requestId: 'req-1',
+            toolName: 'Edit',
+            input: { file_path: '/a.ts' }
+          }
+        }
+      ]
+    })
+  }
+
+  // The card is about tools again. Every plan branch it used to carry moved to
+  // the dialog, and what is left has to still work.
+  it('names the tool, what it would touch, and the three ways out', () => {
+    requestAwaitingAnswer()
+
+    expect(screen.getByText(/wants to use/)).toBeInTheDocument()
+    expect(screen.getByText('/a.ts')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Allow' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Always allow' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Decline' })).toBeInTheDocument()
+  })
+
+  it('sends the answer that was chosen', async () => {
+    const user = userEvent.setup()
+    const { onAnswer } = requestAwaitingAnswer()
+
+    await user.click(screen.getByRole('button', { name: 'Allow' }))
+
+    expect(onAnswer).toHaveBeenCalledWith('req-1', 'allow')
   })
 })

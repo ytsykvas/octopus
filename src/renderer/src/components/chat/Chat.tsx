@@ -2,17 +2,19 @@ import { GitBranch } from 'lucide-react'
 import { useEffect, useRef } from 'react'
 import { useTranslation } from 'react-i18next'
 
-import { PERMISSION_MODES, type PermissionMode } from '@core/chats.js'
 import type { ProjectColor } from '@core/colors.js'
 import type { WorkspaceView } from '@core/workspaces.js'
 
 import { Placeholder } from '../Placeholder.js'
 import { useChat } from '../../hooks/useChat.js'
 import { useErrorMessage } from '../../hooks/useErrorMessage.js'
+import { useModels } from '../../hooks/useModels.js'
 import { useRateLimit } from '../../hooks/useRateLimit.js'
+import { useSessionUsage } from '../../hooks/useSessionUsage.js'
 import { ChatLog } from './ChatLog.js'
 import { Composer } from './Composer.js'
-import { RateLimit } from './RateLimit.js'
+import { PlanDialog } from './PlanDialog.js'
+import { planTitle, readPlan } from './toolSummary.js'
 
 interface ChatProps {
   readonly workspace: WorkspaceView | null
@@ -29,15 +31,6 @@ interface ChatProps {
   readonly color: ProjectColor
 }
 
-const MODE_LABELS: Record<
-  PermissionMode,
-  'chat.modeDefault' | 'chat.modePlan' | 'chat.modeAcceptEdits'
-> = {
-  default: 'chat.modeDefault',
-  plan: 'chat.modePlan',
-  acceptEdits: 'chat.modeAcceptEdits'
-}
-
 /**
  * The agent chat — the centre of the window (§10.8 docs/PROJECT.md).
  *
@@ -51,9 +44,18 @@ export function Chat({ workspace, color }: ChatProps): React.JSX.Element {
   const describeFailure = useErrorMessage()
   const chat = useChat(workspace?.id ?? null, describeFailure)
   const rateLimit = useRateLimit()
+  const models = useModels()
+  const usage = useSessionUsage(chat.chat?.id ?? null)
 
   const scroller = useRef<HTMLDivElement | null>(null)
   const pinnedToBottom = useRef(true)
+
+  // Answered here rather than in the log because this is where the pending
+  // request and the composer's mode meet — the plan's approval decides what the
+  // agent may do next, and that is the setting sitting in the footer below.
+  const pending = chat.pending
+  const plan = pending === null ? null : readPlan(pending.toolName, pending.input)
+  const workingMode = chat.chat?.workingMode ?? 'default'
 
   // Follows the conversation, but only while the user is already at the end of
   // it — yanking the view down while they read something further up is the
@@ -85,32 +87,6 @@ export function Chat({ workspace, color }: ChatProps): React.JSX.Element {
           <GitBranch aria-hidden size={13} className="shrink-0" />
           <span className="truncate font-mono text-[11px]">{workspace.branch}</span>
         </span>
-
-        <span className="ml-auto flex shrink-0 items-center gap-3">
-          <RateLimit limit={rateLimit} />
-
-          <select
-            value={chat.chat?.permissionMode ?? 'default'}
-            // Until the first message there is no record to change, and the
-            // global setting is what the chat will start from.
-            disabled={chat.chat === null}
-            aria-label={t('chat.mode')}
-            onChange={(event) => {
-              const mode = event.target.value
-              // The value comes back as a string; narrowing it keeps the union
-              // honest rather than casting it back into shape.
-              const known = PERMISSION_MODES.find((candidate) => candidate === mode)
-              if (known) void chat.setMode(known)
-            }}
-            className="border-line bg-canvas text-ink-soft focus-ring h-6 shrink-0 rounded-[var(--radius-control)] border px-1.5 disabled:opacity-50"
-          >
-            {PERMISSION_MODES.map((mode) => (
-              <option key={mode} value={mode}>
-                {t(MODE_LABELS[mode])}
-              </option>
-            ))}
-          </select>
-        </span>
       </header>
 
       <div
@@ -129,7 +105,7 @@ export function Chat({ workspace, color }: ChatProps): React.JSX.Element {
         className="min-h-0 flex-1 overflow-auto"
       >
         {chat.error !== null && (
-          <div className="mx-auto w-full max-w-3xl px-6 pt-5">
+          <div className="mx-auto w-full max-w-6xl px-6 pt-5">
             <p className="bg-danger-bg text-danger border-danger/25 rounded-[var(--radius-control)] border px-3 py-2">
               {chat.error}
             </p>
@@ -151,14 +127,53 @@ export function Chat({ workspace, color }: ChatProps): React.JSX.Element {
             entries={chat.entries}
             streaming={chat.streaming}
             busy={chat.busy}
-            pendingRequestId={chat.pendingRequestId}
+            pendingRequestId={pending?.requestId ?? null}
             onAnswer={(requestId, answer) => void chat.answer(requestId, answer)}
+            // Sent as an ordinary message, because that is what it is: the
+            // request it belonged to was answered when the dialog closed, and
+            // there is nothing left to approve. Naming the plan matters — by
+            // the time anyone comes back to one the conversation may hold
+            // several, and "the plan above" would be the agent's guess.
+            //
+            // Planning is turned off first, and not only for the toggle's
+            // sake: that is what hands the session the mode named in the
+            // footer. Without it the message went out while the conversation
+            // was still recorded as planning, and the agent worked in whatever
+            // mode it happened to fall back to — asking about every edit under
+            // a footer that said it would not.
+            onExecutePlan={(plan) => {
+              void (async () => {
+                await chat.setPlanMode(false)
+                await chat.send(t('chat.executePlanMessage', { title: planTitle(plan) }))
+              })()
+            }}
           />
         )}
       </div>
 
+      {plan !== null && pending !== null && (
+        <PlanDialog
+          plan={plan}
+          onExecute={() => void chat.answer(pending.requestId, 'allow')}
+          onKeepPlanning={(feedback) => void chat.answer(pending.requestId, 'deny', feedback)}
+        />
+      )}
+
       <Composer
         busy={chat.busy}
+        // The global default until this conversation has a record of its own,
+        // which is also what the record will be created with.
+        workingMode={workingMode}
+        onWorkingMode={(mode) => void chat.setWorkingMode(mode)}
+        planMode={chat.chat?.planMode ?? false}
+        onPlanMode={(planning) => void chat.setPlanMode(planning)}
+        effort={chat.chat?.effort ?? null}
+        onEffort={(effort) => void chat.setEffort(effort)}
+        model={chat.chat?.model ?? null}
+        onModel={(model) => void chat.setModel(model)}
+        models={models}
+        usage={usage}
+        limit={rateLimit}
         onSend={(text) => void chat.send(text)}
         onStop={() => void chat.interrupt()}
       />

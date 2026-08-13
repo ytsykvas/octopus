@@ -8,10 +8,17 @@
  */
 
 import type { OpenDialogOptions, WebContents } from 'electron'
+import { z } from 'zod'
 
 import type { Config } from '../core/config.js'
 import { type AccountKind, checkAccounts, signOut } from '../core/accounts.js'
-import { ChatMessageSchema, PermissionAnswerSchema, PermissionModeSchema } from '../core/chats.js'
+import {
+  ChatMessageSchema,
+  EffortSchema,
+  PermissionAnswerSchema,
+  PlanFeedbackSchema,
+  WorkingModeSchema
+} from '../core/chats.js'
 import type { RemoteRepository } from '../core/github.js'
 import { InstructionBodySchema, InstructionKindSchema } from '../core/instructions.js'
 import { ScriptBodySchema, ScriptKindSchema } from '../core/scripts.js'
@@ -218,11 +225,39 @@ export function registerIpc(
   )
 
   host.handle('chats:mode', (_event, chatId: string, mode: unknown) =>
-    attempt(() => service.setChatPermissionMode(chatId, PermissionModeSchema.parse(mode)))
+    attempt(() => service.setChatWorkingMode(chatId, WorkingModeSchema.parse(mode)))
   )
 
-  host.handle('chats:permission', (_event, requestId: string, answer: unknown) =>
-    attempt(() => service.answerPermission(requestId, PermissionAnswerSchema.parse(answer)))
+  host.handle('chats:planMode', (_event, chatId: string, planning: unknown) =>
+    attempt(() => service.setChatPlanMode(chatId, z.boolean().parse(planning)))
+  )
+
+  host.handle('chats:effort', (_event, chatId: string, effort: unknown) =>
+    attempt(() => service.setChatEffort(chatId, EffortSchema.nullable().parse(effort)))
+  )
+
+  host.handle('chats:model', (_event, chatId: string, model: unknown) =>
+    attempt(() => service.setChatModel(chatId, z.string().min(1).nullable().parse(model)))
+  )
+
+  host.handle('chats:models', () => attempt(() => service.knownModels()))
+
+  host.handle('chats:pending', (_event, chatId: string) =>
+    attempt(() => service.pendingPermission(chatId))
+  )
+
+  host.handle('chats:usage', (_event, chatId: string) =>
+    attempt(() => service.sessionUsage(chatId))
+  )
+
+  host.handle('chats:permission', (_event, requestId: string, answer: unknown, feedback: unknown) =>
+    attempt(() =>
+      service.answerPermission(
+        requestId,
+        PermissionAnswerSchema.parse(answer),
+        PlanFeedbackSchema.optional().parse(feedback)
+      )
+    )
   )
 
   // Read once when a window opens. Afterwards the figure arrives on its own,

@@ -325,6 +325,74 @@ describe('removeWorkspace', () => {
     await expect(exec(['branch', '--list', workspace.branch])).resolves.toContain(workspace.name)
   })
 
+  /*
+   * Reported from a running app: "git worktree remove … failed: fatal: … is not
+   * a working tree", on a workspace the user was trying to get rid of precisely
+   * because it was already gone. Two windows were open on one state file; one
+   * had removed the worktree, the other still held the record.
+   *
+   * What matters is that git has **forgotten** the path, not merely that the
+   * directory is missing — checked rather than assumed, and the first version of
+   * this test was wrong for exactly that reason: deleting the directory alone
+   * leaves the entry in place, and `git worktree remove` then succeeds on its
+   * own. So the worktree is removed here the way git removes it, leaving the
+   * record behind, which is the state the app was actually in.
+   */
+  it('removes a workspace git has already forgotten', async () => {
+    const workspace = await create()
+    await exec(['worktree', 'remove', workspace.path])
+
+    await expect(
+      removeWorkspace(workspace, { repository: exec, workspace: gitIn(workspace.path) })
+    ).resolves.toBeUndefined()
+  })
+
+  it('deletes the branch of a workspace git has already forgotten', async () => {
+    const workspace = await create()
+    await exec(['worktree', 'remove', workspace.path])
+
+    await removeWorkspace(
+      workspace,
+      { repository: exec, workspace: gitIn(workspace.path) },
+      { deleteBranch: true, baseBranch: 'main' }
+    )
+
+    await expect(exec(['branch', '--list', workspace.branch])).resolves.toBe('')
+  })
+
+  // The directory alone going missing is a different state, and git handles it
+  // without help. Kept so nobody "fixes" the case above by deleting a directory
+  // and concluding the two are the same.
+  it('removes a workspace whose directory has gone but whose entry has not', async () => {
+    const workspace = await create()
+    await rm(workspace.path, { recursive: true, force: true })
+
+    await expect(
+      removeWorkspace(workspace, { repository: exec, workspace: gitIn(workspace.path) })
+    ).resolves.toBeUndefined()
+    await expect(listWorktrees(exec)).resolves.toHaveLength(1)
+  })
+
+  // Absence is forgiven; a refusal is not. A tree holding changes still has
+  // something to lose, and quietly stepping over that would be the opposite of
+  // the safety net `force` exists to be.
+  it('still refuses a worktree that has changes to lose', async () => {
+    const workspace = await create()
+    await writeFile(join(workspace.path, 'scratch.txt'), 'unsaved\n', 'utf8')
+
+    // Named rather than merely "it threw": any failure would satisfy that, and
+    // the one that matters is the safety net saying what would be lost.
+    const error = await removeWorkspace(workspace, {
+      repository: exec,
+      workspace: gitIn(workspace.path)
+    }).catch((cause: unknown) => cause)
+
+    expect(error).toBeInstanceOf(WorkspaceError)
+    expect((error as WorkspaceError).code).toBe('uncommittedChanges')
+
+    await expect(listWorktrees(exec)).resolves.toHaveLength(2)
+  })
+
   it('deletes a merged branch without complaint', async () => {
     const workspace = await create()
 

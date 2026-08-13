@@ -23,6 +23,7 @@ import {
   deleteBranch,
   hasUncommittedChanges,
   isBranchMerged,
+  pruneWorktrees,
   removeWorktree,
   renameBranch,
   type Worktree
@@ -286,12 +287,36 @@ export async function removeWorkspace(
     }
   }
 
-  await removeWorktree(exec.repository, workspace.path, force)
+  await discardWorktree(exec.repository, workspace.path, force)
 
   if (options.deleteBranch === true) {
     // Forced by this point: either the caller asked for force, or the branch
     // was shown to be merged above. Anything else has already thrown.
     await deleteBranch(exec.repository, workspace.branch, true)
+  }
+}
+
+/**
+ * Removes the worktree, counting one that is already gone as removed.
+ *
+ * `git worktree remove` fails on a path it does not recognise, and that turned
+ * a workspace whose directory had been deleted into a record nothing could
+ * clear: the very operation meant to tidy it up was the one that failed, with
+ * "is not a working tree" shown to someone who was asking for exactly that.
+ *
+ * Pruning afterwards clears the entry git keeps inside the repository, which
+ * `git worktree remove` would have cleared and did not.
+ *
+ * A failure with the directory still on disk is a real one — a tree holding
+ * changes and refusing to go without `force`, a locked worktree — and is left
+ * to the caller. Only absence is forgiven.
+ */
+async function discardWorktree(exec: GitExec, path: string, force: boolean): Promise<void> {
+  try {
+    await removeWorktree(exec, path, force)
+  } catch (error) {
+    if (await pathExists(path)) throw error
+    await pruneWorktrees(exec)
   }
 }
 

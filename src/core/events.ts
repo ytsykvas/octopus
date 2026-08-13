@@ -24,6 +24,22 @@ import { z } from 'zod'
  */
 const ToolInputSchema = z.unknown()
 
+/**
+ * The lines an edit landed among, and where they start.
+ *
+ * `startLine` is the 1-based number of the first line of the changed region in
+ * the file as it stood after the edit, so everything drawn can be numbered from
+ * it. Removed lines are not numbered: they belong to the file as it was, and
+ * that is not something we kept.
+ */
+const ChangeContextSchema = z.object({
+  before: z.array(z.string()),
+  after: z.array(z.string()),
+  startLine: z.number().int().positive()
+})
+
+export type ChangeContext = z.infer<typeof ChangeContextSchema>
+
 export const AgentEventSchema = z.discriminatedUnion('type', [
   /** The session exists and can be resumed by this id. */
   z.object({ type: z.literal('session_started'), sessionId: z.string() }),
@@ -49,6 +65,22 @@ export const AgentEventSchema = z.discriminatedUnion('type', [
     toolUseId: z.string(),
     ok: z.boolean(),
     content: z.string()
+  }),
+
+  /**
+   * The lines an edit landed among, read the moment it was made.
+   *
+   * Its own event rather than a field on the result above, because reading a
+   * file is not something `handleEvent` can wait for: made asynchronous, a
+   * later event could overtake an earlier one and the log would be drawn out of
+   * order. Arriving a moment late is fine; arriving out of order is not.
+   *
+   * Paired back up by `toolUseId` when the conversation is drawn.
+   */
+  z.object({
+    type: z.literal('change_context'),
+    toolUseId: z.string(),
+    context: ChangeContextSchema
   }),
 
   /** The agent wants to do something that needs an answer before it proceeds. */

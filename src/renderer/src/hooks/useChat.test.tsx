@@ -5,7 +5,7 @@ import type { Chat } from '@core/chats.js'
 import type { ChatEntry } from '@core/transcript.js'
 
 import type { Failure, Result } from '../../../preload/index.js'
-import { chat } from '../test/chat.js'
+import { chat, givenChat } from '../test/chat.js'
 import { octopus } from '../test/octopus.js'
 import { useChat } from './useChat.js'
 
@@ -35,12 +35,69 @@ describe('without a workspace', () => {
     await act(async () => {
       await result.current.send('hello')
       await result.current.interrupt()
-      await result.current.setMode('plan')
+      await result.current.setWorkingMode('acceptEdits')
+      await result.current.setPlanMode(true)
     })
 
     expect(octopus().chats.open).not.toHaveBeenCalled()
     expect(octopus().chats.interrupt).not.toHaveBeenCalled()
-    expect(octopus().chats.setPermissionMode).not.toHaveBeenCalled()
+    expect(octopus().chats.setWorkingMode).not.toHaveBeenCalled()
+    expect(octopus().chats.setPlanMode).not.toHaveBeenCalled()
+  })
+})
+
+describe('a conversation that is already waiting on an answer', () => {
+  const request = { requestId: 'r-1', toolName: 'ExitPlanMode', input: { plan: 'a plan' } }
+
+  /*
+   * Seen for real: a plan waited half an hour.
+   *
+   * `permission_request` goes out once. A window that was not listening then —
+   * opened afterwards, or switched to another workspace and back, which clears
+   * what it was holding — showed a conversation stuck on "working" while the
+   * one answer it needed was one nobody could give.
+   */
+  it('finds out what the agent is blocked on when the chat is opened', async () => {
+    givenChat()
+    vi.mocked(octopus().chats.pendingPermission).mockResolvedValue({ ok: true, value: request })
+
+    const { result } = renderHook(() => useChat('planner/anna', describeFailure))
+
+    await waitFor(() => {
+      expect(result.current.pending).toEqual(request)
+    })
+    // And it says so, rather than offering a composer for a turn in flight.
+    expect(result.current.busy).toBe(true)
+  })
+
+  it('stays as it was when nothing is blocked', async () => {
+    givenChat()
+
+    const { result } = renderHook(() => useChat('planner/anna', describeFailure))
+
+    await waitFor(() => {
+      expect(result.current.loading).toBe(false)
+    })
+    expect(result.current.pending).toBeNull()
+    expect(result.current.busy).toBe(false)
+  })
+
+  // The worst case is the state we were already in, and an error banner over a
+  // conversation that opened perfectly well would be worse than that.
+  it('says nothing when the question cannot be asked for', async () => {
+    givenChat()
+    vi.mocked(octopus().chats.pendingPermission).mockResolvedValue({
+      ok: false,
+      error: 'no such chat'
+    })
+
+    const { result } = renderHook(() => useChat('planner/anna', describeFailure))
+
+    await waitFor(() => {
+      expect(result.current.loading).toBe(false)
+    })
+    expect(result.current.pending).toBeNull()
+    expect(result.current.error).toBeNull()
   })
 })
 

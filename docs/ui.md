@@ -51,6 +51,17 @@ agent actually did to the working tree. Reasoning is folded away, a successful
 tool result is not shown at all — the output of a `Read` is the file, and pasting
 it in would bury the conversation in the codebase.
 
+**What the agent says is drawn as markdown**, through the same component that
+draws a plan. The model writes it, and shown as characters it is punctuation in
+the way of the words: `**7/10**` read as asterisks, a command came with its
+backticks, a list was a column of hyphens. A fenced block in an answer therefore
+arrives framed and with its copy button, and inline code as a chip.
+
+**What the user typed is the one place markup stays text.** Those characters
+came from the composer, and drawing their asterisks as bold would make the log
+disagree with what the person wrote — the agent's prose is output to render, the
+user's message is their own words to quote.
+
 Text streams in as it is written. The finished block replaces the fragments when
 it arrives; only the finished one is stored (see [data.md](data.md)).
 
@@ -63,21 +74,124 @@ which a subscription never pays, and it is cumulative across the session besides
 on a row it would read as the cost of that turn while meaning the running total.
 A made-up number in a currency, in a place the eye trusts.
 
-**The header carries the subscription's window**, and only when it has something
-to say. Measured against a live session, `rate_limit_event` usually carries no
-`utilization` at all — a status, a reset time and the window's name. So the
-header stays empty while everything is fine and speaks up when the window starts
-running out, rather than parking a green dot and a countdown nobody asked for.
-When a share does arrive it is shown. Which window it counts is never labelled:
-the countdown says it already.
+**The conversation is capped at 72rem** — the log, the composer and the error
+banner above them all, or they stop lining up. A ceiling rather than a width: it
+only applies once the panes are dragged that far apart.
+
+**The composer's two rows wrap rather than overflow.** The centre may be dragged
+down to `MIN_CENTRE_WIDTH` (360, in `RightPanel.tsx`), and at that width the
+footer cannot hold three pickers and the send button side by side. It used to run
+past the rounded border and take the send button off the edge of the block —
+Enter still sent, but the pane's primary control was not on screen. A picker
+carries `min-w-0` rather than `shrink-0` for the same reason: `truncate` on its
+label could never fire while the button refused to shrink. What gives way is the
+wording, and only after the row has already used a second line.
+
+**The composer has an attic**, a strip above the field mirroring the settings
+footer below it: how full this conversation's context window is on the left, how
+much of the subscription's five-hour and weekly windows is gone on the right.
+Both are read one step fainter than the pickers underneath, because those are
+clicked and these are only read.
+
+It used to be one figure in the chat header, and it was almost always blank.
+Measured against a live session, `rate_limit_event` usually carries no
+`utilization` at all — a status, a reset time and one window's name — and a
+single event can never hold both windows anyway. The attic asks the running
+agent instead, which answers with both.
+
+Two rules there are worth keeping:
+
+- **The strip vanishes when it has nothing to say**, rather than standing empty.
+  A workspace nobody has spoken to, an API-key session with no plan windows and
+  a CLI too old to answer all get the composer as it was. An empty rule above
+  the field would be chrome asserting that a measurement exists.
+- **A refusal is named beside the numbers, never over them.** The first attempt
+  had the account's status replace the percentages, which is what the old header
+  chip did — fair there, where one number gave way to a word. Here it covered
+  the two shares the strip exists for, and said less than they did. So only
+  `rejected` gets a word now, because "the next turn will not run" is something
+  no percentage carries; `allowed_warning` gets none, since "close to the limit"
+  is vaguer than "Week 84%" and the colour already says it.
+
+The windows are named here (`5h`, `Week`) although the old header chip never
+named its one: two figures side by side are unreadable without labels, while one
+figure beside a countdown was not.
 
 The reading is account-wide while the header belongs to a workspace, which is
 deliberate — the decision it informs is made looking at the chat.
+
+**What the agent looked at folds; what it changed does not.** A run of tool
+calls becomes the count of them, closed, opening on a click — the same
+disclosure reasoning gets. A turn is mostly tool calls; one rename went through
+fifty-nine, and a line each buried the two things worth reading. A lone call
+stays in the open, since "1 step" costs more to read than the row it replaces,
+and a failure or anything the agent said breaks the run so it stays where it
+happened.
+
+**An edit is drawn as the edit**: the path, `+8 −2`, and the lines themselves,
+removed in `danger`, added in `success`, the untouched ones between them plain.
+`Plan` is likewise never folded — it arrives as a tool call and is the substance
+of the turn.
+
+Three things about that diff are worth knowing:
+
+- The change itself is read from the **call's own arguments** — an `Edit` is
+  handed the text it replaces and the text it writes. A `Write` is reported as
+  all additions, because what stood there before is not in the call and a
+  "before" invented for a tidier diff is the one part the reader could not check.
+- **The lines either side are read from the file the moment the edit succeeds**,
+  and kept. Looked up when the conversation is drawn they would be wrong: a later
+  edit shifts every line after it, so the context would surround wherever that
+  text has since ended up. Recorded once, it stays true — and it arrives as its
+  own event a moment behind the call, because reading a file is not something
+  the event handler can wait for without letting events overtake each other.
+- **A removed line carries no number.** It belongs to the file as it was, which
+  is not something we kept, and a number there would be out by everything the
+  change added. Where no context was recorded — a `Write`, a file since changed,
+  an older transcript — the numbers are left off altogether rather than started
+  from one.
+
+The block is capped and scrolls rather than folding: the median change is two
+lines, so a click would cost more than it saves, while a file written whole runs
+to hundreds and must not push the conversation away.
 
 **Permission requests appear in the log**, where the user is already looking,
 with allow / always / decline. A request read back from the transcript shows no
 buttons: it was answered long ago, and offering them would let someone answer a
 question nobody is waiting on.
+
+**A finished plan gets a dialog instead**, and the request that carried it draws
+nothing in the log at all — the plan is already there, from the `ExitPlanMode`
+call it arrived in, and a card would be the same text a second time under a
+second set of buttons.
+
+It is the one permission worth interrupting for. A plan is the substance of the
+turn, and as a strip with two buttons on it the whole thing was read past on the
+way to one; what the agent did next was start editing files.
+
+**One button and a field**, which is what the question actually has:
+
+- **Execute** runs it, in the mode the composer's footer names. The button used
+  to name that mode as well, and no longer does: the footer is what the session
+  actually runs under, it is on screen behind the backdrop, and a second place
+  for the same fact is a second place for it to go stale.
+- **The field is how you carry on planning.** Writing in it _is_ that, so a
+  button saying so was the same decision offered twice. `Enter` sends and
+  `⇧Enter` breaks the line — the composer's keys, one convention rather than
+  two. The note reaches the agent as the refusal's reason, so "add a step for
+  the tests" comes back as a better plan rather than a stopped conversation, and
+  that plan raises this dialog again.
+
+Dismissing sends whatever is in the field, empty or not. The agent is blocked on
+this answer, so a dismissal that resolved nothing would leave the conversation
+waiting on a question no longer on screen.
+
+**The footer's permission control is two things, not one**, and they are two
+stored fields. `plan` is not a third degree of permission but a state the
+conversation is in: the agent runs no tools at all in it, so "accept edits" has
+nothing to accept. Held as one field they could not both be true, which is why
+approving a plan had no mode to return to — and why the toggle stayed lit over
+an agent that had started editing.
 
 **The right pane** holds Changes, Terminal, Build and Server. Build runs
 `setup.sh`, Server runs `run.sh` with the workspace's port in `$OCTOPUS_PORT`.
@@ -247,15 +361,18 @@ field styling had already drifted by a few pixels of height.
 
 ## Shared components
 
-| Component                                                       | Worth knowing                                                                                                                                                                                |
-| --------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `Modal`                                                         | body has **no padding** — a list spans the full width, a form brings its own. A backdrop click does not close it. `lg` is a fixed height so sectioned dialogs do not resize between sections |
-| `DropdownMenu`                                                  | positioned against the **window**, not its trigger — an absolute panel is clipped by any scrolling ancestor, and the tab strip is one                                                        |
-| `Combobox`                                                      | a select with search; a native one stops being usable around thirty entries                                                                                                                  |
-| `SectionRail`                                                   | the rail shared by both settings dialogs                                                                                                                                                     |
-| `Settings`                                                      | `initialSection` opens it where the caller needs it. Read once, on mount — correct only because `App` renders the dialog conditionally, so a close unmounts it                               |
-| `ProjectGlyph`                                                  | a project's icon, `aria-hidden`: wherever it appears the element around it is already named                                                                                                  |
-| `Field`, `FileEditor`, `NameEditor`, `ResizeHandle`, `Terminal` |                                                                                                                                                                                              |
+| Component      | Worth knowing                                                                                                                                                                                                                                                                                                                                                               |
+| -------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `Modal`        | body has **no padding** — a list spans the full width, a form brings its own. A backdrop click does not close it. `lg` is a fixed height so sectioned dialogs do not resize between sections; `md` grows to the window less a margin, because what it carries is read rather than filled in — a plan, a list of repositories — and height is how much of it you see at once |
+| `DropdownMenu` | positioned against the **window**, not its trigger — an absolute panel is clipped by any scrolling ancestor, and the tab strip is one                                                                                                                                                                                                                                       |
+| `Combobox`     | a select with search; a native one stops being usable around thirty entries                                                                                                                                                                                                                                                                                                 |
+| `SectionRail`  | the rail shared by both settings dialogs                                                                                                                                                                                                                                                                                                                                    |
+
+| `ComposerPicker` | one setting in the composer's control row. Ghost, not `Button` — a bordered control on that surface reads as a chip, and three of them make a toolbar competing with the field above |
+| `Markdown`, `CodeBlock` | how the agent's own output is drawn. A fenced block gets a frame and a copy button in its own row, never floating over code that scrolls sideways. The block/inline distinction is taken from `pre`, not from the language class: a fence with no language hands the `code` override exactly what inline code does |
+| `Settings` | `initialSection` opens it where the caller needs it. Read once, on mount — correct only because `App` renders the dialog conditionally, so a close unmounts it |
+| `ProjectGlyph` | a project's icon, `aria-hidden`: wherever it appears the element around it is already named |
+| `Field`, `FileEditor`, `NameEditor`, `ResizeHandle`, `Terminal` | |
 
 `Button` has four variants: `accent`, `quiet`, `danger` (subdued destructive),
 `destructive` (filled, for the action a confirmation is asking about).

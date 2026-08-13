@@ -1,10 +1,17 @@
 import { useCallback, useEffect, useState } from 'react'
 
-import type { Chat, PermissionMode } from '@core/chats.js'
+import { type Chat, type Effort, EXIT_PLAN_MODE, type WorkingMode } from '@core/chats.js'
 import type { PermissionAnswer } from '@core/service.js'
 import type { ChatEntry } from '@core/transcript.js'
 
-import type { Failure } from '../../../preload/index.js'
+import type { Failure, Result } from '../../../preload/index.js'
+
+/** A tool call the agent is blocked on, waiting to be told whether it may run. */
+export interface PendingPermission {
+  readonly requestId: string
+  readonly toolName: string
+  readonly input: unknown
+}
 
 /** Prose and reasoning still being written, kept apart so they render apart. */
 export interface Streaming {
@@ -21,13 +28,17 @@ export interface ChatController {
   /** A turn is in flight: the agent is working, or waiting on an answer. */
   readonly busy: boolean
   /** The request the agent is blocked on, or null when it is not blocked. */
-  readonly pendingRequestId: string | null
+  readonly pending: PendingPermission | null
   readonly loading: boolean
   readonly error: string | null
   readonly send: (text: string) => Promise<void>
   readonly interrupt: () => Promise<void>
-  readonly answer: (requestId: string, answer: PermissionAnswer) => Promise<void>
-  readonly setMode: (mode: PermissionMode) => Promise<void>
+  /** `feedback` accompanies a refusal and reaches the agent as the reason. */
+  readonly answer: (requestId: string, answer: PermissionAnswer, feedback?: string) => Promise<void>
+  readonly setWorkingMode: (mode: WorkingMode) => Promise<void>
+  readonly setPlanMode: (planning: boolean) => Promise<void>
+  readonly setEffort: (effort: Effort | null) => Promise<void>
+  readonly setModel: (model: string | null) => Promise<void>
 }
 
 /** Turns a failed IPC result into a sentence — what `useErrorMessage` returns. */
@@ -45,7 +56,7 @@ export function useChat(workspaceId: string | null, describeFailure: Describe): 
   const [entries, setEntries] = useState<readonly ChatEntry[]>([])
   const [streaming, setStreaming] = useState<Streaming>(NOTHING_STREAMING)
   const [busy, setBusy] = useState(false)
-  const [pendingRequestId, setPendingRequestId] = useState<string | null>(null)
+  const [pending, setPending] = useState<PendingPermission | null>(null)
   const [loading, setLoading] = useState(workspaceId !== null)
   const [error, setError] = useState<string | null>(null)
   const [shownWorkspaceId, setShownWorkspaceId] = useState(workspaceId)
@@ -60,7 +71,7 @@ export function useChat(workspaceId: string | null, describeFailure: Describe): 
     setEntries([])
     setStreaming(NOTHING_STREAMING)
     setBusy(false)
-    setPendingRequestId(null)
+    setPending(null)
     setError(null)
     // Set here rather than in the effect that loads: by the time an effect
     // runs the frame is already on screen, so the pane would flash the empty
@@ -101,6 +112,18 @@ export function useChat(workspaceId: string | null, describeFailure: Describe): 
       if (history.ok) setEntries(history.value)
       else setError(describeFailure(history))
       setLoading(false)
+
+      // Whether the agent is waiting on an answer. The event that asked went
+      // out once, and a window that was not listening then — opened later, or
+      // switched away and back — would otherwise show a conversation busy for
+      // ever with no way to unblock it. Asked after the history so the log is
+      // on screen first; a failure here is not worth an error, since the worst
+      // case is the state we were already in.
+      const blocked = await window.octopus.chats.pendingPermission(existing.id)
+      if (abandoned() || !blocked.ok || blocked.value === null) return
+
+      setPending(blocked.value)
+      setBusy(true)
     })()
 
     return () => {
@@ -135,29 +158,47 @@ export function useChat(workspaceId: string | null, describeFailure: Describe): 
           { role: 'agent', at: new Date().toISOString(), event }
         ])
 
-        if (event.type === 'permission_request') setPendingRequestId(event.requestId)
+        if (event.type === 'permission_request') {
+          setPending({
+            requestId: event.requestId,
+            toolName: event.toolName,
+            input: event.input
+          })
+        }
         if (event.type === 'result' || event.type === 'error') {
           setBusy(false)
-          setPendingRequestId(null)
+          setPending(null)
         }
       }),
     [openChatId]
   )
 
+  /**
+   * The conversation's record, created if this is the first thing done to it.
+   *
+   * A workspace gets no record from merely being looked at, but choosing a
+   * setting is not looking — the choice has to be kept somewhere, and it
+   * belongs to this conversation rather than to the application. Opening is
+   * idempotent and writes no transcript, so the cost is one row.
+   */
+  const ensureChat = useCallback(async (): Promise<Chat | null> => {
+    if (chat) return chat
+    if (workspaceId === null) return null
+
+    const opened = await window.octopus.chats.open(workspaceId)
+    if (!opened.ok) {
+      setError(describeFailure(opened))
+      return null
+    }
+
+    setChat(opened.value)
+    return opened.value
+  }, [chat, workspaceId, describeFailure])
+
   const send = useCallback(
     async (text: string) => {
-      if (workspaceId === null) return
-
-      let target = chat
-      if (!target) {
-        const opened = await window.octopus.chats.open(workspaceId)
-        if (!opened.ok) {
-          setError(describeFailure(opened))
-          return
-        }
-        target = opened.value
-        setChat(target)
-      }
+      const target = await ensureChat()
+      if (!target) return
 
       // Drawn before the round trip: the message is the user's own, and
       // waiting for the disk to confirm it makes typing feel unresponsive.
@@ -172,7 +213,7 @@ export function useChat(workspaceId: string | null, describeFailure: Describe): 
         setBusy(false)
       }
     },
-    [chat, workspaceId, describeFailure]
+    [ensureChat, describeFailure]
   )
 
   const interrupt = useCallback(async () => {
@@ -182,30 +223,79 @@ export function useChat(workspaceId: string | null, describeFailure: Describe): 
     if (!stopped.ok) setError(describeFailure(stopped))
 
     setBusy(false)
-    setPendingRequestId(null)
+    setPending(null)
   }, [chat, describeFailure])
 
   const answer = useCallback(
-    async (requestId: string, decision: PermissionAnswer) => {
+    async (requestId: string, decision: PermissionAnswer, feedback?: string) => {
       // Cleared first: the agent is unblocked either way, and leaving the card
       // on screen while it works reads as though the click did nothing.
-      setPendingRequestId(null)
+      const answered = pending
+      setPending(null)
 
-      const answered = await window.octopus.chats.answerPermission(requestId, decision)
-      if (!answered.ok) setError(describeFailure(answered))
+      // The same rule the core applies when it clears `planMode`, kept here as
+      // well because nothing tells a window that a record changed. Without it
+      // the toggle stays lit over an agent that has stopped planning — which
+      // was the whole complaint.
+      if (decision !== 'deny' && answered?.toolName === EXIT_PLAN_MODE) {
+        // The null arm cannot be reached: a request is only ever recorded for
+        // the chat this hook has open, so there is one by the time it can be
+        // answered. The guard exists because the state's type says otherwise.
+        /* v8 ignore next */
+        setChat((current) => (current === null ? null : { ...current, planMode: false }))
+      }
+
+      const sent = await window.octopus.chats.answerPermission(requestId, decision, feedback)
+      if (!sent.ok) setError(describeFailure(sent))
     },
-    [describeFailure]
+    [pending, describeFailure]
   )
 
-  const setMode = useCallback(
-    async (mode: PermissionMode) => {
-      if (!chat) return
+  /**
+   * One of the chat's settings, changed.
+   *
+   * All three go the same way — make sure there is a record, tell the core,
+   * then move the local copy or report why not — and written out three times
+   * the differences would be where the bugs hid. `patch` is applied only after
+   * the core agrees, so a refused change leaves the picker showing what is
+   * actually in force.
+   */
+  const change = useCallback(
+    async (patch: Partial<Chat>, send: (chatId: string) => Promise<Result<void>>) => {
+      const target = await ensureChat()
+      if (!target) return
 
-      const changed = await window.octopus.chats.setPermissionMode(chat.id, mode)
-      if (changed.ok) setChat({ ...chat, permissionMode: mode })
+      const changed = await send(target.id)
+      if (changed.ok) setChat({ ...target, ...patch })
       else setError(describeFailure(changed))
     },
-    [chat, describeFailure]
+    [ensureChat, describeFailure]
+  )
+
+  const setWorkingMode = useCallback(
+    (mode: WorkingMode) =>
+      change({ workingMode: mode }, (chatId) => window.octopus.chats.setWorkingMode(chatId, mode)),
+    [change]
+  )
+
+  const setPlanMode = useCallback(
+    (planning: boolean) =>
+      change({ planMode: planning }, (chatId) =>
+        window.octopus.chats.setPlanMode(chatId, planning)
+      ),
+    [change]
+  )
+
+  const setModel = useCallback(
+    (model: string | null) =>
+      change({ model }, (chatId) => window.octopus.chats.setModel(chatId, model)),
+    [change]
+  )
+
+  const setEffort = useCallback(
+    (effort: Effort | null) =>
+      change({ effort }, (chatId) => window.octopus.chats.setEffort(chatId, effort)),
+    [change]
   )
 
   return {
@@ -213,12 +303,15 @@ export function useChat(workspaceId: string | null, describeFailure: Describe): 
     entries,
     streaming,
     busy,
-    pendingRequestId,
+    pending,
     loading,
     error,
     send,
     interrupt,
     answer,
-    setMode
+    setWorkingMode,
+    setPlanMode,
+    setEffort,
+    setModel
   }
 }

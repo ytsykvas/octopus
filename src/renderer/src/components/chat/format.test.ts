@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { formatCountdown, formatTokens } from './format.js'
+import { formatCountdown, formatTokens, usageTone } from './format.js'
 
 describe('token counts', () => {
   it('shows small counts exactly', () => {
@@ -56,5 +56,24 @@ describe('the countdown to a reset', () => {
     const soon = new Date(Date.now() + 90 * 60_000).toISOString()
 
     expect(formatCountdown(soon, labels)).toBe('1h 30m')
+  })
+})
+
+// One function for both readings in the strip. Two gauges side by side that
+// turned colour at different points would read as one of them being broken.
+describe('how full is worth noticing', () => {
+  it('stays quiet while there is room', () => {
+    expect(usageTone(0)).toBe('text-ink-faint')
+    expect(usageTone(74)).toBe('text-ink-faint')
+  })
+
+  it('warns from three quarters', () => {
+    expect(usageTone(75)).toBe('text-warning')
+    expect(usageTone(89)).toBe('text-warning')
+  })
+
+  it('is plain about the last tenth', () => {
+    expect(usageTone(90)).toBe('text-danger')
+    expect(usageTone(100)).toBe('text-danger')
   })
 })

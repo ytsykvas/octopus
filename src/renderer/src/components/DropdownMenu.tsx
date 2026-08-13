@@ -1,3 +1,4 @@
+import { Check } from 'lucide-react'
 import { useCallback, useEffect, useRef, useState } from 'react'
 
 import { useDismiss } from '../hooks/useDismiss.js'
@@ -10,6 +11,13 @@ export interface MenuAction {
   readonly icon?: React.ReactNode
   /** Renders the item in the danger colour — for actions that destroy something. */
   readonly destructive?: boolean
+  /**
+   * Marks the item as one choice among several, and whether it is the current
+   * one. Set it on every item of such a menu, not only the chosen one: it is
+   * what turns them from commands into a group with a state, both for the eye
+   * and for anything reading the screen.
+   */
+  readonly selected?: boolean
   readonly onSelect: () => void
 }
 
@@ -112,7 +120,12 @@ export function DropdownMenu({
             <button
               key={action.id}
               type="button"
-              role="menuitem"
+              // A choice among several is a radio group, not a list of commands.
+              // The role is what carries that to a screen reader, and it is also
+              // the only part of this a jsdom test can see.
+              {...(action.selected === undefined
+                ? { role: 'menuitem' }
+                : { role: 'menuitemradio', 'aria-checked': action.selected })}
               onClick={() => {
                 setOpen(false)
                 action.onSelect()
@@ -124,7 +137,18 @@ export function DropdownMenu({
               }`}
             >
               <span className="flex size-4 shrink-0 items-center justify-center">
-                {action.icon}
+                {/* The tick keeps its space when it is not the current choice,
+                    so the labels of a picker line up instead of stepping left
+                    and right as the selection moves. */}
+                {action.selected === undefined ? (
+                  action.icon
+                ) : (
+                  <Check
+                    aria-hidden
+                    size={12}
+                    className={action.selected ? 'text-accent' : 'opacity-0'}
+                  />
+                )}
               </span>
 
               <span className="min-w-0 flex-1">

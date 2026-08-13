@@ -27,7 +27,19 @@ const WIDTHS = {
  */
 const HEIGHTS = {
   sm: 'max-h-[min(24rem,calc(100vh-8rem))]',
-  md: 'max-h-[min(42rem,calc(100vh-6rem))]',
+  /*
+   * The window, less a margin — no fixed ceiling of its own.
+   *
+   * `md` carries the two things people read rather than fill in: a plan, which
+   * runs to several screens, and a list of repositories. For both, height is
+   * how much you can see at once, and a ceiling in `rem` capped them well short
+   * of the screen they were on — a plan scrolled inside a box with empty room
+   * above and below it.
+   *
+   * Still `max-h`, so a short one stays short. The margin is what keeps it
+   * reading as a dialog rather than as another window.
+   */
+  md: 'max-h-[calc(100vh-6rem)]',
   /*
    * Fixed, not a ceiling.
    *
