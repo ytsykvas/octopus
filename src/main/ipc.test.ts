@@ -257,6 +257,8 @@ describe('channel table', () => {
     'chats:effort',
     'chats:model',
     'chats:models',
+    'chats:commands',
+    'chats:answerQuestions',
     'chats:pending',
     'chats:usage',
     'chats:permission',
@@ -866,6 +868,19 @@ describe('the agent chat', () => {
     await expect(invoke('chats:models')).resolves.toEqual({ ok: true, value: [] })
   })
 
+  // Per chat, unlike the models: a project's own commands live in its
+  // `.claude/commands/`, so the channel has to carry which chat is asking.
+  it('reports no commands for a chat that has not run a session', async () => {
+    const projectId = await addProject()
+    const workspace = await createWorkspace(projectId)
+    const opened = await invoke('chats:open', workspace.id)
+
+    await expect(invoke('chats:commands', chatIdOf(opened))).resolves.toEqual({
+      ok: true,
+      value: []
+    })
+  })
+
   it('reports no usage for a chat that has no session', async () => {
     const projectId = await addProject()
     const workspace = await createWorkspace(projectId)
@@ -892,6 +907,26 @@ describe('the agent chat', () => {
 
   it('refuses to answer for a chat that does not exist', async () => {
     await expect(invoke('chats:pending', 'chat-nothing')).resolves.toMatchObject({ ok: false })
+  })
+
+  // The answers reach the agent as text, so they are parsed at the boundary
+  // like every other thing the window sends.
+  it('rejects answers to a question that are not answers', async () => {
+    await expect(
+      invoke('chats:answerQuestions', 'r-1', [{ selected: ['yes'] }])
+    ).resolves.toMatchObject({ ok: false })
+
+    await expect(invoke('chats:answerQuestions', 'r-1', 'yes')).resolves.toMatchObject({
+      ok: false
+    })
+  })
+
+  it('accepts answers to a question nobody is waiting on', async () => {
+    await expect(
+      invoke('chats:answerQuestions', 'r-1', [
+        { question: 'Which one?', selected: ['the first'], other: null }
+      ])
+    ).resolves.toEqual({ ok: true, value: undefined })
   })
 
   it('rejects an answer that is not one of the three the card offers', async () => {

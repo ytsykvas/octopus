@@ -1,17 +1,22 @@
 import { ArrowUp, Gauge, Map, Pencil, Shield, Sparkles } from 'lucide-react'
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import {
+  type AgentCommand,
   type AgentModel,
   EFFORT_LEVELS,
   type Effort,
+  findAgentModel,
   WORKING_MODES,
   type WorkingMode
 } from '@core/chats.js'
 
 import type { RateLimit, SessionUsage } from '@core/service.js'
 
+import { useDismiss } from '../../hooks/useDismiss.js'
+import { CommandMenu } from './CommandMenu.js'
+import { completeCommand, matchCommands, readCommandQuery } from './commandMatch.js'
 import { ComposerAttic } from './ComposerAttic.js'
 import { ComposerPicker } from './ComposerPicker.js'
 
@@ -31,6 +36,16 @@ interface ComposerProps {
   readonly onModel: (model: string | null) => void
   /** What the agent last said this account may use; empty on a first run. */
   readonly models: readonly AgentModel[]
+  /**
+   * The model the session is actually running, as it last reported.
+   *
+   * Separate from `model` above, which is what was *chosen* — they are
+   * different facts and the footer needs both. Null when no session has
+   * answered yet.
+   */
+  readonly activeModel: string | null
+  /** Slash commands to suggest; empty until this chat has run a session. */
+  readonly commands: readonly AgentCommand[]
   /** What the next message is up against; the strip hides when there is none. */
   readonly usage: SessionUsage
   readonly limit: RateLimit | null
@@ -117,6 +132,8 @@ export function Composer({
   model,
   onModel,
   models,
+  activeModel,
+  commands,
   usage,
   limit,
   onSend,
@@ -125,8 +142,24 @@ export function Composer({
   const { t } = useTranslation()
   const [draft, setDraft] = useState('')
 
-  const chosenModel = models.find((candidate) => candidate.value === model)
-  const effortChoices = effortChoicesFor(chosenModel)
+  const field = useRef<HTMLDivElement>(null)
+  /** Which suggestion Enter would take. */
+  const [active, setActive] = useState(0)
+  /**
+   * Whether the list was sent away for this draft.
+   *
+   * Needed because "is the draft a command being typed" is derived from the
+   * text, and Escape does not change the text. Reset by the next keystroke:
+   * dismissing is about this moment, not about the word.
+   */
+  const [dismissed, setDismissed] = useState(false)
+
+  // Through the catalogue rather than by string equality: a session names
+  // itself in full while the list may hold a short name, and `claude-sonnet-5`
+  // has to find the row called `sonnet`.
+  const chosenModel = model === null ? undefined : findAgentModel(models, model)
+  const runningModel = activeModel === null ? undefined : findAgentModel(models, activeModel)
+  const effortChoices = effortChoicesFor(chosenModel ?? runningModel)
 
   // A model the list no longer names is still the one this chat runs on, so it
   // is offered as itself. Dropping it would leave the picker claiming a default
@@ -134,14 +167,53 @@ export function Composer({
   const modelChoices =
     model === null || chosenModel
       ? models
-      : [{ value: model, displayName: model, description: '' }, ...models]
+      : [{ value: model, resolvedModel: null, displayName: model, description: '' }, ...models]
+
+  /*
+   * What the button says, which is not always what the menu has ticked.
+   *
+   * Nothing chosen means the agent picked, and naming its pick is more use than
+   * repeating that nobody chose — but the tag has to stay, or the footer would
+   * claim a decision that was never made. A `/model` command lands here too:
+   * the CLI scopes it to the session, so it moves what is running without
+   * moving what this chat chose.
+   */
+  const runningLabel =
+    model !== null || activeModel === null
+      ? undefined
+      : `${runningModel?.displayName ?? activeModel} · ${t('chat.modelAutoTag')}`
 
   const trimmed = draft.trim()
+
+  const query = readCommandQuery(draft)
+  const matches = query === null ? [] : matchCommands(commands, query)
+  // `matches.length > 0` is what stops a lone `/` from swallowing Enter: with
+  // no suggestions there is nothing to complete, so the key means what it
+  // always means.
+  const suggesting = !dismissed && query !== null && matches.length > 0
+
+  useDismiss(suggesting, field, () => {
+    setDismissed(true)
+  })
 
   const submit = (): void => {
     if (trimmed === '') return
     onSend(trimmed)
     setDraft('')
+    setDismissed(false)
+    setActive(0)
+  }
+
+  /**
+   * Puts a chosen command in the field. It does not send it.
+   *
+   * Deliberate: the command may take arguments, and a single Enter that both
+   * chose and ran would leave no way to type them. It also means no command
+   * ever runs from one keystroke aimed at a list that had just moved.
+   */
+  const complete = (command: AgentCommand): void => {
+    setDraft(completeCommand(command))
+    setDismissed(true)
   }
 
   return (
@@ -150,7 +222,17 @@ export function Composer({
           and its rule has to run the whole width. Padding here would inset the
           line and leave it looking like an underline for the field rather than
           a division of the box. Each half brings its own instead. */}
-      <div className="border-line bg-surface focus-within:border-line-strong mx-auto flex w-full max-w-6xl flex-col rounded-[var(--radius-panel)] border transition-colors">
+      {/* `relative` so the suggestion list can hang off the top of the whole
+          block rather than off the field: it opens upwards, and anchoring it
+          to the textarea would put it over the text being typed. */}
+      <div
+        ref={field}
+        className="border-line bg-surface focus-within:border-line-strong relative mx-auto flex w-full max-w-6xl flex-col rounded-[var(--radius-panel)] border transition-colors"
+      >
+        {suggesting && (
+          <CommandMenu commands={matches} active={active} onActive={setActive} onPick={complete} />
+        )}
+
         <ComposerAttic usage={usage} limit={limit} />
 
         <textarea
@@ -158,8 +240,45 @@ export function Composer({
           placeholder={t('chat.placeholder')}
           onChange={(event) => {
             setDraft(event.target.value)
+            // Typing brings the list back — dismissing was about the draft as
+            // it stood — and returns the highlight to the top, since filtering
+            // has moved what sits at each index.
+            setDismissed(false)
+            setActive(0)
           }}
           onKeyDown={(event) => {
+            // The list gets first refusal on the keys it uses, because it is
+            // the thing the user is looking at. When it is closed every one of
+            // these falls through to the field's own behaviour.
+            if (suggesting) {
+              if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+                event.preventDefault()
+                const step = event.key === 'ArrowDown' ? 1 : -1
+                setActive((current) => (current + step + matches.length) % matches.length)
+                return
+              }
+
+              // Tab as well as Enter: completing with tab is what a shell does,
+              // and without `preventDefault` it would take the focus out of the
+              // field instead.
+              if (event.key === 'Enter' || event.key === 'Tab') {
+                event.preventDefault()
+                // Iterated rather than indexed with a `!`: `active` is always
+                // inside the list — every keystroke that could move it out
+                // resets it — but the index signature says otherwise, and one
+                // element is exactly what this walks.
+                for (const chosen of matches.slice(active, active + 1)) complete(chosen)
+                return
+              }
+
+              if (event.key === 'Escape') {
+                // The draft is left alone. Escape here means "stop suggesting",
+                // not "undo what I typed".
+                setDismissed(true)
+                return
+              }
+            }
+
             if (event.key !== 'Enter' || event.shiftKey) return
             event.preventDefault()
             submit()
@@ -180,8 +299,9 @@ export function Composer({
         <div className="border-line flex flex-wrap items-center gap-1 border-t px-2 py-1.5">
           <ComposerPicker
             label={t('chat.model')}
-            value={model ?? AGENT_DECIDES}
+            value={chosenModel?.value ?? model ?? AGENT_DECIDES}
             icon={<Sparkles aria-hidden size={12} />}
+            {...(runningLabel !== undefined && { display: runningLabel })}
             options={[
               { value: AGENT_DECIDES, label: t('chat.modelAuto') },
               ...modelChoices.map((candidate) => ({

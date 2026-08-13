@@ -19,6 +19,14 @@ interface ComposerPickerProps<T extends string> {
   readonly disabled?: boolean
   /** Why it is disabled, or what the current choice means. */
   readonly title?: string
+  /**
+   * What the trigger says, when that is not the chosen option's own label.
+   *
+   * The model picker needs the two to differ: the menu marks "the agent
+   * decides", because that is what was chosen, while the button names the model
+   * that choice actually landed on.
+   */
+  readonly display?: string
 }
 
 /**
@@ -40,7 +48,8 @@ export function ComposerPicker<T extends string>({
   onChange,
   icon,
   disabled = false,
-  title
+  title,
+  display
 }: ComposerPickerProps<T>): React.JSX.Element {
   const current = options.find((option) => option.value === value)
 
@@ -73,7 +82,7 @@ export function ComposerPicker<T extends string>({
           }`}
         >
           <span className="shrink-0">{icon}</span>
-          <span className="truncate">{current?.label ?? value}</span>
+          <span className="truncate">{display ?? current?.label ?? value}</span>
           <ChevronDown aria-hidden size={11} className="shrink-0 opacity-60" />
         </button>
       )}

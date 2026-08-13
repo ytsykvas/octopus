@@ -155,10 +155,8 @@ export const uk: Translation = {
     stop: 'Спинити',
     working: 'Працює…',
     thinking: 'Міркує',
+    memoryReset: 'Звідси агент починає пам’ятати розмову спочатку',
 
-    noWorkspaceTitle: 'Оберіть воркспейс',
-    noWorkspaceBody:
-      'Кожна розмова належить одному воркспейсу. Агент працює з його власною копією проєкту, а все, що він змінить, лягає на його гілку.',
     emptyTitle: 'Почніть розмову',
     emptyBody: 'Перше повідомлення запускає сесію агента в цьому робочому дереві. Гілка вже існує.',
 
@@ -171,6 +169,7 @@ export const uk: Translation = {
 
     model: 'Модель',
     modelAuto: 'Вирішує агент',
+    modelAutoTag: 'авто',
 
     effort: 'Зусилля',
     effortAuto: 'Вирішує агент',
@@ -203,6 +202,14 @@ export const uk: Translation = {
     planExecute: 'Виконати',
     planFeedback: 'Щось іще треба уточнити?',
     planFeedbackPlaceholder: 'Напишіть, і агент доопрацює план',
+    questionTitle: 'Агент запитує',
+    questionOther: 'Інше',
+    questionOtherPlaceholder: 'Напишіть свою відповідь',
+    questionSend: 'Відповісти',
+    questionSkip: 'Пропустити',
+    questionAnswered: 'Відповідь надано.',
+    questionUnanswered: 'Лишилось без відповіді.',
+
     permissionTitle: 'Агент хоче скористатися {{tool}}',
     permissionAnswered: 'Відповідь уже дано.',
     allow: 'Дозволити',
@@ -234,6 +241,12 @@ export const uk: Translation = {
       'Додайте його з цього комп’ютера або клонуйте з GitHub. Усередині нього створюються воркспейси — кожен з власною гілкою, текою й сесією агента.',
     noSelectionTitle: 'Виберіть проєкт',
     noSelectionBody: 'Оберіть зі списку ліворуч або додайте ще один репозиторій.',
+    firstWorkspaceTitle: 'Створіть перший воркспейс',
+    firstWorkspaceBody:
+      'Воркспейс — це копія проєкту на власній гілці, з власною текою та власною сесією агента. Те, що ви робите в одному, не зачіпає інші.',
+    noWorkspaceTitle: 'Оберіть воркспейс',
+    noWorkspaceBody:
+      'Кожна розмова належить одному воркспейсу. Агент працює з його власною копією проєкту, а все, що він змінить, лягає на його гілку.',
     addFromDisk: 'Додати з диска…',
     addFromGitHub: 'Додати з GitHub…',
     checkingGitHub: 'Перевіряємо GitHub…'

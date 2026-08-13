@@ -104,6 +104,19 @@ export type Effort = z.infer<typeof EffortSchema>
 export const AgentModelSchema = z.object({
   /** What the SDK is asked for — `claude-opus-5`, `sonnet`, and so on. */
   value: z.string().min(1),
+  /**
+   * The full name this one resolves to, when `value` is a short one.
+   *
+   * `sonnet` and `claude-sonnet-5` are one model under two names, and both are
+   * in circulation: the picker offers whichever the catalogue lists, while a
+   * running session names itself in full. Without this, the two read as
+   * different models — the picker would draw a second row for a model already
+   * in it, and offer effort levels the real one does not take.
+   *
+   * Null when the agent did not say, which is what an entry already spelled out
+   * in full has no need to.
+   */
+  resolvedModel: z.string().nullable().default(null),
   displayName: z.string().min(1),
   description: z.string().default(''),
   /** Null when the agent did not say, in which case every level is offered. */
@@ -112,6 +125,106 @@ export const AgentModelSchema = z.object({
 })
 
 export type AgentModel = z.infer<typeof AgentModelSchema>
+
+/**
+ * The catalogue entry for a model, by either of its names.
+ *
+ * The name in hand may be the short one the picker stored or the full one a
+ * session reported, and the entry answers to both.
+ *
+ * The two passes are not a tidiness: more than one entry can resolve to the
+ * same full name — a live catalogue offers `default` and `opus[1m]` both
+ * resolving to `claude-opus-5[1m]` — so an exact name has to win over an entry
+ * that merely resolves to it, or asking for `opus[1m]` would answer `default`.
+ */
+export function findAgentModel(
+  models: readonly AgentModel[],
+  value: string
+): AgentModel | undefined {
+  return (
+    models.find((model) => model.value === value) ??
+    models.find((model) => model.resolvedModel === value)
+  )
+}
+
+/**
+ * Whether two names mean the same model, as the catalogue resolves them.
+ *
+ * A plain string comparison is not enough anywhere this is used: the record may
+ * hold `sonnet` while the session reports `claude-sonnet-5`, and reading that
+ * as a change would have the interface announce one every time a session
+ * started.
+ */
+export function sameModel(one: string, other: string, models: readonly AgentModel[]): boolean {
+  if (one === other) return true
+
+  const found = findAgentModel(models, one)
+  return found !== undefined && findAgentModel(models, other)?.value === found.value
+}
+
+/**
+ * A slash command the agent offers, as it reported them.
+ *
+ * Ours rather than the SDK's `SlashCommand`, for the same two reasons as
+ * `AgentModel`: the renderer needs it as a value to draw the suggestion list,
+ * and it is stored, so its shape has to be one we can promise.
+ *
+ * Every field but the name is defaulted. The SDK types `description` and
+ * `argumentHint` as required and `aliases` as optional, but a command read from
+ * a project's own `.claude/commands/` is written by hand — a file with no
+ * front matter still names a command, and it must not fail the whole list.
+ */
+export const AgentCommandSchema = z.object({
+  /** Without the leading slash, as the SDK reports it. */
+  name: z.string().min(1),
+  description: z.string().default(''),
+  /** What the arguments are, e.g. `<file>`. Empty when it takes none. */
+  argumentHint: z.string().default(''),
+  /** Other names for the same command — `/cost` and `/stats` both reach `/usage`. */
+  aliases: z.array(z.string()).default([])
+})
+
+export type AgentCommand = z.infer<typeof AgentCommandSchema>
+
+/**
+ * A command name as written, without its slash.
+ *
+ * Aliases are documented with slashes in the SDK's prose and without them in
+ * its examples, so both forms are treated as the same name rather than trusting
+ * one and quietly failing to match the other.
+ */
+function bareName(word: string): string {
+  return word.startsWith('/') ? word.slice(1) : word
+}
+
+/**
+ * The command whose entire job is to make the agent forget the conversation.
+ *
+ * Named here as a literal because nothing in the command list marks what a
+ * command *does* — `SlashCommand` carries a name, a description and a hint, and
+ * none of them can be read as "this one discards the context". The name is part
+ * of the CLI's contract, so this is a fact about the agent rather than a guess.
+ */
+const CLEAR_COMMAND = 'clear'
+
+/**
+ * Whether this message is the user asking for the conversation to be forgotten.
+ *
+ * Asked before the message is sent, and remembered, because the event that
+ * comes back cannot answer it: the SDK emits `conversation_reset` for leaving
+ * plan mode and for fresh-session flows as well. Clearing the visible log on
+ * the event alone would erase the conversation every time a plan was approved.
+ */
+export function isClearCommand(text: string, commands: readonly AgentCommand[]): boolean {
+  const [word] = text.trim().split(/\s+/)
+  if (!word?.startsWith('/')) return false
+
+  const name = bareName(word)
+  if (name === CLEAR_COMMAND) return true
+
+  const clear = commands.find((command) => command.name === CLEAR_COMMAND)
+  return clear?.aliases.some((alias) => bareName(alias) === name) ?? false
+}
 
 export const ChatSchema = z.object({
   /**
@@ -145,6 +258,21 @@ export const ChatSchema = z.object({
    */
   workingMode: WorkingModeSchema.default('default'),
   planMode: z.boolean().default(false),
+  /**
+   * The slash commands this conversation may use, as the agent last reported.
+   *
+   * On the chat rather than beside `knownModels` in the state, because the two
+   * lists have different scopes. Which models an account may use is a fact about
+   * the account. Which commands exist is a fact about a working directory and
+   * the branch checked out in it: `.claude/commands/` lives in the repository,
+   * and two workspaces of one project sit on different branches. Remembered
+   * globally, a command from one workspace would be suggested in another that
+   * does not have it.
+   *
+   * The cost is that a chat suggests nothing until its first message has
+   * started a session — the same trade as `knownModels`, and the honest one.
+   */
+  knownCommands: z.array(AgentCommandSchema).default([]),
   createdAt: z.iso.datetime()
 })
 
@@ -198,6 +326,9 @@ export function newChat(workspaceId: string, options: NewChatOptions): Chat {
     // Never planning to begin with. Planning is a decision taken about a
     // particular task, in the composer, once there is a task to plan.
     planMode: false,
+    // Nothing known until a session has run: the agent is the only thing that
+    // can say which commands this worktree has.
+    knownCommands: [],
     createdAt: options.createdAt
   }
 }

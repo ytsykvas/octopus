@@ -1,4 +1,5 @@
 import type { ChangeContext } from '@core/events.js'
+import { type QuestionAnswer, readQuestions } from '@core/questions.js'
 import type { ChatEntry } from '@core/transcript.js'
 
 import { type Change, readChange } from './changeSummary.js'
@@ -38,20 +39,44 @@ function contextsById(entries: readonly ChatEntry[]): Map<string, ChangeContext>
 }
 
 /**
+ * What the user chose, by the request that asked.
+ *
+ * Gathered in one pass for the same reason as the contexts above: the answer is
+ * recorded as its own event, so it sits further down the log than the question
+ * whose card draws it.
+ */
+export function answersByRequest(
+  entries: readonly ChatEntry[]
+): Map<string, readonly QuestionAnswer[]> {
+  const found = new Map<string, readonly QuestionAnswer[]>()
+
+  for (const entry of entries) {
+    if (entry.role === 'agent' && entry.event.type === 'question_answered') {
+      found.set(entry.event.requestId, entry.event.answers)
+    }
+  }
+
+  return found
+}
+
+/**
  * A tool call that is working out rather than a result.
  *
  * What the agent looked at folds; what it changed does not. A grep is how the
  * answer was found and an edit is the answer, so folding both away left a log
  * that could say "twenty-five steps" and never what any of them did to a file.
  *
- * A plan is neither: it arrives as a tool call and is the substance of the whole
- * turn.
+ * Neither are the two tools that exist to put something in front of the user: a
+ * plan is the substance of the whole turn, and a question is drawn by the card
+ * that answers it. Counting either as a step would put a number on the fold
+ * that no row inside it accounts for.
  */
 function isToolRow(entry: ChatEntry): boolean {
   return (
     entry.role === 'agent' &&
     entry.event.type === 'tool_use' &&
     readPlan(entry.event.name, entry.event.input) === null &&
+    readQuestions(entry.event.name, entry.event.input) === null &&
     readChange(entry.event.name, entry.event.input) === null
   )
 }
@@ -68,9 +93,15 @@ function isToolRow(entry: ChatEntry): boolean {
  * - a **change's context** is read from disk after its edit finishes, and
  *   emitted whenever that read returns — by which time the agent may be several
  *   tools further on, which lands it in the middle of a later run.
+ * - **the call that asks a question** is drawn by the card that answers it,
+ *   which arrives separately, so the call itself has nothing to show.
  */
 function drawsNothing(entry: ChatEntry): boolean {
   if (entry.role !== 'agent') return false
+
+  if (entry.event.type === 'tool_use') {
+    return readQuestions(entry.event.name, entry.event.input) !== null
+  }
 
   return (
     (entry.event.type === 'tool_result' && entry.event.ok) || entry.event.type === 'change_context'

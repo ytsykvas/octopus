@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react'
 
 import { type Chat, type Effort, EXIT_PLAN_MODE, type WorkingMode } from '@core/chats.js'
 import { isEphemeral } from '@core/events.js'
+import type { QuestionAnswer } from '@core/questions.js'
 import type { PermissionAnswer } from '@core/service.js'
 import type { ChatEntry } from '@core/transcript.js'
 
@@ -36,6 +37,8 @@ export interface ChatController {
   readonly interrupt: () => Promise<void>
   /** `feedback` accompanies a refusal and reaches the agent as the reason. */
   readonly answer: (requestId: string, answer: PermissionAnswer, feedback?: string) => Promise<void>
+  /** Answers the questions the agent asked, releasing the tool call. */
+  readonly answerQuestions: (requestId: string, answers: readonly QuestionAnswer[]) => Promise<void>
   readonly setWorkingMode: (mode: WorkingMode) => Promise<void>
   readonly setPlanMode: (planning: boolean) => Promise<void>
   readonly setEffort: (effort: Effort | null) => Promise<void>
@@ -159,6 +162,16 @@ export function useChat(workspaceId: string | null, describeFailure: Describe): 
         // two around a break the reader cannot see.
         if (isEphemeral(event)) return
 
+        // The user asked for the conversation to be forgotten, and the agent
+        // has forgotten it. What is on screen goes with it — the transcript on
+        // disk has already been deleted, so leaving the log would show a
+        // history that no longer exists anywhere and that nothing can continue.
+        if (event.type === 'conversation_reset' && event.cleared) {
+          setStreaming(NOTHING_STREAMING)
+          setEntries([])
+          return
+        }
+
         // Anything else means the block being streamed has finished, and its
         // complete form is in the event now arriving.
         setStreaming(NOTHING_STREAMING)
@@ -174,6 +187,12 @@ export function useChat(workspaceId: string | null, describeFailure: Describe): 
             input: event.input
           })
         }
+        // Answered somewhere else — the other window on this workspace. The
+        // card here has to stop offering buttons for a question that is settled.
+        if (event.type === 'question_answered') {
+          setPending((current) => (current?.requestId === event.requestId ? null : current))
+        }
+
         if (event.type === 'result' || event.type === 'error') {
           setBusy(false)
           setPending(null)
@@ -260,6 +279,20 @@ export function useChat(workspaceId: string | null, describeFailure: Describe): 
     [pending, describeFailure]
   )
 
+  const answerQuestions = useCallback(
+    async (requestId: string, answers: readonly QuestionAnswer[]) => {
+      // Cleared first, as with a permission: the agent is released either way,
+      // and leaving the card live while it works reads as though the button did
+      // nothing. The card itself stays in the log — it is part of the
+      // conversation — and redraws from the `question_answered` event.
+      setPending(null)
+
+      const sent = await window.octopus.chats.answerQuestions(requestId, answers)
+      if (!sent.ok) setError(describeFailure(sent))
+    },
+    [describeFailure]
+  )
+
   /**
    * One of the chat's settings, changed.
    *
@@ -318,6 +351,7 @@ export function useChat(workspaceId: string | null, describeFailure: Describe): 
     send,
     interrupt,
     answer,
+    answerQuestions,
     setWorkingMode,
     setPlanMode,
     setEffort,

@@ -288,9 +288,12 @@ describe('App', () => {
     await user.click(await screen.findByRole('button', { name: 'LE' }))
 
     expect(screen.getByText('/Users/someone/code/ledger')).toBeInTheDocument()
-    // The centre is the chat once a project is open, and a chat without a
-    // workspace has nowhere to run — so it says which one to pick.
+    // A project is open and no workspace is chosen, which is its own screen —
+    // it names what to do and offers the way out, rather than describing one.
     expect(await screen.findByText('Select a workspace')).toBeInTheDocument()
+    expect(
+      within(screen.getByRole('main')).getByRole('button', { name: 'New workspace' })
+    ).toBeInTheDocument()
   })
 
   it('lists the workspaces of the project that is open', async () => {
@@ -828,7 +831,34 @@ describe('App', () => {
     const user = await openApp()
     await user.click(await screen.findByRole('button', { name: 'LE' }))
 
-    await user.click(await screen.findByRole('button', { name: 'New workspace' }))
+    // Named within the sidebar: the centre offers the same action while no
+    // workspace is selected, and both are meant to be reachable.
+    const sidebar = within(screen.getByRole('complementary'))
+    await user.click(await sidebar.findByRole('button', { name: 'New workspace' }))
+
+    expect(window.octopus.workspaces.create).toHaveBeenCalledWith('ledger')
+  })
+
+  /*
+   * A project with no workspaces used to say "select a workspace" over an empty
+   * list, and offered nothing to click: the button that makes one lives in the
+   * sidebar's project header, which is not where someone who has just added a
+   * repository is looking.
+   */
+  it('offers to create the first workspace from the centre', async () => {
+    givenTwoProjects()
+    // A project nobody has made a workspace in yet — the state a repository is
+    // in the moment it is added.
+    vi.mocked(window.octopus.workspaces.list).mockImplementation((projectId: string) =>
+      Promise.resolve({ ok: true, value: projectId === 'ledger' ? [] : [workspaceView('anna')] })
+    )
+    const user = await openApp()
+    await user.click(await screen.findByRole('button', { name: 'LE' }))
+
+    expect(await screen.findByText('Create the first workspace')).toBeInTheDocument()
+
+    const centre = within(screen.getByRole('main'))
+    await user.click(centre.getByRole('button', { name: 'New workspace' }))
 
     expect(window.octopus.workspaces.create).toHaveBeenCalledWith('ledger')
   })

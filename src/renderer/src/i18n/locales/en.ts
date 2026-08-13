@@ -157,10 +157,8 @@ export const en = {
     stop: 'Stop',
     working: 'Working…',
     thinking: 'Thinking',
+    memoryReset: 'The agent’s memory of this conversation starts again here',
 
-    noWorkspaceTitle: 'Select a workspace',
-    noWorkspaceBody:
-      'Every conversation belongs to one workspace. The agent works on that workspace\u2019s own copy of the project, and what it changes lands on that workspace\u2019s branch.',
     emptyTitle: 'Start the conversation',
     emptyBody:
       'The first message starts an agent session in this worktree. The branch already exists.',
@@ -181,6 +179,9 @@ export const en = {
 
     model: 'Model',
     modelAuto: 'Agent decides',
+    /* Marks a model nobody picked here — the agent's own choice, or one a
+       `/model` command set for this session. */
+    modelAutoTag: 'auto',
 
     effort: 'Effort',
     effortAuto: 'Agent decides',
@@ -208,6 +209,14 @@ export const en = {
     planExecute: 'Execute',
     planFeedback: 'Anything to work out first?',
     planFeedbackPlaceholder: 'Write here and the agent will revise the plan',
+    questionTitle: 'The agent is asking',
+    questionOther: 'Something else',
+    questionOtherPlaceholder: 'Write your own answer',
+    questionSend: 'Answer',
+    questionSkip: 'Skip',
+    questionAnswered: 'Answered.',
+    questionUnanswered: 'Left unanswered.',
+
     permissionTitle: 'The agent wants to use {{tool}}',
     permissionAnswered: 'Already answered.',
     allow: 'Allow',
@@ -241,6 +250,15 @@ export const en = {
       'Add one from this machine, or clone it from GitHub. Workspaces are created inside it — each with its own branch, directory and agent session.',
     noSelectionTitle: 'Select a project',
     noSelectionBody: 'Pick one from the list on the left, or add another repository.',
+    /* The workspace half of the same pane. A project is chosen and the centre
+       still has nothing to show, which is two different situations: one where
+       there is nothing to pick, and one where nothing has been picked. */
+    firstWorkspaceTitle: 'Create the first workspace',
+    firstWorkspaceBody:
+      'A workspace is a copy of this project on a branch of its own, with its own folder and its own agent session. Nothing you do in one touches another.',
+    noWorkspaceTitle: 'Select a workspace',
+    noWorkspaceBody:
+      'Every conversation belongs to one workspace. The agent works on that workspace’s own copy of the project, and what it changes lands on that workspace’s branch.',
     addFromDisk: 'Add from disk…',
     addFromGitHub: 'Add from GitHub…',
     checkingGitHub: 'Checking GitHub…'

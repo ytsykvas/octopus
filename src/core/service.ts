@@ -23,10 +23,12 @@ import {
   type SubscriptionUsage
 } from './agent.js'
 import {
+  type AgentCommand,
   type AgentModel,
   type Chat,
   type Effort,
   EXIT_PLAN_MODE,
+  isClearCommand,
   newChat,
   sessionMode,
   type WorkingMode
@@ -39,6 +41,7 @@ import type { GitExec } from './git.js'
 import { gitIn } from './git.js'
 import { type InstructionKind, readInstruction, writeInstruction } from './instructions.js'
 import { configFile, rootDir, stateFile, stateTempFile } from './paths.js'
+import { type QuestionAnswer, readQuestions, withAnswers } from './questions.js'
 import { describeError } from './persist.js'
 import { appendEntry, type ChatEntry, readTranscript, removeTranscript } from './transcript.js'
 import { assertBranchExists, createProject, orderBaseBranches } from './projects.js'
@@ -51,6 +54,7 @@ import {
   findChat,
   findProject,
   loadState,
+  commandsUnchanged,
   modelsUnchanged,
   type Project,
   rememberModels,
@@ -240,6 +244,14 @@ export interface OctopusService {
    * is open, so there is nothing to report before that.
    */
   knownModels(): readonly AgentModel[]
+  /**
+   * Slash commands this chat's agent last reported, for the suggestion list.
+   *
+   * Per chat rather than application-wide, unlike the models above: which
+   * commands exist depends on the worktree and the branch in it, because a
+   * project's own live in `.claude/commands/`. Empty until a session has run.
+   */
+  chatCommands(chatId: string): readonly AgentCommand[]
   /** Answers a pending permission request. Unknown ids are ignored. */
   /**
    * Answers a blocked tool call.
@@ -248,6 +260,17 @@ export interface OctopusService {
    * one place the user can steer without waiting for the turn to end.
    */
   answerPermission(requestId: string, answer: PermissionAnswer, feedback?: string): Promise<void>
+  /**
+   * Answers the questions the agent asked, releasing the tool call.
+   *
+   * Separate from `answerPermission` because it is not a permission: the user
+   * is not saying whether the agent may do something, they are handing it the
+   * information it asked for. Both settle the same waiting promise, so a
+   * question withdrawn while unanswered is withdrawn the same way.
+   *
+   * Ignored when the request is not a question, or is already answered.
+   */
+  answerQuestions(requestId: string, answers: readonly QuestionAnswer[]): Promise<void>
   /**
    * The last rate limit any session reported, or null before one has.
    *
@@ -296,6 +319,21 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
    * them, so this cannot grow.
    */
   const editsInFlight = new Map<string, EditTarget & { readonly chatId: string }>()
+
+  /**
+   * Chats whose user asked, just now, for the conversation to be forgotten.
+   *
+   * The reset that comes back cannot be read as consent on its own: the SDK
+   * sends the same message when the agent leaves plan mode, and clearing the
+   * visible log on that would erase the conversation every time a plan was
+   * approved. So the intent is recorded where it is known — at the point the
+   * message was sent — and consumed by the event it belongs to.
+   *
+   * A chat id is removed the moment a reset is seen, or when its session ends.
+   * An entry that never gets its reset — a `/clear` the CLI refused — is
+   * cleaned up with the session, so this cannot grow.
+   */
+  const clearRequests = new Set<string>()
 
   // One reading for the whole service, not one per chat: the limit belongs to
   // the account, and whichever session reports it is reporting the same thing.
@@ -414,6 +452,24 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
   }
 
   /**
+   * Throws away everything written down about a conversation.
+   *
+   * In the same queue as the appends, and that is the whole point: a delete
+   * racing the writes around it could remove the file between two of them and
+   * leave the log holding the tail of a conversation whose head it discarded.
+   */
+  function discard(chat: Chat): void {
+    // No guard for a chat that has since gone, unlike `record`: appending
+    // recreates the file it was told to forget, while removing one that is
+    // already absent is exactly what was wanted anyway.
+    const remove = (): Promise<void> => removeTranscript(chat.id, dataRoot)
+
+    transcriptWrites = transcriptWrites.then(remove, remove).catch((error: unknown) => {
+      report(chat, error)
+    })
+  }
+
+  /**
    * Reports a background failure into the chat it belongs to, then drops it.
    *
    * The session is still running, and a write that could not be made is not a
@@ -438,28 +494,76 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
   }
 
   /**
+   * Fills in the half of a reset the SDK layer could not know.
+   *
+   * `mapMessage` is a pure function of one message, and one message cannot say
+   * whether the user asked for this: the same reset arrives when the agent
+   * leaves plan mode. The answer was recorded when the message went out, and
+   * this is where the two halves meet. Everything else passes through.
+   */
+  function answerReset(chat: Chat, event: AgentEvent): AgentEvent {
+    if (event.type !== 'conversation_reset') return event
+
+    // Deleted whether or not it was there: the request belongs to the reset it
+    // caused, and leaving it behind would clear the log on the next one.
+    return clearRequests.delete(chat.id) ? { ...event, cleared: true } : event
+  }
+
+  /**
+   * Writes down which commands a chat's agent offers.
+   *
+   * Skipped when the list already matches, because this runs on every session
+   * start and the answer is almost always the same one — see
+   * `commandsUnchanged`. A failure is reported into the chat rather than
+   * swallowed: it is a failed write like any other.
+   */
+  function rememberCommands(chat: Chat, commands: readonly AgentCommand[]): void {
+    const current = findChat(state, chat.id)
+    if (current && commandsUnchanged(current, commands)) return
+
+    background(
+      chat,
+      commit((next) =>
+        findChat(next, chat.id) ? updateChat(next, chat.id, { knownCommands: [...commands] }) : next
+      )
+    )
+  }
+
+  /**
    * Everything that happens to one event: recorded, applied, then announced.
    *
    * The order matters only in that the announcement is synchronous while the
    * writes are not — the UI redraws immediately and the disk catches up.
    */
-  function handleEvent(chat: Chat, event: AgentEvent): void {
-    if (!isEphemeral(event)) record(chat, { role: 'agent', at: now(), event })
+  function handleEvent(chat: Chat, incoming: AgentEvent): void {
+    const event = answerReset(chat, incoming)
+
+    // A conversation the user asked to forget keeps no record of itself. The
+    // delete goes in before the append that would otherwise write this very
+    // event into the file it is about to remove.
+    if (event.type === 'conversation_reset' && event.cleared) discard(chat)
+    else if (!isEphemeral(event)) record(chat, { role: 'agent', at: now(), event })
 
     if (event.type === 'rate_limit') rateLimit = event
 
     if (event.type === 'session_started') {
       // Persisted the moment it appears: this id is the only thing that makes
       // a conversation survive the application being restarted.
+      //
+      // Guarded on having actually changed, because this arrives far more often
+      // than it used to: every slash command produces a fresh init, and without
+      // the check each one would rewrite the state file to the same bytes.
       background(
         chat,
-        commit((current) =>
-          findChat(current, chat.id)
-            ? updateChat(current, chat.id, { sessionId: event.sessionId })
-            : current
-        )
+        commit((current) => {
+          const existing = findChat(current, chat.id)
+          if (!existing || existing.sessionId === event.sessionId) return current
+          return updateChat(current, chat.id, { sessionId: event.sessionId })
+        })
       )
     }
+
+    if (event.type === 'commands_changed') rememberCommands(chat, event.commands)
 
     if (event.type === 'permission_request') {
       background(chat, setStatus(chat.workspaceId, 'waiting_permission'))
@@ -616,6 +720,10 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
         if (edit.chatId === chat.id) editsInFlight.delete(toolUseId)
       }
 
+      // A `/clear` the session never got round to answering. Dropped with the
+      // session so it cannot clear a log the next one writes.
+      clearRequests.delete(chat.id)
+
       // Best effort, one at a time: a session that fails to close must not
       // stop the workspace from being removed.
       await session?.close().catch(() => undefined)
@@ -667,6 +775,20 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
         async (models) => {
           if (modelsUnchanged(state, models)) return
           await commit((current) => rememberModels(current, models))
+        },
+        () => undefined
+      )
+    )
+
+    // The same arrangement for the command list, and asked here rather than
+    // once at start-up because this is the only moment it can be asked: the
+    // answer comes from the running agent, and it is about this worktree —
+    // a project's own commands live in its `.claude/commands/`.
+    background(
+      chat,
+      session.commands().then(
+        (commands) => {
+          rememberCommands(chat, commands)
         },
         () => undefined
       )
@@ -907,6 +1029,33 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
        * asking, and sending into a mode we could not set is the fault being
        * fixed here.
        */
+      /*
+       * Whether this message is the one that throws the conversation away.
+       *
+       * Decided here because here is the only place it can be: the reset that
+       * comes back looks identical to the one the agent sends when it leaves
+       * plan mode, so read from the event alone it would erase the log every
+       * time a plan was approved. Aliases count — `/reset` and `/new` are the
+       * same command — which is why the chat's own list is consulted rather
+       * than the text compared to one word.
+       */
+      if (isClearCommand(text, chat.knownCommands)) clearRequests.add(chatId)
+
+      /*
+       * The model is deliberately **not** re-asserted here, unlike the mode.
+       *
+       * It was, briefly, on the belief that `/model` changed the session behind
+       * our backs with no way to find out. The second half of that is wrong:
+       * the context reading names the running model, which is what the footer
+       * now shows. So re-asserting stopped being a guard against drift and
+       * became an undo of an explicit instruction — `/model opus`, and the next
+       * message went out on whatever the picker still held.
+       *
+       * The CLI is explicit that the command is scoped to the session ("for
+       * this session only"), so the record staying put is the truth rather than
+       * a compromise: it holds what was chosen here, and the footer shows what
+       * is running.
+       */
       const running = sessions.get(chatId)
       if (running) await running.setPermissionMode(sessionMode(chat))
 
@@ -957,6 +1106,10 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
 
     knownModels() {
       return state.knownModels
+    },
+
+    chatCommands(chatId) {
+      return requireChat(chatId).knownCommands
     },
 
     pendingPermission(chatId) {
@@ -1021,6 +1174,37 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
         allow: true,
         ...(leaving && chat && { setMode: chat.workingMode })
       })
+      await setStatus(request.workspaceId, 'running')
+    },
+
+    async answerQuestions(requestId, answers) {
+      const request = pending.get(requestId)
+      // Unknown means already answered — by the other window, most likely — or
+      // the session it belonged to is gone.
+      if (!request) return
+
+      // Left in `pending` rather than answered blind: this is a permission
+      // request like any other, and something that is not a question has to
+      // stay answerable by the card that can answer it.
+      const asked = readQuestions(request.toolName, request.input)
+      if (!asked) return
+
+      const chat = findChat(state, request.chatId)
+      // Unreachable: a chat that goes takes its questions with it —
+      // `closeChatsOf` abandons them — so one still waiting has a record to
+      // belong to. The guard is here because the lookup's type says otherwise.
+      /* v8 ignore next */
+      if (!chat) return
+
+      // Recorded before the answer goes out. It is what the card is redrawn
+      // from after a restart, and the agent may well have moved on by the time
+      // a later write lands.
+      handleEvent(chat, { type: 'question_answered', requestId, answers: [...answers] })
+
+      pending.delete(requestId)
+      // The whole point: the tool reads the user's choices off its own input,
+      // so the reply that releases it carries them.
+      request.resolve({ allow: true, updatedInput: withAnswers(asked, answers) })
       await setStatus(request.workspaceId, 'running')
     },
 

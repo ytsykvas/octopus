@@ -12,6 +12,7 @@ import { useModels } from './useModels.js'
 
 const OPUS: AgentModel = {
   value: 'claude-opus-5',
+  resolvedModel: null,
   displayName: 'Opus 5',
   description: '',
   supportsEffort: true,
@@ -20,6 +21,7 @@ const OPUS: AgentModel = {
 
 const SONNET: AgentModel = {
   value: 'claude-sonnet-5',
+  resolvedModel: null,
   displayName: 'Sonnet 5',
   description: '',
   supportsEffort: true,

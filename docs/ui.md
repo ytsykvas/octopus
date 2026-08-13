@@ -37,7 +37,8 @@ rather than to any project.
 **The centre is the agent chat**, scoped to the selected workspace: its worktree
 is the agent's working directory and its branch is where the work lands. A
 different workspace is a different conversation, not a continuation. Without one
-the pane says which to pick rather than offering an input with nowhere to run.
+the pane is not the chat at all but an empty state that offers to make one — see
+"Empty panes" below.
 
 Its header says which workspace by naming the **branch**, marked with a branch
 icon, and nothing else. It used to carry the name as well: a workspace branch is
@@ -109,8 +110,9 @@ Two rules there are worth keeping:
   agent's own output, and was appended there like anything else for a while:
   that wiped the answer being typed out, and left a row that draws nothing in
   the middle of a run of tool calls — splitting one fold into two, with a break
-  the reader cannot see. `isEphemeral` in `core/events.ts` names the three
-  events that are not part of the conversation, and the log drops all three.
+  the reader cannot see. `isEphemeral` in `core/events.ts` names the
+  events that are not part of the conversation — the two streamed fragments, the
+  rate limit, and the command list — and the log drops every one.
 - **A refusal is named beside the numbers, never over them.** The first attempt
   had the account's status replace the percentages, which is what the old header
   chip did — fair there, where one number gave way to a word. Here it covered
@@ -166,6 +168,25 @@ with allow / always / decline. A request read back from the transcript shows no
 buttons: it was answered long ago, and offering them would let someone answer a
 question nobody is waiting on.
 
+**A question the agent asks gets a card of its own**, with the options it
+offered, what each one means, and a field for saying something it did not think
+of. It stays in the log rather than becoming a dialog, and for the opposite
+reason to the plan below: the answer belongs to the conversation and is still
+worth reading a month later, and a modal would cover the very context the choice
+is made from. Read back from the transcript it shows what was picked — which is
+why the answer is recorded as an event, since the call above it holds the
+questions as they stood before anyone answered.
+
+The preview an option may carry opens under whichever option is being looked at,
+following the pointer and the keyboard rather than the selection: it is there to
+compare options while choosing, and four mock-ups open at once is a wall rather
+than a comparison.
+
+**Skip** is not a refusal. It approves the tool with its arguments untouched, and
+the agent reads that as "nobody answered" — its cue to ask again rather than to
+guess. Declining outright is not offered at all: a question is not a permission,
+and the agent reads a refusal as instruction.
+
 **A finished plan gets a dialog instead**, and the request that carried it draws
 nothing in the log at all — the plan is already there, from the `ExitPlanMode`
 call it arrived in, and a card would be the same text a second time under a
@@ -198,6 +219,19 @@ settings — so that is what the pickers show until it exists, handed down from
 `App`, which is where the config is read. Showing the schema's own defaults
 instead made the control lie about exactly one message: the first, which is the
 one the user has not sent yet and is looking straight at.
+
+**The model picker names what is running, which is not always what was chosen.**
+The two are different facts and the footer needs both: the menu ticks the choice
+— `Agent decides`, when there has been none — while the button names the model
+the session reports it is on, tagged `auto` when nobody picked it here. Without
+the tag the button would claim a decision nobody made; without the name it would
+answer "what is it running?" with "nobody said".
+
+A `/model` command lands in exactly that gap. The CLI scopes it to the session
+("for this session only"), so it moves what is running without moving what this
+chat chose — and the record staying put is the truth rather than a compromise.
+The name reaches the footer with the context reading, which is already refreshed
+on every `result`, so the picker moves as soon as the command's turn ends.
 
 **The footer's permission control is two things, not one**, and they are two
 stored fields. `plan` is not a third degree of permission but a state the
@@ -334,6 +368,19 @@ Those buttons go in `actions`, not in the body. The body renders inside a `<p>`,
 so a button passed as `children` becomes a block element inside a paragraph, and
 the browser silently rearranges it into markup nobody wrote. The slot is a
 sibling of that paragraph for exactly this reason.
+
+**The centre has three empty states, not one**, and they are told apart by what
+is missing: no projects at all, a project not chosen, and a project chosen with
+no workspace showing. The last splits again — a project whose workspaces exist
+but none is selected, and one that has none yet. That second case used to wear
+the first one's face, telling the reader to select from a list with nothing in
+it, and offering no way out: the button that makes a workspace lives in the
+sidebar's project header, which is not where someone who has just added a
+repository is looking.
+
+Deciding this in `App` rather than in the chat is the point. The way out of "no
+workspace" is to create one, and the chat has no business knowing how — it takes
+a workspace that exists and talks to it.
 
 Prefer offering the action to describing it. The centre pane spent a while
 telling a first-time user to add a repository in the left panel while having

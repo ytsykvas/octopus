@@ -15,9 +15,11 @@ function fromAgent(event: AgentEvent): ChatEntry {
 
 function renderLog(overrides: Partial<React.ComponentProps<typeof ChatLog>> = {}): {
   onAnswer: ReturnType<typeof vi.fn>
+  onAnswerQuestions: ReturnType<typeof vi.fn>
   onExecutePlan: ReturnType<typeof vi.fn>
 } {
   const onAnswer = vi.fn()
+  const onAnswerQuestions = vi.fn()
   const onExecutePlan = vi.fn()
 
   render(
@@ -27,12 +29,13 @@ function renderLog(overrides: Partial<React.ComponentProps<typeof ChatLog>> = {}
       busy={false}
       pendingRequestId={null}
       onAnswer={onAnswer}
+      onAnswerQuestions={onAnswerQuestions}
       onExecutePlan={onExecutePlan}
       {...overrides}
     />
   )
 
-  return { onAnswer, onExecutePlan }
+  return { onAnswer, onAnswerQuestions, onExecutePlan }
 }
 
 describe('what the log shows', () => {
@@ -66,6 +69,7 @@ describe('what the log shows', () => {
         busy={false}
         pendingRequestId={null}
         onAnswer={vi.fn()}
+        onAnswerQuestions={vi.fn()}
         onExecutePlan={vi.fn()}
       />
     )
@@ -94,6 +98,7 @@ describe('what the log shows', () => {
         busy
         pendingRequestId={null}
         onAnswer={vi.fn()}
+        onAnswerQuestions={vi.fn()}
         onExecutePlan={vi.fn()}
       />
     )
@@ -473,6 +478,37 @@ describe('what the log shows', () => {
     expect(screen.queryByText('sess-1')).not.toBeInTheDocument()
     expect(screen.queryByText('partial')).not.toBeInTheDocument()
   })
+
+  /*
+   * A reset the user did not ask for — the agent left plan mode, or started a
+   * fresh session of its own. The exchange above it happened and is worth
+   * reading; what changed is that the agent no longer has any of it. Without
+   * the line, a conversation continuing past this point looks like one the
+   * agent can refer back to.
+   */
+  it('marks where the agent stopped remembering', () => {
+    renderLog({
+      entries: [
+        fromAgent({ type: 'text', text: 'Renamed the module' }),
+        fromAgent({ type: 'conversation_reset', cleared: false })
+      ]
+    })
+
+    expect(screen.getByText('Renamed the module')).toBeVisible()
+    expect(
+      screen.getByText('The agent’s memory of this conversation starts again here')
+    ).toBeVisible()
+  })
+
+  // The reset the user did ask for takes the whole log with it, so there is
+  // nothing left for a line to sit in.
+  it('says nothing about a reset that emptied the log', () => {
+    renderLog({ entries: [fromAgent({ type: 'conversation_reset', cleared: true })] })
+
+    expect(
+      screen.queryByText('The agent’s memory of this conversation starts again here')
+    ).not.toBeInTheDocument()
+  })
 })
 
 describe('while an answer is arriving', () => {
@@ -723,5 +759,127 @@ describe('deciding on an ordinary tool', () => {
     await user.click(screen.getByRole('button', { name: 'Allow' }))
 
     expect(onAnswer).toHaveBeenCalledWith('req-1', 'allow')
+  })
+})
+
+/*
+ * A question is a permission request in shape only: the user is not being asked
+ * whether the agent may act, but what it should do. It gets its own card, and
+ * the call that carried it draws nothing — the card is already the question.
+ */
+describe('a question the agent asked', () => {
+  const ASKED = {
+    questions: [
+      {
+        question: 'Which library should we use?',
+        header: 'Library',
+        multiSelect: false,
+        options: [{ label: 'date-fns' }, { label: 'Luxon' }]
+      }
+    ]
+  }
+
+  const request = {
+    type: 'permission_request' as const,
+    requestId: 'r-1',
+    toolName: 'AskUserQuestion',
+    input: ASKED
+  }
+
+  it('draws the options rather than an allow-or-decline card', () => {
+    renderLog({ entries: [fromAgent(request)], pendingRequestId: 'r-1' })
+
+    expect(screen.getByText('Which library should we use?')).toBeVisible()
+    expect(screen.getByRole('radio', { name: /Luxon/ })).toBeVisible()
+    expect(screen.queryByRole('button', { name: 'Allow' })).not.toBeInTheDocument()
+  })
+
+  it('sends the answer with the request it belongs to', async () => {
+    const user = userEvent.setup()
+    const { onAnswerQuestions } = renderLog({
+      entries: [fromAgent(request)],
+      pendingRequestId: 'r-1'
+    })
+
+    await user.click(screen.getByRole('radio', { name: /date-fns/ }))
+    await user.click(screen.getByRole('button', { name: 'Answer' }))
+
+    expect(onAnswerQuestions).toHaveBeenCalledExactlyOnceWith('r-1', [
+      { question: 'Which library should we use?', selected: ['date-fns'], other: null }
+    ])
+  })
+
+  // Skipping is the ordinary approval: the tool runs with its arguments
+  // untouched, and the agent reads that as "nobody answered".
+  it('skips by approving the tool as it stands', async () => {
+    const user = userEvent.setup()
+    const { onAnswer, onAnswerQuestions } = renderLog({
+      entries: [fromAgent(request)],
+      pendingRequestId: 'r-1'
+    })
+
+    await user.click(screen.getByRole('button', { name: 'Skip' }))
+
+    expect(onAnswer).toHaveBeenCalledExactlyOnceWith('r-1', 'allow')
+    expect(onAnswerQuestions).not.toHaveBeenCalled()
+  })
+
+  // The call itself is the same question a second time, and it arrives beside
+  // the request that draws it.
+  it('draws nothing for the call that carried the question', () => {
+    renderLog({
+      entries: [
+        fromAgent({ type: 'tool_use', toolUseId: 'c-1', name: 'AskUserQuestion', input: ASKED })
+      ]
+    })
+
+    expect(screen.queryByText('AskUserQuestion')).not.toBeInTheDocument()
+  })
+
+  /*
+   * And it is not a step either. Counted as one, the fold would promise a row
+   * that nothing inside it accounts for — the same reason a plan and an edit
+   * are kept out of the count.
+   */
+  it('does not count as a step in a run of tool calls', () => {
+    renderLog({
+      entries: [
+        fromAgent({ type: 'tool_use', toolUseId: 'c-1', name: 'Grep', input: { pattern: 'x' } }),
+        fromAgent({ type: 'tool_use', toolUseId: 'c-2', name: 'AskUserQuestion', input: ASKED }),
+        fromAgent({ type: 'tool_use', toolUseId: 'c-3', name: 'Read', input: { file_path: '/a' } })
+      ]
+    })
+
+    expect(screen.getByText('2 steps')).toBeInTheDocument()
+  })
+
+  /*
+   * Read back from the transcript. The answer is a record of its own, which is
+   * the only place the choice survives: the call above holds the questions as
+   * they were before anyone answered.
+   */
+  it('shows what was chosen when the question is history', () => {
+    renderLog({
+      entries: [
+        fromAgent(request),
+        fromAgent({
+          type: 'question_answered',
+          requestId: 'r-1',
+          answers: [{ question: 'Which library should we use?', selected: ['Luxon'], other: null }]
+        })
+      ],
+      pendingRequestId: null
+    })
+
+    expect(screen.getByRole('radio', { name: /Luxon/ })).toBeChecked()
+    expect(screen.getByText('Answered.')).toBeVisible()
+  })
+
+  // The turn ended while it was still on screen. Saying so is the truth, and it
+  // is not the same as saying it was answered.
+  it('says a question was never answered when nothing was recorded', () => {
+    renderLog({ entries: [fromAgent(request)], pendingRequestId: null })
+
+    expect(screen.getByText('Left unanswered.')).toBeVisible()
   })
 })

@@ -9,6 +9,7 @@ import type { WorkspaceView } from '@core/workspaces.js'
 import { Placeholder } from '../Placeholder.js'
 import { useChat } from '../../hooks/useChat.js'
 import { useErrorMessage } from '../../hooks/useErrorMessage.js'
+import { useCommands } from '../../hooks/useCommands.js'
 import { useModels } from '../../hooks/useModels.js'
 import { useRateLimit } from '../../hooks/useRateLimit.js'
 import { useSessionUsage } from '../../hooks/useSessionUsage.js'
@@ -18,7 +19,14 @@ import { PlanDialog } from './PlanDialog.js'
 import { planTitle, readPlan } from './toolSummary.js'
 
 interface ChatProps {
-  readonly workspace: WorkspaceView | null
+  /**
+   * The workspace this conversation acts on.
+   *
+   * Not nullable: a pane with no workspace selected is a different screen, and
+   * `App` shows it instead — the way out of that state is to create one, which
+   * is not something the chat knows how to do.
+   */
+  readonly workspace: WorkspaceView
   /**
    * The project's colour, for the messages you sent.
    *
@@ -58,9 +66,10 @@ export function Chat({
 }: ChatProps): React.JSX.Element {
   const { t } = useTranslation()
   const describeFailure = useErrorMessage()
-  const chat = useChat(workspace?.id ?? null, describeFailure)
+  const chat = useChat(workspace.id, describeFailure)
   const rateLimit = useRateLimit()
   const models = useModels()
+  const commands = useCommands(chat.chat?.id ?? null)
   const usage = useSessionUsage(chat.chat?.id ?? null)
 
   const scroller = useRef<HTMLDivElement | null>(null)
@@ -89,10 +98,6 @@ export function Chat({
 
     element.scrollTop = element.scrollHeight
   }, [chat.entries, chat.streaming])
-
-  if (!workspace) {
-    return <Placeholder title={t('chat.noWorkspaceTitle')}>{t('chat.noWorkspaceBody')}</Placeholder>
-  }
 
   return (
     <div
@@ -152,6 +157,9 @@ export function Chat({
             busy={chat.busy}
             pendingRequestId={pending?.requestId ?? null}
             onAnswer={(requestId, answer) => void chat.answer(requestId, answer)}
+            onAnswerQuestions={(requestId, answers) =>
+              void chat.answerQuestions(requestId, answers)
+            }
             // Sent as an ordinary message, because that is what it is: the
             // request it belonged to was answered when the dialog closed, and
             // there is nothing left to approve. Naming the plan matters — by
@@ -193,6 +201,11 @@ export function Chat({
         model={record?.model ?? null}
         onModel={(model) => void chat.setModel(model)}
         models={models}
+        // What the session reports it is running, which the picker shows when
+        // nothing was chosen here. It rides in with the context reading, so it
+        // refreshes on the same `result` the token count does.
+        activeModel={usage.context?.model ?? null}
+        commands={commands}
         usage={usage}
         limit={rateLimit}
         onSend={(text) => void chat.send(text)}

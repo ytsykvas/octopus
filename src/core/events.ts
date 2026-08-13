@@ -15,6 +15,9 @@
 
 import { z } from 'zod'
 
+import { AgentCommandSchema } from './chats.js'
+import { QuestionAnswerSchema } from './questions.js'
+
 /**
  * Arguments a tool was called with.
  *
@@ -135,6 +138,49 @@ export const AgentEventSchema = z.discriminatedUnion('type', [
     resetsAt: z.iso.datetime().nullable()
   }),
 
+  /**
+   * What the user chose when the agent asked them something.
+   *
+   * Kept, and structured rather than the string the tool receives, because this
+   * is what a card read back from the transcript is drawn from. Neither of the
+   * other two records can do it: the `tool_use` holds the questions as they
+   * were *before* anyone answered, and the tool's result is a sentence of
+   * English prose. Without this, a conversation reopened a month later could
+   * only say that the question had been answered, not what with.
+   *
+   * It also tells a second window to take its copy of the card down.
+   */
+  z.object({
+    type: z.literal('question_answered'),
+    requestId: z.string(),
+    answers: z.array(QuestionAnswerSchema)
+  }),
+
+  /**
+   * The agent's memory of this conversation was replaced with an empty one.
+   *
+   * Carries no session id, deliberately. The SDK's `new_conversation_id` looks
+   * like the thing to resume from and is not: a session started with it fails
+   * with "No conversation found with session ID", while the `init` that follows
+   * a moment later brings the id that does work — and `session_started` already
+   * records that one. Measured against a live session rather than assumed.
+   *
+   * `cleared` is whether the user asked for this. The SDK emits the same reset
+   * for leaving plan mode and for fresh-session flows, so the event alone
+   * cannot be read as "the user wanted the log gone" — that is decided where
+   * the message was sent, and travels here.
+   */
+  z.object({ type: z.literal('conversation_reset'), cleared: z.boolean() }),
+
+  /**
+   * The list of slash commands changed mid-session.
+   *
+   * Ephemeral for the same reason as a rate limit: it describes what the agent
+   * can do now, not something that happened in the conversation. Reading "the
+   * command list changed" back a week later says nothing.
+   */
+  z.object({ type: z.literal('commands_changed'), commands: z.array(AgentCommandSchema) }),
+
   z.object({ type: z.literal('error'), message: z.string() })
 ])
 
@@ -150,10 +196,14 @@ export type AgentEvent = Readonly<z.infer<typeof AgentEventSchema>>
  * A rate limit is ephemeral for a different reason: it describes the account
  * at this moment, not the conversation. Reading "you were at 62%" back a week
  * later says nothing, and it would put a row in the log nobody asked for.
+ * The command list is ephemeral on the same grounds.
  */
 export function isEphemeral(event: AgentEvent): boolean {
   return (
-    event.type === 'text_delta' || event.type === 'thinking_delta' || event.type === 'rate_limit'
+    event.type === 'text_delta' ||
+    event.type === 'thinking_delta' ||
+    event.type === 'rate_limit' ||
+    event.type === 'commands_changed'
   )
 }
 

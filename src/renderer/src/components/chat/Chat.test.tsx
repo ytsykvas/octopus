@@ -37,7 +37,7 @@ function workspace(overrides: Partial<WorkspaceView> = {}): WorkspaceView {
  * a test that is not about them leaves them at the schema's own values.
  */
 async function openChat(
-  target: WorkspaceView | null = workspace(),
+  target: WorkspaceView = workspace(),
   defaults: { workingMode?: WorkingMode; effort?: Effort | null } = {}
 ): Promise<void> {
   render(
@@ -69,17 +69,6 @@ async function openLoadedChat(): Promise<void> {
 }
 
 const field = (): HTMLElement => screen.getByRole('textbox')
-
-describe('without a workspace', () => {
-  // A conversation belongs to a workspace: its worktree is the agent's working
-  // directory, so there is nowhere to run without one.
-  it('says which one to pick and asks the bridge for nothing', () => {
-    render(<Chat workspace={null} color="blue" defaultWorkingMode="default" defaultEffort={null} />)
-
-    expect(screen.getByText('Select a workspace')).toBeInTheDocument()
-    expect(octopus().chats.list).not.toHaveBeenCalled()
-  })
-})
 
 describe('a workspace nobody has written in', () => {
   it('invites the first message without creating a record', async () => {
@@ -351,6 +340,38 @@ describe('events arriving from the agent', () => {
 
     expect(await screen.findByRole('button', { name: 'Send' })).toBeInTheDocument()
     expect(screen.getByText('claude exited with code 1')).toBeInTheDocument()
+  })
+
+  /*
+   * `/clear` asks the agent to forget the conversation, and the core has by
+   * then deleted the transcript. Leaving the log on screen would show a history
+   * that exists nowhere and that nothing can continue.
+   */
+  it('empties the log when the user cleared the conversation', async () => {
+    givenChat([{ role: 'user', at: '2026-08-11T09:00:00.000Z', text: 'remember this' }])
+    await openLoadedChat()
+
+    expect(screen.getByText('remember this')).toBeInTheDocument()
+
+    emitAgentEvent({ type: 'conversation_reset', cleared: true })
+
+    await waitFor(() => {
+      expect(screen.queryByText('remember this')).not.toBeInTheDocument()
+    })
+  })
+
+  // A reset the user did not ask for — leaving plan mode sends one too. The
+  // record stands, with a line saying the agent no longer holds it.
+  it('keeps the log when nobody asked for it to go', async () => {
+    givenChat([{ role: 'user', at: '2026-08-11T09:00:00.000Z', text: 'remember this' }])
+    await openLoadedChat()
+
+    emitAgentEvent({ type: 'conversation_reset', cleared: false })
+
+    expect(screen.getByText('remember this')).toBeInTheDocument()
+    expect(
+      await screen.findByText('The agent’s memory of this conversation starts again here')
+    ).toBeInTheDocument()
   })
 })
 
@@ -708,6 +729,7 @@ describe('the permission mode', () => {
       value: [
         {
           value: 'claude-opus-5',
+          resolvedModel: null,
           displayName: 'Opus 5',
           description: '',
           supportsEffort: null,
@@ -734,6 +756,7 @@ describe('the permission mode', () => {
       value: [
         {
           value: 'claude-opus-5',
+          resolvedModel: null,
           displayName: 'Opus 5',
           description: '',
           supportsEffort: null,
@@ -793,5 +816,78 @@ describe('the permission mode', () => {
 
     expect(await screen.findByText(/no such chat/)).toBeInTheDocument()
     expect(picker()).toHaveTextContent('Ask first')
+  })
+})
+
+/*
+ * The whole point of the card, end to end: the agent asks, the user picks, and
+ * the answer reaches the bridge. Before this, the tool ran with nothing filled
+ * in and the agent reported that nobody had answered.
+ */
+describe('answering a question the agent asked', () => {
+  const request = {
+    type: 'permission_request' as const,
+    requestId: 'r-q',
+    toolName: 'AskUserQuestion',
+    input: {
+      questions: [
+        {
+          question: 'Which library should we use?',
+          header: 'Library',
+          multiSelect: false,
+          options: [{ label: 'date-fns' }, { label: 'Luxon' }]
+        }
+      ]
+    }
+  }
+
+  it('sends what was chosen and takes the buttons away', async () => {
+    const user = userEvent.setup()
+    givenChat()
+    await openLoadedChat()
+
+    emitAgentEvent(request)
+    await user.click(await screen.findByRole('radio', { name: /Luxon/ }))
+    await user.click(screen.getByRole('button', { name: 'Answer' }))
+
+    expect(octopus().chats.answerQuestions).toHaveBeenCalledWith('r-q', [
+      { question: 'Which library should we use?', selected: ['Luxon'], other: null }
+    ])
+    await waitFor(() => {
+      expect(screen.queryByRole('button', { name: 'Answer' })).not.toBeInTheDocument()
+    })
+  })
+
+  // A question is part of the conversation, not an interruption to it: the plan
+  // is the one thing worth a dialog.
+  it('asks in the log rather than in a dialog', async () => {
+    givenChat()
+    await openLoadedChat()
+
+    emitAgentEvent(request)
+
+    expect(await screen.findByText('Which library should we use?')).toBeVisible()
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+  })
+
+  // Answered in the other window on the same workspace. This one has to stop
+  // offering buttons for a question that is already settled.
+  it('takes the buttons away when another window answered', async () => {
+    givenChat()
+    await openLoadedChat()
+
+    emitAgentEvent(request)
+    expect(await screen.findByRole('button', { name: 'Answer' })).toBeVisible()
+
+    emitAgentEvent({
+      type: 'question_answered',
+      requestId: 'r-q',
+      answers: [{ question: 'Which library should we use?', selected: ['date-fns'], other: null }]
+    })
+
+    await waitFor(() => {
+      expect(screen.queryByRole('button', { name: 'Answer' })).not.toBeInTheDocument()
+    })
+    expect(screen.getByRole('radio', { name: /date-fns/ })).toBeChecked()
   })
 })

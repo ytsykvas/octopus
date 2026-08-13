@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { promisify } from 'node:util'
 
-import type { ModelInfo, Query, SDKMessage } from '@anthropic-ai/claude-agent-sdk'
+import type { ModelInfo, Query, SDKMessage, SlashCommand } from '@anthropic-ai/claude-agent-sdk'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import type { CommandExec } from './accounts.js'
@@ -786,7 +786,10 @@ describe('the agent chat', () => {
     rawMaxTokens: 1_000_000,
     percentage: 2,
     autoCompactThreshold: 967_000,
-    isAutoCompactEnabled: true
+    isAutoCompactEnabled: true,
+    // The reading that also names the running model, which is what the footer
+    // shows when nobody picked one here.
+    model: 'claude-opus-5[1m]'
   }
 
   const USAGE_RESPONSE = {
@@ -809,6 +812,8 @@ describe('the agent chat', () => {
    * message, and the answer has to be in place before that.
    */
   let offered: () => Promise<ModelInfo[]>
+  /** The same, for the slash commands this worktree offers. */
+  let offeredCommands: () => Promise<SlashCommand[]>
   /** What the session answers about its context window, and the account's. */
   let contextAnswer: () => Promise<unknown>
   let usageAnswer: () => Promise<unknown>
@@ -897,6 +902,7 @@ describe('the agent chat', () => {
           return Promise.resolve()
         },
         supportedModels: () => offered(),
+        supportedCommands: () => offeredCommands(),
         getContextUsage: () => contextAnswer(),
         usage_EXPERIMENTAL_MAY_CHANGE_DO_NOT_RELY_ON_THIS_API_YET: () => usageAnswer(),
         setPermissionMode: (mode: string) => {
@@ -996,6 +1002,7 @@ describe('the agent chat', () => {
   beforeEach(() => {
     agents = []
     offered = () => Promise.resolve([])
+    offeredCommands = () => Promise.resolve([])
     contextAnswer = () => Promise.resolve(CONTEXT_RESPONSE)
     usageAnswer = () => Promise.resolve(USAGE_RESPONSE)
   })
@@ -1018,7 +1025,12 @@ describe('the agent chat', () => {
       await service.sendToChat(chat.id, 'work')
 
       await expect(service.sessionUsage(chat.id)).resolves.toEqual({
-        context: { percentage: 2, usedTokens: 23_921, maxTokens: 1_000_000 },
+        context: {
+          percentage: 2,
+          usedTokens: 23_921,
+          maxTokens: 1_000_000,
+          model: 'claude-opus-5[1m]'
+        },
         subscription: {
           fiveHour: { utilization: 18, resetsAt: '2026-08-12T19:50:00.149775+00:00' },
           sevenDay: { utilization: 84, resetsAt: '2026-08-12T22:00:00.149796+00:00' }
@@ -1173,6 +1185,292 @@ describe('the agent chat', () => {
 
       await expect(service.sendToChat(chat.id, 'work')).resolves.toBeUndefined()
       expect(service.knownModels()).toEqual([])
+    })
+  })
+
+  /*
+   * Kept per chat rather than per account, unlike the models above: a project's
+   * own commands live in its `.claude/commands/`, so the answer is about this
+   * worktree and this branch.
+   */
+  describe('the commands a chat may use', () => {
+    const DEPLOY: SlashCommand = {
+      name: 'deploy',
+      description: 'Ship it',
+      argumentHint: '<env>'
+    }
+
+    it('knows none until a session has run', async () => {
+      const { service, workspaceId } = await withWorkspace()
+      const chat = await service.openChat(workspaceId)
+
+      expect(service.chatCommands(chat.id)).toEqual([])
+    })
+
+    it('remembers what the agent reported when a session started', async () => {
+      const { service, workspaceId } = await withWorkspace()
+      offeredCommands = () => Promise.resolve([DEPLOY])
+
+      const chat = await service.openChat(workspaceId)
+      await service.sendToChat(chat.id, 'work')
+
+      await vi.waitFor(() => {
+        expect(service.chatCommands(chat.id)).toHaveLength(1)
+      })
+      expect(service.chatCommands(chat.id)[0]).toEqual({
+        name: 'deploy',
+        description: 'Ship it',
+        argumentHint: '<env>',
+        aliases: []
+      })
+    })
+
+    it('keeps the list across a restart', async () => {
+      const { service, workspaceId } = await withWorkspace()
+      offeredCommands = () => Promise.resolve([DEPLOY])
+
+      const chat = await service.openChat(workspaceId)
+      await service.sendToChat(chat.id, 'work')
+      await vi.waitFor(() => {
+        expect(service.chatCommands(chat.id)).toHaveLength(1)
+      })
+
+      const reopened = await createService({ ...paths(dir), query: fakeQuery() })
+      expect(reopened.chatCommands(chat.id)).toHaveLength(1)
+    })
+
+    // Asked on every session start, so a chat reopened a hundred times must not
+    // rewrite the state file a hundred times to say the same thing.
+    it('writes nothing when the list has not changed', async () => {
+      const { service, workspaceId } = await withWorkspace()
+      offeredCommands = () => Promise.resolve([DEPLOY])
+
+      const chat = await service.openChat(workspaceId)
+      await service.sendToChat(chat.id, 'work')
+      await vi.waitFor(() => {
+        expect(service.chatCommands(chat.id)).toHaveLength(1)
+      })
+
+      const before = await readFile(join(dir, 'state.json'), 'utf8')
+      await service.sendToChat(chat.id, 'more work')
+      await vi.waitFor(() => {
+        expect(agents).toHaveLength(1)
+      })
+
+      expect(await readFile(join(dir, 'state.json'), 'utf8')).toBe(before)
+    })
+
+    // The SDK pushes the whole list and says to replace the cached one, so a
+    // command withdrawn upstream has to leave rather than linger.
+    it('replaces the list outright when the agent announces a new one', async () => {
+      const { service, workspaceId } = await withWorkspace()
+      offeredCommands = () => Promise.resolve([DEPLOY])
+
+      const chat = await service.openChat(workspaceId)
+      await service.sendToChat(chat.id, 'work')
+      await vi.waitFor(() => {
+        expect(service.chatCommands(chat.id)).toHaveLength(1)
+      })
+
+      agent().emit({
+        type: 'system',
+        subtype: 'commands_changed',
+        commands: [{ name: 'rollback', description: '', argumentHint: '' }]
+      } as unknown as SDKMessage)
+
+      await vi.waitFor(() => {
+        expect(service.chatCommands(chat.id).map((command) => command.name)).toEqual(['rollback'])
+      })
+    })
+
+    // A session goes on emitting for a moment after its workspace has been
+    // removed. The list has nowhere to be written by then, and writing it
+    // would put a chat back into a state that no longer holds one.
+    it('writes nothing for a chat whose workspace has gone', async () => {
+      const { service, workspaceId, projectId } = await withWorkspace()
+      const chat = await service.openChat(workspaceId)
+      await service.sendToChat(chat.id, 'work')
+
+      const session = agent()
+      await service.removeWorkspaceById(workspaceId, { force: true })
+
+      session.emit({
+        type: 'system',
+        subtype: 'commands_changed',
+        commands: [{ name: 'deploy', description: '', argumentHint: '' }]
+      } as unknown as SDKMessage)
+
+      // Queues behind the write that event started, so awaiting it means that
+      // one has finished — and the assertion is about a settled state rather
+      // than a race.
+      const other = await service.createWorkspaceIn(projectId)
+
+      expect(service.listChats(workspaceId)).toEqual([])
+      expect(service.listChats(other.id)).toEqual([])
+    })
+
+    // A list that cannot be read is a lost convenience, not a lost message:
+    // failing the send over it would report the wrong problem entirely.
+    it('sends the message even when the list cannot be read', async () => {
+      const { service, workspaceId } = await withWorkspace()
+      offeredCommands = () => Promise.reject(new Error('no such control request'))
+
+      const chat = await service.openChat(workspaceId)
+
+      await expect(service.sendToChat(chat.id, 'work')).resolves.toBeUndefined()
+      expect(service.chatCommands(chat.id)).toEqual([])
+    })
+  })
+
+  /*
+   * Clearing is the one command whose consequences reach outside the agent, so
+   * it is the one with tests of its own.
+   *
+   * The reset the SDK sends back is not proof of consent: the same message
+   * arrives when the agent leaves plan mode. Everything here turns on the
+   * difference between a reset the user asked for and one that merely happened.
+   */
+  describe('a conversation cleared', () => {
+    const resetMessage = {
+      type: 'conversation_reset',
+      new_conversation_id: 'conv-2',
+      session_id: 'sess-1'
+    } as unknown as SDKMessage
+
+    /** Sends `text`, then has the agent answer with a reset. */
+    async function sendAndReset(
+      service: OctopusService,
+      chatId: string,
+      text: string
+    ): Promise<void> {
+      await service.sendToChat(chatId, text)
+      agent().emit(resetMessage)
+    }
+
+    it('throws away the transcript when the user asked for it', async () => {
+      const { service, workspaceId } = await withWorkspace()
+      const chat = await service.openChat(workspaceId)
+
+      await service.sendToChat(chat.id, 'remember this')
+      agent().emit(textMessage('noted'))
+      await vi.waitFor(async () => {
+        expect(await service.chatHistory(chat.id)).not.toHaveLength(0)
+      })
+
+      await sendAndReset(service, chat.id, '/clear')
+
+      await vi.waitFor(async () => {
+        expect(await service.chatHistory(chat.id)).toEqual([])
+      })
+    })
+
+    it('tells the window the log is to go with it', async () => {
+      const { service, workspaceId, events } = await withWorkspace()
+      const chat = await service.openChat(workspaceId)
+
+      await sendAndReset(service, chat.id, '/clear')
+
+      await vi.waitFor(() => {
+        expect(events.map((announced) => announced.event)).toContainEqual({
+          type: 'conversation_reset',
+          cleared: true
+        })
+      })
+    })
+
+    /*
+     * The bug this prevents: leaving plan mode also resets the conversation,
+     * so a reset read as consent would erase the whole log every time a plan
+     * was approved — including the plan itself.
+     */
+    it('keeps the transcript when nobody asked, and marks the boundary', async () => {
+      const { service, workspaceId, events } = await withWorkspace()
+      const chat = await service.openChat(workspaceId)
+
+      await sendAndReset(service, chat.id, 'get on with it')
+
+      await vi.waitFor(() => {
+        expect(events.map((announced) => announced.event)).toContainEqual({
+          type: 'conversation_reset',
+          cleared: false
+        })
+      })
+
+      const history = await service.chatHistory(chat.id)
+      expect(
+        history.some((entry) => entry.role === 'user' && entry.text === 'get on with it')
+      ).toBe(true)
+      expect(
+        history.some((entry) => entry.role === 'agent' && entry.event.type === 'conversation_reset')
+      ).toBe(true)
+    })
+
+    // A request belongs to the reset it caused. Left behind, it would clear the
+    // log the next time the agent reset the conversation for its own reasons.
+    it('does not let one request clear a second time', async () => {
+      const { service, workspaceId } = await withWorkspace()
+      const chat = await service.openChat(workspaceId)
+
+      await sendAndReset(service, chat.id, '/clear')
+      await vi.waitFor(async () => {
+        expect(await service.chatHistory(chat.id)).toEqual([])
+      })
+
+      await sendAndReset(service, chat.id, 'carry on')
+
+      await vi.waitFor(async () => {
+        const history = await service.chatHistory(chat.id)
+        expect(history.some((entry) => entry.role === 'user' && entry.text === 'carry on')).toBe(
+          true
+        )
+      })
+    })
+
+    // Discarding happens in the background, so a failure has nowhere to be
+    // thrown. Reported into the chat instead — the same treatment a failed
+    // append gets, and the alternative is an uncaught rejection in the main
+    // process, which Electron turns into a modal.
+    it('reports a transcript it could not throw away', async () => {
+      const { service, workspaceId, events } = await withWorkspace()
+      const chat = await service.openChat(workspaceId)
+      await service.sendToChat(chat.id, '/clear')
+
+      // A directory where the file should be: `rm` without `recursive` refuses
+      // it, which is the closest thing to a disk that will not let go.
+      const transcript = join(dir, 'data', 'chats', `${chat.id}.jsonl`)
+      await rm(transcript, { force: true })
+      await mkdir(join(transcript, 'in the way'), { recursive: true })
+
+      agent().emit(resetMessage)
+
+      await vi.waitFor(() => {
+        expect(events.map((announced) => announced.event.type)).toContain('error')
+      })
+    })
+
+    // Aliases are the agent's own: `/reset` and `/new` reach the same command,
+    // and the chat is where that list is kept.
+    it('recognises the command by an alias the agent reported', async () => {
+      const { service, workspaceId } = await withWorkspace()
+      offeredCommands = () =>
+        Promise.resolve([{ name: 'clear', description: '', argumentHint: '', aliases: ['reset'] }])
+
+      const chat = await service.openChat(workspaceId)
+      await service.sendToChat(chat.id, 'work')
+      await vi.waitFor(() => {
+        expect(service.chatCommands(chat.id)).toHaveLength(1)
+      })
+
+      agent().emit(textMessage('noted'))
+      await vi.waitFor(async () => {
+        expect(await service.chatHistory(chat.id)).not.toHaveLength(0)
+      })
+
+      await sendAndReset(service, chat.id, '/reset')
+
+      await vi.waitFor(async () => {
+        expect(await service.chatHistory(chat.id)).toEqual([])
+      })
     })
   })
 
@@ -1401,6 +1699,49 @@ describe('the agent chat', () => {
       await restarted.sendToChat(chat.id, 'and again')
 
       expect(agent().options().resume).toBe('sess-1')
+    })
+
+    /*
+     * An init now arrives after every slash command, not just at the start of
+     * a session — measured against a live one. Without the guard each command
+     * would rewrite the state file to say what it already said.
+     */
+    it('is not written again when it has not changed', async () => {
+      const { service, workspaceId } = await withWorkspace()
+      const chat = await service.openChat(workspaceId)
+      await service.sendToChat(chat.id, 'hello')
+
+      agent().emit(initMessage)
+      await vi.waitFor(() => {
+        expect(service.listChats(workspaceId)[0]?.sessionId).toBe('sess-1')
+      })
+
+      const before = await readFile(join(dir, 'state.json'), 'utf8')
+      agent().emit(initMessage)
+      agent().emit(textMessage('and something after it, so the queue has drained'))
+      await vi.waitFor(async () => {
+        expect(await service.chatHistory(chat.id)).not.toHaveLength(0)
+      })
+
+      expect(await readFile(join(dir, 'state.json'), 'utf8')).toBe(before)
+    })
+
+    // A `/clear` opens a new conversation, and the id that resumes it comes in
+    // the init that follows — not from the reset, whose own id the CLI refuses.
+    it('follows the agent onto a new conversation', async () => {
+      const { service, workspaceId } = await withWorkspace()
+      const chat = await service.openChat(workspaceId)
+      await service.sendToChat(chat.id, '/clear')
+
+      agent().emit({
+        type: 'system',
+        subtype: 'init',
+        session_id: 'sess-after-clear'
+      } as unknown as SDKMessage)
+
+      await vi.waitFor(() => {
+        expect(service.listChats(workspaceId)[0]?.sessionId).toBe('sess-after-clear')
+      })
     })
   })
 
@@ -2360,6 +2701,41 @@ describe('the agent chat', () => {
       expect(agent().modes()).toEqual(['acceptEdits'])
     })
 
+    /*
+     * The model deliberately gets no such treatment, and this is the test that
+     * says so.
+     *
+     * It briefly did, on the belief that `/model` moved the session with no way
+     * to find out. That belief was wrong — the context reading names the running
+     * model — so re-asserting stopped being a guard against drift and became an
+     * undo of an explicit instruction: `/model opus`, and the next message went
+     * out on whatever the picker still held.
+     */
+    it('leaves a running session on the model a command chose', async () => {
+      const { service, workspaceId } = await withWorkspace()
+      const chat = await service.openChat(workspaceId)
+
+      await service.sendToChat(chat.id, 'first')
+      await service.sendToChat(chat.id, '/model opus')
+      await service.sendToChat(chat.id, 'third')
+
+      // Not once: the record's model reaches the session when it starts, and
+      // when the user changes it here — never on the way past.
+      expect(agent().requestedModels()).toEqual([])
+    })
+
+    it('still tells a running session when the picker moves', async () => {
+      const { service, workspaceId } = await withWorkspace()
+      const chat = await service.openChat(workspaceId)
+      await service.sendToChat(chat.id, 'first')
+
+      await service.setChatModel(chat.id, 'claude-sonnet-5')
+      await service.sendToChat(chat.id, 'second')
+
+      // Once, from the change itself — not again with the message after it.
+      expect(agent().requestedModels()).toEqual(['claude-sonnet-5'])
+    })
+
     // Planning is the user's standing answer, not the CLI's. A toggle that
     // switched itself off would be worse than a turn planned once too often.
     it('puts it back into planning too, whatever the CLI decided', async () => {
@@ -2527,6 +2903,137 @@ describe('the agent chat', () => {
   })
 
   /** Waits for the request the agent is blocked on and answers with its id. */
+  /*
+   * The questions the agent asks.
+   *
+   * They arrive as an ordinary permission request — `AskUserQuestion` is a tool
+   * like any other — but the answer is not allow or deny. The user's choices go
+   * back as a modified copy of the tool's own arguments, which is the only way
+   * a tool that asked something gets to hear it.
+   */
+  describe('the questions the agent asks', () => {
+    const ASKED = {
+      questions: [
+        {
+          question: 'Which library should we use?',
+          header: 'Library',
+          multiSelect: false,
+          options: [
+            { label: 'date-fns', description: '' },
+            { label: 'Luxon', description: '' }
+          ]
+        }
+      ]
+    }
+
+    /** A chat with a question open, and the promise the tool call is holding. */
+    async function withQuestion(): Promise<{
+      service: OctopusService
+      chatId: string
+      requestId: string
+      decision: Promise<unknown>
+      events: ChatEvent[]
+    }> {
+      const { service, workspaceId, events } = await withWorkspace()
+      const chat = await service.openChat(workspaceId)
+      await service.sendToChat(chat.id, 'which one?')
+
+      const decision = agent().ask('AskUserQuestion', ASKED)
+      return { service, chatId: chat.id, requestId: await waitForRequest(events), decision, events }
+    }
+
+    it('hands the tool the answers, written into its own arguments', async () => {
+      const { service, requestId, decision } = await withQuestion()
+
+      await service.answerQuestions(requestId, [
+        { question: 'Which library should we use?', selected: ['Luxon'], other: null }
+      ])
+
+      await expect(decision).resolves.toMatchObject({
+        behavior: 'allow',
+        updatedInput: { answers: { 'Which library should we use?': 'Luxon' } }
+      })
+    })
+
+    // What the card is redrawn from after a restart: the tool call holds the
+    // questions as they were before anyone answered, and the tool's own result
+    // is a sentence of prose.
+    it('writes down what was chosen', async () => {
+      const { service, chatId, requestId } = await withQuestion()
+
+      await service.answerQuestions(requestId, [
+        { question: 'Which library should we use?', selected: ['Luxon'], other: 'or Temporal' }
+      ])
+
+      await vi.waitFor(async () => {
+        const history = await service.chatHistory(chatId)
+        expect(
+          history.some(
+            (entry) => entry.role === 'agent' && entry.event.type === 'question_answered'
+          )
+        ).toBe(true)
+      })
+    })
+
+    // Already answered — by the other window, most likely — or the session it
+    // belonged to is gone.
+    it('ignores an answer to a question nobody is waiting on', async () => {
+      const { service } = await withWorkspace()
+
+      await expect(service.answerQuestions('r-nothing', [])).resolves.toBeUndefined()
+    })
+
+    /*
+     * Something that is not a question has to stay answerable by the card that
+     * can answer it. Answered blind here, an `Edit` would be approved by a
+     * window that never showed anyone the file.
+     */
+    it('leaves a request that is not a question alone', async () => {
+      const { service, workspaceId, events } = await withWorkspace()
+      const chat = await service.openChat(workspaceId)
+      await service.sendToChat(chat.id, 'edit it')
+
+      const decision = agent().ask('Edit', { file_path: '/a.rb' })
+      const requestId = await waitForRequest(events)
+
+      await service.answerQuestions(requestId, [])
+
+      expect(service.pendingPermission(chat.id)?.requestId).toBe(requestId)
+
+      // Answered properly before the test ends, so the tool call is not left
+      // holding a promise while the temporary directory is being removed.
+      await service.answerPermission(requestId, 'deny')
+      await expect(decision).resolves.toMatchObject({ behavior: 'deny' })
+    })
+
+    /*
+     * Skipping is the ordinary approval, and it has to stay that way: the tool
+     * then runs with its arguments untouched, and the agent reads that nobody
+     * answered — which is its cue to ask again rather than to guess.
+     */
+    it('leaves the arguments untouched when the question is skipped', async () => {
+      const { service, requestId, decision } = await withQuestion()
+
+      await service.answerPermission(requestId, 'allow')
+
+      await expect(decision).resolves.toMatchObject({
+        behavior: 'allow',
+        updatedInput: ASKED
+      })
+      expect(await decision).not.toHaveProperty('updatedInput.answers')
+    })
+
+    // A question nobody can answer is withdrawn like any other request: the
+    // turn it belonged to is over, and the card has nothing behind it.
+    it('withdraws an unanswered question when the turn is stopped', async () => {
+      const { service, chatId, decision } = await withQuestion()
+
+      await service.interruptChat(chatId)
+
+      await expect(decision).resolves.toMatchObject({ behavior: 'deny', message: ABANDONED })
+    })
+  })
+
   async function waitForRequest(events: ChatEvent[]): Promise<string> {
     await vi.waitFor(() => {
       expect(events.some((entry) => entry.event.type === 'permission_request')).toBe(true)

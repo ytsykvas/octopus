@@ -1,6 +1,7 @@
 import {
   Check,
   ChevronRight,
+  Eraser,
   Map,
   Pencil,
   Play,
@@ -11,6 +12,7 @@ import {
 import { useTranslation } from 'react-i18next'
 
 import { type AgentEvent, type ChangeContext, type TurnOutcome, turnOutcome } from '@core/events.js'
+import { type QuestionAnswer, readQuestions } from '@core/questions.js'
 import type { PermissionAnswer } from '@core/service.js'
 import type { ChatEntry } from '@core/transcript.js'
 
@@ -19,7 +21,8 @@ import type { Streaming } from '../../hooks/useChat.js'
 import { formatTokens } from './format.js'
 import type { Change, ChangeLine } from './changeSummary.js'
 import { Markdown } from './Markdown.js'
-import { groupToolRuns, toolCount } from './toolRuns.js'
+import { QuestionCard } from './QuestionCard.js'
+import { answersByRequest, groupToolRuns, toolCount } from './toolRuns.js'
 import { describeToolInput, readPlan } from './toolSummary.js'
 
 /**
@@ -49,6 +52,8 @@ interface ChatLogProps {
   readonly busy: boolean
   readonly pendingRequestId: string | null
   readonly onAnswer: (requestId: string, answer: PermissionAnswer) => void
+  /** Answers the agent's own questions, which is not a permission. */
+  readonly onAnswerQuestions: (requestId: string, answers: readonly QuestionAnswer[]) => void
   /** Asks for a plan already in the log to be carried out. */
   readonly onExecutePlan: (plan: string) => void
 }
@@ -66,10 +71,14 @@ export function ChatLog({
   busy,
   pendingRequestId,
   onAnswer,
+  onAnswerQuestions,
   onExecutePlan
 }: ChatLogProps): React.JSX.Element {
   const { t } = useTranslation()
   const streamingAnything = streaming.text !== '' || streaming.thinking !== ''
+  // Gathered once for the whole log: an answer is recorded as its own event, so
+  // it sits further down than the question whose card draws it.
+  const answers = answersByRequest(entries)
 
   return (
     <div className="mx-auto flex w-full max-w-6xl flex-col gap-3 px-6 py-5">
@@ -96,7 +105,9 @@ export function ChatLog({
             entry={block.entry}
             busy={busy}
             pendingRequestId={pendingRequestId}
+            answers={answers}
             onAnswer={onAnswer}
+            onAnswerQuestions={onAnswerQuestions}
             onExecutePlan={onExecutePlan}
           />
         )
@@ -117,45 +128,35 @@ export function ChatLog({
   )
 }
 
-function EntryRow({
-  entry,
-  busy,
-  pendingRequestId,
-  onAnswer,
-  onExecutePlan
-}: {
-  entry: ChatEntry
+/** What every row needs to answer whatever the agent is waiting on. */
+interface AnswerProps {
   busy: boolean
   pendingRequestId: string | null
+  /** What was chosen, by request, for questions read back from the transcript. */
+  answers: Map<string, readonly QuestionAnswer[]>
   onAnswer: (requestId: string, answer: PermissionAnswer) => void
+  onAnswerQuestions: (requestId: string, answers: readonly QuestionAnswer[]) => void
   onExecutePlan: (plan: string) => void
-}): React.JSX.Element | null {
+}
+
+function EntryRow({
+  entry,
+  ...answering
+}: { entry: ChatEntry } & AnswerProps): React.JSX.Element | null {
   if (entry.role === 'user') return <UserMessage text={entry.text} />
 
-  return (
-    <AgentRow
-      event={entry.event}
-      busy={busy}
-      pendingRequestId={pendingRequestId}
-      onAnswer={onAnswer}
-      onExecutePlan={onExecutePlan}
-    />
-  )
+  return <AgentRow event={entry.event} {...answering} />
 }
 
 function AgentRow({
   event,
   busy,
   pendingRequestId,
+  answers,
   onAnswer,
+  onAnswerQuestions,
   onExecutePlan
-}: {
-  event: AgentEvent
-  busy: boolean
-  pendingRequestId: string | null
-  onAnswer: (requestId: string, answer: PermissionAnswer) => void
-  onExecutePlan: (plan: string) => void
-}): React.JSX.Element | null {
+}: { event: AgentEvent } & AnswerProps): React.JSX.Element | null {
   switch (event.type) {
     case 'text':
       return <Prose text={event.text} />
@@ -173,6 +174,11 @@ function AgentRow({
       const plan = readPlan(event.name, event.input)
       if (plan !== null) return <Plan text={plan} busy={busy} onExecute={onExecutePlan} />
 
+      // The call that asks a question says nothing the card beside it does not
+      // say better. Drawn as a tool row it was the same question twice: once as
+      // a name with no readable arguments, and once as the thing to answer.
+      if (readQuestions(event.name, event.input) !== null) return null
+
       // A call that changed a file never arrives here: `groupToolRuns` pulls it
       // out into a block of its own, so that it can carry the context recorded
       // for it — which arrives later in the log than the call does.
@@ -182,12 +188,35 @@ function AgentRow({
     case 'tool_result':
       return event.ok ? null : <ToolFailure content={event.content} />
 
-    case 'permission_request':
+    case 'permission_request': {
       // A plan's request has nothing left to say here. The plan itself is
       // already above, drawn from the `ExitPlanMode` call that carried it, and
       // the question about it is asked in a dialog — a card would be the same
       // text a second time with buttons that duplicate the dialog's.
       if (readPlan(event.toolName, event.input) !== null) return null
+
+      // A question is a permission request in shape only: the user is not being
+      // asked whether the agent may act, but what it should do. Its own card,
+      // and its own way of answering.
+      const asked = readQuestions(event.toolName, event.input)
+      if (asked !== null) {
+        return (
+          <QuestionCard
+            questions={asked}
+            answerable={event.requestId === pendingRequestId}
+            answered={answers.get(event.requestId) ?? null}
+            onAnswer={(given) => {
+              onAnswerQuestions(event.requestId, given)
+            }}
+            // Skipping is an ordinary approval: the tool runs with its
+            // arguments untouched, and the agent reads that as "nobody
+            // answered" — its cue to ask again rather than to guess.
+            onSkip={() => {
+              onAnswer(event.requestId, 'allow')
+            }}
+          />
+        )
+      }
 
       return (
         <PermissionCard
@@ -202,6 +231,7 @@ function AgentRow({
           }}
         />
       )
+    }
 
     case 'result':
       return (
@@ -216,6 +246,11 @@ function AgentRow({
 
     case 'error':
       return <ErrorRow message={event.message} />
+
+    // Only the reset nobody asked for is drawn. The one the user asked for
+    // takes the whole log with it, so there is nothing left for it to sit in.
+    case 'conversation_reset':
+      return event.cleared ? null : <ResetRow />
 
     // Deltas never reach the log — they are drawn from the streaming buffer
     // and replaced by the completed block that follows.
@@ -608,6 +643,28 @@ function TurnFooter({
         <TriangleAlert aria-hidden className="text-danger" size={12} />
       )}
       {parts.join(' · ')}
+    </p>
+  )
+}
+
+/**
+ * The line where the agent's memory of this conversation starts again.
+ *
+ * Everything above it is still the record of what happened — and still worth
+ * reading — but the agent no longer has any of it. Without the line, a
+ * conversation that continues past this point looks like one the agent should
+ * be able to refer back to, and it cannot.
+ *
+ * Drawn in the `TurnFooter` register rather than as a warning: nothing went
+ * wrong here, and a coloured banner would claim otherwise.
+ */
+function ResetRow(): React.JSX.Element {
+  const { t } = useTranslation()
+
+  return (
+    <p className="text-ink-faint border-line flex items-center gap-2 border-t pt-2 text-[11px]">
+      <Eraser aria-hidden size={12} />
+      {t('chat.memoryReset')}
     </p>
   )
 }

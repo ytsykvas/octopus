@@ -86,9 +86,29 @@ replaced whole at the next session start, and it lives here rather than in
 `config.json` because that file is written unqueued and would race the user's
 own edits.
 
+Each entry may carry a `resolvedModel` — the full name a short one stands for,
+`sonnet` → `claude-sonnet-5`. Both names are in circulation and they arrive from
+opposite directions: the picker stores whichever the catalogue offered, while a
+running session reports itself in full. Matched by string alone the two read as
+different models, and the picker would draw a second row for one already in it.
+
 A **chat** is a conversation with one agent inside one workspace: `id`,
 `workspaceId`, `agent`, `sessionId`, `model`, `effort`, `workingMode`,
-`planMode`, `createdAt`.
+`planMode`, `knownCommands`, `createdAt`.
+
+`knownCommands` is the same kind of thing as `knownModels` above, kept in a
+different place for a reason worth stating: which models an account may use is a
+fact about the **account**, while which slash commands exist is a fact about a
+**worktree and the branch in it** — a project's own live in its
+`.claude/commands/`, and two workspaces of one project sit on two branches.
+Remembered globally, a command from one workspace would be suggested in another
+that does not have it. The cost is that a fresh chat suggests nothing until its
+first message has started a session.
+
+Custom commands only appear at all when `settingSources` includes `project`.
+The setting is described as controlling `CLAUDE.md` and settings files, and it
+turns out to gate `.claude/commands/` too — measured, not read off the types. On
+the default (`none`) the list holds only the agent's own built-in commands.
 
 The last two were one three-valued `permissionMode` until approving a plan had
 to put the conversation back into a mode, and there was none to go back to —

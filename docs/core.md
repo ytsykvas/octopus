@@ -13,16 +13,17 @@ Coverage here is 100%, enforced. That is the floor, not the goal: see
 
 Nothing but zod behind them, so a **value** can cross into the window.
 
-| Module                                   | What it decides                                          |
-| ---------------------------------------- | -------------------------------------------------------- |
-| [`branches.ts`](../src/core/branches.ts) | how a branch name is shown — `origin/` is noise          |
-| [`colors.ts`](../src/core/colors.ts)     | the project palette, and which colour a new project gets |
-| [`initials.ts`](../src/core/initials.ts) | the two characters on a project tab                      |
-| [`icons.ts`](../src/core/icons.ts)       | the icons a project may be marked with instead           |
-| [`chats.ts`](../src/core/chats.ts)       | what a chat is, and how much it may do without asking    |
-| [`events.ts`](../src/core/events.ts)     | `AgentEvent` — the only shape the UI sees of the SDK     |
-| [`names.ts`](../src/core/names.ts)       | workspace names, drawn at random from 256                |
-| [`types.ts`](../src/core/types.ts)       | shared identifiers                                       |
+| Module                                     | What it decides                                            |
+| ------------------------------------------ | ---------------------------------------------------------- |
+| [`branches.ts`](../src/core/branches.ts)   | how a branch name is shown — `origin/` is noise            |
+| [`colors.ts`](../src/core/colors.ts)       | the project palette, and which colour a new project gets   |
+| [`initials.ts`](../src/core/initials.ts)   | the two characters on a project tab                        |
+| [`icons.ts`](../src/core/icons.ts)         | the icons a project may be marked with instead             |
+| [`chats.ts`](../src/core/chats.ts)         | what a chat is, and how much it may do without asking      |
+| [`events.ts`](../src/core/events.ts)       | `AgentEvent` — the only shape the UI sees of the SDK       |
+| [`questions.ts`](../src/core/questions.ts) | the questions the agent asks, and how an answer reaches it |
+| [`names.ts`](../src/core/names.ts)         | workspace names, drawn at random from 256                  |
+| [`types.ts`](../src/core/types.ts)         | shared identifiers                                         |
 
 ### Storage
 
@@ -144,6 +145,80 @@ against a real session rather than assumed:
 
 The same session showed `utilization` absent from the event entirely, which is
 why the header is built to say nothing rather than to hold space for it.
+
+Slash commands were measured the same way, and three of the four answers were
+not what the types suggested:
+
+- a **local command answers as ordinary assistant text**. `/usage` prints its
+  table, an unknown command replies "Unknown command: …", and both arrive as
+  `assistant` messages. There is no separate event to map, and none is mapped.
+- a local command **does produce a `result`**, with `terminal_reason` unset. The
+  chat therefore stops looking busy on its own, and no special case decides that
+  a turn has ended.
+- `conversation_reset` carries two ids and **neither resumes the conversation it
+  opened**. `new_conversation_id` fails outright — "No conversation found with
+  session ID" — and the id that works arrives a moment later in an `init` of its
+  own. So the event carries no id at all, and `session_started` stays the only
+  thing that records one.
+- that `init` now arrives **after every command**, not once per session, which is
+  why the branch that stores the id first checks whether it changed.
+
+### An answer travels as the tool's own arguments
+
+`AskUserQuestion` is an ordinary tool, so the agent's questions arrive as a
+permission request and nothing else. What is not ordinary is the reply: the tool
+reads the user's choices off its own input, so the answer goes back as a
+modified copy of the arguments — `PermissionOutcome.updatedInput`. There is no
+message to send and no other way in.
+
+Three details of that were measured against the real CLI rather than read off
+the types, and each one is a way to lose a day:
+
+- **free text belongs in `answers`**, beside the chosen labels, not in the
+  separate `response` field the tool's _output_ has. The CLI's branch for
+  `response` discards the list answers entirely, so anything ticked would vanish
+  the moment something was also typed;
+- **several answers are joined with `', '`** — the separator the CLI splits them
+  back on;
+- **approving without touching the arguments is "skip"**, and the agent reads it
+  as `The user did not answer the questions`. Which is what every question did
+  before this existed.
+
+`config.ts` keeps the tool out of any standing approval for the same reason it
+keeps `ExitPlanMode` out: `askPermission` answers a standing tool before it
+emits anything, so an "always" here does not grant a permission — it deletes the
+question.
+
+### Which model is running, and where that is readable
+
+Two readings claim to answer it and only one is current — measured, and the
+difference costs a turn:
+
+- the **init message** carries a `model`, and init arrives after every slash
+  command, so it looks like the push channel. It is not: after `/model haiku`
+  the init of that same turn still names the old model. The new one appears an
+  init later, which is a turn too late for the footer.
+- **`getContextUsage()`** answers correctly the moment the turn ends. It is a
+  non-cached round trip, and it is one the pane already makes: `useSessionUsage`
+  reads it on every `result`. So the running model rides along with the context
+  gauge and needs no channel of its own.
+
+`supportedModels()` answers neither — it is a catalogue, and the runtime freezes
+it at the first `initialize`. Nor does `initializationResult()`, whose response
+has no model in it at all.
+
+This is also why `sendToChat` re-asserts the permission mode but **not** the
+model. It briefly did both, on the belief that a `/model` could not be detected;
+once it could, the re-assertion stopped guarding against drift and became an
+undo of an explicit instruction.
+
+### A reset is not consent
+
+`conversation_reset` is emitted by `/clear`, by leaving plan mode, and by
+fresh-session flows. Only the first should empty the log, so the intent is
+recorded where it is known — `sendToChat` notes that the message was a clearing
+command, aliases included — and consumed by the event it caused. Read off the
+event alone, approving a plan would erase the conversation that produced it.
 
 ### One writer at a time
 

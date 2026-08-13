@@ -63,6 +63,27 @@ describe('a setting in the composer row', () => {
   // The model list is remembered from the last session, so a chat can name a
   // model the list no longer has. Showing nothing would read as "no choice
   // made", which is a different and wrong statement.
+  /*
+   * The button and the menu are allowed to disagree, and one control needs
+   * them to: the model picker ticks "the agent decides" — which is what was
+   * chosen — while naming the model that choice actually landed on.
+   */
+  it('lets the trigger say something other than the chosen option', async () => {
+    const user = userEvent.setup()
+    renderPicker({ display: 'Sonnet · auto' })
+
+    expect(trigger()).toHaveTextContent('Sonnet · auto')
+
+    await user.click(trigger())
+    expect(screen.getByRole('menuitemradio', { name: /Low/ })).toBeChecked()
+  })
+
+  it('falls back to the chosen option when nothing overrides it', () => {
+    renderPicker()
+
+    expect(trigger()).toHaveTextContent('Low')
+  })
+
   it('shows a value it has no option for as itself', () => {
     renderPicker({ value: 'claude-retired-3' })
 

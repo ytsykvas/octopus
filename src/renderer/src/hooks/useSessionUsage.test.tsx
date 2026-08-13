@@ -12,7 +12,7 @@ import { useSessionUsage } from './useSessionUsage.js'
 const CHAT = 'chat-1'
 
 const READING: SessionUsage = {
-  context: { percentage: 48, usedTokens: 48_000, maxTokens: 200_000 },
+  context: { percentage: 48, usedTokens: 48_000, maxTokens: 200_000, model: 'claude-opus-5' },
   subscription: { fiveHour: { utilization: 31, resetsAt: null }, sevenDay: null }
 }
 

@@ -17,20 +17,31 @@ import {
 } from './chats.js'
 import { configFile } from './paths.js'
 import { readJsonFile, writeJsonFile } from './persist.js'
+import { ASK_USER_QUESTION } from './questions.js'
 
 /**
  * Tools no standing approval may ever cover.
  *
- * `ExitPlanMode` is how the agent hands a finished plan back, so a standing
- * "always" on it accepts every future plan unread — planning undone by one
- * click, and silently: `askPermission` answers a tool on this list before it
- * emits anything at all. No dialog, no record that planning ended, a toggle
- * still lit over an agent that has started editing.
+ * Both are tools whose whole purpose is to put something in front of the user,
+ * and `askPermission` answers a tool on this list **before it emits anything at
+ * all** — so a standing "always" here does not grant a permission, it deletes
+ * the thing the tool exists to show.
  *
- * It got into one of these lists before there was anything to stop it, which is
- * why this strips rather than merely refuses.
+ * `ExitPlanMode` is how the agent hands a finished plan back, so a standing
+ * "always" accepts every future plan unread: no dialog, no record that planning
+ * ended, a toggle still lit over an agent that has started editing.
+ *
+ * `AskUserQuestion` is how the agent asks the user to choose. Approved
+ * standing, the question is answered before it is drawn — the tool then runs
+ * with no answers in it, and the agent, reading that nobody replied, says so
+ * and stops. Which is exactly what it did: this name reached a real config
+ * through the card's own "always allow" button, and the conversation dead-ended
+ * on a question the user never saw.
+ *
+ * Both got into one of these lists before there was anything to stop it, which
+ * is why this strips rather than merely refuses.
  */
-const NEVER_STANDING: readonly string[] = [EXIT_PLAN_MODE]
+const NEVER_STANDING: readonly string[] = [EXIT_PLAN_MODE, ASK_USER_QUESTION]
 
 /**
  * Which setting sources the agent is allowed to load.

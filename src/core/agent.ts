@@ -19,10 +19,11 @@ import type {
   SDKMessage,
   SDKPartialAssistantMessage,
   SDKUserMessage,
-  SettingSource
+  SettingSource,
+  SlashCommand
 } from '@anthropic-ai/claude-agent-sdk'
 
-import type { AgentModel, Effort, PermissionMode } from './chats.js'
+import type { AgentCommand, AgentModel, Effort, PermissionMode } from './chats.js'
 import type { AgentEvent } from './events.js'
 import { describeError } from './persist.js'
 
@@ -84,8 +85,33 @@ export interface PermissionAsk {
  *   session is told, on the same reply that releases the tool call.
  */
 export type PermissionOutcome =
-  | { readonly allow: true; readonly setMode?: PermissionMode }
+  | {
+      readonly allow: true
+      readonly setMode?: PermissionMode
+      /**
+       * The tool's own arguments, changed by whoever answered.
+       *
+       * How an answer reaches a tool that asked for one. `AskUserQuestion`
+       * reads the user's choices off its own input, so the reply that releases
+       * it carries a modified copy — there is no message to send back and no
+       * other way in.
+       */
+      readonly updatedInput?: unknown
+    }
   | { readonly allow: false; readonly message: string }
+
+/**
+ * An answer's arguments, if they are the shape the SDK takes.
+ *
+ * `PermissionOutcome` types them as `unknown` because what a tool wants back is
+ * the tool's business, while the SDK insists on a plain object. Anything else —
+ * which is a bug in whoever answered, not something a session can fix — falls
+ * back to the arguments the agent asked with.
+ */
+function asToolInput(input: unknown): Record<string, unknown> | null {
+  if (typeof input !== 'object' || input === null || Array.isArray(input)) return null
+  return { ...input }
+}
 
 export interface SessionHooks {
   readonly query: QueryFn
@@ -104,6 +130,8 @@ export interface AgentSession {
   setModel: (model: string | null) => Promise<void>
   /** What this account may use, as the agent reported when the session began. */
   models: () => Promise<AgentModel[]>
+  /** The slash commands this session offers, agent's own and the project's. */
+  commands: () => Promise<AgentCommand[]>
   /** How full this conversation's context window is, or null if it cannot say. */
   contextUsage: () => Promise<ContextUsage | null>
   /** How much of the subscription's windows is gone, or null if it cannot say. */
@@ -112,12 +140,22 @@ export interface AgentSession {
   close: () => Promise<void>
 }
 
-/** How full a conversation's context window is. */
+/** How full a conversation's context window is, and what is filling it. */
 export interface ContextUsage {
   /** Whole percent, as the agent itself rounds it. */
   readonly percentage: number
   readonly usedTokens: number
   readonly maxTokens: number
+  /**
+   * The model the session is actually running, in full — `claude-haiku-4-5…`.
+   *
+   * The only reading of it that is both current and immediate, and it rides
+   * along here because this is the one call that already asks. Measured: after
+   * `/model haiku` the init of that same turn still names the old model — the
+   * new one appears an init later — while this answers correctly the moment the
+   * turn ends. Null on a CLI old enough not to say.
+   */
+  readonly model: string | null
 }
 
 /** One subscription window. */
@@ -157,7 +195,7 @@ type UsageCapable = Partial<
  *
  * Measured against a live session rather than assumed: the response is far
  * wider than the type declares — a hundred grid squares for the CLI's own bar
- * chart, a category breakdown, memory files, MCP tools. Three fields are taken
+ * chart, a category breakdown, memory files, MCP tools. Four fields are taken
  * and the rest deliberately stops here.
  */
 export async function readContextUsage(conversation: Query): Promise<ContextUsage | null> {
@@ -169,7 +207,10 @@ export async function readContextUsage(conversation: Query): Promise<ContextUsag
     return {
       percentage: usage.percentage,
       usedTokens: usage.totalTokens,
-      maxTokens: usage.maxTokens
+      maxTokens: usage.maxTokens,
+      // Defended rather than taken: this arrived later than the rest of the
+      // response, so a CLI a few versions back answers without it.
+      model: typeof usage.model === 'string' && usage.model !== '' ? usage.model : null
     }
   } catch {
     return null
@@ -234,10 +275,36 @@ export async function readSubscriptionUsage(
 export function toAgentModels(models: readonly ModelInfo[]): AgentModel[] {
   return models.map((model) => ({
     value: model.value,
+    // Kept, unlike the rest of what the SDK reports about a model: a session
+    // names itself in full while the catalogue may offer a short name, and
+    // without this the two read as different models.
+    resolvedModel: model.resolvedModel ?? null,
     displayName: model.displayName,
     description: model.description,
     supportedEffortLevels: model.supportedEffortLevels ? [...model.supportedEffortLevels] : null,
     supportsEffort: model.supportsEffort ?? null
+  }))
+}
+
+/**
+ * The SDK's command descriptions, narrowed to what a suggestion list needs.
+ *
+ * Pure, so it is testable against literals — the same job as `toAgentModels`:
+ * an SDK shape stops here.
+ *
+ * `aliases` becomes a list rather than staying absent, because the schema
+ * stores it and a suggestion list searches it: `/reset` and `/new` both reach
+ * `/clear`, and a missing array would have every caller guard for it. The two
+ * required strings are taken at their word, exactly as `toAgentModels` does —
+ * and the stored schema defaults them anyway, so a CLI that omits one loads
+ * back as empty rather than as a record that will not parse.
+ */
+export function toAgentCommands(commands: readonly SlashCommand[]): AgentCommand[] {
+  return commands.map((command) => ({
+    name: command.name,
+    description: command.description,
+    argumentHint: command.argumentHint,
+    aliases: command.aliases ? [...command.aliases] : []
   }))
 }
 
@@ -292,7 +359,10 @@ export function startSession(options: SessionOptions, hooks: SessionHooks): Agen
 
         return {
           behavior: 'allow',
-          updatedInput: toolInput,
+          // The answer's own version of the arguments when it has one — this is
+          // the only way a tool that asked a question gets to hear it — and the
+          // untouched ones otherwise, which is what approving a tool means.
+          updatedInput: asToolInput(outcome.updatedInput) ?? toolInput,
           // The SDK's own way to change mode on an approval, and the reason it
           // is done here rather than by a control request afterwards: this
           // reply is what releases the tool call, so anything sent separately
@@ -354,6 +424,10 @@ export function startSession(options: SessionOptions, hooks: SessionHooks): Agen
       return toAgentModels(await conversation.supportedModels())
     },
 
+    async commands() {
+      return toAgentCommands(await conversation.supportedCommands())
+    },
+
     contextUsage() {
       return readContextUsage(conversation)
     },
@@ -400,11 +474,28 @@ export function startSession(options: SessionOptions, hooks: SessionHooks): Agen
 export function mapMessage(message: SDKMessage): AgentEvent[] {
   switch (message.type) {
     case 'system':
-      // The init message is where the session id first appears, and that id is
-      // the whole basis of resuming after a restart.
-      return message.subtype === 'init'
-        ? [{ type: 'session_started', sessionId: message.session_id }]
-        : []
+      switch (message.subtype) {
+        // The init message is where the session id first appears, and that id
+        // is the whole basis of resuming after a restart. It arrives more than
+        // once: every slash command produces a fresh one, so whoever records it
+        // has to tolerate being told the same id repeatedly.
+        case 'init':
+          return [{ type: 'session_started', sessionId: message.session_id }]
+
+        case 'commands_changed':
+          return [{ type: 'commands_changed', commands: toAgentCommands(message.commands) }]
+
+        // Every other system subtype, of which there are dozens and counting.
+        default:
+          return []
+      }
+
+    // The conversation was replaced by an empty one. Whether the user asked for
+    // that is not knowable here — the SDK sends the same message for leaving
+    // plan mode — so it maps to the "nobody asked" form and the service, which
+    // knows what was sent, decides.
+    case 'conversation_reset':
+      return [{ type: 'conversation_reset', cleared: false }]
 
     case 'assistant':
       return fromAssistant(message)

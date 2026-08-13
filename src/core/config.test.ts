@@ -190,11 +190,45 @@ describe('standing approvals', () => {
     expect(written).toMatchObject({ alwaysAllowedTools: ['Bash'] })
   })
 
-  it('leaves every other standing approval alone', async () => {
+  /*
+   * The second name on the list, and it reached a real config through the
+   * card's own "always allow" button. Approved standing, the question is
+   * answered before it is drawn: the tool runs with no answers in it, the agent
+   * reports that nobody replied, and the conversation dead-ends on a question
+   * the user never saw.
+   */
+  it('strips a standing approval on the questions the agent asks', async () => {
     await saveConfig(withTools(['Bash', 'AskUserQuestion', 'Monitor']), file)
 
     await expect(loadConfig(file)).resolves.toMatchObject({
-      alwaysAllowedTools: ['Bash', 'AskUserQuestion', 'Monitor']
+      alwaysAllowedTools: ['Bash', 'Monitor']
+    })
+  })
+
+  /*
+   * The case that actually happened, and the one the test above cannot catch:
+   * a config file already holding the name, written by a build that allowed it.
+   * Saving would clean it, but nobody saves a config to fix a question that has
+   * stopped appearing — it has to be gone the first time the file is read.
+   */
+  it('strips one already written to the file by an older build', async () => {
+    await writeFile(
+      file,
+      JSON.stringify({
+        ...withTools([]),
+        alwaysAllowedTools: ['Bash', 'AskUserQuestion', 'ExitPlanMode']
+      }),
+      'utf8'
+    )
+
+    await expect(loadConfig(file)).resolves.toMatchObject({ alwaysAllowedTools: ['Bash'] })
+  })
+
+  it('leaves every other standing approval alone', async () => {
+    await saveConfig(withTools(['Bash', 'Monitor']), file)
+
+    await expect(loadConfig(file)).resolves.toMatchObject({
+      alwaysAllowedTools: ['Bash', 'Monitor']
     })
   })
 })

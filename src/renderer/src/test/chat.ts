@@ -20,6 +20,7 @@ export function chat(overrides: Partial<Chat> = {}): Chat {
     effort: null,
     workingMode: 'default',
     planMode: false,
+    knownCommands: [],
     createdAt: '2026-08-11T09:00:00.000Z',
     ...overrides
   }

@@ -8,11 +8,24 @@
 
 import { z } from 'zod'
 
-import { type AgentModel, AgentModelSchema, type Chat, ChatSchema } from './chats.js'
+import {
+  type AgentCommand,
+  type AgentModel,
+  AgentModelSchema,
+  type Chat,
+  ChatSchema
+} from './chats.js'
 import { nextProjectColor, type ProjectColor, ProjectColorSchema } from './colors.js'
 import { ProjectIconSchema } from './icons.js'
 
-export { type AgentModel, AgentModelSchema, type Chat, ChatSchema } from './chats.js'
+export {
+  type AgentCommand,
+  AgentCommandSchema,
+  type AgentModel,
+  AgentModelSchema,
+  type Chat,
+  ChatSchema
+} from './chats.js'
 export { PROJECT_COLORS, type ProjectColor } from './colors.js'
 export { PROJECT_ICONS, type ProjectIcon } from './icons.js'
 import { stateFile, stateTempFile } from './paths.js'
@@ -382,4 +395,15 @@ export function rememberModels(state: State, models: readonly AgentModel[]): Sta
 /** Whether the remembered list already says exactly this — a write to avoid. */
 export function modelsUnchanged(state: State, models: readonly AgentModel[]): boolean {
   return JSON.stringify(state.knownModels) === JSON.stringify(models)
+}
+
+/**
+ * Whether this chat's remembered commands already say exactly this.
+ *
+ * Worth more here than for models: a session asks for the list every time it
+ * starts, and a chat is where the answer is kept, so without this every restart
+ * of every conversation would rewrite the state file to the same bytes.
+ */
+export function commandsUnchanged(chat: Chat, commands: readonly AgentCommand[]): boolean {
+  return JSON.stringify(chat.knownCommands) === JSON.stringify(commands)
 }

@@ -1,8 +1,8 @@
 import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { describe, expect, it, vi } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 
-import type { AgentModel } from '@core/chats.js'
+import type { AgentCommand, AgentModel } from '@core/chats.js'
 
 import { Composer } from './Composer.js'
 
@@ -33,6 +33,8 @@ function renderComposer(overrides: Partial<React.ComponentProps<typeof Composer>
       model={null}
       onModel={onModel}
       models={[]}
+      activeModel={null}
+      commands={[]}
       usage={{ context: null, subscription: null }}
       limit={null}
       onSend={onSend}
@@ -45,6 +47,7 @@ function renderComposer(overrides: Partial<React.ComponentProps<typeof Composer>
 
 const OPUS: AgentModel = {
   value: 'claude-opus-5',
+  resolvedModel: null,
   displayName: 'Opus 5',
   description: 'The capable one',
   supportsEffort: true,
@@ -52,6 +55,12 @@ const OPUS: AgentModel = {
 }
 
 const field = (): HTMLElement => screen.getByRole('textbox')
+
+beforeEach(() => {
+  // jsdom does no layout and has no scrollIntoView, which the effect keeping
+  // the highlighted suggestion visible calls on every move.
+  Element.prototype.scrollIntoView = vi.fn()
+})
 
 describe('sending', () => {
   /*
@@ -344,5 +353,293 @@ describe('the settings the next message runs under', () => {
     await user.click(screen.getByRole('menuitemradio', { name: 'Accept edits' }))
 
     expect(onWorkingMode).toHaveBeenCalledExactlyOnceWith('acceptEdits')
+  })
+})
+
+/*
+ * Slash commands go to the agent as ordinary messages — the CLI on the other
+ * end is what reads them — so the composer's whole job here is the suggestion
+ * list, and the keys it has to borrow from the field to run it.
+ */
+describe('suggesting a command', () => {
+  const CLEAR: AgentCommand = {
+    name: 'clear',
+    description: 'Start a new session with empty context',
+    argumentHint: '[name]',
+    aliases: ['reset']
+  }
+
+  const COMPACT: AgentCommand = {
+    name: 'compact',
+    description: 'Summarise the conversation so far',
+    argumentHint: '',
+    aliases: []
+  }
+
+  const options = (): HTMLElement[] => screen.queryAllByRole('option')
+
+  it('offers the commands as soon as a slash is typed', async () => {
+    const user = userEvent.setup()
+    renderComposer({ commands: [CLEAR, COMPACT] })
+
+    await user.type(field(), '/')
+
+    expect(options()).toHaveLength(2)
+    expect(screen.getByText('/clear')).toBeVisible()
+    expect(screen.getByText('Start a new session with empty context')).toBeVisible()
+    expect(screen.getByText('[name]')).toBeVisible()
+  })
+
+  it('narrows to what has been typed', async () => {
+    const user = userEvent.setup()
+    renderComposer({ commands: [CLEAR, COMPACT] })
+
+    await user.type(field(), '/comp')
+
+    expect(options()).toHaveLength(1)
+    expect(screen.getByText('/compact')).toBeVisible()
+  })
+
+  // A conversation is full of paths and dates. A list that opened on any slash
+  // would take Enter away from someone in the middle of a sentence.
+  it('stays out of the way of ordinary writing', async () => {
+    const user = userEvent.setup()
+    renderComposer({ commands: [CLEAR, COMPACT] })
+
+    await user.type(field(), 'look at src/core/')
+
+    expect(options()).toEqual([])
+  })
+
+  /*
+   * The heart of it: Enter completes rather than sends.
+   *
+   * Sending on the first Enter would leave no way to type an argument, and
+   * would run whichever command the highlight happened to be on — for `/clear`,
+   * that is the conversation gone in one keystroke aimed at a list.
+   */
+  it('completes on enter without sending', async () => {
+    const user = userEvent.setup()
+    const { onSend } = renderComposer({ commands: [CLEAR, COMPACT] })
+
+    await user.type(field(), '/')
+    await user.keyboard('{Enter}')
+
+    expect(onSend).not.toHaveBeenCalled()
+    expect(field()).toHaveValue('/clear ')
+    expect(options()).toEqual([])
+  })
+
+  it('sends on the second enter', async () => {
+    const user = userEvent.setup()
+    const { onSend } = renderComposer({ commands: [CLEAR, COMPACT] })
+
+    await user.type(field(), '/')
+    await user.keyboard('{Enter}')
+    await user.keyboard('{Enter}')
+
+    expect(onSend).toHaveBeenCalledExactlyOnceWith('/clear')
+    expect(field()).toHaveValue('')
+  })
+
+  it('walks the list with the arrows', async () => {
+    const user = userEvent.setup()
+    renderComposer({ commands: [CLEAR, COMPACT] })
+
+    await user.type(field(), '/')
+    await user.keyboard('{ArrowDown}')
+    await user.keyboard('{Enter}')
+
+    expect(field()).toHaveValue('/compact')
+  })
+
+  // Wrapping round is what a list of two makes obvious and a list of twenty
+  // makes necessary: from the top, up reaches the bottom.
+  it('wraps from the top of the list to the bottom', async () => {
+    const user = userEvent.setup()
+    renderComposer({ commands: [CLEAR, COMPACT] })
+
+    await user.type(field(), '/')
+    await user.keyboard('{ArrowUp}')
+    await user.keyboard('{Enter}')
+
+    expect(field()).toHaveValue('/compact')
+  })
+
+  // What a shell does, and without `preventDefault` it would take the focus
+  // out of the field instead of completing anything.
+  it('completes on tab as well', async () => {
+    const user = userEvent.setup()
+    renderComposer({ commands: [CLEAR, COMPACT] })
+
+    await user.type(field(), '/comp')
+    await user.keyboard('{Tab}')
+
+    expect(field()).toHaveValue('/compact')
+    expect(field()).toHaveFocus()
+  })
+
+  // Escape means "stop suggesting", not "undo what I typed".
+  it('closes on escape and leaves the draft alone', async () => {
+    const user = userEvent.setup()
+    renderComposer({ commands: [CLEAR, COMPACT] })
+
+    await user.type(field(), '/cle')
+    await user.keyboard('{Escape}')
+
+    expect(options()).toEqual([])
+    expect(field()).toHaveValue('/cle')
+  })
+
+  it('comes back when typing continues', async () => {
+    const user = userEvent.setup()
+    renderComposer({ commands: [CLEAR, COMPACT] })
+
+    await user.type(field(), '/cle')
+    await user.keyboard('{Escape}')
+    await user.type(field(), 'a')
+
+    expect(options()).toHaveLength(1)
+  })
+
+  /*
+   * With no suggestions there is nothing to complete, so Enter has to mean
+   * what it always means. Without this the lone slash — or a typo — would
+   * swallow the keystroke and leave the field looking broken.
+   */
+  it('sends a slash that matches nothing', async () => {
+    const user = userEvent.setup()
+    const { onSend } = renderComposer({ commands: [CLEAR] })
+
+    await user.type(field(), '/zzz')
+    await user.keyboard('{Enter}')
+
+    expect(onSend).toHaveBeenCalledExactlyOnceWith('/zzz')
+  })
+
+  it('suggests nothing at all before the chat has run a session', async () => {
+    const user = userEvent.setup()
+    const { onSend } = renderComposer({ commands: [] })
+
+    await user.type(field(), '/clear')
+    await user.keyboard('{Enter}')
+
+    // And the command still goes: the CLI knows it even when we do not.
+    expect(onSend).toHaveBeenCalledExactlyOnceWith('/clear')
+  })
+
+  it('can be picked with the mouse', async () => {
+    const user = userEvent.setup()
+    renderComposer({ commands: [CLEAR, COMPACT] })
+
+    await user.type(field(), '/')
+    await user.click(screen.getByRole('option', { name: /compact/ }))
+
+    expect(field()).toHaveValue('/compact')
+  })
+
+  // The mouse and the keyboard must not disagree about which row Enter takes.
+  it('moves the highlight to whatever the mouse is over', async () => {
+    const user = userEvent.setup()
+    renderComposer({ commands: [CLEAR, COMPACT] })
+
+    await user.type(field(), '/')
+    await user.hover(screen.getByRole('option', { name: /compact/ }))
+
+    expect(screen.getByRole('option', { name: /compact/ })).toHaveAttribute('aria-selected', 'true')
+  })
+})
+
+/*
+ * The footer names the model that is actually running, which is not always the
+ * one this chat chose. `/model` moves the session without moving the record —
+ * the CLI scopes it to the session — and a picker that kept naming the old one
+ * would be the interface lying about the thing it exists to report.
+ */
+describe('the model the session is running', () => {
+  const SONNET: AgentModel = {
+    value: 'sonnet',
+    resolvedModel: 'claude-sonnet-5',
+    displayName: 'Sonnet',
+    description: '',
+    supportsEffort: true,
+    supportedEffortLevels: ['high']
+  }
+
+  const modelButton = (): HTMLElement => screen.getByRole('button', { name: 'Model' })
+
+  it('names it, tagged, when nothing was chosen here', () => {
+    renderComposer({ models: [SONNET], model: null, activeModel: 'claude-sonnet-5' })
+
+    expect(modelButton()).toHaveTextContent('Sonnet · auto')
+  })
+
+  // The tag is what keeps the button honest: a name on its own would claim a
+  // decision nobody made.
+  it('still has the agent-decides option ticked underneath', async () => {
+    const user = userEvent.setup()
+    renderComposer({ models: [SONNET], model: null, activeModel: 'claude-sonnet-5' })
+
+    await user.click(modelButton())
+
+    expect(screen.getByRole('menuitemradio', { name: 'Agent decides' })).toBeChecked()
+  })
+
+  it('drops the tag once a model is chosen', () => {
+    renderComposer({ models: [SONNET], model: 'sonnet', activeModel: 'claude-sonnet-5' })
+
+    expect(modelButton()).toHaveTextContent('Sonnet')
+    expect(modelButton()).not.toHaveTextContent('auto')
+  })
+
+  // Before any session has answered there is nothing to name.
+  it('says the agent decides while no session has reported', () => {
+    renderComposer({ models: [SONNET], model: null, activeModel: null })
+
+    expect(modelButton()).toHaveTextContent('Agent decides')
+  })
+
+  /*
+   * The alias bridge, from the picker's side. A session reports itself in full
+   * while the catalogue offers the short name, and without matching through
+   * `resolvedModel` the footer would show a raw `claude-sonnet-5` — and the
+   * effort picker would offer levels this model does not take.
+   */
+  it('recognises the full name as the row it stands for', () => {
+    renderComposer({ models: [SONNET], model: null, activeModel: 'claude-sonnet-5' })
+
+    expect(modelButton()).toHaveTextContent('Sonnet')
+    expect(modelButton()).not.toHaveTextContent('claude-sonnet-5')
+  })
+
+  it('marks the chosen row when the record holds the full name', async () => {
+    const user = userEvent.setup()
+    renderComposer({ models: [SONNET], model: 'claude-sonnet-5' })
+
+    await user.click(modelButton())
+
+    expect(screen.getByRole('menuitemradio', { name: 'Sonnet' })).toBeChecked()
+    // And no second row invented for a model already in the list.
+    expect(screen.queryByRole('menuitemradio', { name: 'claude-sonnet-5' })).not.toBeInTheDocument()
+  })
+
+  // A model the catalogue cannot resolve at all still has to be nameable —
+  // this is the older behaviour, and it must survive the matching above.
+  it('shows a model the list has forgotten as itself', () => {
+    renderComposer({ models: [SONNET], model: 'claude-retired-3' })
+
+    expect(modelButton()).toHaveTextContent('claude-retired-3')
+  })
+
+  /*
+   * The same on the running side, and reachable for an ordinary reason: the
+   * catalogue is remembered from the last session, so a session started before
+   * it arrived — or on a model added upstream since — names something the list
+   * has no row for. The raw name is worth more than silence.
+   */
+  it('names a running model the list has no row for', () => {
+    renderComposer({ models: [], model: null, activeModel: 'claude-brand-new-1' })
+
+    expect(modelButton()).toHaveTextContent('claude-brand-new-1 · auto')
   })
 })

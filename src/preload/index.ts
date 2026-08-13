@@ -1,7 +1,7 @@
 import { contextBridge, ipcRenderer } from 'electron'
 
 import type { AccountKind, AccountsStatus } from '@core/accounts.js'
-import type { AgentModel, Chat, Effort, WorkingMode } from '@core/chats.js'
+import type { AgentCommand, AgentModel, Chat, Effort, WorkingMode } from '@core/chats.js'
 import type {
   ChatEvent,
   PermissionAnswer,
@@ -9,6 +9,7 @@ import type {
   RateLimit,
   SessionUsage
 } from '@core/service.js'
+import type { QuestionAnswer } from '@core/questions.js'
 import type { ChatEntry } from '@core/transcript.js'
 import type { TerminalExit, TerminalOutput, TerminalSpec } from '@core/terminal.js'
 import type { Config } from '@core/config.js'
@@ -152,6 +153,28 @@ const api = {
     /** Models the agent last reported; empty until a session has run once. */
     models: (): Promise<Result<readonly AgentModel[]>> =>
       ipcRenderer.invoke('chats:models') as Promise<Result<readonly AgentModel[]>>,
+
+    /**
+     * Slash commands this chat's agent offers; empty until a session has run.
+     *
+     * Per chat, unlike the models above: a project's own commands live in its
+     * `.claude/commands/`, so the answer belongs to the worktree.
+     */
+    commands: (chatId: string): Promise<Result<readonly AgentCommand[]>> =>
+      ipcRenderer.invoke('chats:commands', chatId) as Promise<Result<readonly AgentCommand[]>>,
+
+    /**
+     * Answers the questions the agent asked, releasing the tool call.
+     *
+     * Not a permission: the user is not saying whether the agent may act, they
+     * are handing it what it asked for. The answers go to the tool as a
+     * modified copy of its own arguments — the only way in it has.
+     */
+    answerQuestions: (
+      requestId: string,
+      answers: readonly QuestionAnswer[]
+    ): Promise<Result<void>> =>
+      ipcRenderer.invoke('chats:answerQuestions', requestId, answers) as Promise<Result<void>>,
 
     /**
      * What the chat's agent is blocked on, or `null` when it is not blocked.

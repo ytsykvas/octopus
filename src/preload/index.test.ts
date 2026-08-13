@@ -154,6 +154,12 @@ describe('channel names', () => {
       'chats:model'
     ],
     ['chats.models', () => method('chats', 'models')(), 'chats:models'],
+    ['chats.commands', () => method('chats', 'commands')('c' as never), 'chats:commands'],
+    [
+      'chats.answerQuestions',
+      () => method('chats', 'answerQuestions')('r-1' as never, [] as never),
+      'chats:answerQuestions'
+    ],
     [
       'chats.pendingPermission',
       () => method('chats', 'pendingPermission')('c' as never),

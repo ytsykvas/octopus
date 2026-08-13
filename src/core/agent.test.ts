@@ -1,4 +1,10 @@
-import type { ModelInfo, Query, SDKMessage, SDKUserMessage } from '@anthropic-ai/claude-agent-sdk'
+import type {
+  ModelInfo,
+  Query,
+  SDKMessage,
+  SDKUserMessage,
+  SlashCommand
+} from '@anthropic-ai/claude-agent-sdk'
 import { describe, expect, it, vi } from 'vitest'
 
 import {
@@ -12,6 +18,7 @@ import {
   readContextUsage,
   readSubscriptionUsage,
   startSession,
+  toAgentCommands,
   toAgentModels,
   toIsoTimestamp
 } from './agent.js'
@@ -48,6 +55,7 @@ function fakeAgent(
   hooks: {
     askPermission?: (name: string) => Promise<PermissionOutcome>
     models?: ModelInfo[]
+    commands?: SlashCommand[]
   } = {}
 ): { agent: FakeQuery; events: AgentEvent[] } {
   const queued: SDKMessage[] = []
@@ -61,6 +69,7 @@ function fakeAgent(
   const flagSettings: { effortLevel?: string }[] = []
   const requestedModels: (string | undefined)[] = []
   const offeredModels = hooks.models ?? []
+  const offeredCommands = hooks.commands ?? []
   let interrupted = 0
   let closed = 0
   let transportClosed = false
@@ -119,6 +128,7 @@ function fakeAgent(
       return Promise.resolve()
     },
     supportedModels: () => whileOpen(offeredModels),
+    supportedCommands: () => whileOpen(offeredCommands),
     getContextUsage: () => whileOpen(CONTEXT_RESPONSE),
     usage_EXPERIMENTAL_MAY_CHANGE_DO_NOT_RELY_ON_THIS_API_YET: () => whileOpen(USAGE_RESPONSE),
     close: () => {
@@ -214,7 +224,7 @@ describe('mapping SDK messages', () => {
     expect(mapMessage(message)).toEqual([{ type: 'session_started', sessionId: 'sess-42' }])
   })
 
-  it('ignores system messages that are not the init one', () => {
+  it('ignores system messages it has no use for', () => {
     const message = {
       type: 'system',
       subtype: 'permission_denied',
@@ -222,6 +232,52 @@ describe('mapping SDK messages', () => {
     } as unknown as SDKMessage
 
     expect(mapMessage(message)).toEqual([])
+  })
+
+  /*
+   * The mistake this guards against, written down as a test because it is
+   * invisible in the types and expensive in practice.
+   *
+   * A reset carries two ids: `new_conversation_id`, which reads like the thing
+   * to resume from, and `session_id`, which is the conversation just left
+   * behind. Neither is the answer — resuming with the first fails outright
+   * ("No conversation found with session ID"), and the id that works arrives a
+   * moment later in an `init` of its own. So this event carries no id at all,
+   * and `session_started` goes on being the only thing that records one.
+   */
+  it('takes no session id from a reset, because neither of its ids is the one', () => {
+    const message = {
+      type: 'conversation_reset',
+      new_conversation_id: 'conv-new',
+      session_id: 'sess-old'
+    } as unknown as SDKMessage
+
+    expect(mapMessage(message)).toEqual([{ type: 'conversation_reset', cleared: false }])
+  })
+
+  // Whether the user asked for it cannot be known from one message — the same
+  // reset arrives when the agent leaves plan mode — so the mapping reports the
+  // form that changes nothing, and the service, which sent the message, decides.
+  it('never claims a reset was asked for', () => {
+    const message = { type: 'conversation_reset' } as unknown as SDKMessage
+    const [event] = mapMessage(message)
+
+    expect(event).toEqual({ type: 'conversation_reset', cleared: false })
+  })
+
+  it('passes on a new command list, translated', () => {
+    const message = {
+      type: 'system',
+      subtype: 'commands_changed',
+      commands: [{ name: 'deploy', description: 'Ship it', argumentHint: '<env>' }]
+    } as unknown as SDKMessage
+
+    expect(mapMessage(message)).toEqual([
+      {
+        type: 'commands_changed',
+        commands: [{ name: 'deploy', description: 'Ship it', argumentHint: '<env>', aliases: [] }]
+      }
+    ])
   })
 
   // One assistant message carries several blocks, and each is an event: the
@@ -754,6 +810,44 @@ describe('permissions', () => {
     })
   })
 
+  /*
+   * How an answer reaches a tool that asked a question.
+   *
+   * `AskUserQuestion` reads the user's choices off its own input, so the reply
+   * releasing the tool call carries a modified copy of the arguments. There is
+   * no message to send back and no other way in — get this wrong and the tool
+   * runs with nothing in it, which reads to the agent as "nobody answered".
+   */
+  it('hands a tool the arguments the answer changed', async () => {
+    const answered = { questions: [], answers: { 'Which one?': 'the first' } }
+    const { agent } = fakeAgent(
+      {},
+      { askPermission: () => Promise.resolve({ allow: true, updatedInput: answered }) }
+    )
+
+    await expect(
+      permissionCall(agent)('AskUserQuestion', { questions: [] })
+    ).resolves.toMatchObject({
+      behavior: 'allow',
+      updatedInput: answered
+    })
+  })
+
+  // Arguments that are not an object at all would be a bug in whoever answered,
+  // and one a session cannot fix. The agent's own arguments are the safe thing
+  // to fall back to: that is what approving a tool means.
+  it('falls back to what the agent asked with when the answer is not arguments', async () => {
+    const { agent } = fakeAgent(
+      {},
+      { askPermission: () => Promise.resolve({ allow: true, updatedInput: 'yes please' }) }
+    )
+
+    await expect(permissionCall(agent)('Edit', { file_path: '/a.rb' })).resolves.toEqual({
+      behavior: 'allow',
+      updatedInput: { file_path: '/a.rb' }
+    })
+  })
+
   // The SDK's own way to change mode on an approval, and the reason approving
   // a plan can hand the session to the mode chosen for the work that follows.
   // Verified against a live session before being written down: without this
@@ -874,6 +968,56 @@ describe('how large the prompt was', () => {
   })
 })
 
+describe('the commands a session offers', () => {
+  it('asks the running session, since that is the only thing that knows', async () => {
+    const { agent } = fakeAgent(
+      {},
+      {
+        commands: [
+          {
+            name: 'clear',
+            description: 'Start a new session with empty context',
+            argumentHint: '[name]',
+            aliases: ['reset', 'new']
+          }
+        ]
+      }
+    )
+
+    await expect(agent.session.commands()).resolves.toEqual([
+      {
+        name: 'clear',
+        description: 'Start a new session with empty context',
+        argumentHint: '[name]',
+        aliases: ['reset', 'new']
+      }
+    ])
+  })
+
+  // Most commands have no other name, and the SDK simply leaves the field out.
+  // A list rather than nothing, because every caller searches it — and one that
+  // had to guard for absence would forget.
+  it('gives a command with no other name an empty list of them', () => {
+    const [command] = toAgentCommands([
+      { name: 'usage', description: 'What you have spent', argumentHint: '' }
+    ])
+
+    expect(command?.aliases).toEqual([])
+  })
+
+  // The SDK's own array, handed straight through, would be shared with whatever
+  // else holds it — and this one gets written to disk.
+  it('copies the aliases rather than sharing the array the SDK handed over', () => {
+    const aliases = ['reset']
+    const [command] = toAgentCommands([
+      { name: 'clear', description: '', argumentHint: '', aliases }
+    ])
+
+    aliases.push('new')
+    expect(command?.aliases).toEqual(['reset'])
+  })
+})
+
 describe('the models the account may use', () => {
   it('asks the running session, since that is the only thing that knows', async () => {
     const { agent } = fakeAgent(
@@ -894,6 +1038,7 @@ describe('the models the account may use', () => {
     await expect(agent.session.models()).resolves.toEqual([
       {
         value: 'claude-opus-5',
+        resolvedModel: null,
         displayName: 'Opus 5',
         description: 'The capable one',
         supportsEffort: true,
@@ -917,14 +1062,14 @@ describe('the models the account may use', () => {
   })
 
   // The SDK reports more about a model than a picker has any use for, and
-  // letting those fields through would put an SDK shape in the window.
+  // letting those fields through would put an SDK shape in the window. The one
+  // exception is the name this entry resolves to — see below.
   it('drops what the interface does not need', () => {
     const [model] = toAgentModels([
       {
         value: 'a',
         displayName: 'A',
         description: '',
-        resolvedModel: 'claude-a-1',
         supportsFastMode: true,
         supportsAutoMode: true,
         supportsAdaptiveThinking: true
@@ -933,11 +1078,33 @@ describe('the models the account may use', () => {
 
     expect(model).toEqual({
       value: 'a',
+      resolvedModel: null,
       displayName: 'A',
       description: '',
       supportsEffort: null,
       supportedEffortLevels: null
     })
+  })
+
+  /*
+   * The one SDK field about a model that is kept, because two names for one
+   * model reach us from different directions: the catalogue offers the short
+   * one, a running session reports itself in full. Without this they read as
+   * different models — a second row in the picker for a model already in it.
+   */
+  it('keeps the full name a short one stands for', () => {
+    const [model] = toAgentModels([
+      { value: 'sonnet', displayName: 'Sonnet', description: '', resolvedModel: 'claude-sonnet-5' }
+    ])
+
+    expect(model?.resolvedModel).toBe('claude-sonnet-5')
+  })
+
+  // An entry already spelled out in full has nothing to resolve to.
+  it('says nothing where the agent said nothing', () => {
+    const [model] = toAgentModels([{ value: 'a', displayName: 'A', description: '' }])
+
+    expect(model?.resolvedModel).toBeNull()
   })
 })
 
@@ -986,12 +1153,53 @@ function queryAnswering(overrides: Record<string, unknown>): Query {
 }
 
 describe('reading how full the context window is', () => {
-  it('takes the three figures worth showing and leaves the rest', async () => {
+  it('takes the figures worth showing and leaves the rest', async () => {
     const usage = await readContextUsage(
       queryAnswering({ getContextUsage: () => Promise.resolve(CONTEXT_RESPONSE) })
     )
 
-    expect(usage).toEqual({ percentage: 2, usedTokens: 23_921, maxTokens: 1_000_000 })
+    expect(usage).toEqual({
+      percentage: 2,
+      usedTokens: 23_921,
+      maxTokens: 1_000_000,
+      model: 'claude-opus-5[1m]'
+    })
+  })
+
+  /*
+   * The model rides along because this is the one call that already asks and
+   * whose answer is current: measured against a live session, the init that
+   * follows a `/model` command still names the *old* model, while this answers
+   * correctly the moment the turn ends.
+   */
+  it('names the model the session is actually running', async () => {
+    const usage = await readContextUsage(
+      queryAnswering({
+        getContextUsage: () =>
+          Promise.resolve({ ...CONTEXT_RESPONSE, model: 'claude-haiku-4-5-20251001' })
+      })
+    )
+
+    expect(usage?.model).toBe('claude-haiku-4-5-20251001')
+  })
+
+  // The field arrived later than the rest of the response, so a CLI a few
+  // versions back answers without it — and an empty string is not a model.
+  it('says nothing about the model when the CLI does not', async () => {
+    const { model, ...older } = CONTEXT_RESPONSE
+    void model
+
+    await expect(
+      readContextUsage(queryAnswering({ getContextUsage: () => Promise.resolve(older) }))
+    ).resolves.toMatchObject({ model: null })
+
+    await expect(
+      readContextUsage(
+        queryAnswering({
+          getContextUsage: () => Promise.resolve({ ...CONTEXT_RESPONSE, model: '' })
+        })
+      )
+    ).resolves.toMatchObject({ model: null })
   })
 
   // The typed package and the CLI binary are versioned separately, so a method

@@ -21,6 +21,7 @@ import {
 } from '../core/chats.js'
 import type { RemoteRepository } from '../core/github.js'
 import { InstructionBodySchema, InstructionKindSchema } from '../core/instructions.js'
+import { QuestionAnswerSchema } from '../core/questions.js'
 import { ScriptBodySchema, ScriptKindSchema } from '../core/scripts.js'
 import type { ChatEvent, OctopusService } from '../core/service.js'
 import { ProjectPatchSchema } from '../core/store.js'
@@ -241,6 +242,14 @@ export function registerIpc(
   )
 
   host.handle('chats:models', () => attempt(() => service.knownModels()))
+
+  host.handle('chats:commands', (_event, chatId: string) =>
+    attempt(() => service.chatCommands(chatId))
+  )
+
+  host.handle('chats:answerQuestions', (_event, requestId: string, answers: unknown) =>
+    attempt(() => service.answerQuestions(requestId, z.array(QuestionAnswerSchema).parse(answers)))
+  )
 
   host.handle('chats:pending', (_event, chatId: string) =>
     attempt(() => service.pendingPermission(chatId))

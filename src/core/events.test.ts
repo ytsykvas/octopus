@@ -25,11 +25,21 @@ describe('what gets stored', () => {
     ).toBe(true)
   })
 
+  // The same reasoning as the rate limit: it says what the agent can do now,
+  // not what happened. "The command list changed" is nothing to read back.
+  it('treats a new command list as live only', () => {
+    expect(isEphemeral({ type: 'commands_changed', commands: [] })).toBe(true)
+  })
+
   it('treats completed blocks and everything else as worth keeping', () => {
     const kept: AgentEvent[] = [
       { type: 'text', text: 'Looking at auth.rb' },
       { type: 'thinking', text: 'weighing it up' },
       { type: 'session_started', sessionId: 'sess-1' },
+      // Kept because a reset nobody asked for leaves the log standing, and the
+      // line explaining why the agent forgot has to survive a restart.
+      { type: 'conversation_reset', cleared: false },
+      { type: 'question_answered', requestId: 'r-1', answers: [] },
       {
         type: 'result',
         ok: true,
@@ -62,6 +72,55 @@ describe('the event schema', () => {
         terminalReason: null
       }).success
     ).toBe(true)
+  })
+
+  /*
+   * The record a card is redrawn from. Neither of the other two can do it: the
+   * `tool_use` holds the questions as they were before anyone answered, and the
+   * tool's result is a sentence of English prose.
+   */
+  it('stores and reads back what the user chose', () => {
+    const answered = {
+      type: 'question_answered',
+      requestId: 'r-1',
+      answers: [{ question: 'Which one?', selected: ['the first'], other: null }]
+    }
+
+    const parsed = AgentEventSchema.safeParse(JSON.parse(JSON.stringify(answered)))
+
+    expect(parsed.success).toBe(true)
+    expect(parsed.data).toEqual(answered)
+  })
+
+  // Written down and read back on the next launch, so the round trip is the
+  // thing worth asserting rather than the literal.
+  it('stores and reads back a reset nobody asked for', () => {
+    const parsed = AgentEventSchema.safeParse(
+      JSON.parse(JSON.stringify({ type: 'conversation_reset', cleared: false }))
+    )
+
+    expect(parsed.success).toBe(true)
+    expect(parsed.data).toEqual({ type: 'conversation_reset', cleared: false })
+  })
+
+  // `cleared` has no default on purpose: it is the difference between wiping a
+  // conversation and drawing a line under it, and a shape missing it is a bug
+  // rather than an older record.
+  it('insists a reset says whether it was asked for', () => {
+    expect(AgentEventSchema.safeParse({ type: 'conversation_reset' }).success).toBe(false)
+  })
+
+  it('carries a command list with everything a suggestion needs', () => {
+    const parsed = AgentEventSchema.safeParse({
+      type: 'commands_changed',
+      commands: [{ name: 'clear', aliases: ['reset'] }]
+    })
+
+    expect(parsed.success).toBe(true)
+    expect(parsed.data).toEqual({
+      type: 'commands_changed',
+      commands: [{ name: 'clear', description: '', argumentHint: '', aliases: ['reset'] }]
+    })
   })
 
   // The shape belongs to whichever tool the model picked, so nothing here may

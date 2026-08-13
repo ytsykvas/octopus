@@ -7,12 +7,14 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { InvalidFileError } from './persist.js'
 import {
   addChat,
+  type AgentCommand,
   AgentModelSchema,
   addProject,
   addWorkspace,
   assignPort,
   type Chat,
   chatsOfWorkspace,
+  commandsUnchanged,
   EMPTY_STATE,
   findChat,
   findProject,
@@ -479,6 +481,7 @@ describe('chats', () => {
       effort: null,
       workingMode: 'default',
       planMode: false,
+      knownCommands: [],
       createdAt: '2026-08-11T09:00:00.000Z',
       ...overrides
     }
@@ -615,5 +618,47 @@ describe('the remembered model list', () => {
     await writeFile(file, JSON.stringify({ ...withProject, chats: [] }), 'utf8')
 
     await expect(loadState(file)).resolves.toMatchObject({ knownModels: [] })
+  })
+})
+
+/*
+ * The commands are kept on the chat rather than beside the models above,
+ * because their scope is the worktree: a project's own live in its
+ * `.claude/commands/`, and two workspaces of one project sit on two branches.
+ */
+describe('the commands a chat remembers', () => {
+  const command: AgentCommand = {
+    name: 'deploy',
+    description: 'Ship it',
+    argumentHint: '<env>',
+    aliases: []
+  }
+
+  const chat: Chat = {
+    id: 'chat-1',
+    workspaceId: 'planner/kyiv',
+    agent: 'claude',
+    sessionId: null,
+    model: null,
+    effort: null,
+    workingMode: 'default',
+    planMode: false,
+    knownCommands: [],
+    createdAt: '2026-08-11T09:00:00.000Z'
+  }
+
+  // Asked on every session start, so without this every restart of every
+  // conversation would rewrite the state file to the same bytes.
+  it('recognises a list that says exactly the same thing', () => {
+    expect(commandsUnchanged({ ...chat, knownCommands: [command] }, [command])).toBe(true)
+    expect(commandsUnchanged(chat, [])).toBe(true)
+  })
+
+  it('notices a command added, removed or renamed', () => {
+    const knowing = { ...chat, knownCommands: [command] }
+
+    expect(commandsUnchanged(knowing, [])).toBe(false)
+    expect(commandsUnchanged(knowing, [command, { ...command, name: 'rollback' }])).toBe(false)
+    expect(commandsUnchanged(knowing, [{ ...command, description: 'Ship it now' }])).toBe(false)
   })
 })

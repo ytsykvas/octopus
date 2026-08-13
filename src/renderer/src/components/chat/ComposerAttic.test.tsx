@@ -6,7 +6,7 @@ import type { RateLimit, SessionUsage } from '@core/service.js'
 import { ComposerAttic } from './ComposerAttic.js'
 
 const FULL: SessionUsage = {
-  context: { percentage: 48, usedTokens: 48_000, maxTokens: 200_000 },
+  context: { percentage: 48, usedTokens: 48_000, maxTokens: 200_000, model: 'claude-opus-5' },
   subscription: {
     fiveHour: { utilization: 31, resetsAt: null },
     sevenDay: { utilization: 84, resetsAt: null }
@@ -102,7 +102,7 @@ describe('what the next message is up against', () => {
 
   it('puts the token counts and the reset time where they can be read on demand', () => {
     renderAttic({
-      context: { percentage: 48, usedTokens: 48_000, maxTokens: 200_000 },
+      context: { percentage: 48, usedTokens: 48_000, maxTokens: 200_000, model: 'claude-opus-5' },
       subscription: {
         fiveHour: { utilization: 31, resetsAt: new Date(Date.now() + 7_200_000).toISOString() },
         sevenDay: null

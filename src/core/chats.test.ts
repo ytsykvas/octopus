@@ -2,8 +2,14 @@ import { describe, expect, it } from 'vitest'
 
 import {
   AGENT_KINDS,
+  type AgentCommand,
+  AgentCommandSchema,
+  type AgentModel,
+  findAgentModel,
+  sameModel,
   ChatMessageSchema,
   ChatSchema,
+  isClearCommand,
   newChat,
   PERMISSION_MODES,
   PermissionAnswerSchema,
@@ -32,6 +38,7 @@ describe('a new chat', () => {
       effort: null,
       workingMode: 'default',
       planMode: false,
+      knownCommands: [],
       createdAt: '2026-08-11T09:00:00.000Z'
     })
   })
@@ -50,6 +57,17 @@ describe('a new chat', () => {
     const parsed = ChatSchema.safeParse(older)
     expect(parsed.success).toBe(true)
     expect(parsed.data?.effort).toBeNull()
+  })
+
+  // The same claim for the command list, and it matters more: every chat on
+  // disk right now predates the field.
+  it('reads a record written before commands were remembered', () => {
+    const { knownCommands, ...older } = newChat('planner/kyiv', options)
+    void knownCommands
+
+    const parsed = ChatSchema.safeParse(older)
+    expect(parsed.success).toBe(true)
+    expect(parsed.data?.knownCommands).toEqual([])
   })
 
   /*
@@ -148,5 +166,152 @@ describe('what the renderer may send', () => {
   it('accepts only the three answers a permission card offers', () => {
     expect(PermissionAnswerSchema.safeParse('always').success).toBe(true)
     expect(PermissionAnswerSchema.safeParse('maybe').success).toBe(false)
+  })
+})
+
+describe('a command the agent reported', () => {
+  // Half of this list comes from a project's own `.claude/commands/`, where a
+  // file is written by hand and may declare nothing but a name.
+  it('needs nothing but a name', () => {
+    const parsed = AgentCommandSchema.safeParse({ name: 'deploy' })
+
+    expect(parsed.success).toBe(true)
+    expect(parsed.data).toEqual({
+      name: 'deploy',
+      description: '',
+      argumentHint: '',
+      aliases: []
+    })
+  })
+
+  it('is not a command without one', () => {
+    expect(AgentCommandSchema.safeParse({ name: '' }).success).toBe(false)
+  })
+})
+
+/*
+ * Which message means "forget this conversation".
+ *
+ * Asked before sending rather than read off the reset that comes back, because
+ * the SDK sends the same reset when the agent leaves plan mode — and clearing
+ * the log on that would erase the conversation every time a plan was approved.
+ */
+describe('recognising the command that clears', () => {
+  const clear: AgentCommand = {
+    name: 'clear',
+    description: 'Start a new session with empty context',
+    argumentHint: '[name]',
+    aliases: ['reset', 'new']
+  }
+
+  it('knows the command by name, with or without arguments', () => {
+    expect(isClearCommand('/clear', [])).toBe(true)
+    expect(isClearCommand('  /clear  ', [])).toBe(true)
+    expect(isClearCommand('/clear yesterday', [])).toBe(true)
+  })
+
+  // `/reset` and `/new` reach the same command, and a log left standing after
+  // one of them would claim a history the agent no longer has.
+  it('knows it by the aliases the agent reported', () => {
+    expect(isClearCommand('/reset', [clear])).toBe(true)
+    expect(isClearCommand('/new', [clear])).toBe(true)
+  })
+
+  // The SDK writes aliases with a slash in its prose and without one in its
+  // examples, so both forms have to mean the same thing.
+  it('matches an alias however it was written down', () => {
+    expect(isClearCommand('/reset', [{ ...clear, aliases: ['/reset'] }])).toBe(true)
+  })
+
+  it('does not mistake an alias of some other command for it', () => {
+    expect(isClearCommand('/reset', [{ ...clear, name: 'usage' }])).toBe(false)
+  })
+
+  it('is not fooled by a name that merely starts the same way', () => {
+    expect(isClearCommand('/cleared', [clear])).toBe(false)
+    expect(isClearCommand('/clear-cache', [clear])).toBe(false)
+  })
+
+  it('leaves ordinary messages alone', () => {
+    expect(isClearCommand('clear the build directory', [clear])).toBe(false)
+    expect(isClearCommand('', [clear])).toBe(false)
+    expect(isClearCommand('   ', [clear])).toBe(false)
+  })
+})
+
+/*
+ * Two names for one model.
+ *
+ * The catalogue may offer a short name while a running session reports itself
+ * in full, so `sonnet` and `claude-sonnet-5` have to be recognised as the same
+ * thing — otherwise the picker draws a second row for a model already in it and
+ * offers effort levels the real one does not take.
+ */
+describe('matching a model by either of its names', () => {
+  const CATALOGUE: AgentModel[] = [
+    {
+      value: 'default',
+      resolvedModel: 'claude-opus-5[1m]',
+      displayName: 'Default (recommended)',
+      description: '',
+      supportedEffortLevels: null,
+      supportsEffort: null
+    },
+    {
+      value: 'opus[1m]',
+      resolvedModel: 'claude-opus-5[1m]',
+      displayName: 'Opus (1M context)',
+      description: '',
+      supportedEffortLevels: null,
+      supportsEffort: null
+    },
+    {
+      value: 'sonnet',
+      resolvedModel: 'claude-sonnet-5',
+      displayName: 'Sonnet',
+      description: '',
+      supportedEffortLevels: null,
+      supportsEffort: null
+    }
+  ]
+
+  it('finds an entry by the name it goes by', () => {
+    expect(findAgentModel(CATALOGUE, 'sonnet')?.displayName).toBe('Sonnet')
+  })
+
+  it('finds it by the full name that one stands for', () => {
+    expect(findAgentModel(CATALOGUE, 'claude-sonnet-5')?.displayName).toBe('Sonnet')
+  })
+
+  /*
+   * Taken from a live catalogue, where `default` and `opus[1m]` both resolve to
+   * `claude-opus-5[1m]`. Asking for one of them by its own name has to answer
+   * that one, or choosing "Opus (1M context)" in the picker would tick
+   * "Default" instead.
+   */
+  it('prefers the entry called that over one that merely resolves to it', () => {
+    expect(findAgentModel(CATALOGUE, 'opus[1m]')?.displayName).toBe('Opus (1M context)')
+  })
+
+  it('finds nothing for a model the catalogue does not have', () => {
+    expect(findAgentModel(CATALOGUE, 'claude-retired-3')).toBeUndefined()
+    expect(findAgentModel([], 'sonnet')).toBeUndefined()
+  })
+
+  it('reads two names of one model as the same model', () => {
+    expect(sameModel('sonnet', 'claude-sonnet-5', CATALOGUE)).toBe(true)
+    expect(sameModel('claude-sonnet-5', 'sonnet', CATALOGUE)).toBe(true)
+    expect(sameModel('sonnet', 'sonnet', CATALOGUE)).toBe(true)
+  })
+
+  it('keeps two different models apart', () => {
+    expect(sameModel('sonnet', 'opus[1m]', CATALOGUE)).toBe(false)
+  })
+
+  // With nothing to resolve through, only an exact match can be trusted —
+  // guessing would be worse than admitting the catalogue has not arrived.
+  it('will not guess when the catalogue is empty', () => {
+    expect(sameModel('sonnet', 'claude-sonnet-5', [])).toBe(false)
+    expect(sameModel('sonnet', 'sonnet', [])).toBe(true)
   })
 })

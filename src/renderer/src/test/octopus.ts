@@ -60,9 +60,11 @@ export function installOctopusStub(): Api {
       setEffort: vi.fn(() => ok(undefined)),
       setModel: vi.fn(() => ok(undefined)),
       models: vi.fn(() => ok([])),
+      commands: vi.fn(() => ok([])),
       pendingPermission: vi.fn(() => ok(null)),
       usage: vi.fn(() => ok({ context: null, subscription: null })),
       answerPermission: vi.fn(() => ok(undefined)),
+      answerQuestions: vi.fn(() => ok(undefined)),
       rateLimit: vi.fn(() => ok(null)),
       onEvent: vi.fn(subscription)
     },
@@ -114,6 +116,7 @@ function chatFixture(): Chat {
     effort: null,
     workingMode: 'default',
     planMode: false,
+    knownCommands: [],
     createdAt: '2026-08-08T00:00:00.000Z'
   }
 }

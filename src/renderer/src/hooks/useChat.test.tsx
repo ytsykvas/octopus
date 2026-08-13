@@ -168,3 +168,95 @@ describe('a reading that belongs to the account rather than the conversation', (
     expect(result.current.entries).toEqual([])
   })
 })
+
+/*
+ * Answering the agent's own question. Not a permission — the user is handing
+ * over information rather than saying whether the agent may act — so it has its
+ * own way out to the bridge.
+ */
+describe('answering a question', () => {
+  const ANSWERS = [{ question: 'Which one?', selected: ['the first'], other: null }]
+
+  it('sends the answers and takes the card out of the pending state', async () => {
+    givenChat()
+    const { result } = renderHook(() => useChat('planner/anna', describeFailure))
+    await waitFor(() => {
+      expect(result.current.chat).not.toBeNull()
+    })
+
+    emitAgentEvent({
+      type: 'permission_request',
+      requestId: 'r-q',
+      toolName: 'AskUserQuestion',
+      input: { questions: [] }
+    })
+    expect(result.current.pending).not.toBeNull()
+
+    await act(async () => {
+      await result.current.answerQuestions('r-q', ANSWERS)
+    })
+
+    expect(octopus().chats.answerQuestions).toHaveBeenCalledWith('r-q', ANSWERS)
+    expect(result.current.pending).toBeNull()
+  })
+
+  it('says so when the answer could not be delivered', async () => {
+    vi.mocked(octopus().chats.answerQuestions).mockResolvedValue({
+      ok: false,
+      error: 'the agent is gone'
+    })
+    givenChat()
+    const { result } = renderHook(() => useChat('planner/anna', describeFailure))
+    await waitFor(() => {
+      expect(result.current.chat).not.toBeNull()
+    })
+
+    await act(async () => {
+      await result.current.answerQuestions('r-q', ANSWERS)
+    })
+
+    expect(result.current.error).toBe('the agent is gone')
+  })
+
+  // Another window on the same workspace answered it. This one has to stop
+  // offering buttons for a question that is settled.
+  it('drops a card another window has answered', async () => {
+    givenChat()
+    const { result } = renderHook(() => useChat('planner/anna', describeFailure))
+    await waitFor(() => {
+      expect(result.current.chat).not.toBeNull()
+    })
+
+    emitAgentEvent({
+      type: 'permission_request',
+      requestId: 'r-q',
+      toolName: 'AskUserQuestion',
+      input: { questions: [] }
+    })
+
+    emitAgentEvent({ type: 'question_answered', requestId: 'r-q', answers: ANSWERS })
+
+    expect(result.current.pending).toBeNull()
+  })
+
+  // An answer to some other question leaves this one alone — two questions can
+  // be open at once, and the second must not take the first's card down.
+  it('leaves a card that is waiting on a different question', async () => {
+    givenChat()
+    const { result } = renderHook(() => useChat('planner/anna', describeFailure))
+    await waitFor(() => {
+      expect(result.current.chat).not.toBeNull()
+    })
+
+    emitAgentEvent({
+      type: 'permission_request',
+      requestId: 'r-q',
+      toolName: 'AskUserQuestion',
+      input: { questions: [] }
+    })
+
+    emitAgentEvent({ type: 'question_answered', requestId: 'r-other', answers: ANSWERS })
+
+    expect(result.current.pending?.requestId).toBe('r-q')
+  })
+})

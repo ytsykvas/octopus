@@ -3,6 +3,7 @@ import {
   FolderOpen,
   PanelRightClose,
   PanelRightOpen,
+  Plus,
   Settings as SettingsIcon
 } from 'lucide-react'
 import { useCallback, useEffect, useState } from 'react'
@@ -233,6 +234,11 @@ export function App(): React.JSX.Element {
   }, [selectedProjectId, workspaces, projects])
 
   const selectedProject = projects.all.find((project) => project.id === selectedProjectId) ?? null
+  const projectWorkspaces = selectedProject
+    ? (workspaces.byProject.get(selectedProject.id) ?? [])
+    : []
+  const selectedWorkspace =
+    workspaces.flat.find((workspace) => workspace.id === selectedWorkspaceId) ?? null
   const editingProject = projects.all.find((project) => project.id === editingProjectId) ?? null
 
   // What a conversation with no record of its own starts with. Read here
@@ -307,9 +313,7 @@ export function App(): React.JSX.Element {
             {sidebarOpen && (
               <Sidebar
                 project={selectedProject}
-                workspaces={
-                  selectedProject ? (workspaces.byProject.get(selectedProject.id) ?? []) : []
-                }
+                workspaces={projectWorkspaces}
                 selectedWorkspaceId={selectedWorkspaceId}
                 onSelectWorkspace={setSelectedWorkspaceId}
                 onCreateWorkspace={() => {
@@ -370,11 +374,19 @@ export function App(): React.JSX.Element {
               onAddFromDisk={() => void addFromDisk()}
               onAddFromGitHub={() => void addFromGitHub()}
             />
+          ) : !selectedWorkspace ? (
+            /* Decided here rather than inside the chat, because the way out of
+               this state is to make a workspace — and the chat has no business
+               knowing how. It used to render its own text with no action at
+               all, which read as an instruction to pick from a list that was
+               empty. */
+            <WorkspacePane
+              hasWorkspaces={projectWorkspaces.length > 0}
+              onCreate={() => void workspaces.create(selectedProject.id)}
+            />
           ) : (
             <Chat
-              workspace={
-                workspaces.flat.find((workspace) => workspace.id === selectedWorkspaceId) ?? null
-              }
+              workspace={selectedWorkspace}
               color={selectedProject.color}
               defaultWorkingMode={defaultWorkingMode}
               defaultEffort={defaultEffort}
@@ -466,6 +478,42 @@ interface CenterPaneProps {
  * screen a first run lands on, and telling someone where the button is while
  * having room for the button is a strange thing to do.
  */
+interface WorkspacePaneProps {
+  /** Whether there is anything to select, or only something to create. */
+  readonly hasWorkspaces: boolean
+  readonly onCreate: () => void
+}
+
+/**
+ * A project is open and the centre still has nothing to show.
+ *
+ * Two situations wearing one face until now: a project whose workspaces exist
+ * but none is selected, and a project that has none at all. The second was told
+ * to "select a workspace" from a list with nothing in it, and offered no way to
+ * make one — the button that does lives in the sidebar's project header, which
+ * is exactly where someone who has just added a repository is not looking.
+ */
+function WorkspacePane({ hasWorkspaces, onCreate }: WorkspacePaneProps): React.JSX.Element {
+  const { t } = useTranslation()
+
+  return (
+    <Placeholder
+      title={hasWorkspaces ? t('center.noWorkspaceTitle') : t('center.firstWorkspaceTitle')}
+      actions={
+        // Accent only when there is nothing to choose instead: with workspaces
+        // in the sidebar, picking one is the likelier intent and a filled
+        // button here would compete with the list.
+        <Button variant={hasWorkspaces ? 'quiet' : 'accent'} onClick={onCreate}>
+          <Plus aria-hidden size={13} />
+          {t('workspaces.create')}
+        </Button>
+      }
+    >
+      {hasWorkspaces ? t('center.noWorkspaceBody') : t('center.firstWorkspaceBody')}
+    </Placeholder>
+  )
+}
+
 function CenterPane({
   hasProjects,
   busy,

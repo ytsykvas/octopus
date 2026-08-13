@@ -253,6 +253,69 @@
     border-radius: var(--radius-panel);
   }
 
+  /* Radio and checkbox, drawn rather than left to the platform.
+     `accent-color` was the cheap version and it showed: the platform paints its
+     own shape and its own blue, so the one control the chat asks you to click
+     was the one thing on screen that ignored the palette — the wrong blue on
+     the dark theme, and a ring the rest of the interface has nowhere else.
+
+     `appearance: none` keeps the element a real input — focus, arrow keys,
+     grouping by `name` and the screen reader all stay — and hands us the paint. */
+  .choice {
+    appearance: none;
+    flex-shrink: 0;
+    width: 0.875rem;
+    height: 0.875rem;
+    border: 1px solid var(--border-strong);
+    background-color: var(--canvas);
+    transition:
+      background-color 0.12s ease,
+      border-color 0.12s ease;
+  }
+
+  .choice:hover:not(:disabled) {
+    border-color: var(--accent);
+  }
+
+  .choice[type='radio'] {
+    border-radius: 9999px;
+  }
+
+  /* The dot is the hole in a ring of canvas, not a second element: an inset
+     shadow inside an accent fill leaves exactly the centre showing. */
+  .choice[type='radio']:checked {
+    border-color: var(--accent);
+    background-color: var(--accent);
+    box-shadow: inset 0 0 0 3px var(--canvas);
+  }
+
+  .choice[type='checkbox'] {
+    border-radius: 4px;
+    display: grid;
+    place-content: center;
+  }
+
+  .choice[type='checkbox']:checked {
+    border-color: var(--accent);
+    background-color: var(--accent);
+  }
+
+  /* Two borders of a rotated box — a tick without an asset to load or a colour
+     to hardcode, since it takes the one the fill was painted against. */
+  .choice[type='checkbox']:checked::after {
+    content: '';
+    width: 0.25rem;
+    height: 0.5rem;
+    margin-top: -0.125rem;
+    border: solid var(--on-accent);
+    border-width: 0 1.5px 1.5px 0;
+    transform: rotate(45deg);
+  }
+
+  .choice:disabled {
+    opacity: 0.55;
+  }
+
   /* List row: highlighted on hover, stronger when selected. */
   .row {
     border-radius: var(--radius-control);
