@@ -2,6 +2,7 @@ import { GitBranch } from 'lucide-react'
 import { useEffect, useRef } from 'react'
 import { useTranslation } from 'react-i18next'
 
+import type { Effort, WorkingMode } from '@core/chats.js'
 import type { ProjectColor } from '@core/colors.js'
 import type { WorkspaceView } from '@core/workspaces.js'
 
@@ -29,6 +30,16 @@ interface ChatProps {
    * chat without one is a state that never renders.
    */
   readonly color: ProjectColor
+  /**
+   * What the settings say a new conversation starts with.
+   *
+   * Passed in rather than read here because the footer has to name what
+   * `openChat` will actually create the record with — and it creates it from
+   * the config. Hardcoding the schema's defaults instead made the control lie
+   * for exactly one message: the first.
+   */
+  readonly defaultWorkingMode: WorkingMode
+  readonly defaultEffort: Effort | null
 }
 
 /**
@@ -39,7 +50,12 @@ interface ChatProps {
  * lands. Selecting a different workspace shows a different conversation, not a
  * continuation of this one.
  */
-export function Chat({ workspace, color }: ChatProps): React.JSX.Element {
+export function Chat({
+  workspace,
+  color,
+  defaultWorkingMode,
+  defaultEffort
+}: ChatProps): React.JSX.Element {
   const { t } = useTranslation()
   const describeFailure = useErrorMessage()
   const chat = useChat(workspace?.id ?? null, describeFailure)
@@ -55,7 +71,14 @@ export function Chat({ workspace, color }: ChatProps): React.JSX.Element {
   // agent may do next, and that is the setting sitting in the footer below.
   const pending = chat.pending
   const plan = pending === null ? null : readPlan(pending.toolName, pending.input)
-  const workingMode = chat.chat?.workingMode ?? 'default'
+
+  // The record wins wherever there is one, and the settings answer for the
+  // conversation that does not exist yet. `effort` branches on the record
+  // rather than on the value: null is a choice there — "let the agent decide" —
+  // and `??` would quietly overrule it with the global default.
+  const record = chat.chat
+  const workingMode = record?.workingMode ?? defaultWorkingMode
+  const effort = record ? record.effort : defaultEffort
 
   // Follows the conversation, but only while the user is already at the end of
   // it — yanking the view down while they read something further up is the
@@ -161,15 +184,13 @@ export function Chat({ workspace, color }: ChatProps): React.JSX.Element {
 
       <Composer
         busy={chat.busy}
-        // The global default until this conversation has a record of its own,
-        // which is also what the record will be created with.
         workingMode={workingMode}
         onWorkingMode={(mode) => void chat.setWorkingMode(mode)}
-        planMode={chat.chat?.planMode ?? false}
+        planMode={record?.planMode ?? false}
         onPlanMode={(planning) => void chat.setPlanMode(planning)}
-        effort={chat.chat?.effort ?? null}
-        onEffort={(effort) => void chat.setEffort(effort)}
-        model={chat.chat?.model ?? null}
+        effort={effort}
+        onEffort={(level) => void chat.setEffort(level)}
+        model={record?.model ?? null}
         onModel={(model) => void chat.setModel(model)}
         models={models}
         usage={usage}

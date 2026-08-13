@@ -138,6 +138,11 @@ the mode of the first message the one mode nobody could pick. Opening is
 idempotent and writes no transcript (only appending an entry does that), so the
 record costs one row.
 
+The record is created from `config.workingMode` and `config.effort`, so those
+are also what the composer shows until it exists — passed down from `App`,
+which is where the config is read. The footer named the schema's defaults for a
+while instead, which made it lie about exactly one message: the first.
+
 ### Transcripts
 
 The SDK's `resume` restores what the _model_ remembers, which is not what the

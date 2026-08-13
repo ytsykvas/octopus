@@ -235,6 +235,13 @@ export function App(): React.JSX.Element {
   const selectedProject = projects.all.find((project) => project.id === selectedProjectId) ?? null
   const editingProject = projects.all.find((project) => project.id === editingProjectId) ?? null
 
+  // What a conversation with no record of its own starts with. Read here
+  // rather than in the chat: this is where the config lives, and the composer's
+  // footer has to name what the record will actually be created with. The
+  // schema's own defaults stand in until the file has been read.
+  const defaultWorkingMode = config?.workingMode ?? 'default'
+  const defaultEffort = config?.effort ?? null
+
   return (
     <div className="bg-canvas text-ink flex h-full flex-col">
       {/* One strip across the window rather than one per pane. The traffic
@@ -369,6 +376,8 @@ export function App(): React.JSX.Element {
                 workspaces.flat.find((workspace) => workspace.id === selectedWorkspaceId) ?? null
               }
               color={selectedProject.color}
+              defaultWorkingMode={defaultWorkingMode}
+              defaultEffort={defaultEffort}
             />
           )}
         </main>

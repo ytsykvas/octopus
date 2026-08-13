@@ -328,6 +328,25 @@ describe('App', () => {
     expect(rightPane()).toHaveStyle({ '--project-color': 'var(--project-green)' })
   })
 
+  // Another wiring the pane's own tests cannot see: the composer's footer has
+  // to name what the chat record will be created with, and that comes from the
+  // settings, which live here.
+  it('gives the chat the mode the settings say a new conversation starts in', async () => {
+    givenTwoProjects()
+    vi.mocked(window.octopus.config.get).mockResolvedValue({
+      ok: true,
+      value: config({ workingMode: 'acceptEdits' })
+    })
+    const user = await openApp()
+
+    await user.click(await screen.findByRole('button', { name: 'PL' }))
+    await user.click(await screen.findByText('anna'))
+
+    expect(await screen.findByRole('button', { name: 'Permissions' })).toHaveTextContent(
+      'Accept edits'
+    )
+  })
+
   it('leaves the right pane its default colour while no project is open', async () => {
     givenTwoProjects()
     await openApp()

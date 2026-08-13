@@ -2,6 +2,7 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { beforeAll, describe, expect, it, vi } from 'vitest'
 
+import type { Effort, WorkingMode } from '@core/chats.js'
 import type { WorkspaceView } from '@core/workspaces.js'
 
 import { CHAT_ID, emitAgentEvent, givenChat } from '../../test/chat.js'
@@ -29,9 +30,24 @@ function workspace(overrides: Partial<WorkspaceView> = {}): WorkspaceView {
   }
 }
 
-/** Renders the pane and waits for the chat lookup to settle. */
-async function openChat(target: WorkspaceView | null = workspace()): Promise<void> {
-  render(<Chat workspace={target} color="blue" />)
+/**
+ * Renders the pane and waits for the chat lookup to settle.
+ *
+ * The two defaults are what the settings say a new conversation starts with;
+ * a test that is not about them leaves them at the schema's own values.
+ */
+async function openChat(
+  target: WorkspaceView | null = workspace(),
+  defaults: { workingMode?: WorkingMode; effort?: Effort | null } = {}
+): Promise<void> {
+  render(
+    <Chat
+      workspace={target}
+      color="blue"
+      defaultWorkingMode={defaults.workingMode ?? 'default'}
+      defaultEffort={defaults.effort ?? null}
+    />
+  )
   await waitFor(() => {
     expect(octopus().chats.list).toHaveBeenCalled()
   })
@@ -58,7 +74,7 @@ describe('without a workspace', () => {
   // A conversation belongs to a workspace: its worktree is the agent's working
   // directory, so there is nowhere to run without one.
   it('says which one to pick and asks the bridge for nothing', () => {
-    render(<Chat workspace={null} color="blue" />)
+    render(<Chat workspace={null} color="blue" defaultWorkingMode="default" defaultEffort={null} />)
 
     expect(screen.getByText('Select a workspace')).toBeInTheDocument()
     expect(octopus().chats.list).not.toHaveBeenCalled()
@@ -103,7 +119,14 @@ describe('the project it belongs to', () => {
   // The stylesheet owns how the colour is used; the component only says which
   // one, and it resolves to a token rather than to a value (§10.4).
   it('carries the colour down for the stylesheet to use', async () => {
-    const { container } = render(<Chat workspace={workspace()} color="teal" />)
+    const { container } = render(
+      <Chat
+        workspace={workspace()}
+        color="teal"
+        defaultWorkingMode="default"
+        defaultEffort={null}
+      />
+    )
     await waitFor(() => {
       expect(octopus().chats.list).toHaveBeenCalled()
     })
@@ -228,12 +251,26 @@ describe('an existing conversation', () => {
   // continuation of this one.
   it('is replaced when the workspace changes', async () => {
     givenChat([{ role: 'user', at: '2026-08-11T09:00:00.000Z', text: 'first workspace' }])
-    const { rerender } = render(<Chat workspace={workspace()} color="blue" />)
+    const { rerender } = render(
+      <Chat
+        workspace={workspace()}
+        color="blue"
+        defaultWorkingMode="default"
+        defaultEffort={null}
+      />
+    )
 
     expect(await screen.findByText('first workspace')).toBeInTheDocument()
 
     vi.mocked(octopus().chats.history).mockResolvedValue({ ok: true, value: [] })
-    rerender(<Chat workspace={workspace({ id: 'planner/maria', name: 'maria' })} color="blue" />)
+    rerender(
+      <Chat
+        workspace={workspace({ id: 'planner/maria', name: 'maria' })}
+        color="blue"
+        defaultWorkingMode="default"
+        defaultEffort={null}
+      />
+    )
 
     await waitFor(() => {
       expect(screen.queryByText('first workspace')).not.toBeInTheDocument()
@@ -592,6 +629,34 @@ describe('the permission mode', () => {
 
     expect(octopus().chats.setWorkingMode).toHaveBeenCalledWith(CHAT_ID, 'default')
     expect(picker()).toHaveTextContent('Ask first')
+  })
+
+  /*
+   * The footer used to show the schema's defaults for a workspace with no
+   * record, while `openChat` created that record from the settings. Set
+   * "Accept edits" as the global default and the first message ran with it
+   * while the footer said the agent would ask — and both pickers then flipped
+   * on their own as the record came back.
+   */
+  it('names what the settings will create the first record with', async () => {
+    await openChat(workspace(), { workingMode: 'acceptEdits', effort: 'high' })
+
+    expect(picker()).toHaveTextContent('Accept edits')
+    expect(screen.getByRole('button', { name: 'Effort' })).toHaveTextContent('High')
+  })
+
+  // And once there is a record it answers for itself — including when what it
+  // says is "let the agent decide", which is a choice and not an absence.
+  it('lets the record overrule the settings, null included', async () => {
+    givenChat([], { workingMode: 'default', effort: null })
+    await openChat(workspace(), { workingMode: 'acceptEdits', effort: 'high' })
+
+    await waitFor(() => {
+      expect(octopus().chats.history).toHaveBeenCalled()
+    })
+
+    expect(picker()).toHaveTextContent('Ask first')
+    expect(screen.getByRole('button', { name: 'Effort' })).toHaveTextContent('Agent decides')
   })
 
   // The core deliberately leaves `bypassPermissions` out, and planning is a
