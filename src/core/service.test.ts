@@ -2159,6 +2159,35 @@ describe('the agent chat', () => {
       })
     })
 
+    /*
+     * An answer is also a write, and a write can fail. The question used to be
+     * taken out of the map before the write was attempted, so a config file
+     * that could not be written left the agent blocked on something nobody
+     * could answer a second time: the window had dropped its copy, and
+     * `pendingPermission` had none left to hand back.
+     */
+    it('keeps the question askable when the answer cannot be saved', async () => {
+      const { service, workspaceId, events } = await withWorkspace()
+      const chat = await service.openChat(workspaceId)
+      await service.sendToChat(chat.id, 'list it')
+
+      const decision = agent().ask('Bash', { command: 'ls' })
+      const requestId = await waitForRequest(events)
+
+      // The config file becomes a directory, so the rename that finishes an
+      // atomic write has nowhere to land.
+      await rm(join(dir, 'config.json'), { force: true })
+      await mkdir(join(dir, 'config.json'), { recursive: true })
+
+      await expect(service.answerPermission(requestId, 'always')).rejects.toThrow()
+      expect(service.pendingPermission(chat.id)?.requestId).toBe(requestId)
+
+      // Answering it again works, which is the whole of the point: 'allow'
+      // writes no config, so it gets through where 'always' could not.
+      await service.answerPermission(requestId, 'allow')
+      await expect(decision).resolves.toMatchObject({ behavior: 'allow' })
+    })
+
     // The workspace is going, and with it the chat — so there is nothing left
     // to ask, and the answer has to be given here or not at all.
     it('lets go of the questions of a workspace being removed', async () => {

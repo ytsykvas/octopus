@@ -965,13 +965,16 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
       // Unknown means already answered, or the session it belonged to is gone.
       if (!request) return
 
-      pending.delete(requestId)
-
       if (answer === 'deny') {
         // The user's own words when there are any: the agent reads a refusal's
         // message as instruction, which is how "not quite, do this instead"
         // reaches it without costing a turn.
         const note = feedback?.trim() ?? ''
+        // Removed as the answer is given, never before it. An "always" whose
+        // config write fails throws from here, and taking the question out
+        // first left the agent blocked on something nothing could offer again:
+        // the window had dropped its copy, and `pendingPermission` had none.
+        pending.delete(requestId)
         request.resolve({ allow: false, message: note === '' ? DENIED : note })
         await setStatus(request.workspaceId, 'idle')
         return
@@ -998,6 +1001,11 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
       }
 
       const chat = findChat(state, request.chatId)
+      // Both writes above are behind us, so this is the point the answer is
+      // actually given — see the deny path for what removing it any earlier
+      // cost. A second answer racing this one changes nothing: the writes are
+      // idempotent and a settled promise ignores the later call.
+      pending.delete(requestId)
       request.resolve({
         allow: true,
         ...(leaving && chat && { setMode: chat.workingMode })
