@@ -1132,6 +1132,37 @@ describe('the agent chat', () => {
       await expect(readFile(join(dir, 'state.json'), 'utf8')).resolves.toBe(before)
     })
 
+    /*
+     * The other half of the same fire-and-forget, and it used to have nobody
+     * to catch it: only the read was guarded, so a list that arrived and could
+     * not be written left an uncaught rejection in the main process — which
+     * Electron shows as a modal about a JavaScript error, over an application
+     * that is otherwise fine.
+     *
+     * The answer is held until the state file is unwritable, or it lands
+     * before there is anything to fail against.
+     */
+    it('reports a list that cannot be written instead of leaving it to the process', async () => {
+      const { service, workspaceId, events } = await withWorkspace()
+      let release: (models: ModelInfo[]) => void = () => undefined
+      offered = () =>
+        new Promise<ModelInfo[]>((resolve) => {
+          release = resolve
+        })
+      const chat = await service.openChat(workspaceId)
+      await service.sendToChat(chat.id, 'work')
+
+      // The state file becomes a directory, so the rename that finishes an
+      // atomic write has nowhere to land.
+      await rm(join(dir, 'state.json'), { force: true })
+      await mkdir(join(dir, 'state.json'), { recursive: true })
+      release([OPUS])
+
+      await vi.waitFor(() => {
+        expect(events.some((entry) => entry.event.type === 'error')).toBe(true)
+      })
+    })
+
     // The list is a convenience. A message must not fail because the names of
     // the models could not be read — the session itself already reports its own
     // failures through the event stream.

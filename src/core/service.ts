@@ -654,16 +654,22 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
 
     sessions.set(chat.id, session)
 
-    // Fire-and-forget, and the failure is deliberately swallowed. The list is a
-    // convenience for the picker; a session that cannot start already says so
-    // through the event stream, and failing a message because the model names
-    // could not be read would be reporting the wrong problem.
-    void session.models().then(
-      async (models) => {
-        if (modelsUnchanged(state, models)) return
-        await commit((current) => rememberModels(current, models))
-      },
-      () => undefined
+    // Fire-and-forget, and the two failures go different ways. A list that
+    // cannot be *read* is swallowed: it is a convenience for the picker, a
+    // session that cannot start already says so through the event stream, and
+    // failing a message over the model names would report the wrong problem.
+    // A list that cannot be *written* is a failed write like any other and is
+    // reported into the chat — nothing caught it before, so it left the main
+    // process with an uncaught rejection and Electron with a modal to show.
+    background(
+      chat,
+      session.models().then(
+        async (models) => {
+          if (modelsUnchanged(state, models)) return
+          await commit((current) => rememberModels(current, models))
+        },
+        () => undefined
+      )
     )
 
     return session
