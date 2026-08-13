@@ -632,9 +632,14 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
         permissionMode: sessionMode(chat),
         model: chat.model,
         effort: chat.effort,
-        // The read-only set and the user's own answers are the only things
-        // pre-approved; everything else reaches `askPermission`.
-        allowedTools: [...READ_ONLY_TOOLS, ...config.alwaysAllowedTools]
+        // The read-only set, and nothing else. A name here is approved by the
+        // SDK before `canUseTool` is consulted, which is what that set wants
+        // and exactly what the user's own answers must not have: one handed
+        // over at the start of a session cannot be taken back until the session
+        // ends, so unticking it in Settings changed nothing the agent was
+        // already doing. `askPermission` consults `alwaysAllowedTools` itself,
+        // on every call, against the config as it stands at that moment.
+        allowedTools: [...READ_ONLY_TOOLS]
       },
       {
         query: runQuery,
@@ -981,9 +986,9 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
       }
 
       // Approving a plan is never a standing answer. `config.ts` explains why
-      // at length; the short of it is that the list reaches the SDK, which then
-      // approves every later plan without telling us — so the dialog, the
-      // record and the toggle all stop happening at once.
+      // at length; the short of it is that `askPermission` answers a standing
+      // tool before it emits anything, so the dialog, the record and the toggle
+      // would all stop happening at once.
       const leaving = request.toolName === EXIT_PLAN_MODE
 
       if (answer === 'always' && !leaving) {

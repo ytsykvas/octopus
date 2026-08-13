@@ -1720,11 +1720,11 @@ describe('the agent chat', () => {
     /*
      * The way the whole feature was silently switched off once already.
      *
-     * A standing "always" on the plan tool puts it in the list handed to the
-     * SDK, which then approves every later plan itself and never calls back —
-     * so there is no question, no dialog, no record that planning ended, and
-     * the agent goes straight to editing. `config.ts` strips it on read; this
-     * stops it being written in the first place.
+     * A standing "always" on the plan tool is answered by `askPermission`
+     * before it emits anything, so every later plan is approved with no
+     * question, no dialog, no record that planning ended, and the agent goes
+     * straight to editing. `config.ts` strips it on read; this stops it being
+     * written in the first place.
      */
     it('never takes a standing answer for approving plans', async () => {
       const { service, workspaceId, events } = await withWorkspace()
@@ -2028,14 +2028,26 @@ describe('the agent chat', () => {
       expect(events.some((entry) => entry.event.type === 'change_context')).toBe(false)
     })
 
-    it('pre-approves the read-only tools and whatever the user allowed', async () => {
+    /*
+     * The user's own answers are deliberately absent. A name here is approved
+     * by the SDK before `canUseTool` is consulted, so an "always" handed over
+     * at the start of a session could not be taken back until it ended —
+     * unticking the tool in Settings changed nothing the agent was already
+     * doing, and the call never reached us to be recorded.
+     *
+     * What the fake cannot show is that half: `ask()` calls `canUseTool`
+     * directly, where the real SDK would not call it at all for a tool it
+     * already holds. So the list itself is what is asserted, and the tests
+     * above cover the standing answer still being honoured.
+     */
+    it('pre-approves the read-only tools and nothing else', async () => {
       const { service, workspaceId } = await withWorkspace()
       await service.updateConfig({ alwaysAllowedTools: ['Bash'] })
       const chat = await service.openChat(workspaceId)
 
       await service.sendToChat(chat.id, 'work')
 
-      expect(agent().options().allowedTools).toEqual([...READ_ONLY_TOOLS, 'Bash'])
+      expect(agent().options().allowedTools).toEqual([...READ_ONLY_TOOLS])
     })
 
     // The workspace sits in `waiting_permission` while the question is open, so

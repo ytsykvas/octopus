@@ -50,12 +50,18 @@ Validated by `ConfigSchema` in [`config.ts`](../src/core/config.ts).
 | `deviceId`, `installedAt`         | reserved for licensing (§15.3), unused                               |
 
 `alwaysAllowedTools` is filtered on the way in **and on the way out**, and never
-holds `ExitPlanMode`. That list is handed to the SDK, so an entry there is not
-merely a pre-answered question — it stops the question being asked at all. With
-the plan tool in it the agent's plan was approved by the SDK itself: no dialog,
-no record that planning had ended, and the toggle still lit over an agent
-editing files. It went unnoticed for a day. `NEVER_STANDING` in `config.ts` is
-what strips it.
+holds `ExitPlanMode`. An entry there is not merely a pre-answered question — it
+stops the question being asked at all. With the plan tool in it the agent's plan
+was approved before anything was drawn: no dialog, no record that planning had
+ended, and the toggle still lit over an agent editing files. It went unnoticed
+for a day. `NEVER_STANDING` in `config.ts` is what strips it.
+
+The list is **not** passed to the SDK. It was, alongside the read-only tools,
+and that made it unrevokable: a name the SDK holds is approved before
+`canUseTool` is consulted, so unticking a tool in Settings reached only the
+sessions that had not started yet, while the one on screen kept running the
+tool. `askPermission` consults the list itself now, on every call, against the
+config as it stands at that moment.
 
 **Every new field carries `.default()`** — here, in `StateSchema` and in
 `ChatSchema` alike. `readJsonFile` throws on a mismatch rather than falling

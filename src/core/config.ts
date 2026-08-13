@@ -23,10 +23,9 @@ import { readJsonFile, writeJsonFile } from './persist.js'
  *
  * `ExitPlanMode` is how the agent hands a finished plan back, so a standing
  * "always" on it accepts every future plan unread — planning undone by one
- * click, and silently: the approval never reaches the application at all,
- * because this list is passed to the SDK, which then decides on its own and
- * never calls back. No dialog, no record that planning ended, a toggle still
- * lit over an agent that has started editing.
+ * click, and silently: `askPermission` answers a tool on this list before it
+ * emits anything at all. No dialog, no record that planning ended, a toggle
+ * still lit over an agent that has started editing.
  *
  * It got into one of these lists before there was anything to stop it, which is
  * why this strips rather than merely refuses.
