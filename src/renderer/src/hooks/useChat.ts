@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 
 import { type Chat, type Effort, EXIT_PLAN_MODE, type WorkingMode } from '@core/chats.js'
+import { isEphemeral } from '@core/events.js'
 import type { PermissionAnswer } from '@core/service.js'
 import type { ChatEntry } from '@core/transcript.js'
 
@@ -149,6 +150,14 @@ export function useChat(workspaceId: string | null, describeFailure: Describe): 
           setStreaming((current) => ({ ...current, thinking: current.thinking + event.text }))
           return
         }
+
+        // What is left of `isEphemeral` after the two deltas above is the rate
+        // limit, which describes the account rather than the conversation and
+        // is drawn in the attic by `useRateLimit`. Falling through cost twice:
+        // it wiped the answer being written, and left an entry that draws
+        // nothing in the middle of a run of tool calls, splitting the fold in
+        // two around a break the reader cannot see.
+        if (isEphemeral(event)) return
 
         // Anything else means the block being streamed has finished, and its
         // complete form is in the event now arriving.

@@ -2,10 +2,11 @@ import { act, renderHook, waitFor } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
 
 import type { Chat } from '@core/chats.js'
+import type { AgentEvent } from '@core/events.js'
 import type { ChatEntry } from '@core/transcript.js'
 
 import type { Failure, Result } from '../../../preload/index.js'
-import { chat, givenChat } from '../test/chat.js'
+import { chat, emitAgentEvent, givenChat } from '../test/chat.js'
 import { octopus } from '../test/octopus.js'
 import { useChat } from './useChat.js'
 
@@ -140,6 +141,39 @@ describe('a load that outlives the hook', () => {
       await history.promise
     })
 
+    expect(result.current.entries).toEqual([])
+  })
+})
+
+describe('a reading that belongs to the account rather than the conversation', () => {
+  const READING: AgentEvent = {
+    type: 'rate_limit',
+    status: 'allowed_warning',
+    window: 'seven_day',
+    utilization: 84,
+    resetsAt: null
+  }
+
+  /*
+   * It arrives mid-turn, on the same stream as everything else, and used to
+   * fall through to "the block being streamed has finished". So the answer
+   * being written vanished until the finished block arrived, and the log gained
+   * an entry that draws nothing — which breaks a run of tool calls into two
+   * folds with an invisible gap between them.
+   *
+   * The attic shows it, from `useRateLimit`. The log has no business with it.
+   */
+  it('leaves the answer being written and the log alone', async () => {
+    givenChat()
+    const { result } = renderHook(() => useChat('planner/anna', describeFailure))
+    await waitFor(() => {
+      expect(result.current.chat).not.toBeNull()
+    })
+
+    emitAgentEvent({ type: 'text_delta', text: 'Look' })
+    emitAgentEvent(READING)
+
+    expect(result.current.streaming.text).toBe('Look')
     expect(result.current.entries).toEqual([])
   })
 })
