@@ -7,21 +7,12 @@ import type { ChatEntry } from '@core/transcript.js'
 
 import type { Failure, Result } from '../../../preload/index.js'
 import { chat, emitAgentEvent, givenChat } from '../test/chat.js'
+import { held } from '../test/held.js'
 import { octopus } from '../test/octopus.js'
 import { useChat } from './useChat.js'
 
 /** The English fallback is enough here; the mapping is `useErrorMessage`'s job. */
 const describeFailure = (failure: Failure): string => failure.error
-
-/** A promise the test resolves by hand, so it can act while one is in flight. */
-function held<T>(): { promise: Promise<T>; resolve: (value: T) => void } {
-  let resolve: (value: T) => void = () => undefined
-  const promise = new Promise<T>((settle) => {
-    resolve = settle
-  })
-
-  return { promise, resolve }
-}
 
 describe('without a workspace', () => {
   // The pane shows a placeholder instead, so nothing here is reachable through

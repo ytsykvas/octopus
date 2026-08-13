@@ -9,8 +9,26 @@ const AT = '2026-08-13T09:00:00.000Z'
 
 const agent = (event: AgentEvent): ChatEntry => ({ role: 'agent', at: AT, event })
 
+/**
+ * A tool call shaped the way the stream sends one.
+ *
+ * The name decides the input, because for `Edit` and `Write` the log reads the
+ * text out of the arguments to draw the change. A fixture without it folds like
+ * a grep — which is the opposite of the rule this file exists to pin down, and
+ * is what these tests asserted for a while.
+ */
 const call = (name: string): ChatEntry =>
-  agent({ type: 'tool_use', toolUseId: `c-${name}`, name, input: { file_path: '/a.ts' } })
+  agent({
+    type: 'tool_use',
+    toolUseId: `c-${name}`,
+    name,
+    input: TOOL_INPUT[name] ?? { file_path: '/a.ts' }
+  })
+
+const TOOL_INPUT: Record<string, unknown> = {
+  Edit: { file_path: '/a.ts', old_string: 'one', new_string: 'two' },
+  Write: { file_path: '/a.ts', content: 'all of it' }
+}
 
 const result = (ok: boolean): ChatEntry =>
   agent({ type: 'tool_result', toolUseId: 'c-1', ok, content: ok ? 'fine' : 'no such file' })
@@ -57,9 +75,22 @@ describe('folding a run of tool calls', () => {
   // A failure is a finding, not working out: it stays where it happened, with
   // the work either side of it.
   it('is broken by a failure, and by anything the agent said', () => {
-    const entries = [call('Grep'), call('Grep'), result(false), call('Edit'), call('Edit')]
+    const entries = [call('Grep'), call('Grep'), result(false), call('Read'), call('Read')]
 
     expect(groupToolRuns(entries).map((block) => block.kind)).toEqual(['tools', 'entry', 'tools'])
+  })
+
+  // Two edits either side of nothing are still two changes: the run is what
+  // folds, and a change is never part of one.
+  it('folds nothing away when the calls are edits', () => {
+    const entries = [call('Grep'), call('Grep'), result(false), call('Edit'), call('Write')]
+
+    expect(groupToolRuns(entries).map((block) => block.kind)).toEqual([
+      'tools',
+      'entry',
+      'change',
+      'change'
+    ])
   })
 
   /*

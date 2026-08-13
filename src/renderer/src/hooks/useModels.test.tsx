@@ -1,15 +1,26 @@
-import { renderHook, waitFor } from '@testing-library/react'
+import { act, renderHook, waitFor } from '@testing-library/react'
+import { StrictMode } from 'react'
 import { describe, expect, it, vi } from 'vitest'
 
 import type { AgentModel } from '@core/chats.js'
 import type { AgentEvent } from '@core/events.js'
 
+import type { Result } from '../../../preload/index.js'
+import { held } from '../test/held.js'
 import { octopus } from '../test/octopus.js'
 import { useModels } from './useModels.js'
 
 const OPUS: AgentModel = {
   value: 'claude-opus-5',
   displayName: 'Opus 5',
+  description: '',
+  supportsEffort: true,
+  supportedEffortLevels: ['high']
+}
+
+const SONNET: AgentModel = {
+  value: 'claude-sonnet-5',
+  displayName: 'Sonnet 5',
   description: '',
   supportsEffort: true,
   supportedEffortLevels: ['high']
@@ -61,24 +72,33 @@ describe('the models the account may use', () => {
     expect(octopus().chats.models).toHaveBeenCalledTimes(1)
   })
 
-  // `gh` and the agent both take their time, and the pane can be left before
-  // the answer lands. Setting state on a hook that is gone is a React warning
-  // and, worse, a read belonging to a workspace nobody is looking at.
-  it('drops an answer that arrives after the pane has closed', async () => {
-    let settle: (value: { ok: true; value: AgentModel[] }) => void = () => undefined
-    vi.mocked(octopus().chats.models).mockReturnValue(
-      new Promise((resolve) => {
-        settle = resolve
-      })
-    )
+  /*
+   * The agent takes its time answering, and the read can be abandoned before it
+   * does — the window mounts the hook, tears it down and mounts it again under
+   * `StrictMode`, which is how the application actually runs in development.
+   * Without the guard both reads apply and the abandoned one can land last,
+   * leaving the picker showing a list that has already been replaced.
+   *
+   * This used to unmount and then assert on a promise the test had made itself,
+   * which meant deleting the guard left the suite green.
+   */
+  it('drops the answer to a read it has already abandoned', async () => {
+    const abandoned = held<Result<AgentModel[]>>()
+    vi.mocked(octopus().chats.models)
+      .mockReturnValueOnce(abandoned.promise)
+      .mockResolvedValue({ ok: true, value: [SONNET] })
 
-    const { unmount } = renderHook(() => useModels())
-    unmount()
-    settle({ ok: true, value: [OPUS] })
+    const { result } = renderHook(() => useModels(), { wrapper: StrictMode })
+    await waitFor(() => {
+      expect(result.current).toEqual([SONNET])
+    })
 
-    // Nothing to assert on the result — the hook is gone. What is being checked
-    // is that settling it raises nothing.
-    await expect(Promise.resolve()).resolves.toBeUndefined()
+    await act(async () => {
+      abandoned.resolve({ ok: true, value: [OPUS] })
+      await abandoned.promise
+    })
+
+    expect(result.current).toEqual([SONNET])
   })
 
   // An empty picker would claim the account has no models, which is a different

@@ -1,9 +1,11 @@
-import { renderHook, waitFor } from '@testing-library/react'
+import { act, renderHook, waitFor } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
 
 import type { AgentEvent } from '@core/events.js'
 import type { SessionUsage } from '@core/service.js'
 
+import type { Result } from '../../../preload/index.js'
+import { held } from '../test/held.js'
 import { octopus } from '../test/octopus.js'
 import { useSessionUsage } from './useSessionUsage.js'
 
@@ -139,18 +141,35 @@ describe('what the running session says about usage', () => {
     expect(result.current).toEqual({ context: null, subscription: null })
   })
 
-  it('drops an answer that arrives after the pane has closed', async () => {
-    let settle: (value: { ok: true; value: SessionUsage }) => void = () => undefined
-    vi.mocked(octopus().chats.usage).mockReturnValue(
-      new Promise((resolve) => {
-        settle = resolve
-      })
-    )
+  /*
+   * The read the pane left behind. `sessionUsage` asks the running agent and
+   * then the network for the account's windows, so the answer for the
+   * conversation just left can easily land after the next one is on screen —
+   * and it would put one conversation's context share under another's name.
+   *
+   * The previous test asserted a promise the test itself had made, so deleting
+   * the guard left the suite green. This one settles the abandoned read while
+   * the pane is showing the next conversation, which is the case that matters.
+   */
+  it('drops the answer for the conversation the pane has left', async () => {
+    const abandoned = held<Result<SessionUsage>>()
+    vi.mocked(octopus().chats.usage)
+      .mockReturnValueOnce(abandoned.promise)
+      .mockReturnValue(new Promise(() => undefined))
 
-    const { unmount } = renderHook(() => useSessionUsage(CHAT))
-    unmount()
-    settle({ ok: true, value: READING })
+    const { result, rerender } = renderHook(({ id }) => useSessionUsage(id), {
+      initialProps: { id: CHAT }
+    })
+    await waitFor(() => {
+      expect(octopus().chats.usage).toHaveBeenCalledWith(CHAT)
+    })
 
-    await expect(Promise.resolve()).resolves.toBeUndefined()
+    rerender({ id: 'chat-2' })
+    await act(async () => {
+      abandoned.resolve({ ok: true, value: READING })
+      await abandoned.promise
+    })
+
+    expect(result.current).toEqual({ context: null, subscription: null })
   })
 })
