@@ -2,6 +2,7 @@ import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
+import { highlight } from './highlight.js'
 import { octopus } from '../../test/octopus.js'
 import { fileDiff, hunk, workspaceDiff } from '../../test/diff.js'
 import { commentController } from '../../test/comments.js'
@@ -11,7 +12,11 @@ import { DiffPanel } from './DiffPanel.js'
 // The highlighter is exercised by its own tests. Here it would only break every
 // assertion about a line's text into the spans shiki splits it into, and slow
 // the suite down loading grammars to prove something about shiki.
-vi.mock('./highlight.js', () => ({ highlight: () => Promise.resolve(null) }))
+//
+// A mock rather than a constant, so the one test that is about the coloured
+// path can hand back tokens: a line reaches the reader through those spans in
+// the running app, and drawing it plain is the exception.
+vi.mock('./highlight.js', () => ({ highlight: vi.fn(() => Promise.resolve(null)) }))
 
 const anna = workspaceView('anna')
 const bob = workspaceView('bob')
@@ -194,6 +199,59 @@ describe('DiffPanel', () => {
         })
       ])
     )
+    renderPanel()
+
+    expect(await screen.findByText('U+202E')).toBeInTheDocument()
+    expect(screen.getByLabelText(/characters that do not draw as themselves/)).toBeInTheDocument()
+  })
+
+  /*
+   * The same line, on the path it actually takes.
+   *
+   * Almost every line in the running app is drawn through the highlighter's
+   * spans, and that is a different branch of `Code` from the plain one above.
+   * A chip that worked in one and not the other would look right in every
+   * other test in this file.
+   */
+  it('names it inside a coloured line too', async () => {
+    // The tokens say something the line does not, so a fall back to the plain
+    // branch fails this rather than passing it: the chip would be there either
+    // way, and a test that cannot tell the two apart asserts nothing.
+    vi.mocked(highlight).mockResolvedValueOnce([
+      [{ text: 'tokenised \u202E', light: '#005cc5', dark: '#79b8ff' }]
+    ])
+    answer(
+      workspaceDiff([
+        fileDiff('src/auth.ts', {
+          hunks: [
+            hunk({
+              lines: [
+                {
+                  kind: 'added',
+                  text: 'if (user.isAdmin) { \u202E',
+                  oldNumber: null,
+                  newNumber: 1,
+                  noNewline: false
+                }
+              ]
+            })
+          ]
+        })
+      ])
+    )
+    renderPanel()
+
+    expect(await screen.findByText('tokenised')).toBeInTheDocument()
+    expect(screen.getByText('U+202E')).toBeInTheDocument()
+  })
+
+  /*
+   * A path is drawn from the same bytes as the lines and reorders the same way,
+   * so a file can be named to read as an image while ending in `.js`. That one
+   * costs a click rather than a line, and the header is the only place it shows.
+   */
+  it('names a character in the file’s own name', async () => {
+    answer(workspaceDiff([fileDiff(`src/report\u202Egnp.js`)]))
     renderPanel()
 
     expect(await screen.findByText('U+202E')).toBeInTheDocument()

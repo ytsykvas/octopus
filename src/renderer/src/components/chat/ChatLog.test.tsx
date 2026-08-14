@@ -321,6 +321,23 @@ describe('what the log shows', () => {
     expect(screen.getByText('U+202E')).toBeVisible()
   })
 
+  // The path is drawn from the same bytes and reorders the same way, so a file
+  // can be named to read as an image while ending in `.js`.
+  it('names one in the path of the file that changed', () => {
+    renderLog({
+      entries: [
+        fromAgent({
+          type: 'tool_use',
+          toolUseId: 'c-1',
+          name: 'Write',
+          input: { file_path: '/report\u202Egnp.js', content: 'ok\n' }
+        })
+      ]
+    })
+
+    expect(screen.getByText('U+202E')).toBeVisible()
+  })
+
   // Folded into "1 step", a lone call would be more work to read than the row
   // it replaced.
   it('leaves a lone tool call in the open', () => {

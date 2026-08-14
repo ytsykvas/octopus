@@ -1362,6 +1362,29 @@ describe('App', () => {
   })
 
   /*
+   * The pane is unmounted while it is folded away, so a tab kept inside it was
+   * gone the moment it was hidden — which is half of why the value moved out.
+   */
+  it('keeps the chosen tab across folding the pane away', async () => {
+    givenTwoProjects()
+    // The pane reads the tab back from the config it is answered with, so a
+    // stub that ignores the patch would fold a choice nobody ever made.
+    vi.mocked(window.octopus.config.update).mockImplementation((patch) =>
+      Promise.resolve({ ok: true, value: config(patch) })
+    )
+    const user = await openApp()
+    await user.click(screen.getByRole('button', { name: 'Terminal' }))
+
+    await user.click(screen.getByRole('button', { name: 'Collapse panel' }))
+    await user.click(screen.getByRole('button', { name: 'Show panel' }))
+
+    expect(await screen.findByRole('button', { name: 'Terminal' })).toHaveAttribute(
+      'aria-current',
+      'page'
+    )
+  })
+
+  /*
    * The shortcut has to bring the pane back, or it does nothing in the one
    * place it would save the most — a folded pane is exactly when reaching the
    * changes by mouse costs two clicks rather than one.

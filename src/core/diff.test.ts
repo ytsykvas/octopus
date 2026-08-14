@@ -670,6 +670,18 @@ describe('readWorkspaceDiff', () => {
     expect(diff.files[0]).toMatchObject({ path: 'vanishes.txt', omitted: 'binary', added: 0 })
   })
 
+  // Between `ls-files` naming it and the size being asked for, which is the
+  // window a build step writing into the worktree opens on every read.
+  it('reports an untracked file that goes while it is being measured', async () => {
+    await writeFile(join(dir, 'vanishes.txt'), 'gone\n', 'utf8')
+
+    const diff = await readDiff({
+      statBytes: () => Promise.reject(new Error('ENOENT'))
+    })
+
+    expect(diff.files[0]).toMatchObject({ path: 'vanishes.txt', omitted: 'binary', added: 0 })
+  })
+
   it('reports a deleted file', async () => {
     await rm(join(dir, 'a.txt'))
 
