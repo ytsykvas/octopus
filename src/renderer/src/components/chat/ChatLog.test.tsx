@@ -301,6 +301,26 @@ describe('what the log shows', () => {
     expect(screen.getByText('+one')).toBeVisible()
   })
 
+  /*
+   * The same hazard the diff pane names, on the surface a small change is
+   * actually read: a right-to-left override reorders what is on screen without
+   * changing what runs, so the character is drawn as its code point instead.
+   */
+  it('names a character that would not draw as itself', () => {
+    renderLog({
+      entries: [
+        fromAgent({
+          type: 'tool_use',
+          toolUseId: 'c-1',
+          name: 'Write',
+          input: { file_path: '/auth.ts', content: 'if (user.isAdmin) { \u202E\n' }
+        })
+      ]
+    })
+
+    expect(screen.getByText('U+202E')).toBeVisible()
+  })
+
   // Folded into "1 step", a lone call would be more work to read than the row
   // it replaced.
   it('leaves a lone tool call in the open', () => {

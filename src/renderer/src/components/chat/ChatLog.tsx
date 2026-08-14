@@ -17,6 +17,7 @@ import type { PermissionAnswer } from '@core/service.js'
 import type { ChatEntry } from '@core/transcript.js'
 
 import { Button } from '../Button.js'
+import { shown } from '../diff/shown.js'
 import type { Streaming } from '../../hooks/useChat.js'
 import { formatTokens } from './format.js'
 import type { Change, ChangeLine } from './changeSummary.js'
@@ -408,8 +409,12 @@ function ChangeBlock({
       <div className="border-line text-ink-soft flex min-w-0 items-baseline gap-2 border-b px-2.5 py-1.5">
         <Pencil aria-hidden className="shrink-0 self-center" size={12} />
         <span className="font-medium">{name}</span>
+        {/* The path and the lines go through `shown` for the reason the diff
+            pane's do: a bidi override reorders what is read without changing
+            what runs, and this block is where a small change is usually read
+            instead of in the diff at all. */}
         <span className="text-ink-faint truncate font-mono text-[11px]" title={change.path}>
-          {change.path}
+          {shown(change.path)}
         </span>
 
         <span className="ml-auto shrink-0 font-mono text-[11px]">
@@ -430,7 +435,7 @@ function ChangeBlock({
             </span>
             <span className="min-w-0 whitespace-pre-wrap">
               {line.sign === ' ' ? ' ' : line.sign}
-              {line.text}
+              {shown(line.text)}
             </span>
           </div>
         ))}
