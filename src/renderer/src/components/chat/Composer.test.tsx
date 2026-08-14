@@ -54,6 +54,37 @@ const OPUS: AgentModel = {
   supportedEffortLevels: ['high', 'max']
 }
 
+/**
+ * A catalogue shaped like the one the CLI sends, `Default (recommended)` and
+ * all — the row whose name the picker exists to replace.
+ */
+const CATALOGUE: AgentModel[] = [
+  {
+    value: 'default',
+    resolvedModel: 'claude-opus-5[1m]',
+    displayName: 'Default (recommended)',
+    description: '',
+    supportsEffort: null,
+    supportedEffortLevels: null
+  },
+  {
+    value: 'opus[1m]',
+    resolvedModel: 'claude-opus-5[1m]',
+    displayName: 'Opus (1M context)',
+    description: '',
+    supportsEffort: true,
+    supportedEffortLevels: ['high', 'max']
+  },
+  {
+    value: 'sonnet',
+    resolvedModel: 'claude-sonnet-5',
+    displayName: 'Sonnet',
+    description: '',
+    supportsEffort: null,
+    supportedEffortLevels: null
+  }
+]
+
 const field = (): HTMLElement => screen.getByRole('textbox')
 
 beforeEach(() => {
@@ -252,27 +283,56 @@ describe('the settings the next message runs under', () => {
     const user = userEvent.setup()
     const { onModel } = renderComposer({ models: [OPUS] })
 
-    expect(screen.getByRole('button', { name: 'Model' })).toHaveTextContent('Agent decides')
-
     await user.click(screen.getByRole('button', { name: 'Model' }))
     await user.click(screen.getByRole('menuitemradio', { name: /Opus 5/ }))
 
     expect(onModel).toHaveBeenCalledExactlyOnceWith('claude-opus-5')
   })
 
-  it('turns the agent-decides model back into no override at all', async () => {
+  /*
+   * The row the CLI calls "Default (recommended)" names no model, which is
+   * exactly what a picker of models must not do. It says what it resolves to,
+   * and the catalogue has a row for that name; the picker wears it.
+   */
+  it('names the model the default runs, rather than the word default', async () => {
     const user = userEvent.setup()
-    const { onModel } = renderComposer({ model: OPUS.value, models: [OPUS] })
+    renderComposer({ models: CATALOGUE })
+
+    expect(screen.getByRole('button', { name: 'Model' })).toHaveTextContent('Opus (1M context)')
 
     await user.click(screen.getByRole('button', { name: 'Model' }))
-    await user.click(screen.getByRole('menuitemradio', { name: 'Agent decides' }))
+
+    const rows = screen.getAllByRole('menuitemradio')
+    expect(rows.map((row) => row.textContent)).toEqual(['Opus (1M context)by default', 'Sonnet'])
+    expect(rows[0]).toBeChecked()
+  })
+
+  it('turns the default row back into no override at all', async () => {
+    const user = userEvent.setup()
+    const { onModel } = renderComposer({ model: 'sonnet', models: CATALOGUE })
+
+    await user.click(screen.getByRole('button', { name: 'Model' }))
+    await user.click(screen.getByRole('menuitemradio', { name: /Opus \(1M context\)/ }))
 
     expect(onModel).toHaveBeenCalledExactlyOnceWith(null)
   })
 
+  // A first run: no session has reported a catalogue yet, so there is no model
+  // name to wear. The row still has to be there and has to read as words rather
+  // than as the raw id the picker would otherwise print.
+  it('names the default row in plain language when no catalogue has arrived', async () => {
+    const user = userEvent.setup()
+    renderComposer({ models: [] })
+
+    expect(screen.getByRole('button', { name: 'Model' })).toHaveTextContent('Default model')
+
+    await user.click(screen.getByRole('button', { name: 'Model' }))
+    expect(screen.getAllByRole('menuitemradio')).toHaveLength(1)
+  })
+
   // The list is remembered from the last session, so a chat can name a model it
-  // no longer has. Showing "Agent decides" would claim a default that is not in
-  // force, and there would be no way back to a real choice.
+  // no longer has. Showing the default would claim one that is not in force,
+  // and there would be no way back to a real choice.
   it('keeps a model the remembered list has forgotten', async () => {
     const user = userEvent.setup()
     renderComposer({ model: 'claude-retired-3', models: [OPUS] })
@@ -568,35 +628,41 @@ describe('the model the session is running', () => {
 
   const modelButton = (): HTMLElement => screen.getByRole('button', { name: 'Model' })
 
-  it('names it, tagged, when nothing was chosen here', () => {
-    renderComposer({ models: [SONNET], model: null, activeModel: 'claude-sonnet-5' })
-
-    expect(modelButton()).toHaveTextContent('Sonnet · auto')
-  })
-
-  // The tag is what keeps the button honest: a name on its own would claim a
-  // decision nobody made.
-  it('still has the agent-decides option ticked underneath', async () => {
+  /*
+   * A `/model` command, seen from the footer: the record still chose nothing,
+   * so the menu goes on ticking the default, while the button has to name where
+   * the session actually went.
+   */
+  it('names what is running when that is not what the menu ticks', async () => {
     const user = userEvent.setup()
-    renderComposer({ models: [SONNET], model: null, activeModel: 'claude-sonnet-5' })
-
-    await user.click(modelButton())
-
-    expect(screen.getByRole('menuitemradio', { name: 'Agent decides' })).toBeChecked()
-  })
-
-  it('drops the tag once a model is chosen', () => {
-    renderComposer({ models: [SONNET], model: 'sonnet', activeModel: 'claude-sonnet-5' })
+    renderComposer({ models: CATALOGUE, model: null, activeModel: 'claude-sonnet-5' })
 
     expect(modelButton()).toHaveTextContent('Sonnet')
+
+    await user.click(modelButton())
+    expect(screen.getByRole('menuitemradio', { name: /Opus \(1M context\)/ })).toBeChecked()
+  })
+
+  // The ordinary case, where the two agree. The button says the name once.
+  it('says it once when the session is on what the default runs', () => {
+    renderComposer({ models: CATALOGUE, model: null, activeModel: 'claude-opus-5[1m]' })
+
+    expect(modelButton()).toHaveTextContent('Opus (1M context)')
     expect(modelButton()).not.toHaveTextContent('auto')
   })
 
-  // Before any session has answered there is nothing to name.
-  it('says the agent decides while no session has reported', () => {
-    renderComposer({ models: [SONNET], model: null, activeModel: null })
+  it('names the chosen model when one was chosen here', () => {
+    renderComposer({ models: [SONNET], model: 'sonnet', activeModel: 'claude-sonnet-5' })
 
-    expect(modelButton()).toHaveTextContent('Agent decides')
+    expect(modelButton()).toHaveTextContent('Sonnet')
+  })
+
+  // Before any session has answered there is nothing running to name, and the
+  // default is what the next message will go out on.
+  it('names the default while no session has reported', () => {
+    renderComposer({ models: CATALOGUE, model: null, activeModel: null })
+
+    expect(modelButton()).toHaveTextContent('Opus (1M context)')
   })
 
   /*
@@ -640,6 +706,6 @@ describe('the model the session is running', () => {
   it('names a running model the list has no row for', () => {
     renderComposer({ models: [], model: null, activeModel: 'claude-brand-new-1' })
 
-    expect(modelButton()).toHaveTextContent('claude-brand-new-1 · auto')
+    expect(modelButton()).toHaveTextContent('claude-brand-new-1')
   })
 })

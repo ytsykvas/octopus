@@ -5,6 +5,7 @@ import {
   type AgentCommand,
   AgentCommandSchema,
   type AgentModel,
+  defaultAgentModel,
   findAgentModel,
   sameModel,
   ChatMessageSchema,
@@ -247,34 +248,41 @@ describe('recognising the command that clears', () => {
  * thing — otherwise the picker draws a second row for a model already in it and
  * offers effort levels the real one does not take.
  */
-describe('matching a model by either of its names', () => {
-  const CATALOGUE: AgentModel[] = [
-    {
-      value: 'default',
-      resolvedModel: 'claude-opus-5[1m]',
-      displayName: 'Default (recommended)',
-      description: '',
-      supportedEffortLevels: null,
-      supportsEffort: null
-    },
-    {
-      value: 'opus[1m]',
-      resolvedModel: 'claude-opus-5[1m]',
-      displayName: 'Opus (1M context)',
-      description: '',
-      supportedEffortLevels: null,
-      supportsEffort: null
-    },
-    {
-      value: 'sonnet',
-      resolvedModel: 'claude-sonnet-5',
-      displayName: 'Sonnet',
-      description: '',
-      supportedEffortLevels: null,
-      supportsEffort: null
-    }
-  ]
+/**
+ * A live catalogue, copied from one the CLI actually sent.
+ *
+ * `Default (recommended)` is kept in it deliberately: it is what arrives, and
+ * every test that never sees that string is only worth something because the
+ * fixture contains it.
+ */
+const CATALOGUE: AgentModel[] = [
+  {
+    value: 'default',
+    resolvedModel: 'claude-opus-5[1m]',
+    displayName: 'Default (recommended)',
+    description: '',
+    supportedEffortLevels: null,
+    supportsEffort: null
+  },
+  {
+    value: 'opus[1m]',
+    resolvedModel: 'claude-opus-5[1m]',
+    displayName: 'Opus (1M context)',
+    description: '',
+    supportedEffortLevels: null,
+    supportsEffort: null
+  },
+  {
+    value: 'sonnet',
+    resolvedModel: 'claude-sonnet-5',
+    displayName: 'Sonnet',
+    description: '',
+    supportedEffortLevels: null,
+    supportsEffort: null
+  }
+]
 
+describe('matching a model by either of its names', () => {
   it('finds an entry by the name it goes by', () => {
     expect(findAgentModel(CATALOGUE, 'sonnet')?.displayName).toBe('Sonnet')
   })
@@ -313,5 +321,67 @@ describe('matching a model by either of its names', () => {
   it('will not guess when the catalogue is empty', () => {
     expect(sameModel('sonnet', 'claude-sonnet-5', [])).toBe(false)
     expect(sameModel('sonnet', 'sonnet', [])).toBe(true)
+  })
+})
+
+/*
+ * Naming the row that names nothing.
+ *
+ * "Default (recommended)" tells a reader which model they are about to talk to
+ * exactly as well as a blank line would. The catalogue does know — it just says
+ * it in another row — and this is the lookup that fetches it.
+ */
+describe('the model the default stands for', () => {
+  it('answers with the row that shares its full name', () => {
+    expect(defaultAgentModel(CATALOGUE)?.displayName).toBe('Opus (1M context)')
+  })
+
+  // The row called `default` resolves to the same name as `opus[1m]` and comes
+  // first, so a search that left it in would find it and answer with the very
+  // string this function exists to avoid.
+  it('never answers with the default row itself', () => {
+    const alone: AgentModel[] = [
+      {
+        value: 'default',
+        resolvedModel: 'claude-opus-5[1m]',
+        displayName: 'Default (recommended)',
+        description: '',
+        supportedEffortLevels: null,
+        supportsEffort: null
+      }
+    ]
+
+    expect(defaultAgentModel(alone)).toBeUndefined()
+  })
+
+  it('prefers a row named in full over one that merely resolves to it', () => {
+    const spelled: AgentModel[] = [
+      ...CATALOGUE,
+      {
+        value: 'claude-opus-5[1m]',
+        resolvedModel: null,
+        displayName: 'Opus, spelled out',
+        description: '',
+        supportedEffortLevels: null,
+        supportsEffort: null
+      }
+    ]
+
+    expect(defaultAgentModel(spelled)?.displayName).toBe('Opus, spelled out')
+  })
+
+  it('answers with nothing when the default says nothing about what it runs', () => {
+    const silent = CATALOGUE.map((model) =>
+      model.value === 'default' ? { ...model, resolvedModel: null } : model
+    )
+
+    expect(defaultAgentModel(silent)).toBeUndefined()
+  })
+
+  it('answers with nothing when there is no default row, or no catalogue at all', () => {
+    expect(
+      defaultAgentModel(CATALOGUE.filter((model) => model.value !== 'default'))
+    ).toBeUndefined()
+    expect(defaultAgentModel([])).toBeUndefined()
   })
 })

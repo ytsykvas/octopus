@@ -22,9 +22,9 @@ interface ComposerPickerProps<T extends string> {
   /**
    * What the trigger says, when that is not the chosen option's own label.
    *
-   * The model picker needs the two to differ: the menu marks "the agent
-   * decides", because that is what was chosen, while the button names the model
-   * that choice actually landed on.
+   * The model picker needs the two to differ after a `/model` command: the menu
+   * goes on marking what this chat chose, which the command did not touch,
+   * while the button names the model the session moved to.
    */
   readonly display?: string
 }

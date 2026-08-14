@@ -5,6 +5,7 @@ import { useTranslation } from 'react-i18next'
 import {
   type AgentCommand,
   type AgentModel,
+  DEFAULT_MODEL,
   EFFORT_LEVELS,
   type Effort,
   findAgentModel,
@@ -19,6 +20,7 @@ import { CommandMenu } from './CommandMenu.js'
 import { completeCommand, matchCommands, readCommandQuery } from './commandMatch.js'
 import { ComposerAttic } from './ComposerAttic.js'
 import { ComposerPicker } from './ComposerPicker.js'
+import { modelRows } from './modelRows.js'
 
 interface ComposerProps {
   readonly busy: boolean
@@ -31,7 +33,7 @@ interface ComposerProps {
   /** Null means the agent decides, which is what a new chat starts on. */
   readonly effort: Effort | null
   readonly onEffort: (effort: Effort | null) => void
-  /** Null means the agent decides. */
+  /** Null means nothing was chosen here, which the default row stands for. */
   readonly model: string | null
   readonly onModel: (model: string | null) => void
   /** What the agent last said this account may use; empty on a first run. */
@@ -154,34 +156,35 @@ export function Composer({
    */
   const [dismissed, setDismissed] = useState(false)
 
+  const rows = modelRows(
+    models,
+    { fallback: t('chat.modelDefault'), note: t('chat.modelDefaultNote') },
+    model
+  )
+
   // Through the catalogue rather than by string equality: a session names
   // itself in full while the list may hold a short name, and `claude-sonnet-5`
   // has to find the row called `sonnet`.
-  const chosenModel = model === null ? undefined : findAgentModel(models, model)
-  const runningModel = activeModel === null ? undefined : findAgentModel(models, activeModel)
+  const chosenModel = model === null ? undefined : findAgentModel(rows, model)
+  const runningModel = activeModel === null ? undefined : findAgentModel(rows, activeModel)
   const effortChoices = effortChoicesFor(chosenModel ?? runningModel)
 
-  // A model the list no longer names is still the one this chat runs on, so it
-  // is offered as itself. Dropping it would leave the picker claiming a default
-  // that is not in force, and take away the one click that changes it.
-  const modelChoices =
-    model === null || chosenModel
-      ? models
-      : [{ value: model, resolvedModel: null, displayName: model, description: '' }, ...models]
+  // Nothing chosen ticks the agent's own default, which is a row like any
+  // other now rather than a sentinel standing in for the absence of one.
+  const modelValue = chosenModel?.value ?? DEFAULT_MODEL
 
   /*
-   * What the button says, which is not always what the menu has ticked.
+   * What the button says, when that is not what the menu has ticked.
    *
-   * Nothing chosen means the agent picked, and naming its pick is more use than
-   * repeating that nobody chose — but the tag has to stay, or the footer would
-   * claim a decision that was never made. A `/model` command lands here too:
-   * the CLI scopes it to the session, so it moves what is running without
-   * moving what this chat chose.
+   * Only when the two genuinely differ, which a `/model` command is what
+   * causes: the CLI scopes it to the session, so it moves what is running
+   * without moving what this chat chose. Naming the running model when it is
+   * already the ticked row would just say it twice.
    */
   const runningLabel =
-    model !== null || activeModel === null
+    activeModel === null || runningModel?.value === modelValue
       ? undefined
-      : `${runningModel?.displayName ?? activeModel} · ${t('chat.modelAutoTag')}`
+      : (runningModel?.displayName ?? activeModel)
 
   const trimmed = draft.trim()
 
@@ -299,19 +302,16 @@ export function Composer({
         <div className="border-line flex flex-wrap items-center gap-1 border-t px-2 py-1.5">
           <ComposerPicker
             label={t('chat.model')}
-            value={chosenModel?.value ?? model ?? AGENT_DECIDES}
+            value={modelValue}
             icon={<Sparkles aria-hidden size={12} />}
             {...(runningLabel !== undefined && { display: runningLabel })}
-            options={[
-              { value: AGENT_DECIDES, label: t('chat.modelAuto') },
-              ...modelChoices.map((candidate) => ({
-                value: candidate.value,
-                label: candidate.displayName,
-                ...(candidate.description !== '' && { description: candidate.description })
-              }))
-            ]}
+            options={rows.map((candidate) => ({
+              value: candidate.value,
+              label: candidate.displayName,
+              ...(candidate.description !== '' && { description: candidate.description })
+            }))}
             onChange={(value) => {
-              onModel(value === AGENT_DECIDES ? null : value)
+              onModel(value === DEFAULT_MODEL ? null : value)
             }}
           />
 

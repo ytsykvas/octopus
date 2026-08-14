@@ -772,7 +772,44 @@ describe('the permission mode', () => {
     await user.click(await screen.findByRole('menuitemradio', { name: 'Opus 5' }))
 
     expect(await screen.findByText(/no such chat/)).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Model' })).toHaveTextContent('Agent decides')
+    // This mocked catalogue has no `default` row, so the row that stands for
+    // "nothing chosen here" has no model name to wear.
+    expect(screen.getByRole('button', { name: 'Model' })).toHaveTextContent('Default model')
+  })
+
+  /*
+   * The same wiring end to end, on a catalogue shaped like the real one: the
+   * footer must name the model the agent's default runs, not the row's own
+   * "Default (recommended)", which names nothing.
+   */
+  it('names the model the catalogue default stands for', async () => {
+    vi.mocked(octopus().chats.models).mockResolvedValue({
+      ok: true,
+      value: [
+        {
+          value: 'default',
+          resolvedModel: 'claude-opus-5[1m]',
+          displayName: 'Default (recommended)',
+          description: '',
+          supportsEffort: null,
+          supportedEffortLevels: null
+        },
+        {
+          value: 'opus[1m]',
+          resolvedModel: 'claude-opus-5[1m]',
+          displayName: 'Opus (1M context)',
+          description: '',
+          supportsEffort: null,
+          supportedEffortLevels: null
+        }
+      ]
+    })
+    givenChat()
+    await openLoadedChat()
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: 'Model' })).toHaveTextContent('Opus (1M context)')
+    })
   })
 
   it('sends the effort to the chat it belongs to', async () => {

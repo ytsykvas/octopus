@@ -178,10 +178,12 @@ export const en = {
     windowWeekTitle: 'Weekly window',
 
     model: 'Model',
-    modelAuto: 'Agent decides',
-    /* Marks a model nobody picked here — the agent's own choice, or one a
-       `/model` command set for this session. */
-    modelAutoTag: 'auto',
+    /* The default row's name, for a catalogue that has not arrived yet and so
+       cannot say which model the default actually runs. */
+    modelDefault: 'Default model',
+    /* Under the model the agent's default runs, so that row is read as a
+       standing choice rather than as one more model beside the others. */
+    modelDefaultNote: 'by default',
 
     effort: 'Effort',
     effortAuto: 'Agent decides',

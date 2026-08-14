@@ -220,18 +220,28 @@ settings — so that is what the pickers show until it exists, handed down from
 instead made the control lie about exactly one message: the first, which is the
 one the user has not sent yet and is looking straight at.
 
-**The model picker names what is running, which is not always what was chosen.**
-The two are different facts and the footer needs both: the menu ticks the choice
-— `Agent decides`, when there has been none — while the button names the model
-the session reports it is on, tagged `auto` when nobody picked it here. Without
-the tag the button would claim a decision nobody made; without the name it would
-answer "what is it running?" with "nobody said".
+**Every row of the model picker names a model.** The catalogue's first entry
+does not: the CLI calls it `Default (recommended)`, which tells a reader nothing
+about what they are about to talk to. It does say what it _resolves_ to, and the
+catalogue carries a second row for that same full name — so the default row
+wears that row's name and is marked `by default` underneath, and the duplicate
+is folded away rather than drawn twice under one heading. `modelRows` builds
+this, over `defaultAgentModel` in core. A chat that chose nothing ticks that row,
+which is why there is no longer an `Agent decides` entry beside it: the two said
+the same thing, and only one of them could name a model.
 
-A `/model` command lands in exactly that gap. The CLI scopes it to the session
-("for this session only"), so it moves what is running without moving what this
-chat chose — and the record staying put is the truth rather than a compromise.
-The name reaches the footer with the context reading, which is already refreshed
-on every `result`, so the picker moves as soon as the command's turn ends.
+Before any session has reported a catalogue there is no name to wear, and the
+row reads `Default model` — words rather than the raw `default` the picker would
+otherwise print.
+
+**The button names what is running when that differs from what the menu ticks.**
+A `/model` command is what causes it: the CLI scopes it to the session ("for this
+session only"), so it moves what is running without moving what this chat chose
+— and the record staying put is the truth rather than a compromise. The name
+reaches the footer with the context reading, which is already refreshed on every
+`result`, so the picker moves as soon as the command's turn ends. When the two
+agree the button simply says the ticked row, because saying it twice adds
+nothing.
 
 **The footer's permission control is two things, not one**, and they are two
 stored fields. `plan` is not a third degree of permission but a state the

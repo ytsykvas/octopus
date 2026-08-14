@@ -148,6 +148,41 @@ export function findAgentModel(
 }
 
 /**
+ * What the agent's catalogue calls the entry it picks when asked for nothing.
+ *
+ * A fact about the CLI rather than about any model, which is why it is written
+ * down here while model names are not — the same reasoning as `CLEAR_COMMAND`.
+ */
+export const DEFAULT_MODEL = 'default'
+
+/**
+ * The catalogue entry the `default` row actually runs.
+ *
+ * The `default` row calls itself "Default (recommended)", which names no model
+ * at all — but it does say what it resolves to, and a live catalogue carries a
+ * second row for that same full name. That row is the answer.
+ *
+ * The `default` row is taken out before the search rather than after: without
+ * that, asking for `claude-opus-5[1m]` finds `default` itself, since it is the
+ * first entry resolving to that name, and the picker would be back to the word
+ * this exists to get rid of.
+ *
+ * Undefined when there is no `default` row, when it says nothing about what it
+ * resolves to, or when nothing else in the catalogue answers to that name. It
+ * never falls back to the `default` row's own name, which is the one answer
+ * that would be no use.
+ */
+export function defaultAgentModel(models: readonly AgentModel[]): AgentModel | undefined {
+  const declared = models.find((model) => model.value === DEFAULT_MODEL)
+  if (declared?.resolvedModel == null) return undefined
+
+  return findAgentModel(
+    models.filter((model) => model.value !== DEFAULT_MODEL),
+    declared.resolvedModel
+  )
+}
+
+/**
  * Whether two names mean the same model, as the catalogue resolves them.
  *
  * A plain string comparison is not enough anywhere this is used: the record may

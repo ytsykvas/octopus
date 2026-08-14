@@ -168,8 +168,8 @@ export const uk: Translation = {
     windowWeekTitle: 'Тижневе вікно',
 
     model: 'Модель',
-    modelAuto: 'Вирішує агент',
-    modelAutoTag: 'авто',
+    modelDefault: 'Модель за замовчуванням',
+    modelDefaultNote: 'за замовчуванням',
 
     effort: 'Зусилля',
     effortAuto: 'Вирішує агент',
