@@ -13,6 +13,15 @@ function fromAgent(event: AgentEvent): ChatEntry {
   return { role: 'agent', at: AT, event }
 }
 
+/**
+ * The turn a footer closes.
+ *
+ * A footer at the head of the log draws nothing — it closes a turn the log does
+ * not have, which is what `/clear` used to leave behind — so a test about what
+ * a footer says has to give it a turn to be the footer of.
+ */
+const TURN: ChatEntry = fromAgent({ type: 'text', text: 'that is done' })
+
 function renderLog(overrides: Partial<React.ComponentProps<typeof ChatLog>> = {}): {
   onAnswer: ReturnType<typeof vi.fn>
   onAnswerQuestions: ReturnType<typeof vi.fn>
@@ -346,6 +355,7 @@ describe('what the log shows', () => {
   it('closes a turn with how long it took and what the exchange took', () => {
     renderLog({
       entries: [
+        TURN,
         fromAgent({
           type: 'result',
           ok: true,
@@ -366,6 +376,7 @@ describe('what the log shows', () => {
   it('shows no total when only one half was reported', () => {
     renderLog({
       entries: [
+        TURN,
         fromAgent({
           type: 'result',
           ok: true,
@@ -388,6 +399,7 @@ describe('what the log shows', () => {
   it('never shows a price', () => {
     renderLog({
       entries: [
+        TURN,
         fromAgent({
           type: 'result',
           ok: true,
@@ -408,6 +420,7 @@ describe('what the log shows', () => {
   it('stays quiet about a turn that simply finished', () => {
     renderLog({
       entries: [
+        TURN,
         fromAgent({
           type: 'result',
           ok: true,
@@ -427,6 +440,7 @@ describe('what the log shows', () => {
   it('says why a turn ended when it did not simply finish', () => {
     renderLog({
       entries: [
+        TURN,
         fromAgent({
           type: 'result',
           ok: false,
@@ -445,6 +459,7 @@ describe('what the log shows', () => {
   it('says nothing when the turn reported no numbers at all', () => {
     renderLog({
       entries: [
+        TURN,
         fromAgent({
           type: 'result',
           ok: false,

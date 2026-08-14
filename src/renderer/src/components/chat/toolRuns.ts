@@ -160,7 +160,26 @@ export function groupToolRuns(entries: readonly ChatEntry[]): LogBlock[] {
     run = []
   }
 
+  /*
+   * Whether nothing has been drawn yet, which is what makes a footer stray.
+   *
+   * A `result` closes the turn above it, and at the head of the log there is no
+   * turn above it to close. `/clear` is what leaves one there: the transcript
+   * goes the moment the reset arrives and the command's own result lands a tick
+   * later, so an emptied conversation opened on a single row reading
+   * `0.1s · 0 tokens` — three facts about a turn nobody can see.
+   *
+   * `service.ts` no longer writes that entry, so new conversations never carry
+   * one. This is what the ones already on disk need, and it costs a flag.
+   */
+  let nothingDrawnYet = true
+
   for (const [index, entry] of entries.entries()) {
+    if (nothingDrawnYet) {
+      if (entry.role === 'agent' && entry.event.type === 'result') continue
+      nothingDrawnYet = false
+    }
+
     if (isToolRow(entry) || (run.length > 0 && drawsNothing(entry))) {
       if (run.length === 0) runAt = index
       run.push(entry)

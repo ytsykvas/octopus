@@ -230,6 +230,28 @@ recorded where it is known — `sendToChat` notes that the message was a clearin
 command, aliases included — and consumed by the event it caused. Read off the
 event alone, approving a plan would erase the conversation that produced it.
 
+**The clearing turn outlives its own reset by one event.** The transcript is
+discarded the moment the reset says it was asked for, and the command's own
+`result` arrives a tick later — recreating the file it had just removed, to hold
+the footer of a turn nobody can see. An emptied conversation reopened as one row
+reading `0.1s · 0 tokens`, and clearing again only replaced it.
+
+So the request is consumed in two steps rather than one: `clearRequests` ends at
+the reset, `clearedTurns` at the result that follows it. Only the **writing** is
+skipped — the result is still announced, being what stops the composer offering
+to stop.
+
+Both sets are also emptied with the chat when its workspace is removed, which is
+bookkeeping rather than a guard. Neither can strand a flag that matters: a
+`/clear` whose result never arrives means the session stopped answering, and
+`closeChatsOf` — the only thing that drops a session — runs on workspace
+removal, not on an agent error. A session that dies is kept in `sessions`, so
+there is no later turn for a stale flag to swallow.
+
+The log has the matching rule, because the transcripts written before this did
+not get one: a footer at the head of the log closes no turn, so `groupToolRuns`
+does not draw it.
+
 ### One writer at a time
 
 `persist.ts` writes to a fixed temporary path and renames it, so two saves in

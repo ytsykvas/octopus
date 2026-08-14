@@ -220,3 +220,53 @@ describe('the lines a change landed among', () => {
     expect(blocks[0]?.kind === 'change' && blocks[0].context).toBeNull()
   })
 })
+
+/*
+ * Reported from a running app: `/clear` emptied the pane and left one row at
+ * the top of it reading `0.1s · 0 tokens`.
+ *
+ * A footer closes the turn above it, and at the head of the log there is no
+ * turn above it to close. `service.ts` no longer writes that entry, so a
+ * conversation cleared from now on never carries one — this is what the
+ * transcripts already on disk need, and a clear is not a way to be rid of it
+ * because clearing is what leaves it.
+ */
+describe('a footer with no turn above it', () => {
+  const footer = (): ChatEntry =>
+    agent({
+      type: 'result',
+      ok: true,
+      costUsd: 0,
+      durationMs: 75,
+      inputTokens: 0,
+      outputTokens: 0,
+      terminalReason: null
+    })
+
+  it('draws nothing when it opens the log', () => {
+    expect(groupToolRuns([footer()])).toEqual([])
+  })
+
+  it('leaves the conversation that follows it untouched', () => {
+    const blocks = groupToolRuns([footer(), said('go on'), call('Grep'), call('Grep')])
+
+    expect(blocks.map((block) => block.kind)).toEqual(['entry', 'tools'])
+  })
+
+  // Position is the block's key for as long as it exists, and the log is
+  // append-only. Skipping rather than filtering is what keeps the surviving
+  // entries on the indices they had.
+  it('does not move the entries after it', () => {
+    const blocks = groupToolRuns([footer(), said('go on')])
+
+    expect(blocks.map((block) => block.at)).toEqual([1])
+  })
+
+  // Everywhere else it closes the turn it belongs to, which is the whole reason
+  // the row exists.
+  it('is drawn wherever there is a turn above it', () => {
+    const blocks = groupToolRuns([said('done'), footer()])
+
+    expect(blocks.map((block) => block.kind)).toEqual(['entry', 'entry'])
+  })
+})

@@ -161,6 +161,15 @@ stays in the open, since "1 step" costs more to read than the row it replaces,
 and a failure or anything the agent said breaks the run so it stays where it
 happened.
 
+**A turn's footer needs a turn.** One at the head of the log has nothing above
+it to close, and `/clear` used to leave exactly that: the transcript went with
+the reset and the command's own result landed a tick later, so an emptied
+conversation opened on a row reading `0.1s · 0 tokens` — three facts about a
+turn nobody could see, and clearing again only replaced it. `service.ts` no
+longer writes that entry; this rule is what the transcripts already carrying one
+need, and it is why `groupToolRuns` skips rather than filters — position is a
+block's key, and the entries after the footer have to keep the indices they had.
+
 **An edit is drawn as the edit**: the path, `+8 −2`, and the lines themselves,
 removed in `danger`, added in `success`, the untouched ones between them plain.
 `Plan` is likewise never folded — it arrives as a tool call and is the substance

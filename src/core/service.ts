@@ -329,11 +329,31 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
    * approved. So the intent is recorded where it is known — at the point the
    * message was sent — and consumed by the event it belongs to.
    *
-   * A chat id is removed the moment a reset is seen, or when its session ends.
-   * An entry that never gets its reset — a `/clear` the CLI refused — is
-   * cleaned up with the session, so this cannot grow.
+   * A chat id is removed the moment a reset is seen, or with the chat when its
+   * workspace is removed. An entry that never gets its reset — a `/clear` the
+   * CLI refused — goes that second way, so this cannot grow.
    */
   const clearRequests = new Set<string>()
+
+  /**
+   * Chats whose clearing turn has not ended yet.
+   *
+   * `/clear` discards the transcript the moment the reset says it was asked
+   * for, and the command's own `result` arrives a tick later — recreating the
+   * file it had just removed, to hold the footer of a turn nobody can see. An
+   * emptied conversation reopened as one row reading `0.1s · 0 tokens`.
+   *
+   * It is the *writing* that is skipped and nothing else: the result still has
+   * to be announced, being what stops the composer offering to stop.
+   *
+   * Dropped with the chat when its workspace is removed, like `clearRequests`
+   * above: bookkeeping, so neither set outlives what it is about. It is not a
+   * guard against a stuck flag, and does not need to be — a `/clear` whose
+   * result never comes means the session stopped answering, and a session that
+   * stops answering is not replaced (`sessions` keeps it), so there is no
+   * later footer for a stale flag to swallow.
+   */
+  const clearedTurns = new Set<string>()
 
   // One reading for the whole service, not one per chat: the limit belongs to
   // the account, and whichever session reports it is reporting the same thing.
@@ -510,6 +530,16 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
   }
 
   /**
+   * Whether this event is the footer of the turn that emptied the log.
+   *
+   * Consumed rather than read, in the shape `answerReset` above uses: the flag
+   * belongs to one turn, and the event that ends it takes the flag with it.
+   */
+  function closesTheClearedTurn(chat: Chat, event: AgentEvent): boolean {
+    return event.type === 'result' && clearedTurns.delete(chat.id)
+  }
+
+  /**
    * Writes down which commands a chat's agent offers.
    *
    * Skipped when the list already matches, because this runs on every session
@@ -541,8 +571,12 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
     // A conversation the user asked to forget keeps no record of itself. The
     // delete goes in before the append that would otherwise write this very
     // event into the file it is about to remove.
-    if (event.type === 'conversation_reset' && event.cleared) discard(chat)
-    else if (!isEphemeral(event)) record(chat, { role: 'agent', at: now(), event })
+    if (event.type === 'conversation_reset' && event.cleared) {
+      discard(chat)
+      clearedTurns.add(chat.id)
+    } else if (!isEphemeral(event) && !closesTheClearedTurn(chat, event)) {
+      record(chat, { role: 'agent', at: now(), event })
+    }
 
     if (event.type === 'rate_limit') rateLimit = event
 
@@ -720,9 +754,11 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
         if (edit.chatId === chat.id) editsInFlight.delete(toolUseId)
       }
 
-      // A `/clear` the session never got round to answering. Dropped with the
-      // session so it cannot clear a log the next one writes.
+      // A `/clear` the session never got round to answering, and a clearing
+      // turn whose result never came. Both belong to a chat that is going with
+      // this workspace, so neither is left in a set for the rest of the run.
       clearRequests.delete(chat.id)
+      clearedTurns.delete(chat.id)
 
       // Best effort, one at a time: a session that fails to close must not
       // stop the workspace from being removed.

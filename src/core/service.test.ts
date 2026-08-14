@@ -1364,6 +1364,86 @@ describe('the agent chat', () => {
       })
     })
 
+    /*
+     * Reported from a running app: `/clear` emptied the pane and left one row
+     * at the top of it reading `0.1s · 0 tokens` — the footer of the turn that
+     * ran the command, arriving after the log it belonged to was thrown away.
+     *
+     * The transcript is discarded the moment the reset says it was asked for,
+     * and the result lands a tick later, recreating the file to hold a footer
+     * for a turn nobody can see. It survived a restart, so clearing twice was
+     * the only way to be rid of it — and that left a new one.
+     */
+    it('keeps the footer of the clearing turn out of the fresh transcript', async () => {
+      const { service, workspaceId } = await withWorkspace()
+      const chat = await service.openChat(workspaceId)
+
+      await sendAndReset(service, chat.id, '/clear')
+      agent().emit(resultMessage)
+      // Something that came after it, to wait on. Waiting on the absence
+      // itself is what the first draft of this test did, and it passed against
+      // the bug: the writes are background, so an empty file satisfies "no
+      // result yet" on the first poll. Once a later event is in the file, so is
+      // anything earlier that was ever going to be.
+      agent().emit(textMessage('and now something else'))
+
+      await vi.waitFor(async () => {
+        const history = await service.chatHistory(chat.id)
+        expect(history.some((entry) => entry.role === 'agent' && entry.event.type === 'text')).toBe(
+          true
+        )
+      })
+
+      const history = await service.chatHistory(chat.id)
+      expect(history.some((entry) => entry.role === 'agent' && entry.event.type === 'result')).toBe(
+        false
+      )
+    })
+
+    // The announcement still goes out, unlike the record: it is what stops the
+    // composer offering to stop, and a turn that cannot be ended is worse than
+    // a footer that says nothing.
+    it('still tells the window the turn has ended', async () => {
+      const { service, workspaceId, events } = await withWorkspace()
+      const chat = await service.openChat(workspaceId)
+
+      await sendAndReset(service, chat.id, '/clear')
+      agent().emit(resultMessage)
+
+      await vi.waitFor(() => {
+        expect(events.some((announced) => announced.event.type === 'result')).toBe(true)
+      })
+    })
+
+    // The flag belongs to one turn. Left standing it would swallow the footer
+    // of the next one — the first turn since the clear with anything to report.
+    it('keeps the footer of the turn after it', async () => {
+      const { service, workspaceId } = await withWorkspace()
+      const chat = await service.openChat(workspaceId)
+
+      await sendAndReset(service, chat.id, '/clear')
+      agent().emit(resultMessage)
+
+      await service.sendToChat(chat.id, 'now do something')
+      agent().emit(resultMessage)
+      // The marker again: "exactly one" is satisfied by the first of two the
+      // moment it lands, so without something later to wait on this passes
+      // against a flag that swallowed nothing.
+      agent().emit(textMessage('finished'))
+
+      await vi.waitFor(async () => {
+        const history = await service.chatHistory(chat.id)
+        expect(history.some((entry) => entry.role === 'agent' && entry.event.type === 'text')).toBe(
+          true
+        )
+      })
+
+      const history = await service.chatHistory(chat.id)
+      expect(
+        history.filter((entry) => entry.role === 'agent' && entry.event.type === 'result')
+      ).toHaveLength(1)
+    })
+
     it('tells the window the log is to go with it', async () => {
       const { service, workspaceId, events } = await withWorkspace()
       const chat = await service.openChat(workspaceId)
