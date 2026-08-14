@@ -161,7 +161,7 @@ not have, and `node-pty` spawns a real shell.
 ## Main and preload
 
 `registerIpc` takes its Electron surface as a parameter, so `ipc.test.ts`
-supplies six small functions and drives all 41 channels without a window.
+supplies six small functions and drives all 43 channels without a window.
 
 Two lists are load-bearing: `EXPECTED` in `ipc.test.ts` and `CALLS` in
 `preload/index.test.ts`. A channel name that drifts between the two sides fails
