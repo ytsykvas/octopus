@@ -340,6 +340,12 @@ setting rather than the same one.
 `setup.sh`, Server runs `run.sh` with the workspace's port in `$OCTOPUS_PORT`.
 Both run on a button: starting a server because a tab was clicked is a surprise.
 
+Changes and Terminal are **kept mounted** behind whichever tab is showing. A
+terminal unmounted is a process killed; a diff unmounted loses which files were
+collapsed and where the pane was scrolled to, which a review builds up over
+several turns. What stops the hidden diff reading git is a `visible` prop, not
+being unmounted.
+
 The right pane folds away from **one button in the title bar**, which switches
 between collapse and expand in place. The collapse used to sit inside the pane
 and the expand in the bar — but a control that folds something away cannot live
@@ -373,6 +379,57 @@ difference — which is what puts the pane back where it was when the window goe
 back where it was, without anything having to remember the journey. The window's
 own size is not stored either (`src/main/index.ts`), so every launch starts at a
 width where the saved number applies as it stands.
+
+## The diff
+
+One scrolling column, not a list beside a viewer. The pane is 360px by default,
+and a second column inside it leaves neither half readable — so the file headers
+are **sticky** and the column doubles as the list, which is what the navigation
+was for. Sticky needs the scroller to be the only thing hiding its overflow
+between it and the header; an intermediate `overflow` anywhere in between and
+the headers stop sticking with nothing to say they have.
+
+**What is measured against what.** The left-hand side is the merge base of the
+project's base branch and the workspace's HEAD, and the right-hand side is the
+working tree — so committed, staged and unstaged work all show, while whatever
+landed on the base branch after the fork does not. A change staged and then
+reverted in the working tree is invisible, which is the right answer for a pane
+that reports what the workspace now holds.
+
+**Colour says what changed; the code says what it is.** The row carries
+`--diff-added-bg` or `--diff-removed-bg` and the sign in the gutter carries the
+hue, but the text is left to the syntax highlighting. The chat's change block
+colours the text as well and is right to — three lines with no highlighting need
+the colour to say what they are — but the same green over a whole file drowns
+what the code says. The two backgrounds are their own tokens rather than
+`--success-bg` and `--danger-bg`: those were tuned to sit under their own status
+text, and measuring showed a syntax palette losing about a tenth of its contrast
+on them.
+
+**Two gutters in one column.** A removed line has no number in the file as it now
+stands and an added line had none in the file as it was, so a single gutter would
+put a number on a line that never had one.
+
+**Side by side** is a stored preference, and the width two columns need is
+measured from a sample of the real monospace face — the cell differs by platform,
+font and zoom. Below that width the toggle stays visible and disabled, saying
+why, and the view falls back to one column without touching what was asked for.
+
+**Syntax colours arrive after the diff does.** A side of a file is tokenised
+whole rather than line by line, or a block comment is coloured wrongly from its
+second line on. The hunks are joined end to end, so a construct opened in the gap
+between two of them is still invisible. Nothing waits for a grammar: an
+unhighlighted line is drawn in `--ink`, and a highlighter that never starts costs
+the reader only the colours.
+
+**Files over 500 changed lines start collapsed**, and what the core left undrawn
+is said in the header rather than quietly appearing unchanged.
+
+**A note against a line rides out with the next message.** It becomes text — the
+path, the line, the line as it read when the note was written, then the remark —
+above whatever was typed, because nothing implicit reaches the agent (§4). One
+line takes one note, and the two sides of a diff are different lines even at the
+same number.
 
 ## Colour
 

@@ -38,12 +38,13 @@ Nothing but zod behind them, so a **value** can cross into the window.
 
 ### git
 
-| Module                                       | What it decides                                     |
-| -------------------------------------------- | --------------------------------------------------- |
-| [`git.ts`](../src/core/git.ts)               | running git safely; slugs; which branch is the base |
-| [`worktree.ts`](../src/core/worktree.ts)     | worktrees and branches, and parsing what git prints |
-| [`workspaces.ts`](../src/core/workspaces.ts) | the workspace lifecycle and reconciliation          |
-| [`projects.ts`](../src/core/projects.ts)     | whether a directory can be a project                |
+| Module                                       | What it decides                                       |
+| -------------------------------------------- | ----------------------------------------------------- |
+| [`git.ts`](../src/core/git.ts)               | running git safely; slugs; which branch is the base   |
+| [`worktree.ts`](../src/core/worktree.ts)     | worktrees and branches, and parsing what git prints   |
+| [`workspaces.ts`](../src/core/workspaces.ts) | the workspace lifecycle and reconciliation            |
+| [`projects.ts`](../src/core/projects.ts)     | whether a directory can be a project                  |
+| [`diff.ts`](../src/core/diff.ts)             | what a workspace changed, and parsing what git prints |
 
 ### External tools and processes
 

@@ -423,7 +423,11 @@ Further rules:
 - The branch prefix is configurable (a sensible default is the GitHub username).
 - List workspaces with status, reconciled between `git worktree list --porcelain` and our own state.
 - Removal with a check for uncommitted changes.
-- Diff: `git diff <base>...HEAD` plus `git status --porcelain`.
+- Diff: `git diff <merge-base>` against the working tree, plus
+  `git ls-files --others --exclude-standard` for what nobody has added yet. The
+  three-dot form compares two commits and so cannot see the working tree, which
+  is most of what there is to review; resolving the merge base explicitly gives
+  the same left-hand side and takes committed, staged and unstaged work at once.
 
 ### 12.2 Scripts
 
@@ -595,7 +599,10 @@ The terminal moved into scope early: account sign-in needs an interactive sessio
 - **Tool permissions** — settled for now: the read-only tools are automatic, everything else prompts in the chat, and an answer of "always" is stored per tool in the config where it can be taken back. The mode a new chat starts in is a global setting, so the question is not asked again on each new branch. Open: whether per-project profiles are needed, and whether "always" should narrow to an argument (`Bash(npm test:*)`) rather than a whole tool.
 - **Cross-platform** — whether Linux stays in the plans (affects CI only, not architecture).
 - **Task sources** — creating a workspace from a GitHub issue or a Linear ticket, as Conductor does.
-- **Code review** — inline comments on a diff that become attachments to the prompt.
+- **Code review** — answered: a note against a line rides out inside the next
+  message, as readable text rather than as anything hidden (§4). Open is whether
+  GitHub's review threads should appear on the same surface, which waits on
+  pull requests (§16).
 - **Several agents per workspace** — the store already allows it: a chat owns the session, and `agent` is an enum with one member. Open is whether the interface should offer it, and what two agents editing the same files at once actually does. Conductor allows it and warns about exactly that.
 - **What the list shows** — agent status, change count, CI state. Not session cost: the SDK's `total_cost_usd` is what the same tokens would have cost through the API, which a subscription never pays, and its own documentation calls it "an estimate, not a billing statement". Shown in an interface it is a made-up number in a currency. If usage is worth surfacing at all it belongs as tokens or as distance to a rate limit, not as dollars.
 - **Monetisation model** — whether $20 stays as full access (see the note in §15.5), and whether a separate auth service is warranted at all given the risks in §15.6.
