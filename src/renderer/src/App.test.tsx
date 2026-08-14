@@ -1281,12 +1281,17 @@ describe('App', () => {
     expect(await screen.findByRole('dialog', { name: 'Project settings' })).toBeInTheDocument()
   })
 
-  // A workspace can outlive its project on screen: the two lists are read
-  // separately, so a refresh may drop the project while the workspace list the
-  // pane is drawing from is still the previous one. The hint then points at a
-  // project that is no longer there, and must open nothing rather than settings
-  // for it.
-  it('opens no settings from the missing-script hint once the project has gone', async () => {
+  /*
+   * A workspace can outlive its project on screen: the two lists are read
+   * separately, so a refresh may drop the project while the workspace list the
+   * pane is drawing from is still the previous one.
+   *
+   * The scripts belong to the open project, so a workspace of a project that is
+   * no longer open is offered nothing at all — which is the stronger form of
+   * the promise this used to make, that the hint must not open settings for a
+   * project that has gone.
+   */
+  it('offers no script for a workspace whose project has gone', async () => {
     givenTwoProjects()
     vi.mocked(window.octopus.projects.listRemote).mockResolvedValue({
       ok: true,
@@ -1306,8 +1311,9 @@ describe('App', () => {
     const picker = await openRepositoryPicker(user)
     await user.click(within(picker).getByRole('button', { name: 'Add' }))
 
-    await user.click(await screen.findByRole('button', { name: 'Write the script' }))
-
+    await waitFor(() => {
+      expect(screen.queryByRole('button', { name: 'Write the script' })).not.toBeInTheDocument()
+    })
     expect(screen.queryByRole('dialog', { name: 'Project settings' })).not.toBeInTheDocument()
   })
 

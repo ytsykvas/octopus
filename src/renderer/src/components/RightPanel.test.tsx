@@ -65,6 +65,7 @@ function renderPanel(overrides: Partial<Props> = {}): {
     workspaces: [],
     activeWorkspaceId: null,
     color: null,
+    projectId: 'planner',
     scriptPaths: { setup: null, run: null },
     onEditScripts: vi.fn(),
     width: 360,
@@ -245,9 +246,14 @@ describe('RightPanel', () => {
     expect(onEditScripts).toHaveBeenCalled()
   })
 
-  // A run belongs to the workspace it was started in: carrying its output to
-  // the next one would describe work that never happened there.
-  it('drops a running script when the workspace changes', async () => {
+  /*
+   * A run belongs to the workspace it was started in: carrying its output to
+   * the next one would describe work that never happened there.
+   *
+   * That used to be kept by ending the run — which is how one click on the list
+   * killed a dev server. The promise is the same; only the price has gone.
+   */
+  it('shows the next workspace its own run rather than the last one’s', async () => {
     const { rerender } = renderPanel({
       workspaces: [anna, bob],
       activeWorkspaceId: anna.id,
@@ -262,10 +268,11 @@ describe('RightPanel', () => {
 
     rerender({ activeWorkspaceId: bob.id })
 
-    await waitFor(() => {
-      expect(octopus().terminal.dispose).toHaveBeenCalledWith(sessionId(1))
-    })
+    // Nothing has been started here, so this one offers to start — while the
+    // one left behind is still going.
     expect(screen.getByRole('button', { name: 'Run' })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Stop' })).not.toBeInTheDocument()
+    expect(octopus().terminal.dispose).not.toHaveBeenCalled()
   })
 
   // The control moved to the window header: the button that folds the pane
@@ -535,6 +542,77 @@ describe('RightPanel', () => {
 
     await user.click(screen.getByRole('button', { name: 'Server' }))
     expect(window.octopus.terminal.create).toHaveBeenCalledTimes(1)
+  })
+
+  /*
+   * The reason `run.sh` is handed a port at all.
+   *
+   * A workspace serves while you work in another one, or the port is unique
+   * for nothing. Unmounting is how a run ends, so a key that changed with the
+   * selection ended it — the same bug as the tab switch, reached by a click on
+   * the list instead.
+   */
+  it('leaves a running script alive when another workspace is opened', async () => {
+    const user = userEvent.setup()
+    const { rerender } = renderPanel({
+      workspaces: [anna, bob],
+      activeWorkspaceId: anna.id,
+      scriptPaths: SCRIPTS
+    })
+
+    await user.click(screen.getByRole('button', { name: 'Server' }))
+    await user.click(screen.getByRole('button', { name: 'Run' }))
+    await waitFor(() => {
+      expect(openedDirectories()).toEqual(['/tmp/planner/anna'])
+    })
+
+    rerender({ activeWorkspaceId: bob.id })
+
+    expect(window.octopus.terminal.dispose).not.toHaveBeenCalled()
+  })
+
+  it('lets two workspaces serve at once', async () => {
+    const user = userEvent.setup()
+    const { rerender } = renderPanel({
+      workspaces: [anna, bob],
+      activeWorkspaceId: anna.id,
+      scriptPaths: SCRIPTS
+    })
+
+    await user.click(screen.getByRole('button', { name: 'Server' }))
+    await user.click(screen.getByRole('button', { name: 'Run' }))
+    await waitFor(() => {
+      expect(openedDirectories()).toHaveLength(1)
+    })
+
+    rerender({ activeWorkspaceId: bob.id })
+    await user.click(screen.getByRole('button', { name: 'Run' }))
+
+    await waitFor(() => {
+      expect(openedDirectories()).toEqual(['/tmp/planner/anna', '/tmp/planner/bob'])
+    })
+    expect(window.octopus.terminal.dispose).not.toHaveBeenCalled()
+  })
+
+  // Its directory is gone, so the script has nowhere left to be — the rule the
+  // terminals already follow.
+  it('ends the run of a workspace that has been removed', async () => {
+    const user = userEvent.setup()
+    const { rerender } = renderPanel({
+      workspaces: [anna, bob],
+      activeWorkspaceId: anna.id,
+      scriptPaths: SCRIPTS
+    })
+
+    await user.click(screen.getByRole('button', { name: 'Server' }))
+    await user.click(screen.getByRole('button', { name: 'Run' }))
+    await waitFor(() => {
+      expect(openedDirectories()).toHaveLength(1)
+    })
+
+    rerender({ workspaces: [bob], activeWorkspaceId: bob.id })
+
+    expect(window.octopus.terminal.dispose).toHaveBeenCalledWith(sessionId(1))
   })
 
   // The two script tabs are separate runs, so the one being watched must be

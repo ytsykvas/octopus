@@ -9,7 +9,7 @@ import type { WorkspaceView } from '@core/workspaces.js'
 import { DiffPanel } from './diff/DiffPanel.js'
 import type { DiffView } from './diff/DiffHunk.js'
 import { ResizeHandle } from './ResizeHandle.js'
-import { ScriptRunner } from './ScriptRunner.js'
+import { WorkspaceScripts } from './WorkspaceScripts.js'
 import { WorkspaceTerminals } from './WorkspaceTerminals.js'
 
 /**
@@ -83,6 +83,14 @@ interface RightPanelProps {
   readonly activeWorkspaceId: string | null
   /** The open project's colour; null before one is chosen. */
   readonly color: ProjectColor | null
+  /**
+   * The open project, which the script paths below belong to.
+   *
+   * Needed as well as the active workspace, because clicking the open project
+   * clears the workspace selection without closing the project — and the
+   * scripts must stay standing through that.
+   */
+  readonly projectId: string | null
   /** Absolute paths of the project's scripts; null when never written. */
   readonly scriptPaths: { readonly setup: string | null; readonly run: string | null }
   readonly onEditScripts: () => void
@@ -112,6 +120,7 @@ export function RightPanel({
   workspaces,
   activeWorkspaceId,
   color,
+  projectId,
   scriptPaths,
   onEditScripts,
   width,
@@ -165,6 +174,18 @@ export function RightPanel({
   }
 
   const active = workspaces.find((workspace) => workspace.id === activeWorkspaceId) ?? null
+
+  /*
+   * Only the open project's workspaces may be given its scripts.
+   *
+   * The list carries every project's, because a terminal belongs to a
+   * workspace whatever is on screen. A script does not: `scriptPaths` are this
+   * project's, so a runner left standing from another one would offer to run
+   * this project's `setup.sh` in a directory that never asked for it. Leaving
+   * a project therefore ends its runs — the same clean edge the terminals do
+   * not need, and written down as its own task.
+   */
+  const scriptable = workspaces.filter((workspace) => workspace.projectId === projectId)
 
   // The ceiling moves with the window: shrinking it must not leave the pane
   // covering the centre, and growing it should make the extra room available.
@@ -317,23 +338,19 @@ export function RightPanel({
           the Stop button ends a run, so leaving the tab pressed Stop without
           saying so: a dev server died on the way to reading the diff, and a
           `setup.sh` caught half way through left a half-populated
-          `node_modules` behind it.
-
-          Both are mounted at once now, so each keeps a key of its own. Neither
-          holds anything until its Run button is pressed — an unstarted runner
-          is a line of text — so the pair costs nothing to leave standing. */}
+          `node_modules` behind it. `WorkspaceScripts` keeps the same promise
+          against the other click that used to end a run — opening another
+          workspace. */}
       <div
         aria-hidden={tab !== 'build'}
         className={`flex min-h-0 flex-1 flex-col ${tab === 'build' ? '' : 'hidden'}`}
       >
-        <ScriptRunner
-          // Still remounted per workspace: a run belongs to one workspace, and
-          // carrying its output to another would be a lie.
-          key={`build-${activeWorkspaceId ?? 'none'}`}
-          workspace={active}
+        <WorkspaceScripts
+          workspaces={scriptable}
+          activeId={activeWorkspaceId}
           kind="setup"
           scriptPath={scriptPaths.setup}
-          port={active?.port ?? 0}
+          visible={tab === 'build'}
           onOpenSettings={onEditScripts}
         />
       </div>
@@ -342,12 +359,12 @@ export function RightPanel({
         aria-hidden={tab !== 'server'}
         className={`flex min-h-0 flex-1 flex-col ${tab === 'server' ? '' : 'hidden'}`}
       >
-        <ScriptRunner
-          key={`server-${activeWorkspaceId ?? 'none'}`}
-          workspace={active}
+        <WorkspaceScripts
+          workspaces={scriptable}
+          activeId={activeWorkspaceId}
           kind="run"
           scriptPath={scriptPaths.run}
-          port={active?.port ?? 0}
+          visible={tab === 'server'}
           onOpenSettings={onEditScripts}
         />
       </div>

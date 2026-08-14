@@ -276,6 +276,10 @@ export function App(): React.JSX.Element {
   // disagreement would show up as a centre pane with nowhere to go.
   const sidebarWidth = config?.sidebarWidth ?? DEFAULT_SIDEBAR_WIDTH
 
+  // Read twice: the right pane hands it to the scripts, and the hint they
+  // draw when there is none sends the user to edit that same project.
+  const openProjectId = selectedProject?.id ?? null
+
   // What a conversation with no record of its own starts with. Read here
   // rather than in the chat: this is where the config lives, and the composer's
   // footer has to name what the record will actually be created with. The
@@ -435,9 +439,13 @@ export function App(): React.JSX.Element {
             workspaces={workspaces.flat}
             activeWorkspaceId={selectedWorkspaceId}
             color={selectedProject?.color ?? null}
+            projectId={openProjectId}
             scriptPaths={scriptPaths}
+            // No guard: the scripts belong to the open project, so the hint
+            // that calls this exists only while there is one. With none, this
+            // is asked to edit nothing, which is what closing means.
             onEditScripts={() => {
-              if (selectedProject) setEditingProjectId(selectedProject.id)
+              setEditingProjectId(openProjectId)
             }}
             width={config?.rightPanelWidth ?? 360}
             onWidthChange={(rightPanelWidth) => void updateConfig({ rightPanelWidth })}

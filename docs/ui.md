@@ -340,6 +340,13 @@ setting rather than the same one.
 `setup.sh`, Server runs `run.sh` with the workspace's port in `$OCTOPUS_PORT`.
 Both run on a button: starting a server because a tab was clicked is a surprise.
 
+**A run belongs to its workspace**, the way a terminal does, so there is a
+runner per workspace and several can serve at once — which is what the unique
+port is for. It is the open project's workspaces that get one: the script paths
+are that project's, and a runner left standing from another would offer to run
+this project's `setup.sh` somewhere that never asked for it. Leaving a project
+therefore ends its runs, which is the remaining edge and is written down.
+
 **Every tab is kept mounted** behind whichever one is showing, and hidden with a
 class. A terminal unmounted is a process killed — and so is a script, because
 ceasing to render its terminal is the entire implementation of its Stop button,
