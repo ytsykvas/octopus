@@ -3,6 +3,7 @@ import { vi } from 'vitest'
 import type { AccountsStatus } from '@core/accounts.js'
 import type { Chat } from '@core/chats.js'
 import type { Config } from '@core/config.js'
+import type { WorkspaceDiff } from '@core/diff.js'
 import type { Workspace } from '@core/store.js'
 
 import type { OctopusApi } from '../../../preload/index.js'
@@ -73,7 +74,11 @@ export function installOctopusStub(): Api {
       create: vi.fn(() => ok(workspaceFixture())),
       rename: vi.fn(() => ok(undefined)),
       remove: vi.fn(() => ok(undefined)),
-      hasChanges: vi.fn(() => ok(false))
+      hasChanges: vi.fn(() => ok(false)),
+      diff: vi.fn(() => ok(emptyDiff()))
+    },
+    files: {
+      open: vi.fn(() => ok(undefined))
     },
     dialog: {
       pickDirectory: vi.fn(() => ok(null))
@@ -158,6 +163,18 @@ export function disconnectedAccounts(): AccountsStatus {
       orgName: null
     },
     github: { connected: false, login: null, name: null }
+  }
+}
+
+/** A workspace that has changed nothing — what most tests want from the tab. */
+function emptyDiff(): WorkspaceDiff {
+  return {
+    baseCommit: '0000000',
+    baseBranch: 'main',
+    files: [],
+    added: 0,
+    removed: 0,
+    omittedFiles: 0
   }
 }
 

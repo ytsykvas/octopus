@@ -13,6 +13,7 @@ import type { QuestionAnswer } from '@core/questions.js'
 import type { ChatEntry } from '@core/transcript.js'
 import type { TerminalExit, TerminalOutput, TerminalSpec } from '@core/terminal.js'
 import type { Config } from '@core/config.js'
+import type { WorkspaceDiff } from '@core/diff.js'
 import type { RemoteRepository } from '@core/github.js'
 import type { Workspace } from '@core/store.js'
 import type { RemoveOptions, WorkspaceView } from '@core/workspaces.js'
@@ -233,7 +234,17 @@ const api = {
 
     /** Whether removing this workspace would discard uncommitted work. */
     hasChanges: (workspaceId: string): Promise<Result<boolean>> =>
-      ipcRenderer.invoke('workspaces:hasChanges', workspaceId) as Promise<Result<boolean>>
+      ipcRenderer.invoke('workspaces:hasChanges', workspaceId) as Promise<Result<boolean>>,
+
+    /** Everything the workspace changed since it left the project's base branch. */
+    diff: (workspaceId: string): Promise<Result<WorkspaceDiff>> =>
+      ipcRenderer.invoke('workspaces:diff', workspaceId) as Promise<Result<WorkspaceDiff>>
+  },
+
+  files: {
+    /** Hands a file in a workspace to whatever the system opens it with. */
+    open: (workspaceId: string, path: string): Promise<Result<void>> =>
+      ipcRenderer.invoke('files:open', workspaceId, path) as Promise<Result<void>>
   },
 
   dialog: {

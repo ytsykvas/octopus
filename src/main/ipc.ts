@@ -41,7 +41,7 @@ export interface PickedDirectory {
 /**
  * The parts of Electron this module needs.
  *
- * Named explicitly so a test can supply five small functions instead of a
+ * Named explicitly so a test can supply seven small functions instead of a
  * framework, and so it is obvious at a glance how much of Electron the IPC
  * layer actually touches.
  */
@@ -77,7 +77,23 @@ export interface IpcHost {
    * window looking at the same workspace should see the same conversation.
    */
   readonly broadcastChatEvent: (event: ChatEvent) => void
+  /**
+   * Hands a path to the system, which decides what opens it.
+   *
+   * Answers with an empty string on success and a reason otherwise — Electron's
+   * own shape, kept rather than normalised so nothing is lost on the way here.
+   */
+  readonly openPath: (path: string) => Promise<string>
 }
+
+/**
+ * A path on its way to being opened.
+ *
+ * The ceiling is well past any real path and short of what would make a useful
+ * denial-of-service argument; the service is what proves the path is inside the
+ * workspace it claims.
+ */
+const FilePathSchema = z.string().min(1).max(4096)
 
 /**
  * Registers IPC handlers.
@@ -197,6 +213,21 @@ export function registerIpc(
 
   host.handle('workspaces:hasChanges', (_event, workspaceId: string) =>
     attempt(() => service.workspaceHasChanges(workspaceId))
+  )
+
+  host.handle('workspaces:diff', (_event, workspaceId: string) =>
+    attempt(() => service.readWorkspaceChanges(workspaceId))
+  )
+
+  // The one channel here that takes a path. It is validated, and the service
+  // then proves it is inside the workspace, because what comes back is handed
+  // to the operating system rather than looked up in our own records.
+  host.handle('files:open', (_event, workspaceId: string, path: unknown) =>
+    attempt(async () => {
+      const absolute = service.resolveWorkspaceFile(workspaceId, FilePathSchema.parse(path))
+      const refusal = await host.openPath(absolute)
+      if (refusal !== '') throw new Error(refusal)
+    })
   )
 
   // The agent chat. Everything the renderer sends here reaches a model or a

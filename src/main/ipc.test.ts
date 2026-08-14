@@ -42,8 +42,12 @@ interface Harness {
   readonly handlers: Map<string, (event: unknown, ...args: unknown[]) => unknown>
   readonly broadcasts: ThemeName[]
   readonly chatEvents: ChatEvent[]
+  /** Paths handed to the system, in order. */
+  readonly opened: string[]
   picked: PickedDirectory
   prefersDark: boolean
+  /** What the system says about the next open; empty means it worked. */
+  openRefusal: string
   /** null once the window a call came from has closed, as Electron reports it. */
   window: unknown
 }
@@ -52,13 +56,16 @@ function harness(): Harness {
   const handlers = new Map<string, (event: unknown, ...args: unknown[]) => unknown>()
   const broadcasts: ThemeName[] = []
   const chatEvents: ChatEvent[] = []
+  const opened: string[] = []
 
   const state: Harness = {
     handlers,
     broadcasts,
     chatEvents,
+    opened,
     picked: { canceled: true, filePaths: [] },
     prefersDark: false,
+    openRefusal: '',
     window: {},
     host: {
       handle: (channel, handler) => {
@@ -68,7 +75,11 @@ function harness(): Harness {
       windowFor: () => state.window,
       prefersDark: () => state.prefersDark,
       broadcastTheme: (theme) => broadcasts.push(theme),
-      broadcastChatEvent: (event) => chatEvents.push(event)
+      broadcastChatEvent: (event) => chatEvents.push(event),
+      openPath: (path) => {
+        opened.push(path)
+        return Promise.resolve(state.openRefusal)
+      }
     }
   }
 
@@ -247,6 +258,8 @@ describe('channel table', () => {
     'workspaces:rename',
     'workspaces:remove',
     'workspaces:hasChanges',
+    'workspaces:diff',
+    'files:open',
     'chats:list',
     'chats:open',
     'chats:history',
@@ -670,6 +683,69 @@ describe('workspaces of a real project', () => {
       ok: true
     })
     await expect(invoke('workspaces:list', projectId)).resolves.toEqual({ ok: true, value: [] })
+  })
+
+  it('carries a workspace’s diff across', async () => {
+    const projectId = await addProject()
+    const workspace = await createWorkspace(projectId)
+    await writeFile(join(workspace.path, 'draft.txt'), 'work\n', 'utf8')
+
+    await expect(invoke('workspaces:diff', workspace.id)).resolves.toMatchObject({
+      ok: true,
+      value: { added: 1, files: [{ path: 'draft.txt', status: 'untracked' }] }
+    })
+  })
+
+  // The code is what the renderer localises; without it the pane could only
+  // show git's English, which is the fallback rather than the message.
+  it('carries the code across when the base branch cannot be found', async () => {
+    const projectId = await addProject()
+    const workspace = await createWorkspace(projectId)
+    await service.updateProjectById(projectId, { baseBranch: 'main' })
+    await run('git', ['branch', '-m', 'main', 'trunk'], { cwd: join(dir, 'planner') })
+
+    await expect(invoke('workspaces:diff', workspace.id)).resolves.toMatchObject({
+      ok: false,
+      code: 'baseUnknown'
+    })
+  })
+
+  it('opens a file in a workspace', async () => {
+    const projectId = await addProject()
+    const workspace = await createWorkspace(projectId)
+
+    expect(await invoke('files:open', workspace.id, 'README.md')).toMatchObject({ ok: true })
+    expect(bench.opened).toEqual([join(workspace.path, 'README.md')])
+  })
+
+  it('refuses to open a path outside the workspace', async () => {
+    const projectId = await addProject()
+    const workspace = await createWorkspace(projectId)
+
+    expect(await invoke('files:open', workspace.id, '../../../etc/passwd')).toMatchObject({
+      ok: false
+    })
+    expect(bench.opened).toEqual([])
+  })
+
+  it('refuses a path that is not a string at all', async () => {
+    const projectId = await addProject()
+    const workspace = await createWorkspace(projectId)
+
+    expect(await invoke('files:open', workspace.id, 42)).toMatchObject({ ok: false })
+  })
+
+  // A refusal from the system is the only sign that nothing opened; swallowing
+  // it would leave a click that silently did nothing.
+  it('reports what the system said when a file would not open', async () => {
+    const projectId = await addProject()
+    const workspace = await createWorkspace(projectId)
+    bench.openRefusal = 'no application knows this file'
+
+    expect(await invoke('files:open', workspace.id, 'README.md')).toMatchObject({
+      ok: false,
+      error: 'no application knows this file'
+    })
   })
 
   // Workspaces left behind would keep their directories and branches while

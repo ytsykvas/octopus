@@ -1,7 +1,7 @@
 # IPC
 
 Every call from the interface to the rest of the application goes through one
-of 43 channels. The table lives in [`src/main/ipc.ts`](../src/main/ipc.ts); the
+of 45 channels. The table lives in [`src/main/ipc.ts`](../src/main/ipc.ts); the
 renderer never names a channel itself, it calls
 [`src/preload/index.ts`](../src/preload/index.ts).
 
@@ -58,13 +58,20 @@ The only channel outside this shape is `theme:get`, which cannot fail.
 
 ### Workspaces
 
-| Channel                 | Arguments       | Notes                                  |
-| ----------------------- | --------------- | -------------------------------------- |
-| `workspaces:list`       | `projectId`     | reconciled against `git worktree list` |
-| `workspaces:create`     | `projectId`     |                                        |
-| `workspaces:rename`     | `id`, `name`    | moves the branch, never the directory  |
-| `workspaces:remove`     | `id`, `options` | `force` discards uncommitted work      |
-| `workspaces:hasChanges` | `id`            | asked before offering to remove        |
+| Channel                 | Arguments       | Notes                                    |
+| ----------------------- | --------------- | ---------------------------------------- |
+| `workspaces:list`       | `projectId`     | reconciled against `git worktree list`   |
+| `workspaces:create`     | `projectId`     |                                          |
+| `workspaces:rename`     | `id`, `name`    | moves the branch, never the directory    |
+| `workspaces:remove`     | `id`, `options` | `force` discards uncommitted work        |
+| `workspaces:hasChanges` | `id`            | asked before offering to remove          |
+| `workspaces:diff`       | `id`            | everything changed since the base branch |
+
+### Files
+
+| Channel      | Arguments    | Notes                                                |
+| ------------ | ------------ | ---------------------------------------------------- |
+| `files:open` | `id`, `path` | the path is validated and proved inside the worktree |
 
 ### The agent chat
 
@@ -153,7 +160,8 @@ Two related rules, both learned the hard way:
 ## Why the Electron surface is injected
 
 `registerIpc` takes an `IpcHost` — `handle`, `showOpenDialog`, `windowFor`,
-`prefersDark`, `broadcastTheme`, `broadcastChatEvent` — instead of importing
-Electron. A test then supplies six small functions rather than a framework, and
+`prefersDark`, `broadcastTheme`, `broadcastChatEvent`, `openPath` — instead of
+importing Electron. A test then supplies seven small functions rather than a
+framework, and
 the whole table can be exercised without a window. It is the same reasoning that
 keeps the core headless, applied to the process that talks to it.

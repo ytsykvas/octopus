@@ -154,7 +154,8 @@ async function start(): Promise<void> {
       BrowserWindow.fromWebContents((event as Electron.IpcMainInvokeEvent).sender),
     prefersDark: () => nativeTheme.shouldUseDarkColors,
     broadcastTheme,
-    broadcastChatEvent
+    broadcastChatEvent,
+    openPath: (path) => shell.openPath(path)
   })
   watchSystemTheme(service)
   registerMenu()

@@ -6,6 +6,7 @@
  * bridge, and getting it wrong means an error the UI cannot explain.
  */
 
+import { DiffError } from '../core/diff.js'
 import { GitHubError } from '../core/github.js'
 import { describeError } from '../core/persist.js'
 import { ProjectValidationError } from '../core/projects.js'
@@ -35,7 +36,8 @@ export async function attempt<T>(operation: () => Promise<T> | T): Promise<Resul
     if (
       error instanceof ProjectValidationError ||
       error instanceof GitHubError ||
-      error instanceof WorkspaceError
+      error instanceof WorkspaceError ||
+      error instanceof DiffError
     ) {
       return { ok: false, error: error.message, code: error.code, params: error.params }
     }

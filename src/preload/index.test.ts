@@ -69,6 +69,7 @@ describe('the exposed bridge', () => {
       'chats',
       'config',
       'dialog',
+      'files',
       'projects',
       'settings',
       'terminal',
@@ -128,6 +129,8 @@ describe('channel names', () => {
       () => method('workspaces', 'hasChanges')('w' as never),
       'workspaces:hasChanges'
     ],
+    ['workspaces.diff', () => method('workspaces', 'diff')('w' as never), 'workspaces:diff'],
+    ['files.open', () => method('files', 'open')('w' as never, 'a.ts' as never), 'files:open'],
     ['chats.list', () => method('chats', 'list')('w' as never), 'chats:list'],
     ['chats.open', () => method('chats', 'open')('w' as never), 'chats:open'],
     ['chats.history', () => method('chats', 'history')('c' as never), 'chats:history'],
