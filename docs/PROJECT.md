@@ -299,7 +299,7 @@ Conductor's layout is the model — proven by daily use and free of complaints. 
 
 **Centre — agent chat.** The main working area: the session event stream and the input field.
 
-**Right pane — changes and terminal** in tabs. Shows what the agent did and gives manual access to the workspace. Draggable, and its width persists. Its active tab carries the open project's colour, falling back to the accent while no project is open.
+**Right pane — changes and terminal** in tabs. Shows what the agent did and gives manual access to the workspace. Draggable, and both its width and which tab is showing persist. Whether it is folded away does not — that is a mood about the current window. Its active tab carries the open project's colour, falling back to the accent while no project is open.
 
 #### Shortcuts
 
@@ -310,6 +310,8 @@ Conductor's layout is the model — proven by daily use and free of complaints. 
 | `⌃1`–`⌃9`   | jump to a workspace |
 | `⌘⇧D`       | changes             |
 | `⌘⇧P`       | pull request        |
+
+`⌘⇧P` is the one still to build, and waits on §16. Listing a shortcut that does nothing is worse than listing none: it is read once, tried once, and the rest of the table quietly distrusted along with it — which is what `⌘⇧D` did here for a fortnight.
 
 The right pane collapses — three columns do not fit on a narrow screen.
 

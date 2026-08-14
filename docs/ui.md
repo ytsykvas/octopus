@@ -346,6 +346,14 @@ collapsed and where the pane was scrolled to, which a review builds up over
 several turns. What stops the hidden diff reading git is a `visible` prop, not
 being unmounted.
 
+**Which tab is showing is stored**, and `⌘⇧D` opens Changes from anywhere —
+unfolding the pane if it was folded, because a shortcut for the changes that
+does nothing while the pane is away does nothing where it saves the most. The
+value lives in `App` rather than in the pane: the pane is unmounted while
+folded, so a tab kept inside it survived neither a fold nor a restart, and the
+shortcut has to reach it from outside. Whether the pane is folded is **not**
+stored — that is a mood about the current window rather than a preference.
+
 The right pane folds away from **one button in the title bar**, which switches
 between collapse and expand in place. The collapse used to sit inside the pane
 and the expand in the bar — but a control that folds something away cannot live
@@ -424,6 +432,27 @@ the reader only the colours.
 
 **Files over 500 changed lines start collapsed**, and what the core left undrawn
 is said in the header rather than quietly appearing unchanged.
+
+**A character that does not draw as itself is named where it stands.** Text goes
+on screen through the browser's bidirectional algorithm, so a right-to-left
+override reorders what a reviewer reads without changing a byte of what the
+compiler reads — the Trojan Source trick — and a zero-width character draws as
+nothing at all. Nothing is executed: React escapes the markup, and the danger is
+narrower and worse suited to being ignored, because a pane whose only job is
+checking work before it merges would be showing a line that is not the line.
+
+Such a character is replaced by a chip naming its code point, `U+202E`, which
+stops the reordering as well as reporting it — a marker elsewhere on the row
+would name the problem and leave it standing. The file header carries a warning
+too, since a large file starts collapsed and an unread line is the one most
+likely to be approved. The path gets the same treatment, being drawn from the
+same bytes: a file can be named to read as an image while ending in `.js`.
+
+U+200C and U+200D are deliberately left out. Persian and Indic text need them
+and every multi-part emoji carries one, so warning about those is warning about
+nothing by the second file. `shown` in `src/renderer/src/components/diff/shown.tsx`
+is the one place this is decided, and the chat's change block calls it too — the
+surface where a two-line edit is usually read instead of here.
 
 **A note against a line rides out with the next message.** It becomes text — the
 path, the line, the line as it read when the note was written, then the remark —

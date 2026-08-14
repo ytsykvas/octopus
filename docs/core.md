@@ -296,6 +296,33 @@ Only the session's own stream reaches `handleEvent`; a background write that
 failed is reported straight to the listeners by `report`. That is what makes the
 `error` case safe to withdraw on.
 
+### What a diff counts is exact; what it draws is bounded
+
+The counts come from `git diff --numstat` and are always right, whatever else
+happens. Only how much of a change is **drawn** is limited, and a file left out
+says so rather than quietly appearing unchanged. Keeping those two apart is what
+lets a pane degrade into "this file is too large to draw" instead of into a
+failure.
+
+The ceilings used to count files and lines only, and a line has no length: a
+source map or a minified bundle is two changed lines and passes every one of
+them, then puts megabytes through a buffer that holds 32MB. So there is a byte
+ceiling beside the line one, applied by handing git `core.bigFileThreshold` —
+past it git reports a file as binary rather than writing its content out. That
+flag goes **only** on the call carrying the lines: under the same setting
+`--numstat` answers `-`, and the counts are the half that must not move.
+
+Two consequences worth keeping:
+
+- **The pathspec has to be built from what was drawable, not from what is left.**
+  Comparing the drawn files against an already-marked list compares two numbers
+  that are equal by construction, so git is asked for the whole diff whatever the
+  ceilings said — and the file the ceiling excluded arrives in full anyway.
+- **Untracked files are not a special case.** They are measured before they are
+  read, read one at a time, and share the same budget as everything else.
+  Reading them all at once and measuring afterwards means a workspace whose
+  build output is not ignored opens a read per file in the tree.
+
 ### Errors are not swallowed
 
 If git fails, stderr reaches the user. A `catch` is justified when the fallback
