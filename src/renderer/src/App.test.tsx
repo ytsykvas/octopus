@@ -47,7 +47,7 @@ function config(overrides: Partial<Config> = {}): Config {
     cloneDirectory: '',
     settingSources: 'none',
     workingMode: 'default',
-    effort: null,
+    effort: 'medium',
     alwaysAllowedTools: [],
     theme: 'system',
     language: 'en',

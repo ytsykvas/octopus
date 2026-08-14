@@ -23,7 +23,7 @@ describe('a new chat', () => {
     id: 'chat-1',
     agent: 'claude' as const,
     workingMode: 'default' as const,
-    effort: null,
+    effort: 'medium' as const,
     createdAt: '2026-08-11T09:00:00.000Z'
   }
 
@@ -36,7 +36,7 @@ describe('a new chat', () => {
       agent: 'claude',
       sessionId: null,
       model: null,
-      effort: null,
+      effort: 'medium',
       workingMode: 'default',
       planMode: false,
       knownCommands: [],
@@ -57,7 +57,28 @@ describe('a new chat', () => {
 
     const parsed = ChatSchema.safeParse(older)
     expect(parsed.success).toBe(true)
-    expect(parsed.data?.effort).toBeNull()
+    expect(parsed.data?.effort).toBe('medium')
+  })
+
+  /*
+   * The other half of the same problem, and the one a default cannot answer:
+   * the field is there, holding the null that "the agent decides" was stored
+   * as. Nothing offers that choice any more, so it has to arrive as a level.
+   */
+  it('reads a record written while nothing was a choice', () => {
+    const stored = { ...newChat('planner/kyiv', options), effort: null }
+
+    const parsed = ChatSchema.safeParse(stored)
+    expect(parsed.success).toBe(true)
+    expect(parsed.data?.effort).toBe('medium')
+  })
+
+  // Normalising the two absences must not turn into normalising everything: a
+  // level nobody recognises is a corrupt record, and saying so is the point.
+  it('still refuses a level that is not one', () => {
+    const stored = { ...newChat('planner/kyiv', options), effort: 'ludicrous' }
+
+    expect(ChatSchema.safeParse(stored).success).toBe(false)
   })
 
   // The same claim for the command list, and it matters more: every chat on

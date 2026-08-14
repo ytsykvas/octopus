@@ -89,6 +89,31 @@ export const EFFORT_LEVELS = ['low', 'medium', 'high', 'xhigh', 'max'] as const
 export const EffortSchema = z.enum(EFFORT_LEVELS)
 export type Effort = z.infer<typeof EffortSchema>
 
+/** What a chat asks for when nobody has said otherwise. */
+export const DEFAULT_EFFORT: Effort = 'medium'
+
+/**
+ * Effort as it is stored, which is not quite as it arrives.
+ *
+ * Two shapes of older record, one line for both: the field may be absent, from
+ * before it existed, or present and null, from when "the agent decides" was a
+ * choice the picker offered. Neither is a level, and there is now exactly one
+ * thing to do with them — the composer names the level in force, so there has
+ * to be one.
+ *
+ * `.default()` alone would not do: it answers for a field that is missing, and
+ * says nothing about one that is there holding null. `.catch()` would cover
+ * both and is deliberately not used — it would swallow a genuinely corrupt
+ * level too, and `persist.ts` exists to fail loudly rather than quietly reset.
+ *
+ * Applied on the way in **and** on the way out, since `persist.ts` writes what
+ * the schema returned: an old null is cleaned off the disk the next time
+ * anything is saved. `alwaysAllowedTools` is filtered the same way.
+ */
+export const StoredEffortSchema = EffortSchema.nullable()
+  .default(DEFAULT_EFFORT)
+  .transform((level) => level ?? DEFAULT_EFFORT)
+
 /**
  * A model the account may use, as the agent reported it.
  *
@@ -276,13 +301,14 @@ export const ChatSchema = z.object({
   /** Model override; null leaves the choice to the agent. */
   model: z.string().nullable(),
   /**
-   * Effort override; null leaves the choice to the agent.
+   * How much thinking this conversation asks for; always a level.
    *
-   * Defaulted because a record written before this field existed must still
-   * load: `readJsonFile` throws on a schema mismatch rather than falling back,
-   * so a field without one does not lose the value — it stops the app opening.
+   * Normalised rather than merely defaulted: a record written before the field
+   * existed must still load, and so must one written while null was a choice.
+   * `readJsonFile` throws on a schema mismatch rather than falling back, so
+   * neither case may reach it unanswered — it would stop the app opening.
    */
-  effort: EffortSchema.nullable().default(null),
+  effort: StoredEffortSchema,
   /**
    * What replaced the old three-valued `permissionMode`.
    *
@@ -338,7 +364,7 @@ export interface NewChatOptions {
   readonly agent: AgentKind
   readonly workingMode: WorkingMode
   /** The application-wide default the conversation starts from. */
-  readonly effort: Effort | null
+  readonly effort: Effort
   readonly createdAt: string
 }
 

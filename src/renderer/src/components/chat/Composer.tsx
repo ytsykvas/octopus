@@ -30,9 +30,9 @@ interface ComposerProps {
   /** Whether the next message is asked for a plan first. */
   readonly planMode: boolean
   readonly onPlanMode: (planning: boolean) => void
-  /** Null means the agent decides, which is what a new chat starts on. */
-  readonly effort: Effort | null
-  readonly onEffort: (effort: Effort | null) => void
+  /** How much thinking the next message asks for; always a level. */
+  readonly effort: Effort
+  readonly onEffort: (effort: Effort) => void
   /** Null means nothing was chosen here, which the default row stands for. */
   readonly model: string | null
   readonly onModel: (model: string | null) => void
@@ -55,31 +55,16 @@ interface ComposerProps {
   readonly onStop: () => void
 }
 
-/**
- * "Leave it to the agent" needs a value a picker can hold, and null is not one.
- * It stays inside this file: the store and the SDK both speak in nulls.
- */
-const AGENT_DECIDES = 'auto'
-type EffortChoice = Effort | typeof AGENT_DECIDES
-
 const EFFORT_LABELS: Record<
-  EffortChoice,
-  | 'chat.effortAuto'
-  | 'chat.effortLow'
-  | 'chat.effortMedium'
-  | 'chat.effortHigh'
-  | 'chat.effortXhigh'
-  | 'chat.effortMax'
+  Effort,
+  'chat.effortLow' | 'chat.effortMedium' | 'chat.effortHigh' | 'chat.effortXhigh' | 'chat.effortMax'
 > = {
-  auto: 'chat.effortAuto',
   low: 'chat.effortLow',
   medium: 'chat.effortMedium',
   high: 'chat.effortHigh',
   xhigh: 'chat.effortXhigh',
   max: 'chat.effortMax'
 }
-
-const EFFORT_CHOICES: readonly EffortChoice[] = [AGENT_DECIDES, ...EFFORT_LEVELS]
 
 /**
  * Which effort levels to offer for the model in force.
@@ -88,11 +73,14 @@ const EFFORT_CHOICES: readonly EffortChoice[] = [AGENT_DECIDES, ...EFFORT_LEVELS
  * refusal, and hiding levels the model would in fact accept is worse than
  * offering one it quietly downgrades.
  */
-function effortChoicesFor(model: AgentModel | undefined): readonly EffortChoice[] {
+function effortChoicesFor(model: AgentModel | undefined, inForce: Effort): readonly Effort[] {
   const supported = model?.supportedEffortLevels
-  if (!supported) return EFFORT_CHOICES
+  if (!supported) return EFFORT_LEVELS
 
-  return [AGENT_DECIDES, ...EFFORT_LEVELS.filter((level) => supported.includes(level))]
+  // The level in force is offered whatever the model says about it. It is what
+  // the next message will run with, and a picker whose value has no row of its
+  // own falls back to printing the raw name.
+  return EFFORT_LEVELS.filter((level) => supported.includes(level) || level === inForce)
 }
 
 const MODE_LABELS: Record<WorkingMode, 'chat.modeDefault' | 'chat.modeAcceptEdits'> = {
@@ -167,7 +155,12 @@ export function Composer({
   // has to find the row called `sonnet`.
   const chosenModel = model === null ? undefined : findAgentModel(rows, model)
   const runningModel = activeModel === null ? undefined : findAgentModel(rows, activeModel)
-  const effortChoices = effortChoicesFor(chosenModel ?? runningModel)
+
+  // Which model the effort control answers about: what this chat chose, or
+  // failing that what the session is on, or failing that whatever the default
+  // runs — which is a row now, so there is always an answer.
+  const modelInForce = chosenModel ?? runningModel ?? rows[0]
+  const effortChoices = effortChoicesFor(modelInForce, effort)
 
   // Nothing chosen ticks the agent's own default, which is a row like any
   // other now rather than a sentinel standing in for the absence of one.
@@ -336,20 +329,18 @@ export function Composer({
 
           <ComposerPicker
             label={t('chat.effort')}
-            value={effort ?? AGENT_DECIDES}
+            value={effort}
             icon={<Gauge aria-hidden size={12} />}
             // Greyed out rather than hidden when the model does not use effort:
             // a control that disappears as you change model is harder to make
             // sense of than one that stays put and explains itself.
-            disabled={chosenModel?.supportsEffort === false}
-            {...(chosenModel?.supportsEffort === false && { title: t('chat.effortUnsupported') })}
+            disabled={modelInForce.supportsEffort === false}
+            {...(modelInForce.supportsEffort === false && { title: t('chat.effortUnsupported') })}
             options={effortChoices.map((value) => ({
               value,
               label: t(EFFORT_LABELS[value])
             }))}
-            onChange={(value) => {
-              onEffort(value === AGENT_DECIDES ? null : value)
-            }}
+            onChange={onEffort}
           />
 
           {/* Beside send rather than among the pickers on the left. Those three

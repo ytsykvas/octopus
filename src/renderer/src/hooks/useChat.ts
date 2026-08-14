@@ -41,7 +41,7 @@ export interface ChatController {
   readonly answerQuestions: (requestId: string, answers: readonly QuestionAnswer[]) => Promise<void>
   readonly setWorkingMode: (mode: WorkingMode) => Promise<void>
   readonly setPlanMode: (planning: boolean) => Promise<void>
-  readonly setEffort: (effort: Effort | null) => Promise<void>
+  readonly setEffort: (effort: Effort) => Promise<void>
   readonly setModel: (model: string | null) => Promise<void>
 }
 
@@ -335,7 +335,7 @@ export function useChat(workspaceId: string | null, describeFailure: Describe): 
   )
 
   const setEffort = useCallback(
-    (effort: Effort | null) =>
+    (effort: Effort) =>
       change({ effort }, (chatId) => window.octopus.chats.setEffort(chatId, effort)),
     [change]
   )

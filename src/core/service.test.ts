@@ -2652,20 +2652,23 @@ describe('the agent chat', () => {
       expect(agent().flagSettings()).toEqual([{ effortLevel: 'low' }])
     })
 
-    // Clearing the override means "whatever the agent would choose", which it
-    // can only do at the start of a session. The record still changes, so the
-    // next one obeys — but the turn in flight is left alone rather than being
-    // sent a level nobody asked for.
-    it('writes a cleared effort without pushing one at the running session', async () => {
+    /*
+     * There is no longer a level that is not pushed. Clearing the override used
+     * to mean "whatever the agent would choose", which a running session cannot
+     * be told — so that one change was written and not sent. The composer names
+     * the level in force now, so every change it can express is one the session
+     * can be given, and the default is no exception.
+     */
+    it('pushes the default at a running session like any other level', async () => {
       const { service, workspaceId } = await withWorkspace()
       const chat = await service.openChat(workspaceId)
       await service.setChatEffort(chat.id, 'max')
       await service.sendToChat(chat.id, 'work')
 
-      await service.setChatEffort(chat.id, null)
+      await service.setChatEffort(chat.id, 'medium')
 
-      expect(service.listChats(workspaceId)[0]?.effort).toBeNull()
-      expect(agent().flagSettings()).toEqual([])
+      expect(service.listChats(workspaceId)[0]?.effort).toBe('medium')
+      expect(agent().flagSettings()).toEqual([{ effortLevel: 'medium' }])
     })
 
     it('starts the next session with the effort the chat is now on', async () => {

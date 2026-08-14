@@ -172,7 +172,6 @@ export const uk: Translation = {
     modelDefaultNote: 'за замовчуванням',
 
     effort: 'Зусилля',
-    effortAuto: 'Вирішує агент',
     effortLow: 'Низьке',
     effortMedium: 'Середнє',
     effortHigh: 'Високе',
@@ -293,7 +292,6 @@ export const uk: Translation = {
     effort: 'Зусилля за замовчуванням',
     effortHint:
       'Скільки міркувань просить нова розмова. Кожну потім можна змінити окремо, просто в композері.',
-    effortAutoHint: 'Обирає агент — так і буде, якщо нічого не задано.',
 
     permissionMode: 'Що дозволено новому чату',
     permissionModeHint:

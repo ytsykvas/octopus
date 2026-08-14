@@ -47,7 +47,7 @@ interface ChatProps {
    * for exactly one message: the first.
    */
   readonly defaultWorkingMode: WorkingMode
-  readonly defaultEffort: Effort | null
+  readonly defaultEffort: Effort
 }
 
 /**
@@ -82,12 +82,10 @@ export function Chat({
   const plan = pending === null ? null : readPlan(pending.toolName, pending.input)
 
   // The record wins wherever there is one, and the settings answer for the
-  // conversation that does not exist yet. `effort` branches on the record
-  // rather than on the value: null is a choice there — "let the agent decide" —
-  // and `??` would quietly overrule it with the global default.
+  // conversation that does not exist yet.
   const record = chat.chat
   const workingMode = record?.workingMode ?? defaultWorkingMode
-  const effort = record ? record.effort : defaultEffort
+  const effort = record?.effort ?? defaultEffort
 
   // Follows the conversation, but only while the user is already at the end of
   // it — yanking the view down while they read something further up is the

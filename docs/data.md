@@ -36,18 +36,18 @@ paths alone reported such a workspace as healthy. The parser reads the flag now.
 
 Validated by `ConfigSchema` in [`config.ts`](../src/core/config.ts).
 
-| Field                             | Meaning                                                              |
-| --------------------------------- | -------------------------------------------------------------------- |
-| `version`                         | format version, for future migrations                                |
-| `branchPrefix`                    | branches are `<prefix>/<workspace>`                                  |
-| `cloneDirectory`                  | where GitHub clones land; empty means "ask, then remember"           |
-| `settingSources`                  | what the agent may load — `none` is the transparency default (§4)    |
-| `workingMode`                     | what a new chat may do before asking; planning is not one of them    |
-| `effort`                          | how much thinking a new chat asks for; `null` leaves it to the agent |
-| `alwaysAllowedTools`              | tools the user answered "always" for, listed so they can be undone   |
-| `theme`, `language`               | appearance                                                           |
-| `rightPanelWidth`, `sidebarWidth` | pane widths, in pixels                                               |
-| `deviceId`, `installedAt`         | reserved for licensing (§15.3), unused                               |
+| Field                             | Meaning                                                            |
+| --------------------------------- | ------------------------------------------------------------------ |
+| `version`                         | format version, for future migrations                              |
+| `branchPrefix`                    | branches are `<prefix>/<workspace>`                                |
+| `cloneDirectory`                  | where GitHub clones land; empty means "ask, then remember"         |
+| `settingSources`                  | what the agent may load — `none` is the transparency default (§4)  |
+| `workingMode`                     | what a new chat may do before asking; planning is not one of them  |
+| `effort`                          | how much thinking a new chat asks for; `medium` unless changed     |
+| `alwaysAllowedTools`              | tools the user answered "always" for, listed so they can be undone |
+| `theme`, `language`               | appearance                                                         |
+| `rightPanelWidth`, `sidebarWidth` | pane widths, in pixels                                             |
+| `deviceId`, `installedAt`         | reserved for licensing (§15.3), unused                             |
 
 `alwaysAllowedTools` is filtered on the way in **and on the way out**, and never
 holds `ExitPlanMode`. An entry there is not merely a pre-answered question — it
@@ -68,6 +68,17 @@ config as it stands at that moment.
 back, so a field without one does not lose the value: it stops the application
 opening until someone edits JSON by hand. This is what happened when `language`
 was introduced.
+
+**A field that is _present and null_ is a different problem**, and a default
+does not answer it — a default is for a key that is not there at all. `effort`
+holds the case: it was nullable while "the agent decides" was a choice the
+picker offered, and records on disk still say so. `StoredEffortSchema` in
+`chats.ts` normalises it with a `transform`, which runs on the way in **and** on
+the way out, since `persist.ts` writes back what the schema returned — so the
+old null is cleaned off the disk the next time anything is saved. Same shape as
+the `alwaysAllowedTools` filtering above. A `.catch()` would cover both cases in
+fewer characters and is deliberately not used: it would also swallow a genuinely
+corrupt value, which is the one thing this reader exists to shout about.
 
 ## `state.json`
 
@@ -162,6 +173,10 @@ The record is created from `config.workingMode` and `config.effort`, so those
 are also what the composer shows until it exists — passed down from `App`,
 which is where the config is read. The footer named the schema's defaults for a
 while instead, which made it lie about exactly one message: the first.
+
+Neither of those is ever null. `effort` was, meaning "leave it to the agent",
+and the picker had a row saying so — a control naming a level the agent had
+never been told about. It names `medium` now and `medium` is what goes.
 
 ### Transcripts
 

@@ -220,6 +220,13 @@ settings — so that is what the pickers show until it exists, handed down from
 instead made the control lie about exactly one message: the first, which is the
 one the user has not sent yet and is looking straight at.
 
+Neither picker offers to say nothing. The effort control had an `Agent decides`
+row, stored as null — a control naming a level nobody had sent, which is the
+same lie one step further out. A new conversation starts on `medium`, the
+setting in Settings names a level too, and the level on the button is the level
+the session is given. The one level always offered is the one in force, even by
+a model that does not list it: it is what the next message runs with.
+
 **Every row of the model picker names a model.** The catalogue's first entry
 does not: the CLI calls it `Default (recommended)`, which tells a reader nothing
 about what they are about to talk to. It does say what it _resolves_ to, and the

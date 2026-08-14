@@ -211,14 +211,6 @@ function GitSection({
   )
 }
 
-/**
- * "Leave it to the agent", as a value a radio list can hold.
- *
- * The stored setting is `null`, which no list of options can carry — the same
- * sentinel the composer's own effort picker uses, for the same reason.
- */
-const AGENT_EFFORT = 'auto'
-
 function AgentSection({ config, onChange }: SectionProps): React.JSX.Element {
   const { t } = useTranslation()
 
@@ -275,22 +267,17 @@ function AgentSection({ config, onChange }: SectionProps): React.JSX.Element {
 
       <div className="border-line border-t pt-6">
         <Field label={t('settings.effort')} hint={t('settings.effortHint')}>
-          <RadioList<Effort | typeof AGENT_EFFORT>
-            value={config.effort ?? AGENT_EFFORT}
+          <RadioList<Effort>
+            value={config.effort}
             options={[
-              {
-                value: AGENT_EFFORT,
-                label: t('chat.effortAuto'),
-                hint: t('settings.effortAutoHint')
-              },
               { value: 'low', label: t('chat.effortLow') },
               { value: 'medium', label: t('chat.effortMedium') },
               { value: 'high', label: t('chat.effortHigh') },
               { value: 'xhigh', label: t('chat.effortXhigh') },
               { value: 'max', label: t('chat.effortMax') }
             ]}
-            onChange={(value) => {
-              void onChange({ effort: value === AGENT_EFFORT ? null : value })
+            onChange={(effort) => {
+              void onChange({ effort })
             }}
           />
         </Field>

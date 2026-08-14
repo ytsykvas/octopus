@@ -9,6 +9,7 @@ import {
 import { useCallback, useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
+import { DEFAULT_EFFORT } from '@core/chats.js'
 import type { Config } from '@core/config.js'
 import type { ThemeName } from '@core/types.js'
 
@@ -246,7 +247,7 @@ export function App(): React.JSX.Element {
   // footer has to name what the record will actually be created with. The
   // schema's own defaults stand in until the file has been read.
   const defaultWorkingMode = config?.workingMode ?? 'default'
-  const defaultEffort = config?.effort ?? null
+  const defaultEffort = config?.effort ?? DEFAULT_EFFORT
 
   return (
     <div className="bg-canvas text-ink flex h-full flex-col">

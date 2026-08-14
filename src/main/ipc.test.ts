@@ -822,9 +822,10 @@ describe('the agent chat', () => {
     })
   })
 
-  // Null is a value here rather than a missing argument: it is how the picker
-  // says "leave the choice to the agent", so the channel has to accept it.
-  it('rejects an effort it does not know, and accepts none at all', async () => {
+  // Null used to be a value here, meaning "leave the choice to the agent". It
+  // is not one any more: a chat always holds a level, so a null arriving on
+  // this channel is a caller out of step rather than a choice being expressed.
+  it('rejects an effort it does not know, null included', async () => {
     const projectId = await addProject()
     const workspace = await createWorkspace(projectId)
     const opened = await invoke('chats:open', workspace.id)
@@ -833,12 +834,11 @@ describe('the agent chat', () => {
       ok: false
     })
 
-    await expect(invoke('chats:effort', chatIdOf(opened), 'xhigh')).resolves.toEqual({
-      ok: true,
-      value: undefined
+    await expect(invoke('chats:effort', chatIdOf(opened), null)).resolves.toMatchObject({
+      ok: false
     })
 
-    await expect(invoke('chats:effort', chatIdOf(opened), null)).resolves.toEqual({
+    await expect(invoke('chats:effort', chatIdOf(opened), 'xhigh')).resolves.toEqual({
       ok: true,
       value: undefined
     })

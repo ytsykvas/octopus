@@ -17,7 +17,7 @@ export function chat(overrides: Partial<Chat> = {}): Chat {
     agent: 'claude',
     sessionId: null,
     model: null,
-    effort: null,
+    effort: 'medium',
     workingMode: 'default',
     planMode: false,
     knownCommands: [],

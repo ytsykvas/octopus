@@ -28,7 +28,7 @@ function renderComposer(overrides: Partial<React.ComponentProps<typeof Composer>
       onWorkingMode={onWorkingMode}
       planMode={false}
       onPlanMode={onPlanMode}
-      effort={null}
+      effort="medium"
       onEffort={onEffort}
       model={null}
       onModel={onModel}
@@ -373,7 +373,7 @@ describe('the settings the next message runs under', () => {
 
     await user.click(screen.getByRole('button', { name: 'Effort' }))
 
-    expect(screen.getAllByRole('menuitemradio')).toHaveLength(6)
+    expect(screen.getAllByRole('menuitemradio')).toHaveLength(5)
   })
 
   it('reports the effort that was chosen', async () => {
@@ -386,18 +386,52 @@ describe('the settings the next message runs under', () => {
     expect(onEffort).toHaveBeenCalledExactlyOnceWith('max')
   })
 
-  // The picker needs a value for "no override", and null is not one. Handing
-  // that sentinel back to the store would be an effort level called "auto".
-  it('turns the agent-decides choice back into no override at all', async () => {
+  /*
+   * Neither picker offers to say nothing any more. For the model that row was a
+   * second way of naming the default; for effort it was a level the agent was
+   * never told about while the button claimed one.
+   */
+  it('offers no way to leave either setting unsaid', async () => {
+    const user = userEvent.setup()
+    renderComposer({ effort: 'high', models: CATALOGUE })
+
+    await user.click(screen.getByRole('button', { name: 'Effort' }))
+    expect(screen.queryByRole('menuitemradio', { name: 'Agent decides' })).not.toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: 'Model' }))
+    expect(screen.queryByRole('menuitemradio', { name: 'Agent decides' })).not.toBeInTheDocument()
+  })
+
+  it('reports the level that was chosen', async () => {
     const user = userEvent.setup()
     const { onEffort } = renderComposer({ effort: 'high' })
 
     expect(screen.getByRole('button', { name: 'Effort' })).toHaveTextContent('High')
 
     await user.click(screen.getByRole('button', { name: 'Effort' }))
-    await user.click(screen.getByRole('menuitemradio', { name: 'Agent decides' }))
+    await user.click(screen.getByRole('menuitemradio', { name: 'Low' }))
 
-    expect(onEffort).toHaveBeenCalledExactlyOnceWith(null)
+    expect(onEffort).toHaveBeenCalledExactlyOnceWith('low')
+  })
+
+  /*
+   * A model that lists the levels it takes does not silence the one this chat
+   * is already on. That level is what the next message runs with, and a picker
+   * whose value has no row of its own prints the raw name instead.
+   */
+  it('names the level in force even when the model does not offer it', async () => {
+    const user = userEvent.setup()
+    const picky: AgentModel = {
+      ...OPUS,
+      supportsEffort: true,
+      supportedEffortLevels: ['high', 'max']
+    }
+    renderComposer({ effort: 'medium', model: picky.value, models: [picky] })
+
+    expect(screen.getByRole('button', { name: 'Effort' })).toHaveTextContent('Medium')
+
+    await user.click(screen.getByRole('button', { name: 'Effort' }))
+    expect(screen.getByRole('menuitemradio', { name: 'Medium' })).toBeChecked()
   })
 
   // The whole reason it moved out of the header: there it was disabled until

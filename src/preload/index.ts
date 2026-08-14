@@ -142,8 +142,8 @@ const api = {
     setPlanMode: (chatId: string, planning: boolean): Promise<Result<void>> =>
       ipcRenderer.invoke('chats:planMode', chatId, planning) as Promise<Result<void>>,
 
-    /** Sets how much thinking the chat asks for; null returns it to the agent. */
-    setEffort: (chatId: string, effort: Effort | null): Promise<Result<void>> =>
+    /** Sets how much thinking the chat asks for; there is always a level. */
+    setEffort: (chatId: string, effort: Effort): Promise<Result<void>> =>
       ipcRenderer.invoke('chats:effort', chatId, effort) as Promise<Result<void>>,
 
     /** Sets the model the chat runs on; null returns the choice to the agent. */

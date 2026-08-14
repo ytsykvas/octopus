@@ -10,10 +10,10 @@ The model used to have this problem and no longer does — `getContextUsage()`
 names the running model, and the footer shows it (see `docs/core.md`, "Which
 model is running"). The same response carries no effort.
 
-`setChatEffort` also pushes a level only when the record has one
-(`service.ts`), so a chat whose record says "let the agent decide" never
-re-asserts anything, and a level set by command survives indefinitely — right
-next to a picker claiming the agent is choosing.
+`setChatEffort` pushes the level at a running session, so changing it in the
+picker does overwrite what a command set. But nothing re-asserts it per message
+the way the mode is re-asserted, so a level set by `/effort` survives every
+message after it — right next to a picker naming a different one.
 
 ## Why it matters
 
@@ -27,8 +27,8 @@ different policies, none of them written down where the row is.
 
 ## Evidence
 
-`sendToChat` re-asserts `sessionMode(chat)` and nothing else. `setChatEffort`
-guards its push with `if (effort !== null)`. `SDKControlGetContextUsageResponse`
+`sendToChat` re-asserts `sessionMode(chat)` and nothing else.
+`SDKControlGetContextUsageResponse`
 (`sdk.d.ts:3223`) has `model` and no effort. `applyFlagSettings` — how effort is
 set on a running session — returns `void`, so it cannot be read back either.
 

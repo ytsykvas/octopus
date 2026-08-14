@@ -105,6 +105,31 @@ describe('loadConfig', () => {
     expect(config.rightPanelWidth).toBe(360)
     expect(config.sidebarWidth).toBe(240)
     expect(config.branchPrefix).toBe('ytsykvas')
+    // Absent, so the default answers for it.
+    expect(config.effort).toBe('medium')
+  })
+
+  /*
+   * The case a default cannot answer: the field is there, holding the null that
+   * "the agent decides" was stored as. Nothing offers that choice now, and the
+   * composer names the level in force — so it has to arrive as a level.
+   */
+  it('reads a config written while no level was a choice', async () => {
+    const stored = { ...createDefaultConfig('ytsykvas', NOW, () => UUID), effort: null }
+    await writeFile(file, JSON.stringify(stored), 'utf8')
+
+    await expect(loadConfig(file)).resolves.toMatchObject({ effort: 'medium' })
+  })
+
+  // And on the way out as well, so the null does not sit on disk waiting to be
+  // read again — the same arrangement as the standing approvals below.
+  it('writes the level back rather than leaving the old null in place', async () => {
+    const stored = { ...createDefaultConfig('ytsykvas', NOW, () => UUID), effort: null }
+    await writeFile(file, JSON.stringify(stored), 'utf8')
+
+    await saveConfig(await loadConfig(file), file)
+
+    expect(JSON.parse(await readFile(file, 'utf8'))).toMatchObject({ effort: 'medium' })
   })
 })
 

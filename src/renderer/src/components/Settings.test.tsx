@@ -18,7 +18,7 @@ function config(overrides: Partial<Config> = {}): Config {
     cloneDirectory: '',
     settingSources: 'none',
     workingMode: 'default',
-    effort: null,
+    effort: 'medium',
     alwaysAllowedTools: [],
     theme: 'system',
     language: 'en',
@@ -163,16 +163,19 @@ describe('Settings', () => {
     expect(props.onChange).toHaveBeenCalledExactlyOnceWith({ effort: 'xhigh' })
   })
 
-  // Null is the stored form of "leave it to the agent"; a radio list cannot
-  // hold null, so the sentinel has to be turned back at the boundary.
-  it('stores no effort at all when the agent is to decide', async () => {
+  /*
+   * The setting names a level and that level is sent, which is the whole of it.
+   * "Agent decides" was offered here for a while and stored as null — a control
+   * naming a level the agent had never been told about, which is the interface
+   * reporting a decision nobody took.
+   */
+  it('offers no way to leave the level unsaid', async () => {
     const user = userEvent.setup()
-    const props = await renderSettings({ config: config({ effort: 'max' }) })
+    await renderSettings({ config: config({ effort: 'max' }) })
 
     await openSection(user, 'Agent')
-    await user.click(screen.getByRole('button', { name: /^Agent decides/ }))
 
-    expect(props.onChange).toHaveBeenCalledExactlyOnceWith({ effort: null })
+    expect(screen.queryByRole('button', { name: /^Agent decides/ })).not.toBeInTheDocument()
   })
 
   it('says nothing has been waved through yet', async () => {

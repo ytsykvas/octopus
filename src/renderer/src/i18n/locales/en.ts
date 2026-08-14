@@ -186,7 +186,6 @@ export const en = {
     modelDefaultNote: 'by default',
 
     effort: 'Effort',
-    effortAuto: 'Agent decides',
     effortLow: 'Low',
     effortMedium: 'Medium',
     effortHigh: 'High',
@@ -306,7 +305,6 @@ export const en = {
     effort: 'Default effort',
     effortHint:
       'How much thinking a new conversation asks for. Each one can then be changed on its own, from the composer.',
-    effortAutoHint: 'The agent picks, which is what it does when nothing is set.',
 
     permissionMode: 'What a new chat may do',
     permissionModeHint:

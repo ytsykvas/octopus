@@ -216,8 +216,8 @@ export interface OctopusService {
   setChatWorkingMode(chatId: string, mode: WorkingMode): Promise<void>
   /** Turns planning on or off for the chat. */
   setChatPlanMode(chatId: string, planning: boolean): Promise<void>
-  /** Sets how much thinking the chat asks for; null returns it to the agent. */
-  setChatEffort(chatId: string, effort: Effort | null): Promise<void>
+  /** Sets how much thinking the chat asks for. */
+  setChatEffort(chatId: string, effort: Effort): Promise<void>
   /** Sets the model the chat runs on; null returns the choice to the agent. */
   setChatModel(chatId: string, model: string | null): Promise<void>
   /**
@@ -1090,11 +1090,7 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
     async setChatEffort(chatId, effort) {
       requireChat(chatId)
       await commit((current) => updateChat(current, chatId, { effort }))
-
-      // Only a level can be applied to a running session; clearing the override
-      // means "whatever the agent would choose", which it can only do at the
-      // start. The record is written either way, so the next session obeys.
-      if (effort !== null) await sessions.get(chatId)?.setEffort(effort)
+      await sessions.get(chatId)?.setEffort(effort)
     },
 
     async setChatModel(chatId, model) {

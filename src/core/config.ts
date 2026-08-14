@@ -9,9 +9,10 @@ import { randomUUID } from 'node:crypto'
 import { z } from 'zod'
 
 import {
+  DEFAULT_EFFORT,
   type Effort,
-  EffortSchema,
   EXIT_PLAN_MODE,
+  StoredEffortSchema,
   type WorkingMode,
   WorkingModeSchema
 } from './chats.js'
@@ -92,13 +93,15 @@ export const ConfigSchema = z.object({
   workingMode: WorkingModeSchema.default('default'),
 
   /**
-   * How much thinking a new chat asks for; null leaves the choice to the agent.
+   * How much thinking a new chat asks for; always a level.
    *
-   * Global for the same reason as the mode above, and null by default because
-   * the SDK already has an answer — picking one of our own here would be us
-   * overriding it in every chat while looking like we had not chosen at all.
+   * Global for the same reason as the mode above. It named no level for a
+   * while, on the grounds that the SDK already has an answer — but the composer
+   * shows this setting, and a control naming a level the agent was never told
+   * about is the interface reporting a decision that was not taken. Naming one
+   * and sending it is the honest half of that trade.
    */
-  effort: EffortSchema.nullable().default(null),
+  effort: StoredEffortSchema,
 
   /**
    * Tools the user has answered "always" for.
@@ -172,7 +175,7 @@ export function createDefaultConfig(
   uuid: () => string = randomUUID
 ): Config {
   const workingMode: WorkingMode = 'default'
-  const effort: Effort | null = null
+  const effort: Effort = DEFAULT_EFFORT
 
   return {
     version: 1,

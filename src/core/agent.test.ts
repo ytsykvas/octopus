@@ -143,7 +143,7 @@ function fakeAgent(
       settingSources: [],
       permissionMode: 'default',
       model: null,
-      effort: null,
+      effort: 'medium',
       allowedTools: [...READ_ONLY_TOOLS],
       ...overrides
     },
@@ -716,12 +716,13 @@ describe('a session', () => {
     expect(agent.options().effort).toBe('xhigh')
   })
 
-  // Absent rather than null: the SDK reads a present key as an answer, and
-  // "the agent decides" is the absence of one.
-  it('says nothing about effort when the chat has none', () => {
+  // Always sent, unlike `resume` and `model`, which are spread in only when
+  // there is one: a chat always holds a level, so there is no absence to
+  // express — and the composer names the level on the promise that it goes.
+  it('always asks for a level, since the chat always has one', () => {
     const { agent } = fakeAgent()
 
-    expect(agent.options()).not.toHaveProperty('effort')
+    expect(agent.options().effort).toBe('medium')
   })
 
   it('forwards interrupt and mode changes to the SDK', async () => {
@@ -777,7 +778,7 @@ describe('a session that will not close', () => {
         settingSources: [],
         permissionMode: 'default',
         model: null,
-        effort: null,
+        effort: 'medium',
         allowedTools: []
       },
       {

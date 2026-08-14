@@ -38,14 +38,14 @@ function workspace(overrides: Partial<WorkspaceView> = {}): WorkspaceView {
  */
 async function openChat(
   target: WorkspaceView = workspace(),
-  defaults: { workingMode?: WorkingMode; effort?: Effort | null } = {}
+  defaults: { workingMode?: WorkingMode; effort?: Effort } = {}
 ): Promise<void> {
   render(
     <Chat
       workspace={target}
       color="blue"
       defaultWorkingMode={defaults.workingMode ?? 'default'}
-      defaultEffort={defaults.effort ?? null}
+      defaultEffort={defaults.effort ?? 'medium'}
     />
   )
   await waitFor(() => {
@@ -113,7 +113,7 @@ describe('the project it belongs to', () => {
         workspace={workspace()}
         color="teal"
         defaultWorkingMode="default"
-        defaultEffort={null}
+        defaultEffort="medium"
       />
     )
     await waitFor(() => {
@@ -245,7 +245,7 @@ describe('an existing conversation', () => {
         workspace={workspace()}
         color="blue"
         defaultWorkingMode="default"
-        defaultEffort={null}
+        defaultEffort="medium"
       />
     )
 
@@ -257,7 +257,7 @@ describe('an existing conversation', () => {
         workspace={workspace({ id: 'planner/maria', name: 'maria' })}
         color="blue"
         defaultWorkingMode="default"
-        defaultEffort={null}
+        defaultEffort="medium"
       />
     )
 
@@ -666,10 +666,10 @@ describe('the permission mode', () => {
     expect(screen.getByRole('button', { name: 'Effort' })).toHaveTextContent('High')
   })
 
-  // And once there is a record it answers for itself — including when what it
-  // says is "let the agent decide", which is a choice and not an absence.
-  it('lets the record overrule the settings, null included', async () => {
-    givenChat([], { workingMode: 'default', effort: null })
+  // And once there is a record it answers for itself, whatever the settings
+  // say a new conversation would have started on.
+  it('lets the record overrule the settings', async () => {
+    givenChat([], { workingMode: 'default', effort: 'low' })
     await openChat(workspace(), { workingMode: 'acceptEdits', effort: 'high' })
 
     await waitFor(() => {
@@ -677,7 +677,7 @@ describe('the permission mode', () => {
     })
 
     expect(picker()).toHaveTextContent('Ask first')
-    expect(screen.getByRole('button', { name: 'Effort' })).toHaveTextContent('Agent decides')
+    expect(screen.getByRole('button', { name: 'Effort' })).toHaveTextContent('Low')
   })
 
   // The core deliberately leaves `bypassPermissions` out, and planning is a
@@ -836,7 +836,7 @@ describe('the permission mode', () => {
     await user.click(screen.getByRole('menuitemradio', { name: 'Low' }))
 
     expect(await screen.findByText(/no such chat/)).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Effort' })).toHaveTextContent('Agent decides')
+    expect(screen.getByRole('button', { name: 'Effort' })).toHaveTextContent('Medium')
   })
 
   it('keeps the old mode on screen when the change failed', async () => {

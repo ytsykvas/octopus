@@ -234,7 +234,7 @@ export function registerIpc(
   )
 
   host.handle('chats:effort', (_event, chatId: string, effort: unknown) =>
-    attempt(() => service.setChatEffort(chatId, EffortSchema.nullable().parse(effort)))
+    attempt(() => service.setChatEffort(chatId, EffortSchema.parse(effort)))
   )
 
   host.handle('chats:model', (_event, chatId: string, model: unknown) =>

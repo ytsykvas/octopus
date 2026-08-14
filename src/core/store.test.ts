@@ -478,7 +478,7 @@ describe('chats', () => {
       agent: 'claude',
       sessionId: null,
       model: null,
-      effort: null,
+      effort: 'medium',
       workingMode: 'default',
       planMode: false,
       knownCommands: [],
@@ -619,6 +619,30 @@ describe('the remembered model list', () => {
 
     await expect(loadState(file)).resolves.toMatchObject({ knownModels: [] })
   })
+
+  /*
+   * And a chat written while "the agent decides" was a choice, which is the
+   * harder half: the field is present holding null, so no default answers for
+   * it. The whole file would fail to load without the schema normalising it.
+   */
+  it('loads a chat written while no effort level was a choice', async () => {
+    const legacy = {
+      id: 'chat-1',
+      workspaceId: 'planner/kyiv',
+      agent: 'claude',
+      sessionId: null,
+      model: null,
+      effort: null,
+      workingMode: 'default',
+      planMode: false,
+      knownCommands: [],
+      createdAt: '2026-08-11T09:00:00.000Z'
+    }
+    await writeFile(file, JSON.stringify({ ...withProject, chats: [legacy] }), 'utf8')
+
+    const state = await loadState(file)
+    expect(state.chats[0]?.effort).toBe('medium')
+  })
 })
 
 /*
@@ -640,7 +664,7 @@ describe('the commands a chat remembers', () => {
     agent: 'claude',
     sessionId: null,
     model: null,
-    effort: null,
+    effort: 'medium',
     workingMode: 'default',
     planMode: false,
     knownCommands: [],

@@ -61,8 +61,8 @@ export interface SessionOptions {
   readonly permissionMode: PermissionMode
   /** Model override; null leaves the choice to the agent. */
   readonly model: string | null
-  /** Effort override; null leaves the choice to the agent. */
-  readonly effort: Effort | null
+  /** How much thinking to ask for; a chat always has an answer. */
+  readonly effort: Effort
   /** Tools allowed without asking, on top of the agent's own rules. */
   readonly allowedTools: readonly string[]
 }
@@ -345,7 +345,7 @@ export function startSession(options: SessionOptions, hooks: SessionHooks): Agen
       // the SDK reads a present `resume` as a session to look for.
       ...(options.resume !== null && { resume: options.resume }),
       ...(options.model !== null && { model: options.model }),
-      ...(options.effort !== null && { effort: options.effort }),
+      effort: options.effort,
       settingSources: [...options.settingSources],
       systemPrompt: { type: 'preset', preset: 'claude_code' },
       permissionMode: options.permissionMode,
