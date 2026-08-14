@@ -8,6 +8,7 @@ import type { ThemeName } from '../core/types.js'
 import { registerIpc } from './ipc.js'
 import { canvasColor, resolveTheme } from './theme.js'
 import { TerminalManager } from './terminals.js'
+import { focusExisting } from './windows.js'
 
 /** Canvas colours from the design system (§10) — so the window does not flash white on launch. */
 
@@ -168,7 +169,32 @@ async function start(): Promise<void> {
   })
 }
 
-void app.whenReady().then(start)
+/*
+ * One octopus at a time.
+ *
+ * Two copies both open `~/.octopus/state.json`, both hold it in memory and both
+ * write it whole, so the last writer wins and whatever the other did is not
+ * merged or refused but simply absent next time. `commit` serialising writes
+ * and `writeJsonFile` renaming into place make a write orderly and untearable
+ * within one process; neither is exclusive across two.
+ *
+ * Asked for before `whenReady`, as Electron documents. The instance that loses
+ * never reaches `start`, so it never builds a service and never reads or writes
+ * the data root at all — which is the whole of the point.
+ *
+ * The lock is keyed on Electron's own userData directory rather than on
+ * `~/.octopus`, so a build whose userData differs is still unguarded; that is
+ * recorded in `docs/tasks/` rather than left unsaid.
+ */
+if (!app.requestSingleInstanceLock()) {
+  app.quit()
+} else {
+  app.on('second-instance', () => {
+    focusExisting(BrowserWindow.getAllWindows())
+  })
+
+  void app.whenReady().then(start)
+}
 
 app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') {

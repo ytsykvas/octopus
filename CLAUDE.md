@@ -171,6 +171,15 @@ widened in `core/` while `main/` still validates against the old one produces an
 error message listing values that no longer match the source — confusing to read
 and entirely self-inflicted.
 
+**Only one copy of the app runs at a time**, since it takes Electron's
+single-instance lock. That turns one silent failure into a visible one and
+creates a new symptom worth knowing: `pkill -f "electron-vite dev"` kills the
+dev server but not the Electron process it spawned, and the next `npm run dev`
+then loses the lock and quits. What you see is the **old build** focused and no
+error at all. Kill it by path — `pkill -f "octopus/node_modules/electron/dist"`
+— and never by `Electron`, which matches every other Electron app running,
+this editor included.
+
 **The running app holds the state in memory.** Editing `~/.octopus/state.json`
 from the outside while it runs makes the two disagree, and the app will happily
 act on its stale copy. Never reproduce a bug against the user's real state or
