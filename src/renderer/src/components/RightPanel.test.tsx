@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { type ComponentProps, useState } from 'react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -86,6 +86,21 @@ function renderPanel(overrides: Partial<Props> = {}): {
       rerender(<Tabbed {...props} {...next} />)
     }
   }
+}
+
+/**
+ * The tab body on screen.
+ *
+ * The other three stay mounted — that is the whole point of them — so a query
+ * for text rather than for a role finds all four. `aria-hidden` is what tells
+ * them apart here, exactly as it does for a screen reader; the class that hides
+ * them says nothing without a stylesheet, and jsdom has none.
+ */
+function shownTab(): HTMLElement {
+  const body = pane().querySelector<HTMLElement>('[aria-hidden="false"]')
+  if (!body) throw new Error('No tab body is showing')
+
+  return body
 }
 
 /** The pane itself: a `<section>`, which carries no role to reach it by. */
@@ -476,7 +491,7 @@ describe('RightPanel', () => {
 
     await userEvent.click(screen.getByRole('button', { name: 'Build' }))
 
-    expect(screen.getByText('Select a workspace to run this in.')).toBeInTheDocument()
+    expect(within(shownTab()).getByText('Select a workspace to run this in.')).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Run' })).not.toBeInTheDocument()
   })
 
@@ -495,6 +510,50 @@ describe('RightPanel', () => {
     expect(window.octopus.terminal.dispose).not.toHaveBeenCalled()
 
     await user.click(screen.getByRole('button', { name: 'Terminal' }))
+    expect(window.octopus.terminal.create).toHaveBeenCalledTimes(1)
+  })
+
+  /*
+   * A dev server exists to be running while you look at something else, and
+   * the diff is the likeliest reason to look away. Unmounting is how the Stop
+   * button ends a run, so leaving the tab pressed Stop without saying so — and
+   * a `setup.sh` caught half way through leaves a half-populated
+   * `node_modules` behind it.
+   */
+  it('leaves a running script alive while another tab is shown', async () => {
+    const user = userEvent.setup()
+    renderPanel({ workspaces: [anna], activeWorkspaceId: anna.id, scriptPaths: SCRIPTS })
+
+    await user.click(screen.getByRole('button', { name: 'Server' }))
+    await user.click(screen.getByRole('button', { name: 'Run' }))
+    await waitFor(() => {
+      expect(window.octopus.terminal.create).toHaveBeenCalledTimes(1)
+    })
+
+    await user.click(screen.getByRole('button', { name: 'Changes' }))
+    expect(window.octopus.terminal.dispose).not.toHaveBeenCalled()
+
+    await user.click(screen.getByRole('button', { name: 'Server' }))
+    expect(window.octopus.terminal.create).toHaveBeenCalledTimes(1)
+  })
+
+  // The two script tabs are separate runs, so the one being watched must be
+  // the one whose output is on screen.
+  it('keeps the two script tabs apart', async () => {
+    const user = userEvent.setup()
+    renderPanel({ workspaces: [anna], activeWorkspaceId: anna.id, scriptPaths: SCRIPTS })
+
+    await user.click(screen.getByRole('button', { name: 'Server' }))
+    await user.click(screen.getByRole('button', { name: 'Run' }))
+    await waitFor(() => {
+      expect(openedDirectories()).toHaveLength(1)
+    })
+
+    await user.click(screen.getByRole('button', { name: 'Build' }))
+
+    // Build has not been started, so it offers to start rather than showing
+    // the server's output.
+    expect(screen.getByRole('button', { name: 'Run' })).toBeInTheDocument()
     expect(window.octopus.terminal.create).toHaveBeenCalledTimes(1)
   })
 })

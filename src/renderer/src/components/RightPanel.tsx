@@ -274,11 +274,19 @@ export function RightPanel({
         ))}
       </div>
 
-      {/* Kept mounted like the terminals below, and for a related reason: an
+      {/* Every pane below stays mounted and is hidden by a class. `aria-hidden`
+          says the same thing to a screen reader, which the class alone only
+          manages once the stylesheet has loaded — four panes speaking at once
+          is what a reader would otherwise hear, and what a test would find.
+
+          Kept mounted like the terminals below, and for a related reason: an
           unmounted diff loses which files were collapsed and where the pane was
           scrolled to, both of which a review builds up over several turns.
           `visible` is what stops it reading git while another tab is showing. */}
-      <div className={`flex min-h-0 flex-1 flex-col ${tab === 'diff' ? '' : 'hidden'}`}>
+      <div
+        aria-hidden={tab !== 'diff'}
+        className={`flex min-h-0 flex-1 flex-col ${tab === 'diff' ? '' : 'hidden'}`}
+      >
         <DiffPanel
           workspace={active}
           visible={tab === 'diff'}
@@ -293,7 +301,10 @@ export function RightPanel({
       {/* Hidden, never unmounted: a session belongs to the workspace, not to
           whether its tab happens to be on screen. Switching to Changes used to
           kill every terminal in the project. */}
-      <div className={`flex min-h-0 flex-1 flex-col ${tab === 'terminal' ? '' : 'hidden'}`}>
+      <div
+        aria-hidden={tab !== 'terminal'}
+        className={`flex min-h-0 flex-1 flex-col ${tab === 'terminal' ? '' : 'hidden'}`}
+      >
         <WorkspaceTerminals
           workspaces={workspaces}
           activeId={activeWorkspaceId}
@@ -301,18 +312,45 @@ export function RightPanel({
         />
       </div>
 
-      {(tab === 'build' || tab === 'server') && (
+      {/* Hidden, never unmounted — the third place in this file that has to be,
+          and for the sharpest reason. Unmounting the terminal is exactly how
+          the Stop button ends a run, so leaving the tab pressed Stop without
+          saying so: a dev server died on the way to reading the diff, and a
+          `setup.sh` caught half way through left a half-populated
+          `node_modules` behind it.
+
+          Both are mounted at once now, so each keeps a key of its own. Neither
+          holds anything until its Run button is pressed — an unstarted runner
+          is a line of text — so the pair costs nothing to leave standing. */}
+      <div
+        aria-hidden={tab !== 'build'}
+        className={`flex min-h-0 flex-1 flex-col ${tab === 'build' ? '' : 'hidden'}`}
+      >
         <ScriptRunner
-          // Remounted per workspace and per tab: a run belongs to one
-          // workspace, and carrying its output to another would be a lie.
-          key={`${tab}-${activeWorkspaceId ?? 'none'}`}
+          // Still remounted per workspace: a run belongs to one workspace, and
+          // carrying its output to another would be a lie.
+          key={`build-${activeWorkspaceId ?? 'none'}`}
           workspace={active}
-          kind={tab === 'build' ? 'setup' : 'run'}
-          scriptPath={tab === 'build' ? scriptPaths.setup : scriptPaths.run}
+          kind="setup"
+          scriptPath={scriptPaths.setup}
           port={active?.port ?? 0}
           onOpenSettings={onEditScripts}
         />
-      )}
+      </div>
+
+      <div
+        aria-hidden={tab !== 'server'}
+        className={`flex min-h-0 flex-1 flex-col ${tab === 'server' ? '' : 'hidden'}`}
+      >
+        <ScriptRunner
+          key={`server-${activeWorkspaceId ?? 'none'}`}
+          workspace={active}
+          kind="run"
+          scriptPath={scriptPaths.run}
+          port={active?.port ?? 0}
+          onOpenSettings={onEditScripts}
+        />
+      </div>
     </section>
   )
 }

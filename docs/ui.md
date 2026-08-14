@@ -340,11 +340,17 @@ setting rather than the same one.
 `setup.sh`, Server runs `run.sh` with the workspace's port in `$OCTOPUS_PORT`.
 Both run on a button: starting a server because a tab was clicked is a surprise.
 
-Changes and Terminal are **kept mounted** behind whichever tab is showing. A
-terminal unmounted is a process killed; a diff unmounted loses which files were
-collapsed and where the pane was scrolled to, which a review builds up over
-several turns. What stops the hidden diff reading git is a `visible` prop, not
-being unmounted.
+**Every tab is kept mounted** behind whichever one is showing, and hidden with a
+class. A terminal unmounted is a process killed — and so is a script, because
+ceasing to render its terminal is the entire implementation of its Stop button,
+which made leaving the Build or Server tab press Stop without saying so. A diff
+unmounted loses which files were collapsed and where the pane was scrolled to,
+which a review builds up over several turns. What stops the hidden diff reading
+git is a `visible` prop, not being unmounted.
+
+The hidden panes carry `aria-hidden` as well as the class. The class alone says
+nothing until the stylesheet has loaded, and four panes speaking at once is what
+a screen reader would otherwise hear.
 
 **Which tab is showing is stored**, and `⌘⇧D` opens Changes from anywhere —
 unfolding the pane if it was folded, because a shortcut for the changes that
