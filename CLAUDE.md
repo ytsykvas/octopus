@@ -92,6 +92,29 @@ more than the fix, so just fix it.
 `docs/tasks/README.md` holds the convention: what a file carries, why there is
 no status field, and why a finished task is deleted rather than marked done.
 
+## Findings about these instructions
+
+The same rule applies to the instructions themselves. Work regularly shows that
+a line here is wrong, that a skill leaves out the step which cost twenty
+minutes, or that a trap deserves a sentence so the next session does not walk
+into it.
+
+**Fix it in the same session, and say what was changed.** A lesson nobody wrote
+down is one every later session learns again from nothing.
+
+The bar, because this file is read at the start of every session and a line
+added here is paid for in all of them:
+
+- **Durable and load-bearing.** Would a later session get this wrong without it?
+  "Renderer tests need their own vitest config" outlives the change and does;
+  "the diff parser was fiddly" does neither.
+- **The narrowest home wins.** A skill when it applies to one kind of work, a
+  hook when it is mechanical enough to enforce, this file only when it applies
+  always.
+- **Prefer editing a line to adding one**, and deleting one that has gone stale
+  is worth as much as writing a new one.
+- Never write down what the code, the tests or `docs/` already say.
+
 ## Standards (details in §11.3 of docs/PROJECT.md)
 
 - No `any`; use `unknown` and narrow it.

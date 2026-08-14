@@ -189,6 +189,18 @@ Nothing to do if you use tokens: `.dark` on `<html>` swaps every value at once.
 A component renders and calls `window.octopus.*`. Git, filesystem and process
 work lives in `src/core/`.
 
+## Running the tests
+
+The renderer has a vitest config of its own, and the default one does not look
+in `src/renderer` at all. Without the flag a test file here is not "failing" —
+it is `No test files found`, which reads like a missing file.
+
+```bash
+npx vitest run --config vitest.renderer.config.ts src/renderer/src/components/X.test.tsx
+```
+
+`npm test` runs both configs in turn, so only a single file needs the flag.
+
 ## Before finishing
 
 ```bash
