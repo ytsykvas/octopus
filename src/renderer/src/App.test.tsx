@@ -677,12 +677,23 @@ describe('App', () => {
   })
 
   it('remembers the width the right pane was resized to', async () => {
-    const user = await openApp()
-    edges().panel.focus()
+    // Widened first: the pane's ceiling is what the window has left after the
+    // project strip, the list and a usable centre, and jsdom's own 1024 leaves
+    // it eight pixels of headroom — a nudge of sixteen would be measuring the
+    // clamp rather than the nudge.
+    const narrow = window.innerWidth
+    window.innerWidth = 1400
 
-    await user.keyboard('{ArrowLeft}')
+    try {
+      const user = await openApp()
+      edges().panel.focus()
 
-    expect(window.octopus.config.update).toHaveBeenCalledWith({ rightPanelWidth: 376 })
+      await user.keyboard('{ArrowLeft}')
+
+      expect(window.octopus.config.update).toHaveBeenCalledWith({ rightPanelWidth: 376 })
+    } finally {
+      window.innerWidth = narrow
+    }
   })
 
   it('reports a failure to save a setting', async () => {

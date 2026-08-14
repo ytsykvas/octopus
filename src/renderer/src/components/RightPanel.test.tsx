@@ -22,6 +22,18 @@ const SCRIPTS = { setup: '/tmp/scripts/planner/setup.sh', run: '/tmp/scripts/pla
  */
 const WINDOW_WIDTH = window.innerWidth
 
+/**
+ * A window wide enough that the ceiling is not what these tests measure.
+ *
+ * jsdom's own 1024 leaves the pane eight pixels of headroom once the left
+ * column and the centre have their share, so a drag test there would be
+ * asserting the clamp rather than the drag.
+ */
+const ROOMY = 1400
+
+/** The project strip plus a workspace list at its default width. */
+const LEFT_WIDTH = 296
+
 function renderPanel(overrides: Partial<Props> = {}): {
   props: Props
   rerender: (next: Partial<Props>) => void
@@ -34,6 +46,7 @@ function renderPanel(overrides: Partial<Props> = {}): {
     onEditScripts: vi.fn(),
     width: 360,
     onWidthChange: vi.fn(),
+    leftWidth: LEFT_WIDTH,
     ...overrides
   }
 
@@ -57,6 +70,7 @@ function pane(): HTMLElement {
 describe('RightPanel', () => {
   beforeEach(() => {
     stubTerminalHost()
+    window.innerWidth = ROOMY
   })
 
   afterEach(() => {
@@ -261,6 +275,27 @@ describe('RightPanel', () => {
     // Sidebar and centre pane keep their room; the floor is what is left.
     expect(edge).toHaveAttribute('aria-valuemax', '280')
     expect(edge).toHaveAttribute('aria-valuenow', '280')
+  })
+
+  /*
+   * The room reserved for the rest of the window used to be the constant 256,
+   * and the 360 of centre it claimed to keep was fiction: the left column is a
+   * project strip plus a list that is resizable between 180 and 560 and folds
+   * away entirely. Dragged wide, it left the centre nothing at all.
+   */
+  it('reserves the room the left column actually takes', () => {
+    renderPanel({ leftWidth: 616 })
+
+    // 1400 less a list dragged to its widest, less the centre's own 360.
+    expect(screen.getByRole('separator')).toHaveAttribute('aria-valuemax', '424')
+  })
+
+  // Folded away, the list takes none of the window — and the pane may have the
+  // room it was holding.
+  it('offers the folded list’s room to the pane', () => {
+    renderPanel({ leftWidth: 56 })
+
+    expect(screen.getByRole('separator')).toHaveAttribute('aria-valuemax', '984')
   })
 
   // The stored width is clamped on the way out, not on the way in, so widening

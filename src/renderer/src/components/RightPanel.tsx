@@ -56,16 +56,24 @@ function measureTabs(row: HTMLElement): number {
 }
 
 /**
- * Room the rest of the window keeps: the sidebar (`w-64`) plus enough centre
- * pane to still be one. The pane can take everything else, so on a wide
- * display the terminal gets genuinely wide, while on a laptop the working area
- * survives.
+ * Enough centre pane to still be one. The pane can take everything else, so on
+ * a wide display the terminal gets genuinely wide, while on a laptop the
+ * working area survives.
  */
-const SIDEBAR_WIDTH = 256
 const MIN_CENTRE_WIDTH = 360
 
-function maxWidthFor(windowWidth: number, minWidth: number): number {
-  return Math.max(minWidth, windowWidth - SIDEBAR_WIDTH - MIN_CENTRE_WIDTH)
+/**
+ * How much of the window the left column takes, passed in rather than assumed.
+ *
+ * It stood here as a constant 256 for a while, and the room it reserved was
+ * fiction: the real column is the project strip plus a workspace list that is
+ * resizable between 180 and 560 and folds away entirely — anything from 56 to
+ * 616. At the window's own minimum of 940 the centre reached 320 rather than
+ * the promised 360, and with the list dragged wide it reached nothing at all.
+ * Only `App` knows both halves, so only `App` can say.
+ */
+function maxWidthFor(windowWidth: number, leftWidth: number, minWidth: number): number {
+  return Math.max(minWidth, windowWidth - leftWidth - MIN_CENTRE_WIDTH)
 }
 
 interface RightPanelProps {
@@ -79,6 +87,8 @@ interface RightPanelProps {
   readonly width: number
   /** Persists the width; called when a drag ends, not during it. */
   readonly onWidthChange: (width: number) => void
+  /** The project strip plus the workspace list, or just the strip when folded. */
+  readonly leftWidth: number
 }
 
 export function RightPanel({
@@ -88,7 +98,8 @@ export function RightPanel({
   scriptPaths,
   onEditScripts,
   width,
-  onWidthChange
+  onWidthChange,
+  leftWidth
 }: RightPanelProps): React.JSX.Element {
   const { t, i18n } = useTranslation()
   const [tab, setTab] = useState<RightTab>('diff')
@@ -124,7 +135,7 @@ export function RightPanel({
     setMinWidth(Math.max(MIN_WIDTH, measureTabs(row)))
   }, [i18n.language])
 
-  const maxWidth = maxWidthFor(windowWidth, minWidth)
+  const maxWidth = maxWidthFor(windowWidth, leftWidth, minWidth)
   // Clamped on the way out rather than on the way in, so a width saved on a
   // wide display is kept in the config and comes back when the window does.
   const applied = Math.min(Math.max(dragWidth ?? width, minWidth), maxWidth)

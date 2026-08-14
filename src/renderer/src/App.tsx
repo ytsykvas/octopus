@@ -28,6 +28,18 @@ import { useProjects } from './hooks/useProjects.js'
 import { useWorkspaces } from './hooks/useWorkspaces.js'
 
 /**
+ * The project strip's width, `w-14` in `ProjectTabs`.
+ *
+ * Stated twice, which is once too many — but the right pane has to reserve the
+ * left column's room and cannot read a Tailwind class. The strip is the one
+ * part of that column whose width is not already a number here.
+ */
+const TAB_STRIP_WIDTH = 56
+
+/** The schema's own default, for the render before the config has been read. */
+const DEFAULT_SIDEBAR_WIDTH = 240
+
+/**
  * Window layout (§10.8 docs/PROJECT.md): a project tab strip, then the active
  * project's workspaces, the agent chat, and diff and terminal on the right.
  */
@@ -242,6 +254,12 @@ export function App(): React.JSX.Element {
     workspaces.flat.find((workspace) => workspace.id === selectedWorkspaceId) ?? null
   const editingProject = projects.all.find((project) => project.id === editingProjectId) ?? null
 
+  // Read once and used twice: the list draws itself this wide, and the right
+  // pane reserves it when working out how wide it may grow. Two reads of the
+  // same config field would be one refactor away from disagreeing, and the
+  // disagreement would show up as a centre pane with nowhere to go.
+  const sidebarWidth = config?.sidebarWidth ?? DEFAULT_SIDEBAR_WIDTH
+
   // What a conversation with no record of its own starts with. Read here
   // rather than in the chat: this is where the config lives, and the composer's
   // footer has to name what the record will actually be created with. The
@@ -328,8 +346,8 @@ export function App(): React.JSX.Element {
                 onRemoveWorkspace={(id) => void workspaces.remove(id)}
                 editingWorkspaceId={workspaces.editingId}
                 onEditingWorkspaceChange={workspaces.setEditingId}
-                width={config?.sidebarWidth ?? 240}
-                onWidthChange={(sidebarWidth) => void updateConfig({ sidebarWidth })}
+                width={sidebarWidth}
+                onWidthChange={(next) => void updateConfig({ sidebarWidth: next })}
               />
             )}
           </div>
@@ -406,6 +424,9 @@ export function App(): React.JSX.Element {
             }}
             width={config?.rightPanelWidth ?? 360}
             onWidthChange={(rightPanelWidth) => void updateConfig({ rightPanelWidth })}
+            // The room the pane must leave alone. Folded away, the list takes
+            // none of it — and the pane may have that room too.
+            leftWidth={TAB_STRIP_WIDTH + (sidebarOpen ? sidebarWidth : 0)}
           />
         )}
       </div>
