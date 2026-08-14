@@ -132,4 +132,43 @@ describe('the rows the model picker offers', () => {
   it('adds nothing when this chat pinned nothing', () => {
     expect(modelRows(CATALOGUE, LABELS, null)).toHaveLength(2)
   })
+
+  /*
+   * The shape the CLI in hand actually sends: nothing resolves, and the only
+   * link between the default row and the model it runs is the description they
+   * share. The folding has to work the same way through it.
+   */
+  it('folds by description when the catalogue resolves nothing', () => {
+    const asSent: AgentModel[] = [
+      {
+        value: 'default',
+        resolvedModel: null,
+        displayName: 'Default (recommended)',
+        description: 'Opus 5 with 1M context · Best for everyday, complex tasks',
+        supportedEffortLevels: null,
+        supportsEffort: true
+      },
+      {
+        value: 'opus[1m]',
+        resolvedModel: null,
+        displayName: 'Opus (1M context)',
+        description: 'Opus 5 with 1M context · Best for everyday, complex tasks',
+        supportedEffortLevels: null,
+        supportsEffort: true
+      },
+      {
+        value: 'haiku',
+        resolvedModel: null,
+        displayName: 'Haiku',
+        description: 'Haiku 4.5 · Fastest for quick answers',
+        supportedEffortLevels: null,
+        supportsEffort: null
+      }
+    ]
+
+    const rows = modelRows(asSent, LABELS, null)
+
+    expect(rows.map((row) => row.displayName)).toEqual(['Opus (1M context)', 'Haiku'])
+    expect(rows[0].description).toBe('by default')
+  })
 })

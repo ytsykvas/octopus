@@ -391,12 +391,57 @@ describe('the model the default stands for', () => {
     expect(defaultAgentModel(spelled)?.displayName).toBe('Opus, spelled out')
   })
 
-  it('answers with nothing when the default says nothing about what it runs', () => {
-    const silent = CATALOGUE.map((model) =>
-      model.value === 'default' ? { ...model, resolvedModel: null } : model
-    )
+  /*
+   * The catalogue as the CLI in hand actually sends it: `resolvedModel` is
+   * optional in the SDK's type and this version fills it in for nothing. What
+   * it does copy onto both rows is the description, because the default row is
+   * built from the row it points at — so that is the link left to follow.
+   *
+   * Taken verbatim from `~/.octopus/state.json` on a real account.
+   */
+  const AS_SENT: AgentModel[] = [
+    {
+      value: 'default',
+      resolvedModel: null,
+      displayName: 'Default (recommended)',
+      description: 'Opus 5 with 1M context · Best for everyday, complex tasks',
+      supportedEffortLevels: null,
+      supportsEffort: true
+    },
+    {
+      value: 'opus[1m]',
+      resolvedModel: null,
+      displayName: 'Opus (1M context)',
+      description: 'Opus 5 with 1M context · Best for everyday, complex tasks',
+      supportedEffortLevels: null,
+      supportsEffort: true
+    },
+    {
+      value: 'sonnet',
+      resolvedModel: null,
+      displayName: 'Sonnet',
+      description: 'Sonnet 5 · Efficient for routine tasks',
+      supportedEffortLevels: null,
+      supportsEffort: true
+    }
+  ]
 
-    expect(defaultAgentModel(silent)).toBeUndefined()
+  it('follows the description when the catalogue resolves nothing', () => {
+    expect(defaultAgentModel(AS_SENT)?.displayName).toBe('Opus (1M context)')
+  })
+
+  // Every row describing itself as nothing would otherwise all match each
+  // other, which is a coincidence rather than an answer.
+  it('will not pair two rows on an empty description', () => {
+    const blank = AS_SENT.map((model) => ({ ...model, description: '' }))
+
+    expect(defaultAgentModel(blank)).toBeUndefined()
+  })
+
+  it('answers with nothing when no other row shares the description', () => {
+    const lonely = AS_SENT.filter((model) => model.value !== 'opus[1m]')
+
+    expect(defaultAgentModel(lonely)).toBeUndefined()
   })
 
   it('answers with nothing when there is no default row, or no catalogue at all', () => {
