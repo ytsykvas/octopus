@@ -133,7 +133,18 @@ const CONTEXT_LINES = 3
  * escapes through the parser. `--find-renames`: a moved file is one entry
  * rather than a deletion beside an addition.
  */
-const DIFF_FLAGS = ['--no-ext-diff', '--no-textconv', '--no-color', '--find-renames'] as const
+const DIFF_FLAGS = [
+  '--no-ext-diff',
+  '--no-textconv',
+  '--no-color',
+  '--find-renames',
+  // Pinned, because `diff.mnemonicPrefix` in a user's config renames these to
+  // `c/` and `w/`. Every path would then fail to match the listing it is paired
+  // with, and every file in the pane would draw empty — a total failure with
+  // nothing on screen to say why.
+  '--src-prefix=a/',
+  '--dst-prefix=b/'
+] as const
 
 /**
  * Paths arrive raw rather than octal-escaped.
@@ -656,9 +667,13 @@ export async function readWorkspaceDiff(
 
   const files = [...tracked, ...untrackedFiles]
   const drawable = chooseDrawable(files, limits)
+  const marked = markOmitted(files, drawable)
 
+  // Only the hunks depend on there being something to ask git for. What was
+  // left out is said either way, or the one case where every file is too large
+  // is the case that explains nothing.
   const withHunks =
-    drawable.length === 0 ? files : await attachHunks(exec, baseCommit, files, drawable)
+    drawable.length === 0 ? marked : await attachHunks(exec, baseCommit, marked, drawable)
 
   return {
     baseCommit,
@@ -801,7 +816,22 @@ async function attachHunks(
   drawable: readonly FileDiff[]
 ): Promise<FileDiff[]> {
   const everything = drawable.length === files.filter((file) => file.omitted === 'none').length
-  const pathspec = everything ? [] : ['--', ...drawable.map((file) => `:(literal)${file.path}`)]
+
+  // A rename is two paths, and asking for one of them loses the pairing: git
+  // matches a deletion to an addition only among the paths it was given, so
+  // with the new path alone it sees a file appearing from nowhere and draws
+  // the whole of it as additions — under a header that still says the file
+  // moved and changed one line.
+  const pathspec = everything
+    ? []
+    : [
+        '--',
+        ...drawable.flatMap((file) =>
+          file.oldPath === null
+            ? [`:(literal)${file.path}`]
+            : [`:(literal)${file.path}`, `:(literal)${file.oldPath}`]
+        )
+      ]
 
   const output = await exec([
     ...RAW_PATHS,
@@ -812,19 +842,50 @@ async function attachHunks(
     ...pathspec
   ])
 
-  const parsed = new Map(parseUnifiedDiff(output).map((file) => [file.path, file]))
-  const asked = new Set(drawable.map((file) => file.path))
+  const parsed = collectHunks(parseUnifiedDiff(output))
 
   return files.map((file) => {
-    if (!asked.has(file.path)) {
-      return file.omitted === 'none' && file.status !== 'untracked'
-        ? { ...file, omitted: 'tooLarge' as const }
-        : file
-    }
-
-    const block = parsed.get(file.path)
-    // A file we asked for and did not get back is a rename with nothing else
-    // changed, which has no lines by construction rather than by omission.
-    return block ? { ...file, hunks: block.hunks } : file
+    const hunks = parsed.get(file.path)
+    // A file with no block of its own is a rename with nothing else changed,
+    // which has no lines by construction rather than by omission.
+    return hunks ? { ...file, hunks } : file
   })
+}
+
+/**
+ * Gathers the hunks git printed for each path.
+ *
+ * Blocks are joined rather than replaced, because one path can have two of
+ * them: git renders a change of type — a file replaced by a symlink, or by a
+ * submodule — as a `deleted file mode` block carrying the removals followed by
+ * a `new file mode` block carrying the additions, both under the same name.
+ * Keeping the last would draw half the change under a header whose counts
+ * describe both halves.
+ */
+function collectHunks(blocks: readonly ParsedFile[]): Map<string, Hunk[]> {
+  const byPath = new Map<string, Hunk[]>()
+
+  for (const block of blocks) {
+    const gathered = byPath.get(block.path)
+    if (gathered) gathered.push(...block.hunks)
+    else byPath.set(block.path, [...block.hunks])
+  }
+
+  return byPath
+}
+
+/**
+ * Says which files were left undrawn, whether or not anything else was.
+ *
+ * An untracked file is never in `drawable` — it is drawn from its own contents
+ * rather than from git — so it is not what this is about.
+ */
+function markOmitted(files: readonly FileDiff[], drawable: readonly FileDiff[]): FileDiff[] {
+  const asked = new Set(drawable.map((file) => file.path))
+
+  return files.map((file) =>
+    asked.has(file.path) || file.omitted !== 'none' || file.status === 'untracked'
+      ? file
+      : { ...file, omitted: 'tooLarge' as const }
+  )
 }

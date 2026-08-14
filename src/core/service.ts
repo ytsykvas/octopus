@@ -202,11 +202,11 @@ export interface OctopusService {
   /**
    * An absolute path inside a workspace, for a caller that will open it.
    *
-   * Refuses a path that climbs out of the worktree: it arrives from the
-   * renderer, which draws agent output, and is about to be handed to the
-   * operating system.
+   * Refuses a path that climbs out of the worktree, symlinks followed: it
+   * arrives from the renderer, which draws agent output, and is about to be
+   * handed to the operating system.
    */
-  resolveWorkspaceFile(workspaceId: string, path: string): string
+  resolveWorkspaceFile(workspaceId: string, path: string): Promise<string>
 
   /**
    * The workspace's chat, created on first use.
@@ -1035,9 +1035,9 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
       })
     },
 
-    resolveWorkspaceFile(workspaceId, path) {
+    async resolveWorkspaceFile(workspaceId, path) {
       const workspace = requireWorkspace(workspaceId)
-      const resolved = fileInWorkspace(workspace, path)
+      const resolved = await fileInWorkspace(workspace, path)
 
       if (!resolved) {
         throw new WorkspaceError(

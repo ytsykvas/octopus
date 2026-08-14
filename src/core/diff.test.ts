@@ -10,7 +10,7 @@
  */
 
 import { execFile } from 'node:child_process'
-import { mkdtemp, rm, writeFile } from 'node:fs/promises'
+import { mkdtemp, rm, symlink, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { promisify } from 'node:util'
@@ -478,7 +478,6 @@ describe('parseUnifiedDiff', () => {
       ].join('\n')
     )
 
-    expect(parseUnifiedDiff.length).toBe(1)
     expect(file?.hunks[0]?.lines[0]).toMatchObject({ kind: 'removed', text: '-- a/elsewhere.txt' })
   })
 
@@ -695,6 +694,76 @@ describe('readWorkspaceDiff', () => {
 
     expect(diff.files[0]).toMatchObject({ path: 'b.txt', oldPath: 'a.txt', added: 1, removed: 1 })
     expect(diff.files[0]?.hunks).not.toHaveLength(0)
+  })
+
+  /*
+   * A rename is two paths, and asking for one of them loses the pairing.
+   *
+   * git matches a deletion to an addition only among the paths it was asked
+   * for. Given the new path alone it sees a file appearing out of nowhere and
+   * draws the whole thing as additions — while the header, whose counts come
+   * from a listing that had no pathspec, still says the file moved and changed
+   * one line. An untracked file anywhere in the workspace is enough to put the
+   * diff on the path where this happens.
+   */
+  it('keeps a rename paired when only some files are drawn', async () => {
+    await run('git', ['mv', 'a.txt', 'b.txt'], { cwd: dir })
+    await writeFile(join(dir, 'b.txt'), 'one\nTWO\nthree\n', 'utf8')
+    await commit('move and edit')
+    await writeFile(join(dir, 'fresh.txt'), 'new\n', 'utf8')
+
+    const diff = await readDiff()
+    const moved = diff.files.find((file) => file.path === 'b.txt')
+
+    expect(moved?.oldPath).toBe('a.txt')
+    expect(moved?.hunks[0]?.lines.filter((line) => line.kind === 'added')).toHaveLength(1)
+  })
+
+  /*
+   * git renders a type change as two blocks under one path.
+   *
+   * A file replaced by a symlink is a `deleted file mode` block carrying the
+   * removals and a `new file mode 120000` block carrying the addition — same
+   * path, two `diff --git` headers. Keeping only one of them draws half the
+   * change under a header whose counts describe both halves.
+   */
+  it('keeps both halves of a file that changed type', async () => {
+    await rm(join(dir, 'a.txt'))
+    await symlink('/etc/hosts', join(dir, 'a.txt'))
+
+    const diff = await readDiff()
+    const kinds = diff.files[0]?.hunks.flatMap((hunk) => hunk.lines.map((line) => line.kind))
+
+    expect(kinds).toContain('removed')
+    expect(kinds).toContain('added')
+  })
+
+  /*
+   * `diff.mnemonicPrefix` is an ordinary thing to have in a global gitconfig,
+   * and it renames the prefixes to `c/` and `w/`. Every path would then fail to
+   * match the listing it is paired with, and every file in the pane would draw
+   * empty — a total, silent failure for anyone who happens to set it.
+   */
+  it('draws the lines even when the user has renamed git’s diff prefixes', async () => {
+    await run('git', ['config', 'diff.mnemonicPrefix', 'true'], { cwd: dir })
+    await writeFile(join(dir, 'a.txt'), 'one\nTWO\nthree\n', 'utf8')
+
+    const diff = await readDiff()
+
+    expect(diff.files[0]?.hunks).not.toHaveLength(0)
+  })
+
+  // The marking has to happen whether or not anything is left to draw, or the
+  // one case where every file is too large is the case that says nothing.
+  it('says a file is too large even when it is the only file', async () => {
+    await writeFile(join(dir, 'big.txt'), 'x\n'.repeat(10), 'utf8')
+    await commit('big')
+    await writeFile(join(dir, 'big.txt'), 'y\n'.repeat(10), 'utf8')
+
+    const diff = await readDiff({ limits: { ...DIFF_LIMITS, maxFileLines: 3 } })
+
+    expect(diff.files[0]?.omitted).toBe('tooLarge')
+    expect(diff.omittedFiles).toBe(1)
   })
 
   it('keeps a path containing a space intact', async () => {

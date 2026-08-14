@@ -1,5 +1,15 @@
 import { execFile } from 'node:child_process'
-import { access, mkdir, mkdtemp, readFile, rename, rm, writeFile } from 'node:fs/promises'
+import {
+  access,
+  mkdir,
+  mkdtemp,
+  readFile,
+  realpath,
+  rename,
+  rm,
+  symlink,
+  writeFile
+} from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { promisify } from 'node:util'
@@ -214,8 +224,8 @@ describe('workspaces', () => {
     const { service, projectId } = await withProject()
     const workspace = await service.createWorkspaceIn(projectId)
 
-    expect(service.resolveWorkspaceFile(workspace.id, 'README.md')).toBe(
-      join(workspace.path, 'README.md')
+    await expect(service.resolveWorkspaceFile(workspace.id, 'README.md')).resolves.toBe(
+      await realpath(join(workspace.path, 'README.md'))
     )
   })
 
@@ -223,7 +233,19 @@ describe('workspaces', () => {
     const { service, projectId } = await withProject()
     const workspace = await service.createWorkspaceIn(projectId)
 
-    expect(() => service.resolveWorkspaceFile(workspace.id, '../../secrets')).toThrow(
+    await expect(service.resolveWorkspaceFile(workspace.id, '../../secrets')).rejects.toThrow(
+      WorkspaceError
+    )
+  })
+
+  // The check the lexical one cannot make: a symlink is something the agent can
+  // leave in the worktree, and following it is what the system would do.
+  it('refuses to resolve a symlink that points out of the workspace', async () => {
+    const { service, projectId } = await withProject()
+    const workspace = await service.createWorkspaceIn(projectId)
+    await symlink('/etc/hosts', join(workspace.path, 'notes.txt'))
+
+    await expect(service.resolveWorkspaceFile(workspace.id, 'notes.txt')).rejects.toThrow(
       WorkspaceError
     )
   })

@@ -1,5 +1,5 @@
 import { execFile } from 'node:child_process'
-import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
+import { mkdir, mkdtemp, realpath, rm, symlink, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { promisify } from 'node:util'
@@ -633,28 +633,61 @@ describe('countChanges', () => {
 })
 
 describe('fileInWorkspace', () => {
-  it('resolves a path inside the worktree', async () => {
+  it('resolves a file inside the worktree', async () => {
     const workspace = await create()
+    await writeFile(join(workspace.path, 'a.ts'), 'x\n', 'utf8')
 
-    expect(fileInWorkspace(workspace, 'src/a.ts')).toBe(join(workspace.path, 'src/a.ts'))
+    await expect(fileInWorkspace(workspace, 'a.ts')).resolves.toBe(
+      await realpath(join(workspace.path, 'a.ts'))
+    )
   })
 
   it('refuses a path that climbs out of the worktree', async () => {
     const workspace = await create()
 
-    expect(fileInWorkspace(workspace, '../../../etc/passwd')).toBeNull()
+    await expect(fileInWorkspace(workspace, '../../../etc/hosts')).resolves.toBeNull()
   })
 
   it('refuses an absolute path somewhere else entirely', async () => {
     const workspace = await create()
 
-    expect(fileInWorkspace(workspace, '/etc/passwd')).toBeNull()
+    await expect(fileInWorkspace(workspace, '/etc/hosts')).resolves.toBeNull()
   })
 
   it('refuses the worktree itself, which is not a file in it', async () => {
     const workspace = await create()
 
-    expect(fileInWorkspace(workspace, '.')).toBeNull()
+    await expect(fileInWorkspace(workspace, '.')).resolves.toBeNull()
+  })
+
+  /*
+   * The one the lexical check cannot see.
+   *
+   * `resolve` does not follow symlinks, and a symlink is something the agent
+   * can leave in the worktree. Without following them, a file the diff lists as
+   * `notes.txt` opens whatever it points at.
+   */
+  it('refuses a symlink inside the worktree that points out of it', async () => {
+    const workspace = await create()
+    await symlink('/etc/hosts', join(workspace.path, 'notes.txt'))
+
+    await expect(fileInWorkspace(workspace, 'notes.txt')).resolves.toBeNull()
+  })
+
+  it('resolves a symlink that stays inside the worktree', async () => {
+    const workspace = await create()
+    await writeFile(join(workspace.path, 'real.ts'), 'x\n', 'utf8')
+    await symlink(join(workspace.path, 'real.ts'), join(workspace.path, 'alias.ts'))
+
+    await expect(fileInWorkspace(workspace, 'alias.ts')).resolves.toBe(
+      await realpath(join(workspace.path, 'real.ts'))
+    )
+  })
+
+  it('refuses a file that is not there', async () => {
+    const workspace = await create()
+
+    await expect(fileInWorkspace(workspace, 'never-written.ts')).resolves.toBeNull()
   })
 })
 

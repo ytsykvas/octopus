@@ -9,7 +9,7 @@
  * lives under a single root (§12.4).
  */
 
-import { access } from 'node:fs/promises'
+import { access, realpath } from 'node:fs/promises'
 import { isAbsolute, relative, resolve } from 'node:path'
 
 import { anyBranchExists, type GitExec, toSlug } from './git.js'
@@ -445,9 +445,32 @@ export async function countChanges(
  * same question of the same kind of value, privately; a third caller is when
  * this should move into `paths.ts` rather than be written a third time.
  */
-export function fileInWorkspace(workspace: Workspace, path: string): string | null {
-  const step = relative(resolve(workspace.path), resolve(workspace.path, path))
-  return step !== '' && !step.startsWith('..') && !isAbsolute(step)
-    ? resolve(workspace.path, path)
-    : null
+export async function fileInWorkspace(workspace: Workspace, path: string): Promise<string | null> {
+  const lexical = resolve(workspace.path, path)
+  const step = relative(resolve(workspace.path), lexical)
+  if (step === '' || step.startsWith('..') || isAbsolute(step)) return null
+
+  /*
+   * Lexical containment is not containment.
+   *
+   * `resolve` does not follow symlinks, and a symlink is something an agent can
+   * leave inside the worktree pointing anywhere — so a file listed in the diff
+   * as `notes.txt` can be `~/.ssh/id_rsa`, and handing that to the system to
+   * open is not what "open the file in this workspace" meant.
+   *
+   * Both sides are resolved for real, because the worktree's own path may run
+   * through a symlink too: `/var` is one on macOS, which is the reason
+   * `canonicalPath` above exists at all.
+   */
+  try {
+    const root = await realpath(workspace.path)
+    const real = await realpath(lexical)
+    const inside = relative(root, real)
+
+    return inside !== '' && !inside.startsWith('..') && !isAbsolute(inside) ? real : null
+  } catch {
+    // Gone between the listing and the click, or unreadable. Either way there
+    // is nothing to open, and nothing to be proved about where it points.
+    return null
+  }
 }

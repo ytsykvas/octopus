@@ -224,7 +224,7 @@ export function registerIpc(
   // to the operating system rather than looked up in our own records.
   host.handle('files:open', (_event, workspaceId: string, path: unknown) =>
     attempt(async () => {
-      const absolute = service.resolveWorkspaceFile(workspaceId, FilePathSchema.parse(path))
+      const absolute = await service.resolveWorkspaceFile(workspaceId, FilePathSchema.parse(path))
       const refusal = await host.openPath(absolute)
       if (refusal !== '') throw new Error(refusal)
     })
