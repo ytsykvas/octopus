@@ -176,6 +176,25 @@ describe('sending', () => {
 
     expect(onSend).toHaveBeenCalledWith('add a test')
   })
+
+  // The strip above the field offers `/compact` and `/clear` off the context
+  // reading, and they go out the way anything typed here does — which is the
+  // whole reason that menu needs no command handling of its own. Asserted from
+  // this side because wired to nothing the attic's own tests would still pass.
+  it('sends what the attic menu picks through the channel the field uses', async () => {
+    const user = userEvent.setup()
+    const { onSend } = renderComposer({
+      usage: {
+        context: { percentage: 48, usedTokens: 48_000, maxTokens: 200_000, model: 'claude-opus-5' },
+        subscription: null
+      }
+    })
+
+    await user.click(screen.getByRole('button', { name: /Context 48%/ }))
+    await user.click(screen.getByRole('menuitem', { name: /\/compact/ }))
+
+    expect(onSend).toHaveBeenCalledExactlyOnceWith('/compact')
+  })
 })
 
 describe('while the agent is working', () => {
@@ -199,6 +218,35 @@ describe('while the agent is working', () => {
 
     await user.type(field(), 'and then deploy')
     expect(field()).toHaveValue('and then deploy')
+  })
+
+  /*
+   * The strip's menu is not disabled here, and that is a decision rather than
+   * an omission: `submit` looks at the draft and nothing else, so typing
+   * `/clear` and pressing Enter mid-turn already works. A menu stricter than
+   * the field an inch below it would be two answers to one question.
+   *
+   * It is also the moment the commands matter most — the reading someone is
+   * watching climb is the reason they reach for the menu at all.
+   */
+  it('still offers the commands on the context reading', async () => {
+    const user = userEvent.setup()
+    renderComposer({
+      busy: true,
+      usage: {
+        context: {
+          percentage: 91,
+          usedTokens: 182_000,
+          maxTokens: 200_000,
+          model: 'claude-opus-5'
+        },
+        subscription: null
+      }
+    })
+
+    await user.click(screen.getByRole('button', { name: /Context 91%/ }))
+
+    expect(screen.getByRole('menuitem', { name: /\/compact/ })).toBeInTheDocument()
   })
 })
 

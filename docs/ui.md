@@ -91,8 +91,9 @@ is the wording, and only after the row has already used a second line.
 **The composer has an attic**, a strip above the field mirroring the settings
 footer below it: how full this conversation's context window is on the left, how
 much of the subscription's five-hour and weekly windows is gone on the right.
-Both are read one step fainter than the pickers underneath, because those are
-clicked and these are only read.
+Both are read one step fainter than the pickers underneath, which are clicked
+where these are mostly read — mostly, because the left one is also the way out
+of what it reports.
 
 It used to be one figure in the chat header, and it was almost always blank.
 Measured against a live session, `rate_limit_event` usually carries no
@@ -120,6 +121,30 @@ Two rules there are worth keeping:
   `rejected` gets a word now, because "the next turn will not run" is something
   no percentage carries; `allowed_warning` gets none, since "close to the limit"
   is vaguer than "Week 84%" and the colour already says it.
+
+**Clicking the context share opens the two commands that change it.** It is the
+one figure on the strip that can be acted on — the account's windows empty on a
+clock nobody here controls — and what acts on a full context window is
+`/compact`, which keeps a summary and carries on, or `/clear`, which throws the
+conversation away. Neither is dispatched: they go out as the text of an ordinary
+message, which is what a slash command is in this app, so the menu hands them to
+the same `onSend` the field uses. `isClearCommand` in `core/chats.ts` is the only
+thing octopus notices about one, so the service can drop the transcript when the
+reset comes back.
+
+Three things about that menu:
+
+- **`/clear` asks first**, and is the row drawn in `danger`. Typing the command
+  asks nothing and still will — the question is there because a menu is reached
+  by a stray click in a way a typed command is not, and what is lost is a file
+  on disk rather than a screenful.
+- **Nothing is disabled while the agent works.** The field beside it has no such
+  check either: `Composer.submit` looks at the draft and nothing else. A menu
+  stricter than the control next to it would be two answers to one question.
+- **The reading keeps its measured tone through hover and while the menu is
+  open.** `hover:text-ink` from the pickers below is the one line that must not
+  be copied up here: `usageTone` paints the figure at 75% and again at 90%, and
+  a hover that repainted it would put the control's state over the measurement.
 
 The windows are named here (`5h`, `Week`) although the old header chip never
 named its one: two figures side by side are unreadable without labels, while one

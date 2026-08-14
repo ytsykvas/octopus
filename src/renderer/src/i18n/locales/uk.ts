@@ -162,6 +162,13 @@ export const uk: Translation = {
 
     context: 'Контекст',
     contextTitle: 'Вікно контексту — {{used}} з {{total}}',
+    contextCompactNote: 'Агент лишає собі стислий переказ розмови й працює далі.',
+    contextClearNote: 'Агент забуває цю розмову, а її запис видаляється.',
+    clearTitle: 'Очистити цю розмову?',
+    clearMessage: 'Агент почне спочатку, не пам’ятаючи нічого зі сказаного тут.',
+    clearDetail: 'Запис розмови видаляється разом із нею, і повернути його не вийде.',
+    clearConfirm: 'Очистити',
+    clearCancel: 'Скасувати',
     windowFiveHour: '5 год',
     windowFiveHourTitle: 'П’ятигодинне вікно',
     windowWeek: 'Тиждень',

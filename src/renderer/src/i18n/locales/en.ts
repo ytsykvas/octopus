@@ -177,6 +177,17 @@ export const en = {
 
     context: 'Context',
     contextTitle: 'Context window — {{used}} of {{total}}',
+    /* The second lines of the menu the reading opens. The commands themselves
+       are not here: they are the CLI's own names, printed the way the
+       suggestion list prints them, and a translated `/clear` would be a
+       command that does nothing. */
+    contextCompactNote: 'The agent keeps a summary of the conversation and carries on.',
+    contextClearNote: 'The agent forgets this conversation, and the log goes with it.',
+    clearTitle: 'Clear this conversation?',
+    clearMessage: 'The agent starts again with no memory of what was said here.',
+    clearDetail: 'The log is deleted with it, and cannot be brought back.',
+    clearConfirm: 'Clear',
+    clearCancel: 'Cancel',
     windowFiveHour: '5h',
     windowFiveHourTitle: 'Five-hour window',
     windowWeek: 'Week',

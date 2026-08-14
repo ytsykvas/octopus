@@ -244,7 +244,10 @@ export function Composer({
           <CommandMenu commands={matches} active={active} onActive={setActive} onPick={complete} />
         )}
 
-        <ComposerAttic usage={usage} limit={limit} />
+        {/* The strip's own menu sends slash commands, and it sends them the
+            way the field does — a slash command here is the text of an
+            ordinary message, so there is one channel and not two. */}
+        <ComposerAttic usage={usage} limit={limit} onSend={onSend} />
 
         <textarea
           value={draft}

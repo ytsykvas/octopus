@@ -31,13 +31,46 @@ typed, so the visible gap is the automatic case, which is about the context
 window rather than about commands. A commit that did both could be reviewed as
 neither.
 
+The context reading in the composer's attic now offers `/compact` as well, so
+the manual case is a click rather than a command someone has to know — which
+makes it far more common without moving the gap this task describes, since the
+CLI still narrates the one it was asked for. The automatic case is still the
+silent one.
+
 ## Evidence
 
 Probed against a live session: `/compact` on a conversation too short to compact
 answered with `system/status` (`compacting`, then `null`) and an assistant
-message reading "Not enough messages to compact." A real compaction was not
-reached, so the shape of `compact_metadata` in practice — in particular whether
-`post_tokens` and `duration_ms` arrive — is still only what the types promise.
+message reading "Not enough messages to compact."
+
+A real one was reached later, on `octopus/leslie` with CLI 2.1.224, and the
+metadata arrives in full — under camelCase names rather than the snake_case the
+SDK's prose uses, and with three fields the types do not mention:
+
+```json
+"subtype": "compact_boundary",
+"content": "Conversation compacted",
+"compactMetadata": {
+  "trigger": "manual",
+  "preTokens": 73984,
+  "postTokens": 16023,
+  "cumulativeDroppedTokens": 57961,
+  "durationMs": 65548,
+  "preCompactDiscoveredTools": ["ExitPlanMode"],
+  "preservedMessages": { "anchorUuid": "…", "uuids": ["…"] }
+}
+```
+
+So the sketch below can be built: `trigger`, `preTokens` and `postTokens` are
+all there, and `postTokens` is the whole context rather than the summary alone —
+`preTokens` matched the last request's prompt of 73,572 to within a rounding of
+the system prompt.
+
+Two things that turn is worth knowing for. It took **66 seconds and a dollar**,
+which is long enough that the composer needs to look busy for it — it did, the
+turn being an ordinary one. And its `result` reported `inputTokens: 0`, so the
+summarising call's tokens are attributed to nothing: the footer read
+`65.9s · 0 tokens` under a turn that was neither.
 
 ## A sketch
 
