@@ -128,7 +128,11 @@ full width — a form inside it brings its own.
 `DropdownMenu` positions its panel against the **window**, not its trigger.
 An `absolute` panel is clipped by any scrolling ancestor, and the project tab
 strip is one — the menu came out sliced to the width of a 56px column. The cost
-is that the coordinates are a snapshot, so the menu closes on scroll or resize.
+is that the coordinates are a snapshot, so a resize closes it, and so does a
+scroll — but only one in something the trigger sits **inside**. Closing on every
+scroll was the first rule and the chat log broke it: it pins itself to the
+bottom on each streamed fragment, so the composer's menus shut a few times a
+second while the agent answered, and the composer had not moved a pixel.
 
 ## Colour that carries meaning
 

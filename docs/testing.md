@@ -52,6 +52,18 @@ Both were at 100%. The lesson is not "write more tests" but:
 > When a function reads external output, go and look at what the tool actually
 > prints in the awkward case, and assert against that.
 
+A third arrived from the other direction, and it is worth knowing separately.
+`DropdownMenu` closed on every scroll anywhere, and the test that covered it
+read `closes the menu when the page scrolls` — green, honest, and describing
+what the code did rather than what it was for. The rule it should have been
+holding is narrower: close when the trigger **moved**. The chat log pins itself
+to the bottom on each streamed fragment, so menus in the composer shut a few
+times a second while the agent answered.
+
+> A test named after what the code does can only ever confirm it. Name it after
+> the rule the code exists to keep, and the day the two part company the test
+> is the one that notices.
+
 ```bash
 git worktree list --porcelain   # after rm -rf on the worktree
 ```

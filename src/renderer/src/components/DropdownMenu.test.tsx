@@ -9,6 +9,10 @@ function renderMenu(actions: readonly MenuAction[]): void {
     <div>
       <button type="button">Somewhere else</button>
 
+      {/* Stands for the chat log: something that scrolls beside the trigger
+          rather than around it, so scrolling it cannot move the trigger. */}
+      <div role="log">A region that scrolls on its own</div>
+
       <DropdownMenu
         actions={actions}
         trigger={({ onClick, open }) => (
@@ -102,6 +106,35 @@ describe('DropdownMenu', () => {
     fireEvent.scroll(window)
 
     expect(screen.queryByRole('menu')).toBeNull()
+  })
+
+  it('closes the menu when something the trigger sits inside scrolls', async () => {
+    renderMenu([{ id: 'rename', label: 'Rename', onSelect: vi.fn() }])
+
+    await userEvent.click(triggerButton())
+    fireEvent.scroll(document)
+
+    expect(screen.queryByRole('menu')).toBeNull()
+  })
+
+  /*
+   * Reported from a running app: the chat log pins itself to the bottom on
+   * every streamed fragment, and menus opened from the composer shut a few
+   * times a second for as long as the agent was answering.
+   *
+   * Scrolling does not reflow the rest of the page, so a scroll somewhere the
+   * trigger does not sit cannot move it by a pixel — and the reason to close
+   * is that the trigger moved. The listener is on the window in the capture
+   * phase because a scroll event does not bubble; where it happened has to be
+   * read from the target rather than assumed.
+   */
+  it('stays open when something beside the trigger scrolls', async () => {
+    renderMenu([{ id: 'rename', label: 'Rename', onSelect: vi.fn() }])
+
+    await userEvent.click(triggerButton())
+    fireEvent.scroll(screen.getByRole('log'))
+
+    expect(screen.getByRole('menu')).toBeInTheDocument()
   })
 
   it('closes the menu when the window is resized', async () => {

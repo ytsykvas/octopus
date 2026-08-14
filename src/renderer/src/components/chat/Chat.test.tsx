@@ -398,6 +398,37 @@ describe('following the conversation', () => {
 
     expect(log.scrollTop).toBe(1000)
   })
+
+  /*
+   * Reported from a running app: the menu on the context reading shut a few
+   * times a second for as long as the agent was answering, and stayed open
+   * once the turn ended.
+   *
+   * The log pins itself to the bottom on every streamed fragment, and a menu
+   * at fixed coordinates used to close on any scroll at all. The composer does
+   * not move when the log scrolls, so nothing was wrong with where the panel
+   * was — it was answering an event that had nothing to do with it.
+   */
+  it('leaves the composer’s menus open while the log follows the agent', async () => {
+    const user = userEvent.setup()
+    vi.mocked(octopus().chats.usage).mockResolvedValue({
+      ok: true,
+      value: {
+        context: { percentage: 8, usedTokens: 16_000, maxTokens: 200_000, model: 'claude-opus-5' },
+        subscription: null
+      }
+    })
+    givenChat()
+    await openLoadedChat()
+
+    await user.click(await screen.findByRole('button', { name: /Context 8%/ }))
+    expect(screen.getByRole('menu')).toBeInTheDocument()
+
+    emitAgentEvent({ type: 'text', text: 'still writing' })
+    fireEvent.scroll(screen.getByRole('log'))
+
+    expect(screen.getByRole('menu')).toBeInTheDocument()
+  })
 })
 
 describe('stopping a turn', () => {

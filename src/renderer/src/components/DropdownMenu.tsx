@@ -82,11 +82,31 @@ export function DropdownMenu({
   useEffect(() => {
     if (!open) return
 
-    window.addEventListener('scroll', close, true)
+    /*
+     * Only a scroll that could move the trigger counts, which means one in an
+     * element the trigger sits inside. Scrolling anything else cannot shift it
+     * a pixel — scrolling does not reflow the rest of the page.
+     *
+     * Closing on every scroll instead was the rule for a while, and the chat
+     * log is what broke it: it pins itself to the bottom on each streamed
+     * fragment, so the composer's menus shut a few times a second for as long
+     * as the agent was answering, while the composer itself never moved. The
+     * listener has to be on the window in the capture phase because a scroll
+     * event does not bubble, so `target` is the only thing saying where it
+     * happened.
+     */
+    const closeOnScroll = (event: Event): void => {
+      const scrolled = event.target
+      if (scrolled instanceof Node && !scrolled.contains(container.current)) return
+
+      close()
+    }
+
+    window.addEventListener('scroll', closeOnScroll, true)
     window.addEventListener('resize', close)
 
     return () => {
-      window.removeEventListener('scroll', close, true)
+      window.removeEventListener('scroll', closeOnScroll, true)
       window.removeEventListener('resize', close)
     }
   }, [open, close])
