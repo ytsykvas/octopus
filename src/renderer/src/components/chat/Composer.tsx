@@ -323,12 +323,33 @@ export function Composer({
             }}
           />
 
-          {/* Switched in place rather than picked from a menu. There are two
-              modes, so the menu was a click to open it, a list in which one of
+          <ComposerPicker
+            label={t('chat.effort')}
+            value={effort}
+            icon={<Gauge aria-hidden size={12} />}
+            // Greyed out rather than hidden when the model does not use effort:
+            // a control that disappears as you change model is harder to make
+            // sense of than one that stays put and explains itself.
+            disabled={modelInForce.supportsEffort === false}
+            {...(modelInForce.supportsEffort === false && { title: t('chat.effortUnsupported') })}
+            options={effortChoices.map((value) => ({
+              value,
+              label: t(EFFORT_LABELS[value])
+            }))}
+            onChange={onEffort}
+          />
+
+          {/* Last of the three, and the only one that is not a menu. Model and
+              effort are two halves of one question — which brain, and how hard
+              it thinks — so they sit together, and what the agent is allowed to
+              do without asking is a different question altogether.
+
+              Switched in place rather than picked from a menu: there are two
+              modes, so the list was a click to open it, a list in which one of
               the two visible rows was already in force, and a click to choose
-              the other — three steps to say the thing the button now says in
-              one. The pickers beside it keep their menus because their lists
-              are open-ended.
+              the other — three steps to say the thing the button says in one.
+              The pickers before it keep their menus, their lists being
+              open-ended.
 
               Planning is a third state and still not a third mode: the agent
               runs no tools at all in it, so this stays usable while planning —
@@ -353,22 +374,6 @@ export function Composer({
             <span className="shrink-0">{MODE_ICONS[workingMode]}</span>
             <span className="truncate">{t(MODE_LABELS[workingMode])}</span>
           </button>
-
-          <ComposerPicker
-            label={t('chat.effort')}
-            value={effort}
-            icon={<Gauge aria-hidden size={12} />}
-            // Greyed out rather than hidden when the model does not use effort:
-            // a control that disappears as you change model is harder to make
-            // sense of than one that stays put and explains itself.
-            disabled={modelInForce.supportsEffort === false}
-            {...(modelInForce.supportsEffort === false && { title: t('chat.effortUnsupported') })}
-            options={effortChoices.map((value) => ({
-              value,
-              label: t(EFFORT_LABELS[value])
-            }))}
-            onChange={onEffort}
-          />
 
           {/* Beside send rather than among the pickers on the left. Those three
               are settings, changed rarely and left alone; this is turned on for
