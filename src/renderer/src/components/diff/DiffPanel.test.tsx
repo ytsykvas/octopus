@@ -32,13 +32,23 @@ function answer(diff: ReturnType<typeof workspaceDiff>): void {
   vi.mocked(octopus().workspaces.diff).mockResolvedValue({ ok: true, value: diff })
 }
 
+const WIDE = 900
+
 function renderPanel(workspace = anna, visible = true): void {
-  render(<DiffPanel workspace={workspace} visible={visible} />)
+  render(
+    <DiffPanel
+      workspace={workspace}
+      visible={visible}
+      view="unified"
+      onView={vi.fn()}
+      width={WIDE}
+    />
+  )
 }
 
 describe('DiffPanel', () => {
   it('asks for nothing until a workspace is chosen', () => {
-    render(<DiffPanel workspace={null} visible />)
+    render(<DiffPanel workspace={null} visible view="unified" onView={vi.fn()} width={WIDE} />)
 
     expect(screen.getByText(/Select a workspace/)).toBeInTheDocument()
     expect(octopus().workspaces.diff).not.toHaveBeenCalled()
@@ -187,6 +197,95 @@ describe('DiffPanel', () => {
     ).toBeInTheDocument()
   })
 
+  // jsdom measures every box as zero, so the sample the pane reads its cell
+  // width from has to be given one before the threshold means anything.
+  function withMonospaceCell(pixels: number): void {
+    vi.spyOn(HTMLSpanElement.prototype, 'getBoundingClientRect').mockReturnValue(
+      new DOMRect(0, 0, pixels, 16)
+    )
+  }
+
+  it('offers to put the two sides beside each other', async () => {
+    const user = userEvent.setup()
+    const onView = vi.fn()
+    withMonospaceCell(64)
+    answer(workspaceDiff([fileDiff('src/a.ts')]))
+    render(<DiffPanel workspace={anna} visible view="unified" onView={onView} width={WIDE} />)
+
+    await user.click(await screen.findByRole('button', { name: 'Side by side' }))
+
+    expect(onView).toHaveBeenCalledWith('split')
+  })
+
+  it('pairs the removed line with the one that replaced it', async () => {
+    withMonospaceCell(64)
+    answer(workspaceDiff([fileDiff('src/a.ts')]))
+    render(<DiffPanel workspace={anna} visible view="split" onView={vi.fn()} width={WIDE} />)
+
+    expect(await screen.findByRole('button', { name: 'One column' })).toBeInTheDocument()
+    // Context sits on both sides in split view, which is what tells the two
+    // columns apart from the single one.
+    expect(screen.getAllByText('kept')).toHaveLength(2)
+  })
+
+  it('offers the way back to one column', async () => {
+    const user = userEvent.setup()
+    const onView = vi.fn()
+    withMonospaceCell(64)
+    answer(workspaceDiff([fileDiff('src/a.ts')]))
+    render(<DiffPanel workspace={anna} visible view="split" onView={onView} width={WIDE} />)
+
+    await user.click(await screen.findByRole('button', { name: 'One column' }))
+
+    expect(onView).toHaveBeenCalledWith('unified')
+  })
+
+  // A line with nothing opposite it is what shows an addition as an addition
+  // rather than as one that merely happens to sit beside something.
+  it('leaves the other side blank where a line has no counterpart', async () => {
+    withMonospaceCell(64)
+    answer(
+      workspaceDiff([
+        fileDiff('src/a.ts', {
+          hunks: [
+            hunk({
+              lines: [
+                {
+                  kind: 'added',
+                  text: 'brand new',
+                  oldNumber: null,
+                  newNumber: 1,
+                  noNewline: false
+                }
+              ]
+            })
+          ]
+        })
+      ])
+    )
+    render(<DiffPanel workspace={anna} visible view="split" onView={vi.fn()} width={WIDE} />)
+
+    // Waits for the measurement: the toggle only offers the way back to one
+    // column once the pane has worked out that two of them fit.
+    await screen.findByRole('button', { name: 'One column' })
+
+    // Once, not twice: a context line occupies both columns, and an addition
+    // with nothing opposite it must not be mistaken for one.
+    expect(screen.getAllByText('brand new')).toHaveLength(1)
+  })
+
+  // The stored preference is not overwritten by the pane being too narrow:
+  // dragging it wide again brings the two columns back.
+  it('falls back to one column when the pane is too narrow for two', async () => {
+    withMonospaceCell(320)
+    answer(workspaceDiff([fileDiff('src/a.ts')]))
+    render(<DiffPanel workspace={anna} visible view="split" onView={vi.fn()} width={300} />)
+
+    await screen.findByText('is here now')
+    expect(screen.getAllByText('kept')).toHaveLength(1)
+    expect(screen.getByRole('button', { name: /too narrow/ })).toBeDisabled()
+  })
+
   it('reads nothing while another tab is showing', () => {
     renderPanel(anna, false)
 
@@ -194,8 +293,10 @@ describe('DiffPanel', () => {
   })
 
   it('reads when its tab comes back', async () => {
-    const { rerender } = render(<DiffPanel workspace={anna} visible={false} />)
-    rerender(<DiffPanel workspace={anna} visible />)
+    const { rerender } = render(
+      <DiffPanel workspace={anna} visible={false} view="unified" onView={vi.fn()} width={WIDE} />
+    )
+    rerender(<DiffPanel workspace={anna} visible view="unified" onView={vi.fn()} width={WIDE} />)
 
     await waitFor(() => {
       expect(octopus().workspaces.diff).toHaveBeenCalledWith(anna.id)
@@ -204,10 +305,12 @@ describe('DiffPanel', () => {
 
   it('asks again for another workspace', async () => {
     answer(workspaceDiff([fileDiff('src/a.ts')]))
-    const { rerender } = render(<DiffPanel workspace={anna} visible />)
+    const { rerender } = render(
+      <DiffPanel workspace={anna} visible view="unified" onView={vi.fn()} width={WIDE} />
+    )
     await screen.findByText('is here now')
 
-    rerender(<DiffPanel workspace={bob} visible />)
+    rerender(<DiffPanel workspace={bob} visible view="unified" onView={vi.fn()} width={WIDE} />)
 
     await waitFor(() => {
       expect(octopus().workspaces.diff).toHaveBeenCalledWith(bob.id)

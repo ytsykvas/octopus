@@ -5,7 +5,7 @@ import { useTranslation } from 'react-i18next'
 import type { FileDiff, FileStatus } from '@core/diff.js'
 
 import { DropdownMenu } from '../DropdownMenu.js'
-import { DiffHunk } from './DiffHunk.js'
+import { type DiffView, DiffHunk } from './DiffHunk.js'
 
 /**
  * The letter in a file's header, and the word it stands for.
@@ -58,6 +58,7 @@ const SETTLE_MS = 2000
 interface DiffFileProps {
   readonly file: FileDiff
   readonly collapsed: boolean
+  readonly view: DiffView
   readonly onToggle: () => void
   readonly onOpen: (path: string) => void
 }
@@ -70,7 +71,13 @@ interface DiffFileProps {
  * review depends on, and one the browser gives for nothing as long as no
  * ancestor between here and the scroller hides its overflow.
  */
-export function DiffFile({ file, collapsed, onToggle, onOpen }: DiffFileProps): React.JSX.Element {
+export function DiffFile({
+  file,
+  collapsed,
+  view,
+  onToggle,
+  onOpen
+}: DiffFileProps): React.JSX.Element {
   const { t } = useTranslation()
   const [copyFailed, setCopyFailed] = useState(false)
 
@@ -158,12 +165,18 @@ export function DiffFile({ file, collapsed, onToggle, onOpen }: DiffFileProps): 
         </p>
       )}
 
-      {!collapsed && <DiffBody file={file} />}
+      {!collapsed && <DiffBody file={file} view={view} />}
     </div>
   )
 }
 
-function DiffBody({ file }: { readonly file: FileDiff }): React.JSX.Element | null {
+function DiffBody({
+  file,
+  view
+}: {
+  readonly file: FileDiff
+  readonly view: DiffView
+}): React.JSX.Element | null {
   const { t } = useTranslation()
 
   if (file.omitted === 'binary') {
@@ -181,7 +194,7 @@ function DiffBody({ file }: { readonly file: FileDiff }): React.JSX.Element | nu
   return (
     <div>
       {file.hunks.map((hunk, index) => (
-        <DiffHunk key={index} hunk={hunk} />
+        <DiffHunk key={index} hunk={hunk} view={view} />
       ))}
     </div>
   )

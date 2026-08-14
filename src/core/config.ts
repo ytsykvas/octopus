@@ -149,6 +149,16 @@ export const ConfigSchema = z.object({
   rightPanelWidth: z.number().int().min(280).max(4000).default(360),
 
   /**
+   * How a diff is laid out: one column, or the two sides beside each other.
+   *
+   * Stored rather than kept per session because it is a preference about how
+   * code is read, not a mood. Side by side needs room the pane may not have,
+   * and the panel falls back to one column when it does not — the stored value
+   * is what the reader asked for, not what is currently on screen.
+   */
+  diffView: z.enum(['unified', 'split']).default('unified'),
+
+  /**
    * Width of the workspace list in pixels.
    *
    * The lower bound is where the project name stops having room beside the
@@ -194,6 +204,7 @@ export function createDefaultConfig(
     language: 'en',
     cloneDirectory: '',
     rightPanelWidth: 360,
+    diffView: 'unified',
     sidebarWidth: 240,
     deviceId: uuid(),
     installedAt: now.toISOString()

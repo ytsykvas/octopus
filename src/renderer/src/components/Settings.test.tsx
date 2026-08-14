@@ -23,6 +23,7 @@ function config(overrides: Partial<Config> = {}): Config {
     theme: 'system',
     language: 'en',
     rightPanelWidth: 360,
+    diffView: 'unified',
     sidebarWidth: 240,
     deviceId: '00000000-0000-4000-8000-000000000000',
     installedAt: '2026-08-08T00:00:00.000Z',

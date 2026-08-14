@@ -47,6 +47,8 @@ function renderPanel(overrides: Partial<Props> = {}): {
     width: 360,
     onWidthChange: vi.fn(),
     leftWidth: LEFT_WIDTH,
+    diffView: 'unified',
+    onDiffView: vi.fn(),
     ...overrides
   }
 

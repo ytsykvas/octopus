@@ -5,6 +5,7 @@ import type { ProjectColor } from '@core/colors.js'
 import type { WorkspaceView } from '@core/workspaces.js'
 
 import { DiffPanel } from './diff/DiffPanel.js'
+import type { DiffView } from './diff/DiffHunk.js'
 import { ResizeHandle } from './ResizeHandle.js'
 import { ScriptRunner } from './ScriptRunner.js'
 import { WorkspaceTerminals } from './WorkspaceTerminals.js'
@@ -90,6 +91,9 @@ interface RightPanelProps {
   readonly onWidthChange: (width: number) => void
   /** The project strip plus the workspace list, or just the strip when folded. */
   readonly leftWidth: number
+  /** How the reader asked for diffs to be laid out, across sessions. */
+  readonly diffView: DiffView
+  readonly onDiffView: (view: DiffView) => void
 }
 
 export function RightPanel({
@@ -100,7 +104,9 @@ export function RightPanel({
   onEditScripts,
   width,
   onWidthChange,
-  leftWidth
+  leftWidth,
+  diffView,
+  onDiffView
 }: RightPanelProps): React.JSX.Element {
   const { t, i18n } = useTranslation()
   const [tab, setTab] = useState<RightTab>('diff')
@@ -258,7 +264,13 @@ export function RightPanel({
           scrolled to, both of which a review builds up over several turns.
           `visible` is what stops it reading git while another tab is showing. */}
       <div className={`flex min-h-0 flex-1 flex-col ${tab === 'diff' ? '' : 'hidden'}`}>
-        <DiffPanel workspace={active} visible={tab === 'diff'} />
+        <DiffPanel
+          workspace={active}
+          visible={tab === 'diff'}
+          view={diffView}
+          onView={onDiffView}
+          width={applied}
+        />
       </div>
 
       {/* Hidden, never unmounted: a session belongs to the workspace, not to

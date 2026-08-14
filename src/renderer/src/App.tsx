@@ -424,6 +424,8 @@ export function App(): React.JSX.Element {
             }}
             width={config?.rightPanelWidth ?? 360}
             onWidthChange={(rightPanelWidth) => void updateConfig({ rightPanelWidth })}
+            diffView={config?.diffView ?? 'unified'}
+            onDiffView={(diffView) => void updateConfig({ diffView })}
             // The room the pane must leave alone. Folded away, the list takes
             // none of it — and the pane may have that room too.
             leftWidth={TAB_STRIP_WIDTH + (sidebarOpen ? sidebarWidth : 0)}

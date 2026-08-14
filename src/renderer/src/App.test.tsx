@@ -12,6 +12,7 @@ import type { ThemeName } from '@core/types.js'
 import type { WorkspaceView } from '@core/workspaces.js'
 
 import type { Result } from '../../preload/index.js'
+import { fileDiff, workspaceDiff } from './test/diff.js'
 import { stubDialogElement } from './test/dialog.js'
 import { disconnectedAccounts } from './test/octopus.js'
 import { workspaceView } from './test/workspaces.js'
@@ -52,6 +53,7 @@ function config(overrides: Partial<Config> = {}): Config {
     theme: 'system',
     language: 'en',
     rightPanelWidth: 360,
+    diffView: 'unified',
     sidebarWidth: 240,
     deviceId: '00000000-0000-4000-8000-000000000000',
     installedAt: '2026-08-08T00:00:00.000Z',
@@ -720,6 +722,36 @@ describe('App', () => {
       await user.keyboard('{ArrowLeft}')
 
       expect(window.octopus.config.update).toHaveBeenCalledWith({ rightPanelWidth: 376 })
+    } finally {
+      window.innerWidth = narrow
+    }
+  })
+
+  // How a diff is laid out is a preference about how code is read, so it
+  // outlives the session that chose it.
+  it('remembers how the reader asked diffs to be laid out', async () => {
+    const narrow = window.innerWidth
+    window.innerWidth = 1400
+
+    try {
+      givenTwoProjects()
+      vi.mocked(window.octopus.workspaces.diff).mockResolvedValue({
+        ok: true,
+        value: workspaceDiff([fileDiff('src/a.ts')])
+      })
+      // The sample the pane measures its monospace cell from reports zero in
+      // jsdom, so no width would ever be wide enough for two columns.
+      vi.spyOn(HTMLSpanElement.prototype, 'getBoundingClientRect').mockReturnValue(
+        new DOMRect(0, 0, 32, 16)
+      )
+
+      const user = await openApp()
+      await user.click(await screen.findByRole('button', { name: 'PL' }))
+      await user.click(await screen.findByText('anna'))
+
+      await user.click(await screen.findByRole('button', { name: 'Side by side' }))
+
+      expect(window.octopus.config.update).toHaveBeenCalledWith({ diffView: 'split' })
     } finally {
       window.innerWidth = narrow
     }

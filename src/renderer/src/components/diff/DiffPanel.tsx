@@ -1,5 +1,5 @@
-import { ChevronsDownUp, ChevronsUpDown, RefreshCw } from 'lucide-react'
-import { useState } from 'react'
+import { ChevronsDownUp, ChevronsUpDown, Columns2, RefreshCw, Rows3 } from 'lucide-react'
+import { useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import type { FileDiff } from '@core/diff.js'
@@ -8,6 +8,8 @@ import type { WorkspaceView } from '@core/workspaces.js'
 
 import { useWorkspaceDiff } from '../../hooks/useWorkspaceDiff.js'
 import { DiffFile } from './DiffFile.js'
+import type { DiffView } from './DiffHunk.js'
+import { MIN_SPLIT_COLUMNS, splitThreshold } from './measure.js'
 
 /**
  * A file this big starts collapsed.
@@ -22,6 +24,11 @@ interface DiffPanelProps {
   readonly workspace: WorkspaceView | null
   /** False while another tab is showing; the diff is not read behind one. */
   readonly visible: boolean
+  /** How the reader asked for diffs to be laid out, across sessions. */
+  readonly view: DiffView
+  readonly onView: (view: DiffView) => void
+  /** The pane's current width, which decides whether two columns fit. */
+  readonly width: number
 }
 
 /**
@@ -32,9 +39,28 @@ interface DiffPanelProps {
  * headers are sticky, so the column doubles as the list — which is what the
  * navigation was for.
  */
-export function DiffPanel({ workspace, visible }: DiffPanelProps): React.JSX.Element {
+export function DiffPanel({
+  workspace,
+  visible,
+  view,
+  onView,
+  width
+}: DiffPanelProps): React.JSX.Element {
   const { t } = useTranslation()
   const { diff, loading, error, refresh } = useWorkspaceDiff(workspace?.id ?? null, visible)
+  // Measured only once there is a diff on screen: the sample lives in that
+  // tree, and an element in a hidden subtree measures zero.
+  const { threshold, sample } = useSplitThreshold(visible && (diff?.files.length ?? 0) > 0)
+
+  /*
+   * What is drawn, as against what was asked for.
+   *
+   * The stored preference is never overwritten by the pane being too narrow:
+   * dragging it wide again should bring back the two columns rather than
+   * having silently forgotten them.
+   */
+  const roomForSplit = width >= threshold
+  const effectiveView: DiffView = view === 'split' && roomForSplit ? 'split' : 'unified'
 
   /*
    * Only the files the reader has had an opinion about.
@@ -70,7 +96,8 @@ export function DiffPanel({ workspace, visible }: DiffPanelProps): React.JSX.Ele
   }
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col">
+    <div className="relative flex min-h-0 flex-1 flex-col">
+      {sample}
       <div className="border-line flex shrink-0 items-center gap-2 border-b px-3 py-2">
         <span className="text-ink text-[11px] font-medium">
           {t('diff.fileCount', { count: diff.files.length })}
@@ -104,6 +131,23 @@ export function DiffPanel({ workspace, visible }: DiffPanelProps): React.JSX.Ele
           >
             <ChevronsDownUp aria-hidden size={13} />
           </IconButton>
+          <IconButton
+            label={
+              roomForSplit
+                ? t(view === 'split' ? 'diff.unified' : 'diff.split')
+                : t('diff.splitTooNarrow')
+            }
+            disabled={!roomForSplit}
+            onClick={() => {
+              onView(view === 'split' ? 'unified' : 'split')
+            }}
+          >
+            {effectiveView === 'split' ? (
+              <Rows3 aria-hidden size={13} />
+            ) : (
+              <Columns2 aria-hidden size={13} />
+            )}
+          </IconButton>
           <IconButton label={t('diff.refresh')} onClick={() => void refresh()}>
             <RefreshCw aria-hidden size={13} />
           </IconButton>
@@ -127,6 +171,7 @@ export function DiffPanel({ workspace, visible }: DiffPanelProps): React.JSX.Ele
             onToggle={() => {
               setChoices(new Map(choices).set(file.path, !isCollapsed(file)))
             }}
+            view={effectiveView}
             onOpen={openFile}
           />
         ))}
@@ -154,21 +199,67 @@ function Notice({
 function IconButton({
   label,
   onClick,
+  disabled = false,
   children
 }: {
   readonly label: string
   readonly onClick: () => void
+  readonly disabled?: boolean
   readonly children: React.ReactNode
 }): React.JSX.Element {
   return (
     <button
       type="button"
       onClick={onClick}
+      disabled={disabled}
       title={label}
       aria-label={label}
-      className="focus-ring text-ink-faint hover:text-ink hover:bg-muted rounded-[var(--radius-control)] p-1"
+      className="focus-ring text-ink-faint hover:text-ink hover:bg-muted rounded-[var(--radius-control)] p-1 disabled:pointer-events-none disabled:opacity-40"
     >
       {children}
     </button>
   )
 }
+
+/**
+ * How wide the pane must be before two columns are worth offering.
+ *
+ * Measured from a sample of the real face rather than chosen, the way
+ * `RightPanel.measureTabs` measures its own floor. Read once the pane is on
+ * screen: an element in a hidden subtree measures zero, and a threshold of
+ * zero would offer two columns at any width.
+ */
+function useSplitThreshold(ready: boolean): {
+  readonly threshold: number
+  readonly sample: React.JSX.Element
+} {
+  const element = useRef<HTMLSpanElement>(null)
+  const [threshold, setThreshold] = useState(Number.POSITIVE_INFINITY)
+
+  useEffect(() => {
+    const node = element.current
+    if (!ready || !node) return
+
+    const cell = node.getBoundingClientRect().width / MIN_SPLIT_COLUMNS
+    // jsdom measures every box as zero, and so would a face that has not
+    // loaded. A cell of zero would put the threshold at zero and offer two
+    // columns in a pane with room for none.
+    if (cell > 0) setThreshold(splitThreshold(cell, GUTTER_AND_SIGN_PX))
+  }, [ready])
+
+  return {
+    threshold,
+    sample: (
+      <span
+        ref={element}
+        aria-hidden
+        className="pointer-events-none absolute -z-10 font-mono text-[11px] opacity-0"
+      >
+        {'0'.repeat(MIN_SPLIT_COLUMNS)}
+      </span>
+    )
+  }
+}
+
+/** The line-number gutter plus the sign column, from the classes that draw them. */
+const GUTTER_AND_SIGN_PX = 56
