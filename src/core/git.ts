@@ -27,12 +27,33 @@ export type GitExec = (args: readonly string[]) => Promise<string>
 export class GitError extends Error {
   constructor(
     readonly args: readonly string[],
-    readonly stderr: string
+    readonly stderr: string,
+    /**
+     * What Node called the failure: an exit status, or a name when the command
+     * never got that far.
+     *
+     * Carried so a caller can tell git refusing from git answering with more
+     * than the buffer holds. Those are different situations with different
+     * answers, and without this the only way to tell them apart is by reading
+     * a message written for a human.
+     */
+    readonly code = ''
   ) {
     super(`git ${args.join(' ')} failed: ${stderr}`)
     this.name = 'GitError'
   }
 }
+
+/** What Node calls a command whose output did not fit in the buffer. */
+export const OUTPUT_TOO_LARGE = 'ERR_CHILD_PROCESS_STDIO_MAXBUFFER'
+
+/**
+ * How much output a git command may produce.
+ *
+ * Generous, because a diff of a large change is legitimately big; the callers
+ * that can produce more than this bound themselves rather than raising it.
+ */
+export const MAX_OUTPUT_BYTES = 32 * 1024 * 1024
 
 /**
  * Extracts the most meaningful explanation from a spawn failure.
@@ -48,14 +69,33 @@ export function extractStderr(error: unknown): string {
   return fromField.trim() || describeError(error)
 }
 
-/** Creates an executor bound to a repository directory. */
-export function gitIn(cwd: string): GitExec {
+/**
+ * The name Node gave a spawn failure, when it gave one.
+ *
+ * A refusal carries the exit status, a command that never ran carries a name
+ * like `ENOENT`, and both are stringified so the caller compares one kind of
+ * value rather than two.
+ */
+export function extractCode(error: unknown): string {
+  return typeof error === 'object' && error !== null && 'code' in error ? String(error.code) : ''
+}
+
+/**
+ * Creates an executor bound to a repository directory.
+ *
+ * `maxBuffer` is an option so a test can put a real command past the ceiling
+ * instead of faking the failure — the interesting case is what a caller does
+ * with an overflow, and a fake would only assert that the fake was believed.
+ */
+export function gitIn(cwd: string, options: { readonly maxBuffer?: number } = {}): GitExec {
+  const maxBuffer = options.maxBuffer ?? MAX_OUTPUT_BYTES
+
   return async (args) => {
     try {
-      const { stdout } = await run('git', [...args], { cwd, maxBuffer: 32 * 1024 * 1024 })
+      const { stdout } = await run('git', [...args], { cwd, maxBuffer })
       return stdout
     } catch (error) {
-      throw new GitError(args, extractStderr(error))
+      throw new GitError(args, extractStderr(error), extractCode(error))
     }
   }
 }

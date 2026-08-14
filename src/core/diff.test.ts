@@ -10,7 +10,7 @@
  */
 
 import { execFile } from 'node:child_process'
-import { mkdtemp, rm, symlink, writeFile } from 'node:fs/promises'
+import { mkdtemp, readFile, rm, symlink, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { promisify } from 'node:util'
@@ -28,7 +28,7 @@ import {
   unquotePath,
   untrackedHunk
 } from './diff.js'
-import { type GitExec, gitIn } from './git.js'
+import { type GitExec, GitError, gitIn } from './git.js'
 
 const run = promisify(execFile)
 
@@ -625,13 +625,15 @@ describe('readWorkspaceDiff', () => {
     expect(diff.files[0]).toMatchObject({ path: 'empty.txt', added: 0, omitted: 'none', hunks: [] })
   })
 
-  it('still draws an untracked file when a tracked one was left out', async () => {
+  it('still draws an untracked file when a tracked one was too large to draw', async () => {
     await writeFile(join(dir, 'one.txt'), 'a\n', 'utf8')
-    await writeFile(join(dir, 'two.txt'), 'b\n', 'utf8')
+    await writeFile(join(dir, 'two.txt'), 'b\n'.repeat(10), 'utf8')
     await commit('two files')
     await writeFile(join(dir, 'fresh.txt'), 'f\n', 'utf8')
 
-    const diff = await readDiff({ limits: { ...DIFF_LIMITS, maxFiles: 1 } })
+    // A file nobody is drawing spends none of the budget, so what it leaves is
+    // what the untracked file has to draw with.
+    const diff = await readDiff({ limits: { ...DIFF_LIMITS, maxFileLines: 3 } })
 
     expect(diff.files.find((file) => file.path === 'fresh.txt')).toMatchObject({
       status: 'untracked',
@@ -709,10 +711,13 @@ describe('readWorkspaceDiff', () => {
   it('keeps a rename paired when only some files are drawn', async () => {
     await run('git', ['mv', 'a.txt', 'b.txt'], { cwd: dir })
     await writeFile(join(dir, 'b.txt'), 'one\nTWO\nthree\n', 'utf8')
+    await writeFile(join(dir, 'big.txt'), 'x\n'.repeat(20), 'utf8')
     await commit('move and edit')
-    await writeFile(join(dir, 'fresh.txt'), 'new\n', 'utf8')
 
-    const diff = await readDiff()
+    // A file left undrawn is what puts paths on the command line at all: with
+    // the whole diff asked for at once there is no pathspec to lose a rename
+    // out of, and the case this guards against cannot arise.
+    const diff = await readDiff({ limits: { ...DIFF_LIMITS, maxFileLines: 10 } })
     const moved = diff.files.find((file) => file.path === 'b.txt')
 
     expect(moved?.oldPath).toBe('a.txt')
@@ -873,6 +878,22 @@ describe('readWorkspaceDiff', () => {
     expect(diff.added).toBe(6)
   })
 
+  it('asks git only for the files it will draw', async () => {
+    await writeFile(join(dir, 'one.txt'), 'a\n', 'utf8')
+    await writeFile(join(dir, 'big.txt'), 'x\n'.repeat(20), 'utf8')
+    await commit('two files')
+
+    const diff = await readDiff({ limits: { ...DIFF_LIMITS, maxFileLines: 10 } })
+
+    // Without a pathspec git writes the whole diff out and the lines of a file
+    // nobody will see are read, held and sent on before being ignored.
+    expect(diff.files.find((file) => file.path === 'big.txt')).toMatchObject({
+      omitted: 'tooLarge',
+      hunks: []
+    })
+    expect(diff.files.find((file) => file.path === 'one.txt')?.hunks).not.toEqual([])
+  })
+
   it('draws no more files than it was told to', async () => {
     await writeFile(join(dir, 'one.txt'), 'a\n', 'utf8')
     await writeFile(join(dir, 'two.txt'), 'b\n', 'utf8')
@@ -885,12 +906,107 @@ describe('readWorkspaceDiff', () => {
     expect(diff.files.map((file) => file.omitted)).toEqual(['none', 'tooLarge'])
   })
 
-  it('does not count an untracked file against the drawing budget', async () => {
+  it('counts an untracked file against the drawing budget like any other', async () => {
     await writeFile(join(dir, 'fresh.txt'), 'x\n'.repeat(50), 'utf8')
 
     const diff = await readDiff({ limits: { ...DIFF_LIMITS, maxTotalLines: 1 } })
 
-    expect(diff.files[0]?.omitted).toBe('none')
+    expect(diff.files[0]?.omitted).toBe('tooLarge')
+  })
+
+  it('leaves an untracked file unread once there is no budget left to draw it', async () => {
+    await writeFile(join(dir, 'one.txt'), 'a\na\n', 'utf8')
+    await writeFile(join(dir, 'two.txt'), 'b\nb\n', 'utf8')
+    const read: string[] = []
+
+    const diff = await readDiff({
+      limits: { ...DIFF_LIMITS, maxFiles: 1 },
+      readBytes: (path) => {
+        read.push(path)
+        return readFile(path)
+      }
+    })
+
+    // Named and marked, but never opened: putting an exact count beside "too
+    // large to draw" is what reading thousands of files would buy.
+    expect(diff.files[1]).toMatchObject({ path: 'two.txt', omitted: 'tooLarge', added: 0 })
+    expect(read).toEqual([join(dir, 'one.txt')])
+  })
+
+  it('measures an untracked file before reading it', async () => {
+    await writeFile(join(dir, 'wide.txt'), `${'x'.repeat(4_000)}\n`, 'utf8')
+    let opened = false
+
+    const diff = await readDiff({
+      limits: { ...DIFF_LIMITS, maxFileBytes: 1_000 },
+      readBytes: (path) => {
+        opened = true
+        return readFile(path)
+      }
+    })
+
+    expect(diff.files[0]).toMatchObject({ path: 'wide.txt', omitted: 'tooLarge' })
+    expect(opened).toBe(false)
+  })
+
+  it('draws no lines for a tracked file whose bytes are past the ceiling', async () => {
+    // One line, so every ceiling counted in lines lets it through — which is
+    // what a minified bundle or a source map looks like to `--numstat`.
+    await writeFile(join(dir, 'wide.txt'), `${'x'.repeat(4_000)}\n`, 'utf8')
+    await commit('a file with one very long line')
+    await writeFile(join(dir, 'a.txt'), 'one\ntwo\nthree\nfour\n', 'utf8')
+
+    const diff = await readDiff({ limits: { ...DIFF_LIMITS, maxFileBytes: 1_000 } })
+
+    expect(diff.files.find((file) => file.path === 'wide.txt')).toMatchObject({
+      added: 1,
+      omitted: 'tooLarge',
+      hunks: []
+    })
+    // The rest of the diff is unaffected: one file past the ceiling is not a
+    // reason to stop drawing the files a reviewer came for.
+    expect(diff.files.find((file) => file.path === 'a.txt')?.hunks).not.toEqual([])
+  })
+
+  it('keeps a binary file binary when the whole diff is asked for at once', async () => {
+    await writeFile(join(dir, 'blob.bin'), Buffer.from([0x61, 0x00, 0x62]))
+    await writeFile(join(dir, 'a.txt'), 'one\ntwo\nthree\nfour\n', 'utf8')
+
+    const diff = await readDiff()
+
+    expect(diff.files.find((file) => file.path === 'blob.bin')?.omitted).toBe('binary')
+  })
+
+  it('says every file is too large to draw when the diff will not fit in the buffer', async () => {
+    await writeFile(join(dir, 'a.txt'), `one\ntwo\nthree\n${'x'.repeat(20_000)}\n`, 'utf8')
+    await writeFile(join(dir, 'fresh.txt'), 'new\n', 'utf8')
+
+    // The counts come from `--numstat`, which is small whatever the file holds;
+    // it is the diff carrying the lines that overflows.
+    const diff = await readWorkspaceDiff(gitIn(dir, { maxBuffer: 8_000 }), {
+      baseBranch: 'main',
+      root: dir
+    })
+
+    expect(diff.files[0]).toMatchObject({ path: 'a.txt', added: 1, omitted: 'tooLarge', hunks: [] })
+    expect(diff.omittedFiles).toBe(1)
+    // An untracked file is drawn from its own contents, so git having nothing
+    // to say is not a reason for it to lose its lines.
+    expect(diff.files[1]).toMatchObject({ path: 'fresh.txt', omitted: 'none', added: 1 })
+  })
+
+  it('still reports a git failure that is not the buffer overflowing', async () => {
+    const fake: GitExec = (args) => {
+      if (args[0] === 'merge-base') return Promise.resolve('abc123\n')
+      if (args.includes('--numstat')) return Promise.resolve('1\t0\tghost.txt\0')
+      if (args.includes('--name-status')) return Promise.resolve('M\0ghost.txt\0')
+      if (args[0] === 'ls-files') return Promise.resolve('')
+      return Promise.reject(new GitError(args, 'fatal: bad object', '128'))
+    }
+
+    await expect(readWorkspaceDiff(fake, { baseBranch: 'main', root: dir })).rejects.toThrow(
+      GitError
+    )
   })
 
   it('says an untracked file is too large to draw when it is', async () => {

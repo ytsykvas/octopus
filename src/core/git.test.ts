@@ -18,12 +18,14 @@ import {
   branchExists,
   currentBranch,
   detectBaseBranch,
+  extractCode,
   extractStderr,
   findRepositoryRoot,
   GitError,
   type GitExec,
   gitIn,
   hasCommits,
+  OUTPUT_TOO_LARGE,
   repositoryName,
   toSlug
 } from './git.js'
@@ -91,6 +93,41 @@ describe('gitIn', () => {
   it('throws GitError when git has nowhere to run', async () => {
     const missing = gitIn(join(dir, 'no-such-directory'))
     await expect(missing(['status'])).rejects.toBeInstanceOf(GitError)
+  })
+
+  it('carries the status git refused with, so a caller can tell refusals apart', async () => {
+    await initRepo(dir)
+    const error = await exec(['checkout', 'missing']).catch((cause: unknown) => cause)
+    expect((error as GitError).code).toBe('1')
+  })
+
+  it('says so by name when the output did not fit in the buffer', async () => {
+    await initRepo(dir)
+    // Committed and then rewritten: `git diff` says nothing about a file it
+    // has never seen, so an untracked one would produce no output to overflow.
+    await writeFile(join(dir, 'wide.txt'), 'first\n', 'utf8')
+    await run('git', ['add', '.'], { cwd: dir })
+    await run('git', ['commit', '-q', '-m', 'wide'], { cwd: dir })
+    await writeFile(join(dir, 'wide.txt'), 'x'.repeat(20_000), 'utf8')
+
+    const tight = gitIn(dir, { maxBuffer: 1_000 })
+    const error = await tight(['diff']).catch((cause: unknown) => cause)
+
+    expect((error as GitError).code).toBe(OUTPUT_TOO_LARGE)
+  })
+})
+
+describe('extractCode', () => {
+  it('reads the code Node put on the failure', () => {
+    expect(extractCode({ code: 'ENOENT' })).toBe('ENOENT')
+  })
+
+  it('stringifies an exit status, so one kind of value is compared', () => {
+    expect(extractCode({ code: 128 })).toBe('128')
+  })
+
+  it('answers with nothing when the failure carried no code', () => {
+    expect(extractCode(new Error('something else'))).toBe('')
   })
 })
 

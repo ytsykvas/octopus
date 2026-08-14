@@ -9,13 +9,16 @@
  * asking the question.
  */
 
-import { readFile } from 'node:fs/promises'
+import { readFile, stat } from 'node:fs/promises'
 import { join } from 'node:path'
 
-import type { GitExec } from './git.js'
+import { type GitExec, GitError, OUTPUT_TOO_LARGE } from './git.js'
 
 /** Reads a file's bytes; a parameter so tests need no filesystem. */
 export type ReadBytes = (path: string) => Promise<Uint8Array>
+
+/** A file's size, asked before its contents — the same reason a parameter. */
+export type StatBytes = (path: string) => Promise<number>
 
 /** Failures a user can act on, as opposed to git falling over (§13). */
 export type DiffErrorCode = 'baseUnknown'
@@ -97,17 +100,29 @@ export interface DiffLimits {
   readonly maxFileLines: number
   /** The budget across the whole diff. */
   readonly maxTotalLines: number
+  /**
+   * A single file weighing more than this is not drawn either.
+   *
+   * The ceilings above count lines, and a line has no length: a minified
+   * bundle or a source map is one enormous line and passes every one of them.
+   */
+  readonly maxFileBytes: number
 }
 
 /**
  * Bounds chosen against what a reviewer can actually read, not against what
  * the machine can hold. A lockfile rewrite or a generated bundle passes the
  * per-file ceiling on its own; hand-written source does not come close.
+ *
+ * 256KB is roughly three times what 2 000 lines of hand-written source weighs,
+ * so the byte ceiling only ever bites a file whose lines are long — which is
+ * exactly the generated one nobody is reading line by line.
  */
 export const DIFF_LIMITS: DiffLimits = {
   maxFiles: 400,
   maxFileLines: 2_000,
-  maxTotalLines: 20_000
+  maxTotalLines: 20_000,
+  maxFileBytes: 256 * 1024
 }
 
 export interface ReadDiffOptions {
@@ -116,6 +131,13 @@ export interface ReadDiffOptions {
   readonly root: string
   readonly limits?: DiffLimits
   readonly readBytes?: ReadBytes
+  readonly statBytes?: StatBytes
+}
+
+/** What is left of the ceilings, as the files are taken in turn. */
+interface Budget {
+  readonly files: number
+  readonly lines: number
 }
 
 /** How much of a file git reads before deciding it is binary. */
@@ -651,6 +673,7 @@ export async function readWorkspaceDiff(
 ): Promise<WorkspaceDiff> {
   const limits = options.limits ?? DIFF_LIMITS
   const readBytes = options.readBytes ?? ((path) => readFile(path))
+  const statBytes = options.statBytes ?? (async (path) => (await stat(path)).size)
 
   const baseCommit = await mergeBase(exec, options.baseBranch)
 
@@ -661,19 +684,43 @@ export async function readWorkspaceDiff(
   ])
 
   const tracked = trackedFiles(parseNumstat(numstat), parseNameStatus(nameStatus))
-  const untrackedFiles = await Promise.all(
-    splitNul(untracked).map((path) => readUntracked(options.root, path, readBytes, limits))
-  )
 
-  const files = [...tracked, ...untrackedFiles]
-  const drawable = chooseDrawable(files, limits)
-  const marked = markOmitted(files, drawable)
+  // Tracked files are chosen first because git has already counted them, and
+  // what they leave of the budget is what the untracked ones have to spend —
+  // which is the only way the two kinds share one ceiling rather than each
+  // having its own.
+  const { drawable, left } = chooseDrawable(tracked, limits, {
+    files: limits.maxFiles,
+    lines: limits.maxTotalLines
+  })
+
+  const untrackedFiles = await readUntrackedFiles(splitNul(untracked), left, {
+    root: options.root,
+    limits,
+    readBytes,
+    statBytes
+  })
+
+  const files = [...markOmitted(tracked, drawable), ...untrackedFiles]
+
+  // Counted before anything is marked, which is the only count that says
+  // anything: after marking, every tracked file not being drawn reads as too
+  // large, so the two numbers agree whatever was left out and git is asked for
+  // the whole diff — including the files the ceilings exist to leave out.
+  const candidates = tracked.filter((file) => file.omitted === 'none').length
 
   // Only the hunks depend on there being something to ask git for. What was
   // left out is said either way, or the one case where every file is too large
   // is the case that explains nothing.
   const withHunks =
-    drawable.length === 0 ? marked : await attachHunks(exec, baseCommit, marked, drawable)
+    drawable.length === 0
+      ? files
+      : await attachHunks(exec, files, {
+          baseCommit,
+          drawable,
+          everything: drawable.length === candidates,
+          limits
+        })
 
   return {
     baseCommit,
@@ -736,11 +783,46 @@ function trackedFiles(
   })
 }
 
+/** What reading an untracked file needs, gathered so the walk stays readable. */
+interface UntrackedContext {
+  readonly root: string
+  readonly limits: DiffLimits
+  readonly readBytes: ReadBytes
+  readonly statBytes: StatBytes
+}
+
+/**
+ * Untracked files, as far as the budget the tracked ones left over reaches.
+ *
+ * One at a time rather than `Promise.all` over the whole listing: a workspace
+ * whose build output is not ignored has git list every file in it here, and
+ * reading them at once holds all of them in memory before a single line has
+ * been counted. The budget then stops the walk long before the listing ends,
+ * so the sequential reads are bounded by `maxFiles` rather than by the tree.
+ */
+async function readUntrackedFiles(
+  paths: readonly string[],
+  budget: Budget,
+  context: UntrackedContext
+): Promise<FileDiff[]> {
+  const files: FileDiff[] = []
+  let left = budget
+
+  for (const path of paths) {
+    const file = await readUntracked(path, left, context)
+    if (file.omitted === 'none') {
+      left = { files: left.files - 1, lines: left.lines - file.added }
+    }
+    files.push(file)
+  }
+
+  return files
+}
+
 async function readUntracked(
-  root: string,
   path: string,
-  readBytes: ReadBytes,
-  limits: DiffLimits
+  left: Budget,
+  { root, limits, readBytes, statBytes }: UntrackedContext
 ): Promise<FileDiff> {
   const base = {
     path,
@@ -749,9 +831,22 @@ async function readUntracked(
     hunks: []
   }
 
+  const undrawn = { ...base, added: 0, removed: 0, omitted: 'tooLarge' as const }
+
+  // Named and marked without being opened. Reading the rest of the listing
+  // would buy an exact count to put beside "too large to draw", and cost the
+  // whole tree to produce it.
+  if (left.files <= 0 || left.lines <= 0) return undrawn
+
+  const full = join(root, path)
   let bytes: Uint8Array
+
   try {
-    bytes = await readBytes(join(root, path))
+    // Measured before it is read, which is the only order that bounds
+    // anything: by the time the size is known from the contents, the contents
+    // are already in memory.
+    if ((await statBytes(full)) > limits.maxFileBytes) return undrawn
+    bytes = await readBytes(full)
   } catch {
     // Listed a moment ago and gone now, or unreadable. It is still a change the
     // reviewer should see named, so it is reported with nothing to draw.
@@ -763,7 +858,9 @@ async function readUntracked(
   const hunk = untrackedHunk(new TextDecoder().decode(bytes))
   const added = hunk?.lines.length ?? 0
 
-  if (added > limits.maxFileLines) {
+  // The count is exact here whatever happens next: the file has been read, so
+  // saying it is too large to draw costs nothing in honesty.
+  if (added > limits.maxFileLines || added > left.lines) {
     return { ...base, added, removed: 0, omitted: 'tooLarge' }
   }
 
@@ -784,21 +881,34 @@ async function readUntracked(
  * listed them until the budget is spent, and what did not fit says so rather
  * than quietly appearing unchanged.
  */
-function chooseDrawable(files: readonly FileDiff[], limits: DiffLimits): FileDiff[] {
+function chooseDrawable(
+  files: readonly FileDiff[],
+  limits: DiffLimits,
+  budget: Budget
+): { drawable: FileDiff[]; left: Budget } {
   const drawable: FileDiff[] = []
-  let budget = limits.maxTotalLines
+  let left = budget
 
   for (const file of files) {
     if (file.omitted !== 'none' || file.status === 'untracked') continue
 
     const size = file.added + file.removed
-    if (size > limits.maxFileLines || drawable.length >= limits.maxFiles || size > budget) continue
+    if (size > limits.maxFileLines || left.files <= 0 || size > left.lines) continue
 
-    budget -= size
+    left = { files: left.files - 1, lines: left.lines - size }
     drawable.push(file)
   }
 
-  return drawable
+  return { drawable, left }
+}
+
+/** What the hunk-carrying diff has to know, beyond the files it is describing. */
+interface DrawRequest {
+  readonly baseCommit: string
+  readonly drawable: readonly FileDiff[]
+  /** Whether every file git would write out is one we asked for. */
+  readonly everything: boolean
+  readonly limits: DiffLimits
 }
 
 /**
@@ -811,12 +921,9 @@ function chooseDrawable(files: readonly FileDiff[], limits: DiffLimits): FileDif
  */
 async function attachHunks(
   exec: GitExec,
-  baseCommit: string,
   files: readonly FileDiff[],
-  drawable: readonly FileDiff[]
+  { baseCommit, drawable, everything, limits }: DrawRequest
 ): Promise<FileDiff[]> {
-  const everything = drawable.length === files.filter((file) => file.omitted === 'none').length
-
   // A rename is two paths, and asking for one of them loses the pairing: git
   // matches a deletion to an addition only among the paths it was given, so
   // with the new path alone it sees a file appearing from nowhere and draws
@@ -833,23 +940,58 @@ async function attachHunks(
         )
       ]
 
-  const output = await exec([
-    ...RAW_PATHS,
-    'diff',
-    ...DIFF_FLAGS,
-    `-U${String(CONTEXT_LINES)}`,
-    baseCommit,
-    ...pathspec
-  ])
+  const asked = new Set(drawable.map((file) => file.path))
+  let output: string
+
+  try {
+    output = await exec([
+      ...RAW_PATHS,
+      // The one lever git gives us over a diff measured in bytes: past this
+      // many, a file is reported as binary instead of having its content
+      // written out. It goes only on this call — `--numstat` under the same
+      // setting answers `-` for those files, and the counts must stay exact.
+      '-c',
+      `core.bigFileThreshold=${String(limits.maxFileBytes)}`,
+      'diff',
+      ...DIFF_FLAGS,
+      `-U${String(CONTEXT_LINES)}`,
+      baseCommit,
+      ...pathspec
+    ])
+  } catch (error) {
+    // Enough files just under the per-file ceiling still add up to more than
+    // the buffer holds. Only that failure is caught: a diff nobody can draw is
+    // a pane full of files saying so, but git refusing is still an error, and
+    // catching both would turn every one of them into an empty review.
+    if (!(error instanceof GitError) || error.code !== OUTPUT_TOO_LARGE) throw error
+
+    return files.map((file) =>
+      asked.has(file.path) ? { ...file, omitted: 'tooLarge' as const } : file
+    )
+  }
 
   const parsed = collectHunks(parseUnifiedDiff(output))
 
   return files.map((file) => {
-    const hunks = parsed.get(file.path)
+    const block = parsed.get(file.path)
     // A file with no block of its own is a rename with nothing else changed,
-    // which has no lines by construction rather than by omission.
-    return hunks ? { ...file, hunks } : file
+    // which has no lines by construction rather than by omission. A file we
+    // did not ask about is one git described only because the whole diff was
+    // asked for at once, and it has already said what it is.
+    if (!block || !asked.has(file.path)) return file
+
+    // Asked for as text and answered as binary: `bigFileThreshold` is what
+    // that means here, and the file is past it rather than actually binary.
+    return block.binary
+      ? { ...file, omitted: 'tooLarge' as const, hunks: [] }
+      : { ...file, hunks: block.hunks }
   })
+}
+
+/** What git wrote about one path, gathered from however many blocks it took. */
+interface CollectedFile {
+  binary: boolean
+  readonly hunks: Hunk[]
 }
 
 /**
@@ -862,13 +1004,19 @@ async function attachHunks(
  * Keeping the last would draw half the change under a header whose counts
  * describe both halves.
  */
-function collectHunks(blocks: readonly ParsedFile[]): Map<string, Hunk[]> {
-  const byPath = new Map<string, Hunk[]>()
+function collectHunks(blocks: readonly ParsedFile[]): Map<string, CollectedFile> {
+  const byPath = new Map<string, CollectedFile>()
 
   for (const block of blocks) {
     const gathered = byPath.get(block.path)
-    if (gathered) gathered.push(...block.hunks)
-    else byPath.set(block.path, [...block.hunks])
+    if (gathered) {
+      gathered.hunks.push(...block.hunks)
+      // Either half being binary is the whole file being undrawable: the other
+      // half's lines describe a change the pane could only show part of.
+      gathered.binary ||= block.binary
+    } else {
+      byPath.set(block.path, { binary: block.binary, hunks: [...block.hunks] })
+    }
   }
 
   return byPath
