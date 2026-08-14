@@ -45,6 +45,11 @@ Both configs set `TZ` from `testEnv` in `vitest.shared.ts`, and it is
 without a pinned zone every expectation about it is a fact about the machine
 that ran it.
 
+Both, although only the renderer reads a clock today: two runs disagreeing about
+what time it is would be a difference nobody put there on purpose, and the first
+core test to want a clock should be deterministic from its first run rather than
+after somebody has spent an afternoon on it.
+
 Not UTC on purpose: a formatter reaching for `getUTCHours` would pass every
 expectation under UTC and be wrong for every reader — green, and describing what
 the code does rather than what it is for. Kyiv is three hours off in summer and

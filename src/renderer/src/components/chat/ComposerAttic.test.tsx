@@ -308,6 +308,40 @@ describe('when the windows come back', () => {
       'title',
       'Five-hour window — resets in 3h 50m'
     )
+    // Each window names itself. One `share` draws both, so a title handed the
+    // wrong label is a copy-paste nothing else here would notice.
+    //
+    // `60h`, not `2d 12h`: the countdown does not roll into days, which is
+    // fine where it is — a tooltip is read deliberately, and the strip beside
+    // it already gives the date.
+    expect(screen.getByText(/Week 84%/)).toHaveAttribute(
+      'title',
+      'Weekly window — resets in 60h 0m'
+    )
+  })
+
+  /*
+   * `usageTone` paints what is measured, and an hour of the day is not a
+   * measurement. Drawn in `danger` beside a share that is also red, the moment
+   * would read as the hour being the problem rather than the share — so it
+   * keeps the strip's own tone while the figure beside it does not.
+   *
+   * A class assertion, which this suite otherwise avoids: here the colour *is*
+   * the decision, the same reason the context reading's own tone is asserted
+   * further up this file.
+   */
+  it('leaves the moment in the strip’s tone while the share turns red', () => {
+    renderAttic({
+      ...FULL,
+      subscription: {
+        fiveHour: { utilization: 92, resetsAt: '2026-08-11T19:50:00.000000+00:00' },
+        sevenDay: null
+      }
+    })
+
+    const reading = screen.getByText(/5h 92%/)
+    expect(reading).toHaveClass('text-danger')
+    expect(screen.getByText(/22:50/)).toHaveClass('text-ink-faint')
   })
 
   // An older CLI answers with a share and no reset at all, and a separator with
