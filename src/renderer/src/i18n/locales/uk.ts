@@ -179,9 +179,9 @@ export const uk: Translation = {
     effortMax: 'Максимальне',
     effortUnsupported: 'Ця модель не приймає налаштування зусилля.',
 
-    mode: 'Дозволи',
+    modeToggle: 'Дозволи: {{mode}}',
     modeDefault: 'Питати',
-    modeAcceptEdits: 'Правки без питань',
+    modeAcceptEdits: 'Auto mode',
     modeAfterPlan: 'Що агент робитиме, коли план буде схвалено.',
     planMode: 'План',
     planModeHint: 'Спершу продумати підхід. Доки ви його не схвалите, агент нічого не виконує.',

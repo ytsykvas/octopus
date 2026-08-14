@@ -163,9 +163,14 @@ export const en = {
     emptyBody:
       'The first message starts an agent session in this worktree. The branch already exists.',
 
-    mode: 'Permissions',
+    /* Names the control and the mode in force together: the button switches
+       rather than opening a list, so the value is all it shows. */
+    modeToggle: 'Permissions: {{mode}}',
     modeDefault: 'Ask first',
-    modeAcceptEdits: 'Accept edits',
+    /* Left in English in every locale: it is what the agent's own interfaces
+       call this, and a translated name for a borrowed one reads as a second
+       setting rather than the same one. */
+    modeAcceptEdits: 'Auto mode',
     modeAfterPlan: 'What the agent may do once the plan is approved.',
     planMode: 'Plan',
     planModeHint: 'Work out an approach first. The agent runs no tools until you approve it.',

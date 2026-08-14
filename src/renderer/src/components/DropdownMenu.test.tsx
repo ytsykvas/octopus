@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, it, vi } from 'vitest'
 
@@ -165,6 +165,59 @@ describe('DropdownMenu', () => {
 
     const panel = screen.getByRole('menu')
     expect(Number.parseInt(panel.style.top, 10)).toBeLessThan(window.innerHeight - 20)
+  })
+
+  /*
+   * The descriptions come from outside — the agent writes the ones on the
+   * models — and "Fable 5 · Most capable for your hardest and longest-running
+   * tasks" does not fit a width chosen for one-word commands. Widening every
+   * menu to suit them would leave the short ones full of air.
+   */
+  describe('the width', () => {
+    // Rendered fresh each time rather than compared inside one test: two menus
+    // in one document are two triggers of the same name, and the query cannot
+    // tell them apart.
+    async function widthOf(actions: readonly MenuAction[]): Promise<number> {
+      const user = userEvent.setup()
+      renderMenu(actions)
+
+      await user.click(triggerButton())
+      const width = Number.parseInt(screen.getByRole('menu').style.width, 10)
+      cleanup()
+
+      return width
+    }
+
+    it('grows for a menu whose items carry a second line', async () => {
+      const narrow = await widthOf([{ id: 'rename', label: 'Rename', onSelect: vi.fn() }])
+      const wide = await widthOf([
+        {
+          id: 'sonnet',
+          label: 'Sonnet',
+          description: 'Efficient for routine tasks',
+          onSelect: vi.fn()
+        }
+      ])
+
+      expect(wide).toBeGreaterThan(narrow)
+    })
+
+    // One item with a description is enough: the rows share a width, so the
+    // menu is as wide as its widest need.
+    it('grows for the whole menu when only one item has one', async () => {
+      const mixed = await widthOf([
+        {
+          id: 'disk',
+          label: 'From disk',
+          description: 'A repository already here',
+          onSelect: vi.fn()
+        },
+        { id: 'github', label: 'From GitHub', onSelect: vi.fn() }
+      ])
+      const plain = await widthOf([{ id: 'github', label: 'From GitHub', onSelect: vi.fn() }])
+
+      expect(mixed).toBeGreaterThan(plain)
+    })
   })
 
   // A menu of choices is a different thing from a menu of commands, and the

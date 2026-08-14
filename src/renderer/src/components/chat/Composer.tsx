@@ -1,4 +1,4 @@
-import { ArrowUp, Gauge, Map, Pencil, Shield, Sparkles } from 'lucide-react'
+import { ArrowUp, CheckCheck, Gauge, Map, Shield, Sparkles } from 'lucide-react'
 import { useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
@@ -9,7 +9,6 @@ import {
   EFFORT_LEVELS,
   type Effort,
   findAgentModel,
-  WORKING_MODES,
   type WorkingMode
 } from '@core/chats.js'
 
@@ -92,10 +91,26 @@ const MODE_LABELS: Record<WorkingMode, 'chat.modeDefault' | 'chat.modeAcceptEdit
  * The mode's own icon rather than one for the control, because the row is
  * scanned rather than read: what the agent is allowed to do is the thing worth
  * seeing without stopping on the words.
+ *
+ * A pencil stood for accepting edits for a while and read as "edit this
+ * setting" — the icon of the control rather than of what it says. The double
+ * tick is what the mode does: answering yes before being asked.
  */
 const MODE_ICONS: Record<WorkingMode, React.ReactNode> = {
   default: <Shield aria-hidden size={12} />,
-  acceptEdits: <Pencil aria-hidden size={12} />
+  acceptEdits: <CheckCheck aria-hidden size={12} />
+}
+
+/**
+ * What a click on the mode lands on.
+ *
+ * Written out rather than derived from `WORKING_MODES` by rotation: a third
+ * mode would make "the next one" a decision rather than an inevitability, and
+ * this is where that decision would have to be taken.
+ */
+const NEXT_MODE: Record<WorkingMode, WorkingMode> = {
+  default: 'acceptEdits',
+  acceptEdits: 'default'
 }
 
 /**
@@ -308,24 +323,36 @@ export function Composer({
             }}
           />
 
-          {/* A toggle, not a third entry in the picker beside it. Planning is
-              a state the conversation is in — the agent runs no tools at all —
-              rather than another degree of permission, and listing the three
-              together made them look like peers. */}
-          <ComposerPicker
-            label={t('chat.mode')}
-            value={workingMode}
-            icon={MODE_ICONS[workingMode]}
-            // Left usable while planning: what it names is what the agent will
-            // do once the plan is approved, which is exactly when it is worth
-            // deciding.
+          {/* Switched in place rather than picked from a menu. There are two
+              modes, so the menu was a click to open it, a list in which one of
+              the two visible rows was already in force, and a click to choose
+              the other — three steps to say the thing the button now says in
+              one. The pickers beside it keep their menus because their lists
+              are open-ended.
+
+              Planning is a third state and still not a third mode: the agent
+              runs no tools at all in it, so this stays usable while planning —
+              what it names is what happens once the plan is approved, which is
+              exactly when it is worth deciding. */}
+          <button
+            type="button"
+            aria-label={t('chat.modeToggle', { mode: t(MODE_LABELS[workingMode]) })}
             {...(planMode && { title: t('chat.modeAfterPlan') })}
-            options={WORKING_MODES.map((value) => ({
-              value,
-              label: t(MODE_LABELS[value])
-            }))}
-            onChange={onWorkingMode}
-          />
+            onClick={() => {
+              onWorkingMode(NEXT_MODE[workingMode])
+            }}
+            // Tinted while the agent may write unasked, the same treatment the
+            // plan toggle uses when it is on: of the settings in this row, that
+            // is the one worth noticing without being looked for.
+            className={`focus-ring inline-flex h-6 min-w-0 items-center gap-1 rounded-[var(--radius-control)] px-1.5 text-[11px] transition-colors ${
+              workingMode === 'acceptEdits'
+                ? 'bg-accent/12 text-accent'
+                : 'text-ink-soft hover:bg-muted hover:text-ink'
+            }`}
+          >
+            <span className="shrink-0">{MODE_ICONS[workingMode]}</span>
+            <span className="truncate">{t(MODE_LABELS[workingMode])}</span>
+          </button>
 
           <ComposerPicker
             label={t('chat.effort')}

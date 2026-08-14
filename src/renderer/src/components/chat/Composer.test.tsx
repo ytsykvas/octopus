@@ -87,6 +87,10 @@ const CATALOGUE: AgentModel[] = [
 
 const field = (): HTMLElement => screen.getByRole('textbox')
 
+// Named by the control plus its value, since it has no menu to open and the
+// value is the only word on it.
+const modeButton = (): HTMLElement => screen.getByRole('button', { name: /^Permissions:/ })
+
 beforeEach(() => {
   // jsdom does no layout and has no scrollIntoView, which the effect keeping
   // the highlighted suggestion visible calls on every move.
@@ -109,7 +113,7 @@ describe('sending', () => {
     expect(screen.getByRole('button', { name: 'Send' })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Plan' })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Model' })).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Permissions' })).toBeInTheDocument()
+    expect(modeButton()).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Effort' })).toBeInTheDocument()
   })
 
@@ -199,15 +203,37 @@ describe('while the agent is working', () => {
 })
 
 describe('the settings the next message runs under', () => {
-  it('shows which permission mode is in force', async () => {
-    const user = userEvent.setup()
+  it('shows which permission mode is in force', () => {
     renderComposer({ workingMode: 'acceptEdits' })
 
-    expect(screen.getByRole('button', { name: 'Permissions' })).toHaveTextContent('Accept edits')
+    expect(modeButton()).toHaveTextContent('Auto mode')
+    // The control names itself as well as its value: with no menu to open, the
+    // visible word is the setting and would otherwise be all a reader hears.
+    expect(modeButton()).toHaveAccessibleName('Permissions: Auto mode')
+  })
 
-    await user.click(screen.getByRole('button', { name: 'Permissions' }))
-    expect(screen.getByRole('menuitemradio', { name: 'Accept edits' })).toBeChecked()
-    expect(screen.getByRole('menuitemradio', { name: 'Ask first' })).not.toBeChecked()
+  /*
+   * Switched in place rather than picked from a list. Two modes made the menu
+   * three steps — open it, read a list in which one row was already in force,
+   * click the other — to say what one click says.
+   */
+  it('changes the mode on the spot, without a menu', async () => {
+    const user = userEvent.setup()
+    const { onWorkingMode } = renderComposer({ workingMode: 'default' })
+
+    await user.click(modeButton())
+
+    expect(onWorkingMode).toHaveBeenCalledExactlyOnceWith('acceptEdits')
+    expect(screen.queryByRole('menuitemradio', { name: 'Auto mode' })).not.toBeInTheDocument()
+  })
+
+  it('switches back the other way', async () => {
+    const user = userEvent.setup()
+    const { onWorkingMode } = renderComposer({ workingMode: 'acceptEdits' })
+
+    await user.click(modeButton())
+
+    expect(onWorkingMode).toHaveBeenCalledExactlyOnceWith('default')
   })
 
   // Planning is a state the conversation is in, not a degree of permission —
@@ -252,8 +278,7 @@ describe('the settings the next message runs under', () => {
       const user = userEvent.setup()
       const { onWorkingMode, onPlanMode } = renderComposer({ planMode: true })
 
-      await user.click(screen.getByRole('button', { name: 'Permissions' }))
-      await user.click(screen.getByRole('menuitemradio', { name: 'Accept edits' }))
+      await user.click(modeButton())
 
       expect(onWorkingMode).toHaveBeenCalledExactlyOnceWith('acceptEdits')
       // Choosing what happens afterwards is not a decision to stop planning.
@@ -263,20 +288,12 @@ describe('the settings the next message runs under', () => {
     it('still offers the permissions, for once the plan is approved', () => {
       renderComposer({ planMode: true })
 
-      const picker = screen.getByRole('button', { name: 'Permissions' })
-      expect(picker).toBeEnabled()
-      expect(picker).toHaveAttribute('title', 'What the agent may do once the plan is approved.')
+      expect(modeButton()).toBeEnabled()
+      expect(modeButton()).toHaveAttribute(
+        'title',
+        'What the agent may do once the plan is approved.'
+      )
     })
-  })
-
-  it('reports the mode that was chosen', async () => {
-    const user = userEvent.setup()
-    const { onWorkingMode } = renderComposer()
-
-    await user.click(screen.getByRole('button', { name: 'Permissions' }))
-    await user.click(screen.getByRole('menuitemradio', { name: 'Accept edits' }))
-
-    expect(onWorkingMode).toHaveBeenCalledExactlyOnceWith('acceptEdits')
   })
 
   it('offers the models the agent reported, and reports the one chosen', async () => {
@@ -441,10 +458,9 @@ describe('the settings the next message runs under', () => {
     const user = userEvent.setup()
     const { onWorkingMode } = renderComposer()
 
-    expect(screen.getByRole('button', { name: 'Permissions' })).toBeEnabled()
+    expect(modeButton()).toBeEnabled()
 
-    await user.click(screen.getByRole('button', { name: 'Permissions' }))
-    await user.click(screen.getByRole('menuitemradio', { name: 'Accept edits' }))
+    await user.click(modeButton())
 
     expect(onWorkingMode).toHaveBeenCalledExactlyOnceWith('acceptEdits')
   })

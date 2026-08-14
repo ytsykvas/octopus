@@ -33,8 +33,22 @@ interface DropdownMenuProps {
 }
 
 const PANEL_WIDTH = 232
+/**
+ * What a menu whose items carry a second line gets instead.
+ *
+ * The descriptions come from outside — the agent writes the ones on the models,
+ * and "Fable 5 · Most capable for your hardest and longest-running tasks" does
+ * not fit a width chosen for one-word commands. Widening every menu to suit
+ * them would leave the short ones full of air, so the menu asks its own items.
+ */
+const DESCRIBED_WIDTH = 288
+
 /** Gap between trigger and panel, and the smallest margin to a window edge. */
 const GAP = 6
+
+/** One row, and what a second line adds to it — two lines of it at most. */
+const ROW_HEIGHT = 32
+const DESCRIPTION_HEIGHT = 32
 
 /**
  * A popup menu.
@@ -53,6 +67,9 @@ export function DropdownMenu({
   const [open, setOpen] = useState(false)
   const [position, setPosition] = useState<{ top: number; left: number } | null>(null)
   const container = useRef<HTMLDivElement>(null)
+
+  const described = actions.some((action) => action.description !== undefined)
+  const width = described ? DESCRIBED_WIDTH : PANEL_WIDTH
 
   const close = useCallback(() => {
     setOpen(false)
@@ -76,7 +93,16 @@ export function DropdownMenu({
 
   const openAt = (element: HTMLElement): void => {
     const rect = element.getBoundingClientRect()
-    const height = actions.length * 40 + 8
+
+    // Counted per row rather than as one figure per item, because a second line
+    // is worth two rows of its own. Erring high is the safe way to be wrong: it
+    // flips the menu above the trigger sooner than it must, where erring low
+    // would run it off the bottom of the window.
+    const height = actions.reduce(
+      (total, action) =>
+        total + ROW_HEIGHT + (action.description === undefined ? 0 : DESCRIPTION_HEIGHT),
+      8
+    )
 
     setPosition({
       // Flips above the trigger when there is no room below — near the bottom
@@ -86,8 +112,8 @@ export function DropdownMenu({
           ? Math.max(GAP, rect.top - height - GAP)
           : rect.bottom + GAP,
       left: Math.min(
-        Math.max(GAP, align === 'right' ? rect.right - PANEL_WIDTH : rect.left),
-        window.innerWidth - PANEL_WIDTH - GAP
+        Math.max(GAP, align === 'right' ? rect.right - width : rect.left),
+        window.innerWidth - width - GAP
       )
     })
 
@@ -113,7 +139,7 @@ export function DropdownMenu({
       {open && position && (
         <div
           role="menu"
-          style={{ top: position.top, left: position.left, width: PANEL_WIDTH }}
+          style={{ top: position.top, left: position.left, width }}
           className="border-line bg-canvas fixed z-50 rounded-[var(--radius-panel)] border p-1 shadow-[var(--shadow-pop)]"
         >
           {actions.map((action) => (
@@ -153,8 +179,12 @@ export function DropdownMenu({
 
               <span className="min-w-0 flex-1">
                 <span className="block truncate">{action.label}</span>
+                {/* Wrapped rather than truncated, unlike the label above it.
+                    A name cut short is still a name; a sentence cut short at
+                    "Most capable for your …" is the half that says nothing.
+                    Two lines is the cap — past that the menu is a document. */}
                 {action.description !== undefined && (
-                  <span className="text-ink-faint block truncate text-[11px]">
+                  <span className="text-ink-faint line-clamp-2 text-[11px] leading-4">
                     {action.description}
                   </span>
                 )}

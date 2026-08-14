@@ -100,7 +100,7 @@ describe('a workspace nobody has written in', () => {
   it('offers the mode before there is anything to change', async () => {
     await openChat()
 
-    expect(screen.getByRole('button', { name: 'Permissions' })).toBeEnabled()
+    expect(screen.getByRole('button', { name: /^Permissions:/ })).toBeEnabled()
   })
 })
 
@@ -634,7 +634,7 @@ describe('deciding on a plan', () => {
 })
 
 describe('the permission mode', () => {
-  const picker = (): HTMLElement => screen.getByRole('button', { name: 'Permissions' })
+  const picker = (): HTMLElement => screen.getByRole('button', { name: /^Permissions:/ })
 
   it('shows the mode the chat is in and changes it', async () => {
     const user = userEvent.setup()
@@ -642,11 +642,10 @@ describe('the permission mode', () => {
     await openLoadedChat()
 
     await waitFor(() => {
-      expect(picker()).toHaveTextContent('Accept edits')
+      expect(picker()).toHaveTextContent('Auto mode')
     })
 
     await user.click(picker())
-    await user.click(screen.getByRole('menuitemradio', { name: 'Ask first' }))
 
     expect(octopus().chats.setWorkingMode).toHaveBeenCalledWith(CHAT_ID, 'default')
     expect(picker()).toHaveTextContent('Ask first')
@@ -662,7 +661,7 @@ describe('the permission mode', () => {
   it('names what the settings will create the first record with', async () => {
     await openChat(workspace(), { workingMode: 'acceptEdits', effort: 'high' })
 
-    expect(picker()).toHaveTextContent('Accept edits')
+    expect(picker()).toHaveTextContent('Auto mode')
     expect(screen.getByRole('button', { name: 'Effort' })).toHaveTextContent('High')
   })
 
@@ -680,17 +679,24 @@ describe('the permission mode', () => {
     expect(screen.getByRole('button', { name: 'Effort' })).toHaveTextContent('Low')
   })
 
-  // The core deliberately leaves `bypassPermissions` out, and planning is a
-  // toggle of its own now — so this list is two entries and nothing else.
-  it('offers only the two degrees of permission', async () => {
+  /*
+   * The core deliberately leaves `bypassPermissions` out, and planning is a
+   * toggle of its own — so there are two degrees and the control switches
+   * between them rather than listing them. Asserted by going round: a third
+   * mode could not hide in a cycle that returns in two clicks.
+   */
+  it('cycles between the two degrees of permission and no others', async () => {
     const user = userEvent.setup()
     givenChat()
     await openLoadedChat()
 
     await user.click(picker())
+    expect(picker()).toHaveTextContent('Auto mode')
 
-    expect(screen.getAllByRole('menuitemradio')).toHaveLength(2)
-    expect(screen.queryByRole('menuitemradio', { name: /bypass/i })).not.toBeInTheDocument()
+    await user.click(picker())
+    expect(picker()).toHaveTextContent('Ask first')
+
+    expect(screen.queryByRole('menuitemradio')).not.toBeInTheDocument()
   })
 
   // Its own stored field now, rather than a third value crowding the one the
@@ -849,7 +855,6 @@ describe('the permission mode', () => {
     await openLoadedChat()
 
     await user.click(picker())
-    await user.click(screen.getByRole('menuitemradio', { name: 'Accept edits' }))
 
     expect(await screen.findByText(/no such chat/)).toBeInTheDocument()
     expect(picker()).toHaveTextContent('Ask first')

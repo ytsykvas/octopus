@@ -252,10 +252,22 @@ nothing.
 
 **The footer's permission control is two things, not one**, and they are two
 stored fields. `plan` is not a third degree of permission but a state the
-conversation is in: the agent runs no tools at all in it, so "accept edits" has
+conversation is in: the agent runs no tools at all in it, so `Auto mode` has
 nothing to accept. Held as one field they could not both be true, which is why
 approving a plan had no mode to return to — and why the toggle stayed lit over
 an agent that had started editing.
+
+That leaves the mode itself with two values, so it **switches in place** rather
+than opening a menu. A list of two was a click to open it, a list in which one
+of the two visible rows was already in force, and a click to choose the other —
+three steps to say what one click says. The pickers beside it keep their menus,
+because their lists are open-ended. The chip is tinted while `Auto mode` is on,
+the same treatment the plan toggle gets: of the settings in that row, the one
+where the agent writes unasked is the one worth noticing without looking for it.
+
+`Auto mode` keeps its English name in every locale — it is what the agent's own
+interfaces call it, and a translated name for a borrowed one reads as a second
+setting rather than the same one.
 
 **The right pane** holds Changes, Terminal, Build and Server. Build runs
 `setup.sh`, Server runs `run.sh` with the workspace's port in `$OCTOPUS_PORT`.
