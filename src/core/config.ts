@@ -137,8 +137,14 @@ export const ConfigSchema = z.object({
    *
    * The lower bound is functional: below ~280px a terminal wraps almost every
    * line of build output. The upper one only has to survive a move to a
-   * smaller display — what actually limits dragging is how much room the
-   * centre pane needs, which depends on the window and so cannot live here.
+   * smaller display — what actually limits dragging is how much room the centre
+   * pane needs, which depends on the window and on how wide the workspace list
+   * has been dragged, and so cannot live here.
+   *
+   * Only a drag is written here. Resizing the window moves the pane too — it
+   * takes what the window gains or loses so the centre keeps its width — but
+   * that is measured from this number rather than replacing it, so a window put
+   * back where it was puts the pane back too.
    */
   rightPanelWidth: z.number().int().min(280).max(4000).default(360),
 

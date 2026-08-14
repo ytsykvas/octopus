@@ -393,6 +393,35 @@ describe('App', () => {
     expect(tab('LE')).toBeInTheDocument()
   })
 
+  /*
+   * The right pane may grow into whatever the window has left once the left
+   * column and a usable centre have theirs — and only this window knows what
+   * that column comes to, being the one place that holds both the list's stored
+   * width and whether it is folded. Asserted from here because the pane's own
+   * tests are handed the number: told the wrong one, every last of them passes.
+   *
+   * 1024 less the strip (56), the list at its default (240) and the centre's
+   * own 360 leaves 368; folding the list hands its 240 straight to the pane.
+   */
+  it('offers the pane the room the folded list gives up', async () => {
+    givenTwoProjects()
+    const user = await openApp()
+
+    // Not `edges()`: that one wants both, and folding the list takes its edge
+    // away with it. The pane's is the last, being the last thing in the row.
+    const paneEdge = (): HTMLElement => {
+      const edge = screen.getAllByRole('separator', { name: 'Resize panel' }).at(-1)
+      if (!edge) throw new Error('the pane has no draggable edge')
+      return edge
+    }
+
+    expect(paneEdge()).toHaveAttribute('aria-valuemax', '368')
+
+    await user.click(await screen.findByRole('button', { name: 'Hide workspaces' }))
+
+    expect(paneEdge()).toHaveAttribute('aria-valuemax', '608')
+  })
+
   it('opens the settings dialog from the sidebar', async () => {
     const user = await openApp()
 
