@@ -25,9 +25,20 @@ export interface DiffCommentController {
   readonly clear: () => void
 }
 
-/** Where a note sits, which is also what makes it the same note. */
-function keyOf(comment: DiffComment): string {
-  return `${comment.path}:${comment.side}:${String(comment.line)}`
+/**
+ * Where a note sits, which is also what makes it the same note.
+ *
+ * The one spelling of it. This was written out in three modules — here, in the
+ * row that opens an editor, and in the `key` of the composer's chip — and the
+ * way that fails is silent: change the separator or add a field in one of them
+ * and notes stop deduplicating, or a chip stops matching the line it belongs
+ * to, with nothing failing to say so.
+ *
+ * Takes less than a whole note, because a row has a place before it has a
+ * remark, and it is the place that identifies both.
+ */
+export function anchorKey(anchor: Omit<DiffComment, 'text' | 'code'>): string {
+  return `${anchor.path}:${anchor.side}:${String(anchor.line)}`
 }
 
 /**
@@ -61,14 +72,17 @@ export function useDiffComments(workspaceId: string | null): DiffCommentControll
 
   const add = useCallback(
     (comment: DiffComment) => {
-      update((comments) => [...comments.filter((held) => keyOf(held) !== keyOf(comment)), comment])
+      update((comments) => [
+        ...comments.filter((held) => anchorKey(held) !== anchorKey(comment)),
+        comment
+      ])
     },
     [update]
   )
 
   const remove = useCallback(
     (comment: DiffComment) => {
-      update((comments) => comments.filter((held) => keyOf(held) !== keyOf(comment)))
+      update((comments) => comments.filter((held) => anchorKey(held) !== anchorKey(comment)))
     },
     [update]
   )

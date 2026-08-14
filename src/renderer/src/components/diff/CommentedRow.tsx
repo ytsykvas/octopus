@@ -4,7 +4,7 @@ import { useTranslation } from 'react-i18next'
 
 import type { DiffLine } from '@core/diff.js'
 
-import type { DiffComment } from '../../hooks/useDiffComments.js'
+import { anchorKey, type DiffComment } from '../../hooks/useDiffComments.js'
 
 /** What a row needs to offer a note, hold one, and give it back. */
 export interface CommentSurface {
@@ -28,10 +28,6 @@ export function anchorOf(path: string, line: DiffLine): Omit<DiffComment, 'text'
   const number = line.kind === 'removed' ? line.oldNumber : line.newNumber
 
   return number === null ? null : { path, side, line: number, code: line.text }
-}
-
-export function anchorKey(anchor: Omit<DiffComment, 'text'>): string {
-  return `${anchor.path}:${anchor.side}:${String(anchor.line)}`
 }
 
 interface CommentedRowProps {

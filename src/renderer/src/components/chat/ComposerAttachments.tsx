@@ -1,7 +1,7 @@
 import { X } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 
-import type { DiffComment } from '../../hooks/useDiffComments.js'
+import { anchorKey, type DiffComment } from '../../hooks/useDiffComments.js'
 
 /**
  * The review notes riding along with the next message.
@@ -29,7 +29,7 @@ export function ComposerAttachments({
     <div className="flex flex-wrap gap-1 px-1 pb-1">
       {comments.map((comment) => (
         <span
-          key={`${comment.path}:${comment.side}:${String(comment.line)}`}
+          key={anchorKey(comment)}
           className="border-line bg-muted text-ink-soft flex max-w-full items-center gap-1 rounded-[var(--radius-control)] border px-1.5 py-0.5"
         >
           <span className="text-ink-faint shrink-0 font-mono text-[11px]">
