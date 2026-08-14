@@ -38,6 +38,16 @@
   --warning-bg: #fdf3e3;
   --info-bg: #e4f4f8;
 
+  /* The ground a changed line of code is drawn on.
+     Paler than the status backgrounds beside them, and measured rather than
+     judged: `--success-bg` and `--danger-bg` were tuned to sit under their own
+     status text, and a syntax palette on them loses about a tenth of its
+     contrast — the faintest scope in github-light falls from 3.5:1 on the
+     canvas to 3.0:1. These keep it within a twentieth of what the theme gets
+     on plain white, while still reading as green and red at a glance. */
+  --diff-added-bg: #e6ffec;
+  --diff-removed-bg: #fef2f2;
+
   /* Project identity. Spread around the wheel so neighbours in the tab strip
      stay distinguishable, and dark enough that white text sits on them. */
   --project-ink: #ffffff;
@@ -83,6 +93,9 @@
   --warning-bg: #2b1f0d;
   --info-bg: #0d2429;
 
+  --diff-added-bg: #101d15;
+  --diff-removed-bg: #211318;
+
   /* Lifted against the dark ground — the light values read as mud here. That
      brightness is also why text on a filled tab goes dark rather than white. */
   --project-ink: #0f1115;
@@ -127,6 +140,9 @@
   --color-danger-bg: var(--danger-bg);
   --color-warning-bg: var(--warning-bg);
   --color-info-bg: var(--info-bg);
+
+  --color-diff-added-bg: var(--diff-added-bg);
+  --color-diff-removed-bg: var(--diff-removed-bg);
 
   --radius-control: 6px;
   --radius-panel: 10px;
@@ -358,6 +374,19 @@
     width: 2px;
     border-radius: 1px;
     background-color: var(--project-color, var(--accent));
+  }
+
+  /* Syntax colours, which shiki emits as a pair of custom properties on every
+     token so one tokenising serves both themes. The class on the container is
+     what stops these reaching anything else; the fallback is what an
+     unhighlighted line — an unknown language, or a highlighter still
+     loading — is drawn in. */
+  .diff-code span {
+    color: var(--shiki-light, var(--ink));
+  }
+
+  .dark .diff-code span {
+    color: var(--shiki-dark, var(--ink));
   }
 
   .focus-ring:focus-visible {

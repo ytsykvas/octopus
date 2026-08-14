@@ -7,6 +7,11 @@ import { fileDiff, hunk, workspaceDiff } from '../../test/diff.js'
 import { workspaceView } from '../../test/workspaces.js'
 import { DiffPanel } from './DiffPanel.js'
 
+// The highlighter is exercised by its own tests. Here it would only break every
+// assertion about a line's text into the spans shiki splits it into, and slow
+// the suite down loading grammars to prove something about shiki.
+vi.mock('./highlight.js', () => ({ highlight: () => Promise.resolve(null) }))
+
 const anna = workspaceView('anna')
 const bob = workspaceView('bob')
 

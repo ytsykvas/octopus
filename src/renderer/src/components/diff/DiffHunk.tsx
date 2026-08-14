@@ -2,7 +2,9 @@ import { useMemo } from 'react'
 
 import type { DiffLine, Hunk } from '@core/diff.js'
 
+import type { Token } from './highlight.js'
 import { splitRows } from './splitRows.js'
+import type { Highlighting } from './useHighlighting.js'
 
 /** How a diff is laid out. `split` needs room the pane may not have. */
 export type DiffView = 'unified' | 'split'
@@ -37,11 +39,15 @@ const SIGNS: Record<DiffLine['kind'], string> = {
 
 const GUTTER = 'w-10 shrink-0 pr-2 text-right tabular-nums select-none text-ink-faint'
 const SIGN = 'w-4 shrink-0 text-center select-none'
-const CODE = 'min-w-0 flex-1 pr-2 break-words whitespace-pre-wrap text-ink'
+// `diff-code` is what lets the stylesheet colour the spans shiki produces, and
+// what keeps those custom properties from reaching anything else.
+const CODE = 'diff-code min-w-0 flex-1 pr-2 break-words whitespace-pre-wrap text-ink'
 
 interface DiffHunkProps {
   readonly hunk: Hunk
   readonly view: DiffView
+  /** Syntax colours, as far as they have arrived. */
+  readonly tokens: Highlighting
 }
 
 /**
@@ -51,7 +57,7 @@ interface DiffHunkProps {
  * gutter cannot give: a removed line has no number in the file as it now
  * stands, and an added line had none in the file as it was.
  */
-export function DiffHunk({ hunk, view }: DiffHunkProps): React.JSX.Element {
+export function DiffHunk({ hunk, view, tokens }: DiffHunkProps): React.JSX.Element {
   // Computed here rather than in the row, so a re-render for any other reason
   // — a comment typed, a file collapsed — does not pair the lines again.
   const rows = useMemo(() => (view === 'split' ? splitRows(hunk.lines) : []), [hunk.lines, view])
@@ -66,19 +72,27 @@ export function DiffHunk({ hunk, view }: DiffHunkProps): React.JSX.Element {
       </div>
 
       {view === 'unified'
-        ? hunk.lines.map((line, index) => <UnifiedRow key={index} line={line} />)
+        ? hunk.lines.map((line, index) => (
+            <UnifiedRow key={index} line={line} tokens={tokens.get(line)} />
+          ))
         : rows.map((row, index) => (
             <div key={index} className="flex font-mono text-[11px] leading-relaxed">
-              <SplitHalf line={row.left} />
+              <SplitHalf line={row.left} tokens={row.left && tokens.get(row.left)} />
               <div className="border-line w-px shrink-0 border-l" />
-              <SplitHalf line={row.right} />
+              <SplitHalf line={row.right} tokens={row.right && tokens.get(row.right)} />
             </div>
           ))}
     </div>
   )
 }
 
-function UnifiedRow({ line }: { readonly line: DiffLine }): React.JSX.Element {
+function UnifiedRow({
+  line,
+  tokens
+}: {
+  readonly line: DiffLine
+  readonly tokens: readonly Token[] | undefined
+}): React.JSX.Element {
   return (
     <div className={`flex font-mono text-[11px] leading-relaxed ${ROW_TONES[line.kind]}`}>
       {/* A null renders as nothing, which is exactly what a line with no
@@ -88,7 +102,7 @@ function UnifiedRow({ line }: { readonly line: DiffLine }): React.JSX.Element {
       <span className={`${SIGN} ${SIGN_TONES[line.kind]}`}>{SIGNS[line.kind]}</span>
       {/* Wrapped rather than scrolled sideways: a long line hidden behind an
           edge the reader has to drag is a line they will not read. */}
-      <span className={CODE}>{line.text}</span>
+      <Code text={line.text} tokens={tokens} />
     </div>
   )
 }
@@ -98,7 +112,13 @@ function UnifiedRow({ line }: { readonly line: DiffLine }): React.JSX.Element {
  * this one does not — which is what shows an addition as an addition rather
  * than as a line that merely happens to sit opposite something.
  */
-function SplitHalf({ line }: { readonly line: DiffLine | null }): React.JSX.Element {
+function SplitHalf({
+  line,
+  tokens
+}: {
+  readonly line: DiffLine | null
+  readonly tokens: readonly Token[] | undefined | null
+}): React.JSX.Element {
   if (!line) return <div className="bg-muted/40 min-w-0 flex-1" />
 
   return (
@@ -107,7 +127,40 @@ function SplitHalf({ line }: { readonly line: DiffLine | null }): React.JSX.Elem
           drawn on the left and an addition only ever on the right. */}
       <span className={GUTTER}>{line.kind === 'added' ? line.newNumber : line.oldNumber}</span>
       <span className={`${SIGN} ${SIGN_TONES[line.kind]}`}>{SIGNS[line.kind]}</span>
-      <span className={CODE}>{line.text}</span>
+      <Code text={line.text} tokens={tokens ?? undefined} />
     </div>
+  )
+}
+
+/**
+ * The code itself, coloured where the highlighter has got to it.
+ *
+ * Falls back to the plain text rather than waiting: the diff is readable the
+ * moment it arrives, and the colours land a moment later without the lines
+ * moving. `--shiki-light` and `--shiki-dark` are set on each span so one
+ * tokenising serves both themes and the stylesheet picks between them.
+ */
+function Code({
+  text,
+  tokens
+}: {
+  readonly text: string
+  readonly tokens: readonly Token[] | undefined
+}): React.JSX.Element {
+  if (!tokens) return <span className={CODE}>{text}</span>
+
+  return (
+    <span className={CODE}>
+      {tokens.map((token, index) => (
+        <span
+          key={index}
+          style={
+            { '--shiki-light': token.light, '--shiki-dark': token.dark } as React.CSSProperties
+          }
+        >
+          {token.text}
+        </span>
+      ))}
+    </span>
   )
 }

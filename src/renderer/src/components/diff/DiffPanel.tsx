@@ -10,6 +10,7 @@ import { useWorkspaceDiff } from '../../hooks/useWorkspaceDiff.js'
 import { DiffFile } from './DiffFile.js'
 import type { DiffView } from './DiffHunk.js'
 import { MIN_SPLIT_COLUMNS, splitThreshold } from './measure.js'
+import { useHighlighting } from './useHighlighting.js'
 
 /**
  * A file this big starts collapsed.
@@ -50,6 +51,7 @@ export function DiffPanel({
   const { diff, loading, error, refresh } = useWorkspaceDiff(workspace?.id ?? null, visible)
   // Measured only once there is a diff on screen: the sample lives in that
   // tree, and an element in a hidden subtree measures zero.
+  const tokens = useHighlighting(diff)
   const { threshold, sample } = useSplitThreshold(visible && (diff?.files.length ?? 0) > 0)
 
   /*
@@ -172,6 +174,7 @@ export function DiffPanel({
               setChoices(new Map(choices).set(file.path, !isCollapsed(file)))
             }}
             view={effectiveView}
+            tokens={tokens}
             onOpen={openFile}
           />
         ))}

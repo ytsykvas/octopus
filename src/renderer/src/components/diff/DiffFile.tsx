@@ -6,6 +6,7 @@ import type { FileDiff, FileStatus } from '@core/diff.js'
 
 import { DropdownMenu } from '../DropdownMenu.js'
 import { type DiffView, DiffHunk } from './DiffHunk.js'
+import type { Highlighting } from './useHighlighting.js'
 
 /**
  * The letter in a file's header, and the word it stands for.
@@ -59,6 +60,7 @@ interface DiffFileProps {
   readonly file: FileDiff
   readonly collapsed: boolean
   readonly view: DiffView
+  readonly tokens: Highlighting
   readonly onToggle: () => void
   readonly onOpen: (path: string) => void
 }
@@ -75,6 +77,7 @@ export function DiffFile({
   file,
   collapsed,
   view,
+  tokens,
   onToggle,
   onOpen
 }: DiffFileProps): React.JSX.Element {
@@ -165,17 +168,19 @@ export function DiffFile({
         </p>
       )}
 
-      {!collapsed && <DiffBody file={file} view={view} />}
+      {!collapsed && <DiffBody file={file} view={view} tokens={tokens} />}
     </div>
   )
 }
 
 function DiffBody({
   file,
-  view
+  view,
+  tokens
 }: {
   readonly file: FileDiff
   readonly view: DiffView
+  readonly tokens: Highlighting
 }): React.JSX.Element | null {
   const { t } = useTranslation()
 
@@ -194,7 +199,7 @@ function DiffBody({
   return (
     <div>
       {file.hunks.map((hunk, index) => (
-        <DiffHunk key={index} hunk={hunk} view={view} />
+        <DiffHunk key={index} hunk={hunk} view={view} tokens={tokens} />
       ))}
     </div>
   )
