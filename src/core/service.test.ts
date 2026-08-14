@@ -23,7 +23,12 @@ import type { RemoteRepository } from './github.js'
 import { gitIn } from './git.js'
 import { WORKSPACE_NAMES } from './names.js'
 import { ProjectValidationError } from './projects.js'
-import { type ChatEvent, createService, type OctopusService } from './service.js'
+import {
+  type ChatEvent,
+  createService,
+  type OctopusService,
+  type WorkspaceStatusEvent
+} from './service.js'
 import { listWorktrees } from './worktree.js'
 import { WorkspaceError } from './workspaces.js'
 
@@ -2943,6 +2948,52 @@ describe('the agent chat', () => {
       const { service } = await withWorkspace()
 
       await expect(service.closeChats()).resolves.toBeUndefined()
+    })
+
+    /*
+     * The list draws this, and several workspaces work at once — so what one is
+     * doing has to reach the window without the list asking git about every
+     * workspace of every project to find out.
+     */
+    it('says when a workspace starts working, and when it stops', async () => {
+      const { service, workspaceId } = await withWorkspace()
+      const seen: WorkspaceStatusEvent[] = []
+      service.onWorkspaceStatus((event) => seen.push(event))
+
+      const chat = await service.openChat(workspaceId)
+      await service.sendToChat(chat.id, 'work')
+      expect(seen).toEqual([{ workspaceId, status: 'running' }])
+
+      await service.interruptChat(chat.id)
+      expect(seen).toEqual([
+        { workspaceId, status: 'running' },
+        { workspaceId, status: 'idle' }
+      ])
+    })
+
+    // An unchanged commit would otherwise send an event describing nothing, on
+    // a stream the list re-renders from.
+    it('says nothing when the status has not moved', async () => {
+      const { service, workspaceId } = await withWorkspace()
+      const seen: WorkspaceStatusEvent[] = []
+      service.onWorkspaceStatus((event) => seen.push(event))
+
+      const chat = await service.openChat(workspaceId)
+      await service.interruptChat(chat.id)
+
+      expect(seen).toEqual([])
+    })
+
+    it('stops sending status once the listener has unsubscribed', async () => {
+      const { service, workspaceId } = await withWorkspace()
+      const seen: WorkspaceStatusEvent[] = []
+      const unsubscribe = service.onWorkspaceStatus((event) => seen.push(event))
+      unsubscribe()
+
+      const chat = await service.openChat(workspaceId)
+      await service.sendToChat(chat.id, 'work')
+
+      expect(seen).toEqual([])
     })
 
     it('stops sending events once the listener has unsubscribed', async () => {

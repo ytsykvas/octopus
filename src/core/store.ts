@@ -139,7 +139,29 @@ export class StateConflictError extends Error {
 }
 
 export async function loadState(filePath: string = stateFile()): Promise<State> {
-  return migrate(await readJsonFile(filePath, StateSchema, EMPTY_STATE))
+  return settleStatuses(migrate(await readJsonFile(filePath, StateSchema, EMPTY_STATE)))
+}
+
+/**
+ * Puts down what the last run was carrying.
+ *
+ * `running` and `waiting_permission` describe a session, and no session
+ * survives the process that held it — so a workspace left mid-turn when the app
+ * quit would come back claiming to be working, with nothing behind the claim
+ * and nothing that would ever correct it.
+ *
+ * `error` and `archived` stay. One is a record of something that happened, the
+ * other of a decision; neither is a session still being waited on.
+ */
+export function settleStatuses(state: State): State {
+  return {
+    ...state,
+    workspaces: state.workspaces.map((workspace) =>
+      workspace.status === 'running' || workspace.status === 'waiting_permission'
+        ? { ...workspace, status: 'idle' as const }
+        : workspace
+    )
+  }
 }
 
 /**

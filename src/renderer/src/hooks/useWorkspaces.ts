@@ -61,6 +61,36 @@ export function useWorkspaces(
     setByProject(await load())
   }, [load])
 
+  /*
+   * What a workspace is doing, patched in as the core says so.
+   *
+   * Patched rather than re-read: a full read asks git about every workspace of
+   * every project, and this arrives several times a turn. The value is the one
+   * the core already decided, so there is nothing to work out here — only where
+   * to put it.
+   */
+  useEffect(
+    () =>
+      window.octopus.workspaces.onStatus(({ workspaceId, status }) => {
+        setByProject((current) => {
+          const next = new Map(current)
+
+          for (const [projectId, workspaces] of current) {
+            if (!workspaces.some((workspace) => workspace.id === workspaceId)) continue
+            next.set(
+              projectId,
+              workspaces.map((workspace) =>
+                workspace.id === workspaceId ? { ...workspace, status } : workspace
+              )
+            )
+          }
+
+          return next
+        })
+      }),
+    []
+  )
+
   useEffect(() => {
     const controller = new AbortController()
 

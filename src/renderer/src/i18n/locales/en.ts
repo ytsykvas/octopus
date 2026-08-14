@@ -60,6 +60,9 @@ export const en = {
     rename: 'Rename',
     remove: 'Remove workspace',
     missing: 'Directory is gone',
+    statusRunning: 'The agent is working here',
+    statusWaiting: 'Waiting for your answer',
+    statusError: 'The last turn ended in an error',
     missingHint: 'Removed outside the app. Removing the entry is safe.',
     // Ukrainian needs `few` and `many` as well; i18next picks the form that
     // applies to the active language and ignores the rest.

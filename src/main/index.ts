@@ -3,7 +3,12 @@ import { join } from 'node:path'
 import { app, BrowserWindow, dialog, ipcMain, Menu, nativeTheme, shell } from 'electron'
 
 import { describeError } from '../core/persist.js'
-import { type ChatEvent, createService, type OctopusService } from '../core/service.js'
+import {
+  type ChatEvent,
+  createService,
+  type OctopusService,
+  type WorkspaceStatusEvent
+} from '../core/service.js'
 import type { ThemeName } from '../core/types.js'
 import { registerIpc } from './ipc.js'
 import { canvasColor, resolveTheme } from './theme.js'
@@ -102,6 +107,12 @@ function broadcastChatEvent(event: ChatEvent): void {
   }
 }
 
+function broadcastWorkspaceStatus(event: WorkspaceStatusEvent): void {
+  for (const window of BrowserWindow.getAllWindows()) {
+    window.webContents.send('workspaces:status', event)
+  }
+}
+
 /**
  * Follows the OS appearance.
  *
@@ -156,6 +167,7 @@ async function start(): Promise<void> {
     prefersDark: () => nativeTheme.shouldUseDarkColors,
     broadcastTheme,
     broadcastChatEvent,
+    broadcastWorkspaceStatus,
     openPath: (path) => shell.openPath(path)
   })
   watchSystemTheme(service)

@@ -23,7 +23,7 @@ import type { RemoteRepository } from '../core/github.js'
 import { InstructionBodySchema, InstructionKindSchema } from '../core/instructions.js'
 import { QuestionAnswerSchema } from '../core/questions.js'
 import { ScriptBodySchema, ScriptKindSchema } from '../core/scripts.js'
-import type { ChatEvent, OctopusService } from '../core/service.js'
+import type { ChatEvent, OctopusService, WorkspaceStatusEvent } from '../core/service.js'
 import { ProjectPatchSchema } from '../core/store.js'
 import { TerminalSpecSchema } from '../core/terminal.js'
 import type { ThemeName } from '../core/types.js'
@@ -77,6 +77,13 @@ export interface IpcHost {
    * window looking at the same workspace should see the same conversation.
    */
   readonly broadcastChatEvent: (event: ChatEvent) => void
+  /**
+   * What a workspace is doing, to every window.
+   *
+   * A second stream rather than a variant of the one above: this says nothing
+   * about a conversation, and the list that draws it is not looking at a chat.
+   */
+  readonly broadcastWorkspaceStatus: (event: WorkspaceStatusEvent) => void
   /**
    * Hands a path to the system, which decides what opens it.
    *
@@ -233,6 +240,7 @@ export function registerIpc(
   // The agent chat. Everything the renderer sends here reaches a model or a
   // stored record, so each argument is validated rather than trusted.
   service.onAgentEvent(host.broadcastChatEvent)
+  service.onWorkspaceStatus(host.broadcastWorkspaceStatus)
 
   // Listing does not create, opening does. The distinction is what keeps a
   // workspace nobody has spoken to free of a record and a transcript file.

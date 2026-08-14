@@ -104,6 +104,32 @@ describe('load and save', () => {
     expect(loaded.projects[0]?.icon).toBeUndefined()
   })
 
+  /*
+   * `running` describes a session, and no session survives the process that
+   * held it. A workspace left mid-turn when the app quit would otherwise come
+   * back claiming to be working, with nothing behind the claim and nothing that
+   * would ever correct it.
+   */
+  it('puts down a status the last run was carrying', async () => {
+    const working = updateWorkspace(addWorkspace(withProject, makeWorkspace()), 'planner/kyiv', {
+      status: 'running'
+    })
+    await saveState(working, file, `${file}.tmp`)
+
+    const loaded = await loadState(file)
+    expect(loaded.workspaces[0]?.status).toBe('idle')
+  })
+
+  it('leaves an error alone, which is a record rather than a session', async () => {
+    const failed = updateWorkspace(addWorkspace(withProject, makeWorkspace()), 'planner/kyiv', {
+      status: 'error'
+    })
+    await saveState(failed, file, `${file}.tmp`)
+
+    const loaded = await loadState(file)
+    expect(loaded.workspaces[0]?.status).toBe('error')
+  })
+
   it('throws on a corrupt file rather than silently emptying the workspace list', async () => {
     await writeFile(file, '{ broken', 'utf8')
     await expect(loadState(file)).rejects.toBeInstanceOf(InvalidFileError)

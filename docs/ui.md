@@ -340,6 +340,14 @@ setting rather than the same one.
 `setup.sh`, Server runs `run.sh` with the workspace's port in `$OCTOPUS_PORT`.
 Both run on a button: starting a server because a tab was clicked is a surprise.
 
+**The workspace list says what each one is doing.** One mark carries it: the
+agent's state takes the dot while there is something to report — the accent
+while it works, `warning` while it is stopped on a question, `danger` after a
+failed turn — and falls back to the filled dot for uncommitted work when there
+is not. Two marks side by side would make the list busier than the thing it
+describes, and `warning` is the one worth crossing the window for, because that
+turn has stopped and is waiting on you.
+
 **A run belongs to its workspace**, the way a terminal does, so there is a
 runner per workspace and several can serve at once — which is what the unique
 port is for. It is the open project's workspaces that get one: the script paths

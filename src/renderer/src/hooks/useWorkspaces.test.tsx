@@ -1,6 +1,7 @@
 import { act, renderHook, waitFor } from '@testing-library/react'
 import { describe, expect, it, type Mock, vi } from 'vitest'
 
+import type { WorkspaceStatusEvent } from '@core/service.js'
 import type { Project } from '@core/store.js'
 import type { WorkspaceView } from '@core/workspaces.js'
 
@@ -60,6 +61,22 @@ const deferred = <T,>(): { promise: Promise<T>; settle: (value: T) => void } => 
   }
 }
 
+/**
+ * Delivers a status the way main broadcasts it.
+ *
+ * Wrapped in `act` because it arrives from IPC rather than from React's own
+ * event handling — the same reason `emitAgentEvent` is.
+ */
+const emitStatus = (event: WorkspaceStatusEvent): void => {
+  const handlers = vi
+    .mocked(window.octopus.workspaces.onStatus)
+    .mock.calls.map(([handler]) => handler)
+
+  act(() => {
+    for (const handler of handlers) handler(event)
+  })
+}
+
 /** Each project answers with its own workspaces, the way the real bridge does. */
 const workspacesPerProject = (owned: Readonly<Record<string, readonly WorkspaceView[]>>): void => {
   vi.mocked(window.octopus.workspaces.list).mockImplementation((projectId: string) =>
@@ -79,6 +96,43 @@ describe('useWorkspaces', () => {
     })
     expect(result.current.byProject.get('planner')).toEqual([anna, bob])
     expect(result.current.byProject.get('website')).toEqual([carol])
+  })
+
+  /*
+   * Patched in rather than re-read: a full read asks git about every workspace
+   * of every project, and this arrives several times a turn. The value is the
+   * one the core already decided, so there is nothing to work out here.
+   */
+  it('takes a workspace’s status from the core as it changes', async () => {
+    workspacesPerProject({ planner: [anna, bob], website: [carol] })
+    // Hoisted, or a fresh array each render restarts the read for ever.
+    const projects = [planner, website]
+
+    const { result } = renderHook(() => useWorkspaces(projects, accepts(), vi.fn<OnError>()))
+    await waitFor(() => {
+      expect(result.current.flat).toHaveLength(3)
+    })
+
+    emitStatus({ workspaceId: bob.id, status: 'running' })
+
+    expect(result.current.byProject.get('planner')?.[1]?.status).toBe('running')
+    // Nothing else moves, and no second reading of the workspaces is asked for.
+    expect(result.current.byProject.get('planner')?.[0]?.status).toBe('idle')
+    expect(window.octopus.workspaces.list).toHaveBeenCalledTimes(2)
+  })
+
+  it('ignores a status for a workspace it does not hold', async () => {
+    workspacesPerProject({ planner: [anna], website: [] })
+    const projects = [planner, website]
+
+    const { result } = renderHook(() => useWorkspaces(projects, accepts(), vi.fn<OnError>()))
+    await waitFor(() => {
+      expect(result.current.flat).toEqual([anna])
+    })
+
+    emitStatus({ workspaceId: 'planner/gone', status: 'running' })
+
+    expect(result.current.flat).toEqual([anna])
   })
 
   // A project whose worktrees cannot be read still has to appear in the

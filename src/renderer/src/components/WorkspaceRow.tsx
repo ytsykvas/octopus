@@ -122,14 +122,65 @@ export function WorkspaceRow({
 }
 
 /**
+ * What the agent is doing there, when it is doing anything.
+ *
+ * The whole point of a list of workspaces is that several are working at once,
+ * and until this read `status` the only way to find out was to open each one.
+ * The colour is the difference that matters: `warning` means the turn has
+ * stopped and is waiting on you, which is the one state worth crossing the
+ * window for.
+ */
+const AGENT_TONES: Partial<Record<WorkspaceView['status'], string>> = {
+  running: 'bg-accent animate-pulse',
+  waiting_permission: 'bg-warning',
+  error: 'bg-danger'
+}
+
+/*
+ * Written out rather than built from the status: `t` is typed against the
+ * locale, and a key assembled at runtime is a string it cannot check — which is
+ * the whole point of typing the locales against each other.
+ */
+const AGENT_LABELS: Partial<
+  Record<
+    WorkspaceView['status'],
+    'workspaces.statusRunning' | 'workspaces.statusWaiting' | 'workspaces.statusError'
+  >
+> = {
+  running: 'workspaces.statusRunning',
+  waiting_permission: 'workspaces.statusWaiting',
+  error: 'workspaces.statusError'
+}
+
+/**
  * State at a glance.
  *
- * A filled dot means there is uncommitted work; hollow means clean. Once the
- * agent lands this is where its status goes.
+ * One mark, not two: the agent's state takes the dot while there is one to
+ * report, and a filled dot for uncommitted work is what it falls back to —
+ * `idle` with changes is the ordinary case, and two marks side by side would
+ * make the list busier than the thing it describes.
  */
 function StatusMark({ workspace }: { workspace: WorkspaceView }): React.JSX.Element {
+  const { t } = useTranslation()
+
   if (workspace.missing) {
     return <AlertTriangle aria-hidden size={11} className="text-warning shrink-0" />
+  }
+
+  const tone = AGENT_TONES[workspace.status]
+  const label = AGENT_LABELS[workspace.status]
+
+  if (tone && label) {
+    // Named rather than hidden: this is the one thing on the row a reader may
+    // have come looking for, and a colour says nothing to a screen reader.
+    return (
+      <span
+        role="img"
+        aria-label={t(label)}
+        title={t(label)}
+        className={`size-1.5 shrink-0 rounded-full ${tone}`}
+      />
+    )
   }
 
   return (

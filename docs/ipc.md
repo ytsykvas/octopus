@@ -99,6 +99,16 @@ event }`. A **broadcast**, not a reply to whoever asked: events keep arriving
 long after the call that started them returned, and a second window on the same
 workspace should see the same conversation.
 
+**`workspaces:status`** is the second stream, carrying
+`{ workspaceId, status }` whenever a workspace starts working, stops, or blocks
+on a question. A stream rather than something the list re-reads for itself:
+re-reading asks git about every workspace of every project, several times a
+turn, to learn what the main process had already decided. It says nothing about
+a conversation, which is why it is not folded into the one above — the list that
+draws it is not looking at a chat.
+
+Neither is a `handle`, so neither is counted among the channels above.
+
 Listing and opening are separate on purpose. A workspace nobody has spoken to
 should have no record and no transcript file, so the pane looks the chat up
 without creating one — the first message is what brings it into being.

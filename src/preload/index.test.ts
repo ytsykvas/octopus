@@ -347,4 +347,22 @@ describe('the rest of the surface', () => {
     stop()
     expect(off).toHaveBeenCalledWith('chats:event', expect.any(Function))
   })
+
+  // A second stream, because the list that draws this is not looking at a chat.
+  it('workspaces.onStatus delivers the status and unsubscribes', () => {
+    const handler = vi.fn()
+    const stop = method('workspaces', 'onStatus')(handler as never) as () => void
+
+    const listener = on.mock.calls.find(([channel]) => channel === 'workspaces:status')?.[1] as (
+      event: unknown,
+      payload: unknown
+    ) => void
+
+    const status = { workspaceId: 'planner/kyiv', status: 'running' }
+    listener({}, status)
+    expect(handler).toHaveBeenCalledWith(status)
+
+    stop()
+    expect(off).toHaveBeenCalledWith('workspaces:status', expect.any(Function))
+  })
 })

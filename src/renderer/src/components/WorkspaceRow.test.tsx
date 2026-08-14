@@ -89,6 +89,40 @@ describe('WorkspaceRow', () => {
     expect(screen.queryByText(/files?$/)).not.toBeInTheDocument()
   })
 
+  /*
+   * The whole point of a list of workspaces is that several are working at
+   * once. Until the row read `status`, the only way to find out that another
+   * one was busy — or stopped, waiting on an answer — was to open it.
+   */
+  it('says when the agent is working in a workspace that is not open', () => {
+    renderRow({ workspace: workspace({ status: 'running' }) })
+
+    expect(screen.getByLabelText('The agent is working here')).toBeInTheDocument()
+  })
+
+  // The one state worth crossing the window for: the turn has stopped, and it
+  // stopped on a question only the user can answer.
+  it('says when a workspace is waiting on an answer', () => {
+    renderRow({ workspace: workspace({ status: 'waiting_permission' }) })
+
+    expect(screen.getByLabelText('Waiting for your answer')).toBeInTheDocument()
+  })
+
+  it('says when the last turn there ended badly', () => {
+    renderRow({ workspace: workspace({ status: 'error' }) })
+
+    expect(screen.getByLabelText('The last turn ended in an error')).toBeInTheDocument()
+  })
+
+  // One mark, not two: idle with changes is the ordinary case, and the agent's
+  // state only takes the dot while there is something to report.
+  it('says nothing about an agent that is doing nothing', () => {
+    renderRow({ workspace: workspace({ status: 'idle', changedFiles: 2 }) })
+
+    expect(screen.queryByLabelText(/agent|waiting|error/i)).not.toBeInTheDocument()
+    expect(screen.getByText('2 files')).toBeInTheDocument()
+  })
+
   it('marks a workspace whose directory has gone', () => {
     renderRow({ workspace: workspace({ missing: true }) })
 

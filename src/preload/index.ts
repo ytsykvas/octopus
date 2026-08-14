@@ -7,7 +7,8 @@ import type {
   PermissionAnswer,
   PermissionRequest,
   RateLimit,
-  SessionUsage
+  SessionUsage,
+  WorkspaceStatusEvent
 } from '@core/service.js'
 import type { QuestionAnswer } from '@core/questions.js'
 import type { ChatEntry } from '@core/transcript.js'
@@ -219,6 +220,23 @@ const api = {
   },
 
   workspaces: {
+    /**
+     * What each workspace is doing, as it changes.
+     *
+     * A second stream beside `chats.onEvent`, because the list that draws this
+     * is not looking at a conversation — and re-reading the workspaces to find
+     * out would ask git about every one of them twice a turn.
+     */
+    onStatus: (handler: (event: WorkspaceStatusEvent) => void): (() => void) => {
+      const listener = (_event: unknown, status: WorkspaceStatusEvent): void => {
+        handler(status)
+      }
+      ipcRenderer.on('workspaces:status', listener)
+      return () => {
+        ipcRenderer.off('workspaces:status', listener)
+      }
+    },
+
     /** Workspaces of a project, reconciled with what git actually has. */
     list: (projectId: string): Promise<Result<WorkspaceView[]>> =>
       ipcRenderer.invoke('workspaces:list', projectId) as Promise<Result<WorkspaceView[]>>,

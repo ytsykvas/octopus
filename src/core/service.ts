@@ -119,6 +119,18 @@ export interface ChatEvent {
   readonly event: AgentEvent
 }
 
+/**
+ * A workspace and what it is now doing.
+ *
+ * Sent rather than left to be discovered: the list draws this, and asking for
+ * the workspaces again to find out would put git to work on every one of them
+ * to learn something this process had already decided.
+ */
+export interface WorkspaceStatusEvent {
+  readonly workspaceId: string
+  readonly status: Workspace['status']
+}
+
 /** What the user answered to a permission request. */
 export type PermissionAnswer = 'allow' | 'always' | 'deny'
 
@@ -293,6 +305,8 @@ export interface OctopusService {
   getRateLimit(): RateLimit | null
   /** Subscribes to agent events; the returned function unsubscribes. */
   onAgentEvent(handler: (event: ChatEvent) => void): () => void
+  /** What a workspace is doing, as it changes. A broadcast, like the above. */
+  onWorkspaceStatus(handler: (event: WorkspaceStatusEvent) => void): () => void
   /** Ends every live session. Called when the application quits. */
   closeChats(): Promise<void>
 }
@@ -320,6 +334,7 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
   /** Live agent sessions, keyed by chat. A missing entry means "not started". */
   const sessions = new Map<string, AgentSession>()
   const listeners = new Set<(event: ChatEvent) => void>()
+  const statusListeners = new Set<(event: WorkspaceStatusEvent) => void>()
   const pending = new Map<string, PendingPermission>()
 
   /**
@@ -516,13 +531,26 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
     })
   }
 
+  /**
+   * Records what a workspace is doing, and says so.
+   *
+   * Announced as well as stored because the list draws it: reading the
+   * workspaces again to find out would ask git about every one of them, twice a
+   * turn, for something this process already knew. Announced only on a change,
+   * or every unchanged commit would send an event describing nothing.
+   */
   function setStatus(workspaceId: string, status: Workspace['status']): Promise<void> {
+    const before = state.workspaces.find((workspace) => workspace.id === workspaceId)
+
     return commit((current) =>
       // The workspace can be removed while its last events are still arriving.
       current.workspaces.some((workspace) => workspace.id === workspaceId)
         ? updateWorkspace(current, workspaceId, { status })
         : current
-    )
+    ).then(() => {
+      if (!before || before.status === status) return
+      for (const listener of statusListeners) listener({ workspaceId, status })
+    })
   }
 
   /**
@@ -1312,6 +1340,11 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
     onAgentEvent(handler) {
       listeners.add(handler)
       return () => listeners.delete(handler)
+    },
+
+    onWorkspaceStatus(handler) {
+      statusListeners.add(handler)
+      return () => statusListeners.delete(handler)
     },
 
     async closeChats() {

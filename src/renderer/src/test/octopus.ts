@@ -70,6 +70,7 @@ export function installOctopusStub(): Api {
       onEvent: vi.fn(subscription)
     },
     workspaces: {
+      onStatus: vi.fn(subscription),
       list: vi.fn(() => ok([])),
       create: vi.fn(() => ok(workspaceFixture())),
       rename: vi.fn(() => ok(undefined)),

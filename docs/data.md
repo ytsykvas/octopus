@@ -117,6 +117,14 @@ A **project** is a repository that has been added: `id`, `name`, `repoPath`,
 A **workspace** is a git worktree: `id`, `projectId`, `name`, `branch`, `path`,
 `status`, `port`, `createdAt`, `ownerId`.
 
+`status` is `idle`, `running`, `waiting_permission`, `error` or `archived`, and
+the workspace list draws it — which is how work in a workspace nobody is looking
+at becomes visible at all. It is **settled on load**: `running` and
+`waiting_permission` describe a session, and no session survives the process
+that held it, so a workspace left mid-turn when the app quit would otherwise
+come back claiming to be working with nothing behind the claim. `error` and
+`archived` stay, being a record rather than a session.
+
 `knownModels` is not a record of anything the user did: it is what the agent
 last said this account may use, kept only so the model picker works before the
 first message — the agent can be asked solely while a session is open. It is

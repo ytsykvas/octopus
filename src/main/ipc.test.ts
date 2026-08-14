@@ -12,7 +12,7 @@ import { type AccountsStatus, checkAccounts, type CommandExec, signOut } from '.
 import type { QueryFn } from '../core/agent.js'
 import type { RemoteRepository } from '../core/github.js'
 import { createService, type OctopusService, type ServiceOptions } from '../core/service.js'
-import type { ChatEvent } from '../core/service.js'
+import type { ChatEvent, WorkspaceStatusEvent } from '../core/service.js'
 import type { ThemeName, Workspace } from '../core/types.js'
 import { type IpcHost, registerIpc, type PickedDirectory } from './ipc.js'
 import type { Result } from './result.js'
@@ -42,6 +42,7 @@ interface Harness {
   readonly handlers: Map<string, (event: unknown, ...args: unknown[]) => unknown>
   readonly broadcasts: ThemeName[]
   readonly chatEvents: ChatEvent[]
+  readonly statusEvents: WorkspaceStatusEvent[]
   /** Paths handed to the system, in order. */
   readonly opened: string[]
   picked: PickedDirectory
@@ -56,12 +57,14 @@ function harness(): Harness {
   const handlers = new Map<string, (event: unknown, ...args: unknown[]) => unknown>()
   const broadcasts: ThemeName[] = []
   const chatEvents: ChatEvent[] = []
+  const statusEvents: WorkspaceStatusEvent[] = []
   const opened: string[] = []
 
   const state: Harness = {
     handlers,
     broadcasts,
     chatEvents,
+    statusEvents,
     opened,
     picked: { canceled: true, filePaths: [] },
     prefersDark: false,
@@ -76,6 +79,7 @@ function harness(): Harness {
       prefersDark: () => state.prefersDark,
       broadcastTheme: (theme) => broadcasts.push(theme),
       broadcastChatEvent: (event) => chatEvents.push(event),
+      broadcastWorkspaceStatus: (event) => statusEvents.push(event),
       openPath: (path) => {
         opened.push(path)
         return Promise.resolve(state.openRefusal)
