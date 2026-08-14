@@ -7,6 +7,7 @@ import { shortBranchName } from '@core/branches.js'
 import type { WorkspaceView } from '@core/workspaces.js'
 
 import type { DiffCommentController } from '../../hooks/useDiffComments.js'
+import { useErrorMessage } from '../../hooks/useErrorMessage.js'
 import { useWorkspaceDiff } from '../../hooks/useWorkspaceDiff.js'
 import { DiffFile } from './DiffFile.js'
 import type { DiffView } from './DiffHunk.js'
@@ -33,6 +34,8 @@ interface DiffPanelProps {
   readonly width: number
   /** Review notes waiting to go out with the next message. */
   readonly comments: DiffCommentController
+  /** Says what went wrong where the window already says such things. */
+  readonly onError: (message: string) => void
 }
 
 /**
@@ -49,9 +52,11 @@ export function DiffPanel({
   view,
   onView,
   width,
-  comments
+  comments,
+  onError
 }: DiffPanelProps): React.JSX.Element {
   const { t } = useTranslation()
+  const describeFailure = useErrorMessage()
   const { diff, loading, error, refresh } = useWorkspaceDiff(workspace?.id ?? null, visible)
   // Measured only once there is a diff on screen: the sample lives in that
   // tree, and an element in a hidden subtree measures zero.
@@ -101,7 +106,13 @@ export function DiffPanel({
   }
 
   const openFile = (path: string): void => {
-    void window.octopus.files.open(workspace.id, path)
+    void (async () => {
+      const result = await window.octopus.files.open(workspace.id, path)
+      // The main process goes to the trouble of reporting what the system said;
+      // throwing that away leaves a click that opened nothing looking like one
+      // that worked (§13).
+      if (!result.ok) onError(describeFailure(result))
+    })()
   }
 
   const surface = {
@@ -272,7 +283,7 @@ function useSplitThreshold(ready: boolean): {
       <span
         ref={element}
         aria-hidden
-        className="pointer-events-none absolute -z-10 font-mono text-[11px] opacity-0"
+        className="pointer-events-none absolute -z-10 font-mono text-[11px] opacity-0 select-none"
       >
         {'0'.repeat(MIN_SPLIT_COLUMNS)}
       </span>

@@ -82,7 +82,9 @@ export function CommentedRow({
         <MessageSquarePlus aria-hidden size={11} />
       </button>
 
-      {held && (
+      {/* Not while it is being edited: the editor already holds this text, and
+          two copies of one remark reads as two remarks. */}
+      {held && comments.editing !== key && (
         <Note
           comment={held}
           onRemove={() => {
@@ -145,8 +147,9 @@ function Editor({
   const { t } = useTranslation()
   const [text, setText] = useState(initial)
 
+  const trimmed = text.trim()
+
   const save = (): void => {
-    const trimmed = text.trim()
     if (trimmed !== '') onSave(trimmed)
   }
 
@@ -180,7 +183,10 @@ function Editor({
         <button
           type="button"
           onClick={save}
-          className="focus-ring bg-accent text-on-accent hover:bg-accent-hover rounded-[var(--radius-control)] px-2 py-0.5"
+          // An empty note has nothing to send, and a button that accepts the
+          // click and does nothing is worse than one that says it cannot.
+          disabled={trimmed === ''}
+          className="focus-ring bg-accent text-on-accent hover:bg-accent-hover rounded-[var(--radius-control)] px-2 py-0.5 disabled:opacity-40"
         >
           {t('diff.commentSave')}
         </button>

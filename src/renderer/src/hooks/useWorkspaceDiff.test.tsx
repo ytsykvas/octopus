@@ -95,6 +95,28 @@ describe('what a workspace has changed', () => {
     expect(octopus().workspaces.diff).toHaveBeenCalledTimes(2)
   })
 
+  /*
+   * A turn that fails emits an error and then a result, and two chats in one
+   * workspace regularly finish within a moment of each other. Each of those is
+   * one change to the tree, and reading it once is the whole point of waiting.
+   */
+  it('reads once when two turns end together', async () => {
+    vi.useFakeTimers()
+    answering(workspaceDiff([]))
+    renderHook(() => useWorkspaceDiff(WORKSPACE, true))
+    await vi.waitFor(() => {
+      expect(octopus().workspaces.diff).toHaveBeenCalledTimes(1)
+    })
+
+    emit({ type: 'error', message: 'stopped' })
+    emit(DONE)
+    await act(async () => {
+      await vi.runAllTimersAsync()
+    })
+
+    expect(octopus().workspaces.diff).toHaveBeenCalledTimes(2)
+  })
+
   it('ignores a turn finishing in another workspace', async () => {
     vi.useFakeTimers()
     answering(workspaceDiff([]))

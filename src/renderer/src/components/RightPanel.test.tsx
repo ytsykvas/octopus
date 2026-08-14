@@ -51,6 +51,7 @@ function renderPanel(overrides: Partial<Props> = {}): {
     diffView: 'unified',
     onDiffView: vi.fn(),
     comments: commentController(),
+    onError: vi.fn(),
     ...overrides
   }
 

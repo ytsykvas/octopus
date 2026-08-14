@@ -114,6 +114,25 @@ describe('the colours a diff is drawn in', () => {
     expect(highlight).toHaveBeenCalledWith('typescript', 'was here')
   })
 
+  /*
+   * A minified bundle is a handful of enormous lines.
+   *
+   * The highlighter spends about a second on one of those whatever its length,
+   * and that second is the window not responding. Nobody is reading a minified
+   * line anyway, so it is drawn plain.
+   */
+  it('leaves a file whose lines are enormous alone', async () => {
+    const diff = workspaceDiff([
+      fileDiff('bundle.js', { hunks: [hunk({ lines: [added('x'.repeat(5_000))] })] })
+    ])
+
+    renderHook(() => useHighlighting(diff))
+
+    await waitFor(() => {
+      expect(highlight).not.toHaveBeenCalled()
+    })
+  })
+
   it('asks for both sides when a file has both', async () => {
     const diff = workspaceDiff([
       fileDiff('a.ts', { hunks: [hunk({ lines: [removed('was'), added('is')] })] })

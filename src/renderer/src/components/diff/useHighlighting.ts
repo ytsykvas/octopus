@@ -11,6 +11,22 @@ export type Highlighting = ReadonlyMap<DiffLine, readonly Token[]>
 const NOTHING: Highlighting = new Map()
 
 /**
+ * Past this, a line is not code anyone is reading.
+ *
+ * A minified bundle or a bundled lockfile is a handful of enormous lines, and
+ * the highlighter spends about a second on each of them whatever their length —
+ * seconds of a frozen window, spent colouring something nobody will read. The
+ * file still draws; it simply draws plain.
+ */
+const MAX_LINE_LENGTH = 2_000
+
+function drawableAsCode(
+  hunks: readonly { readonly lines: readonly { readonly text: string }[] }[]
+): boolean {
+  return hunks.every((hunk) => hunk.lines.every((line) => line.text.length <= MAX_LINE_LENGTH))
+}
+
+/**
  * Syntax colours for every line of a diff, as they arrive.
  *
  * Asynchronous and additive on purpose: the diff is drawn plain the moment it
@@ -38,6 +54,7 @@ export function useHighlighting(diff: WorkspaceDiff | null): Highlighting {
       for (const file of diff.files) {
         const language = languageFor(file.path)
         if (language === null || file.hunks.length === 0) continue
+        if (!drawableAsCode(file.hunks)) continue
 
         const { old, current } = sideTexts(file.hunks)
         const [oldTokens, currentTokens] = await Promise.all([

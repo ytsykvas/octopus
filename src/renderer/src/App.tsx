@@ -432,6 +432,7 @@ export function App(): React.JSX.Element {
             diffView={config?.diffView ?? 'unified'}
             onDiffView={(diffView) => void updateConfig({ diffView })}
             comments={diffComments}
+            onError={setError}
             // The room the pane must leave alone. Folded away, the list takes
             // none of it — and the pane may have that room too.
             leftWidth={TAB_STRIP_WIDTH + (sidebarOpen ? sidebarWidth : 0)}

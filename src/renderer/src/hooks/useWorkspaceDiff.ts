@@ -15,9 +15,9 @@ export interface WorkspaceDiffController {
 /**
  * How long the diff waits after a turn ends before reading git.
  *
- * A turn that fails emits an error and then a result, and two chats in one
- * workspace regularly finish together — three reads of the same tree for one
- * change otherwise.
+ * Long enough that a turn ending twice over — an error and then a result — is
+ * one read rather than two, and short enough that the pane is current by the
+ * time the eye reaches it.
  */
 const SETTLE_MS = 300
 
@@ -55,6 +55,20 @@ export function useWorkspaceDiff(
 
   /** Rejects a reply that arrived after the workspace changed under it. */
   const generation = useRef(0)
+
+  /*
+   * The one read that is waiting to happen.
+   *
+   * Replaced rather than added to: a turn that fails emits an error and then a
+   * result, and two chats in one workspace regularly finish together. Each of
+   * those is one change to the tree, and a timer per event would read it once
+   * per event — which is the thing waiting was meant to avoid.
+   *
+   * A ref rather than a variable in the effect, because a local assigned only
+   * inside the callback reads as a constant to the type checker at the two
+   * places that have to test it.
+   */
+  const pending = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   const apply = useCallback(
     (result: Awaited<ReturnType<typeof window.octopus.workspaces.diff>>, attempt: number) => {
@@ -107,8 +121,6 @@ export function useWorkspaceDiff(
   }, [workspaceId, enabled, apply])
 
   useEffect(() => {
-    const timers: ReturnType<typeof setTimeout>[] = []
-
     const unsubscribe = window.octopus.chats.onEvent((announced) => {
       // Any chat in this workspace writes to the same worktree, so this filters
       // on the workspace rather than on the chat the way `useChat` does.
@@ -121,16 +133,15 @@ export function useWorkspaceDiff(
       // above reads again when the tab comes back.
       if (!enabled) return
 
-      timers.push(
-        setTimeout(() => {
-          void load(announced.workspaceId)
-        }, SETTLE_MS)
-      )
+      if (pending.current !== null) clearTimeout(pending.current)
+      pending.current = setTimeout(() => {
+        void load(announced.workspaceId)
+      }, SETTLE_MS)
     })
 
     return () => {
       unsubscribe()
-      for (const timer of timers) clearTimeout(timer)
+      if (pending.current !== null) clearTimeout(pending.current)
     }
   }, [workspaceId, enabled, load])
 

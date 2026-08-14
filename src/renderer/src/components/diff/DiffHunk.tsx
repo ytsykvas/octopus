@@ -21,8 +21,8 @@ export type DiffView = 'unified' | 'split'
  * token (§10.7).
  */
 const ROW_TONES: Record<DiffLine['kind'], string> = {
-  added: 'bg-success-bg',
-  removed: 'bg-danger-bg',
+  added: 'bg-diff-added-bg',
+  removed: 'bg-diff-removed-bg',
   context: ''
 }
 
@@ -107,9 +107,9 @@ function SplitRowView({
 }): React.JSX.Element {
   const pair = (
     <div className="flex font-mono text-[11px] leading-relaxed">
-      <SplitHalf line={row.left} tokens={row.left && tokens.get(row.left)} />
+      <SplitHalf side="old" line={row.left} tokens={row.left && tokens.get(row.left)} />
       <div className="border-line w-px shrink-0 border-l" />
-      <SplitHalf line={row.right} tokens={row.right && tokens.get(row.right)} />
+      <SplitHalf side="new" line={row.right} tokens={row.right && tokens.get(row.right)} />
     </div>
   )
 
@@ -154,9 +154,11 @@ function UnifiedRow({
  * than as a line that merely happens to sit opposite something.
  */
 function SplitHalf({
+  side,
   line,
   tokens
 }: {
+  readonly side: 'old' | 'new'
   readonly line: DiffLine | null
   readonly tokens: readonly Token[] | undefined | null
 }): React.JSX.Element {
@@ -164,9 +166,11 @@ function SplitHalf({
 
   return (
     <div className={`flex min-w-0 flex-1 ${ROW_TONES[line.kind]}`}>
-      {/* Each column shows its own file's numbering: a removal is only ever
-          drawn on the left and an addition only ever on the right. */}
-      <span className={GUTTER}>{line.kind === 'added' ? line.newNumber : line.oldNumber}</span>
+      {/* Each column numbers its own file, which it can only do by knowing
+          which one it is. Reading the number off the line's kind instead gets
+          every context line wrong on the right: it belongs to both files, and
+          the two have drifted apart by everything added above it. */}
+      <span className={GUTTER}>{side === 'old' ? line.oldNumber : line.newNumber}</span>
       <span className={`${SIGN} ${SIGN_TONES[line.kind]}`}>{SIGNS[line.kind]}</span>
       <Code text={line.text} tokens={tokens ?? undefined} />
     </div>

@@ -97,6 +97,7 @@ interface RightPanelProps {
   readonly onDiffView: (view: DiffView) => void
   /** Review notes the diff writes and the composer sends. */
   readonly comments: DiffCommentController
+  readonly onError: (message: string) => void
 }
 
 export function RightPanel({
@@ -110,7 +111,8 @@ export function RightPanel({
   leftWidth,
   diffView,
   onDiffView,
-  comments
+  comments,
+  onError
 }: RightPanelProps): React.JSX.Element {
   const { t, i18n } = useTranslation()
   const [tab, setTab] = useState<RightTab>('diff')
@@ -275,6 +277,7 @@ export function RightPanel({
           onView={onDiffView}
           width={applied}
           comments={comments}
+          onError={onError}
         />
       </div>
 

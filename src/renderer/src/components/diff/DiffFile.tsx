@@ -1,5 +1,5 @@
 import { ChevronDown, ChevronRight, Copy, ExternalLink, MoreHorizontal } from 'lucide-react'
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import type { FileDiff, FileStatus } from '@core/diff.js'
@@ -57,6 +57,15 @@ const STATUS_KEYS: Record<FileStatus, StatusMark> = {
 /** How long the menu reports what copying did before offering it again. */
 const SETTLE_MS = 2000
 
+/** What the last attempt did, which is all the row has to say about it. */
+type Copied = 'idle' | 'done' | 'failed'
+
+const COPY_LABELS: Record<Copied, 'diff.copyPath' | 'diff.copied' | 'diff.copyFailed'> = {
+  idle: 'diff.copyPath',
+  done: 'diff.copied',
+  failed: 'diff.copyFailed'
+}
+
 interface DiffFileProps {
   readonly file: FileDiff
   readonly collapsed: boolean
@@ -85,22 +94,34 @@ export function DiffFile({
   onOpen
 }: DiffFileProps): React.JSX.Element {
   const { t } = useTranslation()
-  const [copyFailed, setCopyFailed] = useState(false)
+  const [copied, setCopied] = useState<Copied>('idle')
 
   const status = STATUS_KEYS[file.status]
   const Chevron = collapsed ? ChevronRight : ChevronDown
 
+  // Back to offering the action on its own, and cleared on the way out: a row
+  // still claiming a copy happened is describing a clipboard that has moved on,
+  // and a timer outliving the row it belongs to is one nobody can cancel.
+  useEffect(() => {
+    if (copied === 'idle') return
+
+    const timer = setTimeout(() => {
+      setCopied('idle')
+    }, SETTLE_MS)
+
+    return () => {
+      clearTimeout(timer)
+    }
+  }, [copied])
+
   const copy = async (): Promise<void> => {
     try {
       await navigator.clipboard.writeText(file.path)
-      setCopyFailed(false)
+      setCopied('done')
     } catch {
       // A refused clipboard is real — an unfocused document is enough — and an
       // action that quietly did nothing is worse than one that says so.
-      setCopyFailed(true)
-      setTimeout(() => {
-        setCopyFailed(false)
-      }, SETTLE_MS)
+      setCopied('failed')
     }
   }
 
@@ -121,11 +142,12 @@ export function DiffFile({
           <span className={`shrink-0 font-mono text-[11px] ${status.tone}`} title={t(status.label)}>
             {t(status.letter)}
           </span>
-          {/* The directory recedes and the filename does not: a column this
-              narrow truncates, and what has to survive truncation is the name. */}
-          <span className="min-w-0 truncate font-mono text-[11px]" title={file.path}>
-            <span className="text-ink-faint">{directoryOf(file.path)}</span>
-            <span className="text-ink">{basenameOf(file.path)}</span>
+          {/* The directory is what gives way. Truncating the whole path cut the
+              filename off the end — the one part that identifies the row — so
+              the two are separate boxes and only the leading one shrinks. */}
+          <span className="flex min-w-0 font-mono text-[11px]" title={file.path}>
+            <span className="text-ink-faint truncate">{directoryOf(file.path)}</span>
+            <span className="text-ink shrink-0">{basenameOf(file.path)}</span>
           </span>
           <span className="ml-auto shrink-0 font-mono text-[11px]">
             {file.added > 0 && <span className="text-success">+{file.added}</span>}
@@ -139,7 +161,7 @@ export function DiffFile({
           actions={[
             {
               id: 'copy',
-              label: copyFailed ? t('diff.copyFailed') : t('diff.copyPath'),
+              label: t(COPY_LABELS[copied]),
               icon: <Copy aria-hidden size={14} />,
               onSelect: () => void copy()
             },

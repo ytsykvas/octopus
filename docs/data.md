@@ -47,6 +47,7 @@ Validated by `ConfigSchema` in [`config.ts`](../src/core/config.ts).
 | `alwaysAllowedTools`              | tools the user answered "always" for, listed so they can be undone                                           |
 | `theme`, `language`               | appearance                                                                                                   |
 | `rightPanelWidth`, `sidebarWidth` | pane widths in pixels, as last dragged — resizing the **window** moves the right pane without rewriting this |
+| `diffView`                        | whether a diff is drawn in one column or two — a preference about how code is read, not a per-session mood   |
 | `deviceId`, `installedAt`         | reserved for licensing (§15.3), unused                                                                       |
 
 `alwaysAllowedTools` is filtered on the way in **and on the way out**, and never

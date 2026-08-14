@@ -49,6 +49,7 @@ function renderPanel(workspace = anna, visible = true): void {
       onView={vi.fn()}
       width={WIDE}
       comments={commentController()}
+      onError={vi.fn()}
     />
   )
 }
@@ -63,6 +64,7 @@ describe('DiffPanel', () => {
         onView={vi.fn()}
         width={WIDE}
         comments={commentController()}
+        onError={vi.fn()}
       />
     )
 
@@ -234,6 +236,7 @@ describe('DiffPanel', () => {
         onView={onView}
         width={WIDE}
         comments={commentController()}
+        onError={vi.fn()}
       />
     )
 
@@ -253,6 +256,7 @@ describe('DiffPanel', () => {
         onView={vi.fn()}
         width={WIDE}
         comments={commentController()}
+        onError={vi.fn()}
       />
     )
 
@@ -275,6 +279,7 @@ describe('DiffPanel', () => {
         onView={onView}
         width={WIDE}
         comments={commentController()}
+        onError={vi.fn()}
       />
     )
 
@@ -314,6 +319,7 @@ describe('DiffPanel', () => {
         onView={vi.fn()}
         width={WIDE}
         comments={commentController()}
+        onError={vi.fn()}
       />
     )
 
@@ -324,6 +330,49 @@ describe('DiffPanel', () => {
     // Once, not twice: a context line occupies both columns, and an addition
     // with nothing opposite it must not be mistaken for one.
     expect(screen.getAllByText('brand new')).toHaveLength(1)
+  })
+
+  /*
+   * The right column belongs to the file as it now stands.
+   *
+   * A context line sits in both columns, and once anything has been added above
+   * it the two files number it differently. Reading the number off the line's
+   * kind gives the old file's number on both sides, so the right column is
+   * wrong for every context line below the first insertion.
+   */
+  it('numbers each column from its own file', async () => {
+    withMonospaceCell(64)
+    answer(
+      workspaceDiff([
+        fileDiff('src/a.ts', {
+          hunks: [
+            hunk({
+              oldStart: 10,
+              newStart: 20,
+              lines: [
+                { kind: 'context', text: 'shared', oldNumber: 10, newNumber: 20, noNewline: false }
+              ]
+            })
+          ]
+        })
+      ])
+    )
+    render(
+      <DiffPanel
+        workspace={anna}
+        visible
+        view="split"
+        onView={vi.fn()}
+        width={WIDE}
+        comments={commentController()}
+        onError={vi.fn()}
+      />
+    )
+
+    await screen.findByRole('button', { name: 'One column' })
+
+    expect(screen.getByText('10')).toBeInTheDocument()
+    expect(screen.getByText('20')).toBeInTheDocument()
   })
 
   // The stored preference is not overwritten by the pane being too narrow:
@@ -339,6 +388,7 @@ describe('DiffPanel', () => {
         onView={vi.fn()}
         width={300}
         comments={commentController()}
+        onError={vi.fn()}
       />
     )
 
@@ -361,6 +411,7 @@ describe('DiffPanel', () => {
           onView={vi.fn()}
           width={WIDE}
           comments={comments}
+          onError={vi.fn()}
         />
       )
       return comments
@@ -490,6 +541,18 @@ describe('DiffPanel', () => {
       expect(comments.add).toHaveBeenCalledWith(expect.objectContaining({ text: 'shorter' }))
     })
 
+    // The chord does not consult the button, so the emptiness is checked twice.
+    it('sends nothing when the keyboard saves an empty note', async () => {
+      const user = userEvent.setup()
+      answer(workspaceDiff([fileDiff('src/a.ts')]))
+      const comments = renderWithComments()
+
+      await user.click(await screen.findByRole('button', { name: 'Comment on line 2' }))
+      await user.type(screen.getByRole('textbox'), '  {Meta>}{Enter}{/Meta}')
+
+      expect(comments.add).not.toHaveBeenCalled()
+    })
+
     it('abandons a note with Escape', async () => {
       const user = userEvent.setup()
       answer(workspaceDiff([fileDiff('src/a.ts')]))
@@ -565,6 +628,7 @@ describe('DiffPanel', () => {
           onView={vi.fn()}
           width={WIDE}
           comments={comments}
+          onError={vi.fn()}
         />
       )
 
@@ -610,6 +674,7 @@ describe('DiffPanel', () => {
         onView={vi.fn()}
         width={WIDE}
         comments={commentController()}
+        onError={vi.fn()}
       />
     )
     rerender(
@@ -620,6 +685,7 @@ describe('DiffPanel', () => {
         onView={vi.fn()}
         width={WIDE}
         comments={commentController()}
+        onError={vi.fn()}
       />
     )
 
@@ -638,6 +704,7 @@ describe('DiffPanel', () => {
         onView={vi.fn()}
         width={WIDE}
         comments={commentController()}
+        onError={vi.fn()}
       />
     )
     await screen.findByText('is here now')
@@ -650,6 +717,7 @@ describe('DiffPanel', () => {
         onView={vi.fn()}
         width={WIDE}
         comments={commentController()}
+        onError={vi.fn()}
       />
     )
 
@@ -667,6 +735,50 @@ describe('DiffPanel', () => {
     await user.click(screen.getByRole('menuitem', { name: 'Open file' }))
 
     expect(octopus().files.open).toHaveBeenCalledWith(anna.id, 'src/a.ts')
+  })
+
+  // The main process reports what the system said about a refused open; a pane
+  // that drops it leaves a click that opened nothing looking like one that did.
+  it('says so when a file would not open', async () => {
+    const user = userEvent.setup()
+    const onError = vi.fn()
+    vi.mocked(octopus().files.open).mockResolvedValue({
+      ok: false,
+      error: 'no application knows this file'
+    })
+    answer(workspaceDiff([fileDiff('src/a.ts')]))
+    render(
+      <DiffPanel
+        workspace={anna}
+        visible
+        view="unified"
+        onView={vi.fn()}
+        width={WIDE}
+        comments={commentController()}
+        onError={onError}
+      />
+    )
+
+    await user.click(await screen.findByRole('button', { name: 'Actions for src/a.ts' }))
+    await user.click(screen.getByRole('menuitem', { name: 'Open file' }))
+
+    await waitFor(() => {
+      expect(onError).toHaveBeenCalledWith(
+        expect.stringContaining('no application knows this file')
+      )
+    })
+  })
+
+  it('confirms a path that was copied', async () => {
+    const user = withClipboard()
+    answer(workspaceDiff([fileDiff('src/a.ts')]))
+    renderPanel()
+
+    await user.click(await screen.findByRole('button', { name: 'Actions for src/a.ts' }))
+    await user.click(screen.getByRole('menuitem', { name: 'Copy path' }))
+    await user.click(screen.getByRole('button', { name: 'Actions for src/a.ts' }))
+
+    expect(await screen.findByRole('menuitem', { name: 'Path copied' })).toBeInTheDocument()
   })
 
   it('copies a file’s path', async () => {
