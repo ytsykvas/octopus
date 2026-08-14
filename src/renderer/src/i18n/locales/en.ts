@@ -146,9 +146,53 @@ export const en = {
     terminal: 'Terminal',
     collapse: 'Collapse panel',
     expand: 'Show panel',
-    changesPlaceholder: "Changes in this workspace against the project's base branch.",
     terminalPlaceholder: 'Select a workspace to open a terminal in its directory.',
     resize: 'Resize panel'
+  },
+
+  diff: {
+    noWorkspace: 'Select a workspace to see what it changed.',
+    clean: 'Nothing has changed in this workspace yet.',
+    loading: 'Reading the changes…',
+    against: 'against {{branch}}',
+    fileCount_one: '{{count}} file',
+    fileCount_few: '{{count}} files',
+    fileCount_many: '{{count}} files',
+    fileCount_other: '{{count}} files',
+    refresh: 'Re-read the changes',
+    expandAll: 'Expand every file',
+    collapseAll: 'Collapse every file',
+    unified: 'One column',
+    split: 'Side by side',
+    splitTooNarrow: 'The panel is too narrow to show two columns — drag it wider.',
+    renamedFrom: 'moved from {{path}}',
+    binary: 'Binary file — nothing to show.',
+    tooLarge: 'Too large to draw here. Open the file to read it.',
+    omittedFiles_one: '{{count}} file is too large to draw',
+    omittedFiles_few: '{{count}} files are too large to draw',
+    omittedFiles_many: '{{count}} files are too large to draw',
+    omittedFiles_other: '{{count}} files are too large to draw',
+    copyPath: 'Copy path',
+    copied: 'Path copied',
+    copyFailed: 'Could not copy',
+    openFile: 'Open file',
+    fileActions: 'Actions for {{path}}',
+    // The one-letter marks in a file's header. Each is the initial of the word
+    // beside it, so a translation changes both together or neither.
+    statusAdded: 'A',
+    statusModified: 'M',
+    statusDeleted: 'D',
+    statusRenamed: 'R',
+    statusCopied: 'C',
+    statusTypeChanged: 'T',
+    statusUntracked: 'U',
+    statusAddedLabel: 'Added',
+    statusModifiedLabel: 'Modified',
+    statusDeletedLabel: 'Deleted',
+    statusRenamedLabel: 'Renamed',
+    statusCopiedLabel: 'Copied',
+    statusTypeChangedLabel: 'Type changed',
+    statusUntrackedLabel: 'Untracked'
   },
 
   chat: {
@@ -372,6 +416,8 @@ export const en = {
       '{{path}} has no commits yet. Make an initial commit — a worktree cannot be created without one.',
     noBaseBranch:
       'Could not determine a base branch in {{path}}. Check out the branch you want and try again.',
+    baseUnknown:
+      'Could not find where this workspace branched off {{branch}}. The branch may have been renamed or deleted — check the project settings.',
     duplicateProject: 'This repository is already added as project "{{name}}".',
     notConnected: 'Could not reach GitHub. Check the account in Settings.',
     listFailed: 'GitHub returned something unexpected.',

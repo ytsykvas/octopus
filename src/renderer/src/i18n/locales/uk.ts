@@ -144,9 +144,53 @@ export const uk: Translation = {
     terminal: 'Термінал',
     collapse: 'Згорнути панель',
     expand: 'Показати панель',
-    changesPlaceholder: 'Зміни воркспейсу відносно базової гілки проєкту.',
     terminalPlaceholder: 'Виберіть воркспейс, щоб відкрити термінал у його теці.',
     resize: 'Змінити ширину панелі'
+  },
+
+  diff: {
+    noWorkspace: 'Виберіть воркспейс, щоб побачити його зміни.',
+    clean: 'У цьому воркспейсі поки нічого не змінилося.',
+    loading: 'Читаю зміни…',
+    against: 'відносно {{branch}}',
+    fileCount_one: '{{count}} файл',
+    fileCount_few: '{{count}} файли',
+    fileCount_many: '{{count}} файлів',
+    fileCount_other: '{{count}} файлів',
+    refresh: 'Перечитати зміни',
+    expandAll: 'Розгорнути всі файли',
+    collapseAll: 'Згорнути всі файли',
+    unified: 'Однією колонкою',
+    split: 'Поруч',
+    splitTooNarrow: 'Панель завузька для двох колонок — розтягніть її ширше.',
+    renamedFrom: 'перенесено з {{path}}',
+    binary: 'Двійковий файл — показувати нічого.',
+    tooLarge: 'Завеликий, щоб малювати тут. Відкрийте файл, щоб прочитати.',
+    omittedFiles_one: '{{count}} файл завеликий, щоб його намалювати',
+    omittedFiles_few: '{{count}} файли завеликі, щоб їх намалювати',
+    omittedFiles_many: '{{count}} файлів завеликі, щоб їх намалювати',
+    omittedFiles_other: '{{count}} файлів завеликі, щоб їх намалювати',
+    copyPath: 'Скопіювати шлях',
+    copied: 'Шлях скопійовано',
+    copyFailed: 'Не вдалося скопіювати',
+    openFile: 'Відкрити файл',
+    fileActions: 'Дії для {{path}}',
+    // Позначки в заголовку файла — перша літера слова поруч, тож переклад
+    // змінює або обидва разом, або жодного.
+    statusAdded: 'Д',
+    statusModified: 'З',
+    statusDeleted: 'В',
+    statusRenamed: 'П',
+    statusCopied: 'К',
+    statusTypeChanged: 'Т',
+    statusUntracked: 'Н',
+    statusAddedLabel: 'Додано',
+    statusModifiedLabel: 'Змінено',
+    statusDeletedLabel: 'Видалено',
+    statusRenamedLabel: 'Перейменовано',
+    statusCopiedLabel: 'Копія',
+    statusTypeChangedLabel: 'Тип змінено',
+    statusUntrackedLabel: 'Не відстежується'
   },
 
   chat: {
@@ -350,6 +394,8 @@ export const uk: Translation = {
       'У {{path}} ще немає жодного коміту. Зробіть перший — без нього worktree створити неможливо.',
     noBaseBranch:
       'Не вдалося визначити базову гілку в {{path}}. Перейдіть на потрібну гілку й спробуйте ще раз.',
+    baseUnknown:
+      'Не вдалося знайти, звідки цей воркспейс відгалузився від {{branch}}. Гілку могли перейменувати або видалити — перевірте налаштування проєкту.',
     duplicateProject: 'Цей репозиторій уже доданий як проєкт «{{name}}».',
     notConnected: 'Не вдалося звернутися до GitHub. Перевірте акаунт у налаштуваннях.',
     listFailed: 'GitHub повернув щось неочікуване.',

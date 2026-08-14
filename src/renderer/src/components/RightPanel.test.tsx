@@ -120,19 +120,32 @@ describe('RightPanel', () => {
     }
   })
 
-  it('opens on the changes tab', () => {
+  it('opens on the changes tab', async () => {
     renderPanel({ workspaces: [anna], activeWorkspaceId: anna.id })
 
-    expect(screen.getByText(/Changes in this workspace/)).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Changes' })).toHaveAttribute('aria-current', 'page')
+    expect(await screen.findByText(/Nothing has changed/)).toBeInTheDocument()
   })
 
-  it('replaces the changes view when another tab is chosen', async () => {
+  it('shows the terminal when its tab is chosen', async () => {
     renderPanel()
 
     await userEvent.click(screen.getByRole('button', { name: 'Terminal' }))
 
-    expect(screen.queryByText(/Changes in this workspace/)).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Terminal' })).toHaveAttribute('aria-current', 'page')
+    expect(screen.getByRole('button', { name: 'Changes' })).not.toHaveAttribute('aria-current')
     expect(screen.getByText(/Select a workspace to open a terminal/)).toBeInTheDocument()
+  })
+
+  // A review is built up over several turns, and unmounting the pane would
+  // drop which files were collapsed and where it had been scrolled to.
+  it('keeps the changes view mounted behind another tab', async () => {
+    renderPanel({ workspaces: [anna], activeWorkspaceId: anna.id })
+    expect(await screen.findByText(/Nothing has changed/)).toBeInTheDocument()
+
+    await userEvent.click(screen.getByRole('button', { name: 'Terminal' }))
+
+    expect(screen.getByText(/Nothing has changed/)).toBeInTheDocument()
   })
 
   it('opens a terminal in the active workspace on the terminal tab', async () => {

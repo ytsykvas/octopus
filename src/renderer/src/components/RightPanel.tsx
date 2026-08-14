@@ -4,6 +4,7 @@ import { useTranslation } from 'react-i18next'
 import type { ProjectColor } from '@core/colors.js'
 import type { WorkspaceView } from '@core/workspaces.js'
 
+import { DiffPanel } from './diff/DiffPanel.js'
 import { ResizeHandle } from './ResizeHandle.js'
 import { ScriptRunner } from './ScriptRunner.js'
 import { WorkspaceTerminals } from './WorkspaceTerminals.js'
@@ -234,6 +235,9 @@ export function RightPanel({
             onClick={() => {
               setTab(item.id)
             }}
+            // Every other chosen thing in the app announces itself; these did
+            // not, so the selection reached the eye and nothing else.
+            aria-current={tab === item.id ? 'page' : undefined}
             // Distinguished by hue, not by brightness. The muted fill it used
             // to carry sits at 1.09:1 against the pane behind it — a difference
             // that measures as barely there and looks it. The hue is the open
@@ -249,14 +253,13 @@ export function RightPanel({
         ))}
       </div>
 
-      {/* Anything holding a terminal gets no padding and no scroll container
-          of its own: xterm scrolls itself, and padding throws off its column
-          count. The changes tab keeps both. */}
-      {tab === 'diff' && (
-        <div className="flex-1 overflow-auto p-4">
-          <p className="text-ink-faint leading-relaxed">{t('panel.changesPlaceholder')}</p>
-        </div>
-      )}
+      {/* Kept mounted like the terminals below, and for a related reason: an
+          unmounted diff loses which files were collapsed and where the pane was
+          scrolled to, both of which a review builds up over several turns.
+          `visible` is what stops it reading git while another tab is showing. */}
+      <div className={`flex min-h-0 flex-1 flex-col ${tab === 'diff' ? '' : 'hidden'}`}>
+        <DiffPanel workspace={active} visible={tab === 'diff'} />
+      </div>
 
       {/* Hidden, never unmounted: a session belongs to the workspace, not to
           whether its tab happens to be on screen. Switching to Changes used to

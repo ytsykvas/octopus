@@ -22,6 +22,8 @@ export function useErrorMessage(): (failure: Failure) => string {
           return t('errors.emptyRepository', { path: failure.params?.path ?? '' })
         case 'noBaseBranch':
           return t('errors.noBaseBranch', { path: failure.params?.path ?? '' })
+        case 'baseUnknown':
+          return t('errors.baseUnknown', { branch: failure.params?.branch ?? '' })
         case 'duplicateProject':
           return t('errors.duplicateProject', { name: failure.params?.name ?? '' })
         case 'notConnected':

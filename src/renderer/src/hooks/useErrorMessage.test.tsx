@@ -27,7 +27,8 @@ const CODES: readonly {
   { code: 'pathExists', parameter: ['path', '/tmp/planner/anna'] },
   { code: 'uncommittedChanges', parameter: ['name', 'anna'] },
   { code: 'nameEmpty' },
-  { code: 'worktreeMissing' }
+  { code: 'worktreeMissing' },
+  { code: 'baseUnknown', parameter: ['branch', 'main'] }
 ]
 
 const WITH_PARAMETER = CODES.filter((entry) => entry.parameter !== undefined)
