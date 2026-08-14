@@ -263,18 +263,16 @@ describe('RightPanel', () => {
 
   // A window narrowed after the pane was sized must not leave the pane covering
   // the centre: the ceiling follows the window rather than being read once.
-  it('pulls the pane in when the window is narrowed', () => {
+  it('lowers the ceiling as the window narrows, never below the floor', () => {
     renderPanel({ width: 360 })
     const edge = screen.getByRole('separator')
-
-    expect(edge).toHaveAttribute('aria-valuenow', '360')
 
     window.innerWidth = 700
     fireEvent.resize(window)
 
-    // Sidebar and centre pane keep their room; the floor is what is left.
+    // 700 has no room for the left column, a usable centre and this pane, so
+    // the floor is what is left — the ceiling stops there rather than below it.
     expect(edge).toHaveAttribute('aria-valuemax', '280')
-    expect(edge).toHaveAttribute('aria-valuenow', '280')
   })
 
   /*
@@ -298,18 +296,121 @@ describe('RightPanel', () => {
     expect(screen.getByRole('separator')).toHaveAttribute('aria-valuemax', '984')
   })
 
-  // The stored width is clamped on the way out, not on the way in, so widening
-  // the window again gives back the width the config still holds.
-  it('lets the pane back out when the window grows again', () => {
+  /*
+   * The window's edge moves this pane's edge, not the centre's.
+   *
+   * The centre is the pane with no width of its own, so it used to absorb every
+   * pixel the window gained or lost — and the conversation stops widening at
+   * 72rem, so what it absorbed was margin, while the diff and the terminal
+   * stayed as narrow as they started.
+   */
+  it('takes the room a widened window adds, so the centre keeps the width it had', () => {
+    renderPanel({ width: 360 })
+
+    window.innerWidth = 1600
+    fireEvent.resize(window)
+
+    expect(screen.getByRole('separator')).toHaveAttribute('aria-valuenow', '560')
+  })
+
+  it('gives up its own width before the centre when the window narrows', () => {
+    renderPanel({ width: 360 })
+
+    window.innerWidth = 1340
+    fireEvent.resize(window)
+
+    expect(screen.getByRole('separator')).toHaveAttribute('aria-valuenow', '300')
+  })
+
+  /*
+   * Where the centre finally starts to lose room. The pane cannot go below what
+   * its tabs need or they overflow it and push the whole window wider.
+   *
+   * jsdom lays nothing out, so the centre's share is not observable from here.
+   * What is, is that the pane refuses to shrink any further — and `main` is the
+   * only flexible child of the layout row in `App`, so every pixel this pane
+   * keeps is a pixel the centre gives up. Nothing in jsdom would notice if
+   * somebody broke that invariant; the aria value would keep reporting a width
+   * the layout no longer used.
+   */
+  it('stops at the width its tabs need and leaves the rest to the centre', () => {
     renderPanel({ width: 360 })
     const edge = screen.getByRole('separator')
 
-    window.innerWidth = 700
+    window.innerWidth = 1200
+    fireEvent.resize(window)
+
+    expect(edge).toHaveAttribute('aria-valuenow', '280')
+    expect(edge).toHaveAttribute('aria-valuemin', '280')
+  })
+
+  // Measured from the window rather than accumulated, so the two subtractions
+  // cancel and nothing has to remember the journey — including the stretch
+  // spent pinned against the floor.
+  it('comes back to the width it had when the window comes back to its own', () => {
+    renderPanel({ width: 360 })
+    const edge = screen.getByRole('separator')
+
+    window.innerWidth = 1000
     fireEvent.resize(window)
     window.innerWidth = 1400
     fireEvent.resize(window)
 
     expect(edge).toHaveAttribute('aria-valuenow', '360')
+  })
+
+  // The config answers over IPC a frame or two after the release. Falling back
+  // to the pre-drag width in the meantime makes the edge visibly bounce, and
+  // would count the window's pixels against the dragged width a second time.
+  it('stays on the width a drag ended at while the config is still answering', async () => {
+    const { rerender } = renderPanel({ width: 360 })
+    const edge = screen.getByRole('separator')
+
+    edge.focus()
+    await userEvent.keyboard('{ArrowLeft}')
+
+    expect(edge).toHaveAttribute('aria-valuenow', '376')
+
+    rerender({ width: 376 })
+    expect(edge).toHaveAttribute('aria-valuenow', '376')
+  })
+
+  /*
+   * A save that fails never sends a new width down, so the pane stays where it
+   * was dragged while the config keeps the old one. Deliberate: `App` puts a
+   * banner up saying the setting could not be saved, and an edge that also
+   * sprang back under the cursor would be saying it twice and less clearly.
+   */
+  it('stays where it was dragged when the width could not be saved', async () => {
+    const { rerender } = renderPanel({ width: 360 })
+    const edge = screen.getByRole('separator')
+
+    edge.focus()
+    await userEvent.keyboard('{ArrowLeft}')
+
+    // The config answers with the width it still holds — which is to say, it
+    // sends nothing new at all.
+    rerender({ width: 360 })
+
+    expect(edge).toHaveAttribute('aria-valuenow', '376')
+  })
+
+  // The pane opens on the schema's fallback and settles on the stored width the
+  // moment the file has been read.
+  it('settles on the stored width once the config has been read', () => {
+    const { rerender } = renderPanel({ width: 360 })
+
+    rerender({ width: 520 })
+
+    expect(screen.getByRole('separator')).toHaveAttribute('aria-valuenow', '520')
+  })
+
+  // Clamped on the way out, so a width saved on a wide display survives a move
+  // to a small one rather than being written down smaller.
+  it('shows only what the window has room for when the stored width is wider', () => {
+    renderPanel({ width: 900 })
+
+    expect(screen.getByRole('separator')).toHaveAttribute('aria-valuenow', '744')
   })
 
   it('has nothing to run on the build tab while no workspace is active', async () => {

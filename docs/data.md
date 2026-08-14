@@ -36,18 +36,18 @@ paths alone reported such a workspace as healthy. The parser reads the flag now.
 
 Validated by `ConfigSchema` in [`config.ts`](../src/core/config.ts).
 
-| Field                             | Meaning                                                            |
-| --------------------------------- | ------------------------------------------------------------------ |
-| `version`                         | format version, for future migrations                              |
-| `branchPrefix`                    | branches are `<prefix>/<workspace>`                                |
-| `cloneDirectory`                  | where GitHub clones land; empty means "ask, then remember"         |
-| `settingSources`                  | what the agent may load — `none` is the transparency default (§4)  |
-| `workingMode`                     | what a new chat may do before asking; planning is not one of them  |
-| `effort`                          | how much thinking a new chat asks for; `medium` unless changed     |
-| `alwaysAllowedTools`              | tools the user answered "always" for, listed so they can be undone |
-| `theme`, `language`               | appearance                                                         |
-| `rightPanelWidth`, `sidebarWidth` | pane widths, in pixels                                             |
-| `deviceId`, `installedAt`         | reserved for licensing (§15.3), unused                             |
+| Field                             | Meaning                                                                                                      |
+| --------------------------------- | ------------------------------------------------------------------------------------------------------------ |
+| `version`                         | format version, for future migrations                                                                        |
+| `branchPrefix`                    | branches are `<prefix>/<workspace>`                                                                          |
+| `cloneDirectory`                  | where GitHub clones land; empty means "ask, then remember"                                                   |
+| `settingSources`                  | what the agent may load — `none` is the transparency default (§4)                                            |
+| `workingMode`                     | what a new chat may do before asking; planning is not one of them                                            |
+| `effort`                          | how much thinking a new chat asks for; `medium` unless changed                                               |
+| `alwaysAllowedTools`              | tools the user answered "always" for, listed so they can be undone                                           |
+| `theme`, `language`               | appearance                                                                                                   |
+| `rightPanelWidth`, `sidebarWidth` | pane widths in pixels, as last dragged — resizing the **window** moves the right pane without rewriting this |
+| `deviceId`, `installedAt`         | reserved for licensing (§15.3), unused                                                                       |
 
 `alwaysAllowedTools` is filtered on the way in **and on the way out**, and never
 holds `ExitPlanMode`. An entry there is not merely a pre-answered question — it

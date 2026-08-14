@@ -110,6 +110,38 @@ export function RightPanel({
   const [minWidth, setMinWidth] = useState(MIN_WIDTH)
   const tabs = useRef<HTMLDivElement>(null)
 
+  /*
+   * The width the pane last settled on, and the window it settled at.
+   *
+   * One fact in two numbers, because either alone says nothing: what the pane
+   * takes is what it was given plus everything the window has gained or lost
+   * since. Held rather than accumulated — a running total drifts out of step
+   * with the ceiling beside it, and would need a reset nobody would remember.
+   */
+  const [settledWidth, setSettledWidth] = useState(width)
+  const [settledWindow, setSettledWindow] = useState(windowWidth)
+  /*
+   * The stored width as this last saw it.
+   *
+   * Kept apart from `settledWidth`, which a drag moves ahead of the config for
+   * the frame or two the save takes. Comparing the prop against the settled
+   * width instead put the pane straight back where the drag started: the two
+   * differ precisely when the drag has just landed, which is the one moment
+   * nothing should be reconciled. `useSessionUsage` keeps the same companion,
+   * for the same reason.
+   */
+  const [storedWidth, setStoredWidth] = useState(width)
+
+  // A different stored width means the config has answered, or changed from
+  // elsewhere. Adjusted while rendering rather than in an effect: the config
+  // lands a moment after mount, and a pane that spent a frame at the fallback
+  // width jumps where the eye is.
+  if (width !== storedWidth) {
+    setStoredWidth(width)
+    setSettledWidth(width)
+    setSettledWindow(windowWidth)
+  }
+
   const active = workspaces.find((workspace) => workspace.id === activeWorkspaceId) ?? null
 
   // The ceiling moves with the window: shrinking it must not leave the pane
@@ -136,9 +168,25 @@ export function RightPanel({
   }, [i18n.language])
 
   const maxWidth = maxWidthFor(windowWidth, leftWidth, minWidth)
-  // Clamped on the way out rather than on the way in, so a width saved on a
-  // wide display is kept in the config and comes back when the window does.
-  const applied = Math.min(Math.max(dragWidth ?? width, minWidth), maxWidth)
+
+  /*
+   * What the pane takes if nothing stops it.
+   *
+   * Dragging the window's own edge drags this pane's edge with it, and the
+   * centre keeps the width it had. The centre is the pane with no width of its
+   * own, so until now it absorbed every pixel the window gained or lost — and
+   * the conversation stops widening at 72rem, so what it absorbed was margin,
+   * while the diff and the terminal stayed as narrow as they started.
+   *
+   * Measured from the window rather than accumulated, which is what makes it
+   * symmetrical for free: put the window back where it was and the two
+   * subtractions cancel, so the pane is back where it was too, with nothing
+   * having had to remember the journey.
+   */
+  const grown = settledWidth + (windowWidth - settledWindow)
+  // Clamped on the way out rather than into what was settled, so a width the
+  // window has no room for is kept and comes back when the room does.
+  const applied = Math.min(Math.max(dragWidth ?? grown, minWidth), maxWidth)
 
   return (
     <section
@@ -158,6 +206,17 @@ export function RightPanel({
         onResize={setDragWidth}
         onCommit={(committed) => {
           setDragWidth(null)
+          // Settled here rather than waiting for the config to answer. That
+          // round trip takes a frame or two, and falling back to the pre-drag
+          // width in the meantime makes the release bounce — worse, growth
+          // would be measured from the old window and counted twice.
+          setSettledWidth(committed)
+          setSettledWindow(windowWidth)
+          // `storedWidth` is deliberately left alone: it is what the config
+          // says, and the config has not said it yet. So a save that fails
+          // leaves the pane where it was dragged while the config keeps the old
+          // width — the banner is what says so, and yanking the pane back under
+          // the cursor would say it twice and less clearly.
           onWidthChange(committed)
         }}
       />

@@ -79,8 +79,9 @@ A made-up number in a currency, in a place the eye trusts.
 banner above them all, or they stop lining up. A ceiling rather than a width: it
 only applies once the panes are dragged that far apart.
 
-**The composer's two rows wrap rather than overflow.** The centre may be dragged
-down to `MIN_CENTRE_WIDTH` (360, in `RightPanel.tsx`), and at that width the
+**The composer's two rows wrap rather than overflow.** The centre reaches
+`MIN_CENTRE_WIDTH` (360, in `RightPanel.tsx`) — by a drag, or by a window
+narrowed past what the right pane can give up — and at that width the
 footer cannot hold its three settings and the send button side by side. It used
 to run past the rounded border and take the send button off the edge of the
 block — Enter still sent, but the pane's primary control was not on screen. Each
@@ -318,8 +319,28 @@ Both side panes are resizable and their widths persist. The right pane's floor i
 width with the language, a number picked against English left the Ukrainian ones
 overflowing, and since the pane does not shrink, anything sticking out of it
 pushed the window wider and put a horizontal scrollbar under the application. The right pane's ceiling
-is whatever the window has left after the sidebar and a usable centre, so it
-grows on a large display without a number to maintain.
+is whatever the window has left after the left column and a usable centre, so it
+grows on a large display without a number to maintain. That column is passed
+down from `App`: it is the project strip plus a list that is resizable and folds
+away, and against the constant it used to be measured by, a list dragged wide
+left the centre nothing at all.
+
+**Dragging the window's own edge drags the right pane's edge with it.** The
+centre used to take every pixel the window gained or lost, being the only pane
+with no width of its own — and the conversation stops widening at 72rem, so what
+it took was margin, while the diff and the terminal stayed as narrow as they
+started. Now the pane absorbs the change and the centre keeps the width it had;
+narrowing takes that width back out of the pane first, and only once the pane is
+down to what its tabs need does the centre begin to lose room. The list on the
+left never yields a pixel: exactly one pane may absorb the change, or "the
+centre keeps the width it had" stops being true and needs a rule for splitting.
+
+What the window adds is not saved. The config holds the width that was dragged,
+the pane remembers the window it was dragged at, and what it shows is the
+difference — which is what puts the pane back where it was when the window goes
+back where it was, without anything having to remember the journey. The window's
+own size is not stored either (`src/main/index.ts`), so every launch starts at a
+width where the saved number applies as it stands.
 
 ## Colour
 
