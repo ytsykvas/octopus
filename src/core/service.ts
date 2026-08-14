@@ -34,6 +34,7 @@ import {
   type WorkingMode
 } from './chats.js'
 import { type EditTarget, readChangeContext, readEditTarget } from './changeContext.js'
+import { readWorkspaceDiff, type WorkspaceDiff } from './diff.js'
 import { type Config, loadConfig, saveConfig, toSdkSettingSources } from './config.js'
 import { type AgentEvent, isEphemeral } from './events.js'
 import { cloneRepository, listRepositories, type RemoteRepository } from './github.js'
@@ -74,6 +75,7 @@ import {
   changeCount,
   countChanges,
   createWorkspace,
+  fileInWorkspace,
   reconcile,
   removeWorkspace,
   renameWorkspace,
@@ -195,6 +197,16 @@ export interface OctopusService {
   removeWorkspaceById(workspaceId: string, options?: RemoveOptions): Promise<void>
   /** Whether a workspace holds work that removal would discard. */
   workspaceHasChanges(workspaceId: string): Promise<boolean>
+  /** Everything the workspace changed since it left the project's base branch. */
+  readWorkspaceChanges(workspaceId: string): Promise<WorkspaceDiff>
+  /**
+   * An absolute path inside a workspace, for a caller that will open it.
+   *
+   * Refuses a path that climbs out of the worktree: it arrives from the
+   * renderer, which draws agent output, and is about to be handed to the
+   * operating system.
+   */
+  resolveWorkspaceFile(workspaceId: string, path: string): string
 
   /**
    * The workspace's chat, created on first use.
@@ -1008,6 +1020,34 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
     async workspaceHasChanges(workspaceId) {
       const workspace = requireWorkspace(workspaceId)
       return (await changeCount(workspace, makeExec)) > 0
+    },
+
+    readWorkspaceChanges(workspaceId) {
+      const workspace = requireWorkspace(workspaceId)
+      const project = requireProject(workspace.projectId)
+
+      // Run from the worktree, not the repository: the base branch is a fact
+      // about the project, but everything else — the working tree, the index,
+      // the untracked files — is a fact about this workspace's own directory.
+      return readWorkspaceDiff(makeExec(workspace.path), {
+        baseBranch: project.baseBranch,
+        root: workspace.path
+      })
+    },
+
+    resolveWorkspaceFile(workspaceId, path) {
+      const workspace = requireWorkspace(workspaceId)
+      const resolved = fileInWorkspace(workspace, path)
+
+      if (!resolved) {
+        throw new WorkspaceError(
+          'worktreeMissing',
+          { workspaceId, path },
+          `Path ${path} is not inside workspace ${workspaceId}.`
+        )
+      }
+
+      return resolved
     },
 
     async openChat(workspaceId) {

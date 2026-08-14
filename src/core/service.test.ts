@@ -191,6 +191,43 @@ describe('workspaces', () => {
     expect(listed[0]?.changedFiles).toBe(1)
   })
 
+  it('reads what a workspace changed against the project’s base branch', async () => {
+    const { service, projectId } = await withProject()
+    const workspace = await service.createWorkspaceIn(projectId)
+    await writeFile(join(workspace.path, 'draft.txt'), 'work\n', 'utf8')
+
+    const diff = await service.readWorkspaceChanges(workspace.id)
+
+    expect(diff.baseBranch).toBe('main')
+    expect(diff.files.map((file) => file.path)).toEqual(['draft.txt'])
+    expect(diff.added).toBe(1)
+  })
+
+  it('says a workspace that changed nothing changed nothing', async () => {
+    const { service, projectId } = await withProject()
+    const workspace = await service.createWorkspaceIn(projectId)
+
+    await expect(service.readWorkspaceChanges(workspace.id)).resolves.toMatchObject({ files: [] })
+  })
+
+  it('resolves a file inside a workspace to an absolute path', async () => {
+    const { service, projectId } = await withProject()
+    const workspace = await service.createWorkspaceIn(projectId)
+
+    expect(service.resolveWorkspaceFile(workspace.id, 'README.md')).toBe(
+      join(workspace.path, 'README.md')
+    )
+  })
+
+  it('refuses to resolve a path that climbs out of the workspace', async () => {
+    const { service, projectId } = await withProject()
+    const workspace = await service.createWorkspaceIn(projectId)
+
+    expect(() => service.resolveWorkspaceFile(workspace.id, '../../secrets')).toThrow(
+      WorkspaceError
+    )
+  })
+
   it('refuses to remove a workspace holding uncommitted work', async () => {
     const { service, projectId } = await withProject()
     const workspace = await service.createWorkspaceIn(projectId)

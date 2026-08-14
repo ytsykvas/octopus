@@ -10,6 +10,7 @@
  */
 
 import { access } from 'node:fs/promises'
+import { isAbsolute, relative, resolve } from 'node:path'
 
 import { anyBranchExists, type GitExec, toSlug } from './git.js'
 import { nextWorkspaceName, type Random } from './names.js'
@@ -432,4 +433,21 @@ export async function countChanges(
   )
 
   return counts
+}
+
+/**
+ * An absolute path inside the worktree, or null when the request climbs out.
+ *
+ * The path comes from the renderer, which is drawing agent output — so it is
+ * the agent's word for a file, arriving over a boundary where types have been
+ * erased. Before it is handed to the operating system it has to be shown to be
+ * inside the workspace it claims to belong to. `readChangeContext` asks the
+ * same question of the same kind of value, privately; a third caller is when
+ * this should move into `paths.ts` rather than be written a third time.
+ */
+export function fileInWorkspace(workspace: Workspace, path: string): string | null {
+  const step = relative(resolve(workspace.path), resolve(workspace.path, path))
+  return step !== '' && !step.startsWith('..') && !isAbsolute(step)
+    ? resolve(workspace.path, path)
+    : null
 }

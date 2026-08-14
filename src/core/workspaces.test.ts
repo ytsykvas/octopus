@@ -13,6 +13,7 @@ import { listWorktrees } from './worktree.js'
 import {
   branchFor,
   countChanges,
+  fileInWorkspace,
   createWorkspace,
   reconcile,
   removeWorkspace,
@@ -628,6 +629,32 @@ describe('countChanges', () => {
 
     const counts = await countChanges([workspace], gitIn)
     expect(counts.get(workspace.id)).toBe(0)
+  })
+})
+
+describe('fileInWorkspace', () => {
+  it('resolves a path inside the worktree', async () => {
+    const workspace = await create()
+
+    expect(fileInWorkspace(workspace, 'src/a.ts')).toBe(join(workspace.path, 'src/a.ts'))
+  })
+
+  it('refuses a path that climbs out of the worktree', async () => {
+    const workspace = await create()
+
+    expect(fileInWorkspace(workspace, '../../../etc/passwd')).toBeNull()
+  })
+
+  it('refuses an absolute path somewhere else entirely', async () => {
+    const workspace = await create()
+
+    expect(fileInWorkspace(workspace, '/etc/passwd')).toBeNull()
+  })
+
+  it('refuses the worktree itself, which is not a file in it', async () => {
+    const workspace = await create()
+
+    expect(fileInWorkspace(workspace, '.')).toBeNull()
   })
 })
 
