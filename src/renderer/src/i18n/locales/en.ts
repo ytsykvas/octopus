@@ -168,6 +168,8 @@ export const en = {
     renamedFrom: 'moved from {{path}}',
     binary: 'Binary file — nothing to show.',
     tooLarge: 'Too large to draw here. Open the file to read it.',
+    invisibleCharacters:
+      'This file contains characters that do not draw as themselves — a line may read differently from how it runs.',
     omittedFiles_one: '{{count}} file is too large to draw',
     omittedFiles_few: '{{count}} files are too large to draw',
     omittedFiles_many: '{{count}} files are too large to draw',

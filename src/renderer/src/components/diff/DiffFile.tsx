@@ -1,4 +1,11 @@
-import { ChevronDown, ChevronRight, Copy, ExternalLink, MoreHorizontal } from 'lucide-react'
+import {
+  ChevronDown,
+  ChevronRight,
+  Copy,
+  ExternalLink,
+  MoreHorizontal,
+  TriangleAlert
+} from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
@@ -7,6 +14,8 @@ import type { FileDiff, FileStatus } from '@core/diff.js'
 import { DropdownMenu } from '../DropdownMenu.js'
 import { type DiffView, DiffHunk } from './DiffHunk.js'
 import type { CommentSurface } from './CommentedRow.js'
+import { fileHasInvisible } from './invisible.js'
+import { shown } from './shown.js'
 import type { Highlighting } from './useHighlighting.js'
 
 /**
@@ -145,9 +154,13 @@ export function DiffFile({
           {/* The directory is what gives way. Truncating the whole path cut the
               filename off the end — the one part that identifies the row — so
               the two are separate boxes and only the leading one shrinks. */}
+          {/* The path goes through `shown` for the same reason the lines do:
+              it is drawn from the same bytes and reorders the same way, and a
+              name that reads as an image while ending in `.js` is the version
+              of this that costs a reviewer a click rather than a line. */}
           <span className="flex min-w-0 font-mono text-[11px]" title={file.path}>
-            <span className="text-ink-faint truncate">{directoryOf(file.path)}</span>
-            <span className="text-ink shrink-0">{basenameOf(file.path)}</span>
+            <span className="text-ink-faint truncate">{shown(directoryOf(file.path))}</span>
+            <span className="text-ink shrink-0">{shown(basenameOf(file.path))}</span>
           </span>
           <span className="ml-auto shrink-0 font-mono text-[11px]">
             {file.added > 0 && <span className="text-success">+{file.added}</span>}
@@ -155,6 +168,22 @@ export function DiffFile({
             {file.removed > 0 && <span className="text-danger">−{file.removed}</span>}
           </span>
         </button>
+
+        {/* Outside the button rather than inside it: the button already
+            carries the path as its whole accessible name, and a label nested
+            in one is a label nobody hears. Said on the header as well as in
+            the line because a large file starts collapsed, and a line nobody
+            has looked at is the one most likely to be approved unread. */}
+        {fileHasInvisible(file) && (
+          <span
+            role="img"
+            aria-label={t('diff.invisibleCharacters')}
+            title={t('diff.invisibleCharacters')}
+            className="text-warning shrink-0"
+          >
+            <TriangleAlert aria-hidden size={12} />
+          </span>
+        )}
 
         <DropdownMenu
           align="right"

@@ -4,6 +4,7 @@ import type { DiffLine, Hunk } from '@core/diff.js'
 
 import { type CommentSurface, CommentedRow } from './CommentedRow.js'
 import type { Token } from './highlight.js'
+import { shown } from './shown.js'
 import { type SplitRow, splitRows } from './splitRows.js'
 import type { Highlighting } from './useHighlighting.js'
 
@@ -184,6 +185,9 @@ function SplitHalf({
  * moment it arrives, and the colours land a moment later without the lines
  * moving. `--shiki-light` and `--shiki-dark` are set on each span so one
  * tokenising serves both themes and the stylesheet picks between them.
+ *
+ * `shown` goes inside the token's span rather than around it, so a syntax
+ * colour still covers the code either side of anything it has to name.
  */
 function Code({
   text,
@@ -192,7 +196,7 @@ function Code({
   readonly text: string
   readonly tokens: readonly Token[] | undefined
 }): React.JSX.Element {
-  if (!tokens) return <span className={CODE}>{text}</span>
+  if (!tokens) return <span className={CODE}>{shown(text)}</span>
 
   return (
     <span className={CODE}>
@@ -203,7 +207,7 @@ function Code({
             { '--shiki-light': token.light, '--shiki-dark': token.dark } as React.CSSProperties
           }
         >
-          {token.text}
+          {shown(token.text)}
         </span>
       ))}
     </span>

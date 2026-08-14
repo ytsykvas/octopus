@@ -168,6 +168,48 @@ describe('DiffPanel', () => {
     expect(screen.getByText('1 file is too large to draw')).toBeInTheDocument()
   })
 
+  /*
+   * A line carrying a right-to-left override reads one way and runs another.
+   * Nothing is executed — React escapes the markup — but the pane exists to be
+   * where work is checked, and a reviewer approving a line that is not the
+   * line is the one failure it cannot have.
+   */
+  it('names a character that would not draw as itself, in place of drawing it', async () => {
+    answer(
+      workspaceDiff([
+        fileDiff('src/auth.ts', {
+          hunks: [
+            hunk({
+              lines: [
+                {
+                  kind: 'added',
+                  text: 'if (user.isAdmin) { \u202E',
+                  oldNumber: null,
+                  newNumber: 1,
+                  noNewline: false
+                }
+              ]
+            })
+          ]
+        })
+      ])
+    )
+    renderPanel()
+
+    expect(await screen.findByText('U+202E')).toBeInTheDocument()
+    expect(screen.getByLabelText(/characters that do not draw as themselves/)).toBeInTheDocument()
+  })
+
+  it('leaves an ordinary file unmarked', async () => {
+    answer(workspaceDiff([fileDiff('src/auth.ts')]))
+    renderPanel()
+
+    await screen.findByText('is here now')
+    expect(
+      screen.queryByLabelText(/characters that do not draw as themselves/)
+    ).not.toBeInTheDocument()
+  })
+
   // A rename with nothing else changed has no lines by construction; the header
   // has already said everything there is to say about it.
   it('draws nothing under a file that only moved', async () => {
