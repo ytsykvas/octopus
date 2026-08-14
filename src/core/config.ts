@@ -60,6 +60,14 @@ export type ThemePreference = z.infer<typeof ThemePreferenceSchema>
 export const LanguageSchema = z.enum(['en', 'uk'])
 export type LanguagePreference = z.infer<typeof LanguageSchema>
 
+/**
+ * The right pane's tabs, named here so the pane and the stored value cannot
+ * drift apart. The renderer takes the **type** only — this module reaches
+ * `node:os` through `paths.ts`, and a value import would follow it there.
+ */
+export const RightPanelTabSchema = z.enum(['diff', 'terminal', 'build', 'server'])
+export type RightPanelTab = z.infer<typeof RightPanelTabSchema>
+
 export const ConfigSchema = z.object({
   /** Format version — needed once the config has to be migrated. */
   version: z.literal(1),
@@ -159,6 +167,20 @@ export const ConfigSchema = z.object({
   diffView: z.enum(['unified', 'split']).default('unified'),
 
   /**
+   * Which of the right pane's tabs is showing.
+   *
+   * Stored for the same reason as the two above: the pane's width persists and
+   * so does the diff's layout, and the tab is the one thing about that pane a
+   * reader changes most often. Somebody who works with the server log open got
+   * Changes back on every launch.
+   *
+   * Whether the pane is folded away is deliberately **not** stored — that is a
+   * mood about the current window, and `App` keeps it. This says what is behind
+   * the tab strip when there is one, not whether there is one.
+   */
+  rightPanelTab: RightPanelTabSchema.default('diff'),
+
+  /**
    * Width of the workspace list in pixels.
    *
    * The lower bound is where the project name stops having room beside the
@@ -205,6 +227,7 @@ export function createDefaultConfig(
     cloneDirectory: '',
     rightPanelWidth: 360,
     diffView: 'unified',
+    rightPanelTab: 'diff',
     sidebarWidth: 240,
     deviceId: uuid(),
     installedAt: now.toISOString()

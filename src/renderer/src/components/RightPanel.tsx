@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import type { ProjectColor } from '@core/colors.js'
+import type { RightPanelTab } from '@core/config.js'
 import type { DiffCommentController } from '../hooks/useDiffComments.js'
 import type { WorkspaceView } from '@core/workspaces.js'
 
@@ -16,10 +17,8 @@ import { WorkspaceTerminals } from './WorkspaceTerminals.js'
  *
  * The changes tab gets its content with the diff viewer; the terminal is live.
  */
-type RightTab = 'diff' | 'terminal' | 'build' | 'server'
-
 const TABS: readonly {
-  readonly id: RightTab
+  readonly id: RightPanelTab
   readonly labelKey: 'panel.changes' | 'panel.terminal' | 'scripts.build' | 'scripts.server'
 }[] = [
   { id: 'diff', labelKey: 'panel.changes' },
@@ -95,6 +94,15 @@ interface RightPanelProps {
   /** How the reader asked for diffs to be laid out, across sessions. */
   readonly diffView: DiffView
   readonly onDiffView: (view: DiffView) => void
+  /**
+   * Which tab is showing, and how to change it.
+   *
+   * Held by `App` rather than here: the pane is unmounted while folded away,
+   * so state kept in it survives neither a fold nor a restart — and `⌘⇧D` has
+   * to be able to reach the tab from outside.
+   */
+  readonly tab: RightPanelTab
+  readonly onTab: (tab: RightPanelTab) => void
   /** Review notes the diff writes and the composer sends. */
   readonly comments: DiffCommentController
   readonly onError: (message: string) => void
@@ -111,11 +119,12 @@ export function RightPanel({
   leftWidth,
   diffView,
   onDiffView,
+  tab,
+  onTab,
   comments,
   onError
 }: RightPanelProps): React.JSX.Element {
   const { t, i18n } = useTranslation()
-  const [tab, setTab] = useState<RightTab>('diff')
   // The pane follows the cursor from local state; the config only hears about
   // the width once the drag is over.
   const [dragWidth, setDragWidth] = useState<number | null>(null)
@@ -245,7 +254,7 @@ export function RightPanel({
             key={item.id}
             type="button"
             onClick={() => {
-              setTab(item.id)
+              onTab(item.id)
             }}
             // Every other chosen thing in the app announces itself; these did
             // not, so the selection reached the eye and nothing else.

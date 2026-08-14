@@ -137,6 +137,7 @@ function defaultConfig(): Config {
     alwaysAllowedTools: [],
     theme: 'system' as const,
     language: 'en' as const,
+    rightPanelTab: 'diff' as const,
     rightPanelWidth: 360,
     diffView: 'unified' as const,
     sidebarWidth: 240,

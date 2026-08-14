@@ -212,13 +212,25 @@ export function App(): React.JSX.Element {
     }
   }, [])
 
-  // ⌘⇧N creates a workspace. ⌘1–⌘9 switch project, as they do between tabs
-  // everywhere else; ⌃1–⌃9 move within the current project's workspaces.
+  // ⌘⇧N creates a workspace, ⌘⇧D opens the changes. ⌘1–⌘9 switch project, as
+  // they do between tabs everywhere else; ⌃1–⌃9 move within the current
+  // project's workspaces.
   useEffect(() => {
     const onKey = (event: KeyboardEvent): void => {
       if (event.metaKey && event.shiftKey && event.key.toLowerCase() === 'n') {
         event.preventDefault()
         if (selectedProjectId !== null) void workspaces.create(selectedProjectId)
+        return
+      }
+
+      if (event.metaKey && event.shiftKey && event.key.toLowerCase() === 'd') {
+        event.preventDefault()
+        // Unfolds as well as selects. A shortcut for the changes that does
+        // nothing while the pane is folded away does nothing in the one place
+        // it would save the most. It does not fold the pane shut again either:
+        // this names a tab, not a pane, and ⌘⇧P is queued behind it.
+        setRightPanelOpen(true)
+        void updateConfig({ rightPanelTab: 'diff' })
         return
       }
 
@@ -248,7 +260,7 @@ export function App(): React.JSX.Element {
     return () => {
       window.removeEventListener('keydown', onKey)
     }
-  }, [selectedProjectId, workspaces, projects])
+  }, [selectedProjectId, workspaces, projects, updateConfig])
 
   const selectedProject = projects.all.find((project) => project.id === selectedProjectId) ?? null
   const projectWorkspaces = selectedProject
@@ -431,6 +443,8 @@ export function App(): React.JSX.Element {
             onWidthChange={(rightPanelWidth) => void updateConfig({ rightPanelWidth })}
             diffView={config?.diffView ?? 'unified'}
             onDiffView={(diffView) => void updateConfig({ diffView })}
+            tab={config?.rightPanelTab ?? 'diff'}
+            onTab={(rightPanelTab) => void updateConfig({ rightPanelTab })}
             comments={diffComments}
             onError={setError}
             // The room the pane must leave alone. Folded away, the list takes

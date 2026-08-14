@@ -53,6 +53,7 @@ function config(overrides: Partial<Config> = {}): Config {
     theme: 'system',
     language: 'en',
     rightPanelWidth: 360,
+    rightPanelTab: 'diff',
     diffView: 'unified',
     sidebarWidth: 240,
     deviceId: '00000000-0000-4000-8000-000000000000',
@@ -1348,6 +1349,32 @@ describe('App', () => {
 
     expect(screen.queryByText('/tmp/planner/setup.sh')).not.toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Write the script' })).toBeInTheDocument()
+  })
+
+  it('opens the changes with ⌘⇧D', async () => {
+    givenTwoProjects()
+    const user = await openApp()
+    await user.click(screen.getByRole('button', { name: 'Terminal' }))
+
+    fireEvent.keyDown(window, { key: 'D', metaKey: true, shiftKey: true })
+
+    expect(window.octopus.config.update).toHaveBeenLastCalledWith({ rightPanelTab: 'diff' })
+  })
+
+  /*
+   * The shortcut has to bring the pane back, or it does nothing in the one
+   * place it would save the most — a folded pane is exactly when reaching the
+   * changes by mouse costs two clicks rather than one.
+   */
+  it('unfolds the right pane to show the changes', async () => {
+    givenTwoProjects()
+    const user = await openApp()
+    await user.click(screen.getByRole('button', { name: 'Collapse panel' }))
+    expect(screen.queryByRole('button', { name: 'Changes' })).not.toBeInTheDocument()
+
+    fireEvent.keyDown(window, { key: 'D', metaKey: true, shiftKey: true })
+
+    expect(await screen.findByRole('button', { name: 'Changes' })).toBeInTheDocument()
   })
 
   // The sidebar renders its header only with a project, but the guard is what

@@ -1,6 +1,6 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import type { ComponentProps } from 'react'
+import { type ComponentProps, useState } from 'react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { octopus } from '../test/octopus.js'
@@ -35,6 +35,28 @@ const ROOMY = 1400
 /** The project strip plus a workspace list at its default width. */
 const LEFT_WIDTH = 296
 
+/**
+ * The pane, with something above it holding the tab.
+ *
+ * `App` owns that value now, so a test clicking a tab and expecting the pane
+ * to follow has to play the parent — otherwise the click reports a choice
+ * nobody acts on, and every such test would assert that nothing happened.
+ */
+function Tabbed(props: Props): React.JSX.Element {
+  const [tab, setTab] = useState(props.tab)
+
+  return (
+    <RightPanel
+      {...props}
+      tab={tab}
+      onTab={(next) => {
+        props.onTab(next)
+        setTab(next)
+      }}
+    />
+  )
+}
+
 function renderPanel(overrides: Partial<Props> = {}): {
   props: Props
   rerender: (next: Partial<Props>) => void
@@ -50,16 +72,18 @@ function renderPanel(overrides: Partial<Props> = {}): {
     leftWidth: LEFT_WIDTH,
     diffView: 'unified',
     onDiffView: vi.fn(),
+    tab: 'diff',
+    onTab: vi.fn(),
     comments: commentController(),
     onError: vi.fn(),
     ...overrides
   }
 
-  const { rerender } = render(<RightPanel {...props} />)
+  const { rerender } = render(<Tabbed {...props} />)
   return {
     props,
     rerender: (next) => {
-      rerender(<RightPanel {...props} {...next} />)
+      rerender(<Tabbed {...props} {...next} />)
     }
   }
 }
@@ -115,6 +139,22 @@ describe('RightPanel', () => {
 
     expect(screen.getByRole('button', { name: 'Changes' })).not.toHaveClass('tab-selected')
     expect(screen.getByRole('button', { name: 'Terminal' })).toHaveClass('tab-selected')
+  })
+
+  it('opens on the tab it was given rather than on the first one', () => {
+    renderPanel({ tab: 'terminal' })
+
+    expect(screen.getByRole('button', { name: 'Terminal' })).toHaveAttribute('aria-current', 'page')
+  })
+
+  it('reports a chosen tab rather than keeping it', async () => {
+    const { props } = renderPanel()
+
+    await userEvent.click(screen.getByRole('button', { name: 'Build' }))
+
+    // Where it goes is what makes it outlive the pane being folded away, and
+    // the restart after that.
+    expect(props.onTab).toHaveBeenCalledWith('build')
   })
 
   it('offers all four tabs', () => {
