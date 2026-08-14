@@ -97,11 +97,30 @@ replaced whole at the next session start, and it lives here rather than in
 `config.json` because that file is written unqueued and would race the user's
 own edits.
 
-Each entry may carry a `resolvedModel` — the full name a short one stands for,
-`sonnet` → `claude-sonnet-5`. Both names are in circulation and they arrive from
-opposite directions: the picker stores whichever the catalogue offered, while a
-running session reports itself in full. Matched by string alone the two read as
-different models, and the picker would draw a second row for one already in it.
+Each entry **may** carry a `resolvedModel` — the full name a short one stands
+for, `sonnet` → `claude-sonnet-5`. Both names are in circulation and they arrive
+from opposite directions: the picker stores whichever the catalogue offered,
+while a running session reports itself in full. Matched by string alone the two
+read as different models, and the picker would draw a second row for one already
+in it.
+
+**"May" is doing real work there.** The field is optional in the SDK's own type,
+and the CLI in hand fills it in for no row at all — every entry arrives with it
+null. Anything reading it has to have an answer for that, and code written
+against the type alone will look correct and do nothing: `defaultAgentModel`
+was, and the picker quietly fell back to calling the default "Default model" on
+an account with five models remembered.
+
+What that CLI does send is the **description**, copied verbatim onto both rows,
+because the default row is built from the row it points at. So `default` and
+`opus[1m]` are word for word "Opus 5 with 1M context · Best for everyday,
+complex tasks", and that is the link `defaultAgentModel` follows when nothing
+resolves. Weaker than an id and enough: a wording that stopped matching would
+cost the name, not correctness, since the caller has words to fall back on.
+
+The fixtures for both shapes are in `chats.test.ts`, and the one for this
+catalogue was copied out of a live `state.json` rather than written from the
+type — which is the only reason the second shape is known to exist.
 
 A **chat** is a conversation with one agent inside one workspace: `id`,
 `workspaceId`, `agent`, `sessionId`, `model`, `effort`, `workingMode`,

@@ -168,6 +168,67 @@ describe('DropdownMenu', () => {
   })
 
   /*
+   * The room a menu needs is counted before it is drawn, so the count has to
+   * know that a second line is worth two more rows. Reserving one row for every
+   * item regardless — which is what it did — put the bottom of a described menu
+   * below the bottom of the window, out of reach with no way to scroll to it.
+   *
+   * Asserted as a difference rather than against a number: the trigger sits
+   * where a plain menu of one item fits below it and a described one does not,
+   * so only a count that reads the descriptions tells the two apart.
+   */
+  it('reserves room for the second lines when deciding which way to open', async () => {
+    async function topOf(description: string | undefined): Promise<number> {
+      const user = userEvent.setup()
+      render(
+        <DropdownMenu
+          trigger={({ onClick }) => (
+            <button type="button" onClick={onClick}>
+              Open
+            </button>
+          )}
+          actions={[
+            {
+              id: 'a',
+              label: 'First',
+              ...(description !== undefined && { description }),
+              onSelect: vi.fn()
+            }
+          ]}
+        />
+      )
+
+      const trigger = screen.getByRole('button', { name: 'Open' })
+      const bottom = window.innerHeight - 60
+      vi.spyOn(trigger, 'getBoundingClientRect').mockReturnValue({
+        top: bottom - 16,
+        bottom,
+        left: 10,
+        right: 40,
+        width: 30,
+        height: 16,
+        x: 10,
+        y: bottom - 16,
+        toJSON: () => ({})
+      })
+
+      await user.click(trigger)
+      const top = Number.parseInt(screen.getByRole('menu').style.top, 10)
+      cleanup()
+
+      return top
+    }
+
+    const plain = await topOf(undefined)
+    const described = await topOf('Efficient for routine tasks')
+
+    // The plain one still has room below the trigger; the described one does not
+    // and has to go above it.
+    expect(plain).toBeGreaterThan(window.innerHeight - 60)
+    expect(described).toBeLessThan(window.innerHeight - 60)
+  })
+
+  /*
    * The descriptions come from outside — the agent writes the ones on the
    * models — and "Fable 5 · Most capable for your hardest and longest-running
    * tasks" does not fit a width chosen for one-word commands. Widening every
