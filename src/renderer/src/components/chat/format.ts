@@ -64,3 +64,52 @@ export function formatCountdown(
   if (hours === 0) return `${String(minutes)}${labels.minutes}`
   return `${String(hours)}${labels.hours} ${String(minutes)}${labels.minutes}`
 }
+
+/** Two digits, so `9:5` never appears where `09:05` is meant. */
+function pad(value: number): string {
+  return String(value).padStart(2, '0')
+}
+
+/**
+ * When a window comes back: `19:50`, or `12.08 01:00` when that is not today.
+ *
+ * The hour always, because "when does it reset" is the question — and the day
+ * only when the hour alone would not answer it. A bare `01:00` read at 22:00 is
+ * a time that has already gone, so a reset falling on another day carries its
+ * date. The boundary is the calendar day rather than a rolling twenty-four
+ * hours: a reader reasons in days, and a rolling one would date tonight's
+ * `23:00` while leaving tomorrow's `01:00` bare — the inversion of what helps.
+ *
+ * One rule for both windows rather than a format each. A weekly window that
+ * happens to reset today then says the hour rather than saying "today", and a
+ * five-hour one across midnight says which midnight — and it crosses one for
+ * five hours in every twenty-four, so that is not a corner.
+ *
+ * 24-hour and day-first in every language, following neither the app's language
+ * nor the system's locale. This is a figure on a strip read sideways: `6:00 PM`
+ * spends three characters saying what `18:00` says, and both locales the app has
+ * write the day first. A locale that does not is the reason to revisit it.
+ *
+ * Null for a moment that cannot be read or has already passed. The reading is
+ * pulled when a turn ends and then sits there, so a window that has reset since
+ * is ordinary rather than broken — and an hour in the past under the word
+ * "resets" is a promise about the future that has already been broken.
+ * `formatCountdown` answers `now` to that same instant, so the strip and its
+ * tooltip cannot end up disagreeing about one window.
+ */
+export function formatResetAt(target: string, from: Date = new Date()): string | null {
+  const at = new Date(target)
+  const moment = at.getTime()
+  if (!Number.isFinite(moment) || moment <= from.getTime()) return null
+
+  const clock = `${pad(at.getHours())}:${pad(at.getMinutes())}`
+
+  // Compared, never shown: `toDateString` is a fixed format by specification, so
+  // this asks "the same day?" in one comparison rather than in three that would
+  // each need a case of their own to stay covered — cases named after the branch
+  // that fired rather than after the rule.
+  if (at.toDateString() === from.toDateString()) return clock
+
+  // `getMonth` counts from zero; nothing else about a date does.
+  return `${pad(at.getDate())}.${pad(at.getMonth() + 1)} ${clock}`
+}

@@ -1,6 +1,6 @@
 import { defineConfig } from 'vitest/config'
 
-import { alias, bootstrapOnly, thresholds } from './vitest.shared.js'
+import { alias, bootstrapOnly, testEnv, thresholds } from './vitest.shared.js'
 
 /**
  * The headless half: core, main and preload.
@@ -14,6 +14,7 @@ export default defineConfig({
   test: {
     globals: true,
     environment: 'node',
+    env: testEnv,
     include: ['src/{core,main,preload}/**/*.{test,spec}.ts'],
     coverage: {
       provider: 'v8',

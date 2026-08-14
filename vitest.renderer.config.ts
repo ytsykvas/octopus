@@ -1,6 +1,6 @@
 import { defineConfig } from 'vitest/config'
 
-import { alias, bootstrapOnly, thresholds } from './vitest.shared.js'
+import { alias, bootstrapOnly, testEnv, thresholds } from './vitest.shared.js'
 
 /** The interface, in a DOM. */
 export default defineConfig({
@@ -8,6 +8,7 @@ export default defineConfig({
   test: {
     globals: true,
     environment: 'jsdom',
+    env: testEnv,
     setupFiles: ['src/renderer/src/test/setup.ts'],
     include: ['src/renderer/**/*.{test,spec}.{ts,tsx}'],
     coverage: {

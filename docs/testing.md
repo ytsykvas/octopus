@@ -38,6 +38,30 @@ applies to every test, and the DOM setup breaks the core suite.
 Only bootstrap is excluded, each a line that mounts something: `main/index.ts`,
 `renderer/src/main.tsx`, the type-only `core/types.ts`, and the test helpers.
 
+## The suite runs in one zone
+
+Both configs set `TZ` from `testEnv` in `vitest.shared.ts`, and it is
+`Europe/Kyiv` rather than UTC. The composer's attic prints a wall clock, so
+without a pinned zone every expectation about it is a fact about the machine
+that ran it.
+
+Not UTC on purpose: a formatter reaching for `getUTCHours` would pass every
+expectation under UTC and be wrong for every reader — green, and describing what
+the code does rather than what it is for. Kyiv is three hours off in summer and
+two in winter, so local and UTC cannot agree by accident, and a fixture written
+in December is not the same arithmetic as one written in August. The pin needs no
+test of its own: reverting the formatter to `getUTCHours` turns five expectations
+red, which is a better guarantee than asserting `process.env.TZ`.
+
+The clock itself is fixed where it has to be. `formatResetAt` takes `from` the
+way `formatCountdown` does, so its own tests need nothing more. The component
+around it reads `new Date()` with no seam, and a prop existing only for tests
+would be worse than a fake clock — so the attic's moment tests fake **`Date`
+alone**, `vi.useFakeTimers({ toFake: ['Date'] })`, and put it back in an
+`afterEach`, which `restoreAllMocks` does not do. Faking the timers as well
+breaks the `userEvent` tests in the same file, and it breaks them by hanging
+rather than by failing.
+
 ## 100% coverage is not the same as tested
 
 This is the most important thing on the page.

@@ -1,6 +1,6 @@
 import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { beforeAll, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import type { RateLimit, SessionUsage } from '@core/service.js'
 
@@ -111,17 +111,12 @@ describe('what the next message is up against', () => {
     expect(screen.queryByText('limit reached')).not.toBeInTheDocument()
   })
 
-  it('puts the token counts and the reset time where they can be read on demand', () => {
-    renderAttic({
-      context: { percentage: 48, usedTokens: 48_000, maxTokens: 200_000, model: 'claude-opus-5' },
-      subscription: {
-        fiveHour: { utilization: 31, resetsAt: new Date(Date.now() + 7_200_000).toISOString() },
-        sevenDay: null
-      }
-    })
+  // The raw counts are the one thing the percentage cannot carry, and nobody
+  // reads them at a glance — so they wait for a hover.
+  it('puts the token counts where they can be read on demand', () => {
+    renderAttic()
 
     expect(screen.getByText(/Context 48%/)).toHaveAttribute('title', 'Context window — 48k of 200k')
-    expect(screen.getByText(/5h 31%/).getAttribute('title')).toContain('Five-hour window —')
   })
 })
 
@@ -254,5 +249,87 @@ describe('the way out of a full context window', () => {
     renderAttic()
 
     expect(reading()).toHaveAttribute('title', 'Context window — 48k of 200k')
+  })
+})
+
+describe('when the windows come back', () => {
+  /*
+   * A wall clock has to be read against a clock. Without a fixed "now" a reset
+   * two hours away lands on tomorrow whenever the suite runs late in the
+   * evening, and the expected string changes with the hour of the run.
+   *
+   * `Date` alone is faked: the menu tests in this file drive `userEvent`, which
+   * needs real timers and hangs rather than failing without them.
+   */
+  beforeEach(() => {
+    vi.useFakeTimers({ toFake: ['Date'] })
+    vi.setSystemTime(new Date('2026-08-11T16:00:00+00:00'))
+  })
+
+  // `restoreAllMocks` in the shared setup does not put the clock back.
+  afterEach(() => {
+    vi.useRealTimers()
+  })
+
+  const RESETTING: SessionUsage = {
+    ...FULL,
+    subscription: {
+      // `.000000` rather than the measured `.149775`: the microseconds are the
+      // shape the CLI sends, but a real fraction pushes `Math.ceil` in the
+      // countdown to `3h 51m` beside a visible `22:50` — true, and reading like
+      // a bug. The measured sample proves the parse in `format.test.ts`.
+      fiveHour: { utilization: 31, resetsAt: '2026-08-11T19:50:00.000000+00:00' },
+      sevenDay: { utilization: 84, resetsAt: '2026-08-14T04:00:00.000000+00:00' }
+    }
+  }
+
+  // The question the strip could not answer: "5h 31%" says how much is gone and
+  // nothing about when it comes back.
+  it('says what hour the five-hour window resets', () => {
+    renderAttic(RESETTING)
+
+    expect(screen.getByText(/5h 31%/)).toHaveTextContent(/^5h 31% · 22:50$/)
+  })
+
+  // Days off, so an hour on its own would not say which day it is the hour of.
+  it('dates the weekly reset, which an hour alone would not place', () => {
+    renderAttic(RESETTING)
+
+    expect(screen.getByText(/Week 84%/)).toHaveTextContent(/^Week 84% · 14\.08 07:00$/)
+  })
+
+  // The glance says when, the hover says how long. The countdown is the half
+  // that cannot go on the strip: it is worked out as the strip is drawn, and the
+  // strip is drawn only when the agent says something.
+  it('keeps the countdown in the tooltip where the moment is on the strip', () => {
+    renderAttic(RESETTING)
+
+    expect(screen.getByText(/5h 31%/)).toHaveAttribute(
+      'title',
+      'Five-hour window — resets in 3h 50m'
+    )
+  })
+
+  // An older CLI answers with a share and no reset at all, and a separator with
+  // nothing after it is worse than no separator.
+  it('shows the share on its own when the account gives no reset', () => {
+    renderAttic(FULL)
+
+    expect(screen.getByText(/5h 31%/)).toHaveTextContent(/^5h 31%$/)
+    expect(screen.getByText(/5h 31%/)).toHaveAttribute('title', 'Five-hour window')
+  })
+
+  // Nobody has spoken to the agent since the window turned over, so the strip is
+  // still showing what the last turn pulled.
+  it('drops a moment that has already passed', () => {
+    renderAttic({
+      ...FULL,
+      subscription: {
+        fiveHour: { utilization: 100, resetsAt: '2026-08-11T15:00:00+00:00' },
+        sevenDay: null
+      }
+    })
+
+    expect(screen.getByText(/5h 100%/)).toHaveTextContent(/^5h 100%$/)
   })
 })

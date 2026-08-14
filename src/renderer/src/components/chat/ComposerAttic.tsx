@@ -6,7 +6,7 @@ import type { RateLimit, SessionUsage } from '@core/service.js'
 
 import { useConfirm } from '../../hooks/useConfirm.js'
 import { DropdownMenu } from '../DropdownMenu.js'
-import { formatCountdown, formatTokens, usageTone } from './format.js'
+import { formatCountdown, formatResetAt, formatTokens, usageTone } from './format.js'
 
 interface ComposerAtticProps {
   readonly usage: SessionUsage
@@ -103,8 +103,12 @@ export function ComposerAttic({
 
   const share = (label: string, window: UsageWindow, title: string): React.JSX.Element => {
     const countdown = countdownFor(window)
+    const moment = window.resetsAt === null ? null : formatResetAt(window.resetsAt)
 
     return (
+      // The title stays on the element around both halves: a tooltip is taken
+      // from the nearest ancestor carrying one, so hovering the moment answers
+      // the same as hovering the figure.
       <span
         className={usageTone(window.utilization)}
         title={
@@ -112,6 +116,17 @@ export function ComposerAttic({
         }
       >
         {label} {Math.round(window.utilization)}%
+        {/* An hour of the day is not a measurement, so it keeps the strip's own
+            tone while the figure beside it may be `warning` or `danger`.
+            `usageTone` paints what is measured, and a reset time in red would
+            read as the hour being the problem rather than the share.
+
+            On the strip rather than in the tooltip because a moment does not go
+            stale: this is redrawn only when the agent says something, so a
+            countdown written here would be an hour wrong an hour later, while
+            `18:00` stays true however long it is looked at. The countdown keeps
+            the tooltip — the glance says when, the hover says how long. */}
+        {moment !== null && <span className="text-ink-faint">{` · ${moment}`}</span>}
       </span>
     )
   }
@@ -220,7 +235,28 @@ export function ComposerAttic({
           />
         )}
 
-        <span className="ml-auto flex items-center gap-2">
+        {/* `gap-4` rather than the strip's own `gap-2`. Each window is now a
+            group — a share, a separator and a moment — and the separator itself
+            takes about 11px, so at 8px the space between two groups was
+            narrower than the space inside one, and the two ran together as a
+            single line of figures.
+
+            24 rather than 16, which was the first try and read as still-tight:
+            beating the separator is the floor, not the target. At twice it the
+            grouping is not something the eye has to work out.
+
+            The strip's outer gap stays at 2: it wraps, so its gap is also the
+            row gap, and this much there would make the whole strip taller every
+            time it did. This group wraps for the reason the composer's footer does —
+            a refusal beside two dated windows no longer fits the narrowest
+            centre, and a reading pushed past the edge is worse than one on a
+            second row. `justify-end` keeps that row flush with the right edge,
+            and `gap-y-1` says it is a continuation rather than a second strip.
+
+            The refusal shares the gap and should: it is a third reading about
+            the same account, and `text-danger` separates it further than any
+            number of pixels. */}
+        <span className="ml-auto flex flex-wrap items-center justify-end gap-x-6 gap-y-1">
           {refused !== null && <span className="text-danger">{refused}</span>}
           {windows}
         </span>

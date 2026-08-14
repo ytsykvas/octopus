@@ -151,6 +151,38 @@ The windows are named here (`5h`, `Week`) although the old header chip never
 named its one: two figures side by side are unreadable without labels, while one
 figure beside a countdown was not.
 
+**Each window says when it comes back, not how long it has left.** `5h 1% ·
+18:00` reads at a glance in a way a countdown cannot: the strip is redrawn only
+when the agent says something, so `2h 30m` written there would be that much
+wrong an hour later, while an hour of the day stays true however long it is
+looked at. The countdown is still what the tooltip carries — the glance says
+when, the hover says how long.
+
+The clock is 24-hour and the date is `DD.MM` in every language, following
+neither the app's language nor the system's locale. This is a figure on a strip
+read sideways: `6:00 PM` spends three characters saying what `18:00` says, and
+both locales the app has write the day first — a locale that does not is the
+reason to revisit it. The date appears only when the clock alone would not say
+which day it is the hour of, and the boundary is the **calendar day** rather
+than a rolling twenty-four hours, because "which day" is what a reader reasons
+about: a bare `01:00` seen at 22:00 reads as a time that has already gone. So
+the weekly window is dated almost always and the five-hour one only across
+midnight — one rule rather than one format per window, which would leave a
+weekly reset falling today saying "today" and withholding the hour.
+
+**Nothing is shown for a moment that has passed.** The reading is pulled when a
+turn ends and then sits there, so a window that has reset since is ordinary
+rather than broken, and an hour in the past under the word "resets" is a promise
+about the future that has already been broken.
+
+**The moment keeps the strip's own tone while the figure beside it may not.**
+`usageTone` paints what is measured; a reset time is not a measurement, and an
+hour of the day drawn in `danger` would read as the hour being the problem
+rather than the share. The space between the two windows grew with them for a
+related reason: each reading is now a group of a share, a separator and a
+moment, and at the strip's own 8px the gap between two groups was narrower than
+the gap inside one.
+
 The reading is account-wide while the header belongs to a workspace, which is
 deliberate — the decision it informs is made looking at the chat.
 
