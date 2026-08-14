@@ -2,8 +2,9 @@ import { useMemo } from 'react'
 
 import type { DiffLine, Hunk } from '@core/diff.js'
 
+import { type CommentSurface, CommentedRow } from './CommentedRow.js'
 import type { Token } from './highlight.js'
-import { splitRows } from './splitRows.js'
+import { type SplitRow, splitRows } from './splitRows.js'
 import type { Highlighting } from './useHighlighting.js'
 
 /** How a diff is laid out. `split` needs room the pane may not have. */
@@ -48,6 +49,8 @@ interface DiffHunkProps {
   readonly view: DiffView
   /** Syntax colours, as far as they have arrived. */
   readonly tokens: Highlighting
+  readonly path: string
+  readonly comments: CommentSurface
 }
 
 /**
@@ -57,7 +60,7 @@ interface DiffHunkProps {
  * gutter cannot give: a removed line has no number in the file as it now
  * stands, and an added line had none in the file as it was.
  */
-export function DiffHunk({ hunk, view, tokens }: DiffHunkProps): React.JSX.Element {
+export function DiffHunk({ hunk, view, tokens, path, comments }: DiffHunkProps): React.JSX.Element {
   // Computed here rather than in the row, so a re-render for any other reason
   // — a comment typed, a file collapsed — does not pair the lines again.
   const rows = useMemo(() => (view === 'split' ? splitRows(hunk.lines) : []), [hunk.lines, view])
@@ -73,16 +76,54 @@ export function DiffHunk({ hunk, view, tokens }: DiffHunkProps): React.JSX.Eleme
 
       {view === 'unified'
         ? hunk.lines.map((line, index) => (
-            <UnifiedRow key={index} line={line} tokens={tokens.get(line)} />
+            <CommentedRow key={index} path={path} line={line} comments={comments}>
+              <UnifiedRow line={line} tokens={tokens.get(line)} />
+            </CommentedRow>
           ))
         : rows.map((row, index) => (
-            <div key={index} className="flex font-mono text-[11px] leading-relaxed">
-              <SplitHalf line={row.left} tokens={row.left && tokens.get(row.left)} />
-              <div className="border-line w-px shrink-0 border-l" />
-              <SplitHalf line={row.right} tokens={row.right && tokens.get(row.right)} />
-            </div>
+            <SplitRowView key={index} row={row} path={path} comments={comments} tokens={tokens} />
           ))}
     </div>
+  )
+}
+
+/**
+ * A paired row, and the one line a note about it belongs to.
+ *
+ * The right-hand side where there is one: a remark on a replaced line is about
+ * what the code has become, and anchoring it to the version being replaced
+ * would send the agent to a line that is already gone.
+ */
+function SplitRowView({
+  row,
+  path,
+  comments,
+  tokens
+}: {
+  readonly row: SplitRow
+  readonly path: string
+  readonly comments: CommentSurface
+  readonly tokens: Highlighting
+}): React.JSX.Element {
+  const pair = (
+    <div className="flex font-mono text-[11px] leading-relaxed">
+      <SplitHalf line={row.left} tokens={row.left && tokens.get(row.left)} />
+      <div className="border-line w-px shrink-0 border-l" />
+      <SplitHalf line={row.right} tokens={row.right && tokens.get(row.right)} />
+    </div>
+  )
+
+  const anchor = row.right ?? row.left
+  // `splitRows` pads one side or the other and never both, so a row with
+  // nothing on either side is not something it produces — the guard is what
+  // the type asks for rather than a state to test for.
+  /* v8 ignore next */
+  if (!anchor) return pair
+
+  return (
+    <CommentedRow path={path} line={anchor} comments={comments}>
+      {pair}
+    </CommentedRow>
   )
 }
 

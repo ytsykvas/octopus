@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import type { ProjectColor } from '@core/colors.js'
+import type { DiffCommentController } from '../hooks/useDiffComments.js'
 import type { WorkspaceView } from '@core/workspaces.js'
 
 import { DiffPanel } from './diff/DiffPanel.js'
@@ -94,6 +95,8 @@ interface RightPanelProps {
   /** How the reader asked for diffs to be laid out, across sessions. */
   readonly diffView: DiffView
   readonly onDiffView: (view: DiffView) => void
+  /** Review notes the diff writes and the composer sends. */
+  readonly comments: DiffCommentController
 }
 
 export function RightPanel({
@@ -106,7 +109,8 @@ export function RightPanel({
   onWidthChange,
   leftWidth,
   diffView,
-  onDiffView
+  onDiffView,
+  comments
 }: RightPanelProps): React.JSX.Element {
   const { t, i18n } = useTranslation()
   const [tab, setTab] = useState<RightTab>('diff')
@@ -270,6 +274,7 @@ export function RightPanel({
           view={diffView}
           onView={onDiffView}
           width={applied}
+          comments={comments}
         />
       </div>
 

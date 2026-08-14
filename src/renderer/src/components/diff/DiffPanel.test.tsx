@@ -4,6 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { octopus } from '../../test/octopus.js'
 import { fileDiff, hunk, workspaceDiff } from '../../test/diff.js'
+import { commentController } from '../../test/comments.js'
 import { workspaceView } from '../../test/workspaces.js'
 import { DiffPanel } from './DiffPanel.js'
 
@@ -47,13 +48,23 @@ function renderPanel(workspace = anna, visible = true): void {
       view="unified"
       onView={vi.fn()}
       width={WIDE}
+      comments={commentController()}
     />
   )
 }
 
 describe('DiffPanel', () => {
   it('asks for nothing until a workspace is chosen', () => {
-    render(<DiffPanel workspace={null} visible view="unified" onView={vi.fn()} width={WIDE} />)
+    render(
+      <DiffPanel
+        workspace={null}
+        visible
+        view="unified"
+        onView={vi.fn()}
+        width={WIDE}
+        comments={commentController()}
+      />
+    )
 
     expect(screen.getByText(/Select a workspace/)).toBeInTheDocument()
     expect(octopus().workspaces.diff).not.toHaveBeenCalled()
@@ -215,7 +226,16 @@ describe('DiffPanel', () => {
     const onView = vi.fn()
     withMonospaceCell(64)
     answer(workspaceDiff([fileDiff('src/a.ts')]))
-    render(<DiffPanel workspace={anna} visible view="unified" onView={onView} width={WIDE} />)
+    render(
+      <DiffPanel
+        workspace={anna}
+        visible
+        view="unified"
+        onView={onView}
+        width={WIDE}
+        comments={commentController()}
+      />
+    )
 
     await user.click(await screen.findByRole('button', { name: 'Side by side' }))
 
@@ -225,7 +245,16 @@ describe('DiffPanel', () => {
   it('pairs the removed line with the one that replaced it', async () => {
     withMonospaceCell(64)
     answer(workspaceDiff([fileDiff('src/a.ts')]))
-    render(<DiffPanel workspace={anna} visible view="split" onView={vi.fn()} width={WIDE} />)
+    render(
+      <DiffPanel
+        workspace={anna}
+        visible
+        view="split"
+        onView={vi.fn()}
+        width={WIDE}
+        comments={commentController()}
+      />
+    )
 
     expect(await screen.findByRole('button', { name: 'One column' })).toBeInTheDocument()
     // Context sits on both sides in split view, which is what tells the two
@@ -238,7 +267,16 @@ describe('DiffPanel', () => {
     const onView = vi.fn()
     withMonospaceCell(64)
     answer(workspaceDiff([fileDiff('src/a.ts')]))
-    render(<DiffPanel workspace={anna} visible view="split" onView={onView} width={WIDE} />)
+    render(
+      <DiffPanel
+        workspace={anna}
+        visible
+        view="split"
+        onView={onView}
+        width={WIDE}
+        comments={commentController()}
+      />
+    )
 
     await user.click(await screen.findByRole('button', { name: 'One column' }))
 
@@ -268,7 +306,16 @@ describe('DiffPanel', () => {
         })
       ])
     )
-    render(<DiffPanel workspace={anna} visible view="split" onView={vi.fn()} width={WIDE} />)
+    render(
+      <DiffPanel
+        workspace={anna}
+        visible
+        view="split"
+        onView={vi.fn()}
+        width={WIDE}
+        comments={commentController()}
+      />
+    )
 
     // Waits for the measurement: the toggle only offers the way back to one
     // column once the pane has worked out that two of them fit.
@@ -284,11 +331,268 @@ describe('DiffPanel', () => {
   it('falls back to one column when the pane is too narrow for two', async () => {
     withMonospaceCell(320)
     answer(workspaceDiff([fileDiff('src/a.ts')]))
-    render(<DiffPanel workspace={anna} visible view="split" onView={vi.fn()} width={300} />)
+    render(
+      <DiffPanel
+        workspace={anna}
+        visible
+        view="split"
+        onView={vi.fn()}
+        width={300}
+        comments={commentController()}
+      />
+    )
 
     await screen.findByText('is here now')
     expect(screen.getAllByText('kept')).toHaveLength(1)
     expect(screen.getByRole('button', { name: /too narrow/ })).toBeDisabled()
+  })
+
+  describe('review notes', () => {
+    /** Renders with a controller a test can watch and preload. */
+    function renderWithComments(
+      overrides: Parameters<typeof commentController>[0] = {}
+    ): ReturnType<typeof commentController> {
+      const comments = commentController(overrides)
+      render(
+        <DiffPanel
+          workspace={anna}
+          visible
+          view="unified"
+          onView={vi.fn()}
+          width={WIDE}
+          comments={comments}
+        />
+      )
+      return comments
+    }
+
+    it('offers a note against every line', async () => {
+      answer(workspaceDiff([fileDiff('src/a.ts')]))
+      renderWithComments()
+
+      // The added line is line 2 of the file as it now stands.
+      expect(await screen.findByRole('button', { name: 'Comment on line 2' })).toBeInTheDocument()
+    })
+
+    it('writes a note against the line it was opened on', async () => {
+      const user = userEvent.setup()
+      answer(workspaceDiff([fileDiff('src/a.ts')]))
+      const comments = renderWithComments()
+
+      await user.click(await screen.findByRole('button', { name: 'Comment on line 2' }))
+      await user.type(screen.getByRole('textbox'), 'call this something else')
+      await user.click(screen.getByRole('button', { name: 'Add' }))
+
+      expect(comments.add).toHaveBeenCalledWith({
+        path: 'src/a.ts',
+        side: 'new',
+        line: 2,
+        code: 'is here now',
+        text: 'call this something else'
+      })
+    })
+
+    // A removed line belongs to the file as it was, and its number is the one
+    // it had there — sending the agent to that number in the current file
+    // would point at whatever now sits in its place.
+    it('anchors a note on a removed line to the file as it was', async () => {
+      const user = userEvent.setup()
+      answer(workspaceDiff([fileDiff('src/a.ts')]))
+      const comments = renderWithComments()
+
+      await user.click(
+        await screen.findByRole('button', { name: 'Comment on line 2 of the file as it was' })
+      )
+      await user.type(screen.getByRole('textbox'), 'why was this dropped?')
+      await user.click(screen.getByRole('button', { name: 'Add' }))
+
+      expect(comments.add).toHaveBeenCalledWith({
+        path: 'src/a.ts',
+        side: 'old',
+        line: 2,
+        code: 'was here',
+        text: 'why was this dropped?'
+      })
+    })
+
+    it('keeps the line as it was when the note is abandoned', async () => {
+      const user = userEvent.setup()
+      answer(workspaceDiff([fileDiff('src/a.ts')]))
+      const comments = renderWithComments()
+
+      await user.click(await screen.findByRole('button', { name: 'Comment on line 2' }))
+      await user.type(screen.getByRole('textbox'), 'never mind')
+      await user.click(screen.getByRole('button', { name: 'Cancel' }))
+
+      expect(comments.add).not.toHaveBeenCalled()
+      expect(screen.queryByRole('textbox')).not.toBeInTheDocument()
+    })
+
+    it('sends nothing when the note was left empty', async () => {
+      const user = userEvent.setup()
+      answer(workspaceDiff([fileDiff('src/a.ts')]))
+      const comments = renderWithComments()
+
+      await user.click(await screen.findByRole('button', { name: 'Comment on line 2' }))
+      await user.click(screen.getByRole('button', { name: 'Add' }))
+
+      expect(comments.add).not.toHaveBeenCalled()
+    })
+
+    it('shows a note that was already written, where it was written', async () => {
+      answer(workspaceDiff([fileDiff('src/a.ts')]))
+      renderWithComments({
+        pending: [
+          { path: 'src/a.ts', side: 'new', line: 2, code: 'is here now', text: 'rename this' }
+        ]
+      })
+
+      expect(await screen.findByText('rename this')).toBeInTheDocument()
+    })
+
+    it('gives a note back from where it sits', async () => {
+      const user = userEvent.setup()
+      const held = {
+        path: 'src/a.ts',
+        side: 'new' as const,
+        line: 2,
+        code: 'is here now',
+        text: 'rename this'
+      }
+      answer(workspaceDiff([fileDiff('src/a.ts')]))
+      const comments = renderWithComments({ pending: [held] })
+
+      await user.click(await screen.findByRole('button', { name: 'Remove this note' }))
+
+      expect(comments.remove).toHaveBeenCalledWith(held)
+    })
+
+    it('saves a note with the keyboard alone', async () => {
+      const user = userEvent.setup()
+      answer(workspaceDiff([fileDiff('src/a.ts')]))
+      const comments = renderWithComments()
+
+      await user.click(await screen.findByRole('button', { name: 'Comment on line 2' }))
+      await user.type(screen.getByRole('textbox'), 'shorter{Meta>}{Enter}{/Meta}')
+
+      expect(comments.add).toHaveBeenCalledWith(expect.objectContaining({ text: 'shorter' }))
+    })
+
+    // Ctrl as well as Command: the same chord on a keyboard that has no Meta.
+    it('saves a note with Ctrl and Enter too', async () => {
+      const user = userEvent.setup()
+      answer(workspaceDiff([fileDiff('src/a.ts')]))
+      const comments = renderWithComments()
+
+      await user.click(await screen.findByRole('button', { name: 'Comment on line 2' }))
+      await user.type(screen.getByRole('textbox'), 'shorter{Control>}{Enter}{/Control}')
+
+      expect(comments.add).toHaveBeenCalledWith(expect.objectContaining({ text: 'shorter' }))
+    })
+
+    it('abandons a note with Escape', async () => {
+      const user = userEvent.setup()
+      answer(workspaceDiff([fileDiff('src/a.ts')]))
+      const comments = renderWithComments()
+
+      await user.click(await screen.findByRole('button', { name: 'Comment on line 2' }))
+      await user.type(screen.getByRole('textbox'), 'never mind{Escape}')
+
+      expect(comments.add).not.toHaveBeenCalled()
+      expect(screen.queryByRole('textbox')).not.toBeInTheDocument()
+    })
+
+    // Nothing git produces looks like this, but the type admits it, and a row
+    // with nowhere to anchor a note is better off offering none.
+    it('offers no note on a line that is numbered on neither side', async () => {
+      answer(
+        workspaceDiff([
+          fileDiff('src/a.ts', {
+            hunks: [
+              hunk({
+                lines: [
+                  {
+                    kind: 'context',
+                    text: 'nowhere',
+                    oldNumber: null,
+                    newNumber: null,
+                    noNewline: false
+                  }
+                ]
+              })
+            ]
+          })
+        ])
+      )
+      renderWithComments()
+
+      expect(await screen.findByText('nowhere')).toBeInTheDocument()
+      expect(screen.queryByRole('button', { name: /Comment on line/ })).not.toBeInTheDocument()
+    })
+
+    // A removal with nothing opposite it is the left half of a paired row, and
+    // the note belongs to it because there is no newer line to prefer.
+    it('anchors a note to the left half when a row has no right one', async () => {
+      const user = userEvent.setup()
+      vi.spyOn(HTMLSpanElement.prototype, 'getBoundingClientRect').mockReturnValue(
+        new DOMRect(0, 0, 64, 16)
+      )
+      answer(
+        workspaceDiff([
+          fileDiff('src/a.ts', {
+            hunks: [
+              hunk({
+                lines: [
+                  {
+                    kind: 'removed',
+                    text: 'dropped',
+                    oldNumber: 7,
+                    newNumber: null,
+                    noNewline: false
+                  }
+                ]
+              })
+            ]
+          })
+        ])
+      )
+      const comments = commentController()
+      render(
+        <DiffPanel
+          workspace={anna}
+          visible
+          view="split"
+          onView={vi.fn()}
+          width={WIDE}
+          comments={comments}
+        />
+      )
+
+      // Waits for the measurement: until it lands the pane is still drawing one
+      // column, and the row clicked would be unmounted mid-click.
+      await screen.findByRole('button', { name: 'One column' })
+
+      await user.click(
+        screen.getByRole('button', { name: 'Comment on line 7 of the file as it was' })
+      )
+      await user.type(screen.getByRole('textbox'), 'why?')
+      await user.click(screen.getByRole('button', { name: 'Add' }))
+
+      expect(comments.add).toHaveBeenCalledWith(expect.objectContaining({ side: 'old', line: 7 }))
+    })
+
+    it('closes the note when its own trigger is pressed again', async () => {
+      const user = userEvent.setup()
+      answer(workspaceDiff([fileDiff('src/a.ts')]))
+      renderWithComments()
+
+      const trigger = await screen.findByRole('button', { name: 'Comment on line 2' })
+      await user.click(trigger)
+      expect(screen.getByRole('textbox')).toBeInTheDocument()
+
+      await user.click(trigger)
+      expect(screen.queryByRole('textbox')).not.toBeInTheDocument()
+    })
   })
 
   it('reads nothing while another tab is showing', () => {
@@ -299,9 +603,25 @@ describe('DiffPanel', () => {
 
   it('reads when its tab comes back', async () => {
     const { rerender } = render(
-      <DiffPanel workspace={anna} visible={false} view="unified" onView={vi.fn()} width={WIDE} />
+      <DiffPanel
+        workspace={anna}
+        visible={false}
+        view="unified"
+        onView={vi.fn()}
+        width={WIDE}
+        comments={commentController()}
+      />
     )
-    rerender(<DiffPanel workspace={anna} visible view="unified" onView={vi.fn()} width={WIDE} />)
+    rerender(
+      <DiffPanel
+        workspace={anna}
+        visible
+        view="unified"
+        onView={vi.fn()}
+        width={WIDE}
+        comments={commentController()}
+      />
+    )
 
     await waitFor(() => {
       expect(octopus().workspaces.diff).toHaveBeenCalledWith(anna.id)
@@ -311,11 +631,27 @@ describe('DiffPanel', () => {
   it('asks again for another workspace', async () => {
     answer(workspaceDiff([fileDiff('src/a.ts')]))
     const { rerender } = render(
-      <DiffPanel workspace={anna} visible view="unified" onView={vi.fn()} width={WIDE} />
+      <DiffPanel
+        workspace={anna}
+        visible
+        view="unified"
+        onView={vi.fn()}
+        width={WIDE}
+        comments={commentController()}
+      />
     )
     await screen.findByText('is here now')
 
-    rerender(<DiffPanel workspace={bob} visible view="unified" onView={vi.fn()} width={WIDE} />)
+    rerender(
+      <DiffPanel
+        workspace={bob}
+        visible
+        view="unified"
+        onView={vi.fn()}
+        width={WIDE}
+        comments={commentController()}
+      />
+    )
 
     await waitFor(() => {
       expect(octopus().workspaces.diff).toHaveBeenCalledWith(bob.id)

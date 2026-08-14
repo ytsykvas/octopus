@@ -14,9 +14,12 @@ import {
 
 import type { RateLimit, SessionUsage } from '@core/service.js'
 
+import type { DiffComment } from '../../hooks/useDiffComments.js'
 import { useDismiss } from '../../hooks/useDismiss.js'
 import { CommandMenu } from './CommandMenu.js'
 import { completeCommand, matchCommands, readCommandQuery } from './commandMatch.js'
+import { withComments } from './attachments.js'
+import { ComposerAttachments } from './ComposerAttachments.js'
 import { ComposerAttic } from './ComposerAttic.js'
 import { ComposerPicker } from './ComposerPicker.js'
 import { modelRows } from './modelRows.js'
@@ -52,6 +55,16 @@ interface ComposerProps {
   readonly limit: RateLimit | null
   readonly onSend: (text: string) => void
   readonly onStop: () => void
+  /**
+   * Review notes waiting to go out with this message.
+   *
+   * Composed into the text here rather than in `Chat`, so the attic's own
+   * `onSend` — which puts `/clear` and `/compact` on the same wire — never
+   * carries them.
+   */
+  readonly comments: readonly DiffComment[]
+  readonly onRemoveComment: (comment: DiffComment) => void
+  readonly onCommentsSent: () => void
 }
 
 const EFFORT_LABELS: Record<
@@ -142,7 +155,10 @@ export function Composer({
   usage,
   limit,
   onSend,
-  onStop
+  onStop,
+  comments,
+  onRemoveComment,
+  onCommentsSent
 }: ComposerProps): React.JSX.Element {
   const { t } = useTranslation()
   const [draft, setDraft] = useState('')
@@ -208,8 +224,12 @@ export function Composer({
   })
 
   const submit = (): void => {
-    if (trimmed === '') return
-    onSend(trimmed)
+    // A message that is only notes is still a message: the field may be empty
+    // and the review is the thing being sent.
+    if (trimmed === '' && comments.length === 0) return
+
+    onSend(withComments(trimmed, comments, t('diff.commentIntro')))
+    onCommentsSent()
     setDraft('')
     setDismissed(false)
     setActive(0)
@@ -248,6 +268,8 @@ export function Composer({
             way the field does — a slash command here is the text of an
             ordinary message, so there is one channel and not two. */}
         <ComposerAttic usage={usage} limit={limit} onSend={onSend} />
+
+        <ComposerAttachments comments={comments} onRemove={onRemoveComment} />
 
         <textarea
           value={draft}
@@ -422,7 +444,8 @@ export function Composer({
               <button
                 type="button"
                 onClick={submit}
-                disabled={trimmed === ''}
+                // A review with nothing typed is still something to send.
+                disabled={trimmed === '' && comments.length === 0}
                 title={t('chat.send')}
                 aria-label={t('chat.send')}
                 className="focus-ring bg-accent text-on-accent hover:bg-accent-hover grid size-6 shrink-0 place-items-center rounded-full transition-colors disabled:pointer-events-none disabled:opacity-40"

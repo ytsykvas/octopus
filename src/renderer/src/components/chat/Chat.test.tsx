@@ -6,6 +6,7 @@ import type { Effort, WorkingMode } from '@core/chats.js'
 import type { WorkspaceView } from '@core/workspaces.js'
 
 import { CHAT_ID, emitAgentEvent, givenChat } from '../../test/chat.js'
+import { commentController } from '../../test/comments.js'
 import { stubDialogElement } from '../../test/dialog.js'
 import { octopus } from '../../test/octopus.js'
 import { Chat } from './Chat.js'
@@ -43,6 +44,7 @@ async function openChat(
   render(
     <Chat
       workspace={target}
+      comments={commentController()}
       color="blue"
       defaultWorkingMode={defaults.workingMode ?? 'default'}
       defaultEffort={defaults.effort ?? 'medium'}
@@ -111,6 +113,7 @@ describe('the project it belongs to', () => {
     const { container } = render(
       <Chat
         workspace={workspace()}
+        comments={commentController()}
         color="teal"
         defaultWorkingMode="default"
         defaultEffort="medium"
@@ -243,6 +246,7 @@ describe('an existing conversation', () => {
     const { rerender } = render(
       <Chat
         workspace={workspace()}
+        comments={commentController()}
         color="blue"
         defaultWorkingMode="default"
         defaultEffort="medium"
@@ -255,6 +259,7 @@ describe('an existing conversation', () => {
     rerender(
       <Chat
         workspace={workspace({ id: 'planner/maria', name: 'maria' })}
+        comments={commentController()}
         color="blue"
         defaultWorkingMode="default"
         defaultEffort="medium"

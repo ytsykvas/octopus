@@ -8,6 +8,7 @@ import type { WorkspaceView } from '@core/workspaces.js'
 
 import { Placeholder } from '../Placeholder.js'
 import { useChat } from '../../hooks/useChat.js'
+import type { DiffCommentController } from '../../hooks/useDiffComments.js'
 import { useErrorMessage } from '../../hooks/useErrorMessage.js'
 import { useCommands } from '../../hooks/useCommands.js'
 import { useModels } from '../../hooks/useModels.js'
@@ -27,6 +28,8 @@ interface ChatProps {
    * is not something the chat knows how to do.
    */
   readonly workspace: WorkspaceView
+  /** Review notes from the diff pane, riding out with the next message. */
+  readonly comments: DiffCommentController
   /**
    * The project's colour, for the messages you sent.
    *
@@ -60,6 +63,7 @@ interface ChatProps {
  */
 export function Chat({
   workspace,
+  comments,
   color,
   defaultWorkingMode,
   defaultEffort
@@ -208,6 +212,9 @@ export function Chat({
         limit={rateLimit}
         onSend={(text) => void chat.send(text)}
         onStop={() => void chat.interrupt()}
+        comments={comments.pending}
+        onRemoveComment={comments.remove}
+        onCommentsSent={comments.clear}
       />
     </div>
   )

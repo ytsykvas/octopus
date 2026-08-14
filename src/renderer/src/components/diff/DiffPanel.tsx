@@ -6,6 +6,7 @@ import type { FileDiff } from '@core/diff.js'
 import { shortBranchName } from '@core/branches.js'
 import type { WorkspaceView } from '@core/workspaces.js'
 
+import type { DiffCommentController } from '../../hooks/useDiffComments.js'
 import { useWorkspaceDiff } from '../../hooks/useWorkspaceDiff.js'
 import { DiffFile } from './DiffFile.js'
 import type { DiffView } from './DiffHunk.js'
@@ -30,6 +31,8 @@ interface DiffPanelProps {
   readonly onView: (view: DiffView) => void
   /** The pane's current width, which decides whether two columns fit. */
   readonly width: number
+  /** Review notes waiting to go out with the next message. */
+  readonly comments: DiffCommentController
 }
 
 /**
@@ -45,7 +48,8 @@ export function DiffPanel({
   visible,
   view,
   onView,
-  width
+  width,
+  comments
 }: DiffPanelProps): React.JSX.Element {
   const { t } = useTranslation()
   const { diff, loading, error, refresh } = useWorkspaceDiff(workspace?.id ?? null, visible)
@@ -72,11 +76,14 @@ export function DiffPanel({
    * set of paths against a diff that has moved on.
    */
   const [choices, setChoices] = useState<ReadonlyMap<string, boolean>>(new Map())
+  /** Which line has its note open; one at a time across the whole pane. */
+  const [editing, setEditing] = useState<string | null>(null)
   const [shownId, setShownId] = useState(workspace?.id ?? null)
 
   if ((workspace?.id ?? null) !== shownId) {
     setShownId(workspace?.id ?? null)
     setChoices(new Map())
+    setEditing(null)
   }
 
   if (!workspace) return <Notice>{t('diff.noWorkspace')}</Notice>
@@ -95,6 +102,14 @@ export function DiffPanel({
 
   const openFile = (path: string): void => {
     void window.octopus.files.open(workspace.id, path)
+  }
+
+  const surface = {
+    pending: comments.pending,
+    editing,
+    onEdit: setEditing,
+    onSave: comments.add,
+    onRemove: comments.remove
   }
 
   return (
@@ -175,6 +190,7 @@ export function DiffPanel({
             }}
             view={effectiveView}
             tokens={tokens}
+            comments={surface}
             onOpen={openFile}
           />
         ))}

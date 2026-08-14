@@ -24,6 +24,7 @@ import { type SectionId, Settings } from './components/Settings.js'
 import { Sidebar } from './components/Sidebar.js'
 import { useConfirm } from './hooks/useConfirm.js'
 import { useErrorMessage } from './hooks/useErrorMessage.js'
+import { useDiffComments } from './hooks/useDiffComments.js'
 import { useProjects } from './hooks/useProjects.js'
 import { useWorkspaces } from './hooks/useWorkspaces.js'
 
@@ -74,6 +75,9 @@ export function App(): React.JSX.Element {
 
   const projects = useProjects(confirm, setError)
   const workspaces = useWorkspaces(projects.all, confirm, setError)
+  // Held here because the diff writes the notes and the composer sends them,
+  // and the two panes are siblings that know nothing of each other.
+  const diffComments = useDiffComments(selectedWorkspaceId)
 
   useEffect(() => {
     const controller = new AbortController()
@@ -407,6 +411,7 @@ export function App(): React.JSX.Element {
             <Chat
               workspace={selectedWorkspace}
               color={selectedProject.color}
+              comments={diffComments}
               defaultWorkingMode={defaultWorkingMode}
               defaultEffort={defaultEffort}
             />
@@ -426,6 +431,7 @@ export function App(): React.JSX.Element {
             onWidthChange={(rightPanelWidth) => void updateConfig({ rightPanelWidth })}
             diffView={config?.diffView ?? 'unified'}
             onDiffView={(diffView) => void updateConfig({ diffView })}
+            comments={diffComments}
             // The room the pane must leave alone. Folded away, the list takes
             // none of it — and the pane may have that room too.
             leftWidth={TAB_STRIP_WIDTH + (sidebarOpen ? sidebarWidth : 0)}

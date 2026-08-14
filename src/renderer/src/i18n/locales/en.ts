@@ -192,7 +192,14 @@ export const en = {
     statusRenamedLabel: 'Renamed',
     statusCopiedLabel: 'Copied',
     statusTypeChangedLabel: 'Type changed',
-    statusUntrackedLabel: 'Untracked'
+    statusUntrackedLabel: 'Untracked',
+    comment: 'Comment on line {{line}}',
+    commentOld: 'Comment on line {{line}} of the file as it was',
+    commentPlaceholder: 'What should the agent change here?',
+    commentSave: 'Add',
+    commentCancel: 'Cancel',
+    commentRemove: 'Remove this note',
+    commentIntro: 'Review notes on the changes:'
   },
 
   chat: {

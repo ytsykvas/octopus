@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { octopus } from '../test/octopus.js'
 import { openedDirectories, sessionId, stubTerminalHost } from '../test/terminal.js'
+import { commentController } from '../test/comments.js'
 import { workspaceView } from '../test/workspaces.js'
 import { RightPanel } from './RightPanel.js'
 
@@ -49,6 +50,7 @@ function renderPanel(overrides: Partial<Props> = {}): {
     leftWidth: LEFT_WIDTH,
     diffView: 'unified',
     onDiffView: vi.fn(),
+    comments: commentController(),
     ...overrides
   }
 

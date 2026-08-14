@@ -190,7 +190,14 @@ export const uk: Translation = {
     statusRenamedLabel: 'Перейменовано',
     statusCopiedLabel: 'Копія',
     statusTypeChangedLabel: 'Тип змінено',
-    statusUntrackedLabel: 'Не відстежується'
+    statusUntrackedLabel: 'Не відстежується',
+    comment: 'Коментар до рядка {{line}}',
+    commentOld: 'Коментар до рядка {{line}} у файлі, яким він був',
+    commentPlaceholder: 'Що агент має тут змінити?',
+    commentSave: 'Додати',
+    commentCancel: 'Скасувати',
+    commentRemove: 'Прибрати цю нотатку',
+    commentIntro: 'Зауваження до змін:'
   },
 
   chat: {

@@ -37,6 +37,9 @@ function renderComposer(overrides: Partial<React.ComponentProps<typeof Composer>
       commands={[]}
       usage={{ context: null, subscription: null }}
       limit={null}
+      comments={[]}
+      onRemoveComment={vi.fn()}
+      onCommentsSent={vi.fn()}
       onSend={onSend}
       onStop={onStop}
       {...overrides}
@@ -186,6 +189,90 @@ describe('sending', () => {
     const { onSend } = renderComposer({
       usage: {
         context: { percentage: 48, usedTokens: 48_000, maxTokens: 200_000, model: 'claude-opus-5' },
+        subscription: null
+      }
+    })
+
+    await user.click(screen.getByRole('button', { name: /Context 48%/ }))
+    await user.click(screen.getByRole('menuitem', { name: /\/compact/ }))
+
+    expect(onSend).toHaveBeenCalledExactlyOnceWith('/compact')
+  })
+})
+
+describe('review notes riding with the message', () => {
+  const NOTE = {
+    path: 'src/core/diff.ts',
+    side: 'new' as const,
+    line: 42,
+    code: 'const b = 2',
+    text: 'this should be 3'
+  }
+
+  it('names the file and line of each note above the field', () => {
+    renderComposer({ comments: [NOTE] })
+
+    expect(screen.getByText('diff.ts:42')).toBeInTheDocument()
+    expect(screen.getByText('this should be 3')).toBeInTheDocument()
+  })
+
+  it('says nothing when there are no notes', () => {
+    renderComposer()
+
+    expect(screen.queryByRole('button', { name: 'Remove this note' })).not.toBeInTheDocument()
+  })
+
+  // Nothing implicit reaches the agent (§4): the notes go out as part of the
+  // message, where the user can read back exactly what was sent.
+  it('writes the notes into the message it sends', async () => {
+    const user = userEvent.setup()
+    const { onSend } = renderComposer({ comments: [NOTE] })
+
+    await user.type(screen.getByRole('textbox'), 'fix these')
+    await user.click(screen.getByRole('button', { name: 'Send' }))
+
+    expect(onSend).toHaveBeenCalledWith(expect.stringContaining('src/core/diff.ts:42'))
+    expect(onSend).toHaveBeenCalledWith(expect.stringContaining('fix these'))
+  })
+
+  // The review can be the whole message.
+  it('sends the notes even when nothing was typed', async () => {
+    const user = userEvent.setup()
+    const { onSend } = renderComposer({ comments: [NOTE] })
+
+    await user.click(screen.getByRole('button', { name: 'Send' }))
+
+    expect(onSend).toHaveBeenCalledWith(expect.stringContaining('this should be 3'))
+  })
+
+  it('clears them once they have gone out', async () => {
+    const user = userEvent.setup()
+    const onCommentsSent = vi.fn()
+    renderComposer({ comments: [NOTE], onCommentsSent })
+
+    await user.click(screen.getByRole('button', { name: 'Send' }))
+
+    expect(onCommentsSent).toHaveBeenCalled()
+  })
+
+  it('gives a note back before it is sent', async () => {
+    const user = userEvent.setup()
+    const onRemoveComment = vi.fn()
+    renderComposer({ comments: [NOTE], onRemoveComment })
+
+    await user.click(screen.getByRole('button', { name: 'Remove this note' }))
+
+    expect(onRemoveComment).toHaveBeenCalledWith(NOTE)
+  })
+
+  // A slash command goes out through the strip's own `onSend`, which composes
+  // nothing. A `/compact` carrying a review would be neither one nor the other.
+  it('leaves a command from the strip above the field alone', async () => {
+    const user = userEvent.setup()
+    const { onSend } = renderComposer({
+      comments: [NOTE],
+      usage: {
+        context: { percentage: 48, usedTokens: 9, maxTokens: 20, model: null },
         subscription: null
       }
     })
