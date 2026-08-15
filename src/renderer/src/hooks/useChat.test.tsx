@@ -260,3 +260,135 @@ describe('answering a question', () => {
     expect(result.current.pending?.requestId).toBe('r-q')
   })
 })
+
+describe('two settings changed in quick succession', () => {
+  /*
+   * Both writes reach the core correctly; only the pane disagrees. `change`
+   * applied its patch to the record it read *before* its await, so whichever
+   * answer landed last carried the other's field back to what it had been —
+   * and the picker then showed a value the core no longer held.
+   */
+  it('keeps both, rather than letting the later answer undo the earlier', async () => {
+    givenChat()
+    const model = held<Result<void>>()
+    const effort = held<Result<void>>()
+    vi.mocked(octopus().chats.setModel).mockReturnValue(model.promise)
+    vi.mocked(octopus().chats.setEffort).mockReturnValue(effort.promise)
+
+    const { result } = renderHook(() => useChat('planner/anna', 'idle', describeFailure))
+    await waitFor(() => {
+      expect(result.current.chat).not.toBeNull()
+    })
+
+    const both = act(async () => {
+      const first = result.current.setModel('claude-opus-5')
+      const second = result.current.setEffort('high')
+      model.resolve({ ok: true, value: undefined })
+      effort.resolve({ ok: true, value: undefined })
+      await Promise.all([first, second])
+    })
+    await both
+
+    expect(result.current.chat?.model).toBe('claude-opus-5')
+    expect(result.current.chat?.effort).toBe('high')
+  })
+})
+
+describe('a round trip that outlives the workspace it was made for', () => {
+  /*
+   * A control request to the CLI is easily over 100ms, and clicking another
+   * workspace in that time is ordinary. The record then landed on the pane now
+   * showing the other one: its log drew this workspace's events and its attic
+   * reported this workspace's usage — one workspace's work under another's
+   * name, which is the confusion this application exists to prevent.
+   */
+  it('drops a chat opened for a workspace that is no longer shown', async () => {
+    vi.mocked(octopus().chats.list).mockResolvedValue({ ok: true, value: [] })
+    const opening = held<Result<Chat>>()
+    vi.mocked(octopus().chats.open).mockReturnValue(opening.promise)
+
+    const { result, rerender } = renderHook(
+      ({ id }: { id: string }) => useChat(id, 'idle', describeFailure),
+      { initialProps: { id: 'planner/anna' } }
+    )
+    await waitFor(() => {
+      expect(result.current.loading).toBe(false)
+    })
+
+    // Started, switched away from, and only then answered — three separate
+    // turns of the loop, because that is what the real thing is. Done in one
+    // `act` React batches them into a single render, and the reset that runs
+    // there hides the write that is the whole bug.
+    const choosing = result.current.setWorkingMode('acceptEdits')
+    await act(async () => {
+      rerender({ id: 'planner/bob' })
+      await Promise.resolve()
+    })
+
+    await act(async () => {
+      opening.resolve({ ok: true, value: chat({ workspaceId: 'planner/anna' }) })
+      await choosing
+    })
+
+    expect(result.current.chat).toBeNull()
+  })
+
+  it('drops a setting answered for a workspace that is no longer shown', async () => {
+    givenChat()
+    const answering = held<Result<void>>()
+    vi.mocked(octopus().chats.setModel).mockReturnValue(answering.promise)
+
+    const { result, rerender } = renderHook(
+      ({ id }: { id: string }) => useChat(id, 'idle', describeFailure),
+      { initialProps: { id: 'planner/anna' } }
+    )
+    await waitFor(() => {
+      expect(result.current.chat).not.toBeNull()
+    })
+
+    const choosing = result.current.setModel('claude-opus-5')
+    await act(async () => {
+      rerender({ id: 'planner/bob' })
+      await Promise.resolve()
+    })
+
+    await act(async () => {
+      answering.resolve({ ok: true, value: undefined })
+      await choosing
+    })
+
+    // The record on screen is the one this workspace loaded for itself; the
+    // choice made in the other one must not have been written over it.
+    expect(result.current.chat?.model).toBeNull()
+  })
+
+  // The failure belongs to the conversation it happened in. Reported late it
+  // appears over whichever one is now on screen, about a message never sent
+  // there.
+  it('keeps a failed send from reporting itself over another workspace', async () => {
+    givenChat()
+    const sending = held<Result<void>>()
+    vi.mocked(octopus().chats.send).mockReturnValue(sending.promise)
+
+    const { result, rerender } = renderHook(
+      ({ id }: { id: string }) => useChat(id, 'idle', describeFailure),
+      { initialProps: { id: 'planner/anna' } }
+    )
+    await waitFor(() => {
+      expect(result.current.chat).not.toBeNull()
+    })
+
+    const sent = result.current.send('add a test')
+    await act(async () => {
+      rerender({ id: 'planner/bob' })
+      await Promise.resolve()
+    })
+
+    await act(async () => {
+      sending.resolve({ ok: false, error: 'the agent is gone' })
+      await sent
+    })
+
+    expect(result.current.error).toBeNull()
+  })
+})

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 
 import { type Chat, type Effort, EXIT_PLAN_MODE, type WorkingMode } from '@core/chats.js'
 import { isEphemeral } from '@core/events.js'
@@ -77,6 +77,22 @@ export function useChat(
   const [loading, setLoading] = useState(workspaceId !== null)
   const [error, setError] = useState<string | null>(null)
   const [shownWorkspaceId, setShownWorkspaceId] = useState(workspaceId)
+
+  /*
+   * The workspace on screen, for the callbacks to check against.
+   *
+   * The load effect has an `AbortController`; these have nothing, and a control
+   * request to the CLI is easily over 100ms — long enough to click elsewhere.
+   * A write landing after that puts one workspace's record on another's pane,
+   * which draws its events and reports its usage under the wrong name.
+   *
+   * Updated in an effect and read only inside a callback, never during render.
+   */
+  const shown = useRef(workspaceId)
+
+  useEffect(() => {
+    shown.current = workspaceId
+  }, [workspaceId])
 
   // Reset during render rather than in an effect. React supports this for
   // state derived from a prop, and it matters here: an effect runs after the
@@ -227,6 +243,10 @@ export function useChat(
     if (workspaceId === null) return null
 
     const opened = await window.octopus.chats.open(workspaceId)
+    // Abandoned: the record belongs to a workspace nobody is looking at, and
+    // the caller has nothing left to do with it either.
+    if (shown.current !== workspaceId) return null
+
     if (!opened.ok) {
       setError(describeFailure(opened))
       return null
@@ -249,12 +269,16 @@ export function useChat(
       setError(null)
 
       const sent = await window.octopus.chats.send(target.id, text)
+      // The failure belongs to the conversation it happened in; reported here
+      // it would appear over whichever one is now on screen.
+      if (shown.current !== workspaceId) return
+
       if (!sent.ok) {
         setError(describeFailure(sent))
         setBusy(false)
       }
     },
-    [ensureChat, describeFailure]
+    [ensureChat, workspaceId, describeFailure]
   )
 
   const interrupt = useCallback(async () => {
@@ -321,10 +345,21 @@ export function useChat(
       if (!target) return
 
       const changed = await send(target.id)
-      if (changed.ok) setChat({ ...target, ...patch })
+      if (shown.current !== workspaceId) return
+
+      // Applied to whatever the record has become rather than to the snapshot
+      // taken before the await: two settings changed a moment apart both reach
+      // the core, and the answer that lands last used to carry the other's
+      // field back to what it had been.
+      // The fallback is what the type asks for rather than a state to test:
+      // `current` is null only after the reset, and the guard above returns
+      // whenever that has happened. Ignored for coverage the way `at` in
+      // `core/diff.ts` is, and for the same reason.
+      /* v8 ignore next */
+      if (changed.ok) setChat((current) => ({ ...(current ?? target), ...patch }))
       else setError(describeFailure(changed))
     },
-    [ensureChat, describeFailure]
+    [ensureChat, workspaceId, describeFailure]
   )
 
   const setWorkingMode = useCallback(
