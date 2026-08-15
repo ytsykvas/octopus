@@ -24,6 +24,7 @@ import type { Change, ChangeLine } from './changeSummary.js'
 import { Markdown } from './Markdown.js'
 import { QuestionCard } from './QuestionCard.js'
 import { answersByRequest, groupToolRuns, toolCount } from './toolRuns.js'
+import { readFailure } from './toolFailure.js'
 import { describeToolInput, readPlan } from './toolSummary.js'
 
 /**
@@ -528,7 +529,7 @@ function Plan({
 function ToolFailure({ content }: { content: string }): React.JSX.Element {
   return (
     <p className="text-danger border-danger/25 border-l pl-3 font-mono text-[11px] break-all">
-      {content.slice(0, 400)}
+      {readFailure(content)}
     </p>
   )
 }

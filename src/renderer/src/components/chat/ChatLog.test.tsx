@@ -338,6 +338,29 @@ describe('what the log shows', () => {
     expect(screen.getByText('U+202E')).toBeVisible()
   })
 
+  /*
+   * Seen in a real conversation: a refused tool call showed its first 400
+   * characters, ending mid-word, with the agent side's own `<tool_use_error>`
+   * envelope drawn as though it were part of the message. What went was the
+   * sentence saying what to do about it.
+   */
+  it('shows both ends of a long failure, and not the envelope', () => {
+    renderLog({
+      entries: [
+        fromAgent({
+          type: 'tool_result',
+          toolUseId: 'c-1',
+          ok: false,
+          content: `<tool_use_error>InputValidationError: ${'x'.repeat(900)} Give each question two choices.</tool_use_error>`
+        })
+      ]
+    })
+
+    const shown = screen.getByText(/InputValidationError/)
+    expect(shown).toHaveTextContent('Give each question two choices.')
+    expect(shown).not.toHaveTextContent('tool_use_error')
+  })
+
   // Folded into "1 step", a lone call would be more work to read than the row
   // it replaced.
   it('leaves a lone tool call in the open', () => {
