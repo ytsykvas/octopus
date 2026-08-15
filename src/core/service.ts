@@ -35,7 +35,7 @@ import {
 } from './chats.js'
 import { type EditTarget, readChangeContext, readEditTarget } from './changeContext.js'
 import { readWorkspaceDiff, type WorkspaceDiff } from './diff.js'
-import { type Config, loadConfig, saveConfig, toSdkSettingSources } from './config.js'
+import { type Config, ConfigSchema, loadConfig, saveConfig, toSdkSettingSources } from './config.js'
 import { type AgentEvent, isEphemeral } from './events.js'
 import { cloneRepository, listRepositories, type RemoteRepository } from './github.js'
 import type { GitExec } from './git.js'
@@ -432,7 +432,11 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
   }
 
   async function applyConfig(patch: Partial<Config>): Promise<Config> {
-    const next: Config = { ...config, ...patch }
+    // Parsed on the way in, not only on the way out. `saveConfig` parses before
+    // writing, so the file was always valid while the copy held here was
+    // whatever arrived — and the two could disagree until the next restart.
+    // This is the same parse that is about to happen anyway, one step earlier.
+    const next: Config = ConfigSchema.parse({ ...config, ...patch })
     await saveConfig(next, configPath)
     config = next
     return next
@@ -747,6 +751,20 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
    * what holds the tool call, and a refusal is the only answer that cannot
    * start work nobody approved.
    */
+  /**
+   * Forgets the edits a chat announced and never finished.
+   *
+   * An entry is made on `tool_use` and removed by the matching result, so a
+   * turn stopped mid-edit leaves one behind — against the map's own promise
+   * that it cannot grow. Called wherever a turn stops being answered for: with
+   * the session, and with an interrupt.
+   */
+  function abandonEdits(chatId: string): void {
+    for (const [toolUseId, edit] of editsInFlight) {
+      if (edit.chatId === chatId) editsInFlight.delete(toolUseId)
+    }
+  }
+
   function abandonPermissions(chatId: string): void {
     for (const [requestId, request] of pending) {
       if (request.chatId !== chatId) continue
@@ -790,9 +808,7 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
       // for, and a question nobody will ever answer at all. Both go with it,
       // and only this chat's, since the maps are the whole service's.
       abandonPermissions(chat.id)
-      for (const [toolUseId, edit] of editsInFlight) {
-        if (edit.chatId === chat.id) editsInFlight.delete(toolUseId)
-      }
+      abandonEdits(chat.id)
 
       // A `/clear` the session never got round to answering, and a clearing
       // turn whose result never came. Both belong to a chat that is going with
@@ -969,6 +985,13 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
         const repository = makeExec(project.repoPath)
 
         for (const workspace of workspacesOfProject(state, projectId)) {
+          // The same closing `removeWorkspaceById` does, and for the same
+          // reason: a session outliving its worktree holds a child process
+          // pointed at a directory that no longer exists, and nothing in the
+          // interface can reach it again — only quitting the application ends
+          // it. Left out here, removing a project leaked every agent in it.
+          await closeChatsOf(workspace.id)
+
           // Best-effort, one by one: a worktree already deleted from outside
           // must not stop the rest — or the project — from being removed. The
           // user has confirmed, so uncommitted work goes too.
@@ -1081,9 +1104,6 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
     async openChat(workspaceId) {
       requireWorkspace(workspaceId)
 
-      const [existing] = chatsOfWorkspace(state, workspaceId)
-      if (existing) return existing
-
       const chat = newChat(workspaceId, {
         id: uuid(),
         agent: 'claude',
@@ -1094,8 +1114,30 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
         createdAt: now()
       })
 
-      await commit((current) => addChat(current, chat))
-      return chat
+      /*
+       * Decided inside the commit rather than before it.
+       *
+       * The renderer has two ways in — a setting picked in the composer, and a
+       * message sent — and either can be in flight when the other starts. Both
+       * saw no record and both wrote one: the reply and its whole transcript
+       * went to the second while `listChats` answered with the first, so the
+       * conversation reopened empty and the transcript that had it was filed
+       * under an id nothing pointed at. `commit` serialises, so the second
+       * caller cannot read a state the first has not written.
+       */
+      // The one that was written, which for whichever call lost the race is not
+      // the one it brought.
+      let opened = chat
+
+      await commit((current) => {
+        const [existing] = chatsOfWorkspace(current, workspaceId)
+        if (!existing) return addChat(current, chat)
+
+        opened = existing
+        return current
+      })
+
+      return opened
     },
 
     listChats(workspaceId) {
@@ -1174,8 +1216,11 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
 
       // Before the interrupt rather than after it: stopping a turn is how a
       // question gets abandoned in the first place, and an interrupt that
-      // throws must still leave nothing behind to be asked again.
+      // throws must still leave nothing behind to be asked again. The same
+      // applies to an edit announced and never finished — no result is coming
+      // for it now.
       abandonPermissions(chatId)
+      abandonEdits(chatId)
 
       // Nothing running is not a failure — the button is simply ahead of the
       // agent, which finished between the render and the click.

@@ -383,6 +383,20 @@ describe('config', () => {
     expect(updated.settingSources).toBe('project')
     expect(service.getConfig().settingSources).toBe('project')
   })
+
+  /*
+   * The patch arrives over IPC as a `Partial<Config>` and nothing validated it.
+   * `saveConfig` parses before writing, so the file stayed right while the copy
+   * held in memory was whatever came — and the two disagreed until the next
+   * restart, which is a bug that survives a screenshot.
+   */
+  it('refuses a patch the schema does not accept, rather than holding it', async () => {
+    const before = service.getConfig().rightPanelWidth
+
+    await expect(service.updateConfig({ rightPanelWidth: 12 })).rejects.toBeDefined()
+
+    expect(service.getConfig().rightPanelWidth).toBe(before)
+  })
 })
 
 describe('projects', () => {
@@ -1100,6 +1114,26 @@ describe('the agent chat', () => {
           sevenDay: { utilization: 84, resetsAt: '2026-08-12T22:00:00.149796+00:00' }
         }
       })
+    })
+
+    /*
+     * The renderer has two ways in — picking a setting in the composer, and
+     * sending a message — and either can be in flight when the other starts.
+     * Both used to see no record and both wrote one: the reply and its whole
+     * transcript went to the second while `listChats` answered with the first,
+     * so the conversation reopened empty and the transcript that had it was
+     * filed under an id nothing pointed at.
+     */
+    it('opens one chat when asked for two at once', async () => {
+      const { service, workspaceId } = await withWorkspace()
+
+      const [first, second] = await Promise.all([
+        service.openChat(workspaceId),
+        service.openChat(workspaceId)
+      ])
+
+      expect(first.id).toBe(second.id)
+      expect(service.listChats(workspaceId)).toHaveLength(1)
     })
 
     // The subscription belongs to the account, so a workspace nobody has
@@ -2456,6 +2490,38 @@ describe('the agent chat', () => {
       expect(events.some((entry) => entry.event.type === 'change_context')).toBe(false)
     })
 
+    /*
+     * A turn stopped mid-edit produces no result, so the entry stayed for ever
+     * — against the map's own comment promising it cannot grow. Bounded and
+     * small, but the same shape as the question `abandonPermissions` withdraws.
+     */
+    it('forgets an edit whose turn was interrupted', async () => {
+      const { service, workspaceId, events } = await withWorkspace()
+      const chat = await service.openChat(workspaceId)
+      await service.sendToChat(chat.id, 'edit it')
+
+      const session = agent()
+      session.emit(
+        toolCallMessage('c-1', 'Edit', {
+          file_path: 'notes.txt',
+          old_string: 'a',
+          new_string: 'b'
+        })
+      )
+      await vi.waitFor(() => {
+        expect(events.some((entry) => entry.event.type === 'tool_use')).toBe(true)
+      })
+
+      await service.interruptChat(chat.id)
+      // Whatever arrives now belongs to a turn nobody is waiting on.
+      session.emit(toolResultMessage('c-1', true))
+
+      await vi.waitFor(() => {
+        expect(events.some((entry) => entry.event.type === 'tool_result')).toBe(true)
+      })
+      expect(events.some((entry) => entry.event.type === 'change_context')).toBe(false)
+    })
+
     // The context is a courtesy: the file may have moved on between the edit
     // and the read, and a wrong one would show a change among lines it never
     // touched.
@@ -3092,6 +3158,22 @@ describe('the agent chat', () => {
       await service.removeProjectById(projectId)
 
       expect(service.listChats(workspaceId)).toEqual([])
+    })
+
+    /*
+     * The records going was all this used to assert, which is why the sessions
+     * staying went unnoticed. A leaked agent is not idle: it holds a child
+     * process whose working directory has just been deleted underneath it, and
+     * nothing in the interface can reach it again.
+     */
+    it('ends the sessions of every workspace it takes', async () => {
+      const { service, projectId, workspaceId } = await withWorkspace()
+      const chat = await service.openChat(workspaceId)
+      await service.sendToChat(chat.id, 'work')
+
+      await service.removeProjectById(projectId)
+
+      expect(agent().closed()).toBe(1)
     })
   })
 
