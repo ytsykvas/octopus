@@ -171,11 +171,19 @@ Versions below are **actually installed and verified** (`npm run check` and `ele
 | react-i18next        | 17.0.11       | React bindings                 |
 | motion               | 13.0.0        | animation                      |
 | lucide-react         | 1.30.0        | icons                          |
-| zustand              | 5.0.14        | UI state                       |
 | node-pty             | 1.1.0         | pseudo-terminals (native)      |
 | @xterm/xterm         | 6.0.0         | terminal rendering             |
 | @xterm/addon-fit     | 0.11.0        | terminal sizing                |
 | shadcn/ui            | not yet added | added as components require it |
+
+**Shared state is a hook, not a store.** `zustand` sat in this table naming
+itself as what holds UI state, and nothing ever imported it: every value two
+panes share — the workspaces, the projects, the review notes, the composer
+drafts — is a hook whose value `App` holds and passes down. A dependency that is
+a claim rather than a tool is worse than none, because the next person to reach
+for shared state reads the line, adds a store, and the application has two ways
+of doing one thing. If the prop threading ever stops being shallow, that is the
+moment to reconsider — not before.
 
 **Native modules.** Stage 1 started without them to avoid `electron-rebuild`, and that held until the embedded terminal arrived: `node-pty` is native and has to be rebuilt against Electron's ABI. A `postinstall` script does it automatically, so `npm install` remains a single step.
 
