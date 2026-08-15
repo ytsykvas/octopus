@@ -28,6 +28,10 @@ interface ChatProps {
    * is not something the chat knows how to do.
    */
   readonly workspace: WorkspaceView
+  /** What was in the composer when this workspace was last left. */
+  readonly draft: string
+  /** Where that text goes on the way out; `App` keeps one per workspace. */
+  readonly onDraftLeave: (text: string) => void
   /** Review notes from the diff pane, riding out with the next message. */
   readonly comments: DiffCommentController
   /**
@@ -63,6 +67,8 @@ interface ChatProps {
  */
 export function Chat({
   workspace,
+  draft,
+  onDraftLeave,
   comments,
   color,
   defaultWorkingMode,
@@ -193,6 +199,18 @@ export function Chat({
       )}
 
       <Composer
+        /*
+         * Remounted per workspace, which is what stops a sentence typed for one
+         * being sent to another — it went to that agent, in that worktree, on
+         * that branch, with the text still in the field saying otherwise.
+         *
+         * A key rather than a reset, because the two states derived from the
+         * text go with it: the highlighted command and the dismissed hint would
+         * otherwise be left pointing at words that have gone.
+         */
+        key={workspace.id}
+        initialDraft={draft}
+        onDraftLeave={onDraftLeave}
         busy={chat.busy}
         workingMode={workingMode}
         onWorkingMode={(mode) => void chat.setWorkingMode(mode)}

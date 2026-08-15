@@ -23,6 +23,8 @@ function renderComposer(overrides: Partial<React.ComponentProps<typeof Composer>
 
   render(
     <Composer
+      initialDraft=""
+      onDraftLeave={vi.fn()}
       busy={false}
       workingMode="default"
       onWorkingMode={onWorkingMode}

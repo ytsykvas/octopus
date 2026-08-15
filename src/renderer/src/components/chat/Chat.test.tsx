@@ -44,6 +44,8 @@ async function openChat(
   render(
     <Chat
       workspace={target}
+      draft=""
+      onDraftLeave={vi.fn()}
       comments={commentController()}
       color="blue"
       defaultWorkingMode={defaults.workingMode ?? 'default'}
@@ -113,6 +115,8 @@ describe('the project it belongs to', () => {
     const { container } = render(
       <Chat
         workspace={workspace()}
+        draft=""
+        onDraftLeave={vi.fn()}
         comments={commentController()}
         color="teal"
         defaultWorkingMode="default"
@@ -246,6 +250,8 @@ describe('an existing conversation', () => {
     const { rerender } = render(
       <Chat
         workspace={workspace()}
+        draft=""
+        onDraftLeave={vi.fn()}
         comments={commentController()}
         color="blue"
         defaultWorkingMode="default"
@@ -259,6 +265,8 @@ describe('an existing conversation', () => {
     rerender(
       <Chat
         workspace={workspace({ id: 'planner/maria', name: 'maria' })}
+        draft=""
+        onDraftLeave={vi.fn()}
         comments={commentController()}
         color="blue"
         defaultWorkingMode="default"
@@ -967,5 +975,68 @@ describe('answering a question the agent asked', () => {
       expect(screen.queryByRole('button', { name: 'Answer' })).not.toBeInTheDocument()
     })
     expect(screen.getByRole('radio', { name: /date-fns/ })).toBeChecked()
+  })
+})
+
+/*
+ * This application's whole premise is that several agents work at once, so
+ * looking at another workspace mid-sentence is ordinary rather than careless.
+ */
+describe('a draft and the workspace it was typed in', () => {
+  const anna = workspace()
+  const bob = workspace({ id: 'planner/bob', name: 'bob', path: '/ws/planner/bob' })
+
+  function renderFor(target: WorkspaceView, draft = ''): (next: WorkspaceView) => void {
+    const { rerender } = render(
+      <Chat
+        workspace={target}
+        draft={draft}
+        onDraftLeave={vi.fn()}
+        comments={commentController()}
+        color="blue"
+        defaultWorkingMode="default"
+        defaultEffort="medium"
+      />
+    )
+
+    return (next) => {
+      rerender(
+        <Chat
+          workspace={next}
+          draft={draft}
+          onDraftLeave={vi.fn()}
+          comments={commentController()}
+          color="blue"
+          defaultWorkingMode="default"
+          defaultEffort="medium"
+        />
+      )
+    }
+  }
+
+  // Typed for anna, sent from bob: it ran in bob's worktree, on bob's branch,
+  // with the text still in the field saying it belonged where it was read.
+  it('does not carry what was typed in one workspace into another', async () => {
+    const user = userEvent.setup()
+    const switchTo = renderFor(anna)
+    await waitFor(() => {
+      expect(octopus().chats.list).toHaveBeenCalled()
+    })
+    await user.type(field(), 'drop the old migration and rerun the seeds')
+
+    switchTo(bob)
+
+    expect(field()).toHaveValue('')
+    await user.type(field(), '{Enter}')
+    expect(octopus().chats.send).not.toHaveBeenCalled()
+  })
+
+  it('opens the field on the draft it was given', async () => {
+    renderFor(anna, 'half a sentence')
+    await waitFor(() => {
+      expect(octopus().chats.list).toHaveBeenCalled()
+    })
+
+    expect(field()).toHaveValue('half a sentence')
   })
 })

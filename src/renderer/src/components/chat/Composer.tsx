@@ -1,5 +1,5 @@
 import { ArrowUp, CheckCheck, Gauge, Map, Shield, Sparkles } from 'lucide-react'
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import {
@@ -25,6 +25,16 @@ import { ComposerPicker } from './ComposerPicker.js'
 import { modelRows } from './modelRows.js'
 
 interface ComposerProps {
+  /**
+   * What was in the field when this workspace was last left.
+   *
+   * Seeded rather than controlled: the value is read once, on mount, and the
+   * component is remounted per workspace — see `latest` below for why it is not
+   * reported on every keystroke.
+   */
+  readonly initialDraft: string
+  /** Where the text goes when the composer is left, so it is there on return. */
+  readonly onDraftLeave: (text: string) => void
   readonly busy: boolean
   /** What the agent may do without asking, once it is doing anything. */
   readonly workingMode: WorkingMode
@@ -158,10 +168,44 @@ export function Composer({
   onStop,
   comments,
   onRemoveComment,
-  onCommentsSent
+  onCommentsSent,
+  initialDraft,
+  onDraftLeave
 }: ComposerProps): React.JSX.Element {
   const { t } = useTranslation()
-  const [draft, setDraft] = useState('')
+  const [draft, setDraft] = useState(initialDraft)
+
+  /*
+   * The text as it stands, and where to leave it.
+   *
+   * The draft belongs to the workspace it was typed in, and the pane keeps one
+   * per workspace so looking at another does not cost a half-written prompt.
+   * Handed up **once, on the way out** rather than on every keystroke: this
+   * component is remounted per workspace, so leaving is exactly when the value
+   * is wanted — and reporting a change would put a `setState` in `App` under
+   * every key pressed, with `ChatLog` re-rendering behind it.
+   *
+   * Refs, written in a handler and read in a cleanup, never during render.
+   */
+  const latest = useRef(draft)
+  const leave = useRef(onDraftLeave)
+
+  useEffect(() => {
+    leave.current = onDraftLeave
+  })
+
+  useEffect(
+    () => () => {
+      leave.current(latest.current)
+    },
+    []
+  )
+
+  /** The one way the text moves, so what is handed up cannot fall behind it. */
+  const write = (text: string): void => {
+    latest.current = text
+    setDraft(text)
+  }
 
   const field = useRef<HTMLDivElement>(null)
   /** Which suggestion Enter would take. */
@@ -230,7 +274,7 @@ export function Composer({
 
     onSend(withComments(trimmed, comments, t('diff.commentIntro')))
     onCommentsSent()
-    setDraft('')
+    write('')
     setDismissed(false)
     setActive(0)
   }
@@ -243,7 +287,7 @@ export function Composer({
    * ever runs from one keystroke aimed at a list that had just moved.
    */
   const complete = (command: AgentCommand): void => {
-    setDraft(completeCommand(command))
+    write(completeCommand(command))
     setDismissed(true)
   }
 
@@ -275,7 +319,7 @@ export function Composer({
           value={draft}
           placeholder={t('chat.placeholder')}
           onChange={(event) => {
-            setDraft(event.target.value)
+            write(event.target.value)
             // Typing brings the list back — dismissing was about the draft as
             // it stood — and returns the highlight to the top, since filtering
             // has moved what sits at each index.

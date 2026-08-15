@@ -79,6 +79,23 @@ export function App(): React.JSX.Element {
   // and the two panes are siblings that know nothing of each other.
   const diffComments = useDiffComments(selectedWorkspaceId)
 
+  /*
+   * A half-written prompt, kept per workspace.
+   *
+   * Here rather than in the chat, which unmounts the moment the selection is
+   * cleared — clicking the open project does exactly that, and losing the text
+   * to a stray click is the complaint this answers. Deliberately not persisted,
+   * for the reason the review notes are not: a draft is about a workspace whose
+   * files are on the point of changing.
+   *
+   * Written once per switch, not per keystroke: `Composer` hands its text up on
+   * the way out.
+   */
+  const [drafts, setDrafts] = useState<ReadonlyMap<string, string>>(new Map())
+  const keepDraft = useCallback((workspaceId: string, text: string) => {
+    setDrafts((current) => new Map(current).set(workspaceId, text))
+  }, [])
+
   useEffect(() => {
     const controller = new AbortController()
 
@@ -426,6 +443,10 @@ export function App(): React.JSX.Element {
           ) : (
             <Chat
               workspace={selectedWorkspace}
+              draft={drafts.get(selectedWorkspace.id) ?? ''}
+              onDraftLeave={(text) => {
+                keepDraft(selectedWorkspace.id, text)
+              }}
               color={selectedProject.color}
               comments={diffComments}
               defaultWorkingMode={defaultWorkingMode}

@@ -1291,6 +1291,26 @@ describe('App', () => {
    * the promise this used to make, that the hint must not open settings for a
    * project that has gone.
    */
+  /*
+   * A half-written prompt is not lost to going and looking at something. The
+   * pane keeps one per workspace, which is the other half of the fix that stops
+   * a sentence typed for one workspace being sent to another.
+   */
+  it('finds a draft where it was left when the workspace comes back', async () => {
+    givenTwoProjects()
+    const user = await openApp()
+    await user.click(await screen.findByRole('button', { name: 'PL' }))
+    await user.click(await screen.findByText('anna'))
+
+    await user.type(await screen.findByRole('textbox'), 'drop the old migration')
+    await user.click(screen.getByText('bob'))
+    expect(await screen.findByRole('textbox')).toHaveValue('')
+
+    await user.click(screen.getByText('anna'))
+
+    expect(await screen.findByRole('textbox')).toHaveValue('drop the old migration')
+  })
+
   it('offers no script for a workspace whose project has gone', async () => {
     givenTwoProjects()
     vi.mocked(window.octopus.projects.listRemote).mockResolvedValue({
