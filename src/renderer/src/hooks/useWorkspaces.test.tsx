@@ -44,6 +44,9 @@ const accepts = (): Mock<Confirm> => answering({ confirmed: true, checked: false
 const acceptsAndDeletesBranch = (): Mock<Confirm> => answering({ confirmed: true, checked: true })
 const declines = (): Mock<Confirm> => answering({ confirmed: false, checked: false })
 
+/** Waits out a delay the hook is counting, so an assertion outlasts it. */
+const after = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms))
+
 /** Lets every promise already queued run before the assertion that follows. */
 const settled = (): Promise<void> => new Promise((resolve) => setTimeout(resolve, 0))
 
@@ -74,6 +77,31 @@ const emitStatus = (event: WorkspaceStatusEvent): void => {
 
   act(() => {
     for (const handler of handlers) handler(event)
+  })
+}
+
+/** A turn ending in a named workspace, as main broadcasts it. */
+const emitTurnEnd = (workspaceId: string, failed = false): void => {
+  const handlers = vi.mocked(window.octopus.chats.onEvent).mock.calls.map(([handler]) => handler)
+
+  act(() => {
+    for (const handler of handlers) {
+      handler({
+        chatId: 'chat-1',
+        workspaceId,
+        event: failed
+          ? { type: 'error', message: 'the agent gave up' }
+          : {
+              type: 'result',
+              ok: true,
+              costUsd: 0,
+              durationMs: 1,
+              inputTokens: 0,
+              outputTokens: 0,
+              terminalReason: 'completed'
+            }
+      })
+    }
   })
 }
 
@@ -119,6 +147,140 @@ describe('useWorkspaces', () => {
     // Nothing else moves, and no second reading of the workspaces is asked for.
     expect(result.current.byProject.get('planner')?.[0]?.status).toBe('idle')
     expect(window.octopus.workspaces.list).toHaveBeenCalledTimes(2)
+  })
+
+  /*
+   * The count used to be read on create, rename, remove and first load, and
+   * never again — so the agent could rewrite twenty files while the row went on
+   * saying what it said an hour ago. The diff pane beside it re-reads itself
+   * when a turn ends, which is what made the disagreement visible; since the
+   * same dot also carries the agent's state, the two now sit inside one mark.
+   */
+  it('re-reads the count when a turn ends', async () => {
+    vi.mocked(window.octopus.workspaces.list)
+      .mockResolvedValueOnce({ ok: true, value: [anna] })
+      .mockResolvedValue({ ok: true, value: [{ ...anna, changedFiles: 8 }] })
+    const projects = [planner]
+
+    const { result } = renderHook(() => useWorkspaces(projects, accepts(), vi.fn<OnError>()))
+    await waitFor(() => {
+      expect(result.current.flat[0]?.changedFiles).toBe(0)
+    })
+
+    emitTurnEnd(anna.id)
+
+    await waitFor(() => {
+      expect(result.current.flat[0]?.changedFiles).toBe(8)
+    })
+  })
+
+  // A turn that failed may well have written files before it did.
+  it('re-reads after a turn that ended badly too', async () => {
+    vi.mocked(window.octopus.workspaces.list)
+      .mockResolvedValueOnce({ ok: true, value: [anna] })
+      .mockResolvedValue({ ok: true, value: [{ ...anna, changedFiles: 2 }] })
+    const projects = [planner]
+
+    const { result } = renderHook(() => useWorkspaces(projects, accepts(), vi.fn<OnError>()))
+    await waitFor(() => {
+      expect(result.current.flat[0]?.changedFiles).toBe(0)
+    })
+
+    emitTurnEnd(anna.id, true)
+
+    await waitFor(() => {
+      expect(result.current.flat[0]?.changedFiles).toBe(2)
+    })
+  })
+
+  // A turn can end twice over — an error and then a result — and one read is
+  // the answer to both.
+  it('reads once for two endings in quick succession', async () => {
+    workspacesPerProject({ planner: [anna] })
+    const projects = [planner]
+
+    const { result } = renderHook(() => useWorkspaces(projects, accepts(), vi.fn<OnError>()))
+    await waitFor(() => {
+      expect(result.current.flat).toEqual([anna])
+    })
+    const reads = vi.mocked(window.octopus.workspaces.list).mock.calls.length
+
+    emitTurnEnd(anna.id, true)
+    emitTurnEnd(anna.id)
+    await waitFor(() => {
+      expect(window.octopus.workspaces.list).toHaveBeenCalledTimes(reads + 1)
+    })
+
+    await settled()
+    expect(window.octopus.workspaces.list).toHaveBeenCalledTimes(reads + 1)
+  })
+
+  it('asks nothing for a turn in a project it does not know', async () => {
+    workspacesPerProject({ planner: [anna] })
+    const projects = [planner]
+
+    const { result } = renderHook(() => useWorkspaces(projects, accepts(), vi.fn<OnError>()))
+    await waitFor(() => {
+      expect(result.current.flat).toEqual([anna])
+    })
+    const reads = vi.mocked(window.octopus.workspaces.list).mock.calls.length
+
+    emitTurnEnd('website/carol')
+    // Past the settling delay, or this would pass without the guard: nothing
+    // has been read yet at that point either way.
+    await after(400)
+
+    expect(window.octopus.workspaces.list).toHaveBeenCalledTimes(reads)
+  })
+
+  // Streamed text arrives many times a turn; a read on each would put git to
+  // work per fragment.
+  it('reads nothing while the turn is still going', async () => {
+    workspacesPerProject({ planner: [anna] })
+    const projects = [planner]
+
+    const { result } = renderHook(() => useWorkspaces(projects, accepts(), vi.fn<OnError>()))
+    await waitFor(() => {
+      expect(result.current.flat).toEqual([anna])
+    })
+    const reads = vi.mocked(window.octopus.workspaces.list).mock.calls.length
+
+    act(() => {
+      for (const handler of vi
+        .mocked(window.octopus.chats.onEvent)
+        .mock.calls.map(([listener]) => listener)) {
+        handler({
+          chatId: 'chat-1',
+          workspaceId: anna.id,
+          event: { type: 'text', text: 'still working' }
+        })
+      }
+    })
+    await after(400)
+
+    expect(window.octopus.workspaces.list).toHaveBeenCalledTimes(reads)
+  })
+
+  // A read that fails leaves the row saying what it last knew, which is a
+  // better answer than emptying the project it belongs to.
+  it('keeps the workspaces it has when the re-read fails', async () => {
+    vi.mocked(window.octopus.workspaces.list)
+      .mockResolvedValueOnce({ ok: true, value: [anna] })
+      .mockResolvedValue({ ok: false, error: 'could not list worktrees' })
+    const projects = [planner]
+
+    const { result } = renderHook(() => useWorkspaces(projects, accepts(), vi.fn<OnError>()))
+    await waitFor(() => {
+      expect(result.current.flat).toEqual([anna])
+    })
+
+    const reads = vi.mocked(window.octopus.workspaces.list).mock.calls.length
+    emitTurnEnd(anna.id)
+    await waitFor(() => {
+      expect(window.octopus.workspaces.list).toHaveBeenCalledTimes(reads + 1)
+    })
+
+    expect(result.current.flat).toEqual([anna])
   })
 
   it('ignores a status for a workspace it does not hold', async () => {

@@ -7,6 +7,16 @@ import type { WorkspaceView } from '@core/workspaces.js'
 import type { ConfirmRequest, ConfirmResult } from './useConfirm.js'
 import { useErrorMessage } from './useErrorMessage.js'
 
+/**
+ * How long to wait after a turn ends before asking git again.
+ *
+ * Long enough that a turn ending twice over — an error and then a result — is
+ * one read rather than two, and short enough that the row is current by the
+ * time the eye reaches it. The same number the diff pane settles on, for the
+ * same reason.
+ */
+const SETTLE_MS = 300
+
 interface UseWorkspaces {
   readonly byProject: ReadonlyMap<string, readonly WorkspaceView[]>
   readonly flat: readonly WorkspaceView[]
@@ -60,6 +70,48 @@ export function useWorkspaces(
   const refresh = useCallback(async () => {
     setByProject(await load())
   }, [load])
+
+  /** The pending re-read, so a turn ending twice over is one of them. */
+  const settle = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  /*
+   * The changed-file count, re-read when the work that changes it stops.
+   *
+   * It used to be read on create, rename, remove and first load and never
+   * again, so the agent could rewrite twenty files while the row went on saying
+   * what it said an hour ago — beside a diff pane that re-reads itself on the
+   * same event, and now inside the same dot that carries the agent's state.
+   *
+   * Only the project the workspace belongs to: a turn ending is a poor reason
+   * to run `git status` over every workspace of every project.
+   */
+  useEffect(() => {
+    const unsubscribe = window.octopus.chats.onEvent((announced) => {
+      // A turn ends either way, and one that failed may well have written files
+      // before it did.
+      if (announced.event.type !== 'result' && announced.event.type !== 'error') return
+
+      const projectId = latestProjects.current.find((project) =>
+        announced.workspaceId.startsWith(`${project.id}/`)
+      )?.id
+      if (projectId === undefined) return
+
+      if (settle.current !== null) clearTimeout(settle.current)
+      settle.current = setTimeout(() => {
+        void (async () => {
+          const result = await window.octopus.workspaces.list(projectId)
+          if (!result.ok) return
+
+          setByProject((current) => new Map(current).set(projectId, result.value))
+        })()
+      }, SETTLE_MS)
+    })
+
+    return () => {
+      unsubscribe()
+      if (settle.current !== null) clearTimeout(settle.current)
+    }
+  }, [])
 
   /*
    * What a workspace is doing, patched in as the core says so.
