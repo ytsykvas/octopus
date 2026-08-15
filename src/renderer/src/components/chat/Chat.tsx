@@ -76,7 +76,7 @@ export function Chat({
 }: ChatProps): React.JSX.Element {
   const { t } = useTranslation()
   const describeFailure = useErrorMessage()
-  const chat = useChat(workspace.id, describeFailure)
+  const chat = useChat(workspace.id, workspace.status, describeFailure)
   const rateLimit = useRateLimit()
   const models = useModels()
   const commands = useCommands(chat.chat?.id ?? null)

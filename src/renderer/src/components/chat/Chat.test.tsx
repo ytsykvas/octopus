@@ -1040,3 +1040,90 @@ describe('a draft and the workspace it was typed in', () => {
     expect(field()).toHaveValue('half a sentence')
   })
 })
+
+/*
+ * The one control that stops an agent editing files, missing exactly when
+ * somebody has come back to check on it. The list beside the pane says the
+ * workspace is working, so the window used to disagree with itself.
+ */
+describe('a turn that was left running', () => {
+  const working = workspace({ status: 'running' })
+
+  it('offers to stop a turn found already in flight', async () => {
+    givenChat()
+    render(
+      <Chat
+        workspace={working}
+        draft=""
+        onDraftLeave={vi.fn()}
+        comments={commentController()}
+        color="blue"
+        defaultWorkingMode="default"
+        defaultEffort="medium"
+      />
+    )
+
+    expect(await screen.findByRole('button', { name: 'Stop' })).toBeInTheDocument()
+  })
+
+  it('stops it when asked', async () => {
+    const user = userEvent.setup()
+    givenChat()
+    render(
+      <Chat
+        workspace={working}
+        draft=""
+        onDraftLeave={vi.fn()}
+        comments={commentController()}
+        color="blue"
+        defaultWorkingMode="default"
+        defaultEffort="medium"
+      />
+    )
+
+    await user.click(await screen.findByRole('button', { name: 'Stop' }))
+
+    expect(octopus().chats.interrupt).toHaveBeenCalledWith(CHAT_ID)
+  })
+
+  // Derived rather than seeded on the switch: the event that ends a turn is
+  // filtered by the open chat's id and the chat is null until its history has
+  // loaded, so one arriving in that window is dropped — and a seeded flag would
+  // stay stuck on with nothing left to correct it.
+  it('offers to send again once the workspace is no longer working', async () => {
+    givenChat()
+    const { rerender } = render(
+      <Chat
+        workspace={working}
+        draft=""
+        onDraftLeave={vi.fn()}
+        comments={commentController()}
+        color="blue"
+        defaultWorkingMode="default"
+        defaultEffort="medium"
+      />
+    )
+    expect(await screen.findByRole('button', { name: 'Stop' })).toBeInTheDocument()
+
+    rerender(
+      <Chat
+        workspace={workspace({ status: 'idle' })}
+        draft=""
+        onDraftLeave={vi.fn()}
+        comments={commentController()}
+        color="blue"
+        defaultWorkingMode="default"
+        defaultEffort="medium"
+      />
+    )
+
+    expect(await screen.findByRole('button', { name: 'Send' })).toBeInTheDocument()
+  })
+
+  it('offers to send in a workspace that is doing nothing', async () => {
+    givenChat()
+    await openLoadedChat()
+
+    expect(screen.getByRole('button', { name: 'Send' })).toBeInTheDocument()
+  })
+})

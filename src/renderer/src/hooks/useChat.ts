@@ -4,6 +4,7 @@ import { type Chat, type Effort, EXIT_PLAN_MODE, type WorkingMode } from '@core/
 import { isEphemeral } from '@core/events.js'
 import type { QuestionAnswer } from '@core/questions.js'
 import type { PermissionAnswer } from '@core/service.js'
+import type { Workspace } from '@core/store.js'
 import type { ChatEntry } from '@core/transcript.js'
 
 import type { Failure, Result } from '../../../preload/index.js'
@@ -55,7 +56,19 @@ type Describe = (failure: Failure) => string
  * The two are deliberately never merged by re-reading the file — an append the
  * UI has already drawn would come back as a duplicate of itself.
  */
-export function useChat(workspaceId: string | null, describeFailure: Describe): ChatController {
+export function useChat(
+  workspaceId: string | null,
+  /**
+   * What the workspace is doing, as the core last said.
+   *
+   * Read as well as the events, because the events are filtered by the open
+   * chat's id and there is no chat until its history has loaded — so a turn
+   * ending in that window is dropped. Seeding a flag at the switch would leave
+   * it stuck on with nothing left to correct it; this corrects itself.
+   */
+  status: Workspace['status'],
+  describeFailure: Describe
+): ChatController {
   const [chat, setChat] = useState<Chat | null>(null)
   const [entries, setEntries] = useState<readonly ChatEntry[]>([])
   const [streaming, setStreaming] = useState<Streaming>(NOTHING_STREAMING)
@@ -340,11 +353,23 @@ export function useChat(workspaceId: string | null, describeFailure: Describe): 
     [change]
   )
 
+  /*
+   * Working, by either account.
+   *
+   * The flag above follows this pane's own events; the status follows the
+   * workspace whatever pane is on screen, which is what survives looking away
+   * and coming back. Gated on the chat having loaded, because `interrupt`
+   * returns early without one — otherwise the stop button would stand there
+   * through the read and do nothing when pressed.
+   */
+  const working =
+    busy || (chat !== null && (status === 'running' || status === 'waiting_permission'))
+
   return {
     chat,
     entries,
     streaming,
-    busy,
+    busy: working,
     pending,
     loading,
     error,

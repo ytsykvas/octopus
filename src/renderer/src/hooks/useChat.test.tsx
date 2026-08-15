@@ -19,7 +19,7 @@ describe('without a workspace', () => {
   // the UI — but the hook is an API, and an API that misbehaves when handed a
   // null is one somebody will eventually hand a null.
   it('asks the bridge for nothing and does nothing when driven', async () => {
-    const { result } = renderHook(() => useChat(null, describeFailure))
+    const { result } = renderHook(() => useChat(null, 'idle', describeFailure))
 
     expect(result.current.loading).toBe(false)
     expect(octopus().chats.list).not.toHaveBeenCalled()
@@ -53,7 +53,7 @@ describe('a conversation that is already waiting on an answer', () => {
     givenChat()
     vi.mocked(octopus().chats.pendingPermission).mockResolvedValue({ ok: true, value: request })
 
-    const { result } = renderHook(() => useChat('planner/anna', describeFailure))
+    const { result } = renderHook(() => useChat('planner/anna', 'idle', describeFailure))
 
     await waitFor(() => {
       expect(result.current.pending).toEqual(request)
@@ -65,7 +65,7 @@ describe('a conversation that is already waiting on an answer', () => {
   it('stays as it was when nothing is blocked', async () => {
     givenChat()
 
-    const { result } = renderHook(() => useChat('planner/anna', describeFailure))
+    const { result } = renderHook(() => useChat('planner/anna', 'idle', describeFailure))
 
     await waitFor(() => {
       expect(result.current.loading).toBe(false)
@@ -83,7 +83,7 @@ describe('a conversation that is already waiting on an answer', () => {
       error: 'no such chat'
     })
 
-    const { result } = renderHook(() => useChat('planner/anna', describeFailure))
+    const { result } = renderHook(() => useChat('planner/anna', 'idle', describeFailure))
 
     await waitFor(() => {
       expect(result.current.loading).toBe(false)
@@ -100,7 +100,7 @@ describe('a load that outlives the hook', () => {
     const lookup = held<Result<Chat[]>>()
     vi.mocked(octopus().chats.list).mockReturnValue(lookup.promise)
 
-    const { unmount } = renderHook(() => useChat('planner/anna', describeFailure))
+    const { unmount } = renderHook(() => useChat('planner/anna', 'idle', describeFailure))
     unmount()
 
     await act(async () => {
@@ -117,7 +117,7 @@ describe('a load that outlives the hook', () => {
     const history = held<Result<ChatEntry[]>>()
     vi.mocked(octopus().chats.history).mockReturnValue(history.promise)
 
-    const { result, unmount } = renderHook(() => useChat('planner/anna', describeFailure))
+    const { result, unmount } = renderHook(() => useChat('planner/anna', 'idle', describeFailure))
     await waitFor(() => {
       expect(octopus().chats.history).toHaveBeenCalled()
     })
@@ -156,7 +156,7 @@ describe('a reading that belongs to the account rather than the conversation', (
    */
   it('leaves the answer being written and the log alone', async () => {
     givenChat()
-    const { result } = renderHook(() => useChat('planner/anna', describeFailure))
+    const { result } = renderHook(() => useChat('planner/anna', 'idle', describeFailure))
     await waitFor(() => {
       expect(result.current.chat).not.toBeNull()
     })
@@ -179,7 +179,7 @@ describe('answering a question', () => {
 
   it('sends the answers and takes the card out of the pending state', async () => {
     givenChat()
-    const { result } = renderHook(() => useChat('planner/anna', describeFailure))
+    const { result } = renderHook(() => useChat('planner/anna', 'idle', describeFailure))
     await waitFor(() => {
       expect(result.current.chat).not.toBeNull()
     })
@@ -206,7 +206,7 @@ describe('answering a question', () => {
       error: 'the agent is gone'
     })
     givenChat()
-    const { result } = renderHook(() => useChat('planner/anna', describeFailure))
+    const { result } = renderHook(() => useChat('planner/anna', 'idle', describeFailure))
     await waitFor(() => {
       expect(result.current.chat).not.toBeNull()
     })
@@ -222,7 +222,7 @@ describe('answering a question', () => {
   // offering buttons for a question that is settled.
   it('drops a card another window has answered', async () => {
     givenChat()
-    const { result } = renderHook(() => useChat('planner/anna', describeFailure))
+    const { result } = renderHook(() => useChat('planner/anna', 'idle', describeFailure))
     await waitFor(() => {
       expect(result.current.chat).not.toBeNull()
     })
@@ -243,7 +243,7 @@ describe('answering a question', () => {
   // be open at once, and the second must not take the first's card down.
   it('leaves a card that is waiting on a different question', async () => {
     givenChat()
-    const { result } = renderHook(() => useChat('planner/anna', describeFailure))
+    const { result } = renderHook(() => useChat('planner/anna', 'idle', describeFailure))
     await waitFor(() => {
       expect(result.current.chat).not.toBeNull()
     })
