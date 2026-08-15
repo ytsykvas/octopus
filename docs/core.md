@@ -270,6 +270,24 @@ Nothing inside a `commit` may call `commit` again: it would queue behind the
 write it is already part of, and wait for itself. That deadlock cost an
 afternoon.
 
+**A decision that depends on the state belongs inside the callback, not before
+it.** `openChat` used to look for an existing record and then await `commit`;
+the renderer has two ways in — a setting picked in the composer, and a message
+sent — and both callers saw none and both wrote one. The reply and its whole
+transcript then went to the second while `listChats` answered with the first, so
+the conversation reopened empty and the transcript that held it was filed under
+an id nothing pointed at. Serialising the write is worth nothing if the question
+it answers was asked outside the queue.
+
+### What the renderer holds is what the core last said
+
+A patch arriving over IPC is external data like any other. `applyConfig` merged
+one straight into memory while `saveConfig` parsed before writing, so the file
+was always valid and the copy the application ran on was whatever came — and the
+two could disagree until the next restart, which is the kind of bug that
+survives a screenshot. The parse now happens on the way in as well, which is the
+same parse a moment earlier.
+
 ### A question nobody can answer is withdrawn
 
 `canUseTool` blocks the agent on a promise, so an open permission request is a
@@ -322,6 +340,21 @@ Two consequences worth keeping:
   read, read one at a time, and share the same budget as everything else.
   Reading them all at once and measuring afterwards means a workspace whose
   build output is not ignored opens a read per file in the tree.
+
+### What a stopped turn was holding goes with it
+
+`editsInFlight` records an edit the agent announced so the lines around it can
+be read once the result says it worked. A turn stopped mid-edit produces no
+result, so the entry stayed for ever — against the map's own promise that it
+cannot grow, and the same shape as the question above. `abandonEdits` is called
+wherever a turn stops being answered for: with the session, and with an
+interrupt.
+
+The same omission is worth watching for one level up. `removeWorkspaceById`
+closed the chats of the workspace it removed and `removeProjectById` did not, so
+every agent in a removed project stayed alive with its working directory deleted
+underneath it, reachable from nothing but a quit. A test asserting that the
+records are gone will not notice: the records were the part that worked.
 
 ### Errors are not swallowed
 

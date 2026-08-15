@@ -594,6 +594,25 @@ describe('RightPanel', () => {
     expect(window.octopus.terminal.dispose).not.toHaveBeenCalled()
   })
 
+  // The reason each workspace gets a port of its own, and the reason a runner
+  // per workspace is worth keeping mounted: two servers at once are two ports.
+  it('runs each workspace’s server on its own port', async () => {
+    const user = userEvent.setup()
+    const { rerender } = renderPanel({
+      workspaces: [anna, bob],
+      activeWorkspaceId: anna.id,
+      scriptPaths: SCRIPTS
+    })
+
+    await user.click(screen.getByRole('button', { name: 'Server' }))
+    expect(screen.getByText(`OCTOPUS_PORT=${String(anna.port)}`)).toBeInTheDocument()
+
+    rerender({ activeWorkspaceId: bob.id })
+
+    expect(screen.getByText(`OCTOPUS_PORT=${String(bob.port)}`)).toBeInTheDocument()
+    expect(anna.port).not.toBe(bob.port)
+  })
+
   // Its directory is gone, so the script has nowhere left to be — the rule the
   // terminals already follow.
   it('ends the run of a workspace that has been removed', async () => {

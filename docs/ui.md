@@ -52,6 +52,17 @@ agent actually did to the working tree. Reasoning is folded away, a successful
 tool result is not shown at all — the output of a `Read` is the file, and pasting
 it in would bury the conversation in the codebase.
 
+**A failed one is shown, and shortened from the middle.** It is the row the user
+has to act on, so it is not summarised away — but it cannot be unbounded either,
+and where it is cut decides what survives. A validation error names the rule at
+the start, spends the middle on the value it refused, and says what to do at the
+end; cutting the tail throws away the half that answers "and now what". So the
+two ends are kept with a marked gap between them, rather than the first 400
+characters ending mid-word as though the message had finished there. The agent
+side's own `<tool_use_error>` envelope is taken off first — each half
+independently, because a message already shortened upstream arrives with an
+opening tag and no closing one.
+
 **What the agent says is drawn as markdown**, through the same component that
 draws a plan. The model writes it, and shown as characters it is punctuation in
 the way of the words: `**7/10**` read as asterisks, a command came with its
@@ -88,6 +99,26 @@ block — Enter still sent, but the pane's primary control was not on screen. Ea
 control carries `min-w-0` rather than `shrink-0` for the same reason: `truncate`
 on its label could never fire while the button refused to shrink. What gives way
 is the wording, and only after the row has already used a second line.
+
+**A draft belongs to the workspace it was typed in.** The composer is keyed by
+the workspace, so a switch takes the field with it — along with the highlighted
+command and the dismissed hint, which are derived from the text and would
+otherwise point at words that had gone. Typing an instruction in one workspace,
+looking at another and pressing Enter used to send it to that agent, in that
+worktree, on that branch, with the text still in the field saying otherwise.
+
+The text is kept per workspace rather than thrown away, in a map `App` holds
+beside the review notes: going to look at something should not cost a
+half-written prompt. The composer hands it up **once, on the way out** — a
+report per keystroke would put a `setState` in `App` under every key pressed,
+with the log re-rendering behind it.
+
+**The stop button follows the workspace, not the pane.** `busy` is this pane's
+own events **or** the workspace's status, so a turn left running is still
+stoppable when you come back to it. Derived rather than seeded on the switch:
+the event that ends a turn is filtered by the open chat's id and there is no
+chat until its history has loaded, so one arriving in that window is dropped and
+a seeded flag would stay stuck on.
 
 **The composer has an attic**, a strip above the field mirroring the settings
 footer below it: how full this conversation's context window is on the left, how
@@ -339,6 +370,14 @@ setting rather than the same one.
 **The right pane** holds Changes, Terminal, Build and Server. Build runs
 `setup.sh`, Server runs `run.sh` with the workspace's port in `$OCTOPUS_PORT`.
 Both run on a button: starting a server because a tab was clicked is a surprise.
+
+**The change count follows the work.** It used to be read when the list was —
+on create, rename, remove and first load — and never again, so the agent could
+rewrite twenty files while the row went on saying what it said an hour ago,
+beside a diff pane that re-reads itself on the same event. The list now listens
+for the same turn endings and settles for the same 300ms, and re-reads only the
+project the workspace belongs to: a turn ending is a poor reason to run
+`git status` over every workspace of every project.
 
 **The workspace list says what each one is doing.** One mark carries it: the
 agent's state takes the dot while there is something to report — the accent
