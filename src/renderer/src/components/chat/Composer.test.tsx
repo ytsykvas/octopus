@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react'
+import { render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
@@ -6,13 +6,21 @@ import type { AgentCommand, AgentModel } from '@core/chats.js'
 
 import { Composer } from './Composer.js'
 
-function renderComposer(overrides: Partial<React.ComponentProps<typeof Composer>> = {}): {
+type ComposerProps = React.ComponentProps<typeof Composer>
+
+/** The panel's two halves, which hold the same names and so need telling apart. */
+const codeColumn = (): HTMLElement => screen.getByRole('radiogroup', { name: 'Writing code' })
+const planColumn = (): HTMLElement => screen.getByRole('radiogroup', { name: 'Plan and research' })
+
+function renderComposer(overrides: Partial<ComposerProps> = {}): {
   onSend: ReturnType<typeof vi.fn>
   onStop: ReturnType<typeof vi.fn>
   onWorkingMode: ReturnType<typeof vi.fn>
   onPlanMode: ReturnType<typeof vi.fn>
   onEffort: ReturnType<typeof vi.fn>
   onModel: ReturnType<typeof vi.fn>
+  onPlanModel: ReturnType<typeof vi.fn>
+  rerender: (next: Partial<ComposerProps>) => void
 } {
   const onSend = vi.fn()
   const onStop = vi.fn()
@@ -20,8 +28,9 @@ function renderComposer(overrides: Partial<React.ComponentProps<typeof Composer>
   const onEffort = vi.fn()
   const onModel = vi.fn()
   const onPlanMode = vi.fn()
+  const onPlanModel = vi.fn()
 
-  render(
+  const composer = (props: Partial<ComposerProps>): React.JSX.Element => (
     <Composer
       initialDraft=""
       onDraftLeave={vi.fn()}
@@ -34,6 +43,8 @@ function renderComposer(overrides: Partial<React.ComponentProps<typeof Composer>
       onEffort={onEffort}
       model={null}
       onModel={onModel}
+      planModel={null}
+      onPlanModel={onPlanModel}
       models={[]}
       activeModel={null}
       commands={[]}
@@ -44,10 +55,26 @@ function renderComposer(overrides: Partial<React.ComponentProps<typeof Composer>
       onCommentsSent={vi.fn()}
       onSend={onSend}
       onStop={onStop}
-      {...overrides}
+      {...props}
     />
   )
-  return { onSend, onStop, onWorkingMode, onPlanMode, onEffort, onModel }
+
+  const view = render(composer(overrides))
+
+  return {
+    onSend,
+    onStop,
+    onWorkingMode,
+    onPlanMode,
+    onEffort,
+    onModel,
+    onPlanModel,
+    // For the settings that have to be watched *changing* — the chip follows
+    // the mode, and a second `render` would mount a second composer instead.
+    rerender: (next) => {
+      view.rerender(composer(next))
+    }
+  }
 }
 
 const OPUS: AgentModel = {
@@ -438,7 +465,7 @@ describe('the settings the next message runs under', () => {
     const { onModel } = renderComposer({ models: [OPUS] })
 
     await user.click(screen.getByRole('button', { name: 'Model' }))
-    await user.click(screen.getByRole('menuitemradio', { name: /Opus 5/ }))
+    await user.click(within(codeColumn()).getByRole('radio', { name: /Opus 5/ }))
 
     expect(onModel).toHaveBeenCalledExactlyOnceWith('claude-opus-5')
   })
@@ -456,7 +483,7 @@ describe('the settings the next message runs under', () => {
 
     await user.click(screen.getByRole('button', { name: 'Model' }))
 
-    const rows = screen.getAllByRole('menuitemradio')
+    const rows = within(codeColumn()).getAllByRole('radio')
     expect(rows.map((row) => row.textContent)).toEqual(['Opus (1M context)by default', 'Sonnet'])
     expect(rows[0]).toBeChecked()
   })
@@ -466,7 +493,7 @@ describe('the settings the next message runs under', () => {
     const { onModel } = renderComposer({ model: 'sonnet', models: CATALOGUE })
 
     await user.click(screen.getByRole('button', { name: 'Model' }))
-    await user.click(screen.getByRole('menuitemradio', { name: /Opus \(1M context\)/ }))
+    await user.click(within(codeColumn()).getByRole('radio', { name: /Opus \(1M context\)/ }))
 
     expect(onModel).toHaveBeenCalledExactlyOnceWith(null)
   })
@@ -481,7 +508,7 @@ describe('the settings the next message runs under', () => {
     expect(screen.getByRole('button', { name: 'Model' })).toHaveTextContent('Default model')
 
     await user.click(screen.getByRole('button', { name: 'Model' }))
-    expect(screen.getAllByRole('menuitemradio')).toHaveLength(1)
+    expect(within(codeColumn()).getAllByRole('radio')).toHaveLength(1)
   })
 
   // The list is remembered from the last session, so a chat can name a model it
@@ -494,17 +521,53 @@ describe('the settings the next message runs under', () => {
     expect(screen.getByRole('button', { name: 'Model' })).toHaveTextContent('claude-retired-3')
 
     await user.click(screen.getByRole('button', { name: 'Model' }))
-    expect(screen.getByRole('menuitemradio', { name: 'claude-retired-3' })).toBeChecked()
+    expect(within(codeColumn()).getByRole('radio', { name: 'claude-retired-3' })).toBeChecked()
   })
 
-  it('offers only the effort levels the chosen model takes', async () => {
-    const user = userEvent.setup()
-    renderComposer({ model: OPUS.value, models: [OPUS] })
+  describe('the two models a conversation runs on', () => {
+    // The chip names what the next message will actually go out on, which is
+    // the whole reason the two are worth telling apart on screen.
+    it('names the plan model while planning a conversation that has one', () => {
+      renderComposer({ models: CATALOGUE, model: 'sonnet', planModel: 'default', planMode: true })
 
-    await user.click(screen.getByRole('button', { name: 'Effort' }))
+      expect(screen.getByRole('button', { name: 'Model' })).toHaveTextContent('Opus (1M context)')
+    })
 
-    expect(screen.getByRole('menuitemradio', { name: 'Maximum' })).toBeInTheDocument()
-    expect(screen.queryByRole('menuitemradio', { name: 'Low' })).not.toBeInTheDocument()
+    // With no split there is one model, and the toggle does not move it. This
+    // is what keeps a conversation nobody has opened the panel in unchanged.
+    it('names the same model in both modes when the two jobs share one', () => {
+      const both = { models: CATALOGUE, model: 'sonnet', planModel: null }
+      const { rerender } = renderComposer(both)
+
+      expect(screen.getByRole('button', { name: 'Model' })).toHaveTextContent('Sonnet')
+
+      rerender({ ...both, planMode: true })
+      expect(screen.getByRole('button', { name: 'Model' })).toHaveTextContent('Sonnet')
+    })
+
+    // The effort control answers about the model in force, so a plan model that
+    // takes no effort greys it out for as long as planning lasts.
+    it('greys the effort out from the plan model while planning', () => {
+      const plain = { ...OPUS, value: 'plain', supportsEffort: false, supportedEffortLevels: null }
+      renderComposer({
+        models: [plain, OPUS],
+        model: OPUS.value,
+        planModel: 'plain',
+        planMode: true
+      })
+
+      expect(screen.getByRole('button', { name: 'Effort' })).toBeDisabled()
+    })
+
+    it('reports the model chosen for planning', async () => {
+      const user = userEvent.setup()
+      const { onPlanModel } = renderComposer({ models: [OPUS] })
+
+      await user.click(screen.getByRole('button', { name: 'Model' }))
+      await user.click(within(planColumn()).getByRole('radio', { name: /Opus 5/ }))
+
+      expect(onPlanModel).toHaveBeenCalledExactlyOnceWith('claude-opus-5')
+    })
   })
 
   // Greyed out rather than gone: a control that vanishes as the model changes
@@ -518,74 +581,22 @@ describe('the settings the next message runs under', () => {
     expect(picker).toHaveAttribute('title', 'This model does not take an effort setting.')
   })
 
-  // Silence is not a refusal. A model that says nothing about effort should get
-  // the full list rather than have levels hidden it would in fact accept.
-  it('offers every level for a model that said nothing about effort', async () => {
-    const user = userEvent.setup()
-    const quiet = { ...OPUS, supportsEffort: null, supportedEffortLevels: null }
-    renderComposer({ model: quiet.value, models: [quiet] })
-
-    await user.click(screen.getByRole('button', { name: 'Effort' }))
-
-    expect(screen.getAllByRole('menuitemradio')).toHaveLength(5)
-  })
-
-  it('reports the effort that was chosen', async () => {
-    const user = userEvent.setup()
-    const { onEffort } = renderComposer()
-
-    await user.click(screen.getByRole('button', { name: 'Effort' }))
-    await user.click(screen.getByRole('menuitemradio', { name: 'Maximum' }))
-
-    expect(onEffort).toHaveBeenCalledExactlyOnceWith('max')
-  })
-
-  /*
-   * Neither picker offers to say nothing any more. For the model that row was a
-   * second way of naming the default; for effort it was a level the agent was
-   * never told about while the button claimed one.
-   */
-  it('offers no way to leave either setting unsaid', async () => {
+  // The model half of what used to be one test about both settings. Neither
+  // picker offers to say nothing any more; the effort half is the scale's own,
+  // and lives beside it.
+  it('offers no way to leave the model unsaid', async () => {
     const user = userEvent.setup()
     renderComposer({ effort: 'high', models: CATALOGUE })
 
-    await user.click(screen.getByRole('button', { name: 'Effort' }))
-    expect(screen.queryByRole('menuitemradio', { name: 'Agent decides' })).not.toBeInTheDocument()
-
     await user.click(screen.getByRole('button', { name: 'Model' }))
-    expect(screen.queryByRole('menuitemradio', { name: 'Agent decides' })).not.toBeInTheDocument()
+
+    expect(screen.queryByRole('radio', { name: 'Agent decides' })).not.toBeInTheDocument()
   })
 
-  it('reports the level that was chosen', async () => {
-    const user = userEvent.setup()
-    const { onEffort } = renderComposer({ effort: 'high' })
+  it('names the effort in force on the chip', () => {
+    renderComposer({ effort: 'high' })
 
     expect(screen.getByRole('button', { name: 'Effort' })).toHaveTextContent('High')
-
-    await user.click(screen.getByRole('button', { name: 'Effort' }))
-    await user.click(screen.getByRole('menuitemradio', { name: 'Low' }))
-
-    expect(onEffort).toHaveBeenCalledExactlyOnceWith('low')
-  })
-
-  /*
-   * A model that lists the levels it takes does not silence the one this chat
-   * is already on. That level is what the next message runs with, and a picker
-   * whose value has no row of its own prints the raw name instead.
-   */
-  it('names the level in force even when the model does not offer it', async () => {
-    const user = userEvent.setup()
-    const picky: AgentModel = {
-      ...OPUS,
-      supportsEffort: true,
-      supportedEffortLevels: ['high', 'max']
-    }
-    renderComposer({ effort: 'medium', model: picky.value, models: [picky] })
-
-    expect(screen.getByRole('button', { name: 'Effort' })).toHaveTextContent('Medium')
-
-    await user.click(screen.getByRole('button', { name: 'Effort' }))
-    expect(screen.getByRole('menuitemradio', { name: 'Medium' })).toBeChecked()
   })
 
   // The whole reason it moved out of the header: there it was disabled until
@@ -827,7 +838,7 @@ describe('the model the session is running', () => {
     expect(modelButton()).toHaveTextContent('Sonnet')
 
     await user.click(modelButton())
-    expect(screen.getByRole('menuitemradio', { name: /Opus \(1M context\)/ })).toBeChecked()
+    expect(within(codeColumn()).getByRole('radio', { name: /Opus \(1M context\)/ })).toBeChecked()
   })
 
   // The ordinary case, where the two agree. The button says the name once.
@@ -871,9 +882,11 @@ describe('the model the session is running', () => {
 
     await user.click(modelButton())
 
-    expect(screen.getByRole('menuitemradio', { name: 'Sonnet' })).toBeChecked()
+    expect(within(codeColumn()).getByRole('radio', { name: 'Sonnet' })).toBeChecked()
     // And no second row invented for a model already in the list.
-    expect(screen.queryByRole('menuitemradio', { name: 'claude-sonnet-5' })).not.toBeInTheDocument()
+    expect(
+      within(codeColumn()).queryByRole('radio', { name: 'claude-sonnet-5' })
+    ).not.toBeInTheDocument()
   })
 
   // A model the catalogue cannot resolve at all still has to be nameable —

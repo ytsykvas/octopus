@@ -223,6 +223,46 @@ model. It briefly did both, on the belief that a `/model` could not be detected;
 once it could, the re-assertion stopped guarding against drift and became an
 undo of an explicit instruction.
 
+### Two models, and when one replaces the other
+
+A conversation holds two: `model` for writing the code and `planModel` for
+planning. `sessionModel` folds them into the one the SDK takes — see
+`docs/data.md` for why the two nulls mean different things — and nothing but its
+return value is ever handed to `setModel` or to `SessionOptions.model`.
+
+Which means the effective model can move without anyone naming one, at exactly
+two moments: planning turned on or off, and a plan approved. `pushModel` handles
+both, and the guard in it is what keeps the paragraph above true — it sends
+nothing unless the value actually changed, so a conversation whose two jobs
+share a model is never pushed at, and a `/model` given to it still stands.
+
+That is a change **this application made and knows the moment of**, which is the
+whole difference from re-asserting per message: sending a message moves nothing,
+so a push there would still be undoing `/model` and nothing else. On an approved
+plan it goes out **before** the permission reply resolves — the reply is what
+releases the tool call, and there is no `updatedModel` to ride along with the
+mode the way `updatedPermissions` carries it.
+
+### One effort, folded into two
+
+`sessionEffort` is the third of these folds, and the odd one: the two answers it
+produces are not two stored fields. A chat holds a single choice, five levels
+wide plus `ultracode`, and the SDK asks about that choice twice — for a level,
+and for a flag that turns dynamic-workflow orchestration on. `ultracode` sets
+both, `xhigh` and `true`.
+
+Which is why it is stored as one value. A level beside a boolean would admit
+`ultracode` with `low`, a state nothing can run, and both halves would then have
+to agree everywhere they were read.
+
+The flag goes out with the level in **one** call, at both moments it can move:
+`Options.settings` at start-up, and `applyFlagSettings` on a running session.
+That is not tidiness — `applyFlagSettings` shallow-merges top-level keys, so a
+flag sent after a level would replace it rather than join it. Both are always
+said, `false` included: `settingSources` is empty, so nothing else is loaded
+that could turn `ultracode` back off, and silence would leave the last session's
+answer standing.
+
 ### A reset is not consent
 
 `conversation_reset` is emitted by `/clear`, by leaving plan mode, and by

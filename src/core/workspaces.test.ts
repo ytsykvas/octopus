@@ -628,6 +628,7 @@ describe('reconcile', () => {
         title: null,
         sessionId: null,
         model: null,
+        planModel: null,
         effort: 'medium',
         workingMode: 'default',
         planMode: false,

@@ -112,6 +112,25 @@ export const ConfigSchema = z.object({
   effort: StoredEffortSchema,
 
   /**
+   * The models a new chat starts on: one that writes the code, one that plans.
+   *
+   * Global for the reason the mode and the effort above are — which model does
+   * which job is a working habit, and re-answering it in every conversation is
+   * the friction that gets a setting left alone.
+   *
+   * Both nullable and both defaulted, and the two nulls mean different things:
+   * `model` null is the agent's own default, `planModel` null is "no split".
+   * `ChatSchema` explains the asymmetry at length; these are copied onto a new
+   * record by `newChat`, so the meanings have to match exactly.
+   *
+   * No model name is written down here or anywhere else: the catalogue arrives
+   * from the running agent, so a model added or withdrawn upstream needs no
+   * release of ours.
+   */
+  model: z.string().min(1).nullable().default(null),
+  planModel: z.string().min(1).nullable().default(null),
+
+  /**
    * Tools the user has answered "always" for.
    *
    * Kept here rather than inside the SDK's own permission rules, because
@@ -221,6 +240,11 @@ export function createDefaultConfig(
     settingSources: 'none',
     workingMode,
     effort,
+    // Nothing to name: no catalogue has arrived on a first run, and the two
+    // nulls are already the right answers — the agent's own choice, and no
+    // split between planning and writing.
+    model: null,
+    planModel: null,
     alwaysAllowedTools: [],
     theme: 'system',
     language: 'en',

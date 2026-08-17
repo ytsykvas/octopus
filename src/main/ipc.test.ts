@@ -281,6 +281,7 @@ describe('channel table', () => {
     'chats:planMode',
     'chats:effort',
     'chats:model',
+    'chats:planModel',
     'chats:models',
     'chats:commands',
     'chats:answerQuestions',
@@ -987,6 +988,14 @@ describe('the agent chat', () => {
       ok: true,
       value: undefined
     })
+
+    // Not a level, and the one value on this channel that is not: the schema
+    // here is the wider of the two, or the scale's last notch would be refused
+    // at the boundary rather than run.
+    await expect(invoke('chats:effort', chatIdOf(opened), 'ultracode')).resolves.toEqual({
+      ok: true,
+      value: undefined
+    })
   })
 
   // Null is the picker's way of handing the choice back; an empty string is a
@@ -1004,6 +1013,31 @@ describe('the agent chat', () => {
     })
 
     await expect(invoke('chats:model', chatIdOf(opened), null)).resolves.toEqual({
+      ok: true,
+      value: undefined
+    })
+  })
+
+  /*
+   * The plan side, whose null means something else again — "no split", rather
+   * than "the agent's default" — but is bounded exactly the same way, since an
+   * empty string is not a model name on either side.
+   */
+  it('bounds the planning model the same way', async () => {
+    const projectId = await addProject()
+    const workspace = await createWorkspace(projectId)
+    const opened = await invoke('chats:open', workspace.id)
+
+    await expect(invoke('chats:planModel', chatIdOf(opened), '')).resolves.toMatchObject({
+      ok: false
+    })
+
+    await expect(invoke('chats:planModel', chatIdOf(opened), 'claude-opus-5')).resolves.toEqual({
+      ok: true,
+      value: undefined
+    })
+
+    await expect(invoke('chats:planModel', chatIdOf(opened), null)).resolves.toEqual({
       ok: true,
       value: undefined
     })

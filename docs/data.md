@@ -43,7 +43,8 @@ Validated by `ConfigSchema` in [`config.ts`](../src/core/config.ts).
 | `cloneDirectory`                  | where GitHub clones land; empty means "ask, then remember"                                                   |
 | `settingSources`                  | what the agent may load — `none` is the transparency default (§4)                                            |
 | `workingMode`                     | what a new chat may do before asking; planning is not one of them                                            |
-| `effort`                          | how much thinking a new chat asks for; `medium` unless changed                                               |
+| `effort`                          | how much thinking a new chat asks for; `medium` unless changed. Five levels, never `ultracode` — see below   |
+| `model`, `planModel`              | the pair a new chat starts on — which model writes the code, which one plans                                 |
 | `alwaysAllowedTools`              | tools the user answered "always" for, listed so they can be undone                                           |
 | `theme`, `language`               | appearance                                                                                                   |
 | `rightPanelWidth`, `sidebarWidth` | pane widths in pixels, as last dragged — resizing the **window** moves the right pane without rewriting this |
@@ -158,8 +159,21 @@ catalogue was copied out of a live `state.json` rather than written from the
 type — which is the only reason the second shape is known to exist.
 
 A **chat** is a conversation with one agent inside one workspace: `id`,
-`workspaceId`, `agent`, `sessionId`, `model`, `effort`, `workingMode`,
-`planMode`, `knownCommands`, `createdAt`.
+`workspaceId`, `agent`, `sessionId`, `model`, `planModel`, `effort`,
+`workingMode`, `planMode`, `knownCommands`, `createdAt`.
+
+**`model` and `planModel` are two models for two jobs**, and their nulls do not
+mean the same thing. `model` null is the agent's own default. `planModel` null
+is _no split at all_ — planning runs on whatever `model` says — which is what
+keeps a conversation nobody has touched behaving exactly as it did before the
+field existed.
+
+That leaves the plan side without a way to say "the agent's own default", since
+its null is taken. It says it with the word: `DEFAULT_MODEL`, which is a row the
+picker offers like any other. The asymmetry is forced rather than untidy, and
+`sessionModel` in `chats.ts` is the only place allowed to unfold it — nothing
+but its return value ever reaches the SDK, because a model literally called
+`default` is not one.
 
 `knownCommands` is the same kind of thing as `knownModels` above, kept in a
 different place for a reason worth stating: which models an account may use is a
@@ -235,8 +249,8 @@ had when it was opened after the tab beside it was closed. Clearing the field is
 how the interface asks for the automatic name back, which is a value rather than
 an absence.
 
-A forked conversation carries the source's model, effort, working mode and known
-commands, and deliberately **not** its `planMode` or its `title`: planning is a
+A forked conversation carries the source's two models, effort, working mode and
+known commands, and deliberately **not** its `planMode` or its `title`: planning is a
 decision about a particular task, forking out of a settled plan to try the other
 approach is the likeliest reason to fork at all, and two tabs bearing one name
 is a strip that cannot be read.
@@ -253,14 +267,29 @@ the mode of the first message the one mode nobody could pick. Opening is
 idempotent and writes no transcript (only appending an entry does that), so the
 record costs one row.
 
-The record is created from `config.workingMode` and `config.effort`, so those
-are also what the composer shows until it exists — passed down from `App`,
+The record is created from `config.workingMode`, `config.effort`,
+`config.model` and `config.planModel`, so those are also what the composer shows
+until it exists — passed down from `App`,
 which is where the config is read. The footer named the schema's defaults for a
 while instead, which made it lie about exactly one message: the first.
 
 Neither of those is ever null. `effort` was, meaning "leave it to the agent",
 and the picker had a row saying so — a control naming a level the agent had
 never been told about. It names `medium` now and `medium` is what goes.
+
+**A chat's `effort` is one value wider than the settings' own.** The five levels
+are what the SDK takes; `ultracode` is a sixth thing a conversation can be set
+to and not a level at all — the SDK spells it as a flag beside `xhigh`. So
+`ChatSchema` uses `StoredEffortChoiceSchema` and `ConfigSchema` keeps
+`StoredEffortSchema`, and the difference is deliberate: a default is inherited by
+every new conversation, and running a fleet of agents is a decision taken about
+one task. `sessionEffort` in `chats.ts` folds the choice back into the pair the
+SDK asks for.
+
+Held as one field rather than as a level plus a boolean, because the two cannot
+vary independently: `ultracode` with `low` is a state nothing can run and the
+scale cannot draw. No state version bump — a new value in an existing enum needs
+none.
 
 ### Transcripts
 

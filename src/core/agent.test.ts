@@ -44,7 +44,7 @@ interface FakeQuery {
   readonly interrupted: () => number
   readonly modes: () => string[]
   /** Settings pushed onto a running session — where effort changes land. */
-  readonly flagSettings: () => { effortLevel?: string }[]
+  readonly flagSettings: () => Record<string, unknown>[]
   /** Models asked for mid-session; `undefined` is "back to the default". */
   readonly requestedModels: () => (string | undefined)[]
   readonly closed: () => number
@@ -66,7 +66,7 @@ function fakeAgent(
   const events: AgentEvent[] = []
   const received: SDKUserMessage[] = []
   const modes: string[] = []
-  const flagSettings: { effortLevel?: string }[] = []
+  const flagSettings: Record<string, unknown>[] = []
   const requestedModels: (string | undefined)[] = []
   const offeredModels = hooks.models ?? []
   const offeredCommands = hooks.commands ?? []
@@ -119,7 +119,7 @@ function fakeAgent(
       modes.push(mode)
       return Promise.resolve()
     },
-    applyFlagSettings: (settings: { effortLevel?: string }) => {
+    applyFlagSettings: (settings: Record<string, unknown>) => {
       flagSettings.push(settings)
       return Promise.resolve()
     },
@@ -707,7 +707,38 @@ describe('a session', () => {
 
     await agent.session.setEffort('max')
 
-    expect(agent.flagSettings()).toEqual([{ effortLevel: 'max' }])
+    expect(agent.flagSettings()).toEqual([
+      { effortLevel: 'max', ultracode: false, enableWorkflows: false }
+    ])
+  })
+
+  // One call rather than three: `applyFlagSettings` shallow-merges top-level
+  // keys, so an `ultracode` sent after the level would replace it rather than
+  // join it, and the session would run the orchestration at whatever effort it
+  // was already on.
+  it('asks for ultracode and the effort it runs at in a single call', async () => {
+    const { agent } = fakeAgent()
+
+    await agent.session.setEffort('ultracode')
+
+    expect(agent.flagSettings()).toEqual([
+      { effortLevel: 'xhigh', ultracode: true, enableWorkflows: true }
+    ])
+  })
+
+  // Leaving it has to say so. Nothing else is loaded that would turn it off —
+  // `settingSources` is empty — so an unsaid `ultracode` is one still running.
+  it('turns ultracode off explicitly when the level moves off it', async () => {
+    const { agent } = fakeAgent()
+
+    await agent.session.setEffort('ultracode')
+    await agent.session.setEffort('high')
+
+    expect(agent.flagSettings()[1]).toEqual({
+      effortLevel: 'high',
+      ultracode: false,
+      enableWorkflows: false
+    })
   })
 
   it('asks for an effort at start-up when the chat has one', () => {
@@ -723,6 +754,24 @@ describe('a session', () => {
     const { agent } = fakeAgent()
 
     expect(agent.options().effort).toBe('medium')
+  })
+
+  // `ultracode` is not a level the SDK takes, so what goes out is the pair it
+  // stands for: the effort it runs at, and the flag that turns the fleet on.
+  it('starts ultracode as xhigh with the workflow flags set', () => {
+    const { agent } = fakeAgent({ effort: 'ultracode' })
+
+    expect(agent.options().effort).toBe('xhigh')
+    expect(agent.options().settings).toEqual({ ultracode: true, enableWorkflows: true })
+  })
+
+  // Said rather than left out. Nothing else is loaded that could say otherwise
+  // — `settingSources` is empty — so silence here would be a session inheriting
+  // whatever the last one was started with.
+  it('says so at start-up when the level is an ordinary one', () => {
+    const { agent } = fakeAgent({ effort: 'high' })
+
+    expect(agent.options().settings).toEqual({ ultracode: false, enableWorkflows: false })
   })
 
   it('forwards interrupt and mode changes to the SDK', async () => {

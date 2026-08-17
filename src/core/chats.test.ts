@@ -7,7 +7,10 @@ import {
   type AgentModel,
   type Chat,
   ChatError,
+  DEFAULT_MODEL,
   defaultAgentModel,
+  EffortChoiceSchema,
+  EffortSchema,
   findAgentModel,
   forkChat,
   sameModel,
@@ -18,7 +21,9 @@ import {
   newChat,
   PERMISSION_MODES,
   PermissionAnswerSchema,
+  sessionEffort,
   sessionMode,
+  sessionModel,
   WORKING_MODES
 } from './chats.js'
 
@@ -28,6 +33,8 @@ describe('a new chat', () => {
     agent: 'claude' as const,
     workingMode: 'default' as const,
     effort: 'medium' as const,
+    model: null,
+    planModel: null,
     createdAt: '2026-08-11T09:00:00.000Z'
   }
 
@@ -42,6 +49,7 @@ describe('a new chat', () => {
       title: null,
       sessionId: null,
       model: null,
+      planModel: null,
       effort: 'medium',
       workingMode: 'default',
       planMode: false,
@@ -131,6 +139,69 @@ describe('a new chat', () => {
     // Planning wins: the agent runs no tools at all, so there is nothing for
     // "accept edits" to accept until the plan is approved.
     expect(sessionMode({ planMode: true, workingMode: 'acceptEdits' })).toBe('plan')
+  })
+
+  /*
+   * The model's twin, and the case worth spelling out is the third one: the
+   * plan side names the agent's own default with a word, because null is
+   * already spoken for there — it means the two jobs share one model.
+   */
+  it('folds the two models back into the one a session runs', () => {
+    const chat = { model: 'opus', planModel: null, planMode: false }
+
+    expect(sessionModel(chat)).toBe('opus')
+    expect(sessionModel({ ...chat, planMode: true })).toBe('opus')
+    expect(sessionModel({ ...chat, planModel: 'sonnet' })).toBe('opus')
+    expect(sessionModel({ ...chat, planModel: 'sonnet', planMode: true })).toBe('sonnet')
+    expect(sessionModel({ ...chat, planModel: DEFAULT_MODEL, planMode: true })).toBeNull()
+    expect(sessionModel({ model: null, planModel: null, planMode: true })).toBeNull()
+  })
+
+  /*
+   * The third fold, and the one whose two answers are not two fields. The SDK
+   * asks for a level and for the flag separately, and `ultracode` is the single
+   * choice that sets both — which is why it is stored as a choice rather than
+   * as a level plus a boolean nothing stops from disagreeing with it.
+   */
+  it('folds a choice into the level a session runs and the flag beside it', () => {
+    expect(sessionEffort('low')).toEqual({ effort: 'low', ultracode: false })
+    expect(sessionEffort('max')).toEqual({ effort: 'max', ultracode: false })
+    expect(sessionEffort('ultracode')).toEqual({ effort: 'xhigh', ultracode: true })
+  })
+
+  it('stores ultracode as the level a conversation is set to', () => {
+    const chat = newChat('planner/kyiv', options)
+
+    const parsed = ChatSchema.safeParse({ ...chat, effort: 'ultracode' })
+    expect(parsed.data?.effort).toBe('ultracode')
+  })
+
+  // The settings' own field stays five levels wide — `ultracode` is a decision
+  // about one task — so the two schemas have to disagree, and this is the half
+  // that says which one is wider.
+  it('refuses ultracode where a plain level is expected', () => {
+    expect(EffortSchema.safeParse('ultracode').success).toBe(false)
+    expect(EffortChoiceSchema.safeParse('ultracode').success).toBe(true)
+  })
+
+  it('carries the models it was created with', () => {
+    const chat = newChat('planner/kyiv', { ...options, model: 'opus', planModel: 'sonnet' })
+
+    expect(chat.model).toBe('opus')
+    expect(chat.planModel).toBe('sonnet')
+  })
+
+  // Defaulted rather than migrated: every record on disk right now predates
+  // the field, and the reader throws on a mismatch rather than falling back.
+  it('reads a record written before the plan model existed', () => {
+    const { planModel, ...older } = newChat('planner/kyiv', options)
+    void planModel
+
+    const parsed = ChatSchema.safeParse(older)
+    expect(parsed.success).toBe(true)
+    // Null, which is "no split" — so the conversation runs one model, exactly
+    // as it did before there could be two.
+    expect(parsed.data?.planModel).toBeNull()
   })
 
   it('is a valid record', () => {
@@ -502,6 +573,8 @@ describe('what a conversation may be doing', () => {
         agent: 'claude',
         workingMode: 'default',
         effort: 'medium',
+        model: null,
+        planModel: null,
         createdAt: '2026-08-11T09:00:00.000Z'
       }).status
     ).toBe('idle')
@@ -517,6 +590,7 @@ describe('a conversation continuing another', () => {
     title: null,
     sessionId: 'session-old',
     model: 'opus',
+    planModel: 'sonnet',
     effort: 'high',
     workingMode: 'acceptEdits',
     planMode: true,
@@ -548,6 +622,9 @@ describe('a conversation continuing another', () => {
   it('keeps how the conversation is run', () => {
     expect(forked.agent).toBe('claude')
     expect(forked.model).toBe('opus')
+    // Which model would plan is a setting like the rest; that the source was
+    // planning is a state, and the test below says it stays behind.
+    expect(forked.planModel).toBe('sonnet')
     expect(forked.effort).toBe('high')
     expect(forked.workingMode).toBe('acceptEdits')
     expect(forked.knownCommands).toEqual(source.knownCommands)

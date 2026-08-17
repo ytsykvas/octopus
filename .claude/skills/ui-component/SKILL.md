@@ -134,6 +134,12 @@ scroll was the first rule and the chat log broke it: it pins itself to the
 bottom on each streamed fragment, so the composer's menus shut a few times a
 second while the agent answered, and the composer had not moved a pixel.
 
+**A panel that is not a menu gets `useAnchoredPanel`** rather than a third copy
+of that reasoning: it holds the open state, the fixed coordinates, the flip, the
+clamp and all four ways of closing, and both composer panels use it. Give it the
+size at the moment of opening — a panel's height often depends on what it is
+about to draw.
+
 ## Colour that carries meaning
 
 A project's colour comes from `--project-<name>`, declared once per theme, and

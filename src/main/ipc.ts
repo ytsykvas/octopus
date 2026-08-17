@@ -15,7 +15,7 @@ import { type AccountKind, checkAccounts, signOut } from '../core/accounts.js'
 import {
   ChatMessageSchema,
   ChatTitleSchema,
-  EffortSchema,
+  EffortChoiceSchema,
   PermissionAnswerSchema,
   PlanFeedbackSchema,
   WorkingModeSchema
@@ -306,11 +306,15 @@ export function registerIpc(
   )
 
   host.handle('chats:effort', (_event, chatId: string, effort: unknown) =>
-    attempt(() => service.setChatEffort(chatId, EffortSchema.parse(effort)))
+    attempt(() => service.setChatEffort(chatId, EffortChoiceSchema.parse(effort)))
   )
 
   host.handle('chats:model', (_event, chatId: string, model: unknown) =>
     attempt(() => service.setChatModel(chatId, z.string().min(1).nullable().parse(model)))
+  )
+
+  host.handle('chats:planModel', (_event, chatId: string, model: unknown) =>
+    attempt(() => service.setChatPlanModel(chatId, z.string().min(1).nullable().parse(model)))
   )
 
   host.handle('chats:models', () => attempt(() => service.knownModels()))

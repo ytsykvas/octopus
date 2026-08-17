@@ -41,6 +41,8 @@ interface ChatProps {
   readonly color: ProjectColor
   readonly defaultWorkingMode: WorkingMode
   readonly defaultEffort: Effort
+  readonly defaultModel: string | null
+  readonly defaultPlanModel: string | null
 }
 
 /**
@@ -68,7 +70,9 @@ export function Chat({
   comments,
   color,
   defaultWorkingMode,
-  defaultEffort
+  defaultEffort,
+  defaultModel,
+  defaultPlanModel
 }: ChatProps): React.JSX.Element {
   return (
     <div
@@ -111,6 +115,8 @@ export function Chat({
           comments={comments}
           defaultWorkingMode={defaultWorkingMode}
           defaultEffort={defaultEffort}
+          defaultModel={defaultModel}
+          defaultPlanModel={defaultPlanModel}
         />
       ))}
     </div>

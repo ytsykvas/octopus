@@ -363,6 +363,8 @@ export function App(): React.JSX.Element {
   // schema's own defaults stand in until the file has been read.
   const defaultWorkingMode = config?.workingMode ?? 'default'
   const defaultEffort = config?.effort ?? DEFAULT_EFFORT
+  const defaultModel = config?.model ?? null
+  const defaultPlanModel = config?.planModel ?? null
 
   return (
     <div className="bg-canvas text-ink flex h-full flex-col">
@@ -532,6 +534,8 @@ export function App(): React.JSX.Element {
               comments={diffComments}
               defaultWorkingMode={defaultWorkingMode}
               defaultEffort={defaultEffort}
+              defaultModel={defaultModel}
+              defaultPlanModel={defaultPlanModel}
             />
           )}
         </main>

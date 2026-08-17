@@ -32,13 +32,14 @@ import {
   ChatError,
   type ChatStatus,
   DEFAULT_AGENT,
-  type Effort,
+  type EffortChoice,
   EXIT_PLAN_MODE,
   forkChat as forkChatRecord,
   isClearCommand,
   MAX_CHATS_PER_WORKSPACE,
   newChat,
   sessionMode,
+  sessionModel,
   type WorkingMode
 } from './chats.js'
 import { type EditTarget, readChangeContext, readEditTarget } from './changeContext.js'
@@ -327,9 +328,11 @@ export interface OctopusService {
   /** Turns planning on or off for the chat. */
   setChatPlanMode(chatId: string, planning: boolean): Promise<void>
   /** Sets how much thinking the chat asks for. */
-  setChatEffort(chatId: string, effort: Effort): Promise<void>
-  /** Sets the model the chat runs on; null returns the choice to the agent. */
+  setChatEffort(chatId: string, effort: EffortChoice): Promise<void>
+  /** Sets the model the chat writes code with; null returns the choice to the agent. */
   setChatModel(chatId: string, model: string | null): Promise<void>
+  /** Sets the model the chat plans with; null means the one above does both. */
+  setChatPlanModel(chatId: string, model: string | null): Promise<void>
   /**
    * What a live session says about its context window and the account's windows.
    *
@@ -959,7 +962,7 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
    * what the other half says, not merely "not planning".
    */
   async function applyMode(chatId: string, patch: Partial<Chat>): Promise<void> {
-    requireChat(chatId)
+    const before = sessionModel(requireChat(chatId))
     await commit((current) => updateChat(current, chatId, patch))
 
     // Applied to the running session too, so the choice takes effect on the
@@ -967,6 +970,26 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
     // rather than merged by hand: the session wants both halves, and only one
     // of them is in the patch.
     await sessions.get(chatId)?.setPermissionMode(sessionMode(requireChat(chatId)))
+    await pushModel(chatId, before)
+  }
+
+  /**
+   * Tells a running session the model it should now be on, if that moved.
+   *
+   * The two moments where the effective model changes without anyone naming
+   * one: planning turned on or off, and a plan approved. `before` is what was
+   * in force when the change was decided.
+   *
+   * The guard is the whole reason `/model` still stands. A conversation whose
+   * two jobs share a model runs that one whatever the toggles do, so nothing
+   * is ever pushed at it — which is byte for byte the behaviour there was
+   * before a conversation could hold two.
+   */
+  async function pushModel(chatId: string, before: string | null): Promise<void> {
+    const wanted = sessionModel(requireChat(chatId))
+    if (wanted === before) return
+
+    await sessions.get(chatId)?.setModel(wanted)
   }
 
   /**
@@ -1013,7 +1036,7 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
         resume: chat.sessionId,
         settingSources: toSdkSettingSources(config.settingSources),
         permissionMode: sessionMode(chat),
-        model: chat.model,
+        model: sessionModel(chat),
         effort: chat.effort,
         // The read-only set, and nothing else. A name here is approved by the
         // SDK before `canUseTool` is consulted, which is what that set wants
@@ -1294,6 +1317,8 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
         // from it without changing what the next workspace inherits.
         workingMode: config.workingMode,
         effort: config.effort,
+        model: config.model,
+        planModel: config.planModel,
         createdAt: now()
       })
 
@@ -1334,6 +1359,8 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
         // beside it.
         workingMode: config.workingMode,
         effort: config.effort,
+        model: config.model,
+        planModel: config.planModel,
         createdAt: now()
       })
 
@@ -1477,6 +1504,12 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
        * this session only"), so the record staying put is the truth rather than
        * a compromise: it holds what was chosen here, and the footer shows what
        * is running.
+       *
+       * A **mode** change is the one thing that does move it, in `applyMode`
+       * and on an approved plan — and only for a conversation whose plan and
+       * code models differ, where leaving the model alone would run the plan
+       * on the model that wrote it. That is not a re-assertion but a second
+       * instruction, given later than `/model` was, and the later one wins.
        */
       const running = sessions.get(chatId)
       if (running) await running.setPermissionMode(sessionMode(chat))
@@ -1522,7 +1555,17 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
       requireChat(chatId)
       await commit((current) => updateChat(current, chatId, { model }))
 
-      await sessions.get(chatId)?.setModel(model)
+      // The effective model rather than the one just stored: a conversation
+      // planning under a split runs the plan model, and choosing the one that
+      // writes the code must not drag the current turn off it.
+      await sessions.get(chatId)?.setModel(sessionModel(requireChat(chatId)))
+    },
+
+    async setChatPlanModel(chatId, model) {
+      requireChat(chatId)
+      await commit((current) => updateChat(current, chatId, { planModel: model }))
+
+      await sessions.get(chatId)?.setModel(sessionModel(requireChat(chatId)))
     },
 
     knownModels() {
@@ -1582,10 +1625,19 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
       // session does not start by planning again, and the running session, so
       // the work the plan describes can actually begin.
       if (leaving) {
+        const before = sessionModel(requireChat(request.chatId))
         await commit((current) => updateChat(current, request.chatId, { planMode: false }))
+
+        // The model leaves planning with the record. Before the reply, never
+        // after it: the reply is what releases the tool call, so a model sent
+        // behind it would reach a session already editing files on the model
+        // that wrote the plan. The reply carries a mode and has no field for a
+        // model, so this is the closest to riding along that there is.
+        await pushModel(request.chatId, before)
       }
 
       const chat = findChat(state, request.chatId)
+
       // Both writes above are behind us, so this is the point the answer is
       // actually given — see the deny path for what removing it any earlier
       // cost. A second answer racing this one changes nothing: the writes are

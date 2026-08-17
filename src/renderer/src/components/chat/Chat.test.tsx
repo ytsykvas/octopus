@@ -34,6 +34,8 @@ function Pane(): React.JSX.Element {
       color="blue"
       defaultWorkingMode="default"
       defaultEffort="medium"
+      defaultModel={null}
+      defaultPlanModel={null}
     />
   )
 }

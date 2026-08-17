@@ -392,28 +392,96 @@ setting in Settings names a level too, and the level on the button is the level
 the session is given. The one level always offered is the one in force, even by
 a model that does not list it: it is what the next message runs with.
 
-**Every row of the model picker names a model.** The catalogue's first entry
-does not: the CLI calls it `Default (recommended)`, which tells a reader nothing
-about what they are about to talk to. It does say what it _resolves_ to, and the
+**Effort is a scale, not a list.** It is one ordered axis — `Faster` at one end,
+`Smarter` at the other — and the menu that drew it as five unrelated words said
+nothing about that ordering or about how far along it you already were. So the
+chip opens a panel holding a horizontal rule with a notch per level, and the
+marker is dragged along it, clicked onto a notch, or moved with the arrow keys.
+
+The scale is only as long as the model can go: a level the model does not list
+is dropped rather than greyed, because a notch that cannot be reached is a step
+to nowhere. Past either end there is no notch at all, so `End` on the last one
+reports nothing rather than a change to what is already in force.
+
+**`ultracode` sits past the end, behind a gap.** It is not a sixth amount of
+thinking: the SDK spells it as a flag standing beside `xhigh` — that effort plus
+dynamic-workflow orchestration — and the break in the rule is what says so
+before the `xhigh + workflows` caption underneath gets the chance. It is offered
+exactly when `xhigh` is, that being what it runs on.
+
+It is also the one thing on the scale that Settings does not offer. A default is
+inherited by every new conversation, and walking into a fleet of agents for the
+next small question is not something to inherit — so `ultracode` is chosen per
+conversation, and the settings' own field stays five levels wide.
+
+**An octopus stands above the scale, one per choice** — an egg with a single
+tentacle out of it at one end, a whole fleet of them at the other. It is the
+reason to open the panel rather than read the chip, and the one thing here
+recognised rather than read. The pictures live in
+`src/renderer/src/assets/effort/`, 512px against at most 240 on screen and
+scaled smoothly, for the reason the mascot's paragraph under **Empty panes**
+sets out. The box never scales one up: past its own grid a pixel drawing goes
+soft in exactly the way the drawing was made to avoid — so a bigger octopus
+means regenerating the files, not raising the number.
+
+What sets the panel's **width**, though, is neither the picture nor the taste of
+whoever last looked at it: it is the longest level name. At 480 the scale read
+`Very hi…` and `Maxim…`, and a label cut short is a level the reader has to
+already know in order to recognise.
+
+**The model chip opens a panel, not a list**, because the question has two
+halves: which model plans and researches, and which one writes the code. They
+sit in two columns side by side — the answer is not "which model" asked twice
+but which of the two does which job, and a panel you have to scroll between
+halves of is that question asked twice again.
+
+No second control was added for it. A chip for the plan model beside the one for
+the coding model would be two settings in a row that already holds three, with
+nothing on screen saying they are two halves of one question.
+
+Its rows carry **names only**, where the old menu carried the agent's
+descriptions: "Opus 5 with 1M context · Best for everyday, complex tasks" does
+not fit a column two hundred pixels wide, and the chip is what a reader consults
+for the wording.
+
+**A pick leaves the panel open**, which is the one place in the interface a menu
+does not close on being used — and it is a `dialog` rather than a `menu` for the
+same reason. Two columns is two answers, and closing on the first would make
+setting both a matter of opening the thing twice.
+
+**The plan column's first row is what makes the split optional.** `Same as
+writing code` is ticked until someone says otherwise, and while it is, the
+conversation runs one model and behaves exactly as it did before it could hold
+two. The row names the model it resolves to underneath, because that is the fact
+a reader opening the panel came for.
+
+**The chip names the model in force**, which is the plan model while planning a
+conversation whose two differ, and the coding model everywhere else. The effort
+control follows the same reading — so a plan model that takes no effort greys it
+out for as long as planning lasts, and gives it back afterwards.
+
+**Every row of the panel names a model.** The catalogue's first entry does not:
+the CLI calls it `Default (recommended)`, which tells a reader nothing about
+what they are about to talk to. It does say what it _resolves_ to, and the
 catalogue carries a second row for that same full name — so the default row
 wears that row's name and is marked `by default` underneath, and the duplicate
 is folded away rather than drawn twice under one heading. `modelRows` builds
-this, over `defaultAgentModel` in core. A chat that chose nothing ticks that row,
-which is why there is no longer an `Agent decides` entry beside it: the two said
-the same thing, and only one of them could name a model.
+this, over `defaultAgentModel` in core, and is called **once per column**: each
+pins its own value, and shared between them one column would drop the row the
+other is running on. A chat that chose nothing ticks that row, which is why
+there is no longer an `Agent decides` entry beside it: the two said the same
+thing, and only one of them could name a model.
 
 Before any session has reported a catalogue there is no name to wear, and the
 row reads `Default model` — words rather than the raw `default` the picker would
 otherwise print.
 
-**The button names what is running when that differs from what the menu ticks.**
+**The chip names what is running when that differs from what the panel ticks.**
 A `/model` command is what causes it: the CLI scopes it to the session ("for this
 session only"), so it moves what is running without moving what this chat chose
 — and the record staying put is the truth rather than a compromise. The name
 reaches the footer with the context reading, which is already refreshed on every
-`result`, so the picker moves as soon as the command's turn ends. When the two
-agree the button simply says the ticked row, because saying it twice adds
-nothing.
+`result`, so the chip moves as soon as the command's turn ends.
 
 **The footer's permission control is two things, not one**, and they are two
 stored fields. `plan` is not a third degree of permission but a state the
@@ -756,7 +824,10 @@ field styling had already drifted by a few pixels of height.
 | `DropdownMenu`                                                  | positioned against the **window**, not its trigger — an absolute panel is clipped by any scrolling ancestor, and the tab strip is one. So the coordinates are a snapshot, and a scroll closes it only when it happened in something the trigger sits inside; anything else cannot move it. Widens itself when its items carry a second line, and wraps that line to two rather than truncating: the model descriptions come from the agent, and one written for a width chosen for one-word commands says nothing when cut short |
 | `Combobox`                                                      | a select with search; a native one stops being usable around thirty entries                                                                                                                                                                                                                                                                                                                                                                                                                                                      |
 | `SectionRail`                                                   | the rail shared by both settings dialogs                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
-| `ComposerPicker`                                                | one setting in the composer's control row. Ghost, not `Button` — a bordered control on that surface reads as a chip, and three of them make a toolbar competing with the field above                                                                                                                                                                                                                                                                                                                                             |
+| `ComposerChip`                                                  | the button each composer setting opens from. Ghost, not `Button` — a bordered control on that surface reads as a chip, and a row of them makes a toolbar competing with the field above. Its own file because the two things opening from that row are not the same kind of thing, and written twice the classes would drift the first time either was touched                                                                                                                                                                   |
+| `EffortPicker`                                                  | the effort chip and the scale behind it, `Faster` to `Smarter`, with `ultracode` past a gap at the end and an octopus above it. A `slider` rather than a row of buttons: the ordering between the levels is the fact it exists to show, and buttons inside would be a tab stop each on a control whose whole point is one handle                                                                                                                                                                                                 |
+| `ModelPicker`                                                   | the model chip and the two-column panel behind it: which model plans, which one writes the code. A `dialog` that **does not close on a pick** — two columns is two answers, and closing on the first would mean opening it twice                                                                                                                                                                                                                                                                                                 |
+| `useAnchoredPanel`                                              | where both composer panels are drawn: `fixed` against the window the way `DropdownMenu` does it and for the same reason, flipped above the chip when it would run off the bottom, clamped when it would run off the right, closed on a scroll of something the chip sits inside. The size is given per opening, since a panel's height can depend on how many rows it is about to hold                                                                                                                                           |
 | `Markdown`, `CodeBlock`                                         | how the agent's own output is drawn. A fenced block gets a frame and a copy button in its own row, never floating over code that scrolls sideways. The block/inline distinction is taken from `pre`, not from the language class: a fence with no language hands the `code` override exactly what inline code does                                                                                                                                                                                                               |
 | `Settings`                                                      | `initialSection` opens it where the caller needs it. Read once, on mount — correct only because `App` renders the dialog conditionally, so a close unmounts it                                                                                                                                                                                                                                                                                                                                                                   |
 | `ProjectGlyph`                                                  | a project's icon, `aria-hidden`: wherever it appears the element around it is already named                                                                                                                                                                                                                                                                                                                                                                                                                                      |

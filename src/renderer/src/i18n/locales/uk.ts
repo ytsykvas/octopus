@@ -248,6 +248,10 @@ export const uk: Translation = {
     model: 'Модель',
     modelDefault: 'Модель за замовчуванням',
     modelDefaultNote: 'за замовчуванням',
+    modelsTitle: 'Моделі цієї розмови',
+    modelsPlan: 'План і дослідження',
+    modelsCode: 'Написання коду',
+    modelsSame: 'Та сама, що й для коду',
 
     effort: 'Зусилля',
     effortLow: 'Низьке',
@@ -255,7 +259,12 @@ export const uk: Translation = {
     effortHigh: 'Високе',
     effortXhigh: 'Дуже високе',
     effortMax: 'Максимальне',
+    effortUltracode: 'Ultracode',
+    effortUltracodeNote: 'xhigh + workflows',
     effortUnsupported: 'Ця модель не приймає налаштування зусилля.',
+    effortScale: 'Зусилля на роздуми',
+    effortFaster: 'Швидше',
+    effortSmarter: 'Розумніше',
 
     modeToggle: 'Дозволи: {{mode}}',
     modeDefault: 'Питати',
@@ -370,6 +379,13 @@ export const uk: Translation = {
     effort: 'Зусилля за замовчуванням',
     effortHint:
       'Скільки міркувань просить нова розмова. Кожну потім можна змінити окремо, просто в композері.',
+
+    model: 'Модель для написання коду',
+    modelHint:
+      'На чому працює нова розмова. Список надає сам агент, тож він порожній, доки не запуститься перша сесія.',
+    planModel: 'Модель для плану та досліджень',
+    planModelHint:
+      'Використовується, доки увімкнено План: план продумує одна модель, а виконує інша. Залиште те саме, щоб одна модель робила обидві справи.',
 
     permissionMode: 'Що дозволено новому чату',
     permissionModeHint:

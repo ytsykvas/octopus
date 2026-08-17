@@ -6,7 +6,7 @@ import type { AccountsStatus } from '@core/accounts.js'
 import type { Config } from '@core/config.js'
 
 import { stubDialogElement } from '../test/dialog.js'
-import { disconnectedAccounts } from '../test/octopus.js'
+import { disconnectedAccounts, octopus } from '../test/octopus.js'
 import { Settings } from './Settings.js'
 
 type SettingsProps = React.ComponentProps<typeof Settings>
@@ -19,6 +19,8 @@ function config(overrides: Partial<Config> = {}): Config {
     settingSources: 'none',
     workingMode: 'default',
     effort: 'medium',
+    model: null,
+    planModel: null,
     alwaysAllowedTools: [],
     theme: 'system',
     language: 'en',
@@ -178,6 +180,100 @@ describe('Settings', () => {
     await openSection(user, 'Agent')
 
     expect(screen.queryByRole('button', { name: /^Agent decides/ })).not.toBeInTheDocument()
+  })
+
+  /*
+   * The pair a new conversation starts on. Global for the reason the two
+   * settings above it are: which model does which job is a working habit, and
+   * answering it again in every conversation is what gets a setting left alone.
+   */
+  describe('the models a new conversation starts on', () => {
+    const CATALOGUE = [
+      {
+        value: 'default',
+        resolvedModel: 'claude-opus-5[1m]',
+        displayName: 'Default (recommended)',
+        description: '',
+        supportsEffort: null,
+        supportedEffortLevels: null
+      },
+      {
+        value: 'opus[1m]',
+        resolvedModel: 'claude-opus-5[1m]',
+        displayName: 'Opus (1M context)',
+        description: '',
+        supportsEffort: null,
+        supportedEffortLevels: null
+      },
+      {
+        value: 'sonnet',
+        resolvedModel: 'claude-sonnet-5',
+        displayName: 'Sonnet',
+        description: '',
+        supportsEffort: null,
+        supportedEffortLevels: null
+      }
+    ]
+
+    async function withCatalogue(overrides: Partial<SettingsProps> = {}): Promise<SettingsProps> {
+      vi.mocked(octopus().chats.models).mockResolvedValue({ ok: true, value: CATALOGUE })
+      const props = await renderSettings(overrides)
+      await screen.findByRole('button', { name: 'Agent' })
+      return props
+    }
+
+    /*
+     * The two lists hold the same names, so they are told apart by order —
+     * coding above, planning below, which is the order they are read in too.
+     */
+    async function rowIn(list: 'coding' | 'planning', name: RegExp): Promise<HTMLElement> {
+      const [coding, planning] = await screen.findAllByRole('button', { name })
+      const found = list === 'coding' ? coding : planning
+      if (!found) throw new Error(`no ${list} row matching ${name.source}`)
+      return found
+    }
+
+    it('sets the model a new conversation writes code with', async () => {
+      const user = userEvent.setup()
+      const props = await withCatalogue()
+
+      await openSection(user, 'Agent')
+      await user.click(await rowIn('coding', /^Sonnet/))
+
+      expect(props.onChange).toHaveBeenCalledExactlyOnceWith({ model: 'sonnet' })
+    })
+
+    it('stores the coding default as no override at all', async () => {
+      const user = userEvent.setup()
+      const props = await withCatalogue({ config: config({ model: 'sonnet' }) })
+
+      await openSection(user, 'Agent')
+      await user.click(await rowIn('coding', /^Opus \(1M context\)by default/))
+
+      expect(props.onChange).toHaveBeenCalledExactlyOnceWith({ model: null })
+    })
+
+    // Null is already spoken for on the plan side — it is the first row, and
+    // means one model does both jobs — so the agent's own default is the word.
+    it('stores the planning default as the word rather than an absence', async () => {
+      const user = userEvent.setup()
+      const props = await withCatalogue({ config: config({ planModel: 'sonnet' }) })
+
+      await openSection(user, 'Agent')
+      await user.click(await rowIn('planning', /^Opus \(1M context\)by default/))
+
+      expect(props.onChange).toHaveBeenCalledExactlyOnceWith({ planModel: 'default' })
+    })
+
+    it('takes the split back off with the first row of the plan list', async () => {
+      const user = userEvent.setup()
+      const props = await withCatalogue({ config: config({ planModel: 'sonnet' }) })
+
+      await openSection(user, 'Agent')
+      await user.click(await screen.findByRole('button', { name: 'Same as writing code' }))
+
+      expect(props.onChange).toHaveBeenCalledExactlyOnceWith({ planModel: null })
+    })
   })
 
   it('says nothing has been waved through yet', async () => {

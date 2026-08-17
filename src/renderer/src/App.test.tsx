@@ -50,6 +50,8 @@ function config(overrides: Partial<Config> = {}): Config {
     settingSources: 'none',
     workingMode: 'default',
     effort: 'medium',
+    model: null,
+    planModel: null,
     alwaysAllowedTools: [],
     theme: 'system',
     language: 'en',

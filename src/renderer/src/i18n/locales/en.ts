@@ -280,6 +280,17 @@ export const en = {
     /* Under the model the agent's default runs, so that row is read as a
        standing choice rather than as one more model beside the others. */
     modelDefaultNote: 'by default',
+    /* The panel the model chip opens, and its two columns. Titled by what it
+       holds rather than by which of the two matters more: the coding model is
+       in force most of the time, but the reason to open this at all is that
+       planning can have its own. */
+    modelsTitle: 'Models for this conversation',
+    modelsPlan: 'Plan and research',
+    modelsCode: 'Writing code',
+    /* The plan column's first row: no split, so whatever writes the code plans
+       as well. The model that resolves to is named underneath, because that is
+       the fact the reader came for. */
+    modelsSame: 'Same as writing code',
 
     effort: 'Effort',
     effortLow: 'Low',
@@ -287,7 +298,17 @@ export const en = {
     effortHigh: 'High',
     effortXhigh: 'Very high',
     effortMax: 'Maximum',
+    /* Left in the SDK's own spelling. It is a name rather than a description —
+       the caption underneath is where the description goes — and translating it
+       would break the one word someone searching for the feature would type. */
+    effortUltracode: 'Ultracode',
+    effortUltracodeNote: 'xhigh + workflows',
     effortUnsupported: 'This model does not take an effort setting.',
+    effortScale: 'Thinking effort',
+    /* The ends of the scale rather than labels for its halves: what is being
+       traded is the interesting part, and neither end is the good one. */
+    effortFaster: 'Faster',
+    effortSmarter: 'Smarter',
 
     // Ukrainian needs `few` and `many` as well; i18next picks the form that
     // applies to the active language and ignores the rest.
@@ -401,6 +422,13 @@ export const en = {
     effort: 'Default effort',
     effortHint:
       'How much thinking a new conversation asks for. Each one can then be changed on its own, from the composer.',
+
+    model: 'Model for writing code',
+    modelHint:
+      'What a new conversation runs on. The list is the agent’s own, so it is empty until a session has run once.',
+    planModel: 'Model for planning and research',
+    planModelHint:
+      'Used while Plan is on, so a plan can be thought out by one model and carried out by another. Leave it the same to use one model for both.',
 
     permissionMode: 'What a new chat may do',
     permissionModeHint:

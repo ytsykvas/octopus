@@ -1,7 +1,7 @@
 import { contextBridge, ipcRenderer } from 'electron'
 
 import type { AccountKind, AccountsStatus } from '@core/accounts.js'
-import type { AgentCommand, AgentModel, Chat, Effort, WorkingMode } from '@core/chats.js'
+import type { AgentCommand, AgentModel, Chat, EffortChoice, WorkingMode } from '@core/chats.js'
 import type {
   ChatEvent,
   ChatStatusEvent,
@@ -162,12 +162,16 @@ const api = {
       ipcRenderer.invoke('chats:planMode', chatId, planning) as Promise<Result<void>>,
 
     /** Sets how much thinking the chat asks for; there is always a level. */
-    setEffort: (chatId: string, effort: Effort): Promise<Result<void>> =>
+    setEffort: (chatId: string, effort: EffortChoice): Promise<Result<void>> =>
       ipcRenderer.invoke('chats:effort', chatId, effort) as Promise<Result<void>>,
 
-    /** Sets the model the chat runs on; null returns the choice to the agent. */
+    /** Sets the model the chat writes code with; null hands the choice to the agent. */
     setModel: (chatId: string, model: string | null): Promise<Result<void>> =>
       ipcRenderer.invoke('chats:model', chatId, model) as Promise<Result<void>>,
+
+    /** Sets the model the chat plans with; null means the one above does both. */
+    setPlanModel: (chatId: string, model: string | null): Promise<Result<void>> =>
+      ipcRenderer.invoke('chats:planModel', chatId, model) as Promise<Result<void>>,
 
     /** Models the agent last reported; empty until a session has run once. */
     models: (): Promise<Result<readonly AgentModel[]>> =>

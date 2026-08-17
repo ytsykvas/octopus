@@ -148,6 +148,18 @@ Alternatively call `session.streamInput(...)` on an existing session object.
 An unclosed `query()` leaves a live child process behind. Every workspace must
 close its own session in its own teardown.
 
+**There is no `setEffort`, and nothing else settings-shaped has a method here.**
+Effort is a start-up option; moving it on a running session goes through
+`applyFlagSettings`, which is also the only way in for the `Settings` keys that
+are not options at all — `ultracode` among them. It **shallow-merges top-level
+keys**, so everything that has to change together goes in one call: a flag sent
+after a level replaces the level rather than joining it.
+
+At start-up the same layer is `Options.settings`, which takes a `Settings` object
+directly. It is not a `settingSource`, so passing it does not weaken the
+`settingSources: []` rule above — but say every key explicitly, `false` included,
+because with no sources loaded there is nothing else to turn one back off.
+
 ## Permissions
 
 `canUseTool` fires only when the decision is not already covered by
@@ -159,7 +171,7 @@ Do not make `bypassPermissions` the default: transparency beats convenience (§4
 ## Isolation from the SDK
 
 The core never hands `SDKMessage` to the renderer. Everything is mapped onto the
-flat `AgentEvent` in `src/core/types.ts` (§11.2). Reason: the SDK union is large
+flat `AgentEvent` in `src/core/events.ts` (§11.2). Reason: the SDK union is large
 and changes between versions — without this layer every package upgrade would
 break the UI.
 

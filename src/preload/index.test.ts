@@ -164,6 +164,11 @@ describe('channel names', () => {
       () => method('chats', 'setModel')('c' as never, 'claude-opus-5' as never),
       'chats:model'
     ],
+    [
+      'chats.setPlanModel',
+      () => method('chats', 'setPlanModel')('c' as never, 'claude-opus-5' as never),
+      'chats:planModel'
+    ],
     ['chats.models', () => method('chats', 'models')(), 'chats:models'],
     ['chats.commands', () => method('chats', 'commands')('c' as never), 'chats:commands'],
     [

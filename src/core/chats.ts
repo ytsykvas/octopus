@@ -124,6 +124,27 @@ export function sessionMode(chat: { planMode: boolean; workingMode: WorkingMode 
 }
 
 /**
+ * The model a session actually runs, once planning is folded in.
+ *
+ * `sessionMode`'s counterpart, and here for the same reason: two stored fields
+ * answer one question the SDK asks once, and nothing outside this file should
+ * have to remember which of them wins.
+ *
+ * The three cases `planModel` carries, in order — not planning, or planning
+ * with no split, both of which are `model`; planning on the agent's own
+ * default; and planning on a named model. Only the last two are a split, and
+ * only they can move the running session off what `model` says.
+ */
+export function sessionModel(chat: {
+  planMode: boolean
+  model: string | null
+  planModel: string | null
+}): string | null {
+  if (!chat.planMode || chat.planModel === null) return chat.model
+  return chat.planModel === DEFAULT_MODEL ? null : chat.planModel
+}
+
+/**
  * The tool the agent calls to hand a finished plan back.
  *
  * Named here rather than in `agent.ts` because the renderer needs it too, and
@@ -172,6 +193,46 @@ export const DEFAULT_EFFORT: Effort = 'medium'
 export const StoredEffortSchema = EffortSchema.nullable()
   .default(DEFAULT_EFFORT)
   .transform((level) => level ?? DEFAULT_EFFORT)
+
+/**
+ * What a conversation may be set to, which is one more thing than a level.
+ *
+ * `ultracode` is not a sixth amount of thinking. The SDK spells it as a session
+ * flag standing beside `xhigh` — that effort plus dynamic-workflow
+ * orchestration — and it belongs here rather than in `EFFORT_LEVELS` for two
+ * reasons: `agent.ts` assigns a level straight into the SDK's closed enum, and
+ * `supportedEffortLevels` is a list of levels a model reports, which will never
+ * name this one.
+ *
+ * Held as one field rather than as a level plus a boolean, because the two
+ * cannot vary independently: `ultracode` with `low` is a state nothing can run
+ * and the scale cannot draw. One setting, one value, and the pair is worked out
+ * where the SDK needs it.
+ */
+export const EFFORT_CHOICES = [...EFFORT_LEVELS, 'ultracode'] as const
+export const EffortChoiceSchema = z.enum(EFFORT_CHOICES)
+export type EffortChoice = z.infer<typeof EffortChoiceSchema>
+
+/** A chat's choice as it is stored — see `StoredEffortSchema` for the why. */
+export const StoredEffortChoiceSchema = EffortChoiceSchema.nullable()
+  .default(DEFAULT_EFFORT)
+  .transform((choice) => choice ?? DEFAULT_EFFORT)
+
+/**
+ * The effort a session actually runs, once `ultracode` is folded out.
+ *
+ * `sessionMode` and `sessionModel`'s third counterpart, and here for the same
+ * reason: one stored field answers two questions the SDK asks separately, and
+ * nothing outside this file should have to remember how they divide.
+ */
+export function sessionEffort(choice: EffortChoice): {
+  effort: Effort
+  ultracode: boolean
+} {
+  return choice === 'ultracode'
+    ? { effort: 'xhigh', ultracode: true }
+    : { effort: choice, ultracode: false }
+}
 
 /**
  * A model the account may use, as the agent reported it.
@@ -398,14 +459,35 @@ export const ChatSchema = z.object({
   /** Model override; null leaves the choice to the agent. */
   model: z.string().nullable(),
   /**
-   * How much thinking this conversation asks for; always a level.
+   * Which model plans, when that is not the one that writes the code.
+   *
+   * Null does **not** mean what it means one line up. `model`'s null is "the
+   * agent's own default"; this one is "no split at all" — planning runs on
+   * whatever `model` says. The asymmetry is the point: a conversation nobody
+   * has opened this panel in behaves exactly as it did before the field
+   * existed, which is what a default of null has to buy.
+   *
+   * "Plan on the agent's default, write the code on something else" is said
+   * with `DEFAULT_MODEL`, which is a row the picker offers like any other.
+   * `sessionModel` is the one place that folds the three cases back together.
+   *
+   * Defaulted rather than migrated, the convention `StateSchema` states: a
+   * field that can be absent needs a default, not a version bump.
+   */
+  planModel: z.string().min(1).nullable().default(null),
+  /**
+   * How much thinking this conversation asks for; always answered.
+   *
+   * Wider than the settings' own field, which stays a plain level: `ultracode`
+   * runs a fleet of agents and is a decision taken about one task, not a mode
+   * every new conversation should inherit.
    *
    * Normalised rather than merely defaulted: a record written before the field
    * existed must still load, and so must one written while null was a choice.
    * `readJsonFile` throws on a schema mismatch rather than falling back, so
    * neither case may reach it unanswered — it would stop the app opening.
    */
-  effort: StoredEffortSchema,
+  effort: StoredEffortChoiceSchema,
   /**
    * What replaced the old three-valued `permissionMode`.
    *
@@ -470,6 +552,9 @@ export interface NewChatOptions {
   readonly workingMode: WorkingMode
   /** The application-wide default the conversation starts from. */
   readonly effort: Effort
+  /** The settings' model, copied in rather than followed: see `newChat`. */
+  readonly model: string | null
+  readonly planModel: string | null
   readonly createdAt: string
 }
 
@@ -488,7 +573,11 @@ export function newChat(workspaceId: string, options: NewChatOptions): Chat {
     status: 'idle',
     title: null,
     sessionId: null,
-    model: null,
+    // Copied from the settings rather than left null and read through them
+    // later: the pair is a starting point, and a conversation that changed it
+    // must not move again when the settings do.
+    model: options.model,
+    planModel: options.planModel,
     effort: options.effort,
     workingMode: options.workingMode,
     // Never planning to begin with. Planning is a decision taken about a
@@ -539,6 +628,7 @@ export function forkChat(source: Chat, options: ForkChatOptions): Chat {
     title: null,
     sessionId: options.sessionId,
     model: source.model,
+    planModel: source.planModel,
     effort: source.effort,
     workingMode: source.workingMode,
     planMode: false,

@@ -529,6 +529,7 @@ Everything under one directory (Conductor spreads across `~/conductor` and `~/.c
     preload/index.ts contextBridge, typed API
     renderer/
       src/
+        assets/      the mascot, and an octopus per effort level
         components/  UI components
         hooks/       React hooks
         i18n/        localisation, en is the source of truth

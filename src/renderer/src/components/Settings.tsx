@@ -2,7 +2,7 @@ import { Bot, GitBranch, Info, type LucideIcon, Monitor, Sparkles } from 'lucide
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
-import type { Effort, WorkingMode } from '@core/chats.js'
+import { type AgentModel, DEFAULT_MODEL, type Effort, type WorkingMode } from '@core/chats.js'
 import type {
   Config,
   LanguagePreference,
@@ -10,7 +10,9 @@ import type {
   ThemePreference
 } from '@core/config.js'
 
+import { useModels } from '../hooks/useModels.js'
 import { Button } from './Button.js'
+import { modelRows } from './chat/modelRows.js'
 import { Field } from './Field.js'
 import { Mascot } from './Mascot.js'
 import { Modal } from './Modal.js'
@@ -283,8 +285,89 @@ function AgentSection({ config, onChange }: SectionProps): React.JSX.Element {
         </Field>
       </div>
 
+      <DefaultModels config={config} onChange={onChange} />
+
       <AlwaysAllowed tools={config.alwaysAllowedTools} onChange={onChange} />
     </div>
+  )
+}
+
+/**
+ * The row standing for "no split", where the config holds null.
+ *
+ * The empty string rather than a word, because `ConfigSchema` bounds a model
+ * name at one character: nothing can ever be called this, where a sentinel
+ * like `same` merely has not been so far.
+ */
+const NO_SPLIT = ''
+
+/**
+ * Which model a new conversation plans with, and which it writes code with.
+ *
+ * Global for the reason the mode and the effort above are: which model does
+ * which job is a working habit, and answering it again in every conversation
+ * is the friction that gets a setting left alone. A conversation may then
+ * diverge without moving this.
+ *
+ * The catalogue is the agent's, so before any session has run there is one row
+ * to offer and it is the default — the same first-run state the composer's
+ * picker has, and honest about it rather than empty.
+ */
+function DefaultModels({
+  config,
+  onChange
+}: {
+  config: Config
+  onChange: (patch: Partial<Config>) => Promise<void>
+}): React.JSX.Element {
+  const { t } = useTranslation()
+  const models = useModels()
+
+  const labels = { fallback: t('chat.modelDefault'), note: t('chat.modelDefaultNote') }
+  const codeRows = modelRows(models, labels, config.model)
+  const planRows = modelRows(models, labels, config.planModel)
+
+  const named = (rows: readonly AgentModel[]): { value: string; label: string; hint?: string }[] =>
+    rows.map((row, index) => ({
+      value: row.value,
+      label: row.displayName,
+      // Only under the head row, and only the wording `modelRows` chose: it
+      // empties the description when the default cannot be named, which is
+      // exactly when "by default" underneath would say it twice.
+      ...(index === 0 && row.description !== '' && { hint: row.description })
+    }))
+
+  return (
+    <>
+      <div className="border-line border-t pt-6">
+        <Field label={t('settings.model')} hint={t('settings.modelHint')}>
+          <RadioList<string>
+            value={config.model ?? DEFAULT_MODEL}
+            options={named(codeRows)}
+            onChange={(value) => {
+              // Null is how "the agent's own choice" is stored, the round trip
+              // the composer's picker makes too.
+              void onChange({ model: value === DEFAULT_MODEL ? null : value })
+            }}
+          />
+        </Field>
+      </div>
+
+      <div className="border-line border-t pt-6">
+        <Field label={t('settings.planModel')} hint={t('settings.planModelHint')}>
+          <RadioList<string>
+            value={config.planModel ?? NO_SPLIT}
+            options={[{ value: NO_SPLIT, label: t('chat.modelsSame') }, ...named(planRows)]}
+            onChange={(value) => {
+              // Everything but the sentinel is stored as it stands, the word
+              // `default` included: null is already spoken for on this side —
+              // it is the row above, and means one model does both jobs.
+              void onChange({ planModel: value === NO_SPLIT ? null : value })
+            }}
+          />
+        </Field>
+      </div>
+    </>
   )
 }
 

@@ -2290,6 +2290,51 @@ describe('the agent chat', () => {
       expect(service.getConfig().alwaysAllowedTools).toEqual([])
     })
 
+    /*
+     * The model leaves planning with the record. Asserted from inside the
+     * agent's own continuation rather than after the answer, because the
+     * ordering is the point: the reply is what releases the tool call, so a
+     * model sent behind it would reach a session already editing files with
+     * the model that wrote the plan.
+     */
+    it('puts a running session back on the coding model when a plan is approved', async () => {
+      const { service, workspaceId, events } = await withWorkspace()
+      const chat = await service.openChat(workspaceId)
+      await service.setChatModel(chat.id, 'claude-sonnet-5')
+      await service.setChatPlanModel(chat.id, 'claude-opus-5')
+      await service.setChatPlanMode(chat.id, true)
+      await service.sendToChat(chat.id, 'plan it')
+
+      let onRelease: readonly (string | undefined)[] = []
+      const decision = agent()
+        .ask('ExitPlanMode', { plan: 'a plan' })
+        .then((outcome) => {
+          onRelease = [...agent().requestedModels()]
+          return outcome
+        })
+
+      await service.answerPermission(await waitForRequest(events), 'allow')
+      await decision
+
+      // One push, not two: the session was started already planning, so it had
+      // the plan model from the options it was built with.
+      expect(onRelease).toEqual(['claude-sonnet-5'])
+      expect(service.listChats(workspaceId)[0]?.planMode).toBe(false)
+    })
+
+    it('sends no model with an approved plan when the two jobs share one', async () => {
+      const { service, workspaceId, events } = await withWorkspace()
+      const chat = await service.openChat(workspaceId)
+      await service.setChatPlanMode(chat.id, true)
+      await service.sendToChat(chat.id, 'plan it')
+
+      const decision = agent().ask('ExitPlanMode', { plan: 'a plan' })
+      await service.answerPermission(await waitForRequest(events), 'allow')
+      await decision
+
+      expect(agent().requestedModels()).toEqual([])
+    })
+
     // Every other approval leaves the mode exactly as it was. Only the plan
     // tool means "planning is over"; `Edit` means "yes, edit that file".
     it('changes no mode when an ordinary tool is approved', async () => {
@@ -2844,6 +2889,115 @@ describe('the agent chat', () => {
       expect(agent().options().model).toBe('claude-sonnet-5')
     })
 
+    it('remembers the model the chat plans with', async () => {
+      const { service, workspaceId } = await withWorkspace()
+      const chat = await service.openChat(workspaceId)
+
+      await service.setChatPlanModel(chat.id, 'claude-opus-5')
+
+      expect(service.listChats(workspaceId)[0]?.planModel).toBe('claude-opus-5')
+    })
+
+    it('starts a planning session on the model chosen for planning', async () => {
+      const { service, workspaceId } = await withWorkspace()
+      const chat = await service.openChat(workspaceId)
+      await service.setChatModel(chat.id, 'claude-sonnet-5')
+      await service.setChatPlanModel(chat.id, 'claude-opus-5')
+      await service.setChatPlanMode(chat.id, true)
+
+      await service.sendToChat(chat.id, 'plan it')
+
+      expect(agent().options().model).toBe('claude-opus-5')
+    })
+
+    /*
+     * The plan side names the agent's own default with a word, since null is
+     * "one model does both" there. It must not reach the SDK as one: nothing
+     * is called `default`, and `startSession` says "no override" by leaving
+     * the option out rather than by sending a name.
+     */
+    it('asks for no model at all when the plan side names the agent default', async () => {
+      const { service, workspaceId } = await withWorkspace()
+      const chat = await service.openChat(workspaceId)
+      await service.setChatModel(chat.id, 'claude-sonnet-5')
+      await service.setChatPlanModel(chat.id, 'default')
+      await service.setChatPlanMode(chat.id, true)
+
+      await service.sendToChat(chat.id, 'plan it')
+
+      expect(agent().options()).not.toHaveProperty('model')
+    })
+
+    it('moves a running session onto the plan model when planning starts', async () => {
+      const { service, workspaceId } = await withWorkspace()
+      const chat = await service.openChat(workspaceId)
+      await service.setChatModel(chat.id, 'claude-sonnet-5')
+      await service.setChatPlanModel(chat.id, 'claude-opus-5')
+      await service.sendToChat(chat.id, 'work')
+
+      await service.setChatPlanMode(chat.id, true)
+
+      expect(agent().requestedModels()).toEqual(['claude-opus-5'])
+      expect(agent().modes()).toEqual(['plan'])
+    })
+
+    it('moves it back when planning stops', async () => {
+      const { service, workspaceId } = await withWorkspace()
+      const chat = await service.openChat(workspaceId)
+      await service.setChatPlanModel(chat.id, 'claude-opus-5')
+      await service.sendToChat(chat.id, 'work')
+
+      await service.setChatPlanMode(chat.id, true)
+      await service.setChatPlanMode(chat.id, false)
+
+      // Undefined is how the session is told to go back to the agent's own
+      // choice, which is what this chat's coding model is.
+      expect(agent().requestedModels()).toEqual(['claude-opus-5', undefined])
+    })
+
+    /*
+     * The claim that keeps every conversation nobody has split behaving
+     * exactly as it did: its effective model never moves, so nothing is ever
+     * pushed at it and an explicit `/model` survives the toggle.
+     */
+    it('sends no model at all when the two jobs share one', async () => {
+      const { service, workspaceId } = await withWorkspace()
+      const chat = await service.openChat(workspaceId)
+      await service.sendToChat(chat.id, 'work')
+
+      await service.setChatPlanMode(chat.id, true)
+      await service.setChatPlanMode(chat.id, false)
+
+      expect(agent().requestedModels()).toEqual([])
+    })
+
+    // A working-mode change is not a model change, split or no split.
+    it('sends no model when only how freely it works changes', async () => {
+      const { service, workspaceId } = await withWorkspace()
+      const chat = await service.openChat(workspaceId)
+      await service.setChatPlanModel(chat.id, 'claude-opus-5')
+      await service.sendToChat(chat.id, 'work')
+
+      await service.setChatWorkingMode(chat.id, 'acceptEdits')
+
+      expect(agent().requestedModels()).toEqual([])
+    })
+
+    // Picking the coding model mid-plan moves the record, not the turn: what
+    // is running is the plan model, and the footer says so.
+    it('leaves a planning session on the plan model when the other one is picked', async () => {
+      const { service, workspaceId } = await withWorkspace()
+      const chat = await service.openChat(workspaceId)
+      await service.setChatPlanModel(chat.id, 'claude-opus-5')
+      await service.setChatPlanMode(chat.id, true)
+      await service.sendToChat(chat.id, 'plan it')
+
+      await service.setChatModel(chat.id, 'claude-sonnet-5')
+
+      expect(service.listChats(workspaceId)[0]?.model).toBe('claude-sonnet-5')
+      expect(agent().requestedModels()).toEqual(['claude-opus-5'])
+    })
+
     it('remembers the effort the chat was set to', async () => {
       const { service, workspaceId } = await withWorkspace()
       const chat = await service.openChat(workspaceId)
@@ -2860,7 +3014,9 @@ describe('the agent chat', () => {
 
       await service.setChatEffort(chat.id, 'low')
 
-      expect(agent().flagSettings()).toEqual([{ effortLevel: 'low' }])
+      expect(agent().flagSettings()).toEqual([
+        { effortLevel: 'low', ultracode: false, enableWorkflows: false }
+      ])
     })
 
     /*
@@ -2879,7 +3035,9 @@ describe('the agent chat', () => {
       await service.setChatEffort(chat.id, 'medium')
 
       expect(service.listChats(workspaceId)[0]?.effort).toBe('medium')
-      expect(agent().flagSettings()).toEqual([{ effortLevel: 'medium' }])
+      expect(agent().flagSettings()).toEqual([
+        { effortLevel: 'medium', ultracode: false, enableWorkflows: false }
+      ])
     })
 
     it('starts the next session with the effort the chat is now on', async () => {
@@ -2890,6 +3048,21 @@ describe('the agent chat', () => {
       await service.sendToChat(chat.id, 'work')
 
       expect(agent().options().effort).toBe('medium')
+    })
+
+    // The whole point of storing the choice rather than the pair: a chat left
+    // on `ultracode` starts its next session on it, and neither half of what
+    // that means has to be remembered anywhere but the fold.
+    it('starts the next session on ultracode when the chat was left on it', async () => {
+      const { service, workspaceId } = await withWorkspace()
+      const chat = await service.openChat(workspaceId)
+      await service.setChatEffort(chat.id, 'ultracode')
+
+      await service.sendToChat(chat.id, 'work')
+
+      expect(service.listChats(workspaceId)[0]?.effort).toBe('ultracode')
+      expect(agent().options().effort).toBe('xhigh')
+      expect(agent().options().settings).toEqual({ ultracode: true, enableWorkflows: true })
     })
 
     /*

@@ -57,6 +57,9 @@ interface ChatSessionProps {
    */
   readonly defaultWorkingMode: WorkingMode
   readonly defaultEffort: Effort
+  /** The settings' model pair, for the same reason as the two above. */
+  readonly defaultModel: string | null
+  readonly defaultPlanModel: string | null
 }
 
 /**
@@ -76,7 +79,9 @@ export function ChatSession({
   onDraftLeave,
   comments,
   defaultWorkingMode,
-  defaultEffort
+  defaultEffort,
+  defaultModel,
+  defaultPlanModel
 }: ChatSessionProps): React.JSX.Element {
   const { t } = useTranslation()
   const describeFailure = useErrorMessage()
@@ -100,6 +105,10 @@ export function ChatSession({
   const record = chat.chat
   const workingMode = record?.workingMode ?? defaultWorkingMode
   const effort = record?.effort ?? defaultEffort
+  // Both models, as stored. `Composer` works out which of them the next message
+  // will run with; the record holds two settings, not a state.
+  const model = record === null ? defaultModel : record.model
+  const planModel = record === null ? defaultPlanModel : record.planModel
 
   // Follows the conversation, but only while the user is already at the end of
   // it — yanking the view down while they read something further up is the
@@ -211,12 +220,14 @@ export function ChatSession({
         onPlanMode={(planning) => void chat.setPlanMode(planning)}
         effort={effort}
         onEffort={(level) => void chat.setEffort(level)}
-        model={record?.model ?? null}
-        onModel={(model) => void chat.setModel(model)}
+        model={model}
+        onModel={(chosen) => void chat.setModel(chosen)}
+        planModel={planModel}
+        onPlanModel={(chosen) => void chat.setPlanModel(chosen)}
         models={models}
-        // What the session reports it is running, which the picker shows when
-        // nothing was chosen here. It rides in with the context reading, so it
-        // refreshes on the same `result` the token count does.
+        // What the session reports it is running, which the chip shows when it
+        // differs from what was chosen here. It rides in with the context
+        // reading, so it refreshes on the same `result` the token count does.
         activeModel={usage.context?.model ?? null}
         commands={commands}
         usage={usage}

@@ -1,4 +1,4 @@
-import { ArrowUp, CheckCheck, Gauge, Map, Shield, Sparkles } from 'lucide-react'
+import { ArrowUp, CheckCheck, Map, Shield } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
@@ -6,8 +6,7 @@ import {
   type AgentCommand,
   type AgentModel,
   DEFAULT_MODEL,
-  EFFORT_LEVELS,
-  type Effort,
+  type EffortChoice,
   findAgentModel,
   type WorkingMode
 } from '@core/chats.js'
@@ -21,8 +20,9 @@ import { completeCommand, matchCommands, readCommandQuery } from './commandMatch
 import { withComments } from './attachments.js'
 import { ComposerAttachments } from './ComposerAttachments.js'
 import { ComposerAttic } from './ComposerAttic.js'
-import { ComposerPicker } from './ComposerPicker.js'
+import { EffortPicker } from './EffortPicker.js'
 import { modelRows } from './modelRows.js'
+import { ModelPicker } from './ModelPicker.js'
 
 interface ComposerProps {
   /**
@@ -42,12 +42,22 @@ interface ComposerProps {
   /** Whether the next message is asked for a plan first. */
   readonly planMode: boolean
   readonly onPlanMode: (planning: boolean) => void
-  /** How much thinking the next message asks for; always a level. */
-  readonly effort: Effort
-  readonly onEffort: (effort: Effort) => void
-  /** Null means nothing was chosen here, which the default row stands for. */
+  /** How much thinking the next message asks for; always answered. */
+  readonly effort: EffortChoice
+  readonly onEffort: (effort: EffortChoice) => void
+  /**
+   * The model this conversation writes code with; null leaves it to the agent.
+   *
+   * Both halves arrive as they are stored, and which of them is *in force* is
+   * worked out here — the chip names it and the effort control answers about
+   * it. Deciding that outside would mean the caller knowing that planning moves
+   * the model, which is this row's business rather than the pane's.
+   */
   readonly model: string | null
   readonly onModel: (model: string | null) => void
+  /** The model it plans with; null means the one above does both jobs. */
+  readonly planModel: string | null
+  readonly onPlanModel: (model: string | null) => void
   /** What the agent last said this account may use; empty on a first run. */
   readonly models: readonly AgentModel[]
   /**
@@ -75,34 +85,6 @@ interface ComposerProps {
   readonly comments: readonly DiffComment[]
   readonly onRemoveComment: (comment: DiffComment) => void
   readonly onCommentsSent: () => void
-}
-
-const EFFORT_LABELS: Record<
-  Effort,
-  'chat.effortLow' | 'chat.effortMedium' | 'chat.effortHigh' | 'chat.effortXhigh' | 'chat.effortMax'
-> = {
-  low: 'chat.effortLow',
-  medium: 'chat.effortMedium',
-  high: 'chat.effortHigh',
-  xhigh: 'chat.effortXhigh',
-  max: 'chat.effortMax'
-}
-
-/**
- * Which effort levels to offer for the model in force.
- *
- * A model that says nothing about effort gets the full list — silence is not a
- * refusal, and hiding levels the model would in fact accept is worse than
- * offering one it quietly downgrades.
- */
-function effortChoicesFor(model: AgentModel | undefined, inForce: Effort): readonly Effort[] {
-  const supported = model?.supportedEffortLevels
-  if (!supported) return EFFORT_LEVELS
-
-  // The level in force is offered whatever the model says about it. It is what
-  // the next message will run with, and a picker whose value has no row of its
-  // own falls back to printing the raw name.
-  return EFFORT_LEVELS.filter((level) => supported.includes(level) || level === inForce)
 }
 
 const MODE_LABELS: Record<WorkingMode, 'chat.modeDefault' | 'chat.modeAcceptEdits'> = {
@@ -159,6 +141,8 @@ export function Composer({
   onEffort,
   model,
   onModel,
+  planModel,
+  onPlanModel,
   models,
   activeModel,
   commands,
@@ -219,39 +203,48 @@ export function Composer({
    */
   const [dismissed, setDismissed] = useState(false)
 
+  /*
+   * Which of the conversation's two models the next message will run with.
+   *
+   * A conversation whose plan and code models differ runs the plan one while
+   * planning, so that is what the chip has to name and what the effort control
+   * has to answer about. With no split — `planModel` null — there is one model
+   * and this is it, whatever the toggle says.
+   */
+  const modelNow = planMode && planModel !== null ? planModel : model
+
   const rows = modelRows(
     models,
     { fallback: t('chat.modelDefault'), note: t('chat.modelDefaultNote') },
-    model
+    modelNow
   )
 
   // Through the catalogue rather than by string equality: a session names
   // itself in full while the list may hold a short name, and `claude-sonnet-5`
   // has to find the row called `sonnet`.
-  const chosenModel = model === null ? undefined : findAgentModel(rows, model)
+  const chosenModel = modelNow === null ? undefined : findAgentModel(rows, modelNow)
   const runningModel = activeModel === null ? undefined : findAgentModel(rows, activeModel)
 
   // Which model the effort control answers about: what this chat chose, or
   // failing that what the session is on, or failing that whatever the default
   // runs — which is a row now, so there is always an answer.
   const modelInForce = chosenModel ?? runningModel ?? rows[0]
-  const effortChoices = effortChoicesFor(modelInForce, effort)
 
   // Nothing chosen ticks the agent's own default, which is a row like any
   // other now rather than a sentinel standing in for the absence of one.
   const modelValue = chosenModel?.value ?? DEFAULT_MODEL
 
   /*
-   * What the button says, when that is not what the menu has ticked.
+   * What the chip says.
    *
-   * Only when the two genuinely differ, which a `/model` command is what
-   * causes: the CLI scopes it to the session, so it moves what is running
-   * without moving what this chat chose. Naming the running model when it is
-   * already the ticked row would just say it twice.
+   * The chosen row's name, unless the session has moved off it — which a
+   * `/model` command is what causes: the CLI scopes it to the session, so it
+   * changes what is running without changing what this chat chose, and the chip
+   * names what is running.
    */
-  const runningLabel =
+  const modelLabel =
     activeModel === null || runningModel?.value === modelValue
-      ? undefined
+      ? (chosenModel?.displayName ?? rows[0].displayName)
       : (runningModel?.displayName ?? activeModel)
 
   const trimmed = draft.trim()
@@ -377,36 +370,16 @@ export function Composer({
             Two lines keep every control named and reachable; widen the pane and
             it unwraps on its own. */}
         <div className="border-line flex flex-wrap items-center gap-1 border-t px-2 py-1.5">
-          <ComposerPicker
-            label={t('chat.model')}
-            value={modelValue}
-            icon={<Sparkles aria-hidden size={12} />}
-            {...(runningLabel !== undefined && { display: runningLabel })}
-            options={rows.map((candidate) => ({
-              value: candidate.value,
-              label: candidate.displayName,
-              ...(candidate.description !== '' && { description: candidate.description })
-            }))}
-            onChange={(value) => {
-              onModel(value === DEFAULT_MODEL ? null : value)
-            }}
+          <ModelPicker
+            models={models}
+            model={model}
+            onModel={onModel}
+            planModel={planModel}
+            onPlanModel={onPlanModel}
+            display={modelLabel}
           />
 
-          <ComposerPicker
-            label={t('chat.effort')}
-            value={effort}
-            icon={<Gauge aria-hidden size={12} />}
-            // Greyed out rather than hidden when the model does not use effort:
-            // a control that disappears as you change model is harder to make
-            // sense of than one that stays put and explains itself.
-            disabled={modelInForce.supportsEffort === false}
-            {...(modelInForce.supportsEffort === false && { title: t('chat.effortUnsupported') })}
-            options={effortChoices.map((value) => ({
-              value,
-              label: t(EFFORT_LABELS[value])
-            }))}
-            onChange={onEffort}
-          />
+          <EffortPicker value={effort} onChange={onEffort} model={modelInForce} />
 
           {/* Last of the three, and the only one that is not a menu. Model and
               effort are two halves of one question — which brain, and how hard

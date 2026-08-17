@@ -23,7 +23,8 @@ import type {
   SlashCommand
 } from '@anthropic-ai/claude-agent-sdk'
 
-import type { AgentCommand, AgentModel, Effort, PermissionMode } from './chats.js'
+import type { AgentCommand, AgentModel, EffortChoice, PermissionMode } from './chats.js'
+import { sessionEffort } from './chats.js'
 import type { AgentEvent } from './events.js'
 import { describeError } from './persist.js'
 
@@ -62,7 +63,7 @@ export interface SessionOptions {
   /** Model override; null leaves the choice to the agent. */
   readonly model: string | null
   /** How much thinking to ask for; a chat always has an answer. */
-  readonly effort: Effort
+  readonly effort: EffortChoice
   /** Tools allowed without asking, on top of the agent's own rules. */
   readonly allowedTools: readonly string[]
 }
@@ -125,7 +126,7 @@ export interface AgentSession {
   send: (text: string) => void
   interrupt: () => Promise<void>
   setPermissionMode: (mode: PermissionMode) => Promise<void>
-  setEffort: (effort: Effort) => Promise<void>
+  setEffort: (effort: EffortChoice) => Promise<void>
   /** Changes the model for what follows; null hands the choice back. */
   setModel: (model: string | null) => Promise<void>
   /** What this account may use, as the agent reported when the session began. */
@@ -335,6 +336,7 @@ export const ABANDONED = 'The turn this question belonged to ended before it was
  */
 export function startSession(options: SessionOptions, hooks: SessionHooks): AgentSession {
   const input = new InputQueue()
+  const { effort, ultracode } = sessionEffort(options.effort)
 
   const conversation = hooks.query({
     prompt: input.stream(),
@@ -345,7 +347,14 @@ export function startSession(options: SessionOptions, hooks: SessionHooks): Agen
       // the SDK reads a present `resume` as a session to look for.
       ...(options.resume !== null && { resume: options.resume }),
       ...(options.model !== null && { model: options.model }),
-      effort: options.effort,
+      effort,
+      // The flag-settings layer, which is where `ultracode` lives: it is not an
+      // option of its own, and asking for it is asking for two things at once —
+      // the orchestration, and the feature it orchestrates with. Both are said
+      // explicitly, `false` included, because `settingSources: []` means nothing
+      // else is loaded to say otherwise, and a session that quietly kept the
+      // last one's workflows would be a state nobody chose.
+      settings: { ultracode, enableWorkflows: ultracode },
       settingSources: [...options.settingSources],
       systemPrompt: { type: 'preset', preset: 'claude_code' },
       permissionMode: options.permissionMode,
@@ -436,17 +445,23 @@ export function startSession(options: SessionOptions, hooks: SessionHooks): Agen
       return readSubscriptionUsage(conversation)
     },
 
-    async setEffort(effort) {
+    async setEffort(choice) {
       // There is no `setEffort`; `effort` is a start-time option and this is
       // the only way to move it on a running session.
       //
       // Two things about it that look wrong and are not. It shallow-merges
       // top-level keys, so a second setting sent later would not join this one
-      // — both would have to go in one call. And the persisted `effortLevel`
-      // excludes `max` while this parameter allows it, because `max` lasts for
-      // the session and the CLI never writes it to a settings file; we keep it
-      // on the chat instead, and the next session asks for it at start-up.
-      await conversation.applyFlagSettings({ effortLevel: effort })
+      // — which is why all three go in one call rather than effort here and
+      // `ultracode` somewhere tidier. And the persisted `effortLevel` excludes
+      // `max` while this parameter allows it, because `max` lasts for the
+      // session and the CLI never writes it to a settings file; we keep it on
+      // the chat instead, and the next session asks for it at start-up.
+      const { effort, ultracode } = sessionEffort(choice)
+      await conversation.applyFlagSettings({
+        effortLevel: effort,
+        ultracode,
+        enableWorkflows: ultracode
+      })
     },
 
     close() {

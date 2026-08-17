@@ -3,7 +3,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import {
   type Chat,
   type ChatStatus,
-  type Effort,
+  type EffortChoice,
   EXIT_PLAN_MODE,
   type WorkingMode
 } from '@core/chats.js'
@@ -47,8 +47,9 @@ export interface ChatController {
   readonly answerQuestions: (requestId: string, answers: readonly QuestionAnswer[]) => Promise<void>
   readonly setWorkingMode: (mode: WorkingMode) => Promise<void>
   readonly setPlanMode: (planning: boolean) => Promise<void>
-  readonly setEffort: (effort: Effort) => Promise<void>
+  readonly setEffort: (effort: EffortChoice) => Promise<void>
   readonly setModel: (model: string | null) => Promise<void>
+  readonly setPlanModel: (model: string | null) => Promise<void>
 }
 
 /** Turns a failed IPC result into a sentence — what `useErrorMessage` returns. */
@@ -394,8 +395,14 @@ export function useChat(
     [change]
   )
 
+  const setPlanModel = useCallback(
+    (planModel: string | null) =>
+      change({ planModel }, (chatId) => window.octopus.chats.setPlanModel(chatId, planModel)),
+    [change]
+  )
+
   const setEffort = useCallback(
-    (effort: Effort) =>
+    (effort: EffortChoice) =>
       change({ effort }, (chatId) => window.octopus.chats.setEffort(chatId, effort)),
     [change]
   )
@@ -432,6 +439,7 @@ export function useChat(
     setWorkingMode,
     setPlanMode,
     setEffort,
-    setModel
+    setModel,
+    setPlanModel
   }
 }

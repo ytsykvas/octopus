@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { beforeAll, describe, expect, it, vi } from 'vitest'
 
@@ -43,6 +43,8 @@ interface PaneProps {
   readonly color?: ProjectColor
   readonly defaultWorkingMode?: WorkingMode
   readonly defaultEffort?: Effort
+  readonly defaultModel?: string | null
+  readonly defaultPlanModel?: string | null
   /** Where a failure the strip owns is reported, as `App` reports it. */
   readonly onError?: (message: string) => void
 }
@@ -63,6 +65,8 @@ function ChatPane({
   color = 'blue',
   defaultWorkingMode = 'default',
   defaultEffort = 'medium',
+  defaultModel = null,
+  defaultPlanModel = null,
   onError = vi.fn()
 }: PaneProps): React.JSX.Element {
   const tabs = useChatTabs(
@@ -85,6 +89,8 @@ function ChatPane({
       color={color}
       defaultWorkingMode={defaultWorkingMode}
       defaultEffort={defaultEffort}
+      defaultModel={defaultModel}
+      defaultPlanModel={defaultPlanModel}
     />
   )
 }
@@ -97,19 +103,29 @@ function ChatPane({
  */
 async function openChat(
   target: WorkspaceView = workspace(),
-  defaults: { workingMode?: WorkingMode; effort?: Effort } = {}
+  defaults: {
+    workingMode?: WorkingMode
+    effort?: Effort
+    model?: string | null
+    planModel?: string | null
+  } = {}
 ): Promise<void> {
   render(
     <ChatPane
       workspace={target}
       defaultWorkingMode={defaults.workingMode ?? 'default'}
       defaultEffort={defaults.effort ?? 'medium'}
+      defaultModel={defaults.model ?? null}
+      defaultPlanModel={defaults.planModel ?? null}
     />
   )
   await waitFor(() => {
     expect(octopus().chats.list).toHaveBeenCalled()
   })
 }
+
+/** The panel's coding half; both columns hold the same names. */
+const codeColumn = (): HTMLElement => screen.getByRole('radiogroup', { name: 'Writing code' })
 
 /**
  * Renders a pane whose chat already exists, and waits until it is loaded.
@@ -230,7 +246,7 @@ describe('sending the first message', () => {
     await openChat()
 
     await user.click(screen.getByRole('button', { name: 'Effort' }))
-    await user.click(screen.getByRole('menuitemradio', { name: 'Low' }))
+    await user.click(screen.getByText('Low'))
 
     expect(await screen.findByText(/no such workspace/)).toBeInTheDocument()
     expect(octopus().chats.setEffort).not.toHaveBeenCalled()
@@ -821,11 +837,45 @@ describe('the permission mode', () => {
     await screen.findByRole('button', { name: 'Model' })
 
     await user.click(screen.getByRole('button', { name: 'Model' }))
-    await user.click(await screen.findByRole('menuitemradio', { name: 'Opus 5' }))
+    await user.click(within(codeColumn()).getByRole('radio', { name: 'Opus 5' }))
 
     await waitFor(() => {
       expect(octopus().chats.setModel).toHaveBeenCalledWith(CHAT_ID, 'claude-opus-5')
     })
+  })
+
+  // The other half of the panel, on its own channel: the two models are two
+  // stored fields, and picking one must not be sent as the other.
+  it('sends the model chosen for planning down its own channel', async () => {
+    const user = userEvent.setup()
+    vi.mocked(octopus().chats.models).mockResolvedValue({
+      ok: true,
+      value: [
+        {
+          value: 'claude-opus-5',
+          resolvedModel: null,
+          displayName: 'Opus 5',
+          description: '',
+          supportsEffort: null,
+          supportedEffortLevels: null
+        }
+      ]
+    })
+    givenChat()
+    await openLoadedChat()
+    await screen.findByRole('button', { name: 'Model' })
+
+    await user.click(screen.getByRole('button', { name: 'Model' }))
+    await user.click(
+      within(screen.getByRole('radiogroup', { name: 'Plan and research' })).getByRole('radio', {
+        name: 'Opus 5'
+      })
+    )
+
+    await waitFor(() => {
+      expect(octopus().chats.setPlanModel).toHaveBeenCalledWith(CHAT_ID, 'claude-opus-5')
+    })
+    expect(octopus().chats.setModel).not.toHaveBeenCalled()
   })
 
   it('keeps the old model on screen when the change failed', async () => {
@@ -848,7 +898,7 @@ describe('the permission mode', () => {
     await openLoadedChat()
 
     await user.click(await screen.findByRole('button', { name: 'Model' }))
-    await user.click(await screen.findByRole('menuitemradio', { name: 'Opus 5' }))
+    await user.click(within(codeColumn()).getByRole('radio', { name: 'Opus 5' }))
 
     expect(await screen.findByText(/no such chat/)).toBeInTheDocument()
     // This mocked catalogue has no `default` row, so the row that stands for
@@ -897,12 +947,29 @@ describe('the permission mode', () => {
     await openLoadedChat()
 
     await user.click(screen.getByRole('button', { name: 'Effort' }))
-    await user.click(screen.getByRole('menuitemradio', { name: 'Very high' }))
+    await user.click(screen.getByText('Very high'))
 
     await waitFor(() => {
       expect(octopus().chats.setEffort).toHaveBeenCalledWith(CHAT_ID, 'xhigh')
     })
     expect(screen.getByRole('button', { name: 'Effort' })).toHaveTextContent('Very high')
+  })
+
+  // The far end of the scale crosses every layer the levels do — the hook, the
+  // preload API, the channel's schema — and is the one value on it that is not
+  // a level, so nothing about that journey is covered by the levels' own test.
+  it('sends ultracode to the chat like any other choice', async () => {
+    const user = userEvent.setup()
+    givenChat()
+    await openLoadedChat()
+
+    await user.click(screen.getByRole('button', { name: 'Effort' }))
+    await user.click(screen.getByText('Ultracode'))
+
+    await waitFor(() => {
+      expect(octopus().chats.setEffort).toHaveBeenCalledWith(CHAT_ID, 'ultracode')
+    })
+    expect(screen.getByRole('button', { name: 'Effort' })).toHaveTextContent('Ultracode')
   })
 
   it('keeps the old effort on screen when the change failed', async () => {
@@ -912,7 +979,7 @@ describe('the permission mode', () => {
     await openLoadedChat()
 
     await user.click(screen.getByRole('button', { name: 'Effort' }))
-    await user.click(screen.getByRole('menuitemradio', { name: 'Low' }))
+    await user.click(screen.getByText('Low'))
 
     expect(await screen.findByText(/no such chat/)).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Effort' })).toHaveTextContent('Medium')
