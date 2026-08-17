@@ -23,9 +23,16 @@ interface ProjectSettingsProps {
   readonly onUpdate: (patch: ProjectPatch) => Promise<boolean>
   readonly onRemove: () => void
   readonly onClose: () => void
+  /**
+   * Which section to open on, for a caller that already knows what it is about.
+   *
+   * Read once, on mount, which is correct only because `App` renders this
+   * dialog conditionally — the same arrangement `Settings` relies on.
+   */
+  readonly initialSection?: SectionId
 }
 
-type SectionId = 'general' | 'git' | 'scripts' | 'instructions' | 'danger'
+export type SectionId = 'general' | 'git' | 'scripts' | 'instructions' | 'danger'
 
 const SECTIONS: readonly {
   readonly id: SectionId
@@ -56,12 +63,13 @@ export function ProjectSettings({
   project,
   onUpdate,
   onRemove,
-  onClose
+  onClose,
+  initialSection
 }: ProjectSettingsProps): React.JSX.Element {
   const { t } = useTranslation()
   const describeFailure = useErrorMessage()
 
-  const [section, setSection] = useState<SectionId>('general')
+  const [section, setSection] = useState<SectionId>(initialSection ?? 'general')
   const [name, setName] = useState(project.name)
   const [branches, setBranches] = useState<readonly string[]>([])
   const [error, setError] = useState<string | null>(null)

@@ -1,0 +1,126 @@
+import { useCallback, useEffect, useRef, useState } from 'react'
+
+import type { PullRequestDraft, PullRequestView } from '@core/pullRequests.js'
+
+import { useErrorMessage } from './useErrorMessage.js'
+
+export interface PullRequestController {
+  readonly view: PullRequestView | null
+  /** Nothing has been read yet, so there is nothing to draw and no failure. */
+  readonly loading: boolean
+  readonly error: string | null
+  /** True while the request is being opened, which the button reflects. */
+  readonly creating: boolean
+  /** Opens one, and answers with its URL — or null when it did not. */
+  readonly create: (draft: PullRequestDraft) => Promise<string | null>
+}
+
+/**
+ * What has become of a workspace's branch on GitHub.
+ *
+ * `enabled` is what stops `gh` running for a tab nobody is looking at — the
+ * same rule the diff follows, and it matters more here: this one leaves the
+ * machine, so a hidden tab would be a network call per workspace opened.
+ *
+ * Deliberately not kept in step with the agent the way the diff is. A turn
+ * ending changes the working tree, and nothing about the working tree changes
+ * whether a pull request exists; the read happens when the tab is opened, and
+ * again after one is created.
+ */
+export function usePullRequest(
+  workspaceId: string | null,
+  enabled: boolean
+): PullRequestController {
+  const describeFailure = useErrorMessage()
+
+  const [view, setView] = useState<PullRequestView | null>(null)
+  const [error, setError] = useState<string | null>(null)
+  const [creating, setCreating] = useState(false)
+
+  /*
+   * The workspace the two above describe.
+   *
+   * Compared during render rather than reconciled in an effect: a pane showing
+   * the previous workspace's pull request for a frame would be naming a branch
+   * that is not the one on screen.
+   */
+  const [shownId, setShownId] = useState(workspaceId)
+
+  if (workspaceId !== shownId) {
+    setShownId(workspaceId)
+    setView(null)
+    setError(null)
+  }
+
+  /** Rejects a reply that arrived after the workspace changed under it. */
+  const generation = useRef(0)
+
+  const apply = useCallback(
+    (
+      result: Awaited<ReturnType<typeof window.octopus.workspaces.pullRequest>>,
+      attempt: number
+    ) => {
+      if (attempt !== generation.current) return
+
+      if (result.ok) {
+        setView(result.value)
+        setError(null)
+        return
+      }
+
+      setView(null)
+      setError(describeFailure(result))
+    },
+    [describeFailure]
+  )
+
+  // Read inline rather than through a callback, so nothing sets state until the
+  // first await has passed.
+  useEffect(() => {
+    if (workspaceId === null || !enabled) return
+
+    const controller = new AbortController()
+    const attempt = ++generation.current
+
+    void (async () => {
+      const result = await window.octopus.workspaces.pullRequest(workspaceId)
+      if (!controller.signal.aborted) apply(result, attempt)
+    })()
+
+    return () => {
+      controller.abort()
+    }
+  }, [workspaceId, enabled, apply])
+
+  const create = useCallback(
+    async (draft: PullRequestDraft): Promise<string | null> => {
+      if (workspaceId === null) return null
+
+      setCreating(true)
+      const result = await window.octopus.workspaces.createPullRequest(workspaceId, draft)
+      setCreating(false)
+
+      if (!result.ok) {
+        setError(describeFailure(result))
+        return null
+      }
+
+      // Read again rather than assembling the new state here: what came back is
+      // a URL, and the number, the title and whether the branch is now pushed
+      // are all things the next read knows and this reply does not.
+      const attempt = ++generation.current
+      apply(await window.octopus.workspaces.pullRequest(workspaceId), attempt)
+
+      return result.value
+    },
+    [workspaceId, apply, describeFailure]
+  )
+
+  return {
+    view,
+    loading: view === null && error === null && workspaceId !== null,
+    error,
+    creating,
+    create
+  }
+}

@@ -1,5 +1,5 @@
 /**
- * Per-project instructions for the agent.
+ * Instructions for the agent, per project and for the installation.
  *
  * Files rather than config strings, for the same reasons as the scripts: they
  * grow past what a text field holds comfortably, they are worth reading in a
@@ -17,7 +17,7 @@ import { dirname } from 'node:path'
 
 import { z } from 'zod'
 
-import { pullRequestInstruction } from './paths.js'
+import { globalPullRequestInstruction, pullRequestInstruction } from './paths.js'
 import type { ProjectId } from './types.js'
 
 export const InstructionKindSchema = z.enum(['pullRequest'])
@@ -52,43 +52,97 @@ How the agent should describe the work in a pull request for this project.
 }
 
 /**
- * Where each kind of instruction lives.
+ * Whose instruction this is.
+ *
+ * `null` is the installation's own, which every project falls back to. A
+ * project id rather than a boolean flag beside it, so the two cannot both be
+ * given and neither can be forgotten.
+ */
+export type InstructionScope = ProjectId | null
+
+/**
+ * Where each kind of instruction lives, at each scope.
  *
  * A map keyed by the kind, so adding a second one is a compile error here
  * rather than something that quietly falls through to the first file.
  */
-const PATHS: Record<InstructionKind, (projectId: ProjectId, root?: string) => string> = {
-  pullRequest: pullRequestInstruction
+const PATHS: Record<
+  InstructionKind,
+  {
+    project: (projectId: ProjectId, root?: string) => string
+    global: (root?: string) => string
+  }
+> = {
+  pullRequest: { project: pullRequestInstruction, global: globalPullRequestInstruction }
 }
 
 export function instructionPath(
   kind: InstructionKind,
-  projectId: ProjectId,
+  scope: InstructionScope,
   root?: string
 ): string {
-  return PATHS[kind](projectId, root)
+  const paths = PATHS[kind]
+  return scope === null ? paths.global(root) : paths.project(scope, root)
+}
+
+/**
+ * What is written, or null where nothing is.
+ *
+ * The distinction the fallback below is built on, and the one `readInstruction`
+ * cannot make: it answers with the template for a file that is absent, which is
+ * the right answer for an editor and the wrong one for a chain of defaults.
+ */
+async function storedInstruction(
+  kind: InstructionKind,
+  scope: InstructionScope,
+  root?: string
+): Promise<string | null> {
+  try {
+    return await readFile(instructionPath(kind, scope, root), 'utf8')
+  } catch {
+    return null
+  }
 }
 
 /** An instruction's contents, or the template when it has never been written. */
 export async function readInstruction(
   kind: InstructionKind,
+  scope: InstructionScope,
+  root?: string
+): Promise<string> {
+  return (await storedInstruction(kind, scope, root)) ?? TEMPLATES[kind]
+}
+
+/**
+ * The instruction that actually applies to a project.
+ *
+ * The project's own if it has one, the installation's if not, and the template
+ * if neither — the template being what both editors start from, so a project
+ * that has never been touched sends the same thing it displays.
+ *
+ * **An empty file counts.** Emptying a project's instruction is a decision that
+ * this project says nothing extra, and falling back to the global one there
+ * would make that decision impossible to express.
+ */
+export async function effectiveInstruction(
+  kind: InstructionKind,
   projectId: ProjectId,
   root?: string
 ): Promise<string> {
-  try {
-    return await readFile(instructionPath(kind, projectId, root), 'utf8')
-  } catch {
-    return TEMPLATES[kind]
-  }
+  return (
+    (await storedInstruction(kind, projectId, root)) ??
+    (await storedInstruction(kind, null, root)) ??
+    TEMPLATES[kind]
+  )
 }
 
 export async function writeInstruction(
   kind: InstructionKind,
-  projectId: ProjectId,
+  scope: InstructionScope,
   contents: string,
   root?: string
 ): Promise<void> {
-  const path = instructionPath(kind, projectId, root)
+  const path = instructionPath(kind, scope, root)
 
   await mkdir(dirname(path), { recursive: true })
   await writeFile(path, contents, 'utf8')

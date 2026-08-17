@@ -65,8 +65,30 @@ export type LanguagePreference = z.infer<typeof LanguageSchema>
  * drift apart. The renderer takes the **type** only — this module reaches
  * `node:os` through `paths.ts`, and a value import would follow it there.
  */
-export const RightPanelTabSchema = z.enum(['diff', 'terminal', 'build', 'server'])
+export const RIGHT_PANEL_TABS = ['diff', 'terminal', 'scripts', 'pullRequest'] as const
+export const RightPanelTabSchema = z.enum(RIGHT_PANEL_TABS)
 export type RightPanelTab = z.infer<typeof RightPanelTabSchema>
+
+/**
+ * The tab as it is stored, which is not quite as it is offered.
+ *
+ * Build and server were two tabs before they were one, and configs on disk name
+ * them. `.default()` answers for a key that is missing and says nothing about a
+ * key that is present holding a word this build no longer knows — and
+ * `persist.ts` throws on a value it cannot parse rather than resetting, at
+ * `createService`, un-guarded. Left to the plain enum, every existing install
+ * would fail to start over a tab nobody chose.
+ *
+ * So the two old names are still accepted and folded into the one that replaced
+ * them. Applied on the way in **and** on the way out, since `persist.ts` writes
+ * what the schema returned: the stale word leaves the disk the next time
+ * anything is saved. `StoredEffortSchema` in `chats.ts` is the same shape for
+ * the same reason.
+ */
+export const StoredRightPanelTabSchema = z
+  .enum([...RIGHT_PANEL_TABS, 'build', 'server'])
+  .default('diff')
+  .transform((tab): RightPanelTab => (tab === 'build' || tab === 'server' ? 'scripts' : tab))
 
 export const ConfigSchema = z.object({
   /** Format version — needed once the config has to be migrated. */
@@ -197,7 +219,7 @@ export const ConfigSchema = z.object({
    * mood about the current window, and `App` keeps it. This says what is behind
    * the tab strip when there is one, not whether there is one.
    */
-  rightPanelTab: RightPanelTabSchema.default('diff'),
+  rightPanelTab: StoredRightPanelTabSchema,
 
   /**
    * Width of the workspace list in pixels.

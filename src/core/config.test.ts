@@ -111,6 +111,49 @@ describe('loadConfig', () => {
   })
 
   /*
+   * The other case a default cannot answer, and the one that would have taken
+   * every existing install down with it: the field is there, holding a tab this
+   * build no longer has. Build and server were two tabs before they were one,
+   * and a plain enum would have failed the parse — which `persist.ts` turns
+   * into a refusal to start rather than a reset.
+   */
+  it('opens the tab that replaced the one a config still names', async () => {
+    for (const stored of ['build', 'server'] as const) {
+      const file = join(dir, `${stored}.json`)
+      await writeFile(
+        file,
+        JSON.stringify({
+          ...createDefaultConfig('ytsykvas', NOW, () => UUID),
+          rightPanelTab: stored
+        }),
+        'utf8'
+      )
+
+      const config = await loadConfig(file)
+      expect(config.rightPanelTab).toBe('scripts')
+    }
+  })
+
+  // Cleaned off the disk rather than translated on every read: the schema
+  // applies on the way out too, so the stale word goes the next time anything
+  // is saved.
+  it('writes the replacement back rather than the name it was given', async () => {
+    const file = join(dir, 'stale.json')
+    await writeFile(
+      file,
+      JSON.stringify({
+        ...createDefaultConfig('ytsykvas', NOW, () => UUID),
+        rightPanelTab: 'server'
+      }),
+      'utf8'
+    )
+
+    await saveConfig(await loadConfig(file), file)
+
+    expect(JSON.parse(await readFile(file, 'utf8'))).toMatchObject({ rightPanelTab: 'scripts' })
+  })
+
+  /*
    * The case a default cannot answer: the field is there, holding the null that
    * "the agent decides" was stored as. Nothing offers that choice now, and the
    * composer names the level in force — so it has to arrive as a level.

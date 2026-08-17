@@ -9,6 +9,7 @@ import type { WorkspaceView } from '@core/workspaces.js'
 import { DiffPanel } from './diff/DiffPanel.js'
 import type { DiffView } from './diff/DiffHunk.js'
 import { ResizeHandle } from './ResizeHandle.js'
+import { PullRequestPanel } from './PullRequestPanel.js'
 import { WorkspaceScripts } from './WorkspaceScripts.js'
 import { WorkspaceTerminals } from './WorkspaceTerminals.js'
 
@@ -19,12 +20,12 @@ import { WorkspaceTerminals } from './WorkspaceTerminals.js'
  */
 const TABS: readonly {
   readonly id: RightPanelTab
-  readonly labelKey: 'panel.changes' | 'panel.terminal' | 'scripts.build' | 'scripts.server'
+  readonly labelKey: 'panel.changes' | 'panel.terminal' | 'panel.scripts' | 'panel.pullRequest'
 }[] = [
   { id: 'diff', labelKey: 'panel.changes' },
   { id: 'terminal', labelKey: 'panel.terminal' },
-  { id: 'build', labelKey: 'scripts.build' },
-  { id: 'server', labelKey: 'scripts.server' }
+  { id: 'scripts', labelKey: 'panel.scripts' },
+  { id: 'pullRequest', labelKey: 'panel.pullRequest' }
 ]
 
 /**
@@ -94,6 +95,10 @@ interface RightPanelProps {
   /** Absolute paths of the project's scripts; null when never written. */
   readonly scriptPaths: { readonly setup: string | null; readonly run: string | null }
   readonly onEditScripts: () => void
+  /** Opens the project's pull request instructions, from the tab about them. */
+  readonly onEditInstructions: () => void
+  /** The conversation a prompt would go to; null when the workspace has none. */
+  readonly chatId: string | null
   readonly width: number
   /** Persists the width; called when a drag ends, not during it. */
   readonly onWidthChange: (width: number) => void
@@ -123,6 +128,8 @@ export function RightPanel({
   projectId,
   scriptPaths,
   onEditScripts,
+  onEditInstructions,
+  chatId,
   width,
   onWidthChange,
   leftWidth,
@@ -341,31 +348,65 @@ export function RightPanel({
           `node_modules` behind it. `WorkspaceScripts` keeps the same promise
           against the other click that used to end a run — opening another
           workspace. */}
+      {/* One tab, both scripts, one above the other. They were two tabs, which
+          made a pair of halves of one question — what this workspace runs —
+          into two places to look, and cost a fifth of a tab row whose width has
+          to be measured because it barely fits. Stacked, a server can be seen
+          running while a build is read.
+
+          Each half gets `min-h-0` and half the height. A terminal measures
+          itself against the box it is in, and a box that has not been told it
+          may be shorter than its content grows instead of scrolling. */}
       <div
-        aria-hidden={tab !== 'build'}
-        className={`flex min-h-0 flex-1 flex-col ${tab === 'build' ? '' : 'hidden'}`}
+        aria-hidden={tab !== 'scripts'}
+        className={`flex min-h-0 flex-1 flex-col ${tab === 'scripts' ? '' : 'hidden'}`}
       >
-        <WorkspaceScripts
-          workspaces={scriptable}
-          activeId={activeWorkspaceId}
-          kind="setup"
-          scriptPath={scriptPaths.setup}
-          visible={tab === 'build'}
-          onOpenSettings={onEditScripts}
-        />
+        {/* A named region each, rather than two anonymous halves. Both are on
+            screen at once now, so "the Run button" is ambiguous to anything
+            reading the pane aloud — and to anything testing it. The heading is
+            `aria-hidden` because the region already carries the same word. */}
+        <section aria-label={t('scripts.build')} className="flex min-h-0 flex-1 flex-col">
+          <p aria-hidden className="section-label border-line shrink-0 border-b px-3 py-1.5">
+            {t('scripts.build')}
+          </p>
+          <WorkspaceScripts
+            workspaces={scriptable}
+            activeId={activeWorkspaceId}
+            kind="setup"
+            scriptPath={scriptPaths.setup}
+            visible={tab === 'scripts'}
+            onOpenSettings={onEditScripts}
+          />
+        </section>
+
+        <section
+          aria-label={t('scripts.server')}
+          className="border-line flex min-h-0 flex-1 flex-col border-t"
+        >
+          <p aria-hidden className="section-label border-line shrink-0 border-b px-3 py-1.5">
+            {t('scripts.server')}
+          </p>
+          <WorkspaceScripts
+            workspaces={scriptable}
+            activeId={activeWorkspaceId}
+            kind="run"
+            scriptPath={scriptPaths.run}
+            visible={tab === 'scripts'}
+            onOpenSettings={onEditScripts}
+          />
+        </section>
       </div>
 
       <div
-        aria-hidden={tab !== 'server'}
-        className={`flex min-h-0 flex-1 flex-col ${tab === 'server' ? '' : 'hidden'}`}
+        aria-hidden={tab !== 'pullRequest'}
+        className={`flex min-h-0 flex-1 flex-col ${tab === 'pullRequest' ? '' : 'hidden'}`}
       >
-        <WorkspaceScripts
-          workspaces={scriptable}
-          activeId={activeWorkspaceId}
-          kind="run"
-          scriptPath={scriptPaths.run}
-          visible={tab === 'server'}
-          onOpenSettings={onEditScripts}
+        <PullRequestPanel
+          workspace={active}
+          visible={tab === 'pullRequest'}
+          chatId={chatId}
+          onEditInstructions={onEditInstructions}
+          onError={onError}
         />
       </div>
     </section>

@@ -18,7 +18,7 @@ import { Button } from './components/Button.js'
 import { Chat } from './components/chat/Chat.js'
 import { RepositoryPicker } from './components/RepositoryPicker.js'
 import { Placeholder } from './components/Placeholder.js'
-import { ProjectSettings } from './components/ProjectSettings.js'
+import { ProjectSettings, type SectionId as ProjectSection } from './components/ProjectSettings.js'
 import { ProjectTabs } from './components/ProjectTabs.js'
 import { RightPanel } from './components/RightPanel.js'
 import { type SectionId, Settings } from './components/Settings.js'
@@ -70,6 +70,8 @@ export function App(): React.JSX.Element {
   const [checkingGitHub, setCheckingGitHub] = useState(false)
   const [selectedWorkspaceId, setSelectedWorkspaceId] = useState<string | null>(null)
   const [editingProjectId, setEditingProjectId] = useState<string | null>(null)
+  /** Which section that dialog opens on, for the callers that know. */
+  const [editingProjectSection, setEditingProjectSection] = useState<ProjectSection>('general')
   const [scriptPaths, setScriptPaths] = useState<{ setup: string | null; run: string | null }>({
     setup: null,
     run: null
@@ -115,6 +117,14 @@ export function App(): React.JSX.Element {
   )
 
   const chatTabs = useChatTabs(selectedWorkspaceId, confirm, publishChats, setError)
+
+  /*
+   * The conversation a prompt from the right pane would go to.
+   *
+   * Null until the first tab has a record — a tab exists before its chat does,
+   * and the pull request pane disables its button rather than creating one.
+   */
+  const activeChatId = chatTabs.tabs.find((tab) => tab.key === chatTabs.activeKey)?.id ?? null
 
   /*
    * A half-written prompt, kept per conversation.
@@ -313,9 +323,19 @@ export function App(): React.JSX.Element {
         // Unfolds as well as selects. A shortcut for the changes that does
         // nothing while the pane is folded away does nothing in the one place
         // it would save the most. It does not fold the pane shut again either:
-        // this names a tab, not a pane, and ⌘⇧P is queued behind it.
+        // this names a tab, not a pane.
         setRightPanelOpen(true)
         void updateConfig({ rightPanelTab: 'diff' })
+        return
+      }
+
+      // The twin of the one above, and the shortcut §10.8 has listed since
+      // before there was a tab to give it. A listed shortcut that does nothing
+      // is read once, tried once, and takes the rest of the table with it.
+      if (event.metaKey && event.shiftKey && event.key.toLowerCase() === 'p') {
+        event.preventDefault()
+        setRightPanelOpen(true)
+        void updateConfig({ rightPanelTab: 'pullRequest' })
         return
       }
 
@@ -560,7 +580,16 @@ export function App(): React.JSX.Element {
             // is asked to edit nothing, which is what closing means.
             onEditScripts={() => {
               setEditingProjectId(openProjectId)
+              setEditingProjectSection('scripts')
             }}
+            // The instruction the pull request tab would send is the project's,
+            // so the tab opens the place it is written rather than carrying a
+            // second editor of its own.
+            onEditInstructions={() => {
+              setEditingProjectId(openProjectId)
+              setEditingProjectSection('instructions')
+            }}
+            chatId={activeChatId}
             width={config?.rightPanelWidth ?? 360}
             onWidthChange={(rightPanelWidth) => void updateConfig({ rightPanelWidth })}
             diffView={config?.diffView ?? 'unified'}
@@ -590,6 +619,7 @@ export function App(): React.JSX.Element {
       {editingProject && (
         <ProjectSettings
           project={editingProject}
+          initialSection={editingProjectSection}
           onUpdate={(patch) => projects.update(editingProject.id, patch)}
           onRemove={() => {
             void (async () => {

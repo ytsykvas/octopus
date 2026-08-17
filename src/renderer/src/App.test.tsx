@@ -1238,7 +1238,7 @@ describe('App', () => {
     givenScriptsOf({ planner: { setup: '/tmp/planner/setup.sh', run: null } })
     const user = await openApp()
     await user.click(await screen.findByRole('button', { name: 'PL' }))
-    await user.click(screen.getByRole('button', { name: 'Build' }))
+    await user.click(screen.getByRole('button', { name: 'Scripts' }))
     await user.click(await screen.findByText('anna'))
     expect(await screen.findByText('/tmp/planner/setup.sh')).toBeInTheDocument()
 
@@ -1262,7 +1262,7 @@ describe('App', () => {
     )
     const user = await openApp()
     await user.click(await screen.findByRole('button', { name: 'PL' }))
-    await user.click(screen.getByRole('button', { name: 'Build' }))
+    await user.click(screen.getByRole('button', { name: 'Scripts' }))
     await user.click(await screen.findByText('anna'))
     const dialog = await openProjectSettings(user, 'PL')
 
@@ -1276,10 +1276,14 @@ describe('App', () => {
     givenTwoProjects()
     const user = await openApp()
     await user.click(await screen.findByRole('button', { name: 'PL' }))
-    await user.click(screen.getByRole('button', { name: 'Build' }))
+    await user.click(screen.getByRole('button', { name: 'Scripts' }))
     await user.click(await screen.findByText('anna'))
 
-    await user.click(await screen.findByRole('button', { name: 'Write the script' }))
+    await user.click(
+      await within(screen.getByRole('region', { name: 'Build' })).findByRole('button', {
+        name: 'Write the script'
+      })
+    )
 
     expect(await screen.findByRole('dialog', { name: 'Project settings' })).toBeInTheDocument()
   })
@@ -1323,9 +1327,11 @@ describe('App', () => {
     vi.mocked(window.octopus.projects.addFromGitHub).mockResolvedValue({ ok: true, value: LEDGER })
     const user = await openApp()
     await user.click(await screen.findByRole('button', { name: 'PL' }))
-    await user.click(screen.getByRole('button', { name: 'Build' }))
+    await user.click(screen.getByRole('button', { name: 'Scripts' }))
     await user.click(await screen.findByText('anna'))
-    await screen.findByRole('button', { name: 'Write the script' })
+    await within(screen.getByRole('region', { name: 'Build' })).findByRole('button', {
+      name: 'Write the script'
+    })
 
     // The next read of the projects has lost planner, while the workspace lists
     // stay out and the pane keeps the ones it already has.
@@ -1335,7 +1341,11 @@ describe('App', () => {
     await user.click(within(picker).getByRole('button', { name: 'Add' }))
 
     await waitFor(() => {
-      expect(screen.queryByRole('button', { name: 'Write the script' })).not.toBeInTheDocument()
+      expect(
+        within(screen.getByRole('region', { name: 'Build' })).queryByRole('button', {
+          name: 'Write the script'
+        })
+      ).not.toBeInTheDocument()
     })
     expect(screen.queryByRole('dialog', { name: 'Project settings' })).not.toBeInTheDocument()
   })
@@ -1350,10 +1360,14 @@ describe('App', () => {
     })
     const user = await openApp()
     await user.click(await screen.findByRole('button', { name: 'PL' }))
-    await user.click(screen.getByRole('button', { name: 'Build' }))
+    await user.click(screen.getByRole('button', { name: 'Scripts' }))
     await user.click(await screen.findByText('anna'))
 
-    expect(await screen.findByRole('button', { name: 'Write the script' })).toBeInTheDocument()
+    expect(
+      await within(screen.getByRole('region', { name: 'Build' })).findByRole('button', {
+        name: 'Write the script'
+      })
+    ).toBeInTheDocument()
   })
 
   // Switching project starts a second read while the first is still out. The
@@ -1369,7 +1383,7 @@ describe('App', () => {
     const user = await openApp()
     await user.click(await screen.findByRole('button', { name: 'PL' }))
     await user.click(tab('LE'))
-    await user.click(screen.getByRole('button', { name: 'Build' }))
+    await user.click(screen.getByRole('button', { name: 'Scripts' }))
     await user.click(await screen.findByText('carol'))
 
     await act(async () => {
@@ -1377,7 +1391,11 @@ describe('App', () => {
     })
 
     expect(screen.queryByText('/tmp/planner/setup.sh')).not.toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Write the script' })).toBeInTheDocument()
+    expect(
+      within(screen.getByRole('region', { name: 'Build' })).getByRole('button', {
+        name: 'Write the script'
+      })
+    ).toBeInTheDocument()
   })
 
   it('opens another conversation with ⌘T', async () => {
@@ -1480,6 +1498,37 @@ describe('App', () => {
     fireEvent.keyDown(window, { key: 'D', metaKey: true, shiftKey: true })
 
     expect(window.octopus.config.update).toHaveBeenLastCalledWith({ rightPanelTab: 'diff' })
+  })
+
+  // Listed in §10.8 since before there was a tab for it to name, which is the
+  // shape of shortcut that teaches people to distrust the whole table.
+  /*
+   * The pull request tab edits the project's instruction by opening the place
+   * it lives — one editor for one file, reached from the places it matters.
+   */
+  it('opens the project instructions from the pull request tab', async () => {
+    givenTwoProjects()
+    const user = await openApp()
+    await user.click(await screen.findByRole('button', { name: 'PL' }))
+    await user.click(screen.getByRole('button', { name: 'Pull request' }))
+    await user.click(await screen.findByText('anna'))
+
+    await user.click(await screen.findByRole('button', { name: 'Instructions for a new PR' }))
+
+    expect(await screen.findByRole('dialog', { name: 'Project settings' })).toBeInTheDocument()
+    expect(screen.getByDisplayValue(/Pull request descriptions/)).toBeInTheDocument()
+  })
+
+  it('opens the pull request with ⌘⇧P', async () => {
+    givenTwoProjects()
+    const user = await openApp()
+    await user.click(screen.getByRole('button', { name: 'Terminal' }))
+
+    fireEvent.keyDown(window, { key: 'P', metaKey: true, shiftKey: true })
+
+    expect(window.octopus.config.update).toHaveBeenLastCalledWith({
+      rightPanelTab: 'pullRequest'
+    })
   })
 
   /*

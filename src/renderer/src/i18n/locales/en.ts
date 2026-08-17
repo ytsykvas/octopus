@@ -111,7 +111,7 @@ export const en = {
       'Starts the dev server. $OCTOPUS_PORT is set to the workspace\u2019s own port, so several can serve at once. Saved as run.sh.',
     pullRequestInstruction: 'Pull request descriptions',
     pullRequestInstructionHint:
-      'Handed to the agent when it writes a pull request for this project. Nothing reads it yet — pull requests are still ahead.',
+      'Sent to the agent when you ask it to describe a change for a pull request in this project. Used instead of the one in Settings; empty means this project adds nothing.',
     repository: 'Repository',
     dangerZone: 'Danger zone',
     removeHint: 'Removes the project from octopus. The repository stays on disk.'
@@ -147,10 +147,45 @@ export const en = {
   panel: {
     changes: 'Changes',
     terminal: 'Terminal',
+    /* Named on the tab rather than in `scripts.*` with the two headings inside
+       it: the tab is one place, and what it holds is two. */
+    scripts: 'Scripts',
+    pullRequest: 'Pull request',
     collapse: 'Collapse panel',
     expand: 'Show panel',
     terminalPlaceholder: 'Select a workspace to open a terminal in its directory.',
     resize: 'Resize panel'
+  },
+
+  pullRequest: {
+    noWorkspace: 'Select a workspace to open a pull request for it.',
+    loading: 'Asking GitHub about this branch…',
+    /* The branch is the whole subject: it is what a pull request is made of,
+       and what its name will be on GitHub. */
+    editInstructions: 'Instructions for a new PR',
+    ask: 'Ask the agent to describe it',
+    noConversation: 'Open a conversation in this workspace first.',
+    branch: 'Branch',
+    nothingToOpen:
+      'Nothing to open yet. This branch has no commits that {{base}} does not — make one first.',
+    /* Said before the button rather than after it fails. Pushing is a thing
+       that happens to somebody else's machine, and it should not be a surprise. */
+    willPush: 'This branch is not on GitHub yet. Opening will push it.',
+    dirty:
+      'There are uncommitted changes here. A pull request carries commits, so they stay behind.',
+    title: 'Title',
+    titlePlaceholder: 'What this change does',
+    body: 'Description',
+    bodyPlaceholder: 'Anything a reviewer needs to know',
+    draft: 'Open as a draft',
+    create: 'Open pull request',
+    creating: 'Opening…',
+    open: 'Open on GitHub',
+    /* The state the branch is in, each said as a fact rather than as a status
+       word — the number is what identifies it to anyone who goes looking. */
+    stateOpen: 'Pull request #{{number}} is open.',
+    stateMerged: 'Pull request #{{number}} was merged.',
+    stateClosed: 'Pull request #{{number}} was closed without merging.'
   },
 
   diff: {
@@ -395,6 +430,12 @@ export const en = {
     sectionGeneral: 'General',
     sectionGit: 'Git',
     sectionAgent: 'Agent',
+    sectionInstructions: 'Instructions',
+    /* The global one. What a project's own instruction overrides, and what
+       applies wherever a project has not written one. */
+    pullRequestInstruction: 'Pull request descriptions',
+    pullRequestInstructionHint:
+      'Sent to the agent when you ask it to describe a change for a pull request. A project can write its own, which is used instead of this one.',
     sectionAccounts: 'Claude',
     sectionAbout: 'About',
 
@@ -494,6 +535,9 @@ export const en = {
     notConnected: 'Could not reach GitHub. Check the account in Settings.',
     listFailed: 'GitHub returned something unexpected.',
     cloneFailed: 'Could not clone {{repository}}.',
+    noCommits: 'This branch has nothing that {{base}} does not.',
+    pushFailed: 'Could not push {{branch}} to GitHub.',
+    createFailed: 'Could not open the pull request. GitHub refused it.',
     alreadyExists: '{{path}} already exists. Add it from disk instead.',
     branchUnmerged:
       '{{branch}} has commits that are not in the base branch. Remove it with the branch checkbox cleared, or merge it first.',

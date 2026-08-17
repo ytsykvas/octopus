@@ -82,7 +82,12 @@ export function installOctopusStub(): Api {
       rename: vi.fn(() => ok(undefined)),
       remove: vi.fn(() => ok(undefined)),
       hasChanges: vi.fn(() => ok(false)),
-      diff: vi.fn(() => ok(emptyDiff()))
+      diff: vi.fn(() => ok(emptyDiff())),
+      // A branch with commits and no pull request — the state the pane offers
+      // to act on, and the one most tests are about.
+      pullRequest: vi.fn(() => ok({ request: null, pushed: false, dirty: false, ahead: 1 })),
+      createPullRequest: vi.fn(() => ok('https://github.com/ytsykvas/octopus/pull/1')),
+      instruction: vi.fn(() => ok('Describe what changed and why.'))
     },
     files: {
       open: vi.fn(() => ok(undefined))

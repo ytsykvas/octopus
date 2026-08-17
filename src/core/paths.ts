@@ -59,6 +59,20 @@ export function pullRequestInstruction(projectId: ProjectId, root: string = root
   return join(projectInstructionsDir(projectId, root), 'pull-request.md')
 }
 
+/**
+ * The same instructions, for every project that has not written its own.
+ *
+ * Beside the projects rather than inside one: it belongs to the installation,
+ * and a copy under `projects/` would be a project called nothing.
+ */
+export function globalInstructionsDir(root: string = rootDir()): string {
+  return join(root, 'instructions')
+}
+
+export function globalPullRequestInstruction(root: string = rootDir()): string {
+  return join(globalInstructionsDir(root), 'pull-request.md')
+}
+
 /** Script run right after `git worktree add`. */
 export function setupScript(projectId: ProjectId, root: string = rootDir()): string {
   return join(projectScriptsDir(projectId, root), 'setup.sh')

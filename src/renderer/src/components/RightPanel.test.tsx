@@ -68,6 +68,8 @@ function renderPanel(overrides: Partial<Props> = {}): {
     projectId: 'planner',
     scriptPaths: { setup: null, run: null },
     onEditScripts: vi.fn(),
+    onEditInstructions: vi.fn(),
+    chatId: null,
     width: 360,
     onWidthChange: vi.fn(),
     leftWidth: LEFT_WIDTH,
@@ -105,6 +107,18 @@ function shownTab(): HTMLElement {
 }
 
 /** The pane itself: a `<section>`, which carries no role to reach it by. */
+/** The one tab both scripts now live behind. */
+const scriptsTab = (): HTMLElement => screen.getByRole('button', { name: 'Scripts' })
+
+/**
+ * One of the two halves of that tab.
+ *
+ * Both are on screen together, so every query about a run has to say which one
+ * it means — `Run` alone matches twice, which is the point of the change.
+ */
+const buildSection = (): HTMLElement => screen.getByRole('region', { name: 'Build' })
+const serverSection = (): HTMLElement => screen.getByRole('region', { name: 'Server' })
+
 function pane(): HTMLElement {
   const section = screen.getByRole('button', { name: 'Changes' }).closest('section')
   if (!section) throw new Error('The pane is not in the document')
@@ -166,19 +180,27 @@ describe('RightPanel', () => {
   it('reports a chosen tab rather than keeping it', async () => {
     const { props } = renderPanel()
 
-    await userEvent.click(screen.getByRole('button', { name: 'Build' }))
+    await userEvent.click(scriptsTab())
 
     // Where it goes is what makes it outlive the pane being folded away, and
     // the restart after that.
-    expect(props.onTab).toHaveBeenCalledWith('build')
+    expect(props.onTab).toHaveBeenCalledWith('scripts')
   })
 
   it('offers all four tabs', () => {
     renderPanel()
 
-    for (const label of ['Changes', 'Terminal', 'Build', 'Server']) {
+    for (const label of ['Changes', 'Terminal', 'Scripts', 'Pull request']) {
       expect(screen.getByRole('button', { name: label })).toBeInTheDocument()
     }
+  })
+
+  it('shows the pull request pane on its own tab', async () => {
+    renderPanel({ workspaces: [anna], activeWorkspaceId: anna.id })
+
+    await userEvent.click(screen.getByRole('button', { name: 'Pull request' }))
+
+    expect(within(shownTab()).getByText(anna.branch)).toBeInTheDocument()
   })
 
   it('opens on the changes tab', async () => {
@@ -222,16 +244,16 @@ describe('RightPanel', () => {
   it('shows the project build script on the build tab', async () => {
     renderPanel({ workspaces: [anna], activeWorkspaceId: anna.id, scriptPaths: SCRIPTS })
 
-    await userEvent.click(screen.getByRole('button', { name: 'Build' }))
+    await userEvent.click(scriptsTab())
 
     expect(screen.getByText(SCRIPTS.setup)).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Run' })).toBeInTheDocument()
+    expect(within(buildSection()).getByRole('button', { name: 'Run' })).toBeInTheDocument()
   })
 
   it("shows the active workspace's port on the server tab", async () => {
     renderPanel({ workspaces: [anna, bob], activeWorkspaceId: bob.id, scriptPaths: SCRIPTS })
 
-    await userEvent.click(screen.getByRole('button', { name: 'Server' }))
+    await userEvent.click(scriptsTab())
 
     expect(screen.getByText('OCTOPUS_PORT=3222')).toBeInTheDocument()
   })
@@ -240,8 +262,8 @@ describe('RightPanel', () => {
     const onEditScripts = vi.fn()
     renderPanel({ workspaces: [anna], activeWorkspaceId: anna.id, onEditScripts })
 
-    await userEvent.click(screen.getByRole('button', { name: 'Build' }))
-    await userEvent.click(screen.getByRole('button', { name: 'Write the script' }))
+    await userEvent.click(scriptsTab())
+    await userEvent.click(within(buildSection()).getByRole('button', { name: 'Write the script' }))
 
     expect(onEditScripts).toHaveBeenCalled()
   })
@@ -260,8 +282,8 @@ describe('RightPanel', () => {
       scriptPaths: SCRIPTS
     })
 
-    await userEvent.click(screen.getByRole('button', { name: 'Build' }))
-    await userEvent.click(screen.getByRole('button', { name: 'Run' }))
+    await userEvent.click(scriptsTab())
+    await userEvent.click(within(buildSection()).getByRole('button', { name: 'Run' }))
     await waitFor(() => {
       expect(octopus().terminal.create).toHaveBeenCalledTimes(1)
     })
@@ -270,8 +292,8 @@ describe('RightPanel', () => {
 
     // Nothing has been started here, so this one offers to start — while the
     // one left behind is still going.
-    expect(screen.getByRole('button', { name: 'Run' })).toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: 'Stop' })).not.toBeInTheDocument()
+    expect(within(buildSection()).getByRole('button', { name: 'Run' })).toBeInTheDocument()
+    expect(within(buildSection()).queryByRole('button', { name: 'Stop' })).not.toBeInTheDocument()
     expect(octopus().terminal.dispose).not.toHaveBeenCalled()
   })
 
@@ -496,10 +518,16 @@ describe('RightPanel', () => {
   it('has nothing to run on the build tab while no workspace is active', async () => {
     renderPanel({ workspaces: [anna], activeWorkspaceId: null, scriptPaths: SCRIPTS })
 
-    await userEvent.click(screen.getByRole('button', { name: 'Build' }))
+    await userEvent.click(scriptsTab())
 
-    expect(within(shownTab()).getByText('Select a workspace to run this in.')).toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: 'Run' })).not.toBeInTheDocument()
+    // Said in both halves, since neither has a workspace to run in.
+    expect(
+      within(buildSection()).getByText('Select a workspace to run this in.')
+    ).toBeInTheDocument()
+    expect(
+      within(serverSection()).getByText('Select a workspace to run this in.')
+    ).toBeInTheDocument()
+    expect(within(buildSection()).queryByRole('button', { name: 'Run' })).not.toBeInTheDocument()
   })
 
   // A session belongs to its workspace, not to whether its tab is on screen.
@@ -531,8 +559,8 @@ describe('RightPanel', () => {
     const user = userEvent.setup()
     renderPanel({ workspaces: [anna], activeWorkspaceId: anna.id, scriptPaths: SCRIPTS })
 
-    await user.click(screen.getByRole('button', { name: 'Server' }))
-    await user.click(screen.getByRole('button', { name: 'Run' }))
+    await user.click(scriptsTab())
+    await user.click(within(buildSection()).getByRole('button', { name: 'Run' }))
     await waitFor(() => {
       expect(window.octopus.terminal.create).toHaveBeenCalledTimes(1)
     })
@@ -540,7 +568,7 @@ describe('RightPanel', () => {
     await user.click(screen.getByRole('button', { name: 'Changes' }))
     expect(window.octopus.terminal.dispose).not.toHaveBeenCalled()
 
-    await user.click(screen.getByRole('button', { name: 'Server' }))
+    await user.click(scriptsTab())
     expect(window.octopus.terminal.create).toHaveBeenCalledTimes(1)
   })
 
@@ -560,8 +588,8 @@ describe('RightPanel', () => {
       scriptPaths: SCRIPTS
     })
 
-    await user.click(screen.getByRole('button', { name: 'Server' }))
-    await user.click(screen.getByRole('button', { name: 'Run' }))
+    await user.click(scriptsTab())
+    await user.click(within(buildSection()).getByRole('button', { name: 'Run' }))
     await waitFor(() => {
       expect(openedDirectories()).toEqual(['/tmp/planner/anna'])
     })
@@ -579,14 +607,14 @@ describe('RightPanel', () => {
       scriptPaths: SCRIPTS
     })
 
-    await user.click(screen.getByRole('button', { name: 'Server' }))
-    await user.click(screen.getByRole('button', { name: 'Run' }))
+    await user.click(scriptsTab())
+    await user.click(within(buildSection()).getByRole('button', { name: 'Run' }))
     await waitFor(() => {
       expect(openedDirectories()).toHaveLength(1)
     })
 
     rerender({ activeWorkspaceId: bob.id })
-    await user.click(screen.getByRole('button', { name: 'Run' }))
+    await user.click(within(buildSection()).getByRole('button', { name: 'Run' }))
 
     await waitFor(() => {
       expect(openedDirectories()).toEqual(['/tmp/planner/anna', '/tmp/planner/bob'])
@@ -604,7 +632,7 @@ describe('RightPanel', () => {
       scriptPaths: SCRIPTS
     })
 
-    await user.click(screen.getByRole('button', { name: 'Server' }))
+    await user.click(scriptsTab())
     expect(screen.getByText(`OCTOPUS_PORT=${String(anna.port)}`)).toBeInTheDocument()
 
     rerender({ activeWorkspaceId: bob.id })
@@ -623,8 +651,8 @@ describe('RightPanel', () => {
       scriptPaths: SCRIPTS
     })
 
-    await user.click(screen.getByRole('button', { name: 'Server' }))
-    await user.click(screen.getByRole('button', { name: 'Run' }))
+    await user.click(scriptsTab())
+    await user.click(within(buildSection()).getByRole('button', { name: 'Run' }))
     await waitFor(() => {
       expect(openedDirectories()).toHaveLength(1)
     })
@@ -636,21 +664,26 @@ describe('RightPanel', () => {
 
   // The two script tabs are separate runs, so the one being watched must be
   // the one whose output is on screen.
-  it('keeps the two script tabs apart', async () => {
+  /*
+   * They were two tabs and are now two halves of one, which is exactly the
+   * arrangement that could quietly merge them: one `WorkspaceScripts` drawn
+   * twice, or one run showing in both places.
+   */
+  it('keeps the two scripts apart inside the one tab', async () => {
     const user = userEvent.setup()
     renderPanel({ workspaces: [anna], activeWorkspaceId: anna.id, scriptPaths: SCRIPTS })
 
-    await user.click(screen.getByRole('button', { name: 'Server' }))
-    await user.click(screen.getByRole('button', { name: 'Run' }))
+    await user.click(scriptsTab())
+    await user.click(within(serverSection()).getByRole('button', { name: 'Run' }))
     await waitFor(() => {
       expect(openedDirectories()).toHaveLength(1)
     })
 
-    await user.click(screen.getByRole('button', { name: 'Build' }))
-
-    // Build has not been started, so it offers to start rather than showing
-    // the server's output.
-    expect(screen.getByRole('button', { name: 'Run' })).toBeInTheDocument()
+    // The server is running; the build has not been started, so it still offers
+    // to start rather than showing the server's output.
+    expect(within(serverSection()).getByRole('button', { name: 'Stop' })).toBeInTheDocument()
+    expect(within(buildSection()).getByRole('button', { name: 'Run' })).toBeInTheDocument()
+    expect(within(buildSection()).queryByRole('button', { name: 'Stop' })).not.toBeInTheDocument()
     expect(window.octopus.terminal.create).toHaveBeenCalledTimes(1)
   })
 })

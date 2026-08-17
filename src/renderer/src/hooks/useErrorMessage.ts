@@ -34,6 +34,12 @@ export function useErrorMessage(): (failure: Failure) => string {
           return t('errors.cloneFailed', { repository: failure.params?.repository ?? '' })
         case 'alreadyExists':
           return t('errors.alreadyExists', { path: failure.params?.path ?? '' })
+        case 'noCommits':
+          return t('errors.noCommits', { base: failure.params?.base ?? '' })
+        case 'pushFailed':
+          return t('errors.pushFailed', { branch: failure.params?.branch ?? '' })
+        case 'createFailed':
+          return t('errors.createFailed')
         case 'branchUnmerged':
           return t('errors.branchUnmerged', { branch: failure.params?.branch ?? '' })
         case 'branchExists':

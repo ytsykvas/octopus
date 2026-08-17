@@ -830,6 +830,40 @@ describe('project instructions', () => {
     await expect(service.readProjectInstruction('missing', 'pullRequest')).rejects.toThrow()
     await expect(service.saveProjectInstruction('missing', 'pullRequest', 'x')).rejects.toThrow()
   })
+
+  /*
+   * The installation's own belongs to no project, so there is nothing to check
+   * it against — and it has to be writable before any project exists.
+   */
+  it('reads and writes the installation instruction without a project', async () => {
+    await service.saveProjectInstruction(null, 'pullRequest', 'Say why.\n')
+
+    await expect(service.readProjectInstruction(null, 'pullRequest')).resolves.toBe('Say why.\n')
+  })
+
+  /*
+   * What a workspace would actually send. Resolved here rather than in the
+   * renderer, which would have to know the order of precedence and ask twice to
+   * apply it.
+   */
+  it("resolves a workspace's instruction, the project's over the installation's", async () => {
+    const projectId = await withProject()
+    const workspace = await service.createWorkspaceIn(projectId)
+
+    await service.saveProjectInstruction(null, 'pullRequest', 'Global rules.\n')
+    await expect(service.readEffectiveInstruction(workspace.id, 'pullRequest')).resolves.toBe(
+      'Global rules.\n'
+    )
+
+    await service.saveProjectInstruction(projectId, 'pullRequest', 'Project rules.\n')
+    await expect(service.readEffectiveInstruction(workspace.id, 'pullRequest')).resolves.toBe(
+      'Project rules.\n'
+    )
+  })
+
+  it('refuses to resolve one for a workspace that is not there', async () => {
+    await expect(service.readEffectiveInstruction('missing', 'pullRequest')).rejects.toThrow()
+  })
 })
 
 describe('the agent chat', () => {

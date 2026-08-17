@@ -9,10 +9,11 @@ else joins a home directory by hand.
   config.json                        settings
   state.json                         projects, workspaces and chats
   chats/<chatId>.jsonl               one conversation each, append-only
+  instructions/pull-request.md       guidance every project falls back to
   projects/<projectId>/
     scripts/setup.sh                 runs in a new workspace
     scripts/run.sh                   starts the dev server
-    instructions/pull-request.md     guidance for the agent
+    instructions/pull-request.md     this project's own, which wins
   workspaces/<projectId>/<name>/     the git worktrees
 ```
 
@@ -36,21 +37,21 @@ paths alone reported such a workspace as healthy. The parser reads the flag now.
 
 Validated by `ConfigSchema` in [`config.ts`](../src/core/config.ts).
 
-| Field                             | Meaning                                                                                                      |
-| --------------------------------- | ------------------------------------------------------------------------------------------------------------ |
-| `version`                         | format version, for future migrations                                                                        |
-| `branchPrefix`                    | branches are `<prefix>/<workspace>`                                                                          |
-| `cloneDirectory`                  | where GitHub clones land; empty means "ask, then remember"                                                   |
-| `settingSources`                  | what the agent may load — `none` is the transparency default (§4)                                            |
-| `workingMode`                     | what a new chat may do before asking; planning is not one of them                                            |
-| `effort`                          | how much thinking a new chat asks for; `medium` unless changed. Five levels, never `ultracode` — see below   |
-| `model`, `planModel`              | the pair a new chat starts on — which model writes the code, which one plans                                 |
-| `alwaysAllowedTools`              | tools the user answered "always" for, listed so they can be undone                                           |
-| `theme`, `language`               | appearance                                                                                                   |
-| `rightPanelWidth`, `sidebarWidth` | pane widths in pixels, as last dragged — resizing the **window** moves the right pane without rewriting this |
-| `diffView`                        | whether a diff is drawn in one column or two — a preference about how code is read, not a per-session mood   |
-| `rightPanelTab`                   | which of the right pane's tabs is showing; whether the pane is folded away is **not** stored                 |
-| `deviceId`, `installedAt`         | reserved for licensing (§15.3), unused                                                                       |
+| Field                             | Meaning                                                                                                                                                            |
+| --------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `version`                         | format version, for future migrations                                                                                                                              |
+| `branchPrefix`                    | branches are `<prefix>/<workspace>`                                                                                                                                |
+| `cloneDirectory`                  | where GitHub clones land; empty means "ask, then remember"                                                                                                         |
+| `settingSources`                  | what the agent may load — `none` is the transparency default (§4)                                                                                                  |
+| `workingMode`                     | what a new chat may do before asking; planning is not one of them                                                                                                  |
+| `effort`                          | how much thinking a new chat asks for; `medium` unless changed. Five levels, never `ultracode` — see below                                                         |
+| `model`, `planModel`              | the pair a new chat starts on — which model writes the code, which one plans                                                                                       |
+| `alwaysAllowedTools`              | tools the user answered "always" for, listed so they can be undone                                                                                                 |
+| `theme`, `language`               | appearance                                                                                                                                                         |
+| `rightPanelWidth`, `sidebarWidth` | pane widths in pixels, as last dragged — resizing the **window** moves the right pane without rewriting this                                                       |
+| `diffView`                        | whether a diff is drawn in one column or two — a preference about how code is read, not a per-session mood                                                         |
+| `rightPanelTab`                   | which of the right pane's tabs is showing; whether the pane is folded away is **not** stored — `build` and `server` are still read and become `scripts`, see below |
+| `deviceId`, `installedAt`         | reserved for licensing (§15.3), unused                                                                                                                             |
 
 `alwaysAllowedTools` is filtered on the way in **and on the way out**, and never
 holds `ExitPlanMode`. An entry there is not merely a pre-answered question — it
@@ -291,6 +292,18 @@ vary independently: `ultracode` with `low` is a state nothing can run and the
 scale cannot draw. No state version bump — a new value in an existing enum needs
 none.
 
+**A stored tab that no longer exists still opens.** Build and server were two
+tabs before they were one, and a config on disk names whichever was last used.
+`.default()` answers for a key that is missing and says nothing about a key that
+is present holding a word this build does not know — and `persist.ts` throws on
+that rather than resetting, at startup, un-guarded. Left to a plain enum, every
+existing install would have failed to start over a tab nobody chose.
+
+So `StoredRightPanelTabSchema` accepts the two old names and folds them into the
+one that replaced them, on the way in **and** on the way out — the stale word
+leaves the disk the next time anything is saved. Same shape as
+`StoredEffortSchema`, and the same reason.
+
 ### Transcripts
 
 The SDK's `resume` restores what the _model_ remembers, which is not what the
@@ -371,6 +384,16 @@ falling back to defaults. Silently resetting someone's projects because a byte
 went wrong is worse than refusing to start.
 
 ## Scripts and instructions
+
+**Instructions come at two levels.** `instructions/pull-request.md` under the
+data root is the installation's own; the same file under a project's directory
+is that project's, and it wins where it exists. `effectiveInstruction` in
+`instructions.ts` is the one place that order is written down.
+
+An **empty** project file counts as an answer. Emptying it says this project
+adds nothing, and falling through to the global one there would make that
+impossible to express — so the chain asks whether a file exists, not whether it
+has text in it.
 
 Both are files rather than strings in the config: they outgrow a text field,
 they are worth reading in a diff, and they can be run or edited outside the app —

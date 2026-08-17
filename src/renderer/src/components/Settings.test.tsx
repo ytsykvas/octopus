@@ -63,6 +63,62 @@ function reportAccounts(overrides: Partial<AccountsStatus>): void {
 
 beforeAll(stubDialogElement)
 
+describe('the instruction every project falls back to', () => {
+  /*
+   * A file rather than a setting, which is why it is read and written through
+   * the project channels with a null project rather than through `onChange`:
+   * instructions outgrow a text field, are worth reading in a diff, and can be
+   * edited outside the app.
+   */
+  it('reads the installation instruction', async () => {
+    const user = userEvent.setup()
+    vi.mocked(octopus().projects.readInstruction).mockResolvedValue({
+      ok: true,
+      value: 'Lead with the why.'
+    })
+    await renderSettings()
+
+    await openSection(user, 'Instructions')
+
+    expect(await screen.findByDisplayValue('Lead with the why.')).toBeInTheDocument()
+    expect(octopus().projects.readInstruction).toHaveBeenCalledWith(null, 'pullRequest')
+  })
+
+  // Whatever sits in the box is what gets written back, so a file that could not
+  // be read leaves it empty rather than holding the error as if it were text.
+  it('leaves the editor empty when the file cannot be read', async () => {
+    const user = userEvent.setup()
+    vi.mocked(octopus().projects.readInstruction).mockResolvedValue({
+      ok: false,
+      error: 'EACCES: permission denied'
+    })
+    await renderSettings()
+
+    await openSection(user, 'Instructions')
+
+    expect(await screen.findByRole('textbox')).toHaveValue('')
+    expect(screen.queryByText(/EACCES/)).not.toBeInTheDocument()
+  })
+
+  it('saves it when the editor loses focus', async () => {
+    const user = userEvent.setup()
+    vi.mocked(octopus().projects.readInstruction).mockResolvedValue({ ok: true, value: 'old' })
+    await renderSettings()
+
+    await openSection(user, 'Instructions')
+    const editor = await screen.findByDisplayValue('old')
+    await user.clear(editor)
+    await user.type(editor, 'Say what changed.')
+    await user.tab()
+
+    expect(octopus().projects.saveInstruction).toHaveBeenCalledExactlyOnceWith(
+      null,
+      'pullRequest',
+      'Say what changed.'
+    )
+  })
+})
+
 describe('Settings', () => {
   it('opens on the general section, offering the theme and the language', async () => {
     await renderSettings()

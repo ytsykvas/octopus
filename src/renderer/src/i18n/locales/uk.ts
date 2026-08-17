@@ -109,7 +109,7 @@ export const uk: Translation = {
       'Запускає dev-сервер. $OCTOPUS_PORT — власний порт воркспейсу, тож кілька можуть працювати одночасно. Зберігається як run.sh.',
     pullRequestInstruction: 'Опис pull request',
     pullRequestInstructionHint:
-      'Передається агенту, коли він писатиме pull request для цього проєкту. Поки не використовується — pull request ще попереду.',
+      'Надсилається агенту, коли ви просите його описати зміну для pull request у цьому проєкті. Використовується замість тієї, що в Налаштуваннях; порожня означає, що проєкт нічого не додає.',
     repository: 'Репозиторій',
     dangerZone: 'Небезпечна зона',
     removeHint: 'Прибирає проєкт з Octopus. Репозиторій лишається на диску.'
@@ -145,10 +145,36 @@ export const uk: Translation = {
   panel: {
     changes: 'Зміни',
     terminal: 'Термінал',
+    scripts: 'Скрипти',
+    pullRequest: 'Pull request',
     collapse: 'Згорнути панель',
     expand: 'Показати панель',
     terminalPlaceholder: 'Виберіть воркспейс, щоб відкрити термінал у його теці.',
     resize: 'Змінити ширину панелі'
+  },
+
+  pullRequest: {
+    noWorkspace: 'Виберіть воркспейс, щоб відкрити для нього pull request.',
+    loading: 'Питаю GitHub про цю гілку…',
+    editInstructions: 'Інструкції для нового PR',
+    ask: 'Попросити агента описати',
+    noConversation: 'Спершу відкрийте розмову в цьому воркспейсі.',
+    branch: 'Гілка',
+    nothingToOpen:
+      'Поки нічого відкривати. У цій гілці немає комітів, яких немає в {{base}}, — зробіть спершу коміт.',
+    willPush: 'Цієї гілки ще немає на GitHub. Відкриття запушить її.',
+    dirty: 'Тут є незакомічені зміни. Pull request несе коміти, тож вони лишаться поза ним.',
+    title: 'Заголовок',
+    titlePlaceholder: 'Що робить ця зміна',
+    body: 'Опис',
+    bodyPlaceholder: 'Усе, що варто знати рев’юеру',
+    draft: 'Відкрити як чернетку',
+    create: 'Відкрити pull request',
+    creating: 'Відкриваю…',
+    open: 'Відкрити на GitHub',
+    stateOpen: 'Pull request #{{number}} відкритий.',
+    stateMerged: 'Pull request #{{number}} влитий.',
+    stateClosed: 'Pull request #{{number}} закрито без злиття.'
   },
 
   diff: {
@@ -345,6 +371,10 @@ export const uk: Translation = {
     sectionGeneral: 'Загальні',
     sectionGit: 'Git',
     sectionAgent: 'Агент',
+    sectionInstructions: 'Інструкції',
+    pullRequestInstruction: 'Опис pull request',
+    pullRequestInstructionHint:
+      'Надсилається агенту, коли ви просите його описати зміну для pull request. Проєкт може написати свою інструкцію, і тоді використовується вона.',
     sectionAccounts: 'Claude',
     sectionAbout: 'Про застосунок',
 
@@ -445,6 +475,9 @@ export const uk: Translation = {
     notConnected: 'Не вдалося звернутися до GitHub. Перевірте акаунт у налаштуваннях.',
     listFailed: 'GitHub повернув щось неочікуване.',
     cloneFailed: 'Не вдалося клонувати {{repository}}.',
+    noCommits: 'У цій гілці немає нічого, чого немає в {{base}}.',
+    pushFailed: 'Не вдалося запушити {{branch}} на GitHub.',
+    createFailed: 'Не вдалося відкрити pull request. GitHub його відхилив.',
     alreadyExists: '{{path}} уже існує. Додайте його з диска.',
     branchUnmerged:
       '{{branch}} має коміти, яких немає в базовій гілці. Зніміть прапорець видалення гілки або спершу злийте її.',

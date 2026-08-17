@@ -518,6 +518,45 @@ for the same turn endings and settles for the same 300ms, and re-reads only the
 project the workspace belongs to: a turn ending is a poor reason to run
 `git status` over every workspace of every project.
 
+**The right pane carries four tabs.** Changes and Terminal, then Scripts and
+Pull request. Build and server were two tabs and are now two halves of one: they
+are the same question — what this workspace runs — and splitting it cost a fifth
+of a row whose width has to be **measured** because it barely fits. Stacked, a
+server can be seen running while a build is read, which two tabs could not show
+at once.
+
+Each half is a named region rather than an anonymous box. Both are on screen
+together, so "the Run button" is ambiguous to anything reading the pane aloud —
+and each half keeps its own `min-h-0`, because a terminal measures itself against
+the box it is in and one never told it may be shorter grows instead of scrolling.
+
+**The pull request tab is the one place that reaches GitHub for something other
+than cloning.** It names the branch, and then either reports the request there
+is — number, title, a link out — or offers the form that opens one. Two things
+are said **before** the button rather than after it fails: that opening will push
+a branch that is not pushed, and that uncommitted work stays behind. Pushing
+touches somebody else's machine, and a button that does that silently is one
+people learn to distrust.
+
+Two buttons sit above all of that. **Instructions for a new PR** opens the
+project's own instruction where it lives, in project settings — one editor for
+one file, reached from the place it matters, which is the arrangement "Write the
+script" already uses. A second editor here would be a second place for the two
+to disagree.
+
+**Ask the agent to describe it** sends that instruction — the project's, or the
+global one in Settings where a project has written none — to the workspace's
+conversation, as an ordinary message. Not a call behind the reader's back: §4
+leaves no room for the app prompting the agent invisibly, and the answer has to
+appear in the conversation anyway. With no conversation open the button says so
+rather than starting one, since a conversation created by a button pressed for
+something else is a surprise.
+
+It asks `gh` nothing while another tab is showing. The diff follows the same
+rule, and it matters more here: this leaves the machine, so a hidden tab would be
+a network call for every workspace opened. `⌘⇧P` selects it — the shortcut §10.8
+had listed since before there was a tab to name.
+
 **The workspace list says what each one is doing.** One mark carries it: the
 agent's state takes the dot while there is something to report — the accent
 while it works, `warning` while it is stopped on a question, `danger` after a

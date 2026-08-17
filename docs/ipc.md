@@ -48,24 +48,27 @@ The only channel outside this shape is `theme:get`, which cannot fail.
 
 ### Scripts and instructions
 
-| Channel             | Arguments            | Notes                                     |
-| ------------------- | -------------------- | ----------------------------------------- |
-| `scripts:read`      | `id`, `kind`         | a missing script comes back as a template |
-| `scripts:save`      | `id`, `kind`, `body` | written executable                        |
-| `scripts:paths`     | `id`                 | `null` where nothing has been written     |
-| `instructions:read` | `id`, `kind`         |                                           |
-| `instructions:save` | `id`, `kind`, `body` |                                           |
+| Channel                  | Arguments             | Notes                                                                                                                                        |
+| ------------------------ | --------------------- | -------------------------------------------------------------------------------------------------------------------------------------------- |
+| `scripts:read`           | `id`, `kind`          | a missing script comes back as a template                                                                                                    |
+| `scripts:save`           | `id`, `kind`, `body`  | written executable                                                                                                                           |
+| `scripts:paths`          | `id`                  | `null` where nothing has been written                                                                                                        |
+| `instructions:read`      | `id`, `kind`          | `null` id is the installation's own                                                                                                          |
+| `instructions:save`      | `id`, `kind`, `body`  | same, and it needs no project to exist                                                                                                       |
+| `instructions:effective` | `workspaceId`, `kind` | what this workspace would send: its project's, or the installation's. Resolved in core so the renderer need not know the order and ask twice |
 
 ### Workspaces
 
-| Channel                 | Arguments       | Notes                                    |
-| ----------------------- | --------------- | ---------------------------------------- |
-| `workspaces:list`       | `projectId`     | reconciled against `git worktree list`   |
-| `workspaces:create`     | `projectId`     |                                          |
-| `workspaces:rename`     | `id`, `name`    | moves the branch, never the directory    |
-| `workspaces:remove`     | `id`, `options` | `force` discards uncommitted work        |
-| `workspaces:hasChanges` | `id`            | asked before offering to remove          |
-| `workspaces:diff`       | `id`            | everything changed since the base branch |
+| Channel                        | Arguments                | Notes                                                                                                                                                                                                                                               |
+| ------------------------------ | ------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `workspaces:list`              | `projectId`              | reconciled against `git worktree list`                                                                                                                                                                                                              |
+| `workspaces:create`            | `projectId`              |                                                                                                                                                                                                                                                     |
+| `workspaces:rename`            | `id`, `name`             | moves the branch, never the directory                                                                                                                                                                                                               |
+| `workspaces:remove`            | `id`, `options`          | `force` discards uncommitted work                                                                                                                                                                                                                   |
+| `workspaces:hasChanges`        | `id`                     | asked before offering to remove                                                                                                                                                                                                                     |
+| `workspaces:diff`              | `id`                     | everything changed since the base branch                                                                                                                                                                                                            |
+| `workspaces:pullRequest`       | `workspaceId`            | what has become of the branch on GitHub, if anything — `gh pr list --head` plus what git knows about the remote. Read on opening the tab, never behind one: this one leaves the machine                                                             |
+| `workspaces:createPullRequest` | `workspaceId`, `request` | pushes the branch if it needs it, then opens the request; answers with its URL. The title and body are the user's and are bounded here, because both become arguments to `gh`. The base branch comes from the project rather than from the renderer |
 
 ### Files
 
@@ -153,16 +156,16 @@ with zod before it goes anywhere.** TypeScript guarantees nothing across a
 process boundary: the renderer is a separate process that displays agent
 output, and a compromised or simply buggy one must not reach a command line.
 
-| Argument               | Schema                                             |
-| ---------------------- | -------------------------------------------------- |
-| project patch          | `ProjectPatchSchema`                               |
-| script kind, body      | `ScriptKindSchema`, `ScriptBodySchema`             |
-| instruction kind, body | `InstructionKindSchema`, `InstructionBodySchema`   |
-| terminal spec          | `TerminalSpecSchema`                               |
-| account kind           | `AccountKindSchema`                                |
-| chat message           | `ChatMessageSchema` — bounded; it becomes a prompt |
-| permission mode        | `PermissionModeSchema`                             |
-| permission answer      | `PermissionAnswerSchema`                           |
+| Argument               | Schema                                                                                                                              |
+| ---------------------- | ----------------------------------------------------------------------------------------------------------------------------------- |
+| project patch          | `ProjectPatchSchema`                                                                                                                |
+| script kind, body      | `ScriptKindSchema`, `ScriptBodySchema`                                                                                              |
+| instruction kind, body | `InstructionKindSchema`, `InstructionBodySchema` — the project id is deliberately not narrowed, `null` being the installation's own |
+| terminal spec          | `TerminalSpecSchema`                                                                                                                |
+| account kind           | `AccountKindSchema`                                                                                                                 |
+| chat message           | `ChatMessageSchema` — bounded; it becomes a prompt                                                                                  |
+| permission mode        | `PermissionModeSchema`                                                                                                              |
+| permission answer      | `PermissionAnswerSchema`                                                                                                            |
 
 Two related rules, both learned the hard way:
 

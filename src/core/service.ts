@@ -48,8 +48,21 @@ import { type Config, ConfigSchema, loadConfig, saveConfig, toSdkSettingSources 
 import { type AgentEvent, isEphemeral } from './events.js'
 import { cloneRepository, listRepositories, type RemoteRepository } from './github.js'
 import type { GitExec } from './git.js'
+import {
+  createPullRequest,
+  type GhExec,
+  ghIn,
+  type NewPullRequest,
+  type PullRequestView,
+  readPullRequest
+} from './pullRequests.js'
 import { gitIn } from './git.js'
-import { type InstructionKind, readInstruction, writeInstruction } from './instructions.js'
+import {
+  effectiveInstruction,
+  type InstructionKind,
+  readInstruction,
+  writeInstruction
+} from './instructions.js'
 import { configFile, rootDir, stateFile, stateTempFile } from './paths.js'
 import { type QuestionAnswer, readQuestions, withAnswers } from './questions.js'
 import { describeError } from './persist.js'
@@ -129,6 +142,11 @@ export interface ServiceOptions {
   readonly dataRoot?: string
   readonly makeExec?: (cwd: string) => GitExec
   readonly commandExec?: CommandExec
+  /**
+   * `gh` in a worktree, injected for the reason the two above are: a test that
+   * used the real one would open pull requests on somebody's repository.
+   */
+  readonly makeGh?: (cwd: string) => GhExec
   /**
    * The Agent SDK's entry point.
    *
@@ -255,9 +273,27 @@ export interface OctopusService {
    */
   projectScriptPaths(projectId: string): Promise<Record<ScriptKind, string | null>>
 
-  /** Guidance handed to the agent, or a starting template if none is written. */
-  readProjectInstruction(projectId: string, kind: InstructionKind): Promise<string>
-  saveProjectInstruction(projectId: string, kind: InstructionKind, contents: string): Promise<void>
+  /**
+   * Guidance handed to the agent, or a starting template if none is written.
+   *
+   * `null` for the project is the installation's own, which every project falls
+   * back to — the same call for both, because they are edited the same way and
+   * a second pair of methods would be two spellings of one thing.
+   */
+  readProjectInstruction(projectId: string | null, kind: InstructionKind): Promise<string>
+  saveProjectInstruction(
+    projectId: string | null,
+    kind: InstructionKind,
+    contents: string
+  ): Promise<void>
+
+  /**
+   * What a workspace would actually send: its project's, or the global one.
+   *
+   * Resolved here rather than in the renderer, which would have to know the
+   * order of precedence and ask twice to apply it.
+   */
+  readEffectiveInstruction(workspaceId: string, kind: InstructionKind): Promise<string>
 
   /** Workspaces of a project, reconciled with what git actually has. */
   listWorkspaces(projectId: string): Promise<WorkspaceView[]>
@@ -268,6 +304,19 @@ export interface OctopusService {
   workspaceHasChanges(workspaceId: string): Promise<boolean>
   /** Everything the workspace changed since it left the project's base branch. */
   readWorkspaceChanges(workspaceId: string): Promise<WorkspaceDiff>
+
+  /** What has become of this workspace's branch on GitHub, if anything. */
+  readPullRequest(workspaceId: string): Promise<PullRequestView>
+
+  /**
+   * Pushes the branch if it needs it and opens a pull request for it.
+   *
+   * Returns the URL, which is the one thing the caller has no other way to get.
+   */
+  createPullRequest(
+    workspaceId: string,
+    request: Omit<NewPullRequest, 'branch' | 'base'>
+  ): Promise<string>
   /**
    * An absolute path inside a workspace, for a caller that will open it.
    *
@@ -414,6 +463,7 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
   const configPath = options.configFilePath ?? configFile()
   const makeExec = options.makeExec ?? gitIn
   const commandExec = options.commandExec ?? defaultExec
+  const makeGh = options.makeGh ?? ghIn
   const dataRoot = options.dataRoot ?? rootDir()
   const runQuery = options.query ?? defaultQuery
   const runForkSession = options.forkSession ?? defaultForkSession
@@ -1172,13 +1222,20 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
     },
 
     async readProjectInstruction(projectId, kind) {
-      requireProject(projectId)
+      // Only a project has to exist. The global one belongs to the install and
+      // is written the first time anybody saves it.
+      if (projectId !== null) requireProject(projectId)
       return readInstruction(kind, projectId, dataRoot)
     },
 
     async saveProjectInstruction(projectId, kind, contents) {
-      requireProject(projectId)
+      if (projectId !== null) requireProject(projectId)
       await writeInstruction(kind, projectId, contents, dataRoot)
+    },
+
+    async readEffectiveInstruction(workspaceId, kind) {
+      const workspace = requireWorkspace(workspaceId)
+      return effectiveInstruction(kind, workspace.projectId, dataRoot)
     },
 
     async removeProjectById(projectId) {
@@ -1290,6 +1347,31 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
         baseBranch: project.baseBranch,
         root: workspace.path
       })
+    },
+
+    readPullRequest(workspaceId) {
+      const workspace = requireWorkspace(workspaceId)
+      const project = requireProject(workspace.projectId)
+
+      // Both run from the worktree: `gh` finds the repository from the
+      // directory it is in, and the branch's own state is a fact about there.
+      return readPullRequest(
+        workspace.branch,
+        project.baseBranch,
+        makeGh(workspace.path),
+        makeExec(workspace.path)
+      )
+    },
+
+    createPullRequest(workspaceId, request) {
+      const workspace = requireWorkspace(workspaceId)
+      const project = requireProject(workspace.projectId)
+
+      return createPullRequest(
+        { ...request, branch: workspace.branch, base: project.baseBranch },
+        makeGh(workspace.path),
+        makeExec(workspace.path)
+      )
     },
 
     async resolveWorkspaceFile(workspaceId, path) {

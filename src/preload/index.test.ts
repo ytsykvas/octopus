@@ -130,6 +130,21 @@ describe('channel names', () => {
       'workspaces:hasChanges'
     ],
     ['workspaces.diff', () => method('workspaces', 'diff')('w' as never), 'workspaces:diff'],
+    [
+      'workspaces.pullRequest',
+      () => method('workspaces', 'pullRequest')('w' as never),
+      'workspaces:pullRequest'
+    ],
+    [
+      'workspaces.createPullRequest',
+      () => method('workspaces', 'createPullRequest')('w' as never, {} as never),
+      'workspaces:createPullRequest'
+    ],
+    [
+      'workspaces.instruction',
+      () => method('workspaces', 'instruction')('w' as never, 'pullRequest' as never),
+      'instructions:effective'
+    ],
     ['files.open', () => method('files', 'open')('w' as never, 'a.ts' as never), 'files:open'],
     ['chats.list', () => method('chats', 'list')('w' as never), 'chats:list'],
     ['chats.open', () => method('chats', 'open')('w' as never), 'chats:open'],

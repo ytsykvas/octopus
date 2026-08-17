@@ -52,6 +52,38 @@ describe('useErrorMessage', () => {
     expect(message).not.toBe('raw english fallback')
   })
 
+  /*
+   * The three a pull request can fail with, each of which names the thing the
+   * reader has to act on: which base has nothing to merge, which branch would
+   * not push. A code with no case falls through to the raw English, so these
+   * are what prove the messages exist at all.
+   */
+  it('localises what went wrong opening a pull request', () => {
+    const { result } = renderHook(() => useErrorMessage())
+
+    expect(
+      result.current({ ok: false, error: 'raw', code: 'noCommits', params: { base: 'main' } })
+    ).toContain('main')
+    expect(
+      result.current({
+        ok: false,
+        error: 'raw',
+        code: 'pushFailed',
+        params: { branch: 'octopus/anna' }
+      })
+    ).toContain('octopus/anna')
+    expect(result.current({ ok: false, error: 'raw', code: 'createFailed' })).not.toContain('raw')
+  })
+
+  // A failure that names a code and forgets the value it was about. The message
+  // is still a sentence rather than one with a hole where a branch should be.
+  it('says something when a code arrives without the value it names', () => {
+    const { result } = renderHook(() => useErrorMessage())
+
+    expect(result.current({ ok: false, error: 'raw', code: 'noCommits' })).not.toContain('{{')
+    expect(result.current({ ok: false, error: 'raw', code: 'pushFailed' })).not.toContain('{{')
+  })
+
   // Core sends the English text as a fallback for logs. An unknown code still
   // has to say something, so the text is carried into a localised frame rather
   // than dropped.

@@ -22,6 +22,7 @@ import {
 } from '../core/chats.js'
 import type { RemoteRepository } from '../core/github.js'
 import { InstructionBodySchema, InstructionKindSchema } from '../core/instructions.js'
+import { NewPullRequestSchema } from '../core/pullRequests.js'
 import { QuestionAnswerSchema } from '../core/questions.js'
 import { ScriptBodySchema, ScriptKindSchema } from '../core/scripts.js'
 import type {
@@ -196,18 +197,26 @@ export function registerIpc(
     attempt(() => service.projectScriptPaths(projectId))
   )
 
-  host.handle('instructions:read', (_event, projectId: string, kind: unknown) =>
+  // `null` is the installation's own instruction rather than a project's, which
+  // is why the id is not narrowed to a string here.
+  host.handle('instructions:read', (_event, projectId: string | null, kind: unknown) =>
     attempt(() => service.readProjectInstruction(projectId, InstructionKindSchema.parse(kind)))
   )
 
-  host.handle('instructions:save', (_event, projectId: string, kind: unknown, contents: unknown) =>
-    attempt(() =>
-      service.saveProjectInstruction(
-        projectId,
-        InstructionKindSchema.parse(kind),
-        InstructionBodySchema.parse(contents)
+  host.handle(
+    'instructions:save',
+    (_event, projectId: string | null, kind: unknown, contents: unknown) =>
+      attempt(() =>
+        service.saveProjectInstruction(
+          projectId,
+          InstructionKindSchema.parse(kind),
+          InstructionBodySchema.parse(contents)
+        )
       )
-    )
+  )
+
+  host.handle('instructions:effective', (_event, workspaceId: string, kind: unknown) =>
+    attempt(() => service.readEffectiveInstruction(workspaceId, InstructionKindSchema.parse(kind)))
   )
 
   host.handle('projects:remove', (_event, projectId: string) =>
@@ -238,6 +247,17 @@ export function registerIpc(
 
   host.handle('workspaces:diff', (_event, workspaceId: string) =>
     attempt(() => service.readWorkspaceChanges(workspaceId))
+  )
+
+  host.handle('workspaces:pullRequest', (_event, workspaceId: string) =>
+    attempt(() => service.readPullRequest(workspaceId))
+  )
+
+  // Title and body are typed by the user and end up as arguments to `gh`, so
+  // they are bounded here like every other string crossing this boundary — a
+  // body the size of a file is a mistake, not a description.
+  host.handle('workspaces:createPullRequest', (_event, workspaceId: string, request: unknown) =>
+    attempt(() => service.createPullRequest(workspaceId, NewPullRequestSchema.parse(request)))
   )
 
   // The one channel here that takes a path. It is validated, and the service

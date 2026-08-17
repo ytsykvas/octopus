@@ -330,7 +330,7 @@ They run in the same worktree with no locking between them, deliberately (§17).
 | `⌘⇧D`       | changes             |
 | `⌘⇧P`       | pull request        |
 
-`⌘⇧P` is the one still to build, and waits on §16. Listing a shortcut that does nothing is worse than listing none: it is read once, tried once, and the rest of the table quietly distrusted along with it — which is what `⌘⇧D` did here for a fortnight.
+`⌘⇧P` opens the pull request tab, which is what it was waiting for. Listing a shortcut that does nothing is worse than listing none: it is read once, tried once, and the rest of the table quietly distrusted along with it — which is what `⌘⇧D` did here for a fortnight, and what `⌘⇧P` did until there was a tab to name.
 
 The right pane collapses — three columns do not fit on a narrow screen.
 
@@ -611,7 +611,9 @@ This is not an argument against the hooks — they are free. It is an argument a
 
 ## 16. Out of scope for stage 1
 
-Monaco diff, GitHub PRs and checks through `gh`, notifications, workspace archiving, Linux builds, signing and notarisation, the auth service and licensing (§15).
+Monaco diff, GitHub **checks** through `gh`, notifications, workspace archiving, Linux builds, signing and notarisation, the auth service and licensing (§15).
+
+Opening a pull request came in ahead of this list: §3 calls a branch and a pull request the unit of integration, and a workspace whose branch had no way out of the app was only half of that. What waits here is what surrounds one — the checks on it and the review threads. The description template is read: §10.8's pull request tab sends the project's instruction, or the installation's where a project has written none.
 
 The terminal moved into scope early: account sign-in needs an interactive session, and sending the user to Terminal.app for it broke the sense that this window is where the work happens. The same component will fill the right pane's Terminal tab.
 

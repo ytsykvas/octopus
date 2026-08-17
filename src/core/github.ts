@@ -27,7 +27,16 @@ const RemoteRepositorySchema = z.object({
 export type RemoteRepository = z.infer<typeof RemoteRepositorySchema>
 
 /** Failure that the user can act on, carrying a code the UI localises. */
-export type GitHubErrorCode = 'notConnected' | 'listFailed' | 'cloneFailed' | 'alreadyExists'
+export type GitHubErrorCode =
+  | 'notConnected'
+  | 'listFailed'
+  | 'cloneFailed'
+  | 'alreadyExists'
+  // Opening a pull request, which `pullRequests.ts` does through the same `gh`
+  // and reports through this same error so the renderer has one place to map.
+  | 'noCommits'
+  | 'pushFailed'
+  | 'createFailed'
 
 export class GitHubError extends Error {
   constructor(

@@ -261,12 +261,15 @@ describe('channel table', () => {
     'scripts:paths',
     'instructions:read',
     'instructions:save',
+    'instructions:effective',
     'workspaces:list',
     'workspaces:create',
     'workspaces:rename',
     'workspaces:remove',
     'workspaces:hasChanges',
     'workspaces:diff',
+    'workspaces:pullRequest',
+    'workspaces:createPullRequest',
     'files:open',
     'chats:list',
     'chats:open',
@@ -369,6 +372,29 @@ describe('validation at the boundary', () => {
   it('rejects a script kind it does not know', async () => {
     const result = await invoke('scripts:read', 'nothing', 'malicious')
     expect(result).toMatchObject({ ok: false })
+  })
+
+  /*
+   * The installation's own instruction, which every project falls back to. It
+   * crosses the same channel with a null project rather than a channel of its
+   * own — they are edited the same way, and two would be two spellings of one
+   * thing that could drift.
+   */
+  it('carries the instruction a workspace would send across', async () => {
+    const projectId = await addProject('instructed')
+    const workspace = await createWorkspace(projectId)
+
+    await invoke('instructions:save', null, 'pullRequest', 'Global rules.')
+    await expect(invoke('instructions:effective', workspace.id, 'pullRequest')).resolves.toEqual({
+      ok: true,
+      value: 'Global rules.'
+    })
+
+    await invoke('instructions:save', projectId, 'pullRequest', 'Project rules.')
+    await expect(invoke('instructions:effective', workspace.id, 'pullRequest')).resolves.toEqual({
+      ok: true,
+      value: 'Project rules.'
+    })
   })
 
   it('rejects an instruction body that is not a string', async () => {
@@ -707,6 +733,75 @@ describe('workspaces of a real project', () => {
       ok: true,
       value: { added: 1, files: [{ path: 'draft.txt', status: 'untracked' }] }
     })
+  })
+
+  /*
+   * `gh` is the one command in the table that cannot run for real: it would ask
+   * GitHub about somebody's repository, and creating would open a pull request
+   * on it. Git stays real — pushing to a bare repository next door is what
+   * proves the branch actually left.
+   */
+  it('carries what GitHub says about a branch across', async () => {
+    const projectId = await addProject('prs')
+    service = await useService({ makeGh: () => () => Promise.resolve('[]') })
+    const workspace = await createWorkspace(projectId)
+
+    await expect(invoke('workspaces:pullRequest', workspace.id)).resolves.toMatchObject({
+      ok: true,
+      value: { request: null, pushed: false }
+    })
+  })
+
+  it('pushes the branch and opens the request', async () => {
+    const projectId = await addProject('opening')
+    const origin = join(dir, 'origin.git')
+    await run('git', ['init', '-q', '--bare', origin])
+    await run('git', ['remote', 'add', 'origin', origin], { cwd: join(dir, 'opening') })
+
+    const asked: string[][] = []
+    service = await useService({
+      makeGh: () => (args) => {
+        asked.push([...args])
+        return Promise.resolve('https://github.com/o/p/pull/1\n')
+      }
+    })
+
+    const workspace = await createWorkspace(projectId)
+    await writeFile(join(workspace.path, 'a.txt'), 'work\n', 'utf8')
+    await run('git', ['add', '.'], { cwd: workspace.path })
+    await run('git', ['commit', '-q', '-m', 'work'], { cwd: workspace.path })
+
+    await expect(
+      invoke('workspaces:createPullRequest', workspace.id, {
+        title: 'Add a thing',
+        body: '',
+        draft: false
+      })
+    ).resolves.toEqual({ ok: true, value: 'https://github.com/o/p/pull/1' })
+
+    // The base came from the project rather than from the renderer, which never
+    // sends one — it is a fact about the project, not about the request.
+    expect(asked[0]).toContain('--base')
+    expect(asked[0]).toContain('main')
+    const pushed = await run('git', ['ls-remote', '--heads', 'origin', workspace.branch], {
+      cwd: workspace.path
+    })
+    expect(pushed.stdout).toContain(workspace.branch)
+  })
+
+  // Both strings end up as arguments to `gh`, so they are checked here rather
+  // than left to fail somewhere less able to explain itself.
+  it('refuses a pull request with no title', async () => {
+    const projectId = await addProject('untitled')
+    const workspace = await createWorkspace(projectId)
+
+    await expect(
+      invoke('workspaces:createPullRequest', workspace.id, {
+        title: '',
+        body: '',
+        draft: false
+      })
+    ).resolves.toMatchObject({ ok: false })
   })
 
   // The code is what the renderer localises; without it the pane could only

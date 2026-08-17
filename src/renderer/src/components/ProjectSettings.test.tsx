@@ -371,6 +371,22 @@ describe('ProjectSettings', () => {
     )
   })
 
+  /*
+   * Opened where the caller already knows the question — the pull request tab
+   * asks for the instructions section rather than dropping the reader on
+   * General to find it. Read once, on mount, which is correct only because the
+   * dialog is rendered conditionally.
+   */
+  it('opens on the section it was asked for', async () => {
+    vi.mocked(window.octopus.projects.readInstruction).mockResolvedValue({
+      ok: true,
+      value: 'Lead with the why.'
+    })
+    await renderDialog({ initialSection: 'instructions' })
+
+    expect(await screen.findByDisplayValue('Lead with the why.')).toBeInTheDocument()
+  })
+
   it('shows the pull request instructions under Instructions', async () => {
     vi.mocked(window.octopus.projects.readInstruction).mockResolvedValue({
       ok: true,

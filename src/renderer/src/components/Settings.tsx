@@ -1,4 +1,4 @@
-import { Bot, GitBranch, Info, type LucideIcon, Monitor, Sparkles } from 'lucide-react'
+import { BookText, Bot, GitBranch, Info, type LucideIcon, Monitor, Sparkles } from 'lucide-react'
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
@@ -11,6 +11,7 @@ import type {
 } from '@core/config.js'
 
 import { useModels } from '../hooks/useModels.js'
+import { FileEditor } from './FileEditor.js'
 import { Button } from './Button.js'
 import { modelRows } from './chat/modelRows.js'
 import { Field } from './Field.js'
@@ -37,7 +38,7 @@ interface SettingsProps {
   readonly initialSection?: SectionId
 }
 
-export type SectionId = 'general' | 'git' | 'agent' | 'accounts' | 'about'
+export type SectionId = 'general' | 'git' | 'agent' | 'instructions' | 'accounts' | 'about'
 
 const SECTIONS: readonly {
   readonly id: SectionId
@@ -45,6 +46,7 @@ const SECTIONS: readonly {
     | 'settings.sectionGeneral'
     | 'settings.sectionGit'
     | 'settings.sectionAgent'
+    | 'settings.sectionInstructions'
     | 'settings.sectionAccounts'
     | 'settings.sectionAbout'
   readonly Icon: LucideIcon
@@ -52,6 +54,7 @@ const SECTIONS: readonly {
   { id: 'general', labelKey: 'settings.sectionGeneral', Icon: Monitor },
   { id: 'git', labelKey: 'settings.sectionGit', Icon: GitBranch },
   { id: 'agent', labelKey: 'settings.sectionAgent', Icon: Sparkles },
+  { id: 'instructions', labelKey: 'settings.sectionInstructions', Icon: BookText },
   { id: 'accounts', labelKey: 'settings.sectionAccounts', Icon: Bot },
   { id: 'about', labelKey: 'settings.sectionAbout', Icon: Info }
 ]
@@ -93,6 +96,7 @@ export function Settings({
             <GitSection config={config} onChange={onChange} accounts={accounts} />
           )}
           {section === 'agent' && <AgentSection config={config} onChange={onChange} />}
+          {section === 'instructions' && <InstructionsSection />}
           {section === 'accounts' && <ClaudeSection accounts={accounts} />}
           {section === 'about' && <AboutSection config={config} />}
         </div>
@@ -104,6 +108,36 @@ export function Settings({
 interface SectionProps {
   readonly config: Config
   readonly onChange: (patch: Partial<Config>) => Promise<void>
+}
+
+/**
+ * The instruction every project falls back to.
+ *
+ * A file rather than a setting, which is why this section takes no `config`:
+ * instructions grow past what a text field holds, are worth reading in a diff,
+ * and can be edited outside the app — the same reasoning `instructions.ts`
+ * gives for the per-project ones, and the reason `ConfigSchema` holds no long
+ * text at all.
+ *
+ * The same editor the project dialog uses, pointed at a null project. Two
+ * editors for one kind of thing would be two places for them to disagree.
+ */
+function InstructionsSection(): React.JSX.Element {
+  const { t } = useTranslation()
+
+  return (
+    <FileEditor
+      label={t('settings.pullRequestInstruction')}
+      hint={t('settings.pullRequestInstructionHint')}
+      read={async () => {
+        const result = await window.octopus.projects.readInstruction(null, 'pullRequest')
+        return result.ok ? result.value : null
+      }}
+      save={(contents) => {
+        void window.octopus.projects.saveInstruction(null, 'pullRequest', contents)
+      }}
+    />
+  )
 }
 
 function GeneralSection({ config, onChange }: SectionProps): React.JSX.Element {

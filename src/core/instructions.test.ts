@@ -4,7 +4,12 @@ import { join } from 'node:path'
 
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 
-import { instructionPath, readInstruction, writeInstruction } from './instructions.js'
+import {
+  effectiveInstruction,
+  instructionPath,
+  readInstruction,
+  writeInstruction
+} from './instructions.js'
 
 let root: string
 
@@ -76,5 +81,64 @@ describe('writeInstruction', () => {
     const { stat } = await import('node:fs/promises')
     const mode = (await stat(instructionPath('pullRequest', 'planner', root))).mode
     expect(mode & 0o111).toBe(0)
+  })
+})
+
+describe('the instruction that applies', () => {
+  /*
+   * The chain exists so a project can say something different, and the
+   * installation can say something at all. Each rung is a separate test because
+   * a fallback that skips one is invisible until the day it matters.
+   */
+  it("prefers the project's own over the installation's", async () => {
+    await writeInstruction('pullRequest', null, 'Global rules.', root)
+    await writeInstruction('pullRequest', 'planner', 'Project rules.', root)
+
+    expect(await effectiveInstruction('pullRequest', 'planner', root)).toBe('Project rules.')
+  })
+
+  it("uses the installation's where a project has written none", async () => {
+    await writeInstruction('pullRequest', null, 'Global rules.', root)
+
+    expect(await effectiveInstruction('pullRequest', 'planner', root)).toBe('Global rules.')
+  })
+
+  it('falls back to the template when neither has been written', async () => {
+    expect(await effectiveInstruction('pullRequest', 'planner', root)).toContain('Pull request')
+  })
+
+  /*
+   * Emptying a project's instruction is a decision — this project adds nothing —
+   * and falling through to the global one there would make that decision
+   * impossible to express. Which is why the chain is built on "is there a file"
+   * rather than on "is there any text".
+   */
+  it('takes an empty project instruction as a decision, not as an absence', async () => {
+    await writeInstruction('pullRequest', null, 'Global rules.', root)
+    await writeInstruction('pullRequest', 'planner', '', root)
+
+    expect(await effectiveInstruction('pullRequest', 'planner', root)).toBe('')
+  })
+
+  it('keeps one project out of another', async () => {
+    await writeInstruction('pullRequest', 'planner', 'Planner rules.', root)
+
+    expect(await effectiveInstruction('pullRequest', 'other', root)).toContain('Pull request')
+  })
+})
+
+describe('the installation-wide instruction', () => {
+  it('lives beside the projects rather than inside one', () => {
+    expect(instructionPath('pullRequest', null, root)).toBe(
+      join(root, 'instructions', 'pull-request.md')
+    )
+  })
+
+  it('reads back as a template until it is written', async () => {
+    expect(await readInstruction('pullRequest', null, root)).toContain('Pull request')
+
+    await writeInstruction('pullRequest', null, 'Say why.', root)
+
+    expect(await readInstruction('pullRequest', null, root)).toBe('Say why.')
   })
 })

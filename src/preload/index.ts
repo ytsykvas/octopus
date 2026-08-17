@@ -16,6 +16,7 @@ import type { ChatEntry } from '@core/transcript.js'
 import type { TerminalExit, TerminalOutput, TerminalSpec } from '@core/terminal.js'
 import type { Config } from '@core/config.js'
 import type { WorkspaceDiff } from '@core/diff.js'
+import type { PullRequestDraft, PullRequestView } from '@core/pullRequests.js'
 import type { RemoteRepository } from '@core/github.js'
 import type { Workspace } from '@core/store.js'
 import type { RemoveOptions, WorkspaceView } from '@core/workspaces.js'
@@ -294,7 +295,21 @@ const api = {
 
     /** Everything the workspace changed since it left the project's base branch. */
     diff: (workspaceId: string): Promise<Result<WorkspaceDiff>> =>
-      ipcRenderer.invoke('workspaces:diff', workspaceId) as Promise<Result<WorkspaceDiff>>
+      ipcRenderer.invoke('workspaces:diff', workspaceId) as Promise<Result<WorkspaceDiff>>,
+
+    /** What has become of this workspace's branch on GitHub, if anything. */
+    pullRequest: (workspaceId: string): Promise<Result<PullRequestView>> =>
+      ipcRenderer.invoke('workspaces:pullRequest', workspaceId) as Promise<Result<PullRequestView>>,
+
+    /** Pushes the branch if it needs it, opens the request, answers with its URL. */
+    createPullRequest: (workspaceId: string, request: PullRequestDraft): Promise<Result<string>> =>
+      ipcRenderer.invoke('workspaces:createPullRequest', workspaceId, request) as Promise<
+        Result<string>
+      >,
+
+    /** The instruction this workspace would send: its project's, or the global one. */
+    instruction: (workspaceId: string, kind: InstructionKind): Promise<Result<string>> =>
+      ipcRenderer.invoke('instructions:effective', workspaceId, kind) as Promise<Result<string>>
   },
 
   files: {
@@ -345,12 +360,17 @@ const api = {
     saveScript: (projectId: string, kind: ScriptKind, contents: string): Promise<Result<void>> =>
       ipcRenderer.invoke('scripts:save', projectId, kind, contents) as Promise<Result<void>>,
 
-    /** Guidance for the agent; a missing one comes back as a template. */
-    readInstruction: (projectId: string, kind: InstructionKind): Promise<Result<string>> =>
+    /**
+     * Guidance for the agent; a missing one comes back as a template.
+     *
+     * A null project is the installation's own, which every project without one
+     * of its own falls back to.
+     */
+    readInstruction: (projectId: string | null, kind: InstructionKind): Promise<Result<string>> =>
       ipcRenderer.invoke('instructions:read', projectId, kind) as Promise<Result<string>>,
 
     saveInstruction: (
-      projectId: string,
+      projectId: string | null,
       kind: InstructionKind,
       contents: string
     ): Promise<Result<void>> =>
