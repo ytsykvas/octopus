@@ -157,6 +157,48 @@ describe('DropdownMenu', () => {
     expect(rename).not.toHaveBeenCalled()
   })
 
+  /*
+   * Reported from the running app: the menu on a diff file's header opened and
+   * was nowhere to be seen — painted behind the header of the file below it.
+   *
+   * `z-50` only ever means "above its own siblings". A `sticky` element with a
+   * `z-index` starts a stacking context, the diff's file headers are exactly
+   * that, and a panel inside one cannot be lifted out of it by any number. So
+   * the panel is drawn into the body, and this is the assertion that says so —
+   * the alternative is a screenshot nobody will take again.
+   */
+  it('draws its panel outside whatever the trigger sits inside', async () => {
+    const user = userEvent.setup()
+    renderMenu([{ id: 'rename', label: 'Rename', onSelect: vi.fn() }])
+
+    await user.click(triggerButton())
+
+    expect(screen.getByRole('menu').parentElement).toBe(document.body)
+  })
+
+  /*
+   * The companion to the portal above, and the thing it would break silently.
+   *
+   * `useDismiss` asks whether a click landed inside the trigger's container,
+   * and once the panel is drawn into the body it is not in that container. Told
+   * only about the trigger, the hook would call a click on the menu "outside"
+   * and close it on `mousedown` — before the `click` on an item could ever
+   * fire. Every item would look inert.
+   */
+  it('stays open when the panel itself is clicked', async () => {
+    const user = userEvent.setup()
+    const onSelect = vi.fn()
+    renderMenu([{ id: 'rename', label: 'Rename', onSelect }])
+
+    await user.click(triggerButton())
+    // The panel's own padding rather than an item: an item closes the menu by
+    // choosing something, which would pass whether the hook knew or not.
+    await user.click(screen.getByRole('menu'))
+
+    expect(screen.getByRole('menu')).toBeInTheDocument()
+    expect(onSelect).not.toHaveBeenCalled()
+  })
+
   it('closes the menu when something outside it is clicked', async () => {
     renderMenu([{ id: 'rename', label: 'Rename', onSelect: vi.fn() }])
 

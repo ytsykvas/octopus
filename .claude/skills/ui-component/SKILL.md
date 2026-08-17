@@ -134,6 +134,14 @@ scroll was the first rule and the chat log broke it: it pins itself to the
 bottom on each streamed fragment, so the composer's menus shut a few times a
 second while the agent answered, and the composer had not moved a pixel.
 
+**A panel is drawn into the body, not beside its trigger.** `z-50` only ever
+means "above its own siblings", and any `sticky` or `transform`ed ancestor with
+a `z-index` starts a stacking context the panel cannot be lifted out of by any
+number. The diff's file headers are exactly that, and a menu opened from one was
+painted behind the next header. `DropdownMenu` portals; if you write another
+panel, portal it too — and remember that `useDismiss` then needs the panel's own
+ref, or a click inside it counts as outside and closes it under the pointer.
+
 **A panel that is not a menu gets `useAnchoredPanel`** rather than a third copy
 of that reasoning: it holds the open state, the fixed coordinates, the flip, the
 clamp and all four ways of closing, and both composer panels use it. Give it the

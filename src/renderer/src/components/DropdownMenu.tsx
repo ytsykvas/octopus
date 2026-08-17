@@ -1,6 +1,8 @@
 import { Check } from 'lucide-react'
 import { useCallback, useEffect, useRef, useState } from 'react'
 
+import { createPortal } from 'react-dom'
+
 import { useDismiss } from '../hooks/useDismiss.js'
 
 export interface MenuAction {
@@ -67,6 +69,7 @@ export function DropdownMenu({
   const [open, setOpen] = useState(false)
   const [position, setPosition] = useState<{ top: number; left: number } | null>(null)
   const container = useRef<HTMLDivElement>(null)
+  const panel = useRef<HTMLDivElement>(null)
 
   const described = actions.some((action) => action.description !== undefined)
   const width = described ? DESCRIBED_WIDTH : PANEL_WIDTH
@@ -75,7 +78,7 @@ export function DropdownMenu({
     setOpen(false)
   }, [])
 
-  useDismiss(open, container, close)
+  useDismiss(open, container, close, panel)
 
   // Fixed coordinates are a snapshot: anything that moves the trigger leaves
   // the panel floating where the trigger used to be, so it closes instead.
@@ -156,63 +159,80 @@ export function DropdownMenu({
         }
       })}
 
-      {open && position && (
-        <div
-          role="menu"
-          style={{ top: position.top, left: position.left, width }}
-          className="border-line bg-canvas fixed z-50 rounded-[var(--radius-panel)] border p-1 shadow-[var(--shadow-pop)]"
-        >
-          {actions.map((action) => (
-            <button
-              key={action.id}
-              type="button"
-              // A choice among several is a radio group, not a list of commands.
-              // The role is what carries that to a screen reader, and it is also
-              // the only part of this a jsdom test can see.
-              {...(action.selected === undefined
-                ? { role: 'menuitem' }
-                : { role: 'menuitemradio', 'aria-checked': action.selected })}
-              onClick={() => {
-                setOpen(false)
-                action.onSelect()
-              }}
-              className={`row focus-ring flex w-full items-center gap-2.5 px-2.5 py-1.5 text-left ${
-                action.destructive === true
-                  ? 'text-danger hover:bg-danger-bg'
-                  : 'text-ink-soft hover:text-ink'
-              }`}
-            >
-              <span className="flex size-4 shrink-0 items-center justify-center">
-                {/* The tick keeps its space when it is not the current choice,
+      {open &&
+        position &&
+        /*
+         * Into the body, not beside the trigger.
+         *
+         * `z-50` only ever means "above its own siblings". A `sticky` element
+         * with a `z-index` starts a stacking context of its own, and the diff's
+         * file headers are exactly that — so this menu, opened from one of
+         * them, was painted inside that header's context and the **next**
+         * header covered it. Nothing about the number would have fixed it.
+         *
+         * The coordinates are already the window's, so nothing about the
+         * placement changes; what changes is which box the painting is
+         * confined to.
+         */
+        createPortal(
+          <div
+            ref={panel}
+            role="menu"
+            style={{ top: position.top, left: position.left, width }}
+            className="border-line bg-canvas fixed z-50 rounded-[var(--radius-panel)] border p-1 shadow-[var(--shadow-pop)]"
+          >
+            {actions.map((action) => (
+              <button
+                key={action.id}
+                type="button"
+                // A choice among several is a radio group, not a list of commands.
+                // The role is what carries that to a screen reader, and it is also
+                // the only part of this a jsdom test can see.
+                {...(action.selected === undefined
+                  ? { role: 'menuitem' }
+                  : { role: 'menuitemradio', 'aria-checked': action.selected })}
+                onClick={() => {
+                  setOpen(false)
+                  action.onSelect()
+                }}
+                className={`row focus-ring flex w-full items-center gap-2.5 px-2.5 py-1.5 text-left ${
+                  action.destructive === true
+                    ? 'text-danger hover:bg-danger-bg'
+                    : 'text-ink-soft hover:text-ink'
+                }`}
+              >
+                <span className="flex size-4 shrink-0 items-center justify-center">
+                  {/* The tick keeps its space when it is not the current choice,
                     so the labels of a picker line up instead of stepping left
                     and right as the selection moves. */}
-                {action.selected === undefined ? (
-                  action.icon
-                ) : (
-                  <Check
-                    aria-hidden
-                    size={12}
-                    className={action.selected ? 'text-accent' : 'opacity-0'}
-                  />
-                )}
-              </span>
+                  {action.selected === undefined ? (
+                    action.icon
+                  ) : (
+                    <Check
+                      aria-hidden
+                      size={12}
+                      className={action.selected ? 'text-accent' : 'opacity-0'}
+                    />
+                  )}
+                </span>
 
-              <span className="min-w-0 flex-1">
-                <span className="block truncate">{action.label}</span>
-                {/* Wrapped rather than truncated, unlike the label above it.
+                <span className="min-w-0 flex-1">
+                  <span className="block truncate">{action.label}</span>
+                  {/* Wrapped rather than truncated, unlike the label above it.
                     A name cut short is still a name; a sentence cut short at
                     "Most capable for your …" is the half that says nothing.
                     Two lines is the cap — past that the menu is a document. */}
-                {action.description !== undefined && (
-                  <span className="text-ink-faint line-clamp-2 text-[11px] leading-4">
-                    {action.description}
-                  </span>
-                )}
-              </span>
-            </button>
-          ))}
-        </div>
-      )}
+                  {action.description !== undefined && (
+                    <span className="text-ink-faint line-clamp-2 text-[11px] leading-4">
+                      {action.description}
+                    </span>
+                  )}
+                </span>
+              </button>
+            ))}
+          </div>,
+          document.body
+        )}
     </div>
   )
 }
