@@ -653,11 +653,40 @@ nothing by the second file. `shown` in `src/renderer/src/components/diff/shown.t
 is the one place this is decided, and the chat's change block calls it too — the
 surface where a two-line edit is usually read instead of here.
 
-**A note against a line rides out with the next message.** It becomes text — the
-path, the line, the line as it read when the note was written, then the remark —
-above whatever was typed, because nothing implicit reaches the agent (§4). One
-line takes one note, and the two sides of a diff are different lines even at the
-same number.
+**A note against the code rides out with the next message.** It becomes text —
+the path, the lines, the code as it read when the note was written, then the
+remark — above whatever was typed, because nothing implicit reaches the agent
+(§4). The two sides of a diff are different lines even at the same number.
+
+**A note covers a passage, not only a line.** The trigger in the gutter takes
+one line, and selecting code with the mouse takes as many as were dragged over:
+a button appears at the selection and opens the same editor. One line is the
+right unit for "this line is wrong" and the wrong one for a condition spanning
+three, the two halves of a rename, or a block that should not be there — each of
+which used to mean several notes and the hope that the agent joined them up.
+
+The selection is trimmed to the file and the side it **started** in. Dragging
+past the end of a file is how a reader selects the end of a file, and a gesture
+that answers nothing because it went one line too far teaches people to drag
+carefully rather than to select what they mean.
+
+**Whole lines are quoted, even from half a selection.** Half an expression
+without the line around it is precise about the wrong thing, and the note is
+read by an agent that has to find the code again. The quote comes from the diff
+model rather than from the screen: `shown` replaces invisible characters with
+visible `U+202E` badges, so the text in the DOM is deliberately not the text in
+the file.
+
+**One passage takes one note**, which is what `anchorKey` spells — path, side,
+and both ends. Two passages may overlap, which the single-line rule this
+replaces could not: refusing the second would mean deciding which of two
+overlapping selections wins, and neither gesture asks that.
+
+The rows carry their own address in a `data-line` attribute, since a browser
+selection knows about nodes and offsets and nothing about the model that drew
+them. It sits on the code rather than the row: the gutters are `select-none`, so
+a selection is always inside one, and side by side draws two per row addressing
+different files.
 
 ## Colour
 
@@ -832,6 +861,7 @@ field styling had already drifted by a few pixels of height.
 | `EffortPicker`                                                  | the effort chip and the scale behind it, `Faster` to `Smarter`, with `ultracode` past a gap at the end and an octopus above it. A `slider` rather than a row of buttons: the ordering between the levels is the fact it exists to show, and buttons inside would be a tab stop each on a control whose whole point is one handle                                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
 | `ModelPicker`                                                   | the model chip and the two-column panel behind it: which model plans, which one writes the code. A `dialog` that **does not close on a pick** — two columns is two answers, and closing on the first would mean opening it twice                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
 | `useAnchoredPanel`                                              | where both composer panels are drawn: `fixed` against the window the way `DropdownMenu` does it and for the same reason, flipped above the chip when it would run off the bottom, clamped when it would run off the right, closed on a scroll of something the chip sits inside. The size is given per opening, since a panel's height can depend on how many rows it is about to hold                                                                                                                                                                                                                                                                                                                                                                                                                  |
+| `selectionAnchor`                                               | how a browser selection becomes a review note: the rows carry a `data-line` address and this reduces the ones a range touched to a file, a side and two line numbers. Pure and string-only, so the awkward cases — two files, both sides, a path with a colon in it — are tested without a layout engine                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
 | `Markdown`, `CodeBlock`                                         | how the agent's own output is drawn. A fenced block gets a frame and a copy button in its own row, never floating over code that scrolls sideways. The block/inline distinction is taken from `pre`, not from the language class: a fence with no language hands the `code` override exactly what inline code does                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      |
 | `Settings`                                                      | `initialSection` opens it where the caller needs it. Read once, on mount — correct only because `App` renders the dialog conditionally, so a close unmounts it                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
 | `ProjectGlyph`                                                  | a project's icon, `aria-hidden`: wherever it appears the element around it is already named                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             |

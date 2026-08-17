@@ -234,6 +234,7 @@ describe('review notes riding with the message', () => {
     path: 'src/core/diff.ts',
     side: 'new' as const,
     line: 42,
+    endLine: 42,
     code: 'const b = 2',
     text: 'this should be 3'
   }
@@ -243,6 +244,14 @@ describe('review notes riding with the message', () => {
 
     expect(screen.getByText('diff.ts:42')).toBeInTheDocument()
     expect(screen.getByText('this should be 3')).toBeInTheDocument()
+  })
+
+  // A note over a passage says how far it reaches, or the chip claims a remark
+  // about one line that the message will turn out to be about nine.
+  it('names both ends of a note that covers a passage', () => {
+    renderComposer({ comments: [{ ...NOTE, line: 42, endLine: 50 }] })
+
+    expect(screen.getByText('diff.ts:42-50')).toBeInTheDocument()
   })
 
   it('says nothing when there are no notes', () => {

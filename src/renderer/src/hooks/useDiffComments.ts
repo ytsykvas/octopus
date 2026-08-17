@@ -1,21 +1,36 @@
 import { useCallback, useState } from 'react'
 
 /**
- * A note against one line of the diff, waiting to be sent.
+ * A note against a passage of the diff, waiting to be sent.
  *
- * There is no id: a line is identified by where it is, and a second note on the
- * same line replaces the first rather than sitting under it. One line, one
- * remark — a thread would be a conversation this app has no way to continue.
+ * There is no id: a note is identified by where it is, and a second note over
+ * the same passage replaces the first rather than sitting under it. One
+ * passage, one remark — a thread would be a conversation this app has no way to
+ * continue.
+ *
+ * A passage is one line when the trigger in the gutter was used and as many as
+ * were dragged over when the selection was. Two ranges may overlap, which the
+ * single-line rule it replaces could not: refusing the second would mean
+ * deciding which of two overlapping selections wins, and neither gesture asks
+ * that question.
  */
 export interface DiffComment {
   readonly path: string
-  /** Which file the line belongs to: the one as it was, or as it is. */
+  /** Which file the lines belong to: the one as it was, or as it is. */
   readonly side: 'old' | 'new'
   readonly line: number
-  /** The line as it read when the note was written, so the prompt can quote it. */
+  /** The last line the note covers; equal to `line` when it covers one. */
+  readonly endLine: number
+  /**
+   * The lines as they read when the note was written, so the prompt can quote
+   * them — joined by newlines, and whole even where half of one was selected.
+   */
   readonly code: string
   readonly text: string
 }
+
+/** A note's place, which a row knows before there is a remark to put there. */
+export type CommentAnchor = Omit<DiffComment, 'text' | 'code'>
 
 export interface DiffCommentController {
   /** Notes for the open workspace, in the order they were written. */
@@ -35,10 +50,12 @@ export interface DiffCommentController {
  * to, with nothing failing to say so.
  *
  * Takes less than a whole note, because a row has a place before it has a
- * remark, and it is the place that identifies both.
+ * remark, and it is the place that identifies both. The end of the range is
+ * part of it: two notes starting on one line and covering different amounts are
+ * two notes, and a key that dropped the end would silently merge them.
  */
-export function anchorKey(anchor: Omit<DiffComment, 'text' | 'code'>): string {
-  return `${anchor.path}:${anchor.side}:${String(anchor.line)}`
+export function anchorKey(anchor: CommentAnchor): string {
+  return `${anchor.path}:${anchor.side}:${String(anchor.line)}-${String(anchor.endLine)}`
 }
 
 /**

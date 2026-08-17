@@ -517,6 +517,381 @@ describe('DiffPanel', () => {
       return comments
     }
 
+    /*
+     * jsdom implements `Range` and `Selection` but not `getBoundingClientRect`
+     * on a range — it lays nothing out, so it has no rectangle to answer with.
+     * The pane reads one to place the button, so without this every selection
+     * throws inside the handler and no button ever appears.
+     */
+    beforeEach(() => {
+      Range.prototype.getBoundingClientRect = () => new DOMRect(20, 100, 80, 16)
+    })
+
+    /**
+     * The first run of text inside an element, however deeply it sits.
+     *
+     * A browser puts a selection's ends in **text** nodes, not in the elements
+     * around them, and once the highlighter has run the text of a line is
+     * inside however many token spans shiki produced. Anchoring a test's range
+     * to the element instead would model a selection no browser makes, and
+     * would stop exercising the very nesting the running app always has.
+     */
+    function textIn(element: Element): Text {
+      return document.createTreeWalker(element, NodeFilter.SHOW_TEXT).nextNode() as Text
+    }
+
+    /**
+     * A drag across the rendered code, as the browser reports one.
+     *
+     * jsdom fires no `selectionchange` of its own, so the event is dispatched
+     * here — the pane listens for that one because it is the only event
+     * covering every way a selection can be made.
+     */
+    function selectAcross(from: Element, to: Element): void {
+      const end = textIn(to)
+
+      const range = document.createRange()
+      range.setStart(textIn(from), 0)
+      range.setEnd(end, end.length)
+
+      const selection = window.getSelection()!
+      selection.removeAllRanges()
+      selection.addRange(range)
+
+      act(() => {
+        document.dispatchEvent(new Event('selectionchange'))
+      })
+    }
+
+    /** The code spans, in the order the pane drew them. */
+    const codeLines = (): Element[] => [...document.querySelectorAll('[data-line]')]
+
+    /*
+     * Awaited rather than read outright. The button appears from a state change
+     * made inside a document-level listener, and under a full suite's load that
+     * lands a tick after the event does — `getBy` looked before it had.
+     */
+    const askButton = (): Promise<HTMLElement> =>
+      screen.findByRole('button', { name: 'Ask about the selected code' })
+
+    it('offers to ask about a passage that was selected', async () => {
+      answer(workspaceDiff([fileDiff('src/a.ts')]))
+      renderWithComments()
+      await screen.findByText('kept')
+
+      const lines = codeLines()
+      selectAcross(lines[0]!, lines[2]!)
+
+      expect(await askButton()).toBeInTheDocument()
+    })
+
+    // Reading is not asking. The button appears where a passage was chosen, and
+    // a click that chose nothing has not chosen a passage.
+    it('offers nothing for a selection that is only a cursor', async () => {
+      answer(workspaceDiff([fileDiff('src/a.ts')]))
+      renderWithComments()
+      await screen.findByText('kept')
+
+      const lines = codeLines()
+      selectAcross(lines[0]!, lines[0]!)
+      act(() => {
+        window.getSelection()!.removeAllRanges()
+        document.dispatchEvent(new Event('selectionchange'))
+      })
+
+      expect(
+        screen.queryByRole('button', { name: 'Ask about the selected code' })
+      ).not.toBeInTheDocument()
+    })
+
+    /*
+     * The whole point of the gesture: one note covering the lines that were
+     * dragged over, quoted in full and in order. The two lines here are both on
+     * the new side — the removed line between them belongs to the other file.
+     */
+    it('writes one note covering every line the selection touched', async () => {
+      const user = userEvent.setup()
+      answer(workspaceDiff([fileDiff('src/a.ts')]))
+      const comments = renderWithComments()
+      await screen.findByText('kept')
+
+      const lines = codeLines()
+      selectAcross(lines[0]!, lines[2]!)
+      await user.click(await askButton())
+      await user.type(await screen.findByRole('textbox'), 'this pair is wrong')
+      await user.click(screen.getByRole('button', { name: 'Add' }))
+
+      expect(comments.add).toHaveBeenCalledWith({
+        path: 'src/a.ts',
+        side: 'new',
+        line: 1,
+        endLine: 2,
+        code: 'kept\nis here now',
+        text: 'this pair is wrong'
+      })
+    })
+
+    // Half a line selected is still a line asked about: an expression without
+    // the line around it is precise about the wrong thing.
+    it('quotes the whole of a line that was only half selected', async () => {
+      const user = userEvent.setup()
+      answer(workspaceDiff([fileDiff('src/a.ts')]))
+      const comments = renderWithComments()
+      await screen.findByText('kept')
+
+      const text = textIn(codeLines()[0]!)
+      const range = document.createRange()
+      range.setStart(text, 1)
+      range.setEnd(text, 3)
+      const selection = window.getSelection()!
+      selection.removeAllRanges()
+      selection.addRange(range)
+      act(() => {
+        document.dispatchEvent(new Event('selectionchange'))
+      })
+
+      await user.click(await askButton())
+      await user.type(await screen.findByRole('textbox'), 'why')
+      await user.click(screen.getByRole('button', { name: 'Add' }))
+
+      expect(comments.add).toHaveBeenCalledWith(
+        expect.objectContaining({ line: 1, endLine: 1, code: 'kept' })
+      )
+    })
+
+    it('keeps a selection dragged past the end of a file to that file', async () => {
+      const user = userEvent.setup()
+      answer(workspaceDiff([fileDiff('src/a.ts'), fileDiff('src/b.ts')]))
+      const comments = renderWithComments()
+      // Both files carry the same three lines, so the count is what says the
+      // second one has arrived — its path is drawn in two spans, not one.
+      await waitFor(() => {
+        expect(codeLines()).toHaveLength(6)
+      })
+
+      const lines = codeLines()
+      // From the first file's last line into the second file's first.
+      selectAcross(lines[2]!, lines[3]!)
+      await user.click(await askButton())
+      await user.type(await screen.findByRole('textbox'), 'and this')
+      await user.click(screen.getByRole('button', { name: 'Add' }))
+
+      expect(comments.add).toHaveBeenCalledWith(
+        expect.objectContaining({ path: 'src/a.ts', line: 2, endLine: 2 })
+      )
+    })
+
+    // The editor opens above the first line of the passage, so a note about a
+    // screenful of code is not written somewhere the reader has to scroll to.
+    it('opens the editor at the top of the passage', async () => {
+      const user = userEvent.setup()
+      answer(workspaceDiff([fileDiff('src/a.ts')]))
+      renderWithComments()
+      await screen.findByText('kept')
+
+      const lines = codeLines()
+      selectAcross(lines[0]!, lines[2]!)
+      await user.click(await askButton())
+
+      const editor = screen.getByRole('textbox')
+      expect(editor.compareDocumentPosition(screen.getByText('is here now'))).toBe(
+        Node.DOCUMENT_POSITION_FOLLOWING
+      )
+    })
+
+    // A browser with nothing selected at all, which is what `getSelection`
+    // answers before anything has been clicked in the document.
+    it('offers nothing when the browser reports no selection', async () => {
+      vi.spyOn(window, 'getSelection').mockReturnValue(null)
+      answer(workspaceDiff([fileDiff('src/a.ts')]))
+      renderWithComments()
+      await screen.findByText('kept')
+
+      act(() => {
+        document.dispatchEvent(new Event('selectionchange'))
+      })
+
+      expect(
+        screen.queryByRole('button', { name: 'Ask about the selected code' })
+      ).not.toBeInTheDocument()
+    })
+
+    // The file header, the gutters, the counts in the toolbar: a selection that
+    // touched none of the code has no passage in it to ask about.
+    it('offers nothing for a selection that touched no code', async () => {
+      answer(workspaceDiff([fileDiff('src/a.ts')]))
+      renderWithComments()
+      await screen.findByText('kept')
+
+      selectAcross(screen.getByText('src/'), screen.getByText('a.ts'))
+
+      expect(
+        screen.queryByRole('button', { name: 'Ask about the selected code' })
+      ).not.toBeInTheDocument()
+    })
+
+    /*
+     * A passage can span the gap between two hunks, where the file has lines
+     * the diff never drew. Quoting a blank for each of them would tell the
+     * agent the file has empty lines it does not have.
+     */
+    it('quotes only the lines the diff actually shows', async () => {
+      const user = userEvent.setup()
+      answer(
+        workspaceDiff([
+          fileDiff('src/a.ts', {
+            hunks: [
+              hunk(),
+              hunk({
+                oldStart: 10,
+                newStart: 10,
+                lines: [
+                  {
+                    kind: 'added',
+                    text: 'far below',
+                    oldNumber: null,
+                    newNumber: 10,
+                    noNewline: false
+                  }
+                ]
+              })
+            ]
+          })
+        ])
+      )
+      const comments = renderWithComments()
+      await screen.findByText('far below')
+
+      const lines = codeLines()
+      selectAcross(lines[2]!, lines[3]!)
+      await user.click(await askButton())
+      await user.type(await screen.findByRole('textbox'), 'these two')
+      await user.click(screen.getByRole('button', { name: 'Add' }))
+
+      expect(comments.add).toHaveBeenCalledWith(
+        expect.objectContaining({ line: 2, endLine: 10, code: 'is here now\nfar below' })
+      )
+    })
+
+    /*
+     * Every other test here draws the code plain, because the highlighter is
+     * mocked away. The running app almost never does: a line's text is inside
+     * however many token spans shiki produced, and the address the pane reads a
+     * selection from is on the span **around** them. A selection made inside a
+     * token has to still find it.
+     */
+    it('reads a selection made inside the coloured spans', async () => {
+      const user = userEvent.setup()
+      vi.mocked(highlight).mockResolvedValueOnce([
+        [
+          { text: 'const ', light: '#d73a49', dark: '#f97583' },
+          { text: 'answer', light: '#005cc5', dark: '#79b8ff' }
+        ]
+      ])
+      answer(
+        workspaceDiff([
+          fileDiff('src/a.ts', {
+            hunks: [
+              hunk({
+                lines: [
+                  {
+                    kind: 'added',
+                    text: 'const answer',
+                    oldNumber: null,
+                    newNumber: 1,
+                    noNewline: false
+                  }
+                ]
+              })
+            ]
+          })
+        ])
+      )
+      const comments = renderWithComments()
+
+      // The token, not the line: a fall back to the plain branch would leave
+      // this element out of the document entirely.
+      const token = await screen.findByText('answer')
+      selectAcross(token, token)
+      await user.click(await askButton())
+      await user.type(await screen.findByRole('textbox'), 'name it better')
+      await user.click(screen.getByRole('button', { name: 'Add' }))
+
+      expect(comments.add).toHaveBeenCalledWith(
+        expect.objectContaining({ line: 1, endLine: 1, code: 'const answer' })
+      )
+    })
+
+    // Side by side, the two columns are two files. A selection in the left one
+    // is about the file as it was, whatever the same numbers mean on the right.
+    it('anchors a selection in the left column to the file as it was', async () => {
+      const user = userEvent.setup()
+      answer(workspaceDiff([fileDiff('src/a.ts')]))
+      const comments = commentController()
+      render(
+        <DiffPanel
+          workspace={anna}
+          visible
+          view="split"
+          onView={vi.fn()}
+          width={WIDE}
+          comments={comments}
+          onError={vi.fn()}
+        />
+      )
+      await screen.findByText('was here')
+
+      selectAcross(screen.getByText('was here'), screen.getByText('was here'))
+      await user.click(await askButton())
+      await user.type(await screen.findByRole('textbox'), 'why go?')
+      await user.click(screen.getByRole('button', { name: 'Add' }))
+
+      expect(comments.add).toHaveBeenCalledWith(
+        expect.objectContaining({ side: 'old', line: 2, endLine: 2 })
+      )
+    })
+
+    // The button acted on the passage; leaving it there would invite a second
+    // press on a selection whose editor is already open below it.
+    it('takes the button away once it has been pressed', async () => {
+      const user = userEvent.setup()
+      answer(workspaceDiff([fileDiff('src/a.ts')]))
+      renderWithComments()
+      await screen.findByText('kept')
+
+      const lines = codeLines()
+      selectAcross(lines[0]!, lines[2]!)
+      await user.click(await askButton())
+
+      expect(
+        screen.queryByRole('button', { name: 'Ask about the selected code' })
+      ).not.toBeInTheDocument()
+    })
+
+    // Written against three lines, shown against the first of them — the same
+    // rule the editor follows, so a remark does not appear somewhere the reader
+    // has to scroll to find it.
+    it('shows a note covering a passage at the top of that passage', async () => {
+      answer(workspaceDiff([fileDiff('src/a.ts')]))
+      renderWithComments({
+        pending: [
+          {
+            path: 'src/a.ts',
+            side: 'new',
+            line: 1,
+            endLine: 2,
+            code: 'kept\nis here now',
+            text: 'this pair is wrong'
+          }
+        ]
+      })
+
+      const note = await screen.findByText('this pair is wrong')
+      expect(note.compareDocumentPosition(screen.getByText('is here now'))).toBe(
+        Node.DOCUMENT_POSITION_FOLLOWING
+      )
+    })
+
     it('offers a note against every line', async () => {
       answer(workspaceDiff([fileDiff('src/a.ts')]))
       renderWithComments()
@@ -531,13 +906,14 @@ describe('DiffPanel', () => {
       const comments = renderWithComments()
 
       await user.click(await screen.findByRole('button', { name: 'Comment on line 2' }))
-      await user.type(screen.getByRole('textbox'), 'call this something else')
+      await user.type(await screen.findByRole('textbox'), 'call this something else')
       await user.click(screen.getByRole('button', { name: 'Add' }))
 
       expect(comments.add).toHaveBeenCalledWith({
         path: 'src/a.ts',
         side: 'new',
         line: 2,
+        endLine: 2,
         code: 'is here now',
         text: 'call this something else'
       })
@@ -554,13 +930,14 @@ describe('DiffPanel', () => {
       await user.click(
         await screen.findByRole('button', { name: 'Comment on line 2 of the file as it was' })
       )
-      await user.type(screen.getByRole('textbox'), 'why was this dropped?')
+      await user.type(await screen.findByRole('textbox'), 'why was this dropped?')
       await user.click(screen.getByRole('button', { name: 'Add' }))
 
       expect(comments.add).toHaveBeenCalledWith({
         path: 'src/a.ts',
         side: 'old',
         line: 2,
+        endLine: 2,
         code: 'was here',
         text: 'why was this dropped?'
       })
@@ -572,7 +949,7 @@ describe('DiffPanel', () => {
       const comments = renderWithComments()
 
       await user.click(await screen.findByRole('button', { name: 'Comment on line 2' }))
-      await user.type(screen.getByRole('textbox'), 'never mind')
+      await user.type(await screen.findByRole('textbox'), 'never mind')
       await user.click(screen.getByRole('button', { name: 'Cancel' }))
 
       expect(comments.add).not.toHaveBeenCalled()
@@ -594,7 +971,14 @@ describe('DiffPanel', () => {
       answer(workspaceDiff([fileDiff('src/a.ts')]))
       renderWithComments({
         pending: [
-          { path: 'src/a.ts', side: 'new', line: 2, code: 'is here now', text: 'rename this' }
+          {
+            path: 'src/a.ts',
+            side: 'new',
+            line: 2,
+            endLine: 2,
+            code: 'is here now',
+            text: 'rename this'
+          }
         ]
       })
 
@@ -607,6 +991,7 @@ describe('DiffPanel', () => {
         path: 'src/a.ts',
         side: 'new' as const,
         line: 2,
+        endLine: 2,
         code: 'is here now',
         text: 'rename this'
       }
@@ -624,7 +1009,7 @@ describe('DiffPanel', () => {
       const comments = renderWithComments()
 
       await user.click(await screen.findByRole('button', { name: 'Comment on line 2' }))
-      await user.type(screen.getByRole('textbox'), 'shorter{Meta>}{Enter}{/Meta}')
+      await user.type(await screen.findByRole('textbox'), 'shorter{Meta>}{Enter}{/Meta}')
 
       expect(comments.add).toHaveBeenCalledWith(expect.objectContaining({ text: 'shorter' }))
     })
@@ -636,7 +1021,7 @@ describe('DiffPanel', () => {
       const comments = renderWithComments()
 
       await user.click(await screen.findByRole('button', { name: 'Comment on line 2' }))
-      await user.type(screen.getByRole('textbox'), 'shorter{Control>}{Enter}{/Control}')
+      await user.type(await screen.findByRole('textbox'), 'shorter{Control>}{Enter}{/Control}')
 
       expect(comments.add).toHaveBeenCalledWith(expect.objectContaining({ text: 'shorter' }))
     })
@@ -648,7 +1033,7 @@ describe('DiffPanel', () => {
       const comments = renderWithComments()
 
       await user.click(await screen.findByRole('button', { name: 'Comment on line 2' }))
-      await user.type(screen.getByRole('textbox'), '  {Meta>}{Enter}{/Meta}')
+      await user.type(await screen.findByRole('textbox'), '  {Meta>}{Enter}{/Meta}')
 
       expect(comments.add).not.toHaveBeenCalled()
     })
@@ -659,7 +1044,7 @@ describe('DiffPanel', () => {
       const comments = renderWithComments()
 
       await user.click(await screen.findByRole('button', { name: 'Comment on line 2' }))
-      await user.type(screen.getByRole('textbox'), 'never mind{Escape}')
+      await user.type(await screen.findByRole('textbox'), 'never mind{Escape}')
 
       expect(comments.add).not.toHaveBeenCalled()
       expect(screen.queryByRole('textbox')).not.toBeInTheDocument()
@@ -739,7 +1124,7 @@ describe('DiffPanel', () => {
       await user.click(
         screen.getByRole('button', { name: 'Comment on line 7 of the file as it was' })
       )
-      await user.type(screen.getByRole('textbox'), 'why?')
+      await user.type(await screen.findByRole('textbox'), 'why?')
       await user.click(screen.getByRole('button', { name: 'Add' }))
 
       expect(comments.add).toHaveBeenCalledWith(expect.objectContaining({ side: 'old', line: 7 }))

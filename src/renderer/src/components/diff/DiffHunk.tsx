@@ -4,6 +4,7 @@ import type { DiffLine, Hunk } from '@core/diff.js'
 
 import { type CommentSurface, CommentedRow } from './CommentedRow.js'
 import type { Token } from './highlight.js'
+import { lineAddress } from './selectionAnchor.js'
 import { shown } from './shown.js'
 import { type SplitRow, splitRows } from './splitRows.js'
 import type { Highlighting } from './useHighlighting.js'
@@ -78,7 +79,7 @@ export function DiffHunk({ hunk, view, tokens, path, comments }: DiffHunkProps):
       {view === 'unified'
         ? hunk.lines.map((line, index) => (
             <CommentedRow key={index} path={path} line={line} comments={comments}>
-              <UnifiedRow line={line} tokens={tokens.get(line)} />
+              <UnifiedRow line={line} path={path} tokens={tokens.get(line)} />
             </CommentedRow>
           ))
         : rows.map((row, index) => (
@@ -108,9 +109,14 @@ function SplitRowView({
 }): React.JSX.Element {
   const pair = (
     <div className="flex font-mono text-[11px] leading-relaxed">
-      <SplitHalf side="old" line={row.left} tokens={row.left && tokens.get(row.left)} />
+      <SplitHalf side="old" path={path} line={row.left} tokens={row.left && tokens.get(row.left)} />
       <div className="border-line w-px shrink-0 border-l" />
-      <SplitHalf side="new" line={row.right} tokens={row.right && tokens.get(row.right)} />
+      <SplitHalf
+        side="new"
+        path={path}
+        line={row.right}
+        tokens={row.right && tokens.get(row.right)}
+      />
     </div>
   )
 
@@ -130,11 +136,16 @@ function SplitRowView({
 
 function UnifiedRow({
   line,
+  path,
   tokens
 }: {
   readonly line: DiffLine
+  readonly path: string
   readonly tokens: readonly Token[] | undefined
 }): React.JSX.Element {
+  const side = line.kind === 'removed' ? 'old' : 'new'
+  const number = line.kind === 'removed' ? line.oldNumber : line.newNumber
+
   return (
     <div className={`flex font-mono text-[11px] leading-relaxed ${ROW_TONES[line.kind]}`}>
       {/* A null renders as nothing, which is exactly what a line with no
@@ -144,7 +155,11 @@ function UnifiedRow({
       <span className={`${SIGN} ${SIGN_TONES[line.kind]}`}>{SIGNS[line.kind]}</span>
       {/* Wrapped rather than scrolled sideways: a long line hidden behind an
           edge the reader has to drag is a line they will not read. */}
-      <Code text={line.text} tokens={tokens} />
+      <Code
+        text={line.text}
+        tokens={tokens}
+        address={number === null ? null : lineAddress(path, side, number)}
+      />
     </div>
   )
 }
@@ -156,14 +171,18 @@ function UnifiedRow({
  */
 function SplitHalf({
   side,
+  path,
   line,
   tokens
 }: {
   readonly side: 'old' | 'new'
+  readonly path: string
   readonly line: DiffLine | null
   readonly tokens: readonly Token[] | undefined | null
 }): React.JSX.Element {
   if (!line) return <div className="bg-muted/40 min-w-0 flex-1" />
+
+  const number = side === 'old' ? line.oldNumber : line.newNumber
 
   return (
     <div className={`flex min-w-0 flex-1 ${ROW_TONES[line.kind]}`}>
@@ -173,7 +192,20 @@ function SplitHalf({
           the two have drifted apart by everything added above it. */}
       <span className={GUTTER}>{side === 'old' ? line.oldNumber : line.newNumber}</span>
       <span className={`${SIGN} ${SIGN_TONES[line.kind]}`}>{SIGNS[line.kind]}</span>
-      <Code text={line.text} tokens={tokens ?? undefined} />
+      <Code
+        text={line.text}
+        tokens={tokens ?? undefined}
+        // The column's own side, not the line's. A context line belongs to both
+        // files at once and carries a different number in each, so reading the
+        // side off its kind would address the left column by the right's line.
+        //
+        // `splitRows` only ever puts a removed or context line on the left and
+        // an added or context one on the right, and each of those carries a
+        // number on the side it is drawn in. The guard is what the type asks
+        // for rather than a state to test for, like the one above it.
+        /* v8 ignore next */
+        address={number === null ? null : lineAddress(path, side, number)}
+      />
     </div>
   )
 }
@@ -191,15 +223,28 @@ function SplitHalf({
  */
 function Code({
   text,
-  tokens
+  tokens,
+  address
 }: {
   readonly text: string
   readonly tokens: readonly Token[] | undefined
+  /** Where this line is, for a selection to be read back into a note. */
+  readonly address: string | null
 }): React.JSX.Element {
-  if (!tokens) return <span className={CODE}>{shown(text)}</span>
+  // On the code rather than the row: the gutters are `select-none`, so a
+  // selection is always inside one of these, and split view draws two of them
+  // per row addressing different files.
+  const marked = address === null ? {} : { 'data-line': address }
+
+  if (!tokens)
+    return (
+      <span className={CODE} {...marked}>
+        {shown(text)}
+      </span>
+    )
 
   return (
-    <span className={CODE}>
+    <span className={CODE} {...marked}>
       {tokens.map((token, index) => (
         <span
           key={index}

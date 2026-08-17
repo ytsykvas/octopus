@@ -4,30 +4,45 @@ import { useTranslation } from 'react-i18next'
 
 import type { DiffLine } from '@core/diff.js'
 
-import { anchorKey, type DiffComment } from '../../hooks/useDiffComments.js'
+import type { CommentAnchor, DiffComment } from '../../hooks/useDiffComments.js'
 
 /** What a row needs to offer a note, hold one, and give it back. */
 export interface CommentSurface {
   readonly pending: readonly DiffComment[]
-  /** The anchor of the line whose editor is open, or null when none is. */
-  readonly editing: string | null
-  readonly onEdit: (anchor: string | null) => void
-  readonly onSave: (comment: DiffComment) => void
+  /** Where the open editor is anchored, or null when none is open. */
+  readonly editing: CommentAnchor | null
+  readonly onEdit: (anchor: CommentAnchor | null) => void
+  /**
+   * Saves a remark against a place.
+   *
+   * The quoted code is not passed up with it: a note may cover several lines
+   * and a row knows only its own, so the pane — which holds the whole diff —
+   * is what reads the passage out.
+   */
+  readonly onSave: (anchor: CommentAnchor, text: string) => void
   readonly onRemove: (comment: DiffComment) => void
 }
 
 /**
  * Where a note sits: the file, which side of it, and the line.
  *
+ * One line, since this is the anchor the gutter's own trigger makes — a
+ * selection makes a wider one, and `selectionAnchor` builds that.
+ *
  * Null when the line carries no number on its own side. Nothing git produces
  * looks like that, but the type admits it and a row with nowhere to anchor a
  * note is better off offering none than anchoring it wrongly.
  */
-export function anchorOf(path: string, line: DiffLine): Omit<DiffComment, 'text'> | null {
+export function anchorOf(path: string, line: DiffLine): CommentAnchor | null {
   const side = line.kind === 'removed' ? 'old' : 'new'
   const number = line.kind === 'removed' ? line.oldNumber : line.newNumber
 
-  return number === null ? null : { path, side, line: number, code: line.text }
+  return number === null ? null : { path, side, line: number, endLine: number }
+}
+
+/** Whether a note or an open editor belongs to the row starting at `anchor`. */
+function startsHere(anchor: CommentAnchor, at: CommentAnchor | DiffComment): boolean {
+  return at.path === anchor.path && at.side === anchor.side && at.line === anchor.line
 }
 
 interface CommentedRowProps {
@@ -55,8 +70,15 @@ export function CommentedRow({
   const anchor = anchorOf(path, line)
   if (!anchor) return <>{children}</>
 
-  const key = anchorKey(anchor)
-  const held = comments.pending.find((comment) => anchorKey(comment) === key)
+  // Notes are shown by the row they **start** on, which for a note made from
+  // the gutter is the only row it covers, and for one made from a selection is
+  // the top of it. Anywhere else and a passage spanning a screenful would put
+  // its remark somewhere the reader has to scroll to find.
+  const held = comments.pending.find((comment) => startsHere(anchor, comment))
+  // Read into a const so it stays narrowed inside the editor's own callback,
+  // where a property of `comments` would be `CommentAnchor | null` again.
+  const editing = comments.editing
+  const open = editing !== null && startsHere(anchor, editing)
 
   return (
     <div className="group relative">
@@ -65,7 +87,7 @@ export function CommentedRow({
       <button
         type="button"
         onClick={() => {
-          comments.onEdit(comments.editing === key ? null : key)
+          comments.onEdit(open ? null : (held ?? anchor))
         }}
         // The two sides can carry the same number for different lines, so the
         // label has to say which file it means or the two are indistinguishable
@@ -80,7 +102,7 @@ export function CommentedRow({
 
       {/* Not while it is being edited: the editor already holds this text, and
           two copies of one remark reads as two remarks. */}
-      {held && comments.editing !== key && (
+      {held && !open && (
         <Note
           comment={held}
           onRemove={() => {
@@ -89,14 +111,16 @@ export function CommentedRow({
         />
       )}
 
-      {comments.editing === key && (
+      {editing !== null && open && (
         <Editor
           initial={held?.text ?? ''}
           onCancel={() => {
             comments.onEdit(null)
           }}
           onSave={(text) => {
-            comments.onSave({ ...anchor, text })
+            // The editor's own anchor, not the row's: a selection opened this
+            // one over several lines, and the row it opened above covers one.
+            comments.onSave(editing, text)
             comments.onEdit(null)
           }}
         />

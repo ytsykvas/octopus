@@ -10,6 +10,7 @@ const note = (overrides: Partial<DiffComment> = {}): DiffComment => ({
   path: 'src/a.ts',
   side: 'new',
   line: 1,
+  endLine: 1,
   code: 'const x = 1',
   text: 'rename this',
   ...overrides
@@ -58,6 +59,37 @@ describe('the review notes waiting to be sent', () => {
   })
 
   // The same line number on the two sides of a diff is two different lines.
+  /*
+   * Two selections starting on one line and covering different amounts are two
+   * remarks about two passages. Identity that dropped the end would treat the
+   * second as a correction of the first and silently lose one of them.
+   */
+  it('tells two passages starting on the same line apart', () => {
+    const { result } = renderHook(() => useDiffComments(ANNA))
+
+    act(() => {
+      result.current.add(note({ line: 4, endLine: 6, text: 'this block' }))
+    })
+    act(() => {
+      result.current.add(note({ line: 4, endLine: 9, text: 'all of this' }))
+    })
+
+    expect(result.current.pending).toHaveLength(2)
+  })
+
+  it('replaces a note on the passage it already covers', () => {
+    const { result } = renderHook(() => useDiffComments(ANNA))
+
+    act(() => {
+      result.current.add(note({ line: 4, endLine: 6, text: 'first go' }))
+    })
+    act(() => {
+      result.current.add(note({ line: 4, endLine: 6, text: 'better wording' }))
+    })
+
+    expect(result.current.pending).toEqual([expect.objectContaining({ text: 'better wording' })])
+  })
+
   it('tells the two sides of a line apart', () => {
     const { result } = renderHook(() => useDiffComments(ANNA))
 

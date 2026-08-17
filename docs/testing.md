@@ -187,6 +187,25 @@ makes a 100% threshold on UI survivable.
 Native things are stubbed: xterm.js measures glyphs against a canvas jsdom does
 not have, and `node-pty` spawns a real shell.
 
+**jsdom lays nothing out**, which bites in three places and always the same way
+— a measurement comes back as zero, or the method is missing entirely, and the
+component behaves as though the window had no size:
+
+- `getBoundingClientRect` on an **element** answers zeroes, so anything placed
+  against a trigger needs it stubbed (`useAnchoredPanel.test.tsx` and the split
+  threshold in `DiffPanel.test.tsx` both do);
+- `getBoundingClientRect` on a **`Range`** does not exist at all. A handler that
+  calls it throws, and the state it was going to set never arrives — which
+  looks exactly like a listener that never fired. `DiffPanel.test.tsx` assigns
+  one on `Range.prototype`;
+- there is no `selectionchange` event of jsdom's own, so a test that selects
+  text dispatches it after building the range.
+
+A selection's ends belong in **text** nodes, not in the elements around them,
+and once the highlighter has run a line's text sits inside however many token
+spans shiki produced. A range anchored to the element instead models a selection
+no browser makes, and stops exercising the nesting the running app always has.
+
 ## Main and preload
 
 `registerIpc` takes its Electron surface as a parameter, so `ipc.test.ts`

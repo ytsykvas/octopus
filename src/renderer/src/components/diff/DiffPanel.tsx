@@ -1,17 +1,25 @@
-import { ChevronsDownUp, ChevronsUpDown, Columns2, RefreshCw, Rows3 } from 'lucide-react'
-import { useEffect, useRef, useState } from 'react'
+import {
+  ChevronsDownUp,
+  ChevronsUpDown,
+  Columns2,
+  MessageSquarePlus,
+  RefreshCw,
+  Rows3
+} from 'lucide-react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import type { FileDiff } from '@core/diff.js'
 import { shortBranchName } from '@core/branches.js'
 import type { WorkspaceView } from '@core/workspaces.js'
 
-import type { DiffCommentController } from '../../hooks/useDiffComments.js'
+import type { CommentAnchor, DiffCommentController } from '../../hooks/useDiffComments.js'
 import { useErrorMessage } from '../../hooks/useErrorMessage.js'
 import { useWorkspaceDiff } from '../../hooks/useWorkspaceDiff.js'
 import { DiffFile } from './DiffFile.js'
 import type { DiffView } from './DiffHunk.js'
 import { MIN_SPLIT_COLUMNS, splitThreshold } from './measure.js'
+import { lineAddress, selectionAnchor } from './selectionAnchor.js'
 import { useHighlighting } from './useHighlighting.js'
 
 /**
@@ -81,14 +89,70 @@ export function DiffPanel({
    * set of paths against a diff that has moved on.
    */
   const [choices, setChoices] = useState<ReadonlyMap<string, boolean>>(new Map())
-  /** Which line has its note open; one at a time across the whole pane. */
-  const [editing, setEditing] = useState<string | null>(null)
+  /** Where the open note sits; one at a time across the whole pane. */
+  const [editing, setEditing] = useState<CommentAnchor | null>(null)
+  const [selected, setSelected] = useState<Passage | null>(null)
   const [shownId, setShownId] = useState(workspace?.id ?? null)
+
+  /** The only scroll container in the pane, and what a selection is read from. */
+  const scroller = useRef<HTMLDivElement>(null)
+
+  /*
+   * Every line by where it is, so a note can quote the passage it covers.
+   *
+   * Read out of the model rather than off the screen. `shown` replaces
+   * invisible characters with visible `U+202E` badges, so the text in the DOM
+   * is deliberately not the text in the file — quoting that would send the
+   * agent a line the file does not contain.
+   *
+   * A context line is in here twice, once per side: it belongs to both files
+   * and carries a different number in each.
+   */
+  const lines = useMemo(() => {
+    const byAddress = new Map<string, string>()
+
+    for (const file of diff?.files ?? [])
+      for (const hunk of file.hunks)
+        for (const line of hunk.lines) {
+          if (line.oldNumber !== null)
+            byAddress.set(lineAddress(file.path, 'old', line.oldNumber), line.text)
+          if (line.newNumber !== null)
+            byAddress.set(lineAddress(file.path, 'new', line.newNumber), line.text)
+        }
+
+    return byAddress
+  }, [diff])
+
+  /*
+   * What the reader has selected, watched rather than asked for.
+   *
+   * `selectionchange` on the document is the only event that fires for every
+   * way a selection can be made — dragged, double-clicked, extended with the
+   * keyboard — and the scroll listener beside it re-reads the rectangle rather
+   * than closing, because the range lives in the document and moves with it.
+   */
+  useEffect(() => {
+    const node = scroller.current
+    if (!node) return
+
+    const read = (): void => {
+      setSelected(passageIn(node, window.getSelection()))
+    }
+
+    document.addEventListener('selectionchange', read)
+    node.addEventListener('scroll', read)
+
+    return () => {
+      document.removeEventListener('selectionchange', read)
+      node.removeEventListener('scroll', read)
+    }
+  }, [diff])
 
   if ((workspace?.id ?? null) !== shownId) {
     setShownId(workspace?.id ?? null)
     setChoices(new Map())
     setEditing(null)
+    setSelected(null)
   }
 
   if (!workspace) return <Notice>{t('diff.noWorkspace')}</Notice>
@@ -119,7 +183,11 @@ export function DiffPanel({
     pending: comments.pending,
     editing,
     onEdit: setEditing,
-    onSave: comments.add,
+    // The quote is put together here rather than in the row: a note may cover
+    // more lines than the row it is shown against, and this is what holds them.
+    onSave: (anchor: CommentAnchor, text: string) => {
+      comments.add({ ...anchor, code: quote(lines, anchor), text })
+    },
     onRemove: comments.remove
   }
 
@@ -190,7 +258,7 @@ export function DiffPanel({
 
       {/* The only scroll container in here: sticky headers stop working the
           moment an ancestor between them and the scroller hides its overflow. */}
-      <div className="min-h-0 flex-1 overflow-auto">
+      <div ref={scroller} className="min-h-0 flex-1 overflow-auto">
         {diff.files.map((file) => (
           <DiffFile
             key={file.path}
@@ -206,8 +274,84 @@ export function DiffPanel({
           />
         ))}
       </div>
+
+      {/* Floating at the selection rather than waiting in the gutter, because
+          what it acts on is the selection: a control somewhere else would leave
+          the reader to check that it means the passage they just dragged over.
+          It goes as soon as the selection does. */}
+      {selected && (
+        <button
+          type="button"
+          onClick={() => {
+            setEditing(selected.anchor)
+            setSelected(null)
+          }}
+          aria-label={t('diff.askSelection')}
+          style={{ top: selected.top - SELECTION_BUTTON_GAP, left: selected.left }}
+          className="focus-ring bg-surface border-line text-ink-soft hover:text-accent fixed z-40 -translate-x-1/2 rounded-[var(--radius-control)] border p-1 shadow-[var(--shadow-pop)]"
+        >
+          <MessageSquarePlus aria-hidden size={13} />
+        </button>
+      )}
     </div>
   )
+}
+
+/** A selection, reduced to the note it would make and where to offer it. */
+interface Passage {
+  readonly anchor: CommentAnchor
+  /** Window coordinates of the top of the selection, and its middle. */
+  readonly top: number
+  readonly left: number
+}
+
+/** Clear of the text, so the button does not sit on what was selected. */
+const SELECTION_BUTTON_GAP = 30
+
+/**
+ * What is selected inside the pane, or null when that is nothing it can use.
+ *
+ * The rows carry their own address, so the work is finding which of them the
+ * range touches — `intersectsNode` rather than arithmetic on offsets, since the
+ * text is split into however many spans the highlighter produced and a
+ * selection may begin and end inside different ones.
+ */
+function passageIn(container: HTMLElement, selection: Selection | null): Passage | null {
+  // Collapsed covers a cleared selection as well as a plain click: with no
+  // ranges left there is nothing to be at either end of.
+  if (selection === null || selection.isCollapsed) return null
+
+  const range = selection.getRangeAt(0)
+
+  const anchor = selectionAnchor(
+    [...container.querySelectorAll('[data-line]')]
+      .filter((span) => range.intersectsNode(span))
+      .map((span) => span.getAttribute('data-line'))
+      .filter((address) => address !== null)
+  )
+
+  if (anchor === null) return null
+
+  const rect = range.getBoundingClientRect()
+  return { anchor, top: rect.top, left: rect.left + rect.width / 2 }
+}
+
+/**
+ * The lines a note covers, as they read when it was written.
+ *
+ * Lines the diff does not show are skipped rather than left as gaps: a range
+ * can span the space between two hunks, and quoting a blank for code nobody
+ * changed would tell the agent the file has one.
+ */
+function quote(lines: ReadonlyMap<string, string>, anchor: CommentAnchor): string {
+  const covered: string[] = []
+
+  for (let line = anchor.line; line <= anchor.endLine; line++) {
+    const text = lines.get(lineAddress(anchor.path, anchor.side, line))
+    if (text !== undefined) covered.push(text)
+  }
+
+  return covered.join('\n')
 }
 
 function Notice({

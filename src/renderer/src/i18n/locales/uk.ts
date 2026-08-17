@@ -197,6 +197,7 @@ export const uk: Translation = {
     statusTypeChangedLabel: 'Тип змінено',
     statusUntrackedLabel: 'Не відстежується',
     comment: 'Коментар до рядка {{line}}',
+    askSelection: 'Запитати про виділений код',
     commentOld: 'Коментар до рядка {{line}} у файлі, яким він був',
     commentPlaceholder: 'Що агент має тут змінити?',
     commentSave: 'Додати',

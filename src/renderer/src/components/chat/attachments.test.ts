@@ -8,6 +8,7 @@ const note = (overrides: Partial<DiffComment> = {}): DiffComment => ({
   path: 'src/core/diff.ts',
   side: 'new',
   line: 42,
+  endLine: 42,
   code: 'const b = 2',
   text: 'This should be 3.',
   ...overrides
@@ -25,6 +26,23 @@ describe('withComments', () => {
 
     expect(message).toBe(
       'Review notes:\n\nsrc/core/diff.ts:42\n> const b = 2\nThis should be 3.\n\nfix these'
+    )
+  })
+
+  /*
+   * A passage names both ends and quotes every line of itself. One `>` and then
+   * bare lines would read as a quote that ended and a message that began, which
+   * is the confusion the marker exists to prevent.
+   */
+  it('names both ends of a passage and marks every line of it', () => {
+    const message = withComments(
+      'why',
+      [note({ line: 42, endLine: 44, code: 'const b = 2\nconst c = 3\nreturn c' })],
+      'Review notes:'
+    )
+
+    expect(message).toBe(
+      'Review notes:\n\nsrc/core/diff.ts:42-44\n> const b = 2\n> const c = 3\n> return c\nThis should be 3.\n\nwhy'
     )
   })
 

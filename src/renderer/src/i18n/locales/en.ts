@@ -200,6 +200,10 @@ export const en = {
     statusUntrackedLabel: 'Untracked',
     comment: 'Comment on line {{line}}',
     commentOld: 'Comment on line {{line}} of the file as it was',
+    /* What the button floating at a selection says. "Ask" rather than
+       "comment": the passage was chosen to be asked about, and the field it
+       opens is the same one the gutter's trigger opens. */
+    askSelection: 'Ask about the selected code',
     commentPlaceholder: 'What should the agent change here?',
     commentSave: 'Add',
     commentCancel: 'Cancel',
@@ -220,6 +224,9 @@ export const en = {
        name — the one the user gave it, or the automatic one above — because a
        renamed conversation should read as itself here too. */
     tabStatus: '{{name}}: {{state}}',
+    /* Two quiet states, and the difference is what a glance down the list is
+       usually after: a turn that ended cleanly, against a conversation nobody
+       has written in. Neither says "idle", which describes both. */
     tabStatusIdle: 'nothing written yet',
     tabStatusDone: 'finished',
     newTab: 'New conversation',

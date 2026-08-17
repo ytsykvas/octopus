@@ -34,6 +34,7 @@ export function ComposerAttachments({
         >
           <span className="text-ink-faint shrink-0 font-mono text-[11px]">
             {comment.path.slice(comment.path.lastIndexOf('/') + 1)}:{comment.line}
+            {comment.endLine !== comment.line && `-${String(comment.endLine)}`}
           </span>
           <span className="min-w-0 truncate text-[11px]">{comment.text}</span>
           <button

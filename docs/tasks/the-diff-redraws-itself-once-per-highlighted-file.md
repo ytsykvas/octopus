@@ -32,6 +32,17 @@ every pointer move re-renders every row.
 - `src/renderer/src/components/RightPanel.tsx` — `applied` changes on every
   pointer move during a drag and is passed straight down to `DiffPanel`.
 
+## It costs more since notes learned to cover a selection
+
+A redraw drops a live text selection. That was invisible while the diff was only
+read: the reader lost a highlight and reselected without thinking about it. Now
+the selection is a gesture — it is what the floating button acts on — so a file
+finishing its highlighting mid-drag takes the passage the reader was choosing,
+and the button with it.
+
+Which turns this from waste into a thing that misbehaves, and moves it ahead of
+the rest of the diff work.
+
 ## What is already decided
 
 Colours arrive after the diff is drawn, and files are done one at a time so that
