@@ -28,7 +28,11 @@ const CODES: readonly {
   { code: 'uncommittedChanges', parameter: ['name', 'anna'] },
   { code: 'nameEmpty' },
   { code: 'worktreeMissing' },
-  { code: 'baseUnknown', parameter: ['branch', 'main'] }
+  { code: 'baseUnknown', parameter: ['branch', 'main'] },
+  { code: 'tooManyChats', parameter: ['limit', '3'] },
+  { code: 'lastChat' },
+  { code: 'nothingToFork' },
+  { code: 'forkFailed' }
 ]
 
 const WITH_PARAMETER = CODES.filter((entry) => entry.parameter !== undefined)

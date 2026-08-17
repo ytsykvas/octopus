@@ -14,15 +14,23 @@ import { useChat } from './useChat.js'
 /** The English fallback is enough here; the mapping is `useErrorMessage`'s job. */
 const describeFailure = (failure: Failure): string => failure.error
 
+/** What the tab strip does with a record the pane created; not this hook's job. */
+const noted = vi.fn()
+
+/** The hook as the pane calls it, for a conversation that already exists. */
+function open(record: Chat | null = chat()): Parameters<typeof useChat> {
+  return [record, 'planner/anna', 'idle', describeFailure, noted]
+}
+
 describe('without a workspace', () => {
   // The pane shows a placeholder instead, so nothing here is reachable through
   // the UI — but the hook is an API, and an API that misbehaves when handed a
   // null is one somebody will eventually hand a null.
   it('asks the bridge for nothing and does nothing when driven', async () => {
-    const { result } = renderHook(() => useChat(null, 'idle', describeFailure))
+    const { result } = renderHook(() => useChat(null, null, 'idle', describeFailure, noted))
 
     expect(result.current.loading).toBe(false)
-    expect(octopus().chats.list).not.toHaveBeenCalled()
+    expect(octopus().chats.history).not.toHaveBeenCalled()
 
     await act(async () => {
       await result.current.send('hello')
@@ -53,7 +61,7 @@ describe('a conversation that is already waiting on an answer', () => {
     givenChat()
     vi.mocked(octopus().chats.pendingPermission).mockResolvedValue({ ok: true, value: request })
 
-    const { result } = renderHook(() => useChat('planner/anna', 'idle', describeFailure))
+    const { result } = renderHook(() => useChat(...open()))
 
     await waitFor(() => {
       expect(result.current.pending).toEqual(request)
@@ -65,7 +73,7 @@ describe('a conversation that is already waiting on an answer', () => {
   it('stays as it was when nothing is blocked', async () => {
     givenChat()
 
-    const { result } = renderHook(() => useChat('planner/anna', 'idle', describeFailure))
+    const { result } = renderHook(() => useChat(...open()))
 
     await waitFor(() => {
       expect(result.current.loading).toBe(false)
@@ -83,7 +91,7 @@ describe('a conversation that is already waiting on an answer', () => {
       error: 'no such chat'
     })
 
-    const { result } = renderHook(() => useChat('planner/anna', 'idle', describeFailure))
+    const { result } = renderHook(() => useChat(...open()))
 
     await waitFor(() => {
       expect(result.current.loading).toBe(false)
@@ -94,30 +102,13 @@ describe('a conversation that is already waiting on an answer', () => {
 })
 
 describe('a load that outlives the hook', () => {
-  // Switching workspace quickly, or closing the pane mid-read. Applying the
-  // answer then would set state on something that is gone.
-  it('is dropped when the chat lookup comes back too late', async () => {
-    const lookup = held<Result<Chat[]>>()
-    vi.mocked(octopus().chats.list).mockReturnValue(lookup.promise)
-
-    const { unmount } = renderHook(() => useChat('planner/anna', 'idle', describeFailure))
-    unmount()
-
-    await act(async () => {
-      lookup.resolve({ ok: true, value: [chat()] })
-      await lookup.promise
-    })
-
-    expect(octopus().chats.history).not.toHaveBeenCalled()
-  })
-
   it('is dropped when the history comes back too late', async () => {
     vi.mocked(octopus().chats.list).mockResolvedValue({ ok: true, value: [chat()] })
 
     const history = held<Result<ChatEntry[]>>()
     vi.mocked(octopus().chats.history).mockReturnValue(history.promise)
 
-    const { result, unmount } = renderHook(() => useChat('planner/anna', 'idle', describeFailure))
+    const { result, unmount } = renderHook(() => useChat(...open()))
     await waitFor(() => {
       expect(octopus().chats.history).toHaveBeenCalled()
     })
@@ -156,7 +147,7 @@ describe('a reading that belongs to the account rather than the conversation', (
    */
   it('leaves the answer being written and the log alone', async () => {
     givenChat()
-    const { result } = renderHook(() => useChat('planner/anna', 'idle', describeFailure))
+    const { result } = renderHook(() => useChat(...open()))
     await waitFor(() => {
       expect(result.current.chat).not.toBeNull()
     })
@@ -179,7 +170,7 @@ describe('answering a question', () => {
 
   it('sends the answers and takes the card out of the pending state', async () => {
     givenChat()
-    const { result } = renderHook(() => useChat('planner/anna', 'idle', describeFailure))
+    const { result } = renderHook(() => useChat(...open()))
     await waitFor(() => {
       expect(result.current.chat).not.toBeNull()
     })
@@ -206,7 +197,7 @@ describe('answering a question', () => {
       error: 'the agent is gone'
     })
     givenChat()
-    const { result } = renderHook(() => useChat('planner/anna', 'idle', describeFailure))
+    const { result } = renderHook(() => useChat(...open()))
     await waitFor(() => {
       expect(result.current.chat).not.toBeNull()
     })
@@ -222,7 +213,7 @@ describe('answering a question', () => {
   // offering buttons for a question that is settled.
   it('drops a card another window has answered', async () => {
     givenChat()
-    const { result } = renderHook(() => useChat('planner/anna', 'idle', describeFailure))
+    const { result } = renderHook(() => useChat(...open()))
     await waitFor(() => {
       expect(result.current.chat).not.toBeNull()
     })
@@ -243,7 +234,7 @@ describe('answering a question', () => {
   // be open at once, and the second must not take the first's card down.
   it('leaves a card that is waiting on a different question', async () => {
     givenChat()
-    const { result } = renderHook(() => useChat('planner/anna', 'idle', describeFailure))
+    const { result } = renderHook(() => useChat(...open()))
     await waitFor(() => {
       expect(result.current.chat).not.toBeNull()
     })
@@ -275,7 +266,7 @@ describe('two settings changed in quick succession', () => {
     vi.mocked(octopus().chats.setModel).mockReturnValue(model.promise)
     vi.mocked(octopus().chats.setEffort).mockReturnValue(effort.promise)
 
-    const { result } = renderHook(() => useChat('planner/anna', 'idle', describeFailure))
+    const { result } = renderHook(() => useChat(...open()))
     await waitFor(() => {
       expect(result.current.chat).not.toBeNull()
     })
@@ -294,101 +285,134 @@ describe('two settings changed in quick succession', () => {
   })
 })
 
-describe('a round trip that outlives the workspace it was made for', () => {
+describe('the record the pane creates for itself', () => {
   /*
-   * A control request to the CLI is easily over 100ms, and clicking another
-   * workspace in that time is ordinary. The record then landed on the pane now
-   * showing the other one: its log drew this workspace's events and its attic
-   * reported this workspace's usage — one workspace's work under another's
-   * name, which is the confusion this application exists to prevent.
+   * The first conversation of a workspace is written by the first message, so
+   * its id reaches the tab strip and comes back here as a prop a render later.
+   *
+   * Read as an arrival — which the obvious comparison does — that render wipes
+   * the message just drawn, the answer already being streamed in reply to it,
+   * and the flag that says a turn is in flight. It happened on the first
+   * message of every new workspace.
    */
-  it('drops a chat opened for a workspace that is no longer shown', async () => {
-    vi.mocked(octopus().chats.list).mockResolvedValue({ ok: true, value: [] })
-    const opening = held<Result<Chat>>()
-    vi.mocked(octopus().chats.open).mockReturnValue(opening.promise)
+  it('does not read its own id, arriving as a prop, as a different conversation', async () => {
+    const created = chat()
+    vi.mocked(octopus().chats.open).mockResolvedValue({ ok: true, value: created })
 
     const { result, rerender } = renderHook(
-      ({ id }: { id: string }) => useChat(id, 'idle', describeFailure),
-      { initialProps: { id: 'planner/anna' } }
+      ({ record }: { record: Chat | null }) =>
+        useChat(record, 'planner/anna', 'idle', describeFailure, noted),
+      { initialProps: { record: null as Chat | null } }
     )
+
+    await act(async () => {
+      await result.current.send('add a test')
+    })
+    expect(result.current.entries).toHaveLength(1)
+
+    // What the strip does with `onOpened`: the tab now carries the record.
+    rerender({ record: created })
+
+    expect(result.current.entries).toHaveLength(1)
+    expect(result.current.busy).toBe(true)
+  })
+
+  it('tells the strip about the record it created', async () => {
+    const created = chat()
+    vi.mocked(octopus().chats.open).mockResolvedValue({ ok: true, value: created })
+
+    const { result } = renderHook(() =>
+      useChat(null, 'planner/anna', 'idle', describeFailure, noted)
+    )
+
+    await act(async () => {
+      await result.current.send('add a test')
+    })
+
+    expect(noted).toHaveBeenCalledWith(created)
+  })
+
+  // Its history is what this pane has just written; reading it back would draw
+  // the message twice.
+  it('does not read back the history of a conversation it just created', async () => {
+    const created = chat()
+    vi.mocked(octopus().chats.open).mockResolvedValue({ ok: true, value: created })
+
+    const { result, rerender } = renderHook(
+      ({ record }: { record: Chat | null }) =>
+        useChat(record, 'planner/anna', 'idle', describeFailure, noted),
+      { initialProps: { record: null as Chat | null } }
+    )
+
+    await act(async () => {
+      await result.current.send('add a test')
+    })
+    rerender({ record: created })
+
+    expect(octopus().chats.history).not.toHaveBeenCalled()
+  })
+})
+
+describe('a different conversation in the same pane', () => {
+  // Switching tabs is not a continuation: the log, the answer being streamed
+  // and the question being waited on all belong to the one being left.
+  it('clears what it was showing', async () => {
+    const first = chat()
+    const second = chat({ id: 'chat-2' })
+    vi.mocked(octopus().chats.history).mockResolvedValue({
+      ok: true,
+      value: [{ role: 'user', at: '2026-08-11T09:00:00.000Z', text: 'the first one' }]
+    })
+
+    const { result, rerender } = renderHook(
+      ({ record }: { record: Chat }) =>
+        useChat(record, 'planner/anna', 'idle', describeFailure, noted),
+      { initialProps: { record: first } }
+    )
+    await waitFor(() => {
+      expect(result.current.entries).toHaveLength(1)
+    })
+
+    vi.mocked(octopus().chats.history).mockResolvedValue({ ok: true, value: [] })
+    rerender({ record: second })
+
+    expect(result.current.entries).toEqual([])
+    expect(result.current.chat?.id).toBe('chat-2')
+  })
+})
+
+describe('a turn already in flight when the pane opens', () => {
+  /*
+   * The conversation's own status, not its workspace's. A workspace holds up to
+   * three and they run at once, so the one that finished used to report the
+   * other two idle — and take the stop button away from turns still going.
+   */
+  it('is busy when the record says the conversation is running', async () => {
+    const { result } = renderHook(() =>
+      useChat(chat(), 'planner/anna', 'running', describeFailure, noted)
+    )
+
+    await waitFor(() => {
+      expect(result.current.busy).toBe(true)
+    })
+  })
+
+  it('is busy when it is waiting on an answer', async () => {
+    const { result } = renderHook(() =>
+      useChat(chat(), 'planner/anna', 'waiting_permission', describeFailure, noted)
+    )
+
+    await waitFor(() => {
+      expect(result.current.busy).toBe(true)
+    })
+  })
+
+  it('is not busy for a conversation that is doing nothing', async () => {
+    const { result } = renderHook(() => useChat(...open()))
+
     await waitFor(() => {
       expect(result.current.loading).toBe(false)
     })
-
-    // Started, switched away from, and only then answered — three separate
-    // turns of the loop, because that is what the real thing is. Done in one
-    // `act` React batches them into a single render, and the reset that runs
-    // there hides the write that is the whole bug.
-    const choosing = result.current.setWorkingMode('acceptEdits')
-    await act(async () => {
-      rerender({ id: 'planner/bob' })
-      await Promise.resolve()
-    })
-
-    await act(async () => {
-      opening.resolve({ ok: true, value: chat({ workspaceId: 'planner/anna' }) })
-      await choosing
-    })
-
-    expect(result.current.chat).toBeNull()
-  })
-
-  it('drops a setting answered for a workspace that is no longer shown', async () => {
-    givenChat()
-    const answering = held<Result<void>>()
-    vi.mocked(octopus().chats.setModel).mockReturnValue(answering.promise)
-
-    const { result, rerender } = renderHook(
-      ({ id }: { id: string }) => useChat(id, 'idle', describeFailure),
-      { initialProps: { id: 'planner/anna' } }
-    )
-    await waitFor(() => {
-      expect(result.current.chat).not.toBeNull()
-    })
-
-    const choosing = result.current.setModel('claude-opus-5')
-    await act(async () => {
-      rerender({ id: 'planner/bob' })
-      await Promise.resolve()
-    })
-
-    await act(async () => {
-      answering.resolve({ ok: true, value: undefined })
-      await choosing
-    })
-
-    // The record on screen is the one this workspace loaded for itself; the
-    // choice made in the other one must not have been written over it.
-    expect(result.current.chat?.model).toBeNull()
-  })
-
-  // The failure belongs to the conversation it happened in. Reported late it
-  // appears over whichever one is now on screen, about a message never sent
-  // there.
-  it('keeps a failed send from reporting itself over another workspace', async () => {
-    givenChat()
-    const sending = held<Result<void>>()
-    vi.mocked(octopus().chats.send).mockReturnValue(sending.promise)
-
-    const { result, rerender } = renderHook(
-      ({ id }: { id: string }) => useChat(id, 'idle', describeFailure),
-      { initialProps: { id: 'planner/anna' } }
-    )
-    await waitFor(() => {
-      expect(result.current.chat).not.toBeNull()
-    })
-
-    const sent = result.current.send('add a test')
-    await act(async () => {
-      rerender({ id: 'planner/bob' })
-      await Promise.resolve()
-    })
-
-    await act(async () => {
-      sending.resolve({ ok: false, error: 'the agent is gone' })
-      await sent
-    })
-
-    expect(result.current.error).toBeNull()
+    expect(result.current.busy).toBe(false)
   })
 })

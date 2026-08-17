@@ -25,6 +25,7 @@ import { WORKSPACE_NAMES } from './names.js'
 import { ProjectValidationError } from './projects.js'
 import {
   type ChatEvent,
+  type ChatStatusEvent,
   createService,
   type OctopusService,
   type WorkspaceStatusEvent
@@ -1000,7 +1001,7 @@ describe('the agent chat', () => {
     yield* []
   }
 
-  /** The one session in flight — every test here drives a single chat. */
+  /** The first session in flight — most tests here drive a single chat. */
   function agent(): FakeAgent {
     const [only] = agents
     if (!only) throw new Error('no session was started')
@@ -3306,6 +3307,482 @@ describe('the agent chat', () => {
       await service.interruptChat(chatId)
 
       await expect(decision).resolves.toMatchObject({ behavior: 'deny', message: ABANDONED })
+    })
+  })
+
+  describe('a second conversation in the same workspace', () => {
+    it('is created beside the first, in the order they were opened', async () => {
+      const { service, workspaceId } = await withWorkspace()
+      const first = await service.openChat(workspaceId)
+      const second = await service.createChat(workspaceId)
+
+      expect(second.id).not.toBe(first.id)
+      expect(service.listChats(workspaceId).map((chat) => chat.id)).toEqual([first.id, second.id])
+    })
+
+    it('starts from the settings a first conversation would', async () => {
+      const { service, workspaceId } = await withWorkspace()
+      await service.updateConfig({ workingMode: 'acceptEdits', effort: 'high' })
+
+      const created = await service.createChat(workspaceId)
+
+      expect(created.workingMode).toBe('acceptEdits')
+      expect(created.effort).toBe('high')
+      expect(created.status).toBe('idle')
+    })
+
+    it('refuses a fourth', async () => {
+      const { service, workspaceId } = await withWorkspace()
+      await service.openChat(workspaceId)
+      await service.createChat(workspaceId)
+      await service.createChat(workspaceId)
+
+      await expect(service.createChat(workspaceId)).rejects.toMatchObject({
+        name: 'ChatError',
+        code: 'tooManyChats',
+        params: { limit: '3' }
+      })
+      expect(service.listChats(workspaceId)).toHaveLength(3)
+    })
+
+    /*
+     * The cap is counted inside the commit, for the reason `openChat` decides
+     * inside its own: two presses of the new-tab button landing together would
+     * both see room against two conversations, and it would hold for neither.
+     */
+    it('holds the cap when two requests land together', async () => {
+      const { service, workspaceId } = await withWorkspace()
+      await service.openChat(workspaceId)
+      await service.createChat(workspaceId)
+
+      const [one, other] = await Promise.allSettled([
+        service.createChat(workspaceId),
+        service.createChat(workspaceId)
+      ])
+
+      expect([one.status, other.status].sort()).toEqual(['fulfilled', 'rejected'])
+      expect(service.listChats(workspaceId)).toHaveLength(3)
+    })
+
+    it('refuses a workspace that is not there', async () => {
+      const { service } = await withWorkspace()
+
+      await expect(service.createChat('planner/nowhere')).rejects.toBeInstanceOf(WorkspaceError)
+    })
+  })
+
+  describe('what each conversation is doing', () => {
+    /** Two conversations in one workspace, the first of them with a session. */
+    async function withTwoChats(): Promise<{
+      service: OctopusService
+      workspaceId: string
+      first: string
+      second: string
+      statuses: ChatStatusEvent[]
+      workspaces: WorkspaceStatusEvent[]
+    }> {
+      const { service, workspaceId } = await withWorkspace()
+      const first = await service.openChat(workspaceId)
+      const second = await service.createChat(workspaceId)
+
+      const statuses: ChatStatusEvent[] = []
+      const workspaces: WorkspaceStatusEvent[] = []
+      service.onChatStatus((event) => statuses.push(event))
+      service.onWorkspaceStatus((event) => workspaces.push(event))
+
+      return { service, workspaceId, first: first.id, second: second.id, statuses, workspaces }
+    }
+
+    // Every subscriber is dropped when its window closes; one left behind
+    // would go on being handed events for a pane that no longer exists.
+    it('stops announcing to a listener that has unsubscribed', async () => {
+      const { service, first, statuses } = await withTwoChats()
+      const seen: ChatStatusEvent[] = []
+      const stop = service.onChatStatus((event) => seen.push(event))
+
+      stop()
+      await service.sendToChat(first, 'go')
+
+      expect(seen).toEqual([])
+      expect(statuses).toHaveLength(1)
+    })
+
+    it('moves only the conversation that sent a message', async () => {
+      const { service, workspaceId, first, second } = await withTwoChats()
+
+      await service.sendToChat(first, 'go')
+
+      const chats = service.listChats(workspaceId)
+      expect(chats.find((chat) => chat.id === first)?.status).toBe('running')
+      expect(chats.find((chat) => chat.id === second)?.status).toBe('idle')
+    })
+
+    it('announces the conversation and the workspace it moved', async () => {
+      const { service, workspaceId, first, statuses, workspaces } = await withTwoChats()
+
+      await service.sendToChat(first, 'go')
+
+      expect(statuses).toEqual([{ chatId: first, workspaceId, status: 'running' }])
+      expect(workspaces).toEqual([{ workspaceId, status: 'running' }])
+    })
+
+    /*
+     * The regression this whole arrangement exists to prevent. The workspace's
+     * status used to be written by whichever conversation had an event, so the
+     * one that finished reported the others idle — and took the stop button
+     * away from turns that were still running.
+     */
+    it('leaves the workspace running when one of two conversations finishes', async () => {
+      const { service, workspaceId, first, second, workspaces } = await withTwoChats()
+
+      await service.sendToChat(first, 'go')
+      await service.sendToChat(second, 'go too')
+
+      const [firstAgent, secondAgent] = agents
+      secondAgent?.emit(resultMessage)
+      await vi.waitFor(() => {
+        expect(service.listChats(workspaceId).find((chat) => chat.id === second)?.status).toBe(
+          'idle'
+        )
+      })
+
+      expect(service.listChats(workspaceId).find((chat) => chat.id === first)?.status).toBe(
+        'running'
+      )
+      expect(workspaces.filter((event) => event.status === 'idle')).toEqual([])
+
+      firstAgent?.finish()
+    })
+
+    // The workspace's own value only changes when the aggregate does, or every
+    // turn in a busy workspace would redraw the whole list for nothing.
+    it('says nothing about the workspace when the aggregate has not moved', async () => {
+      const { service, workspaceId, first, second, workspaces } = await withTwoChats()
+
+      await service.sendToChat(first, 'go')
+      await service.sendToChat(second, 'go too')
+
+      expect(workspaces).toEqual([{ workspaceId, status: 'running' }])
+    })
+
+    it('stops only the conversation that was interrupted', async () => {
+      const { service, workspaceId, first, second } = await withTwoChats()
+
+      await service.sendToChat(first, 'go')
+      await service.sendToChat(second, 'go too')
+      await service.interruptChat(second)
+
+      const chats = service.listChats(workspaceId)
+      expect(chats.find((chat) => chat.id === first)?.status).toBe('running')
+      expect(chats.find((chat) => chat.id === second)?.status).toBe('idle')
+    })
+
+    // A closing session goes on emitting for a moment after its conversation
+    // was closed, and there is nothing left to record it against.
+    it('ignores an event for a conversation that has gone', async () => {
+      const { service, workspaceId, first, second, statuses } = await withTwoChats()
+
+      await service.sendToChat(first, 'go')
+      await service.closeChat(first)
+      statuses.length = 0
+
+      agent().emit(resultMessage)
+      await new Promise((resolve) => setTimeout(resolve, 10))
+
+      expect(statuses).toEqual([])
+      expect(service.listChats(workspaceId).map((chat) => chat.id)).toEqual([second])
+    })
+  })
+
+  /*
+   * The sidebar draws one dot per conversation, and it draws them from what
+   * `listWorkspaces` answers. Every other test here reads `listChats`, which
+   * goes nowhere near the view the list is actually built from.
+   */
+  describe('what the workspace list says about the conversations', () => {
+    it('reports each of them, with what it is doing', async () => {
+      const { service, projectId, workspaceId } = await withWorkspace()
+      const first = await service.openChat(workspaceId)
+      const second = await service.createChat(workspaceId)
+      await service.renameChat(second.id, 'auth refactor')
+      await service.sendToChat(first.id, 'go')
+
+      const [view] = await service.listWorkspaces(projectId)
+
+      expect(view?.chats).toEqual([
+        { id: first.id, agent: 'claude', title: null, status: 'running' },
+        { id: second.id, agent: 'claude', title: 'auth refactor', status: 'idle' }
+      ])
+    })
+
+    it('reports none for a workspace nobody has spoken to', async () => {
+      const { service, projectId } = await withWorkspace()
+
+      const [view] = await service.listWorkspaces(projectId)
+
+      expect(view?.chats).toEqual([])
+    })
+
+    it('drops a conversation that was closed', async () => {
+      const { service, projectId, workspaceId } = await withWorkspace()
+      const first = await service.openChat(workspaceId)
+      const second = await service.createChat(workspaceId)
+
+      await service.closeChat(second.id)
+      const [view] = await service.listWorkspaces(projectId)
+
+      expect(view?.chats.map((chat) => chat.id)).toEqual([first.id])
+    })
+  })
+
+  describe('naming a conversation', () => {
+    it('keeps the name it was given', async () => {
+      const { service, workspaceId } = await withWorkspace()
+      const chat = await service.openChat(workspaceId)
+
+      await service.renameChat(chat.id, 'auth refactor')
+
+      expect(service.listChats(workspaceId)[0]?.title).toBe('auth refactor')
+    })
+
+    it('trims what it is handed, so a name of spaces is not a gap', async () => {
+      const { service, workspaceId } = await withWorkspace()
+      const chat = await service.openChat(workspaceId)
+
+      await service.renameChat(chat.id, '  auth refactor  ')
+
+      expect(service.listChats(workspaceId)[0]?.title).toBe('auth refactor')
+    })
+
+    /*
+     * Not a refusal but a request: the conversation goes back to being named
+     * after its agent and its place, the way clearing a project's icon puts the
+     * initials back.
+     */
+    it('takes the name back when handed an empty one', async () => {
+      const { service, workspaceId } = await withWorkspace()
+      const chat = await service.openChat(workspaceId)
+      await service.renameChat(chat.id, 'auth refactor')
+
+      await service.renameChat(chat.id, '   ')
+
+      expect(service.listChats(workspaceId)[0]?.title).toBeNull()
+    })
+
+    it('survives a restart', async () => {
+      const { service, workspaceId } = await withWorkspace()
+      const chat = await service.openChat(workspaceId)
+      await service.renameChat(chat.id, 'auth refactor')
+
+      const reopened = await createService({ ...paths(dir), query: fakeQuery() })
+
+      expect(reopened.listChats(workspaceId)[0]?.title).toBe('auth refactor')
+    })
+
+    it('refuses an id nothing answers to', async () => {
+      const { service } = await withWorkspace()
+
+      await expect(service.renameChat('chat-nowhere', 'x')).rejects.toBeInstanceOf(WorkspaceError)
+    })
+  })
+
+  describe('closing a conversation', () => {
+    it('ends the session, discards the history and drops the record', async () => {
+      const { service, workspaceId } = await withWorkspace()
+      const first = await service.openChat(workspaceId)
+      const second = await service.createChat(workspaceId)
+
+      await service.sendToChat(first.id, 'go')
+      await service.closeChat(first.id)
+
+      expect(agent().closed()).toBe(1)
+      await expect(service.chatHistory(first.id)).resolves.toEqual([])
+      expect(service.listChats(workspaceId).map((chat) => chat.id)).toEqual([second.id])
+    })
+
+    it('leaves the other conversations’ history alone', async () => {
+      const { service, workspaceId } = await withWorkspace()
+      const first = await service.openChat(workspaceId)
+      const second = await service.createChat(workspaceId)
+
+      await service.sendToChat(first.id, 'first')
+      await service.sendToChat(second.id, 'second')
+      await service.closeChat(first.id)
+
+      await expect(service.chatHistory(second.id)).resolves.toMatchObject([
+        { role: 'user', text: 'second' }
+      ])
+    })
+
+    // Only this conversation's. The maps are the whole service's, and a
+    // question belonging to a conversation still open must survive.
+    it('abandons only its own questions', async () => {
+      const { service, workspaceId, events } = await withWorkspace()
+      const first = await service.openChat(workspaceId)
+      const second = await service.createChat(workspaceId)
+
+      await service.sendToChat(first.id, 'first')
+      await service.sendToChat(second.id, 'second')
+
+      const [firstAgent, secondAgent] = agents
+      void firstAgent?.ask('Bash', { command: 'ls' })
+      void secondAgent?.ask('Bash', { command: 'pwd' })
+      await waitForRequest(events)
+
+      await service.closeChat(first.id)
+
+      expect(service.pendingPermission(second.id)).not.toBeNull()
+    })
+
+    it('brings the workspace back to idle when the one running goes', async () => {
+      const { service, workspaceId } = await withWorkspace()
+      const first = await service.openChat(workspaceId)
+      await service.createChat(workspaceId)
+      await service.sendToChat(first.id, 'go')
+
+      const workspaces: WorkspaceStatusEvent[] = []
+      service.onWorkspaceStatus((event) => workspaces.push(event))
+
+      await service.closeChat(first.id)
+
+      expect(workspaces).toEqual([{ workspaceId, status: 'idle' }])
+    })
+
+    /*
+     * Throwing away the only conversation is `/clear`, which does it without
+     * leaving the pane with nothing to draw. Two ways to do one thing, and one
+     * of them destroying a file without the confirmation the other carries.
+     */
+    it('refuses the last one of a workspace', async () => {
+      const { service, workspaceId } = await withWorkspace()
+      const only = await service.openChat(workspaceId)
+
+      await expect(service.closeChat(only.id)).rejects.toMatchObject({
+        name: 'ChatError',
+        code: 'lastChat'
+      })
+      expect(service.listChats(workspaceId)).toHaveLength(1)
+    })
+
+    it('refuses an id nothing answers to', async () => {
+      const { service } = await withWorkspace()
+
+      await expect(service.closeChat('chat-nowhere')).rejects.toBeInstanceOf(WorkspaceError)
+    })
+  })
+
+  describe('a conversation continuing another', () => {
+    /** The SDK's own fork, injected like `query` so no CLI is reached. */
+    function forkingService(
+      forkSession: (id: string, options: { readonly dir: string }) => Promise<{ sessionId: string }>
+    ): Promise<OctopusService> {
+      return createService({ ...paths(dir), query: fakeQuery(), forkSession })
+    }
+
+    async function started(
+      service: OctopusService
+    ): Promise<{ workspaceId: string; chatId: string }> {
+      const repo = join(dir, 'planner')
+      await initRepo(repo)
+      const project = await service.addProjectFromPath(repo)
+      const workspace = await service.createWorkspaceIn(project.id)
+
+      const chat = await service.openChat(workspace.id)
+      await service.sendToChat(chat.id, 'the first thing')
+      agent().emit(initMessage)
+      await vi.waitFor(() => {
+        expect(service.listChats(workspace.id)[0]?.sessionId).toBe('sess-1')
+      })
+
+      return { workspaceId: workspace.id, chatId: chat.id }
+    }
+
+    it('asks the agent to fork, in the workspace’s own directory', async () => {
+      const calls: { id: string; dir: string }[] = []
+      const service = await forkingService((id, options) => {
+        calls.push({ id, dir: options.dir })
+        return Promise.resolve({ sessionId: 'sess-forked' })
+      })
+      const { workspaceId, chatId } = await started(service)
+      const path = (await service.listWorkspaces('planner'))[0]?.path
+
+      await service.forkChat(chatId)
+
+      expect(calls).toEqual([{ id: 'sess-1', dir: path }])
+      expect(service.listChats(workspaceId)).toHaveLength(2)
+    })
+
+    /*
+     * Never the source's. Resuming continues a session in place and keeps its
+     * id, so two records holding one would be two agent processes appending to
+     * a single transcript.
+     */
+    it('stores the forked session rather than the one it came from', async () => {
+      const service = await forkingService(() => Promise.resolve({ sessionId: 'sess-forked' }))
+      const { workspaceId, chatId } = await started(service)
+
+      const forked = await service.forkChat(chatId)
+
+      expect(forked.sessionId).toBe('sess-forked')
+      expect(service.listChats(workspaceId)[0]?.sessionId).toBe('sess-1')
+    })
+
+    // The agent's fork copies what the model remembers; this is what the screen
+    // draws. Without it the new tab opens empty above an agent that remembers.
+    it('copies the history the new conversation inherits', async () => {
+      const service = await forkingService(() => Promise.resolve({ sessionId: 'sess-forked' }))
+      const { chatId } = await started(service)
+
+      const forked = await service.forkChat(chatId)
+
+      // Entry for entry, the session's own opening included: what the new tab
+      // draws has to be what the one it came from drew.
+      await expect(service.chatHistory(forked.id)).resolves.toEqual(
+        await service.chatHistory(chatId)
+      )
+    })
+
+    it('refuses a conversation that has never run', async () => {
+      const service = await forkingService(() => Promise.resolve({ sessionId: 'sess-forked' }))
+      const repo = join(dir, 'planner')
+      await initRepo(repo)
+      const project = await service.addProjectFromPath(repo)
+      const workspace = await service.createWorkspaceIn(project.id)
+      const chat = await service.openChat(workspace.id)
+
+      await expect(service.forkChat(chat.id)).rejects.toMatchObject({
+        name: 'ChatError',
+        code: 'nothingToFork'
+      })
+      expect(service.listChats(workspace.id)).toHaveLength(1)
+    })
+
+    // A half-made fork is worse than none: a tab that says it continues a
+    // conversation and does not.
+    it('writes no record when the agent cannot fork', async () => {
+      const service = await forkingService(() => Promise.reject(new Error('no such session')))
+      const { workspaceId, chatId } = await started(service)
+
+      await expect(service.forkChat(chatId)).rejects.toMatchObject({
+        name: 'ChatError',
+        code: 'forkFailed'
+      })
+      expect(service.listChats(workspaceId)).toHaveLength(1)
+    })
+
+    it('honours the cap', async () => {
+      const service = await forkingService(() => Promise.resolve({ sessionId: 'sess-forked' }))
+      const { workspaceId, chatId } = await started(service)
+      await service.createChat(workspaceId)
+      await service.createChat(workspaceId)
+
+      await expect(service.forkChat(chatId)).rejects.toMatchObject({ code: 'tooManyChats' })
+    })
+
+    it('refuses an id nothing answers to', async () => {
+      const service = await forkingService(() => Promise.resolve({ sessionId: 'sess-forked' }))
+
+      await expect(service.forkChat('chat-nowhere')).rejects.toBeInstanceOf(WorkspaceError)
     })
   })
 

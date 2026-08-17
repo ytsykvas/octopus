@@ -133,6 +133,14 @@ describe('channel names', () => {
     ['files.open', () => method('files', 'open')('w' as never, 'a.ts' as never), 'files:open'],
     ['chats.list', () => method('chats', 'list')('w' as never), 'chats:list'],
     ['chats.open', () => method('chats', 'open')('w' as never), 'chats:open'],
+    ['chats.create', () => method('chats', 'create')('w' as never), 'chats:create'],
+    ['chats.fork', () => method('chats', 'fork')('c' as never), 'chats:fork'],
+    ['chats.close', () => method('chats', 'close')('c' as never), 'chats:close'],
+    [
+      'chats.rename',
+      () => method('chats', 'rename')('c' as never, 'auth' as never),
+      'chats:rename'
+    ],
     ['chats.history', () => method('chats', 'history')('c' as never), 'chats:history'],
     ['chats.send', () => method('chats', 'send')('c' as never, 'hi' as never), 'chats:send'],
     ['chats.interrupt', () => method('chats', 'interrupt')('c' as never), 'chats:interrupt'],
@@ -346,6 +354,25 @@ describe('the rest of the surface', () => {
 
     stop()
     expect(off).toHaveBeenCalledWith('chats:event', expect.any(Function))
+  })
+
+  // A third stream, because a conversation's state moves at moments neither of
+  // the other two describe: an interrupt, an answered permission, a closed tab.
+  it('chats.onStatus delivers the status and unsubscribes', () => {
+    const handler = vi.fn()
+    const stop = method('chats', 'onStatus')(handler as never) as () => void
+
+    const listener = on.mock.calls.find(([channel]) => channel === 'chats:status')?.[1] as (
+      event: unknown,
+      payload: unknown
+    ) => void
+
+    const status = { chatId: 'chat-1', workspaceId: 'planner/kyiv', status: 'running' }
+    listener({}, status)
+    expect(handler).toHaveBeenCalledWith(status)
+
+    stop()
+    expect(off).toHaveBeenCalledWith('chats:status', expect.any(Function))
   })
 
   // A second stream, because the list that draws this is not looking at a chat.

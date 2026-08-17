@@ -14,6 +14,7 @@ import type { Config } from '../core/config.js'
 import { type AccountKind, checkAccounts, signOut } from '../core/accounts.js'
 import {
   ChatMessageSchema,
+  ChatTitleSchema,
   EffortSchema,
   PermissionAnswerSchema,
   PlanFeedbackSchema,
@@ -23,7 +24,12 @@ import type { RemoteRepository } from '../core/github.js'
 import { InstructionBodySchema, InstructionKindSchema } from '../core/instructions.js'
 import { QuestionAnswerSchema } from '../core/questions.js'
 import { ScriptBodySchema, ScriptKindSchema } from '../core/scripts.js'
-import type { ChatEvent, OctopusService, WorkspaceStatusEvent } from '../core/service.js'
+import type {
+  ChatEvent,
+  ChatStatusEvent,
+  OctopusService,
+  WorkspaceStatusEvent
+} from '../core/service.js'
 import { ProjectPatchSchema } from '../core/store.js'
 import { TerminalSpecSchema } from '../core/terminal.js'
 import type { ThemeName } from '../core/types.js'
@@ -84,6 +90,14 @@ export interface IpcHost {
    * about a conversation, and the list that draws it is not looking at a chat.
    */
   readonly broadcastWorkspaceStatus: (event: WorkspaceStatusEvent) => void
+  /**
+   * What each conversation is doing, to every window.
+   *
+   * The twin of the above one level in, and a third stream for the same reason
+   * the second exists: the tab strip draws a conversation's state, and it moves
+   * at moments the workspace's does not.
+   */
+  readonly broadcastChatStatus: (event: ChatStatusEvent) => void
   /**
    * Hands a path to the system, which decides what opens it.
    *
@@ -241,6 +255,7 @@ export function registerIpc(
   // stored record, so each argument is validated rather than trusted.
   service.onAgentEvent(host.broadcastChatEvent)
   service.onWorkspaceStatus(host.broadcastWorkspaceStatus)
+  service.onChatStatus(host.broadcastChatStatus)
 
   // Listing does not create, opening does. The distinction is what keeps a
   // workspace nobody has spoken to free of a record and a transcript file.
@@ -250,6 +265,24 @@ export function registerIpc(
 
   host.handle('chats:open', (_event, workspaceId: string) =>
     attempt(() => service.openChat(workspaceId))
+  )
+
+  // The three below take ids and nothing else, so there is nothing to parse:
+  // the service proves an id against the store, which is stronger than a shape
+  // check — the same treatment `chats:history` and `chats:interrupt` get.
+  host.handle('chats:create', (_event, workspaceId: string) =>
+    attempt(() => service.createChat(workspaceId))
+  )
+
+  host.handle('chats:fork', (_event, chatId: string) => attempt(() => service.forkChat(chatId)))
+
+  host.handle('chats:close', (_event, chatId: string) => attempt(() => service.closeChat(chatId)))
+
+  // The one of the four that carries something the user typed, so it is parsed
+  // rather than trusted — it is bounded, and the bound is what stops a tab
+  // carrying a pasted paragraph.
+  host.handle('chats:rename', (_event, chatId: string, title: unknown) =>
+    attempt(() => service.renameChat(chatId, ChatTitleSchema.parse(title)))
   )
 
   host.handle('chats:history', (_event, chatId: string) =>

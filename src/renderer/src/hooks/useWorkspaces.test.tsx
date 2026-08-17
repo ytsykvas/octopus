@@ -80,6 +80,19 @@ const emitStatus = (event: WorkspaceStatusEvent): void => {
   })
 }
 
+/** A conversation's state changing, as main broadcasts it. */
+const emitChatStatus = (event: {
+  chatId: string
+  workspaceId: string
+  status: 'idle' | 'running' | 'waiting_permission' | 'error'
+}): void => {
+  const handlers = vi.mocked(window.octopus.chats.onStatus).mock.calls.map(([handler]) => handler)
+
+  act(() => {
+    for (const handler of handlers) handler(event)
+  })
+}
+
 /** A turn ending in a named workspace, as main broadcasts it. */
 const emitTurnEnd = (workspaceId: string, failed = false): void => {
   const handlers = vi.mocked(window.octopus.chats.onEvent).mock.calls.map(([handler]) => handler)
@@ -131,6 +144,55 @@ describe('useWorkspaces', () => {
    * of every project, and this arrives several times a turn. The value is the
    * one the core already decided, so there is nothing to work out here.
    */
+  /*
+   * The same, one level in. The row draws a dot per conversation once a
+   * workspace holds several, and those move at moments the workspace's own
+   * summary does not — a second conversation finishing leaves a workspace whose
+   * first is still running exactly where it was.
+   */
+  it('takes each conversation’s status from the core as it changes', async () => {
+    const busy = workspaceView('anna', {
+      chats: [
+        { id: 'chat-1', agent: 'claude' as const, title: null, status: 'idle' as const },
+        { id: 'chat-2', agent: 'claude' as const, title: null, status: 'idle' as const }
+      ]
+    })
+    workspacesPerProject({ planner: [busy] })
+    const projects = [planner]
+
+    const { result } = renderHook(() => useWorkspaces(projects, accepts(), vi.fn<OnError>()))
+    await waitFor(() => {
+      expect(result.current.flat).toHaveLength(1)
+    })
+
+    emitChatStatus({ chatId: 'chat-2', workspaceId: busy.id, status: 'running' })
+
+    expect(result.current.flat[0]?.chats.map((item) => item.status)).toEqual(['idle', 'running'])
+  })
+
+  // Pushed by the strip that opened it, rather than re-read: `workspaces.list`
+  // would put git to work on every workspace of the project to learn something
+  // the window already decided.
+  it('takes a conversation list handed to it by the pane', async () => {
+    workspacesPerProject({ planner: [anna] })
+    const projects = [planner]
+
+    const { result } = renderHook(() => useWorkspaces(projects, accepts(), vi.fn<OnError>()))
+    await waitFor(() => {
+      expect(result.current.flat).toHaveLength(1)
+    })
+
+    act(() => {
+      result.current.setChats(anna.id, [
+        { id: 'chat-1', agent: 'claude', title: null, status: 'running' }
+      ])
+    })
+
+    expect(result.current.flat[0]?.chats).toEqual([
+      { id: 'chat-1', agent: 'claude', title: null, status: 'running' }
+    ])
+  })
+
   it('takes a workspace’s status from the core as it changes', async () => {
     workspacesPerProject({ planner: [anna, bob], website: [carol] })
     // Hoisted, or a fresh array each render restarts the read for ever.

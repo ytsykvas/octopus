@@ -46,6 +46,16 @@ export function useErrorMessage(): (failure: Failure) => string {
           return t('errors.nameEmpty')
         case 'worktreeMissing':
           return t('errors.worktreeMissing')
+        case 'tooManyChats':
+          // Numeric, because the sentence counts: `count` is what i18next
+          // pluralises on, and Ukrainian needs it to pick between three forms.
+          return t('errors.tooManyChats', { count: Number(failure.params?.limit ?? 0) })
+        case 'lastChat':
+          return t('errors.lastChat')
+        case 'nothingToFork':
+          return t('errors.nothingToFork')
+        case 'forkFailed':
+          return t('errors.forkFailed')
         default:
           return t('errors.unknown', { message: failure.error })
       }

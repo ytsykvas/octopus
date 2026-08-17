@@ -32,10 +32,12 @@ import {
   saveState,
   type State,
   StateConflictError,
+  removeChat,
   updateChat,
   updateWorkspace,
   type Workspace,
-  workspacesOfProject
+  workspacesOfProject,
+  workspaceStatusFrom
 } from './store.js'
 
 const project: Project = {
@@ -59,6 +61,25 @@ function makeWorkspace(overrides: Partial<Workspace> = {}): Workspace {
     port: 3100,
     createdAt: '2026-08-07T12:00:00.000Z',
     ownerId: null,
+    ...overrides
+  }
+}
+
+/** A chat of `makeWorkspace`'s workspace, for the tests about loading. */
+function storedChat(overrides: Partial<Chat> = {}): Chat {
+  return {
+    id: 'chat-1',
+    workspaceId: 'planner/kyiv',
+    agent: 'claude',
+    status: 'idle',
+    title: null,
+    sessionId: null,
+    model: null,
+    effort: 'medium',
+    workingMode: 'default',
+    planMode: false,
+    knownCommands: [],
+    createdAt: '2026-08-07T12:00:00.000Z',
     ...overrides
   }
 }
@@ -106,28 +127,49 @@ describe('load and save', () => {
 
   /*
    * `running` describes a session, and no session survives the process that
-   * held it. A workspace left mid-turn when the app quit would otherwise come
-   * back claiming to be working, with nothing behind the claim and nothing that
-   * would ever correct it.
+   * held it. A conversation left mid-turn when the app quit would otherwise
+   * come back claiming to be working, with nothing behind the claim and nothing
+   * that would ever correct it — and its workspace along with it, since the
+   * workspace's own status is derived from its conversations.
    */
   it('puts down a status the last run was carrying', async () => {
-    const working = updateWorkspace(addWorkspace(withProject, makeWorkspace()), 'planner/kyiv', {
-      status: 'running'
-    })
+    const working = addChat(
+      addWorkspace(withProject, makeWorkspace()),
+      storedChat({ status: 'running' })
+    )
     await saveState(working, file, `${file}.tmp`)
 
     const loaded = await loadState(file)
+    expect(loaded.chats[0]?.status).toBe('idle')
     expect(loaded.workspaces[0]?.status).toBe('idle')
   })
 
   it('leaves an error alone, which is a record rather than a session', async () => {
+    const failed = addChat(
+      addWorkspace(withProject, makeWorkspace()),
+      storedChat({ status: 'error' })
+    )
+    await saveState(failed, file, `${file}.tmp`)
+
+    const loaded = await loadState(file)
+    expect(loaded.chats[0]?.status).toBe('error')
+    expect(loaded.workspaces[0]?.status).toBe('error')
+  })
+
+  /*
+   * The workspace's status is derived, so it has nothing of its own to keep.
+   * A file whose workspace says `error` while every conversation in it is idle
+   * was written by an older build — or by hand — and the conversations are what
+   * the application acts on.
+   */
+  it('derives a workspace with no conversations back to idle', async () => {
     const failed = updateWorkspace(addWorkspace(withProject, makeWorkspace()), 'planner/kyiv', {
       status: 'error'
     })
     await saveState(failed, file, `${file}.tmp`)
 
     const loaded = await loadState(file)
-    expect(loaded.workspaces[0]?.status).toBe('error')
+    expect(loaded.workspaces[0]?.status).toBe('idle')
   })
 
   it('throws on a corrupt file rather than silently emptying the workspace list', async () => {
@@ -502,6 +544,8 @@ describe('chats', () => {
       id: 'chat-1',
       workspaceId: 'planner/kyiv',
       agent: 'claude',
+      status: 'idle',
+      title: null,
       sessionId: null,
       model: null,
       effort: 'medium',
@@ -656,6 +700,8 @@ describe('the remembered model list', () => {
       id: 'chat-1',
       workspaceId: 'planner/kyiv',
       agent: 'claude',
+      status: 'idle',
+      title: null,
       sessionId: null,
       model: null,
       effort: null,
@@ -688,6 +734,8 @@ describe('the commands a chat remembers', () => {
     id: 'chat-1',
     workspaceId: 'planner/kyiv',
     agent: 'claude',
+    status: 'idle',
+    title: null,
     sessionId: null,
     model: null,
     effort: 'medium',
@@ -710,5 +758,75 @@ describe('the commands a chat remembers', () => {
     expect(commandsUnchanged(knowing, [])).toBe(false)
     expect(commandsUnchanged(knowing, [command, { ...command, name: 'rollback' }])).toBe(false)
     expect(commandsUnchanged(knowing, [{ ...command, description: 'Ship it now' }])).toBe(false)
+  })
+})
+
+describe('what a workspace is doing, from its conversations', () => {
+  function chatWith(id: string, status: Chat['status']): Chat {
+    return storedChat({ id, status })
+  }
+
+  it('is idle when it holds none at all', () => {
+    expect(workspaceStatusFrom([], 'idle')).toBe('idle')
+  })
+
+  it('is idle when every conversation is', () => {
+    expect(workspaceStatusFrom([chatWith('a', 'idle'), chatWith('b', 'idle')], 'idle')).toBe('idle')
+  })
+
+  /*
+   * The order is what the sidebar's single dot should say when they disagree.
+   * A turn that has stopped and is waiting on an answer is the one state worth
+   * crossing the window for, so it outranks work still going.
+   */
+  it('waits for an answer over anything else', () => {
+    expect(
+      workspaceStatusFrom(
+        [chatWith('a', 'running'), chatWith('b', 'waiting_permission'), chatWith('c', 'error')],
+        'idle'
+      )
+    ).toBe('waiting_permission')
+  })
+
+  // The dot says what is happening now; a failed turn is a record of something
+  // that already happened.
+  it('reports work in flight over a turn that failed', () => {
+    expect(workspaceStatusFrom([chatWith('a', 'error'), chatWith('b', 'running')], 'idle')).toBe(
+      'running'
+    )
+  })
+
+  it('reports a failure when nothing is running', () => {
+    expect(workspaceStatusFrom([chatWith('a', 'idle'), chatWith('b', 'error')], 'idle')).toBe(
+      'error'
+    )
+  })
+
+  // A decision about the workspace, which nothing a conversation does can
+  // overrule.
+  it('leaves an archived workspace archived', () => {
+    expect(workspaceStatusFrom([chatWith('a', 'running')], 'archived')).toBe('archived')
+  })
+})
+
+describe('removing a conversation', () => {
+  const twoChats = addChat(
+    addChat(addWorkspace(withProject, makeWorkspace()), storedChat()),
+    storedChat({ id: 'chat-2' })
+  )
+
+  it('drops the one asked for and leaves its siblings', () => {
+    const left = removeChat(twoChats, 'chat-1')
+
+    expect(left.chats.map((chat) => chat.id)).toEqual(['chat-2'])
+  })
+
+  /*
+   * Unlike `updateChat`, which throws. Removal is idempotent, and the one
+   * caller reaches here after closing a live session — exactly the window in
+   * which the record can already have gone.
+   */
+  it('says nothing about an id that is not there', () => {
+    expect(removeChat(twoChats, 'chat-9').chats).toHaveLength(2)
   })
 })

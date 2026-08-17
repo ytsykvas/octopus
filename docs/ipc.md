@@ -1,7 +1,7 @@
 # IPC
 
 Every call from the interface to the rest of the application goes through one
-of 45 channels. The table lives in [`src/main/ipc.ts`](../src/main/ipc.ts); the
+of 49 channels. The table lives in [`src/main/ipc.ts`](../src/main/ipc.ts); the
 renderer never names a channel itself, it calls
 [`src/preload/index.ts`](../src/preload/index.ts).
 
@@ -79,6 +79,10 @@ The only channel outside this shape is `theme:get`, which cannot fail.
 | ----------------------- | ---------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `chats:list`            | `workspaceId`                      | empty until someone writes; creates nothing                                                                                                                                                                                                  |
 | `chats:open`            | `workspaceId`                      | the chat, created on first use                                                                                                                                                                                                               |
+| `chats:create`          | `workspaceId`                      | an **additional** conversation; refuses past three. Separate from opening rather than a flag on it: opening is idempotent and answers "the conversation to write into", while this one always writes a record, which is the whole request    |
+| `chats:fork`            | `chatId`                           | a new conversation continuing this one. Forks the agent's session through the SDK and copies the transcript; refuses one that has never run                                                                                                  |
+| `chats:close`           | `chatId`                           | ends a conversation and discards it, transcript included. Refuses the last one of a workspace — emptying the only conversation is `/clear`, which leaves the pane with something to draw                                                     |
+| `chats:rename`          | `chatId`, `title`                  | names a conversation. The one of these four carrying something the user typed, so it is parsed and bounded; an empty name is a request rather than a refusal — the conversation goes back to the name it is given                            |
 | `chats:history`         | `chatId`                           | the transcript, as it will be redrawn after a restart                                                                                                                                                                                        |
 | `chats:send`            | `chatId`, `text`                   | answers immediately; the reply arrives as events                                                                                                                                                                                             |
 | `chats:interrupt`       | `chatId`                           | stops the turn, leaves the session open                                                                                                                                                                                                      |
@@ -107,7 +111,16 @@ turn, to learn what the main process had already decided. It says nothing about
 a conversation, which is why it is not folded into the one above — the list that
 draws it is not looking at a chat.
 
-Neither is a `handle`, so neither is counted among the channels above.
+**`chats:status`** is the third, carrying `{ chatId, workspaceId, status }`.
+The twin of the one above, a level in: the tab strip draws a conversation while
+the list draws its workspace, and the two move at different moments — a second
+conversation finishing leaves a workspace whose first is still running exactly
+where it was. It is not folded into `chats:event` either, because that stream
+carries `AgentEvent`, which is the isolation boundary around the SDK and the
+shape written to the transcript — while half of these changes come from moments
+no agent message describes: an interrupt, an answered permission, a closed tab.
+
+None of the three is a `handle`, so none is counted among the channels above.
 
 Listing and opening are separate on purpose. A workspace nobody has spoken to
 should have no record and no transcript file, so the pane looks the chat up

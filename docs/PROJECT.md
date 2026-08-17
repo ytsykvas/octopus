@@ -9,7 +9,7 @@
 
 **octopus** is a local macOS application for running Claude Code sessions in parallel: a dispatcher for agent tasks where each task executes in its own isolated copy of a repository.
 
-Instead of waiting for the agent to finish one task, the developer starts several at once — each in a separate git worktree with its own branch, its own agent session and its own dev server. The tasks never see each other and never conflict.
+Instead of waiting for the agent to finish one task, the developer starts several at once — each in a separate git worktree with its own branch, its own agent sessions and its own dev server. The tasks never see each other and never conflict.
 
 **The goal** is a tool for daily personal work that imposes no foreign workflow and does not interfere with what the agent receives. Not a product for sale, not a service, not a team tool.
 
@@ -45,7 +45,10 @@ A workspace is a git worktree: a full working copy of the repository in a separa
 Each workspace owns:
 
 - **a branch** — created automatically with the workspace;
-- **an agent session** — its own `session_id`, surviving application restarts;
+- **up to three agent conversations** — each with its own `session_id`,
+  surviving application restarts. The id is stored on the conversation rather
+  than on the workspace, which is what made the third one a record rather than a
+  migration (§12.3); they share the worktree and run without locking (§10.8);
 - **a dev server** — on its own port, so several copies of the app run at once;
 - **a diff** — changes relative to the base branch.
 
@@ -303,9 +306,15 @@ Conductor's layout is the model — proven by daily use and free of complaints. 
 
 **Tab strip — projects.** A colour each, and either two initials or an icon chosen in the project's settings. The colour is stored on the project rather than derived from its name: a hash would repaint the project the moment it was renamed, and constancy is what makes it recognisable. Fifteen colours, each measured for contrast in both themes. The initials are the fallback rather than the goal — two letters collide as soon as two repositories start alike, and 36px hold a picture or a pair of letters, not both.
 
+**Title bar — where you are.** The project's name, its directory, and the branch of the selected workspace. The branch used to sit in the chat's own header, which spent a whole row on one short string while answering a question about the window rather than about any conversation in it — the row it left belongs to the tab strip now.
+
 **Second pane — workspaces of the active project.** Carries a gradient wash of that project's colour, strongest at the project name and fading down the list, so "where am I" reads peripherally rather than by reading names. A workspace is recognised primarily **by its branch name**; the directory name is the secondary identifier.
 
 **Centre — agent chat.** The main working area: the session event stream and the input field.
+
+A workspace holds up to **three conversations at once**, switched by a strip of underlined tabs across the pane's header row. Each is called after the agent that runs it and its place in the strip — `Claude 1`, `Claude 2` — which is a name that needs no inventing and stops being a guess the moment there is a second kind of agent. A conversation can be given a name of its own by double-clicking its tab, and clearing that name gives the automatic one back. Each tab carries the same status dot the workspace list uses, so which agent is working, which is waiting on an answer and which has stopped is readable without opening any of them. A conversation is created empty; a tab's menu also offers to continue an existing one in a new tab, which forks the agent's session so the two diverge from a shared past.
+
+They run in the same worktree with no locking between them, deliberately (§17). Every tab stays mounted while its workspace is open, so a conversation keeps its place in the log and the answer being streamed into it while another is on screen — but only the one showing may raise a dialog, since a modal about work the reader cannot see is the worst kind of interruption.
 
 **Right pane — changes and terminal** in tabs. Shows what the agent did and gives manual access to the workspace. Draggable, and both its width and which tab is showing persist. Whether it is folded away does not — that is a mood about the current window. Its active tab carries the open project's colour, falling back to the accent while no project is open.
 
@@ -316,6 +325,8 @@ Conductor's layout is the model — proven by daily use and free of complaints. 
 | `⌘⇧N`       | new workspace       |
 | `⌘1`–`⌘9`   | switch project      |
 | `⌃1`–`⌃9`   | jump to a workspace |
+| `⌥1`–`⌥3`   | switch conversation |
+| `⌘T`        | new conversation    |
 | `⌘⇧D`       | changes             |
 | `⌘⇧P`       | pull request        |
 
@@ -465,7 +476,9 @@ const q = query({
 **`settingSources: []` is the technical answer to the main complaint about Conductor.** The SDK loads no settings and no `CLAUDE.md` implicitly; everything entering the context is added by us, deliberately. The config exposes a switch: nothing / `project` / `user + project + local`.
 
 Session control: `interrupt()`, `setModel()`, `setPermissionMode()`, `streamInput()`, `close()`.
-The `sessionId` from `SDKSystemMessage` is persisted — that is what enables resuming after a restart. It is stored on the **chat**, not the workspace: one session per workspace would make a second agent in the same worktree a migration, while one per chat makes it another record (§17).
+The `sessionId` from `SDKSystemMessage` is persisted — that is what enables resuming after a restart. It is stored on the **chat**, not the workspace: one session per workspace would make a second agent in the same worktree a migration, while one per chat makes it another record. That is exactly how it played out — three conversations per workspace shipped as a widened interface over the shape that was already there (§10.8).
+
+Forking a conversation goes through the SDK's own `forkSession(sessionId, { dir })`, never by copying the id: a plain `resume` continues a session **in place and keeps its id**, so two records holding one would be two agent processes appending to a single session file, each reading the other's turns as part of its own. The SDK's fork returns a new id, and copies what the model remembers; our own transcript is copied beside it, because that is what the screen draws.
 
 ### 12.4 On-disk layout
 
@@ -613,6 +626,6 @@ The terminal moved into scope early: account sign-in needs an interactive sessio
   message, as readable text rather than as anything hidden (§4). Open is whether
   GitHub's review threads should appear on the same surface, which waits on
   pull requests (§16).
-- **Several agents per workspace** — the store already allows it: a chat owns the session, and `agent` is an enum with one member. Open is whether the interface should offer it, and what two agents editing the same files at once actually does. Conductor allows it and warns about exactly that.
+- **Several agents per workspace** — half answered. The interface offers it: up to three conversations per workspace, no locking between them (§10.8). Still open is what two agents editing the same files at once actually does — the changes pane shows one diff for the workspace, with no way to tell whose work is whose, and a review note against a line may be about a line another conversation has since moved. Conductor allows it and warns about exactly that. `agent` is still an enum with one member, so a second _kind_ of agent remains a widened enum rather than a migration.
 - **What the list shows** — agent status, change count, CI state. Not session cost: the SDK's `total_cost_usd` is what the same tokens would have cost through the API, which a subscription never pays, and its own documentation calls it "an estimate, not a billing statement". Shown in an interface it is a made-up number in a currency. If usage is worth surfacing at all it belongs as tokens or as distance to a rate limit, not as dollars.
 - **Monetisation model** — whether $20 stays as full access (see the note in §15.5), and whether a separate auth service is warranted at all given the risks in §15.6.

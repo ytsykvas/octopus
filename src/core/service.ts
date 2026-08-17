@@ -8,7 +8,10 @@
 
 import { randomUUID } from 'node:crypto'
 
-import { query as defaultQuery } from '@anthropic-ai/claude-agent-sdk'
+import {
+  forkSession as defaultForkSession,
+  query as defaultQuery
+} from '@anthropic-ai/claude-agent-sdk'
 
 import { type CommandExec, defaultExec } from './accounts.js'
 import {
@@ -26,9 +29,14 @@ import {
   type AgentCommand,
   type AgentModel,
   type Chat,
+  ChatError,
+  type ChatStatus,
+  DEFAULT_AGENT,
   type Effort,
   EXIT_PLAN_MODE,
+  forkChat as forkChatRecord,
   isClearCommand,
+  MAX_CHATS_PER_WORKSPACE,
   newChat,
   sessionMode,
   type WorkingMode
@@ -44,7 +52,13 @@ import { type InstructionKind, readInstruction, writeInstruction } from './instr
 import { configFile, rootDir, stateFile, stateTempFile } from './paths.js'
 import { type QuestionAnswer, readQuestions, withAnswers } from './questions.js'
 import { describeError } from './persist.js'
-import { appendEntry, type ChatEntry, readTranscript, removeTranscript } from './transcript.js'
+import {
+  appendEntry,
+  type ChatEntry,
+  copyTranscript,
+  readTranscript,
+  removeTranscript
+} from './transcript.js'
 import { assertBranchExists, createProject, orderBaseBranches } from './projects.js'
 import { readScript, type ScriptKind, scriptExists, scriptPath, writeScript } from './scripts.js'
 import {
@@ -59,6 +73,7 @@ import {
   modelsUnchanged,
   type Project,
   rememberModels,
+  removeChat,
   removeProject,
   type ProjectPatch,
   removeWorkspace as removeWorkspaceRecord,
@@ -68,7 +83,8 @@ import {
   updateProject,
   updateWorkspace,
   type Workspace,
-  workspacesOfProject
+  workspacesOfProject,
+  workspaceStatusFrom
 } from './store.js'
 import { listBranches, listRemoteBranches, listWorktrees } from './worktree.js'
 import {
@@ -84,6 +100,18 @@ import {
   type WorkspaceView,
   type RemoveOptions
 } from './workspaces.js'
+
+/**
+ * The SDK's `forkSession`, narrowed to what this service asks of it.
+ *
+ * Ours rather than the SDK's own signature, so the injected stand-in in tests
+ * is written against what is actually used rather than against an options bag
+ * with alpha members in it.
+ */
+export type ForkSessionFn = (
+  sessionId: string,
+  options: { readonly dir: string }
+) => Promise<{ readonly sessionId: string }>
 
 export interface ServiceOptions {
   readonly stateFilePath?: string
@@ -107,6 +135,14 @@ export interface ServiceOptions {
    * or reaching the network — the same reasoning as `makeExec`.
    */
   readonly query?: QueryFn
+  /**
+   * The SDK's session fork, injected for the same reason as `query`.
+   *
+   * A real fork reads and writes the agent CLI's own session store, so a test
+   * that called it would depend on a conversation having happened on the
+   * machine running it.
+   */
+  readonly forkSession?: ForkSessionFn
   readonly uuid?: () => string
   /** Current time as an ISO string; a parameter so records are predictable in tests. */
   readonly now?: () => string
@@ -129,6 +165,26 @@ export interface ChatEvent {
 export interface WorkspaceStatusEvent {
   readonly workspaceId: string
   readonly status: Workspace['status']
+}
+
+/**
+ * A conversation and what it is now doing — the twin of the above, one level in.
+ *
+ * Two streams because two lists draw two different things: the tab strip draws
+ * a conversation, the workspace list draws a workspace, and they move at
+ * different moments. A second tab finishing does not move a workspace whose
+ * first tab is still running.
+ *
+ * Not folded into `ChatEvent` either. That stream carries `AgentEvent`, which is
+ * the isolation boundary around the SDK and the shape written to the transcript
+ * — a status this application computes has no business in it, and half the
+ * changes here come from places with no agent event at all: an interrupt, an
+ * answered permission, a closed tab.
+ */
+export interface ChatStatusEvent {
+  readonly chatId: string
+  readonly workspaceId: string
+  readonly status: ChatStatus
 }
 
 /** What the user answered to a permission request. */
@@ -228,7 +284,37 @@ export interface OctopusService {
    * than of what might.
    */
   openChat(workspaceId: string): Promise<Chat>
-  /** Every chat of a workspace. One today; the shape already allows more. */
+  /**
+   * An additional conversation in this workspace, refusing past the cap.
+   *
+   * Separate from `openChat` rather than a flag on it: opening is idempotent
+   * and answers "the conversation to write into", which is what every caller
+   * that is not the new-tab button wants. This one always writes a record,
+   * which is the whole request.
+   */
+  createChat(workspaceId: string): Promise<Chat>
+  /**
+   * A new conversation continuing this one, in the same worktree.
+   *
+   * The agent keeps what it remembers; the two then diverge. Refuses a chat
+   * that has never run, since there is nothing to continue.
+   */
+  forkChat(chatId: string): Promise<Chat>
+  /**
+   * Gives a conversation a name of its own, or takes it back.
+   *
+   * An empty name is not a refusal but a request: it clears the field, and the
+   * strip goes back to naming the conversation after its agent and its place.
+   */
+  renameChat(chatId: string, title: string): Promise<void>
+  /**
+   * Ends a conversation and discards it, transcript included.
+   *
+   * Refuses the last one of a workspace: throwing away the only conversation is
+   * `/clear`, which does it without leaving the workspace without one.
+   */
+  closeChat(chatId: string): Promise<void>
+  /** Every chat of a workspace, in the order they were opened. */
   listChats(workspaceId: string): readonly Chat[]
   /** Everything said in a chat, as it will be redrawn after a restart. */
   chatHistory(chatId: string): Promise<ChatEntry[]>
@@ -307,6 +393,8 @@ export interface OctopusService {
   onAgentEvent(handler: (event: ChatEvent) => void): () => void
   /** What a workspace is doing, as it changes. A broadcast, like the above. */
   onWorkspaceStatus(handler: (event: WorkspaceStatusEvent) => void): () => void
+  /** What each conversation is doing, as it changes. The tab strip draws this. */
+  onChatStatus(handler: (event: ChatStatusEvent) => void): () => void
   /** Ends every live session. Called when the application quits. */
   closeChats(): Promise<void>
 }
@@ -325,6 +413,7 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
   const commandExec = options.commandExec ?? defaultExec
   const dataRoot = options.dataRoot ?? rootDir()
   const runQuery = options.query ?? defaultQuery
+  const runForkSession = options.forkSession ?? defaultForkSession
   const uuid = options.uuid ?? randomUUID
   const now = options.now ?? ((): string => new Date().toISOString())
 
@@ -335,6 +424,7 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
   const sessions = new Map<string, AgentSession>()
   const listeners = new Set<(event: ChatEvent) => void>()
   const statusListeners = new Set<(event: WorkspaceStatusEvent) => void>()
+  const chatStatusListeners = new Set<(event: ChatStatusEvent) => void>()
   const pending = new Map<string, PendingPermission>()
 
   /**
@@ -521,6 +611,46 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
   }
 
   /**
+   * Copies one conversation's history onto another — what a fork needs.
+   *
+   * In the same queue as the appends, for the reason `discard` gives: a copy
+   * racing the writes around it could read the source between two lines of one
+   * turn. Awaited rather than left running like `record`, because the caller is
+   * about to hand the new conversation to a window that reads the file at once.
+   */
+  function copyHistory(from: Chat, to: Chat): Promise<void> {
+    // No failure arms, unlike `record` and `discard`: the queue's tail is
+    // always a settled promise because both of those end in a `catch`, and
+    // `copyTranscript` is silent rather than throwing.
+    const run = transcriptWrites.then(() => copyTranscript(from.id, to.id, dataRoot))
+    transcriptWrites = run
+
+    return run
+  }
+
+  /**
+   * Adds a conversation to a workspace, refusing past the cap.
+   *
+   * The count is taken inside the commit rather than before it, for the same
+   * reason `openChat` decides inside its own: two presses of the new-tab button
+   * landing together would both see room against two conversations, and the cap
+   * would hold for neither.
+   */
+  function addChatCapped(chat: Chat): Promise<void> {
+    return commitChats(chat.workspaceId, (current) => {
+      if (chatsOfWorkspace(current, chat.workspaceId).length >= MAX_CHATS_PER_WORKSPACE) {
+        throw new ChatError(
+          'tooManyChats',
+          { limit: String(MAX_CHATS_PER_WORKSPACE) },
+          `Workspace ${chat.workspaceId} already holds ${String(MAX_CHATS_PER_WORKSPACE)} chats.`
+        )
+      }
+
+      return addChat(current, chat)
+    })
+  }
+
+  /**
    * Reports a background failure into the chat it belongs to, then drops it.
    *
    * The session is still running, and a write that could not be made is not a
@@ -536,24 +666,71 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
   }
 
   /**
-   * Records what a workspace is doing, and says so.
+   * Changes a workspace's conversations, brings its status back in line, and
+   * says so if it moved.
+   *
+   * The workspace's status is derived from its chats, so the two move in one
+   * `commit`. Two commits would leave a moment in which the chats say one thing
+   * and the workspace derived from them says another — and that moment is when
+   * the file gets written.
    *
    * Announced as well as stored because the list draws it: reading the
    * workspaces again to find out would ask git about every one of them, twice a
    * turn, for something this process already knew. Announced only on a change,
    * or every unchanged commit would send an event describing nothing.
    */
-  function setStatus(workspaceId: string, status: Workspace['status']): Promise<void> {
+  function commitChats(workspaceId: string, change: (current: State) => State): Promise<void> {
     const before = state.workspaces.find((workspace) => workspace.id === workspaceId)
 
-    return commit((current) =>
-      // The workspace can be removed while its last events are still arriving.
-      current.workspaces.some((workspace) => workspace.id === workspaceId)
-        ? updateWorkspace(current, workspaceId, { status })
-        : current
-    ).then(() => {
-      if (!before || before.status === status) return
-      for (const listener of statusListeners) listener({ workspaceId, status })
+    return commit((current) => {
+      const next = change(current)
+
+      // Mapped rather than looked up and updated, so a workspace removed while
+      // its last events were still arriving is simply not among them — there is
+      // no "and what if it has gone" arm to get wrong.
+      return {
+        ...next,
+        workspaces: next.workspaces.map((workspace) =>
+          workspace.id === workspaceId
+            ? {
+                ...workspace,
+                status: workspaceStatusFrom(chatsOfWorkspace(next, workspaceId), workspace.status)
+              }
+            : workspace
+        )
+      }
+    }).then(() => {
+      const settled = state.workspaces.find((workspace) => workspace.id === workspaceId)
+      if (!settled || settled.status === before?.status) return
+      for (const listener of statusListeners) listener({ workspaceId, status: settled.status })
+    })
+  }
+
+  /**
+   * Records what a conversation is doing, and says so.
+   *
+   * Its own stream beside the workspace's, because the tab strip draws the
+   * conversation while the list draws the workspace, and the two move at
+   * different moments: a second tab finishing leaves a workspace whose first
+   * tab is still running exactly where it was.
+   */
+  function setChatStatus(chatId: string, status: ChatStatus): Promise<void> {
+    const before = findChat(state, chatId)
+    // A closing session goes on emitting for a moment after its conversation
+    // was closed, and there is nothing left to record it against.
+    if (!before) return Promise.resolve()
+
+    const { workspaceId } = before
+
+    // Mapped for the same reason the workspaces are: a conversation closed
+    // while its session's last events were still arriving is not in the list,
+    // and that is the whole of what has to happen about it.
+    return commitChats(workspaceId, (current) => ({
+      ...current,
+      chats: current.chats.map((chat) => (chat.id === chatId ? { ...chat, status } : chat))
+    })).then(() => {
+      if (before.status === status) return
+      for (const listener of chatStatusListeners) listener({ chatId, workspaceId, status })
     })
   }
 
@@ -644,7 +821,7 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
     if (event.type === 'commands_changed') rememberCommands(chat, event.commands)
 
     if (event.type === 'permission_request') {
-      background(chat, setStatus(chat.workspaceId, 'waiting_permission'))
+      background(chat, setChatStatus(chat.id, 'waiting_permission'))
     }
 
     // An edit announced. Remembered rather than acted on: whether it worked is
@@ -667,11 +844,11 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
     }
 
     if (event.type === 'result') {
-      background(chat, setStatus(chat.workspaceId, event.ok ? 'idle' : 'error'))
+      background(chat, setChatStatus(chat.id, event.ok ? 'idle' : 'error'))
     }
 
     if (event.type === 'error') {
-      background(chat, setStatus(chat.workspaceId, 'error'))
+      background(chat, setChatStatus(chat.id, 'error'))
     }
 
     // A turn that has ended cannot answer for a tool it never ran. Only the
@@ -799,27 +976,33 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
    * needs doing here is the part outside the state file — a child process and
    * a transcript, neither of which a record removal would touch.
    */
+  async function closeOneChat(chat: Chat): Promise<void> {
+    const session = sessions.get(chat.id)
+    sessions.delete(chat.id)
+
+    // A session that ends mid-tool leaves an edit nobody will ever answer
+    // for, and a question nobody will ever answer at all. Both go with it,
+    // and only this chat's, since the maps are the whole service's.
+    abandonPermissions(chat.id)
+    abandonEdits(chat.id)
+
+    // A `/clear` the session never got round to answering, and a clearing
+    // turn whose result never came. Both belong to a chat that is going, so
+    // neither is left in a set for the rest of the run.
+    clearRequests.delete(chat.id)
+    clearedTurns.delete(chat.id)
+
+    // Best effort: a session that fails to close must not stop the workspace
+    // from being removed, nor the tab from closing.
+    await session?.close().catch(() => undefined)
+    await removeTranscript(chat.id, dataRoot).catch(() => undefined)
+  }
+
   async function closeChatsOf(workspaceId: string): Promise<void> {
+    // One at a time rather than all at once, so a session that hangs on close
+    // is one wait rather than a race between several.
     for (const chat of chatsOfWorkspace(state, workspaceId)) {
-      const session = sessions.get(chat.id)
-      sessions.delete(chat.id)
-
-      // A session that ends mid-tool leaves an edit nobody will ever answer
-      // for, and a question nobody will ever answer at all. Both go with it,
-      // and only this chat's, since the maps are the whole service's.
-      abandonPermissions(chat.id)
-      abandonEdits(chat.id)
-
-      // A `/clear` the session never got round to answering, and a clearing
-      // turn whose result never came. Both belong to a chat that is going with
-      // this workspace, so neither is left in a set for the rest of the run.
-      clearRequests.delete(chat.id)
-      clearedTurns.delete(chat.id)
-
-      // Best effort, one at a time: a session that fails to close must not
-      // stop the workspace from being removed.
-      await session?.close().catch(() => undefined)
-      await removeTranscript(chat.id, dataRoot).catch(() => undefined)
+      await closeOneChat(chat)
     }
   }
 
@@ -1021,7 +1204,7 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
       const worktrees = await listWorktrees(makeExec(project.repoPath)).catch(() => null)
       const changes = await countChanges(stored, makeExec)
 
-      return reconcile(stored, worktrees, changes)
+      return reconcile(stored, worktrees, changes, state.chats)
     },
 
     async createWorkspaceIn(projectId) {
@@ -1106,7 +1289,7 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
 
       const chat = newChat(workspaceId, {
         id: uuid(),
-        agent: 'claude',
+        agent: DEFAULT_AGENT,
         // The global setting is the starting point; the chat may then diverge
         // from it without changing what the next workspace inherits.
         workingMode: config.workingMode,
@@ -1138,6 +1321,99 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
       })
 
       return opened
+    },
+
+    async createChat(workspaceId) {
+      requireWorkspace(workspaceId)
+
+      const chat = newChat(workspaceId, {
+        id: uuid(),
+        agent: DEFAULT_AGENT,
+        // The global setting is the starting point, as it is for the first
+        // conversation: a second tab is a fresh start, not a copy of the one
+        // beside it.
+        workingMode: config.workingMode,
+        effort: config.effort,
+        createdAt: now()
+      })
+
+      await addChatCapped(chat)
+      return chat
+    },
+
+    async forkChat(chatId) {
+      const source = requireChat(chatId)
+      const workspace = requireWorkspace(source.workspaceId)
+
+      if (source.sessionId === null) {
+        throw new ChatError('nothingToFork', { chatId }, `Chat ${chatId} has not started yet.`)
+      }
+
+      /*
+       * The agent's own fork, run before any record exists.
+       *
+       * Resuming a session continues it in place and keeps its id — which is
+       * exactly what the SDK's `forkSession` option exists to opt out of — so a
+       * second record carrying the source's id would be two agent processes
+       * appending to one session file, each reading the other's turns as part
+       * of its own conversation. What comes back is a new id, which makes the
+       * new chat an ordinary one from its first render.
+       *
+       * Not caught into a clean conversation: a tab that says it continues this
+       * one and does not is worse than a refusal.
+       */
+      let forked: { readonly sessionId: string }
+      try {
+        // `dir` rather than letting it search: without one the SDK looks
+        // through every project directory for a session id.
+        forked = await runForkSession(source.sessionId, { dir: workspace.path })
+      } catch (error) {
+        throw new ChatError('forkFailed', { chatId }, describeError(error))
+      }
+
+      const chat = forkChatRecord(source, {
+        id: uuid(),
+        sessionId: forked.sessionId,
+        createdAt: now()
+      })
+
+      await addChatCapped(chat)
+
+      // The fork above copied what the model remembers; this copies what the
+      // screen draws. Without it the new tab opens empty above an agent that
+      // remembers all of it.
+      await copyHistory(source, chat)
+      return chat
+    },
+
+    async renameChat(chatId, title) {
+      requireChat(chatId)
+
+      // Trimmed here rather than at the boundary: what reaches the record is
+      // what the strip will draw, and a name of three spaces draws as a gap
+      // nothing explains.
+      const trimmed = title.trim()
+      await commit((current) =>
+        updateChat(current, chatId, { title: trimmed === '' ? null : trimmed })
+      )
+    },
+
+    async closeChat(chatId) {
+      const chat = requireChat(chatId)
+
+      // A workspace without a conversation has no way back to one but the
+      // first message, and throwing the only one away is `/clear` — which does
+      // it without leaving the pane with nothing to draw.
+      if (chatsOfWorkspace(state, chat.workspaceId).length <= 1) {
+        throw new ChatError('lastChat', { chatId }, `Chat ${chatId} is its workspace's only one.`)
+      }
+
+      await closeOneChat(chat)
+      // Through `commitChats` rather than a plain commit: the workspace's
+      // status is derived from its conversations, and one of them has gone —
+      // closing the tab that was running leaves the workspace idle, and the
+      // list has to hear about it.
+      await commitChats(chat.workspaceId, (current) => removeChat(current, chatId))
     },
 
     listChats(workspaceId) {
@@ -1208,11 +1484,11 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
       const session = running ?? startFor(chat, workspace)
       session.send(text)
 
-      await setStatus(workspace.id, 'running')
+      await setChatStatus(chatId, 'running')
     },
 
     async interruptChat(chatId) {
-      const chat = requireChat(chatId)
+      requireChat(chatId)
 
       // Before the interrupt rather than after it: stopping a turn is how a
       // question gets abandoned in the first place, and an interrupt that
@@ -1225,7 +1501,7 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
       // Nothing running is not a failure — the button is simply ahead of the
       // agent, which finished between the render and the click.
       await sessions.get(chatId)?.interrupt()
-      await setStatus(chat.workspaceId, 'idle')
+      await setChatStatus(chatId, 'idle')
     },
 
     async setChatWorkingMode(chatId, mode) {
@@ -1285,7 +1561,7 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
         // the window had dropped its copy, and `pendingPermission` had none.
         pending.delete(requestId)
         request.resolve({ allow: false, message: note === '' ? DENIED : note })
-        await setStatus(request.workspaceId, 'idle')
+        await setChatStatus(request.chatId, 'idle')
         return
       }
 
@@ -1319,7 +1595,7 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
         allow: true,
         ...(leaving && chat && { setMode: chat.workingMode })
       })
-      await setStatus(request.workspaceId, 'running')
+      await setChatStatus(request.chatId, 'running')
     },
 
     async answerQuestions(requestId, answers) {
@@ -1350,7 +1626,7 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
       // The whole point: the tool reads the user's choices off its own input,
       // so the reply that releases it carries them.
       request.resolve({ allow: true, updatedInput: withAnswers(asked, answers) })
-      await setStatus(request.workspaceId, 'running')
+      await setChatStatus(request.chatId, 'running')
     },
 
     getRateLimit() {
@@ -1390,6 +1666,11 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
     onWorkspaceStatus(handler) {
       statusListeners.add(handler)
       return () => statusListeners.delete(handler)
+    },
+
+    onChatStatus(handler) {
+      chatStatusListeners.add(handler)
+      return () => chatStatusListeners.delete(handler)
     },
 
     async closeChats() {

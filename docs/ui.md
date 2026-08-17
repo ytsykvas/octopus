@@ -40,11 +40,71 @@ different workspace is a different conversation, not a continuation. Without one
 the pane is not the chat at all but an empty state that offers to make one — see
 "Empty panes" below.
 
-Its header says which workspace by naming the **branch**, marked with a branch
-icon, and nothing else. It used to carry the name as well: a workspace branch is
-made from the workspace name, so `anna ytsykvas/anna` was the same word twice —
-and the branch is what a workspace is identified by anyway. The icon is there
-because nothing else in the pane says what that string is.
+**Its header is the strip of conversations**, and nothing else. A workspace holds
+up to three, and they run at once in the one worktree.
+
+The branch used to be here, marked with a branch icon, and has moved to the
+title bar beside the project's directory: it says where the work lands, which is
+a fact about the window rather than about any one conversation, and it was
+spending a 36px row on one short string. The centre is the narrowest pane in the
+window, so a row is worth having. The header's contents are capped at the same
+72rem as everything below, or the strip would not line up with the log it
+labels.
+
+The tabs are **underlined rather than boxed**, unlike the right pane's. Those
+switch between three different kinds of thing, so each wants an edge of its own;
+these are three of one kind, told apart by a name and a dot, and a row of boxes
+around "Claude 1" would weigh more than what it labels. The active one is marked
+by a 1px rule in the project's colour, and `aria-current` carries that to a
+reader — not `role="tab"`, which nothing else in this window uses.
+
+**A conversation is called after the agent that runs it and its place in the
+strip** — `Claude 1`, `Claude 2`. A name that needs no inventing, and one that
+stops being a guess the moment a second kind of agent exists: it is read from
+the chat's `agent`, through `AGENT_NAMES` in core, which is not in the locales
+because no language translates "Claude".
+
+It can be given a name of its own — double-click the tab, or take Rename from
+its menu, the same gesture that renames a workspace one pane to the left. The
+field opens on whatever the tab currently says, so a small correction is a small
+edit. **Emptying it gives the automatic name back**, which is a request rather
+than the slip it would be on a workspace: a conversation always has a name to
+fall back to. Nothing writes the automatic name into the record, so closing the
+tab beside a conversation renumbers it instead of leaving it called after a
+place it no longer holds. A fork inherits neither the name nor the planning
+state of the conversation it continues — two tabs called "auth refactor" is a
+strip that cannot be read.
+
+**The dot is the same vocabulary as the workspace list's**, shared from
+`agentStatus.ts`: accent and pulsing for working, amber for waiting on an
+answer, danger for a turn that failed. A conversation with nothing to report
+keeps a hollow dot rather than none, or the strip would shift sideways the
+moment an agent started. The colour says nothing aloud at all, so the whole
+meaning is in the button's label: "Claude 2: Waiting for your answer", or the
+conversation's own name where it has been given one.
+
+A tab's menu — right-click, or the ellipsis that appears on hover — offers to
+**rename** it, to **continue the conversation in a new tab**, and to **close**
+it. No inline cross: the workspace list settled that question with the menu
+alone, and two answers to one question is a disagreement rather than a
+convenience. An item that could not work is absent rather than disabled: nothing
+to continue before a session has run, and the last conversation cannot be closed
+at all — a workspace with none has no way back to one but the first message, and
+emptying the only one is `/clear`. Closing a conversation that has said
+something asks first, because it deletes a transcript nothing can bring back.
+
+**Every conversation stays mounted** while its workspace is open, hidden with a
+class the way the right pane hides its tabs — one that unmounted would lose its
+place in the log and the answer half-streamed into it each time you looked at
+another, which with several agents at work is most of the time. Two things
+follow from being hidden rather than gone. A `display:none` element measures
+zero, so the log's pin-to-bottom is skipped while a tab is away and run again
+when it comes back, or a background conversation would scroll itself to the top
+on every event. And the plan dialog is drawn **only by the tab showing**: a
+modal raised by a conversation nobody is looking at is about work the reader
+cannot see and takes the keyboard from work they can. Its tab's dot turns amber
+instead, which is how the workspace list already announces a turn waiting where
+nobody is looking.
 
 The chat draws **one row per event**, not one bubble per turn. A turn is mostly
 tool calls, and folding them into the prose hides the part that says what the
@@ -100,22 +160,29 @@ control carries `min-w-0` rather than `shrink-0` for the same reason: `truncate`
 on its label could never fire while the button refused to shrink. What gives way
 is the wording, and only after the row has already used a second line.
 
-**A draft belongs to the workspace it was typed in.** The composer is keyed by
-the workspace, so a switch takes the field with it — along with the highlighted
-command and the dismissed hint, which are derived from the text and would
-otherwise point at words that had gone. Typing an instruction in one workspace,
-looking at another and pressing Enter used to send it to that agent, in that
-worktree, on that branch, with the text still in the field saying otherwise.
+**A draft belongs to the conversation it was typed in.** The whole chat pane is
+keyed by the workspace, so a switch takes the field with it — along with the
+highlighted command and the dismissed hint, which are derived from the text and
+would otherwise point at words that had gone. Typing an instruction in one
+workspace, looking at another and pressing Enter used to send it to that agent,
+in that worktree, on that branch, with the text still in the field saying
+otherwise.
 
-The text is kept per workspace rather than thrown away, in a map `App` holds
-beside the review notes: going to look at something should not cost a
-half-written prompt. The composer hands it up **once, on the way out** — a
+The text is kept per workspace **and tab** rather than thrown away, in a map
+`App` holds beside the review notes: going to look at something should not cost
+a half-written prompt, and a sentence typed for one conversation is not for the
+one beside it. Keyed by the tab's key rather than by its chat id — the id
+appears with the first message, and a draft filed under the old key would be
+lost at exactly that moment. The composer hands it up **once, on the way out** — a
 report per keystroke would put a `setState` in `App` under every key pressed,
 with the log re-rendering behind it.
 
-**The stop button follows the workspace, not the pane.** `busy` is this pane's
-own events **or** the workspace's status, so a turn left running is still
-stoppable when you come back to it. Derived rather than seeded on the switch:
+**The stop button follows the conversation, not the pane.** `busy` is this
+pane's own events **or** the conversation's status, so a turn left running is
+still stoppable when you come back to it. The conversation's rather than its
+workspace's, which is what it read before there could be more than one: three
+tabs share a workspace, so the one that finished reported the other two idle and
+took the stop button away from turns still going. Derived rather than seeded on the switch:
 the event that ends a turn is filtered by the open chat's id and there is no
 chat until its history has loaded, so one arriving in that window is dropped and
 a seeded flag would stay stuck on.

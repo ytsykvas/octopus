@@ -12,6 +12,7 @@
 import { access, realpath } from 'node:fs/promises'
 import { isAbsolute, relative, resolve } from 'node:path'
 
+import type { AgentKind, Chat, ChatStatus } from './chats.js'
 import { anyBranchExists, type GitExec, toSlug } from './git.js'
 import { nextWorkspaceName, type Random } from './names.js'
 import { workspacePath } from './paths.js'
@@ -63,6 +64,27 @@ export interface WorkspaceView extends Workspace {
   readonly changedFiles: number
   /** The directory is gone — removed outside the app. */
   readonly missing: boolean
+  /**
+   * The workspace's conversations, in the order they were opened.
+   *
+   * The list draws one dot per conversation, so it needs each one's state
+   * rather than only the workspace's summary of them: three agents at work,
+   * one of them waiting for an answer, is what the row has to be able to say.
+   *
+   * The id comes too, because the status arrives afterwards on `chats:status`
+   * and has to find the entry it belongs to.
+   */
+  readonly chats: readonly WorkspaceChat[]
+}
+
+/** One conversation of a workspace, as the list draws it. */
+export interface WorkspaceChat {
+  readonly id: string
+  /** Which agent runs it — the row names a conversation by it, as the strip does. */
+  readonly agent: AgentKind
+  /** A name the user gave it, or null for the one it is given. */
+  readonly title: string | null
+  readonly status: ChatStatus
 }
 
 async function pathExists(path: string): Promise<boolean> {
@@ -369,8 +391,26 @@ export async function rollbackWorkspace(workspace: Workspace, exec: GitExec): Pr
 export function reconcile(
   workspaces: readonly Workspace[],
   worktrees: readonly Worktree[] | null,
-  changes: ReadonlyMap<string, number> = new Map()
+  changes: ReadonlyMap<string, number> = new Map(),
+  /**
+   * Every chat in the state, not one workspace's.
+   *
+   * Filtered here rather than grouped by the caller: the caller has the flat
+   * list, and pre-grouping it would be a second shape to keep in step for a
+   * handful of records.
+   */
+  chats: readonly Chat[] = []
 ): WorkspaceView[] {
+  const conversations = (workspace: Workspace): WorkspaceChat[] =>
+    chats
+      .filter((chat) => chat.workspaceId === workspace.id)
+      .map((chat) => ({
+        id: chat.id,
+        agent: chat.agent,
+        title: chat.title,
+        status: chat.status
+      }))
+
   // `null` means git could not be asked — the repository was moved, renamed or
   // is otherwise unreadable. That says nothing about whether the worktrees are
   // still there, so nothing is marked missing: the alternative is claiming
@@ -380,7 +420,8 @@ export function reconcile(
     return workspaces.map((workspace) => ({
       ...workspace,
       missing: false,
-      changedFiles: changes.get(workspace.id) ?? 0
+      changedFiles: changes.get(workspace.id) ?? 0,
+      chats: conversations(workspace)
     }))
   }
 
@@ -393,7 +434,8 @@ export function reconcile(
   return workspaces.map((workspace) => ({
     ...workspace,
     missing: !present.has(workspace.path),
-    changedFiles: changes.get(workspace.id) ?? 0
+    changedFiles: changes.get(workspace.id) ?? 0,
+    chats: conversations(workspace)
   }))
 }
 

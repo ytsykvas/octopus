@@ -208,8 +208,38 @@ what appears in a pull request.
 `sessionId` used to sit on the workspace. It moved because the shape decided
 what the application could become: one session per workspace makes a second
 agent in the same worktree a migration, while one per chat makes it another
-record. The UI shows a single chat today; the store already allows more, and
-`agent` is a one-member enum for the same reason.
+record. That is how it played out — the interface now offers up to three
+conversations per workspace, and the stored shape did not have to change for it.
+`agent` is a one-member enum for the same reason, so a second _kind_ of agent
+stays a widened enum rather than a migration.
+
+Three because they share a worktree: past that the tabs stop being a way to work
+in parallel and become a way to lose track of who changed what. The cap lives in
+`chats.ts` as `MAX_CHATS_PER_WORKSPACE`, which is also where the tab strip reads
+it from — the renderer may import _values_ only from core modules that pull in
+nothing Node-only, and `store.ts` reaches `node:os` through `paths.ts`.
+
+`status` sits on the chat as well, and the workspace's own is **derived** from
+its conversations by `workspaceStatusFrom`: `waiting_permission` outranks
+`running`, which outranks `error`, which outranks `idle`, and `archived` — a
+decision about the workspace — overrules all of them. Before this, whichever
+conversation last had an event wrote the workspace's status, so the one that
+finished reported the two still working as idle.
+
+`title` is the name a user gave a conversation, and null for the one it is
+given — `Claude 1`, from the chat's `agent` and its place in the strip. Null
+rather than a copy of that name, and defaulted rather than migrated, for the
+reason the project icon is: absent is already the right answer, and writing the
+automatic name down would freeze it, so a conversation would keep the number it
+had when it was opened after the tab beside it was closed. Clearing the field is
+how the interface asks for the automatic name back, which is a value rather than
+an absence.
+
+A forked conversation carries the source's model, effort, working mode and known
+commands, and deliberately **not** its `planMode` or its `title`: planning is a
+decision about a particular task, forking out of a settled plan to try the other
+approach is the likeliest reason to fork at all, and two tabs bearing one name
+is a strip that cannot be read.
 
 A chat is created by the **first thing done to it**, not by the workspace: the
 first message, or choosing a setting in the composer before sending one. A

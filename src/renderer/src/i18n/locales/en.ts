@@ -208,6 +208,30 @@ export const en = {
   },
 
   chat: {
+    /* The strip above the conversation. A workspace holds up to three, running
+       at once in the same worktree; a tab is named after the agent that runs it
+       and numbered by its place, because a title would have to be invented
+       before there was anything to title. The name is interpolated rather than
+       written in: it comes from the chat's `agent`, so a second kind of agent
+       does not need these lines rewritten. */
+    tabs: 'Conversations',
+    tab: '{{agent}} {{number}}',
+    /* What a tab says aloud, and what its tooltip shows. Takes the resolved
+       name — the one the user gave it, or the automatic one above — because a
+       renamed conversation should read as itself here too. */
+    tabStatus: '{{name}}: {{state}}',
+    tabStatusIdle: 'nothing running',
+    newTab: 'New conversation',
+    renameTab: 'Rename…',
+    forkTab: 'Continue in a new conversation',
+    forkTabHint: 'The agent keeps what it remembers of this one.',
+    closeTab: 'Close conversation',
+    closeTabTitle: 'Close this conversation?',
+    closeTabMessage: '{{name}} and everything said in it.',
+    closeTabDetail: 'The agent’s memory of it goes too, and cannot be brought back.',
+    closeTabConfirm: 'Close',
+    closeTabCancel: 'Cancel',
+
     placeholder: 'Ask the agent to do something in this workspace…',
     send: 'Send',
     stop: 'Stop',
@@ -442,6 +466,15 @@ export const en = {
     uncommittedChanges: '{{name}} has uncommitted changes.',
     nameEmpty: 'The name cannot be empty.',
     worktreeMissing: 'That workspace is no longer there.',
+    // Ukrainian needs `few` and `many` as well; i18next picks the form that
+    // applies to the active language and ignores the rest.
+    tooManyChats_one: 'A workspace holds at most {{count}} conversation.',
+    tooManyChats_few: 'A workspace holds at most {{count}} conversations.',
+    tooManyChats_many: 'A workspace holds at most {{count}} conversations.',
+    tooManyChats_other: 'A workspace holds at most {{count}} conversations.',
+    lastChat: 'The last conversation cannot be closed. Use /clear to start it again.',
+    nothingToFork: 'This conversation has not started yet, so there is nothing to continue.',
+    forkFailed: 'The agent could not copy this conversation.',
     unknown: 'Something went wrong: {{message}}'
   }
 }

@@ -1,9 +1,9 @@
 /**
  * Chat records — a conversation with one agent inside one workspace.
  *
- * A chat, not a workspace, owns the agent session. The distinction costs
- * nothing today, when the UI shows a single chat per workspace, and is what
- * lets a second agent join later without the stored shape having to change:
+ * A chat, not a workspace, owns the agent session. That distinction is what let
+ * a workspace hold three conversations at once without the stored shape having
+ * to change — and what would let a second *kind* of agent join the same way:
  * another chat with a different `agent`, sharing the branch and the files.
  *
  * Deliberately free of Node imports so the renderer can import the mode list
@@ -22,6 +22,65 @@ import { z } from 'zod'
 export const AGENT_KINDS = ['claude'] as const
 export const AgentKindSchema = z.enum(AGENT_KINDS)
 export type AgentKind = z.infer<typeof AgentKindSchema>
+
+/**
+ * What each agent is called on screen.
+ *
+ * Not in the locales, because these are proper nouns: no language translates
+ * "Claude". Here rather than written into a tab's label so that adding `codex`
+ * to the enum above is a compile error here — `Record` is exhaustive — rather
+ * than a strip that goes on calling every conversation by the wrong name.
+ */
+export const AGENT_NAMES: Record<AgentKind, string> = {
+  claude: 'Claude'
+}
+
+/**
+ * Which agent a new conversation is started with.
+ *
+ * The only one there is, and named rather than written out at each of the three
+ * places that create a record — including the tab the strip draws before the
+ * record exists, which has to agree with what will be created for it.
+ */
+export const DEFAULT_AGENT: AgentKind = 'claude'
+
+/**
+ * What a conversation is doing.
+ *
+ * The workspace's own statuses minus `archived`, which is a decision taken
+ * about a workspace and not something a conversation can be in. Kept as its own
+ * enum rather than reusing `WorkspaceStatusSchema` for exactly that reason —
+ * and because that one lives in `store.ts`, which the renderer may not import
+ * values from (§11.1).
+ */
+export const CHAT_STATUSES = ['idle', 'running', 'waiting_permission', 'error'] as const
+export const ChatStatusSchema = z.enum(CHAT_STATUSES)
+export type ChatStatus = z.infer<typeof ChatStatusSchema>
+
+/**
+ * How many conversations one workspace may hold at once.
+ *
+ * Three because they share a worktree: past that the tabs stop being a way to
+ * work in parallel and become a way to lose track of who changed what. Here
+ * rather than in `store.ts` because the tab strip needs it as a **value** to
+ * know when to stop offering a new one, and this module pulls in nothing
+ * Node-only.
+ */
+export const MAX_CHATS_PER_WORKSPACE = 3
+
+export type ChatErrorCode = 'tooManyChats' | 'lastChat' | 'nothingToFork' | 'forkFailed'
+
+/** A refused operation on a conversation, carrying a code the UI localises. */
+export class ChatError extends Error {
+  constructor(
+    readonly code: ChatErrorCode,
+    readonly params: Readonly<Record<string, string>>,
+    message: string
+  ) {
+    super(message)
+    this.name = 'ChatError'
+  }
+}
 
 /**
  * How much the agent is allowed to do without asking.
@@ -310,6 +369,30 @@ export const ChatSchema = z.object({
   id: z.string().min(1),
   workspaceId: z.string().min(1),
   agent: AgentKindSchema,
+  /**
+   * What this conversation is doing.
+   *
+   * On the chat as well as on the workspace, because a workspace holds several
+   * and they run at once: a workspace-wide flag meant the tab that finished
+   * marked the ones still working as idle. The workspace keeps its own, derived
+   * from these — `workspaceStatusFrom` in `store.ts`.
+   *
+   * Defaulted rather than migrated: a record written before this field existed
+   * was not running when it was written, and `settleStatuses` would put it down
+   * to `idle` on the next load anyway.
+   */
+  status: ChatStatusSchema.default('idle'),
+  /**
+   * A name the user gave this conversation, or null for the one it is given.
+   *
+   * Null rather than a copy of "Claude 1", and defaulted rather than migrated,
+   * for the reason the project icon is: absent is already the right answer, and
+   * writing the automatic name down would freeze it — a conversation would keep
+   * the number it had when it was opened after the tab beside it was closed.
+   * Clearing the field is how the interface says "back to the automatic name",
+   * which is a value rather than an absence.
+   */
+  title: z.string().nullable().default(null),
   /** Agent session id; null until the agent has answered once. */
   sessionId: z.string().nullable(),
   /** Model override; null leaves the choice to the agent. */
@@ -362,6 +445,14 @@ export type Chat = z.infer<typeof ChatSchema>
  */
 export const ChatMessageSchema = z.string().min(1).max(100_000)
 
+/**
+ * A name as accepted from the renderer.
+ *
+ * Bounded because it is drawn in a tab a few characters wide; past this the
+ * strip is carrying a sentence. Empty is allowed and means the automatic name.
+ */
+export const ChatTitleSchema = z.string().max(60)
+
 /** How the user may answer a permission request. */
 export const PermissionAnswerSchema = z.enum(['allow', 'always', 'deny'])
 
@@ -394,6 +485,8 @@ export function newChat(workspaceId: string, options: NewChatOptions): Chat {
     id: options.id,
     workspaceId,
     agent: options.agent,
+    status: 'idle',
+    title: null,
     sessionId: null,
     model: null,
     effort: options.effort,
@@ -404,6 +497,52 @@ export function newChat(workspaceId: string, options: NewChatOptions): Chat {
     // Nothing known until a session has run: the agent is the only thing that
     // can say which commands this worktree has.
     knownCommands: [],
+    createdAt: options.createdAt
+  }
+}
+
+export interface ForkChatOptions {
+  readonly id: string
+  /**
+   * The **forked** session, never the source's.
+   *
+   * Resuming a session continues it in place and keeps its id, so two records
+   * holding one id would be two agent processes writing one transcript. The
+   * caller forks first and passes what came back.
+   */
+  readonly sessionId: string
+  readonly createdAt: string
+}
+
+/**
+ * Builds a chat continuing another one.
+ *
+ * Carries across everything that describes how this conversation is run —
+ * model, effort, working mode, the commands its worktree offers — because the
+ * fork is the same work in the same place, and re-picking all of it would be
+ * the first thing anyone did.
+ *
+ * `planMode` deliberately does not come along. Planning is a decision about a
+ * particular task, and forking out of a settled plan to try the other approach
+ * is the likeliest reason to fork at all — inheriting it would start the new
+ * conversation planning the old one's task.
+ */
+export function forkChat(source: Chat, options: ForkChatOptions): Chat {
+  return {
+    id: options.id,
+    workspaceId: source.workspaceId,
+    agent: source.agent,
+    status: 'idle',
+    // Not the source's name either, and for the same reason as `planMode`: the
+    // fork is a divergence, and two tabs called "auth refactor" is a strip that
+    // cannot be read. It takes the automatic name until it is given one.
+    title: null,
+    sessionId: options.sessionId,
+    model: source.model,
+    effort: source.effort,
+    workingMode: source.workingMode,
+    planMode: false,
+    knownCommands: source.knownCommands,
     createdAt: options.createdAt
   }
 }

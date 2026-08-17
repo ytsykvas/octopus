@@ -279,6 +279,81 @@ the conversation reopened empty and the transcript that held it was filed under
 an id nothing pointed at. Serialising the write is worth nothing if the question
 it answers was asked outside the queue.
 
+`createChat` counts against the cap inside its own callback for exactly that
+reason: two presses of the new-tab button landing together would both see room
+against two conversations, and the cap would hold for neither.
+
+### Opening a conversation, and creating another
+
+`openChat` answers "the conversation to write into" and is idempotent — it is
+what the pane calls when a setting is picked or a first message sent, and a
+workspace nobody has spoken to gets no record from it being looked at.
+`createChat` always writes one, which is the whole of what the new-tab button
+asks for. A flag on the first would have made every caller say which of the two
+it meant.
+
+`closeChat` ends a conversation and discards it, and refuses the last one of a
+workspace: emptying the only conversation is `/clear`, which does it without
+leaving the pane with nothing to draw — and does it with a confirmation, which a
+second route through the tab's menu would not have carried.
+
+The sequence a closing conversation goes through — abandon its questions and its
+edits in flight, drop its `clearRequests` and `clearedTurns`, close the session,
+remove the transcript — lives in `closeOneChat`, and `closeChatsOf` is a loop
+over it. Written out twice it would drift, which is what `removeProjectById`
+did before its own cascade was factored out.
+
+`renameChat` trims what it is handed and stores null for an empty name. Trimmed
+in the service rather than at the boundary, because what reaches the record is
+what the strip will draw, and a name of three spaces draws as a gap nothing
+explains.
+
+### A workspace's status is derived, not written
+
+`Workspace.status` used to be written by whichever conversation last had an
+event. With three per workspace that is wrong in the ordinary case: the tab that
+finished marked the two still working as idle, and the composer's stop button
+went with it.
+
+The status now sits on the **chat**, and the workspace's is computed from its
+conversations by `workspaceStatusFrom` — `waiting_permission` first, because
+that turn has stopped and is waiting on the user; then `running`, because the
+dot says what is happening now; then `error`, which is a record of something
+that already happened; then `idle`. `archived` is a decision about the workspace
+and nothing a conversation does overrules it.
+
+Both move in one `commit` (`commitChats`), because two would leave a moment in
+which the chats say one thing and the workspace derived from them says another —
+and that moment is when the file gets written. Each of the two streams fires
+only when its own value actually changed: a second conversation finishing does
+not move a workspace whose first is still running, and announcing it anyway
+would redraw the whole list for nothing.
+
+`settleStatuses` follows the same shape on load: the conversations are put down
+first, and the workspaces derived from the settled list rather than settled
+alongside it by a rule that would drift the first time one of them changed.
+
+### Forking a conversation
+
+A plain `resume` continues a session **in place and keeps its id** — which is
+what the SDK's own `forkSession` option exists to opt out of, and what the guard
+in `handleEvent` that skips an unchanged `sessionId` had already shown. So
+copying the id onto a second record is not a cosmetic clash but two agent
+processes appending to one session file, each reading the other's turns as part
+of its own conversation.
+
+`forkChat` therefore calls the SDK's standalone `forkSession(sessionId, { dir })`
+**before** any record exists, and stores what comes back. `dir` is the
+workspace's path and is not optional in practice: without it the SDK searches
+every project directory for the id. Injected like `query`, so a test reaches no
+CLI and no conversation that happened on the machine running it.
+
+That copies what the _model_ remembers. Our own transcript is copied beside it
+(`copyTranscript`, queued behind the appends), because that is what the _screen_
+draws — without it the new tab opens empty above an agent that remembers all of
+it. A fork the SDK refuses writes no record at all: a tab that says it continues
+a conversation and does not is worse than a refusal.
+
 ### What the renderer holds is what the core last said
 
 A patch arriving over IPC is external data like any other. `applyConfig` merged

@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
+import { ChatError } from '../core/chats.js'
 import { ProjectValidationError } from '../core/projects.js'
 import { WorkspaceError } from '../core/workspaces.js'
 import { attempt } from './result.js'
@@ -37,6 +38,19 @@ describe('attempt', () => {
     })
 
     expect(result).toMatchObject({ ok: false, code: 'branchExists' })
+  })
+
+  it('keeps the code and params of a refused conversation', async () => {
+    const result = await attempt(() => {
+      throw new ChatError('tooManyChats', { limit: '3' }, 'too many chats')
+    })
+
+    expect(result).toEqual({
+      ok: false,
+      error: 'too many chats',
+      code: 'tooManyChats',
+      params: { limit: '3' }
+    })
   })
 
   it('describes an ordinary error without inventing a code', async () => {

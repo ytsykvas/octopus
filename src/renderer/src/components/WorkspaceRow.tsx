@@ -1,8 +1,10 @@
 import { AlertTriangle, MoreHorizontal, Pencil, Trash2 } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 
+import { AGENT_NAMES } from '@core/chats.js'
 import type { WorkspaceView } from '@core/workspaces.js'
 
+import { AGENT_LABELS, AGENT_TONES, chatStatusLabel, chatStatusTone } from './agentStatus.js'
 import { DropdownMenu } from './DropdownMenu.js'
 import { NameEditor } from './NameEditor.js'
 
@@ -122,49 +124,49 @@ export function WorkspaceRow({
 }
 
 /**
- * What the agent is doing there, when it is doing anything.
- *
- * The whole point of a list of workspaces is that several are working at once,
- * and until this read `status` the only way to find out was to open each one.
- * The colour is the difference that matters: `warning` means the turn has
- * stopped and is waiting on you, which is the one state worth crossing the
- * window for.
- */
-const AGENT_TONES: Partial<Record<WorkspaceView['status'], string>> = {
-  running: 'bg-accent animate-pulse',
-  waiting_permission: 'bg-warning',
-  error: 'bg-danger'
-}
-
-/*
- * Written out rather than built from the status: `t` is typed against the
- * locale, and a key assembled at runtime is a string it cannot check — which is
- * the whole point of typing the locales against each other.
- */
-const AGENT_LABELS: Partial<
-  Record<
-    WorkspaceView['status'],
-    'workspaces.statusRunning' | 'workspaces.statusWaiting' | 'workspaces.statusError'
-  >
-> = {
-  running: 'workspaces.statusRunning',
-  waiting_permission: 'workspaces.statusWaiting',
-  error: 'workspaces.statusError'
-}
-
-/**
  * State at a glance.
  *
  * One mark, not two: the agent's state takes the dot while there is one to
  * report, and a filled dot for uncommitted work is what it falls back to —
  * `idle` with changes is the ordinary case, and two marks side by side would
  * make the list busier than the thing it describes.
+ *
+ * The exception is a workspace holding several conversations, which is the one
+ * thing a single dot cannot say: two agents at work while a third waits for an
+ * answer summarises to "waiting", and the row would be hiding the two that are
+ * still going. Then it is one dot each, in tab order.
  */
 function StatusMark({ workspace }: { workspace: WorkspaceView }): React.JSX.Element {
   const { t } = useTranslation()
 
   if (workspace.missing) {
     return <AlertTriangle aria-hidden size={11} className="text-warning shrink-0" />
+  }
+
+  if (workspace.chats.length > 1) {
+    return (
+      <span className="flex shrink-0 items-center gap-[3px]">
+        {workspace.chats.map((chat, index) => {
+          // Named exactly as the tab strip names it, its own name included: a
+          // reader told "auth refactor is waiting" has somewhere to go.
+          const described = t('chat.tabStatus', {
+            name:
+              chat.title ?? t('chat.tab', { agent: AGENT_NAMES[chat.agent], number: index + 1 }),
+            state: t(chatStatusLabel(chat.status))
+          })
+
+          return (
+            <span
+              key={chat.id}
+              role="img"
+              aria-label={described}
+              title={described}
+              className={`size-1.5 shrink-0 rounded-full ${chatStatusTone(chat.status)}`}
+            />
+          )
+        })}
+      </span>
+    )
   }
 
   const tone = AGENT_TONES[workspace.status]

@@ -1,7 +1,7 @@
 import { act } from '@testing-library/react'
 import { vi } from 'vitest'
 
-import type { Chat } from '@core/chats.js'
+import type { Chat, ChatStatus } from '@core/chats.js'
 import type { AgentEvent } from '@core/events.js'
 import type { ChatEntry } from '@core/transcript.js'
 
@@ -15,6 +15,8 @@ export function chat(overrides: Partial<Chat> = {}): Chat {
     id: CHAT_ID,
     workspaceId: 'planner/anna',
     agent: 'claude',
+    status: 'idle',
+    title: null,
     sessionId: null,
     model: null,
     effort: 'medium',
@@ -39,6 +41,37 @@ export function givenChat(history: ChatEntry[] = [], overrides: Partial<Chat> = 
   vi.mocked(octopus().chats.history).mockResolvedValue({ ok: true, value: history })
 
   return record
+}
+
+/**
+ * Makes the bridge answer with several conversations — a workspace with tabs.
+ *
+ * Separate from `givenChat` rather than replacing it: most tests are about one
+ * conversation and would only be made longer by naming the others.
+ */
+export function givenChats(records: readonly Chat[]): readonly Chat[] {
+  vi.mocked(octopus().chats.list).mockResolvedValue({ ok: true, value: [...records] })
+  return records
+}
+
+/**
+ * Delivers a status change to whatever subscribed, as main would.
+ *
+ * The twin of `emitAgentEvent`, and wrapped in `act` for the same reason: it
+ * arrives from IPC rather than from a click.
+ */
+export function emitChatStatus(
+  chatId: string,
+  status: ChatStatus,
+  workspaceId = 'planner/anna'
+): void {
+  const handlers = vi.mocked(octopus().chats.onStatus).mock.calls.map(([handler]) => handler)
+
+  act(() => {
+    for (const handler of handlers) {
+      handler({ chatId, workspaceId, status })
+    }
+  })
 }
 
 /**

@@ -10,7 +10,7 @@
  * spend most of its time serialising its own past.
  */
 
-import { appendFile, mkdir, readFile, rm } from 'node:fs/promises'
+import { appendFile, copyFile, mkdir, readFile, rm } from 'node:fs/promises'
 import { dirname } from 'node:path'
 
 import { z } from 'zod'
@@ -59,6 +59,33 @@ export async function readTranscript(chatId: ChatId, root?: string): Promise<Cha
   }
 
   return entries
+}
+
+/**
+ * Copies one chat's history onto another — what forking a conversation needs.
+ *
+ * The SDK's own `forkSession` copies what the *model* remembers; this copies
+ * what the *screen* draws. Both halves are needed, and this is the one nothing
+ * upstream can do: without it the forked conversation opens empty above an
+ * agent that remembers all of it — this module's opening problem, inverted.
+ *
+ * Silent when it cannot be done, matching `readTranscript` rather than
+ * `appendEntry`. A conversation whose log was cleared has a live session and no
+ * history, and forking it is a reasonable thing to want; and a copy that fails
+ * for any other reason leaves the new conversation looking exactly like that
+ * one — empty, above an agent that remembers. Failing the fork instead would
+ * cost the conversation itself over a file the caller can live without.
+ */
+export async function copyTranscript(from: ChatId, to: ChatId, root?: string): Promise<void> {
+  const source = chatTranscript(from, root)
+  const target = chatTranscript(to, root)
+
+  try {
+    await mkdir(dirname(target), { recursive: true })
+    await copyFile(source, target)
+  } catch {
+    // Nothing was said in the source, or nothing can be written for it.
+  }
 }
 
 /** Discards a chat's history — called when its workspace goes. */

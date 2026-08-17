@@ -17,6 +17,7 @@ function workspace(overrides: Partial<WorkspaceView> = {}): WorkspaceView {
     port: 3100,
     createdAt: '2026-08-08T00:00:00.000Z',
     ownerId: null,
+    chats: [],
     changedFiles: 0,
     missing: false,
     ...overrides
@@ -121,6 +122,59 @@ describe('WorkspaceRow', () => {
 
     expect(screen.queryByLabelText(/agent|waiting|error/i)).not.toBeInTheDocument()
     expect(screen.getByText('2 files')).toBeInTheDocument()
+  })
+
+  /*
+   * The one thing a single summarising dot cannot say: two agents at work while
+   * a third waits for an answer summarises to "waiting", and the row would be
+   * hiding the two that are still going.
+   */
+  it('draws a dot per conversation once a workspace holds several', () => {
+    renderRow({
+      workspace: workspace({
+        status: 'waiting_permission',
+        chats: [
+          { id: 'chat-1', agent: 'claude' as const, title: null, status: 'running' as const },
+          {
+            id: 'chat-2',
+            agent: 'claude' as const,
+            title: null,
+            status: 'waiting_permission' as const
+          },
+          { id: 'chat-3', agent: 'claude' as const, title: null, status: 'idle' as const }
+        ]
+      })
+    })
+
+    expect(screen.getByLabelText('Claude 1: The agent is working here')).toBeInTheDocument()
+    expect(screen.getByLabelText('Claude 2: Waiting for your answer')).toBeInTheDocument()
+    expect(screen.getByLabelText('Claude 3: nothing running')).toBeInTheDocument()
+  })
+
+  it('says when one of several conversations ended badly', () => {
+    renderRow({
+      workspace: workspace({
+        status: 'error',
+        chats: [
+          { id: 'chat-1', agent: 'claude' as const, title: null, status: 'error' as const },
+          { id: 'chat-2', agent: 'claude' as const, title: null, status: 'idle' as const }
+        ]
+      })
+    })
+
+    expect(screen.getByLabelText('Claude 1: The last turn ended in an error')).toBeInTheDocument()
+  })
+
+  // One conversation is the ordinary case, and the row reads as it always has.
+  it('keeps the single mark for a workspace with one conversation', () => {
+    renderRow({
+      workspace: workspace({
+        status: 'running',
+        chats: [{ id: 'chat-1', agent: 'claude' as const, title: null, status: 'running' as const }]
+      })
+    })
+
+    expect(screen.getByLabelText('The agent is working here')).toBeInTheDocument()
   })
 
   it('marks a workspace whose directory has gone', () => {

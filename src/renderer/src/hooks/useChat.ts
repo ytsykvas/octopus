@@ -1,10 +1,15 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 
-import { type Chat, type Effort, EXIT_PLAN_MODE, type WorkingMode } from '@core/chats.js'
+import {
+  type Chat,
+  type ChatStatus,
+  type Effort,
+  EXIT_PLAN_MODE,
+  type WorkingMode
+} from '@core/chats.js'
 import { isEphemeral } from '@core/events.js'
 import type { QuestionAnswer } from '@core/questions.js'
 import type { PermissionAnswer } from '@core/service.js'
-import type { Workspace } from '@core/store.js'
 import type { ChatEntry } from '@core/transcript.js'
 
 import type { Failure, Result } from '../../../preload/index.js'
@@ -50,66 +55,95 @@ export interface ChatController {
 type Describe = (failure: Failure) => string
 
 /**
- * One workspace's conversation.
+ * One conversation.
  *
  * The history is read from disk once; everything after that arrives as events.
  * The two are deliberately never merged by re-reading the file — an append the
  * UI has already drawn would come back as a duplicate of itself.
  */
 export function useChat(
+  /**
+   * The conversation this pane shows, or null for a tab with no record yet.
+   *
+   * Null is the ordinary state of the first tab of a workspace nobody has
+   * spoken to: the record is written by the first thing done to the pane, so
+   * that a workspace merely looked at leaves nothing behind.
+   *
+   * A seed rather than the source of truth. Once the pane is showing, its own
+   * copy is what the footer's pickers are drawn from — a setting is applied
+   * here the moment the core agrees, and waiting for the list to be read again
+   * would leave the picker showing the old value for a round trip.
+   */
+  initial: Chat | null,
+  /** Where the record will be created, when there is a reason to create one. */
   workspaceId: string | null,
   /**
-   * What the workspace is doing, as the core last said.
+   * What this conversation is doing, as the core last said.
    *
    * Read as well as the events, because the events are filtered by the open
    * chat's id and there is no chat until its history has loaded — so a turn
    * ending in that window is dropped. Seeding a flag at the switch would leave
    * it stuck on with nothing left to correct it; this corrects itself.
    */
-  status: Workspace['status'],
-  describeFailure: Describe
+  status: ChatStatus,
+  describeFailure: Describe,
+  /** Announces the record this pane created, so the tab strip can draw it. */
+  onOpened: (chat: Chat) => void
 ): ChatController {
-  const [chat, setChat] = useState<Chat | null>(null)
+  const chatId = initial?.id ?? null
+
+  const [chat, setChat] = useState<Chat | null>(initial)
   const [entries, setEntries] = useState<readonly ChatEntry[]>([])
   const [streaming, setStreaming] = useState<Streaming>(NOTHING_STREAMING)
   const [busy, setBusy] = useState(false)
   const [pending, setPending] = useState<PendingPermission | null>(null)
-  const [loading, setLoading] = useState(workspaceId !== null)
+  const [loading, setLoading] = useState(chatId !== null)
   const [error, setError] = useState<string | null>(null)
-  const [shownWorkspaceId, setShownWorkspaceId] = useState(workspaceId)
+  const [shownChatId, setShownChatId] = useState(chatId)
 
   /*
-   * The workspace on screen, for the callbacks to check against.
+   * There is deliberately no "is this still the pane on screen" guard here.
    *
-   * The load effect has an `AbortController`; these have nothing, and a control
-   * request to the CLI is easily over 100ms — long enough to click elsewhere.
-   * A write landing after that puts one workspace's record on another's pane,
-   * which draws its events and reports its usage under the wrong name.
-   *
-   * Updated in an effect and read only inside a callback, never during render.
+   * There used to be one, and it was doing real work: a single instance of this
+   * hook was reused for every workspace, so a control request that took longer
+   * than the click elsewhere put one conversation's record on another's pane.
+   * Each tab now has an instance of its own, kept mounted while its workspace
+   * is, and the workspace's own pane is keyed — so an instance is bound to one
+   * conversation for its whole life, and a late reply has nowhere else to land.
+   * A reply arriving after the pane has gone sets state on an unmounted
+   * component, which React ignores.
    */
-  const shown = useRef(workspaceId)
 
-  useEffect(() => {
-    shown.current = workspaceId
-  }, [workspaceId])
+  /**
+   * The record this pane created for itself, so it is not read as an arrival.
+   *
+   * The first conversation is written by the first message, which means the id
+   * reaches the strip and comes back as a prop a render later. Both the reset
+   * below and the load beneath it would treat that as a different conversation
+   * — wiping the message that created it, and then reading its history back
+   * over the copy already drawn.
+   */
+  const created = useRef<string | null>(null)
 
   // Reset during render rather than in an effect. React supports this for
   // state derived from a prop, and it matters here: an effect runs after the
-  // paint, so switching workspace would show the previous conversation for a
-  // frame before it cleared.
-  if (workspaceId !== shownWorkspaceId) {
-    setShownWorkspaceId(workspaceId)
-    setChat(null)
-    setEntries([])
-    setStreaming(NOTHING_STREAMING)
-    setBusy(false)
-    setPending(null)
-    setError(null)
-    // Set here rather than in the effect that loads: by the time an effect
-    // runs the frame is already on screen, so the pane would flash the empty
-    // state before the spinner.
-    setLoading(workspaceId !== null)
+  // paint, so switching conversation would show the previous one for a frame
+  // before it cleared.
+  if (chatId !== shownChatId) {
+    setShownChatId(chatId)
+
+    if (chatId !== chat?.id) {
+      setChat(initial)
+      setEntries([])
+      setStreaming(NOTHING_STREAMING)
+      setBusy(false)
+      setPending(null)
+      setError(null)
+      // Set here rather than in the effect that loads: by the time an effect
+      // runs the frame is already on screen, so the pane would flash the empty
+      // state before the spinner.
+      setLoading(chatId !== null)
+    }
   }
 
   useEffect(() => {
@@ -118,30 +152,12 @@ export function useChat(
     // `aborted` survives an await, and the second check would read as dead.
     const abandoned = (): boolean => controller.signal.aborted
 
-    if (workspaceId === null) return
+    if (chatId === null || chatId === created.current) return
 
     void (async () => {
-      const found = await window.octopus.chats.list(workspaceId)
+      const history = await window.octopus.chats.history(chatId)
       if (abandoned()) return
 
-      if (!found.ok) {
-        setError(describeFailure(found))
-        setLoading(false)
-        return
-      }
-
-      // No chat yet is the ordinary state of a fresh workspace, not a failure:
-      // the record is created by the first message.
-      const [existing] = found.value
-      if (!existing) {
-        setLoading(false)
-        return
-      }
-
-      const history = await window.octopus.chats.history(existing.id)
-      if (abandoned()) return
-
-      setChat(existing)
       if (history.ok) setEntries(history.value)
       else setError(describeFailure(history))
       setLoading(false)
@@ -152,7 +168,7 @@ export function useChat(
       // ever with no way to unblock it. Asked after the history so the log is
       // on screen first; a failure here is not worth an error, since the worst
       // case is the state we were already in.
-      const blocked = await window.octopus.chats.pendingPermission(existing.id)
+      const blocked = await window.octopus.chats.pendingPermission(chatId)
       if (abandoned() || !blocked.ok || blocked.value === null) return
 
       setPending(blocked.value)
@@ -162,7 +178,7 @@ export function useChat(
     return () => {
       controller.abort()
     }
-  }, [workspaceId, describeFailure])
+  }, [chatId, describeFailure])
 
   const openChatId = chat?.id ?? null
 
@@ -243,18 +259,19 @@ export function useChat(
     if (workspaceId === null) return null
 
     const opened = await window.octopus.chats.open(workspaceId)
-    // Abandoned: the record belongs to a workspace nobody is looking at, and
-    // the caller has nothing left to do with it either.
-    if (shown.current !== workspaceId) return null
-
     if (!opened.ok) {
       setError(describeFailure(opened))
       return null
     }
 
+    created.current = opened.value.id
     setChat(opened.value)
+    // The strip drew this tab without a record; now there is one, and its dot,
+    // its menu and its number all come from it.
+    onOpened(opened.value)
+
     return opened.value
-  }, [chat, workspaceId, describeFailure])
+  }, [chat, workspaceId, describeFailure, onOpened])
 
   const send = useCallback(
     async (text: string) => {
@@ -269,16 +286,12 @@ export function useChat(
       setError(null)
 
       const sent = await window.octopus.chats.send(target.id, text)
-      // The failure belongs to the conversation it happened in; reported here
-      // it would appear over whichever one is now on screen.
-      if (shown.current !== workspaceId) return
-
       if (!sent.ok) {
         setError(describeFailure(sent))
         setBusy(false)
       }
     },
-    [ensureChat, workspaceId, describeFailure]
+    [ensureChat, describeFailure]
   )
 
   const interrupt = useCallback(async () => {
@@ -345,7 +358,6 @@ export function useChat(
       if (!target) return
 
       const changed = await send(target.id)
-      if (shown.current !== workspaceId) return
 
       // Applied to whatever the record has become rather than to the snapshot
       // taken before the await: two settings changed a moment apart both reach
@@ -359,7 +371,7 @@ export function useChat(
       if (changed.ok) setChat((current) => ({ ...(current ?? target), ...patch }))
       else setError(describeFailure(changed))
     },
-    [ensureChat, workspaceId, describeFailure]
+    [ensureChat, describeFailure]
   )
 
   const setWorkingMode = useCallback(
@@ -392,10 +404,15 @@ export function useChat(
    * Working, by either account.
    *
    * The flag above follows this pane's own events; the status follows the
-   * workspace whatever pane is on screen, which is what survives looking away
-   * and coming back. Gated on the chat having loaded, because `interrupt`
+   * conversation whichever tab is on screen, which is what survives looking
+   * away and coming back. Gated on the chat having loaded, because `interrupt`
    * returns early without one — otherwise the stop button would stand there
    * through the read and do nothing when pressed.
+   *
+   * The conversation's own status rather than its workspace's, which is what
+   * this read before there could be more than one: three tabs share a
+   * workspace, so the one that finished would have reported the other two idle
+   * — and taken the stop button away from turns still running.
    */
   const working =
     busy || (chat !== null && (status === 'running' || status === 'waiting_permission'))

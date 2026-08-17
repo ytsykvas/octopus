@@ -4,6 +4,7 @@ import type { AccountKind, AccountsStatus } from '@core/accounts.js'
 import type { AgentCommand, AgentModel, Chat, Effort, WorkingMode } from '@core/chats.js'
 import type {
   ChatEvent,
+  ChatStatusEvent,
   PermissionAnswer,
   PermissionRequest,
   RateLimit,
@@ -124,6 +125,22 @@ const api = {
     open: (workspaceId: string): Promise<Result<Chat>> =>
       ipcRenderer.invoke('chats:open', workspaceId) as Promise<Result<Chat>>,
 
+    /** An additional chat in this workspace; refuses past the cap. */
+    create: (workspaceId: string): Promise<Result<Chat>> =>
+      ipcRenderer.invoke('chats:create', workspaceId) as Promise<Result<Chat>>,
+
+    /** A new chat continuing this one — the agent keeps what it remembers. */
+    fork: (chatId: string): Promise<Result<Chat>> =>
+      ipcRenderer.invoke('chats:fork', chatId) as Promise<Result<Chat>>,
+
+    /** Ends a chat and discards it, history included; refuses the last one. */
+    close: (chatId: string): Promise<Result<void>> =>
+      ipcRenderer.invoke('chats:close', chatId) as Promise<Result<void>>,
+
+    /** Names a chat; an empty name gives it back the one it is given. */
+    rename: (chatId: string, title: string): Promise<Result<void>> =>
+      ipcRenderer.invoke('chats:rename', chatId, title) as Promise<Result<void>>,
+
     /** Everything said in this chat before now. */
     history: (chatId: string): Promise<Result<ChatEntry[]>> =>
       ipcRenderer.invoke('chats:history', chatId) as Promise<Result<ChatEntry[]>>,
@@ -215,6 +232,23 @@ const api = {
       ipcRenderer.on('chats:event', listener)
       return () => {
         ipcRenderer.off('chats:event', listener)
+      }
+    },
+
+    /**
+     * What each conversation is doing, as it changes.
+     *
+     * A stream of its own rather than a variant of `onEvent`: that one carries
+     * the agent's messages, and half of these come from moments no agent
+     * message describes — an interrupt, an answered permission, a closed tab.
+     */
+    onStatus: (handler: (event: ChatStatusEvent) => void): (() => void) => {
+      const listener = (_event: unknown, status: ChatStatusEvent): void => {
+        handler(status)
+      }
+      ipcRenderer.on('chats:status', listener)
+      return () => {
+        ipcRenderer.off('chats:status', listener)
       }
     }
   },

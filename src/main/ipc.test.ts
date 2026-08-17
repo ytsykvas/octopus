@@ -12,7 +12,7 @@ import { type AccountsStatus, checkAccounts, type CommandExec, signOut } from '.
 import type { QueryFn } from '../core/agent.js'
 import type { RemoteRepository } from '../core/github.js'
 import { createService, type OctopusService, type ServiceOptions } from '../core/service.js'
-import type { ChatEvent, WorkspaceStatusEvent } from '../core/service.js'
+import type { ChatEvent, ChatStatusEvent, WorkspaceStatusEvent } from '../core/service.js'
 import type { ThemeName, Workspace } from '../core/types.js'
 import { type IpcHost, registerIpc, type PickedDirectory } from './ipc.js'
 import type { Result } from './result.js'
@@ -34,7 +34,7 @@ const run = promisify(execFile)
 /**
  * A stand-in for the Electron surface the IPC layer touches.
  *
- * Six small functions instead of a framework — which is the point of injecting
+ * Nine small functions instead of a framework — which is the point of injecting
  * them: the whole channel table can be exercised without a window.
  */
 interface Harness {
@@ -43,6 +43,7 @@ interface Harness {
   readonly broadcasts: ThemeName[]
   readonly chatEvents: ChatEvent[]
   readonly statusEvents: WorkspaceStatusEvent[]
+  readonly chatStatusEvents: ChatStatusEvent[]
   /** Paths handed to the system, in order. */
   readonly opened: string[]
   picked: PickedDirectory
@@ -58,6 +59,7 @@ function harness(): Harness {
   const broadcasts: ThemeName[] = []
   const chatEvents: ChatEvent[] = []
   const statusEvents: WorkspaceStatusEvent[] = []
+  const chatStatusEvents: ChatStatusEvent[] = []
   const opened: string[] = []
 
   const state: Harness = {
@@ -65,6 +67,7 @@ function harness(): Harness {
     broadcasts,
     chatEvents,
     statusEvents,
+    chatStatusEvents,
     opened,
     picked: { canceled: true, filePaths: [] },
     prefersDark: false,
@@ -80,6 +83,7 @@ function harness(): Harness {
       broadcastTheme: (theme) => broadcasts.push(theme),
       broadcastChatEvent: (event) => chatEvents.push(event),
       broadcastWorkspaceStatus: (event) => statusEvents.push(event),
+      broadcastChatStatus: (event) => chatStatusEvents.push(event),
       openPath: (path) => {
         opened.push(path)
         return Promise.resolve(state.openRefusal)
@@ -266,6 +270,10 @@ describe('channel table', () => {
     'files:open',
     'chats:list',
     'chats:open',
+    'chats:create',
+    'chats:fork',
+    'chats:close',
+    'chats:rename',
     'chats:history',
     'chats:send',
     'chats:interrupt',
@@ -838,6 +846,63 @@ describe('the agent chat', () => {
     await expect(invoke('chats:open', 'planner/nowhere')).resolves.toMatchObject({
       ok: false,
       code: 'worktreeMissing'
+    })
+  })
+
+  it('creates a second conversation and closes it again', async () => {
+    const projectId = await addProject()
+    const workspace = await createWorkspace(projectId)
+    await invoke('chats:open', workspace.id)
+
+    const created = (await invoke('chats:create', workspace.id)) as {
+      ok: true
+      value: { id: string }
+    }
+    expect(created.ok).toBe(true)
+    await expect(invoke('chats:list', workspace.id)).resolves.toMatchObject({
+      ok: true,
+      value: [{ workspaceId: workspace.id }, { workspaceId: workspace.id }]
+    })
+
+    await expect(invoke('chats:close', created.value.id)).resolves.toEqual({
+      ok: true,
+      value: undefined
+    })
+    await expect(invoke('chats:list', workspace.id)).resolves.toMatchObject({
+      ok: true,
+      value: [{ workspaceId: workspace.id }]
+    })
+  })
+
+  it('names a conversation, and refuses one longer than a tab can hold', async () => {
+    const projectId = await addProject()
+    const workspace = await createWorkspace(projectId)
+    const opened = (await invoke('chats:open', workspace.id)) as { ok: true; value: { id: string } }
+
+    await expect(invoke('chats:rename', opened.value.id, 'auth refactor')).resolves.toEqual({
+      ok: true,
+      value: undefined
+    })
+    await expect(invoke('chats:list', workspace.id)).resolves.toMatchObject({
+      ok: true,
+      value: [{ title: 'auth refactor' }]
+    })
+
+    await expect(invoke('chats:rename', opened.value.id, 'x'.repeat(61))).resolves.toMatchObject({
+      ok: false
+    })
+  })
+
+  // The code is what the renderer localises; without it the window shows the
+  // English fallback for a refusal it knows how to explain.
+  it('carries a refused fork back with its code', async () => {
+    const projectId = await addProject()
+    const workspace = await createWorkspace(projectId)
+    const opened = (await invoke('chats:open', workspace.id)) as { ok: true; value: { id: string } }
+
+    await expect(invoke('chats:fork', opened.value.id)).resolves.toMatchObject({
+      ok: false,
+      code: 'nothingToFork'
     })
   })
 

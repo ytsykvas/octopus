@@ -1,6 +1,7 @@
 import {
   CloudDownload,
   FolderOpen,
+  GitBranch,
   PanelRightClose,
   PanelRightOpen,
   Plus,
@@ -25,6 +26,7 @@ import { Sidebar } from './components/Sidebar.js'
 import { useConfirm } from './hooks/useConfirm.js'
 import { useErrorMessage } from './hooks/useErrorMessage.js'
 import { useDiffComments } from './hooks/useDiffComments.js'
+import { type ChatTab, useChatTabs } from './hooks/useChatTabs.js'
 import { useProjects } from './hooks/useProjects.js'
 import { useWorkspaces } from './hooks/useWorkspaces.js'
 
@@ -80,7 +82,34 @@ export function App(): React.JSX.Element {
   const diffComments = useDiffComments(selectedWorkspaceId)
 
   /*
-   * A half-written prompt, kept per workspace.
+   * The selected workspace's conversations.
+   *
+   * Here rather than in the chat pane, for the same reason the drafts are: the
+   * keyboard listener below owns ⌥1–⌥3, and turning a digit into a tab needs
+   * the list. It also hands the list to `useWorkspaces`, so a row can draw a
+   * dot per conversation without asking git anything.
+   */
+  const setWorkspaceChats = workspaces.setChats
+  const publishChats = useCallback(
+    (workspaceId: string, tabs: readonly ChatTab[]) => {
+      // A tab with no record yet is left out: the row draws the conversations
+      // that exist, and one nobody has spoken to is not yet one of them.
+      setWorkspaceChats(
+        workspaceId,
+        tabs.flatMap((tab) =>
+          tab.id === null
+            ? []
+            : [{ id: tab.id, agent: tab.agent, title: tab.title, status: tab.status }]
+        )
+      )
+    },
+    [setWorkspaceChats]
+  )
+
+  const chatTabs = useChatTabs(selectedWorkspaceId, confirm, publishChats, setError)
+
+  /*
+   * A half-written prompt, kept per conversation.
    *
    * Here rather than in the chat, which unmounts the moment the selection is
    * cleared — clicking the open project does exactly that, and losing the text
@@ -88,12 +117,17 @@ export function App(): React.JSX.Element {
    * for the reason the review notes are not: a draft is about a workspace whose
    * files are on the point of changing.
    *
+   * Keyed by workspace *and* tab, since a workspace now holds up to three
+   * conversations and a sentence typed for one of them is not for the others.
+   * The tab's key rather than its chat id: the id appears on the first message,
+   * and a draft filed under the old key would be lost at exactly that moment.
+   *
    * Written once per switch, not per keystroke: `Composer` hands its text up on
    * the way out.
    */
   const [drafts, setDrafts] = useState<ReadonlyMap<string, string>>(new Map())
-  const keepDraft = useCallback((workspaceId: string, text: string) => {
-    setDrafts((current) => new Map(current).set(workspaceId, text))
+  const keepDraft = useCallback((workspaceId: string, tabKey: string, text: string) => {
+    setDrafts((current) => new Map(current).set(`${workspaceId}#${tabKey}`, text))
   }, [])
 
   useEffect(() => {
@@ -229,11 +263,37 @@ export function App(): React.JSX.Element {
     }
   }, [])
 
-  // ⌘⇧N creates a workspace, ⌘⇧D opens the changes. ⌘1–⌘9 switch project, as
-  // they do between tabs everywhere else; ⌃1–⌃9 move within the current
-  // project's workspaces.
+  // ⌘⇧N creates a workspace, ⌘⇧D opens the changes, ⌘T opens a conversation.
+  // ⌘1–⌘9 switch project, as they do between tabs everywhere else; ⌃1–⌃9 move
+  // within the current project's workspaces, and ⌥1–⌥3 between the selected
+  // workspace's conversations.
   useEffect(() => {
     const onKey = (event: KeyboardEvent): void => {
+      if (event.metaKey && !event.shiftKey && event.key.toLowerCase() === 't') {
+        event.preventDefault()
+        if (chatTabs.canCreate) void chatTabs.create()
+        return
+      }
+
+      /*
+       * Read from `code` rather than `key`, unlike every branch below it.
+       *
+       * On macOS ⌥ rewrites the character: Option-1 arrives as `¡`, Option-2 as
+       * `™`, Option-3 as `£`. `Number.parseInt` on those is `NaN`, so the digit
+       * check further down returns before this could ever run — and `code` is
+       * the physical key, which is also what makes this work on a layout where
+       * the digits are somewhere else.
+       */
+      if (event.altKey && !event.metaKey && !event.ctrlKey) {
+        const position = ['Digit1', 'Digit2', 'Digit3'].indexOf(event.code)
+        const tab = position === -1 ? undefined : chatTabs.tabs[position]
+        if (tab) {
+          event.preventDefault()
+          chatTabs.select(tab.key)
+        }
+        return
+      }
+
       if (event.metaKey && event.shiftKey && event.key.toLowerCase() === 'n') {
         event.preventDefault()
         if (selectedProjectId !== null) void workspaces.create(selectedProjectId)
@@ -277,7 +337,7 @@ export function App(): React.JSX.Element {
     return () => {
       window.removeEventListener('keydown', onKey)
     }
-  }, [selectedProjectId, workspaces, projects, updateConfig])
+  }, [selectedProjectId, workspaces, projects, updateConfig, chatTabs])
 
   const selectedProject = projects.all.find((project) => project.id === selectedProjectId) ?? null
   const projectWorkspaces = selectedProject
@@ -311,10 +371,25 @@ export function App(): React.JSX.Element {
           a pane's colour reaching up here made the window look like it started
           in the wrong place. */}
       <header className="titlebar-drag border-line flex h-11 shrink-0 items-center gap-3 border-b pr-3 pl-[5.5rem]">
-        <span className="truncate font-medium">{selectedProject?.name ?? t('app.name')}</span>
+        <span className="shrink-0 truncate font-medium">
+          {selectedProject?.name ?? t('app.name')}
+        </span>
         {selectedProject && (
-          <span className="text-ink-faint truncate font-mono text-[11px]">
+          <span className="text-ink-faint min-w-0 truncate font-mono text-[11px]">
             {selectedProject.repoPath}
+          </span>
+        )}
+
+        {/* The branch, beside the path it is a branch of.
+            It used to sit in the chat's own header, which was a whole 36px row
+            carrying one short string — and it was answering a question about
+            the window rather than about the conversation: where the work lands.
+            Here it reads as one line with the project and its directory, and
+            the row it left is the tab strip's. */}
+        {selectedWorkspace && (
+          <span className="text-ink-soft flex min-w-0 shrink-0 items-center gap-1.5">
+            <GitBranch aria-hidden size={12} className="shrink-0" />
+            <span className="truncate font-mono text-[11px]">{selectedWorkspace.branch}</span>
           </span>
         )}
 
@@ -442,10 +517,16 @@ export function App(): React.JSX.Element {
             />
           ) : (
             <Chat
+              /* Keyed, so switching workspace builds the panes fresh rather
+                 than handing one workspace's conversation to another's tab
+                 keys — which is what lets everything inside drop the "is this
+                 still on screen" checks a shared instance needed. */
+              key={selectedWorkspace.id}
               workspace={selectedWorkspace}
-              draft={drafts.get(selectedWorkspace.id) ?? ''}
-              onDraftLeave={(text) => {
-                keepDraft(selectedWorkspace.id, text)
+              tabs={chatTabs}
+              draftOf={(tabKey) => drafts.get(`${selectedWorkspace.id}#${tabKey}`) ?? ''}
+              onDraftLeave={(tabKey, text) => {
+                keepDraft(selectedWorkspace.id, tabKey, text)
               }}
               color={selectedProject.color}
               comments={diffComments}

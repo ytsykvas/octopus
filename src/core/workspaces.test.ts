@@ -6,6 +6,7 @@ import { promisify } from 'node:util'
 
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 
+import type { Chat } from './chats.js'
 import { GitError, type GitExec, gitIn } from './git.js'
 import { NAME_POOL_SIZE, type Random, WORKSPACE_NAMES } from './names.js'
 import { addProject, EMPTY_STATE, type Project, type State, type Workspace } from './store.js'
@@ -606,6 +607,78 @@ describe('reconcile', () => {
     const counts = new Map([['anna', 3]])
 
     expect(reconcile([workspace], [], counts)[0]?.changedFiles).toBe(3)
+  })
+
+  /*
+   * The row draws one dot per conversation, so every field it draws with has to
+   * survive the trip. Assembled key by key here, which is the shape a new field
+   * goes missing in: the schema accepts it, the view drops it, and nothing is
+   * uncovered because the line still runs.
+   */
+  describe('the conversations a workspace holds', () => {
+    const workspace = { id: 'planner/anna', path: '/x' } as Workspace
+    const other = { id: 'planner/bob', path: '/y' } as Workspace
+
+    function conversation(overrides: Partial<Chat>): Chat {
+      return {
+        id: 'chat-1',
+        workspaceId: 'planner/anna',
+        agent: 'claude',
+        status: 'idle',
+        title: null,
+        sessionId: null,
+        model: null,
+        effort: 'medium',
+        workingMode: 'default',
+        planMode: false,
+        knownCommands: [],
+        createdAt: '2026-08-11T09:00:00.000Z',
+        ...overrides
+      }
+    }
+
+    it('reports each of them, in the order they were opened', () => {
+      const chats = [
+        conversation({ id: 'chat-1', status: 'running' }),
+        conversation({ id: 'chat-2', status: 'waiting_permission', title: 'auth refactor' })
+      ]
+
+      expect(reconcile([workspace], [], new Map(), chats)[0]?.chats).toEqual([
+        { id: 'chat-1', agent: 'claude', title: null, status: 'running' },
+        { id: 'chat-2', agent: 'claude', title: 'auth refactor', status: 'waiting_permission' }
+      ])
+    })
+
+    it('gives each workspace only its own', () => {
+      const chats = [
+        conversation({ id: 'chat-1' }),
+        conversation({ id: 'chat-2', workspaceId: 'planner/bob' })
+      ]
+
+      const views = reconcile([workspace, other], [], new Map(), chats)
+
+      expect(views[0]?.chats.map((chat) => chat.id)).toEqual(['chat-1'])
+      expect(views[1]?.chats.map((chat) => chat.id)).toEqual(['chat-2'])
+    })
+
+    it('reports none for a workspace nobody has spoken to', () => {
+      expect(reconcile([workspace], [], new Map(), [])[0]?.chats).toEqual([])
+    })
+
+    // The default arm, which is what every caller but the service uses.
+    it('reports none when it is not told about any', () => {
+      expect(reconcile([workspace], [])[0]?.chats).toEqual([])
+    })
+
+    // git could not be asked is its own arm, and it assembles the view
+    // separately — a field added to one and not the other is the whole risk.
+    it('reports them when git could not be asked either', () => {
+      const chats = [conversation({ id: 'chat-1', title: 'auth refactor' })]
+
+      expect(reconcile([workspace], null, new Map(), chats)[0]?.chats).toEqual([
+        { id: 'chat-1', agent: 'claude', title: 'auth refactor', status: 'idle' }
+      ])
+    })
   })
 })
 

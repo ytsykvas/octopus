@@ -24,7 +24,9 @@ export {
   type AgentModel,
   AgentModelSchema,
   type Chat,
-  ChatSchema
+  ChatSchema,
+  type ChatStatus,
+  ChatStatusSchema
 } from './chats.js'
 export { PROJECT_COLORS, type ProjectColor } from './colors.js'
 export { PROJECT_ICONS, type ProjectIcon } from './icons.js'
@@ -143,24 +145,63 @@ export async function loadState(filePath: string = stateFile()): Promise<State> 
 }
 
 /**
+ * What a workspace is doing, from what its conversations are doing.
+ *
+ * Derived rather than written by whichever chat last had an event, because a
+ * workspace holds up to three and they run at once: the tab that finished used
+ * to mark the two still working as idle.
+ *
+ * The order is what the sidebar's single dot should say when they disagree.
+ * `waiting_permission` wins because that turn has stopped and is waiting on the
+ * user — the one state worth crossing the window for (§10.8). `running` beats
+ * `error` because the dot says what is happening now, and a failed turn is a
+ * record while a running one is an event. `archived` is a decision about the
+ * workspace, which nothing a conversation does can overrule.
+ */
+export function workspaceStatusFrom(
+  chats: readonly Chat[],
+  current: Workspace['status']
+): Workspace['status'] {
+  if (current === 'archived') return 'archived'
+  if (chats.some((chat) => chat.status === 'waiting_permission')) return 'waiting_permission'
+  if (chats.some((chat) => chat.status === 'running')) return 'running'
+  if (chats.some((chat) => chat.status === 'error')) return 'error'
+  return 'idle'
+}
+
+/**
  * Puts down what the last run was carrying.
  *
  * `running` and `waiting_permission` describe a session, and no session
- * survives the process that held it — so a workspace left mid-turn when the app
- * quit would come back claiming to be working, with nothing behind the claim
- * and nothing that would ever correct it.
+ * survives the process that held it — so a conversation left mid-turn when the
+ * app quit would come back claiming to be working, with nothing behind the
+ * claim and nothing that would ever correct it.
  *
  * `error` and `archived` stay. One is a record of something that happened, the
  * other of a decision; neither is a session still being waited on.
+ *
+ * The workspaces are then derived from the settled chats rather than settled by
+ * the same rule alongside them. Two lists settled independently agree today and
+ * would drift the first time one of the rules changed — and a workspace is no
+ * longer a thing that has a status of its own to put down.
  */
 export function settleStatuses(state: State): State {
+  const chats = state.chats.map((chat) =>
+    chat.status === 'running' || chat.status === 'waiting_permission'
+      ? { ...chat, status: 'idle' as const }
+      : chat
+  )
+
   return {
     ...state,
-    workspaces: state.workspaces.map((workspace) =>
-      workspace.status === 'running' || workspace.status === 'waiting_permission'
-        ? { ...workspace, status: 'idle' as const }
-        : workspace
-    )
+    chats,
+    workspaces: state.workspaces.map((workspace) => ({
+      ...workspace,
+      status: workspaceStatusFrom(
+        chats.filter((chat) => chat.workspaceId === workspace.id),
+        workspace.status
+      )
+    }))
   }
 }
 
@@ -379,6 +420,17 @@ export function addChat(state: State, chat: Chat): State {
   }
 
   return { ...state, chats: [...state.chats, chat] }
+}
+
+/**
+ * Removes a chat.
+ *
+ * An id that is not there is not an error, unlike `updateChat` above: removal
+ * is idempotent, and the one caller reaches here after closing a live session,
+ * which is exactly the window in which the record can already have gone.
+ */
+export function removeChat(state: State, chatId: string): State {
+  return { ...state, chats: state.chats.filter((chat) => chat.id !== chatId) }
 }
 
 /**

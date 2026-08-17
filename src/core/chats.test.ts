@@ -5,12 +5,16 @@ import {
   type AgentCommand,
   AgentCommandSchema,
   type AgentModel,
+  type Chat,
+  ChatError,
   defaultAgentModel,
   findAgentModel,
+  forkChat,
   sameModel,
   ChatMessageSchema,
   ChatSchema,
   isClearCommand,
+  MAX_CHATS_PER_WORKSPACE,
   newChat,
   PERMISSION_MODES,
   PermissionAnswerSchema,
@@ -34,6 +38,8 @@ describe('a new chat', () => {
       id: 'chat-1',
       workspaceId: 'planner/kyiv',
       agent: 'claude',
+      status: 'idle',
+      title: null,
       sessionId: null,
       model: null,
       effort: 'medium',
@@ -449,5 +455,141 @@ describe('the model the default stands for', () => {
       defaultAgentModel(CATALOGUE.filter((model) => model.value !== 'default'))
     ).toBeUndefined()
     expect(defaultAgentModel([])).toBeUndefined()
+  })
+})
+
+describe('what a conversation may be doing', () => {
+  const record = {
+    id: 'chat-1',
+    workspaceId: 'planner/kyiv',
+    agent: 'claude',
+    sessionId: null,
+    model: null,
+    effort: 'medium',
+    workingMode: 'default',
+    planMode: false,
+    knownCommands: [],
+    createdAt: '2026-08-11T09:00:00.000Z'
+  }
+
+  it('reads a record written before the field existed as idle', () => {
+    expect(ChatSchema.parse(record).status).toBe('idle')
+  })
+
+  it('keeps a status it was given', () => {
+    expect(ChatSchema.parse({ ...record, status: 'waiting_permission' }).status).toBe(
+      'waiting_permission'
+    )
+  })
+
+  /*
+   * The one thing that separates this enum from the workspace's. Archiving is a
+   * decision taken about a workspace, and a conversation has no way to be in
+   * it — a record claiming otherwise is a file written by something else.
+   */
+  it('refuses archived, which is a workspace’s word', () => {
+    expect(ChatSchema.safeParse({ ...record, status: 'archived' }).success).toBe(false)
+  })
+
+  it('reads a record written before names existed as unnamed', () => {
+    expect(ChatSchema.parse(record).title).toBeNull()
+  })
+
+  it('starts a new conversation idle', () => {
+    expect(
+      newChat('planner/kyiv', {
+        id: 'chat-2',
+        agent: 'claude',
+        workingMode: 'default',
+        effort: 'medium',
+        createdAt: '2026-08-11T09:00:00.000Z'
+      }).status
+    ).toBe('idle')
+  })
+})
+
+describe('a conversation continuing another', () => {
+  const source: Chat = {
+    id: 'chat-1',
+    workspaceId: 'planner/kyiv',
+    agent: 'claude',
+    status: 'running',
+    title: null,
+    sessionId: 'session-old',
+    model: 'opus',
+    effort: 'high',
+    workingMode: 'acceptEdits',
+    planMode: true,
+    knownCommands: [{ name: 'deploy', description: '', argumentHint: '', aliases: [] }],
+    createdAt: '2026-08-11T09:00:00.000Z'
+  }
+
+  const forked = forkChat(source, {
+    id: 'chat-2',
+    sessionId: 'session-new',
+    createdAt: '2026-08-11T10:00:00.000Z'
+  })
+
+  it('is its own record in the same workspace', () => {
+    expect(forked.id).toBe('chat-2')
+    expect(forked.workspaceId).toBe('planner/kyiv')
+    expect(forked.createdAt).toBe('2026-08-11T10:00:00.000Z')
+  })
+
+  /*
+   * Never the source's. Resuming a session continues it in place and keeps its
+   * id, so two records holding one would be two agent processes writing one
+   * transcript — each reading the other's turns as part of its own.
+   */
+  it('carries the forked session, not the one it came from', () => {
+    expect(forked.sessionId).toBe('session-new')
+  })
+
+  it('keeps how the conversation is run', () => {
+    expect(forked.agent).toBe('claude')
+    expect(forked.model).toBe('opus')
+    expect(forked.effort).toBe('high')
+    expect(forked.workingMode).toBe('acceptEdits')
+    expect(forked.knownCommands).toEqual(source.knownCommands)
+  })
+
+  /*
+   * Planning is a decision about a particular task, and forking out of a
+   * settled plan to try the other approach is the likeliest reason to fork at
+   * all — inheriting it would start the new conversation planning the old
+   * one's task.
+   */
+  it('does not inherit planning, nor a turn in flight', () => {
+    expect(forked.planMode).toBe(false)
+    expect(forked.status).toBe('idle')
+  })
+
+  // Two tabs called "auth refactor" is a strip that cannot be read.
+  it('does not inherit the name it was given either', () => {
+    expect(
+      forkChat(
+        { ...source, title: 'auth refactor' },
+        {
+          id: 'chat-3',
+          sessionId: 'session-new',
+          createdAt: '2026-08-11T10:00:00.000Z'
+        }
+      ).title
+    ).toBeNull()
+  })
+})
+
+describe('a refused operation on a conversation', () => {
+  it('carries a code and the values its message needs', () => {
+    const error = new ChatError(
+      'tooManyChats',
+      { limit: String(MAX_CHATS_PER_WORKSPACE) },
+      'A workspace holds at most three chats.'
+    )
+
+    expect(error).toBeInstanceOf(Error)
+    expect(error.name).toBe('ChatError')
+    expect(error.code).toBe('tooManyChats')
+    expect(error.params).toEqual({ limit: '3' })
   })
 })

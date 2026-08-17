@@ -53,6 +53,10 @@ export function installOctopusStub(): Api {
     chats: {
       list: vi.fn(() => ok([])),
       open: vi.fn(() => ok(chatFixture())),
+      create: vi.fn(() => ok(chatFixture())),
+      fork: vi.fn(() => ok(chatFixture())),
+      close: vi.fn(() => ok(undefined)),
+      rename: vi.fn(() => ok(undefined)),
       history: vi.fn(() => ok([])),
       send: vi.fn(() => ok(undefined)),
       interrupt: vi.fn(() => ok(undefined)),
@@ -67,7 +71,8 @@ export function installOctopusStub(): Api {
       answerPermission: vi.fn(() => ok(undefined)),
       answerQuestions: vi.fn(() => ok(undefined)),
       rateLimit: vi.fn(() => ok(null)),
-      onEvent: vi.fn(subscription)
+      onEvent: vi.fn(subscription),
+      onStatus: vi.fn(subscription)
     },
     workspaces: {
       onStatus: vi.fn(subscription),
@@ -117,6 +122,8 @@ function chatFixture(): Chat {
     id: 'chat-1',
     workspaceId: 'planner/kyiv',
     agent: 'claude',
+    status: 'idle',
+    title: null,
     sessionId: null,
     model: null,
     effort: 'medium',

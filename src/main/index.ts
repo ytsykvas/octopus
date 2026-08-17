@@ -5,6 +5,7 @@ import { app, BrowserWindow, dialog, ipcMain, Menu, nativeTheme, shell } from 'e
 import { describeError } from '../core/persist.js'
 import {
   type ChatEvent,
+  type ChatStatusEvent,
   createService,
   type OctopusService,
   type WorkspaceStatusEvent
@@ -113,6 +114,12 @@ function broadcastWorkspaceStatus(event: WorkspaceStatusEvent): void {
   }
 }
 
+function broadcastChatStatus(event: ChatStatusEvent): void {
+  for (const window of BrowserWindow.getAllWindows()) {
+    window.webContents.send('chats:status', event)
+  }
+}
+
 /**
  * Follows the OS appearance.
  *
@@ -168,6 +175,7 @@ async function start(): Promise<void> {
     broadcastTheme,
     broadcastChatEvent,
     broadcastWorkspaceStatus,
+    broadcastChatStatus,
     openPath: (path) => shell.openPath(path)
   })
   watchSystemTheme(service)

@@ -6,7 +6,13 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 
 import type { AgentEvent } from './events.js'
 import { chatTranscript } from './paths.js'
-import { appendEntry, type ChatEntry, readTranscript, removeTranscript } from './transcript.js'
+import {
+  appendEntry,
+  type ChatEntry,
+  copyTranscript,
+  readTranscript,
+  removeTranscript
+} from './transcript.js'
 
 let root: string
 
@@ -194,5 +200,48 @@ describe('removal', () => {
   // Called when a workspace is removed, which may well have had no chat.
   it('says nothing about a chat that never wrote anything', async () => {
     await expect(removeTranscript('chat-nothing', root)).resolves.toBeUndefined()
+  })
+})
+
+describe('copying, which is what forking a conversation needs', () => {
+  it('carries every entry over', async () => {
+    await appendEntry('chat-1', { role: 'user', at: AT, text: 'add a test' }, root)
+    await appendEntry('chat-1', { role: 'user', at: AT, text: 'and another' }, root)
+
+    await copyTranscript('chat-1', 'chat-2', root)
+
+    await expect(readTranscript('chat-2', root)).resolves.toEqual([
+      { role: 'user', at: AT, text: 'add a test' },
+      { role: 'user', at: AT, text: 'and another' }
+    ])
+  })
+
+  it('leaves the conversation it came from alone', async () => {
+    await appendEntry('chat-1', { role: 'user', at: AT, text: 'add a test' }, root)
+    await copyTranscript('chat-1', 'chat-2', root)
+    await appendEntry('chat-2', { role: 'user', at: AT, text: 'only here' }, root)
+
+    await expect(readTranscript('chat-1', root)).resolves.toEqual([
+      { role: 'user', at: AT, text: 'add a test' }
+    ])
+  })
+
+  it('creates the directory on first use', async () => {
+    const fresh = join(root, 'nested')
+    await appendEntry('chat-1', { role: 'user', at: AT, text: 'add a test' }, fresh)
+
+    await copyTranscript('chat-1', 'chat-2', fresh)
+
+    await expect(readTranscript('chat-2', fresh)).resolves.toHaveLength(1)
+  })
+
+  /*
+   * Silence rather than a throw, matching `readTranscript`: a conversation
+   * whose log was cleared has a live session and no history, and continuing it
+   * is a reasonable thing to want.
+   */
+  it('says nothing about a source that has written nothing', async () => {
+    await expect(copyTranscript('chat-nothing', 'chat-2', root)).resolves.toBeUndefined()
+    await expect(readTranscript('chat-2', root)).resolves.toEqual([])
   })
 })

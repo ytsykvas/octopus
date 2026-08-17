@@ -5,6 +5,17 @@ interface NameEditorProps {
   readonly initial: string
   readonly onCommit: (name: string) => void
   readonly onCancel: () => void
+  /**
+   * What an empty name means, where it means something.
+   *
+   * A project and a workspace must be called something, so emptying the field
+   * there is a slip mid-typing and cancels. A conversation has a name it is
+   * given when it has none of its own, so clearing the field is a request —
+   * the same shape as clearing a project's icon.
+   */
+  readonly onClear?: () => void
+  /** Overridden where the field is not a whole row — the tab strip's is narrow. */
+  readonly className?: string
 }
 
 /**
@@ -14,14 +25,21 @@ interface NameEditorProps {
  * "done", and losing the edit there would be surprising. An empty name cancels
  * rather than erroring — it is clearly a mistake mid-typing, not a request.
  */
-export function NameEditor({ initial, onCommit, onCancel }: NameEditorProps): React.JSX.Element {
+export function NameEditor({
+  initial,
+  onCommit,
+  onCancel,
+  onClear,
+  className = 'input focus-ring'
+}: NameEditorProps): React.JSX.Element {
   const { t } = useTranslation()
   const [draft, setDraft] = useState(initial)
 
   const commit = (): void => {
     const trimmed = draft.trim()
     if (trimmed === '') {
-      onCancel()
+      if (onClear) onClear()
+      else onCancel()
       return
     }
     onCommit(trimmed)
@@ -51,7 +69,7 @@ export function NameEditor({ initial, onCommit, onCancel }: NameEditorProps): Re
       onFocus={(event) => {
         event.target.select()
       }}
-      className="input focus-ring"
+      className={className}
     />
   )
 }

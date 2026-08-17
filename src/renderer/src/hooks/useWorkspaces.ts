@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import type { Project } from '@core/store.js'
-import type { WorkspaceView } from '@core/workspaces.js'
+import type { WorkspaceChat, WorkspaceView } from '@core/workspaces.js'
 
 import type { ConfirmRequest, ConfirmResult } from './useConfirm.js'
 import { useErrorMessage } from './useErrorMessage.js'
@@ -23,6 +23,15 @@ interface UseWorkspaces {
   readonly editingId: string | null
   readonly setEditingId: (workspaceId: string | null) => void
   readonly refresh: () => Promise<void>
+  /**
+   * Replaces a workspace's conversation list, from the pane that owns it.
+   *
+   * Pushed rather than re-read: the tab strip has just opened or closed one and
+   * knows the answer, while a re-read would put git to work on every workspace
+   * of the project to learn something this window already decided. The dots on
+   * the row would otherwise only catch up when the next turn ended.
+   */
+  readonly setChats: (workspaceId: string, chats: readonly WorkspaceChat[]) => void
   readonly create: (projectId: string) => Promise<void>
   readonly rename: (workspaceId: string, name: string) => Promise<void>
   readonly remove: (workspaceId: string) => Promise<void>
@@ -70,6 +79,42 @@ export function useWorkspaces(
   const refresh = useCallback(async () => {
     setByProject(await load())
   }, [load])
+
+  /**
+   * Applies a change to whichever project holds this workspace.
+   *
+   * The map is keyed by project and the callers only know the workspace, so the
+   * search would otherwise be written out at each of them — and each of them
+   * would have to remember to leave the other projects' arrays alone, which is
+   * what keeps their rows from redrawing.
+   */
+  const patchWorkspace = useCallback(
+    (workspaceId: string, patch: (workspace: WorkspaceView) => WorkspaceView) => {
+      setByProject((current) => {
+        const next = new Map(current)
+
+        for (const [projectId, workspaces] of current) {
+          if (!workspaces.some((workspace) => workspace.id === workspaceId)) continue
+          next.set(
+            projectId,
+            workspaces.map((workspace) =>
+              workspace.id === workspaceId ? patch(workspace) : workspace
+            )
+          )
+        }
+
+        return next
+      })
+    },
+    []
+  )
+
+  const setChats = useCallback(
+    (workspaceId: string, chats: readonly WorkspaceChat[]) => {
+      patchWorkspace(workspaceId, (workspace) => ({ ...workspace, chats }))
+    },
+    [patchWorkspace]
+  )
 
   /** The pending re-read, so a turn ending twice over is one of them. */
   const settle = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -124,23 +169,29 @@ export function useWorkspaces(
   useEffect(
     () =>
       window.octopus.workspaces.onStatus(({ workspaceId, status }) => {
-        setByProject((current) => {
-          const next = new Map(current)
-
-          for (const [projectId, workspaces] of current) {
-            if (!workspaces.some((workspace) => workspace.id === workspaceId)) continue
-            next.set(
-              projectId,
-              workspaces.map((workspace) =>
-                workspace.id === workspaceId ? { ...workspace, status } : workspace
-              )
-            )
-          }
-
-          return next
-        })
+        patchWorkspace(workspaceId, (workspace) => ({ ...workspace, status }))
       }),
-    []
+    [patchWorkspace]
+  )
+
+  /*
+   * The same, one level in: what each of a workspace's conversations is doing.
+   *
+   * A second subscription rather than more work in the one above, because the
+   * row draws both — a summarising dot while there is one conversation, and one
+   * dot per conversation once there are more, and the two move at different
+   * moments. A conversation this window has not read yet is left alone; the
+   * strip that opened it pushes the list down through `setChats`.
+   */
+  useEffect(
+    () =>
+      window.octopus.chats.onStatus(({ chatId, workspaceId, status }) => {
+        patchWorkspace(workspaceId, (workspace) => ({
+          ...workspace,
+          chats: workspace.chats.map((chat) => (chat.id === chatId ? { ...chat, status } : chat))
+        }))
+      }),
+    [patchWorkspace]
   )
 
   useEffect(() => {
@@ -240,6 +291,7 @@ export function useWorkspaces(
     editingId,
     setEditingId,
     refresh,
+    setChats,
     create,
     rename,
     remove

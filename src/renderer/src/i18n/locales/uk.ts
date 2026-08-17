@@ -206,6 +206,21 @@ export const uk: Translation = {
   },
 
   chat: {
+    tabs: 'Розмови',
+    tab: '{{agent}} {{number}}',
+    tabStatus: '{{name}}: {{state}}',
+    tabStatusIdle: 'нічого не виконується',
+    newTab: 'Нова розмова',
+    renameTab: 'Перейменувати…',
+    forkTab: 'Продовжити в новій розмові',
+    forkTabHint: 'Агент збереже те, що пам’ятає з цієї.',
+    closeTab: 'Закрити розмову',
+    closeTabTitle: 'Закрити цю розмову?',
+    closeTabMessage: '{{name}} і все сказане в ній.',
+    closeTabDetail: 'Пам’ять агента про неї зникне теж, і повернути її не вийде.',
+    closeTabConfirm: 'Закрити',
+    closeTabCancel: 'Скасувати',
+
     placeholder: 'Попросіть агента щось зробити в цьому воркспейсі…',
     send: 'Надіслати',
     stop: 'Спинити',
@@ -420,6 +435,13 @@ export const uk: Translation = {
     uncommittedChanges: 'У {{name}} є незакомічені зміни.',
     nameEmpty: 'Назва не може бути порожньою.',
     worktreeMissing: 'Цього воркспейсу вже немає.',
+    tooManyChats_one: 'Воркспейс тримає щонайбільше {{count}} розмову.',
+    tooManyChats_few: 'Воркспейс тримає щонайбільше {{count}} розмови.',
+    tooManyChats_many: 'Воркспейс тримає щонайбільше {{count}} розмов.',
+    tooManyChats_other: 'Воркспейс тримає щонайбільше {{count}} розмови.',
+    lastChat: 'Останню розмову закрити не можна. Щоб почати її спочатку, скористайтеся /clear.',
+    nothingToFork: 'Ця розмова ще не почалася, тож продовжувати нема чого.',
+    forkFailed: 'Агент не зміг скопіювати цю розмову.',
     unknown: 'Щось пішло не так: {{message}}'
   }
 }

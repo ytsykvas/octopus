@@ -14,6 +14,7 @@ import type { WorkspaceView } from '@core/workspaces.js'
 import type { Result } from '../../preload/index.js'
 import { fileDiff, workspaceDiff } from './test/diff.js'
 import { stubDialogElement } from './test/dialog.js'
+import { chat } from './test/chat.js'
 import { disconnectedAccounts } from './test/octopus.js'
 import { workspaceView } from './test/workspaces.js'
 import { App } from './App.js'
@@ -1375,6 +1376,98 @@ describe('App', () => {
 
     expect(screen.queryByText('/tmp/planner/setup.sh')).not.toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Write the script' })).toBeInTheDocument()
+  })
+
+  it('opens another conversation with ⌘T', async () => {
+    givenTwoProjects()
+    const user = await openApp()
+    await user.click(tab('PL'))
+    await user.click(screen.getByRole('button', { name: /anna/ }))
+    await screen.findByRole('navigation', { name: 'Conversations' })
+
+    fireEvent.keyDown(window, { key: 't', metaKey: true })
+
+    await waitFor(() => {
+      expect(window.octopus.chats.create).toHaveBeenCalledWith('planner/anna')
+    })
+  })
+
+  /*
+   * Sent the way macOS actually sends it. Option rewrites the character —
+   * Option-2 arrives as `™` — so a handler reading `event.key` cannot work, and
+   * a test that sent a plain `2` would be green over one that does not.
+   */
+  it('switches conversation with ⌥2', async () => {
+    vi.mocked(window.octopus.chats.list).mockResolvedValue({
+      ok: true,
+      value: [
+        chat({ workspaceId: 'planner/anna' }),
+        chat({ id: 'chat-2', workspaceId: 'planner/anna' })
+      ]
+    })
+    givenTwoProjects()
+    const user = await openApp()
+    await user.click(tab('PL'))
+    await user.click(screen.getByRole('button', { name: /anna/ }))
+    await screen.findByRole('button', { name: /^Claude 2: / })
+
+    fireEvent.keyDown(window, { key: '™', code: 'Digit2', altKey: true })
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: /^Claude 2: / })).toHaveAttribute(
+        'aria-current',
+        'page'
+      )
+    })
+  })
+
+  // The shortcut cannot do what the button no longer offers: three conversations
+  // share a worktree, and past that the tabs stop being a way to work in
+  // parallel and become a way to lose track of who changed what.
+  it('does not open a fourth conversation with ⌘T', async () => {
+    vi.mocked(window.octopus.chats.list).mockResolvedValue({
+      ok: true,
+      value: [
+        chat({ workspaceId: 'planner/anna' }),
+        chat({ id: 'chat-2', workspaceId: 'planner/anna' }),
+        chat({ id: 'chat-3', workspaceId: 'planner/anna' })
+      ]
+    })
+    givenTwoProjects()
+    const user = await openApp()
+    await user.click(tab('PL'))
+    await user.click(screen.getByRole('button', { name: /anna/ }))
+    await screen.findByRole('button', { name: /^Claude 3: / })
+
+    fireEvent.keyDown(window, { key: 't', metaKey: true })
+
+    expect(window.octopus.chats.create).not.toHaveBeenCalled()
+  })
+
+  // ⌥ with anything else on it: the window has no business claiming a
+  // combination it does not answer.
+  it('leaves other ⌥ combinations alone', async () => {
+    givenTwoProjects()
+    const user = await openApp()
+    await user.click(tab('PL'))
+    await user.click(screen.getByRole('button', { name: /anna/ }))
+    await screen.findByRole('navigation', { name: 'Conversations' })
+
+    fireEvent.keyDown(window, { key: 'å', code: 'KeyA', altKey: true })
+
+    expect(window.octopus.chats.create).not.toHaveBeenCalled()
+  })
+
+  it('does nothing for a conversation that is not there', async () => {
+    givenTwoProjects()
+    const user = await openApp()
+    await user.click(tab('PL'))
+    await user.click(screen.getByRole('button', { name: /anna/ }))
+    const strip = await screen.findByRole('navigation', { name: 'Conversations' })
+
+    fireEvent.keyDown(window, { key: '£', code: 'Digit3', altKey: true })
+
+    expect(strip).toBeInTheDocument()
   })
 
   it('opens the changes with ⌘⇧D', async () => {
