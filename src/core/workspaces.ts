@@ -85,6 +85,15 @@ export interface WorkspaceChat {
   /** A name the user gave it, or null for the one it is given. */
   readonly title: string | null
   readonly status: ChatStatus
+  /**
+   * Whether a session has ever run here.
+   *
+   * What tells a conversation that finished cleanly from one nobody has written
+   * in yet: both are `idle`, and the dot in the list draws them differently.
+   * The same fact the tab strip calls `started`, and read the same way — a
+   * session id is written the moment the agent answers and kept afterwards.
+   */
+  readonly started: boolean
 }
 
 async function pathExists(path: string): Promise<boolean> {
@@ -408,7 +417,8 @@ export function reconcile(
         id: chat.id,
         agent: chat.agent,
         title: chat.title,
-        status: chat.status
+        status: chat.status,
+        started: chat.sessionId !== null
       }))
 
   // `null` means git could not be asked — the repository was moved, renamed or

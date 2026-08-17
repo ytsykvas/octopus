@@ -373,6 +373,14 @@ would redraw the whole list for nothing.
 first, and the workspaces derived from the settled list rather than settled
 alongside it by a rule that would drift the first time one of them changed.
 
+`reconcile` puts one more fact on each conversation than its status: `started`,
+which is `sessionId !== null`. The list draws a conversation that ran and
+finished differently from one nobody has written in, and both of those are
+`idle` — so the status alone cannot say which, and this is what does. Note the
+order it becomes true in: a turn is under way before the session it runs in has
+announced itself, so a conversation is `running` and not yet `started`, which is
+the honest reading of both.
+
 ### Forking a conversation
 
 A plain `resume` continues a session **in place and keeps its id** — which is

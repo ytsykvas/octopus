@@ -152,7 +152,7 @@ function StatusMark({ workspace }: { workspace: WorkspaceView }): React.JSX.Elem
           const described = t('chat.tabStatus', {
             name:
               chat.title ?? t('chat.tab', { agent: AGENT_NAMES[chat.agent], number: index + 1 }),
-            state: t(chatStatusLabel(chat.status))
+            state: t(chatStatusLabel(chat.status, chat.started))
           })
 
           return (
@@ -161,7 +161,7 @@ function StatusMark({ workspace }: { workspace: WorkspaceView }): React.JSX.Elem
               role="img"
               aria-label={described}
               title={described}
-              className={`size-1.5 shrink-0 rounded-full ${chatStatusTone(chat.status)}`}
+              className={`size-1.5 shrink-0 rounded-full ${chatStatusTone(chat.status, chat.started)}`}
             />
           )
         })}

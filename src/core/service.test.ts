@@ -3682,9 +3682,22 @@ describe('the agent chat', () => {
 
       const [view] = await service.listWorkspaces(projectId)
 
+      /*
+       * Neither has `started` yet, the one being worked in included: the id
+       * arrives as an `init` event of the agent's own and this fake sends none.
+       * Which is the honest order — a turn is under way before the session it
+       * runs in has announced itself, and `running` is what the list draws
+       * meanwhile.
+       */
       expect(view?.chats).toEqual([
-        { id: first.id, agent: 'claude', title: null, status: 'running' },
-        { id: second.id, agent: 'claude', title: 'auth refactor', status: 'idle' }
+        { id: first.id, agent: 'claude', title: null, status: 'running', started: false },
+        {
+          id: second.id,
+          agent: 'claude',
+          title: 'auth refactor',
+          status: 'idle',
+          started: false
+        }
       ])
     })
 

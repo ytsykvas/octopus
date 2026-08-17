@@ -99,7 +99,15 @@ export function App(): React.JSX.Element {
         tabs.flatMap((tab) =>
           tab.id === null
             ? []
-            : [{ id: tab.id, agent: tab.agent, title: tab.title, status: tab.status }]
+            : [
+                {
+                  id: tab.id,
+                  agent: tab.agent,
+                  title: tab.title,
+                  status: tab.status,
+                  started: tab.started
+                }
+              ]
         )
       )
     },

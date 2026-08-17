@@ -134,21 +134,72 @@ describe('WorkspaceRow', () => {
       workspace: workspace({
         status: 'waiting_permission',
         chats: [
-          { id: 'chat-1', agent: 'claude' as const, title: null, status: 'running' as const },
+          {
+            id: 'chat-1',
+            agent: 'claude' as const,
+            title: null,
+            status: 'running' as const,
+            started: true
+          },
           {
             id: 'chat-2',
             agent: 'claude' as const,
             title: null,
-            status: 'waiting_permission' as const
+            status: 'waiting_permission' as const,
+            started: true
           },
-          { id: 'chat-3', agent: 'claude' as const, title: null, status: 'idle' as const }
+          {
+            id: 'chat-3',
+            agent: 'claude' as const,
+            title: null,
+            status: 'idle' as const,
+            started: true
+          }
         ]
       })
     })
 
     expect(screen.getByLabelText('Claude 1: The agent is working here')).toBeInTheDocument()
     expect(screen.getByLabelText('Claude 2: Waiting for your answer')).toBeInTheDocument()
-    expect(screen.getByLabelText('Claude 3: nothing running')).toBeInTheDocument()
+    expect(screen.getByLabelText('Claude 3: finished')).toBeInTheDocument()
+  })
+
+  /*
+   * The two quiet states, which are the ones a glance down the list is usually
+   * telling apart: a conversation that ran and finished, against one nobody has
+   * written in. Both are `idle`, so the status alone cannot say which — and
+   * drawn the same they made a finished workspace look untouched.
+   */
+  it('tells a conversation that has run from one nobody has written in', () => {
+    renderRow({
+      workspace: workspace({
+        status: 'idle',
+        chats: [
+          { id: 'chat-1', agent: 'claude' as const, title: null, status: 'idle', started: true },
+          { id: 'chat-2', agent: 'claude' as const, title: null, status: 'idle', started: false }
+        ]
+      })
+    })
+
+    expect(screen.getByLabelText('Claude 1: finished')).toBeInTheDocument()
+    expect(screen.getByLabelText('Claude 2: nothing written yet')).toBeInTheDocument()
+  })
+
+  // Whether it ever started says nothing about a turn that is under way, or one
+  // waiting on an answer, or one that ended badly. Those speak for themselves.
+  it('leaves a conversation with something to report saying it', () => {
+    renderRow({
+      workspace: workspace({
+        status: 'error',
+        chats: [
+          { id: 'chat-1', agent: 'claude' as const, title: null, status: 'error', started: true },
+          { id: 'chat-2', agent: 'claude' as const, title: null, status: 'running', started: false }
+        ]
+      })
+    })
+
+    expect(screen.getByLabelText('Claude 1: The last turn ended in an error')).toBeInTheDocument()
+    expect(screen.getByLabelText('Claude 2: The agent is working here')).toBeInTheDocument()
   })
 
   it('says when one of several conversations ended badly', () => {
@@ -156,8 +207,20 @@ describe('WorkspaceRow', () => {
       workspace: workspace({
         status: 'error',
         chats: [
-          { id: 'chat-1', agent: 'claude' as const, title: null, status: 'error' as const },
-          { id: 'chat-2', agent: 'claude' as const, title: null, status: 'idle' as const }
+          {
+            id: 'chat-1',
+            agent: 'claude' as const,
+            title: null,
+            status: 'error' as const,
+            started: true
+          },
+          {
+            id: 'chat-2',
+            agent: 'claude' as const,
+            title: null,
+            status: 'idle' as const,
+            started: true
+          }
         ]
       })
     })
@@ -170,7 +233,15 @@ describe('WorkspaceRow', () => {
     renderRow({
       workspace: workspace({
         status: 'running',
-        chats: [{ id: 'chat-1', agent: 'claude' as const, title: null, status: 'running' as const }]
+        chats: [
+          {
+            id: 'chat-1',
+            agent: 'claude' as const,
+            title: null,
+            status: 'running' as const,
+            started: true
+          }
+        ]
       })
     })
 

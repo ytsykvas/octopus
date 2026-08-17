@@ -84,7 +84,10 @@ function TabButton({
   const named = tab.title ?? t('chat.tab', { agent: AGENT_NAMES[tab.agent], number })
   // Composed through a key rather than by joining two translated strings: what
   // separates a name from its state is a matter for the language.
-  const described = t('chat.tabStatus', { name: named, state: t(chatStatusLabel(tab.status)) })
+  const described = t('chat.tabStatus', {
+    name: named,
+    state: t(chatStatusLabel(tab.status, tab.started))
+  })
 
   // Read into a constant so the closures below carry a string rather than a
   // nullable field they would each have to answer for.
@@ -174,7 +177,7 @@ function TabButton({
             agent began working. */}
         <span
           aria-hidden
-          className={`size-1.5 shrink-0 rounded-full ${chatStatusTone(tab.status)}`}
+          className={`size-1.5 shrink-0 rounded-full ${chatStatusTone(tab.status, tab.started)}`}
         />
         <span aria-hidden>{named}</span>
         {/* The visible label is a name, and the dot beside it says nothing

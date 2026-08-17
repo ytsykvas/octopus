@@ -220,7 +220,8 @@ export const en = {
        name — the one the user gave it, or the automatic one above — because a
        renamed conversation should read as itself here too. */
     tabStatus: '{{name}}: {{state}}',
-    tabStatusIdle: 'nothing running',
+    tabStatusIdle: 'nothing written yet',
+    tabStatusDone: 'finished',
     newTab: 'New conversation',
     renameTab: 'Rename…',
     forkTab: 'Continue in a new conversation',

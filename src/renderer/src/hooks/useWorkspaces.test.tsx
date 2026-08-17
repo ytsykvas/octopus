@@ -153,8 +153,20 @@ describe('useWorkspaces', () => {
   it('takes each conversation’s status from the core as it changes', async () => {
     const busy = workspaceView('anna', {
       chats: [
-        { id: 'chat-1', agent: 'claude' as const, title: null, status: 'idle' as const },
-        { id: 'chat-2', agent: 'claude' as const, title: null, status: 'idle' as const }
+        {
+          id: 'chat-1',
+          agent: 'claude' as const,
+          title: null,
+          status: 'idle' as const,
+          started: true
+        },
+        {
+          id: 'chat-2',
+          agent: 'claude' as const,
+          title: null,
+          status: 'idle' as const,
+          started: true
+        }
       ]
     })
     workspacesPerProject({ planner: [busy] })
@@ -184,12 +196,12 @@ describe('useWorkspaces', () => {
 
     act(() => {
       result.current.setChats(anna.id, [
-        { id: 'chat-1', agent: 'claude', title: null, status: 'running' }
+        { id: 'chat-1', agent: 'claude', title: null, status: 'running', started: true }
       ])
     })
 
     expect(result.current.flat[0]?.chats).toEqual([
-      { id: 'chat-1', agent: 'claude', title: null, status: 'running' }
+      { id: 'chat-1', agent: 'claude', title: null, status: 'running', started: true }
     ])
   })
 

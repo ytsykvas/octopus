@@ -28,8 +28,18 @@ export const AGENT_TONES: Partial<Record<WorkspaceView['status'], string>> = {
   error: 'bg-danger'
 }
 
-/** What a conversation with nothing to report looks like — a hollow dot. */
-export const QUIET_TONE = 'border-ink-faint border'
+/** What a conversation nobody has written in yet looks like — a hollow dot. */
+export const EMPTY_TONE = 'border-ink-faint border'
+
+/**
+ * A conversation that has run and is not doing anything now.
+ *
+ * `idle` used to draw the hollow dot as well, which made "finished, nothing
+ * wrong" and "never used" the same mark — and those are the two states a
+ * glance down the list is most often trying to tell apart. Green is the
+ * ordinary end of a turn, so it is the quiet green rather than a lit one.
+ */
+export const DONE_TONE = 'bg-success'
 
 /**
  * The label for each tone.
@@ -50,22 +60,31 @@ export const AGENT_LABELS: Partial<
 }
 
 /**
- * The label for a conversation, which unlike a workspace has a word for `idle`.
+ * The label for a conversation, which unlike a workspace has words for `idle`.
  *
  * A tab's dot is always there — the strip would jump by six pixels the moment a
- * turn started otherwise — so the quiet state needs something to be called.
+ * turn started otherwise — so the quiet states need something to be called, and
+ * there are two of them: one where a turn ended and one where none has run.
  */
 export function chatStatusLabel(
-  status: ChatStatus
+  status: ChatStatus,
+  started: boolean
 ):
   | 'workspaces.statusRunning'
   | 'workspaces.statusWaiting'
   | 'workspaces.statusError'
+  | 'chat.tabStatusDone'
   | 'chat.tabStatusIdle' {
-  return AGENT_LABELS[status] ?? 'chat.tabStatusIdle'
+  return AGENT_LABELS[status] ?? (started ? 'chat.tabStatusDone' : 'chat.tabStatusIdle')
 }
 
-/** The tone for a conversation, falling back to the hollow dot. */
-export function chatStatusTone(status: ChatStatus): string {
-  return AGENT_TONES[status] ?? QUIET_TONE
+/**
+ * The tone for a conversation.
+ *
+ * `started` only decides the quiet case. A conversation that is running, or
+ * waiting, or ended in an error has something to say about right now, and how
+ * it began is not part of it.
+ */
+export function chatStatusTone(status: ChatStatus, started: boolean): string {
+  return AGENT_TONES[status] ?? (started ? DONE_TONE : EMPTY_TONE)
 }

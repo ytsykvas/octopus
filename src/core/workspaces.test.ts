@@ -640,13 +640,37 @@ describe('reconcile', () => {
 
     it('reports each of them, in the order they were opened', () => {
       const chats = [
-        conversation({ id: 'chat-1', status: 'running' }),
+        conversation({ id: 'chat-1', status: 'running', sessionId: 'sess-1' }),
         conversation({ id: 'chat-2', status: 'waiting_permission', title: 'auth refactor' })
       ]
 
       expect(reconcile([workspace], [], new Map(), chats)[0]?.chats).toEqual([
-        { id: 'chat-1', agent: 'claude', title: null, status: 'running' },
-        { id: 'chat-2', agent: 'claude', title: 'auth refactor', status: 'waiting_permission' }
+        { id: 'chat-1', agent: 'claude', title: null, status: 'running', started: true },
+        {
+          id: 'chat-2',
+          agent: 'claude',
+          title: 'auth refactor',
+          status: 'waiting_permission',
+          started: false
+        }
+      ])
+    })
+
+    /*
+     * The list draws a conversation that finished differently from one nobody
+     * has written in, and both are `idle` — so the status alone cannot tell
+     * them apart and this is the field that does. A session id is written the
+     * moment the agent answers and kept from then on.
+     */
+    it('says which conversations have ever run', () => {
+      const chats = [
+        conversation({ id: 'chat-1', sessionId: 'sess-1' }),
+        conversation({ id: 'chat-2' })
+      ]
+
+      expect(reconcile([workspace], [], new Map(), chats)[0]?.chats.map((c) => c.started)).toEqual([
+        true,
+        false
       ])
     })
 
@@ -677,7 +701,7 @@ describe('reconcile', () => {
       const chats = [conversation({ id: 'chat-1', title: 'auth refactor' })]
 
       expect(reconcile([workspace], null, new Map(), chats)[0]?.chats).toEqual([
-        { id: 'chat-1', agent: 'claude', title: 'auth refactor', status: 'idle' }
+        { id: 'chat-1', agent: 'claude', title: 'auth refactor', status: 'idle', started: false }
       ])
     })
   })
