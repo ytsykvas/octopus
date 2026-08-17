@@ -121,8 +121,9 @@ added here is paid for in all of them:
 - External data is validated with zod at the boundary; types come from `z.infer`.
 - External processes go through `execFile`, never `exec`.
 - All paths through `path.join()`; no hardcoded `~/Library` or `/Users/...`.
-- **`src/core/` coverage is 100%**, enforced by a threshold that fails the build.
-  UI and IPC are covered by substance, not by chasing a number.
+- **Coverage is 100% everywhere**, enforced by a threshold that fails the build —
+  `vitest.config.ts` and `vitest.renderer.config.ts` share it. Size the renderer
+  tests accordingly; only the files in `bootstrapOnly` are exempt.
 - Tests are written alongside the code. A bug is reproduced by a test first.
 - Comments explain **why**, not **what**.
 - Conventional Commits.
