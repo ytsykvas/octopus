@@ -162,6 +162,16 @@
   body,
   #root {
     height: 100%;
+    /*
+     * A window, not a document.
+     *
+     * Every pane inside scrolls on its own, so the page never has a reason to.
+     * Without this, anything taller or wider than the window — a terminal still
+     * sized to the window before it was made smaller — spills out and scrolls
+     * the whole application instead, carrying the sidebar and the chat off
+     * screen while the pane that caused it stays put.
+     */
+    overflow: hidden;
   }
 
   body {
