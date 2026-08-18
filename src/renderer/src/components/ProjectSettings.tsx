@@ -298,9 +298,9 @@ export function ProjectSettings({
             />
           )}
 
-          {/* Nothing reads this yet — pull requests are still ahead. It is here
-              because the conventions are worth writing down while the project
-              is being set up, not scrambled for at the moment a PR is opened. */}
+          {/* What the pull request tab's "ask the agent to describe" button
+              sends. This one wins over the installation's wherever it exists —
+              emptied included, which is how a project says it adds nothing. */}
           {section === 'instructions' && (
             <FileEditor
               label={t('project.pullRequestInstruction')}
