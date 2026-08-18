@@ -27,7 +27,15 @@ vi.mock('./DiffHunk.js', () => ({
 }))
 
 const file = fileDiff('src/a.ts', { hunks: [hunk()] })
-const comments = { pending: [], editing: null, onEdit: vi.fn(), onSave: vi.fn(), onRemove: vi.fn() }
+const comments = {
+  pending: [],
+  editing: null,
+  onEdit: vi.fn(),
+  onSave: vi.fn(),
+  onRemove: vi.fn(),
+  readDraft: vi.fn(() => null),
+  onDraft: vi.fn()
+}
 
 /** The props as `DiffPanel` hands them over: every one of them steady. */
 const props = {

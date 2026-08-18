@@ -43,6 +43,43 @@ function answer(diff: ReturnType<typeof workspaceDiff>): void {
   vi.mocked(octopus().workspaces.diff).mockResolvedValue({ ok: true, value: diff })
 }
 
+/** The same file after a reload that dropped a line above the annotated one. */
+function shiftedFile(): ReturnType<typeof fileDiff> {
+  return fileDiff('src/a.ts', {
+    hunks: [
+      hunk({
+        lines: [
+          { kind: 'context', text: 'kept', oldNumber: 1, newNumber: 1, noNewline: false },
+          { kind: 'added', text: 'is here now', oldNumber: null, newNumber: 2, noNewline: false }
+        ]
+      })
+    ]
+  })
+}
+
+/** A turn ending in this workspace, which is what makes the pane read again. */
+function emitTurnEnd(): void {
+  const handlers = vi.mocked(octopus().chats.onEvent).mock.calls.map(([handler]) => handler)
+
+  act(() => {
+    for (const handler of handlers) {
+      handler({
+        chatId: 'chat-1',
+        workspaceId: anna.id,
+        event: {
+          type: 'result',
+          ok: true,
+          costUsd: 0,
+          durationMs: 1,
+          inputTokens: 0,
+          outputTokens: 0,
+          terminalReason: 'completed'
+        }
+      })
+    }
+  })
+}
+
 const WIDE = 900
 
 function renderPanel(workspace = anna, visible = true): void {
@@ -954,6 +991,70 @@ describe('DiffPanel', () => {
 
       expect(comments.add).not.toHaveBeenCalled()
       expect(screen.queryByRole('textbox')).not.toBeInTheDocument()
+    })
+
+    /*
+     * The diff re-reads itself when a turn ends, which is exactly when someone
+     * is writing a note — and a re-read moves the lines.
+     *
+     * Rows used to be keyed by their place in the hunk, so a line that had
+     * shifted was drawn by the component holding a different one; the editor's
+     * text lived in that component, and the half-written sentence went with it
+     * silently. The draft now sits above the rows, so it survives either way.
+     */
+    it('keeps a note being typed when the diff reloads under it', async () => {
+      const user = userEvent.setup()
+      answer(workspaceDiff([fileDiff('src/a.ts')]))
+      renderWithComments()
+
+      await user.click(await screen.findByRole('button', { name: 'Comment on line 2' }))
+      await user.type(await screen.findByRole('textbox'), 'half a thought')
+
+      // The same file with a line inserted above the one being annotated, which
+      // is what shifts every row below it.
+      answer(workspaceDiff([shiftedFile()]))
+      emitTurnEnd()
+      await act(async () => {
+        await new Promise((resolve) => setTimeout(resolve, 400))
+      })
+
+      expect(await screen.findByRole('textbox')).toHaveValue('half a thought')
+    })
+
+    /*
+     * The rows go entirely when a file is folded, so nothing about how they are
+     * keyed can save the sentence being typed. The draft is held above them for
+     * this half of it.
+     */
+    it('keeps a note being typed when its file is folded away and back', async () => {
+      const user = userEvent.setup()
+      answer(workspaceDiff([fileDiff('src/a.ts')]))
+      renderWithComments()
+
+      await user.click(await screen.findByRole('button', { name: 'Comment on line 2' }))
+      await user.type(await screen.findByRole('textbox'), 'half a thought')
+
+      const fold = screen.getByRole('button', { name: 'src/a.ts', expanded: true })
+      await user.click(fold)
+      expect(screen.queryByRole('textbox')).not.toBeInTheDocument()
+      await user.click(fold)
+
+      expect(await screen.findByRole('textbox')).toHaveValue('half a thought')
+    })
+
+    // Focus used to drop to `<body>`, so a keyboard user restarted from the top
+    // of the pane — after writing a note, which is the deepest into it they get.
+    it('hands focus back to the trigger when the note closes', async () => {
+      const user = userEvent.setup()
+      answer(workspaceDiff([fileDiff('src/a.ts')]))
+      renderWithComments()
+
+      const trigger = await screen.findByRole('button', { name: 'Comment on line 2' })
+      await user.click(trigger)
+      await user.type(await screen.findByRole('textbox'), 'never mind')
+      await user.click(screen.getByRole('button', { name: 'Cancel' }))
+
+      expect(trigger).toHaveFocus()
     })
 
     it('sends nothing when the note was left empty', async () => {

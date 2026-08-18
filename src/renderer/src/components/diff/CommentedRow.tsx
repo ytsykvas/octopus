@@ -1,5 +1,5 @@
 import { MessageSquarePlus, X } from 'lucide-react'
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import type { DiffLine } from '@core/diff.js'
@@ -21,6 +21,20 @@ export interface CommentSurface {
    */
   readonly onSave: (anchor: CommentAnchor, text: string) => void
   readonly onRemove: (comment: DiffComment) => void
+  /**
+   * The note being typed, held above the rows rather than inside one.
+   *
+   * The diff re-reads itself when a turn ends, which is exactly when someone is
+   * writing a note. A row whose line moved is drawn by a different component
+   * and the editor went with it, taking the half-written sentence and saying
+   * nothing about why. Kept here, the draft outlives the row either way.
+   *
+   * Two functions rather than a value, and both steady across renders: a draft
+   * passed down as data would change this object on every keystroke, and
+   * `DiffFile` is memoised against exactly that.
+   */
+  readonly readDraft: (anchor: CommentAnchor) => string | null
+  readonly onDraft: (anchor: CommentAnchor, text: string) => void
 }
 
 /**
@@ -67,6 +81,15 @@ export function CommentedRow({
 }: CommentedRowProps): React.JSX.Element {
   const { t } = useTranslation()
 
+  /*
+   * The button that opened the editor, so closing it can hand focus back.
+   *
+   * Without this, focus drops to `<body>` and a keyboard user restarts from the
+   * top of the pane — after a note, which is the one moment they are deepest
+   * into it.
+   */
+  const trigger = useRef<HTMLButtonElement>(null)
+
   const anchor = anchorOf(path, line)
   if (!anchor) return <>{children}</>
 
@@ -85,6 +108,7 @@ export function CommentedRow({
       {children}
 
       <button
+        ref={trigger}
         type="button"
         onClick={() => {
           comments.onEdit(open ? null : (held ?? anchor))
@@ -113,15 +137,22 @@ export function CommentedRow({
 
       {editing !== null && open && (
         <Editor
-          initial={held?.text ?? ''}
+          // The draft wins over the saved text: it is the later of the two, and
+          // it is only ever set while this very note is being written.
+          initial={comments.readDraft(editing) ?? held?.text ?? ''}
+          onChange={(text) => {
+            comments.onDraft(editing, text)
+          }}
           onCancel={() => {
             comments.onEdit(null)
+            trigger.current?.focus()
           }}
           onSave={(text) => {
             // The editor's own anchor, not the row's: a selection opened this
             // one over several lines, and the row it opened above covers one.
             comments.onSave(editing, text)
             comments.onEdit(null)
+            trigger.current?.focus()
           }}
         />
       )}
@@ -157,10 +188,12 @@ function Note({
 /** Writing one. ⌘Enter saves, Escape leaves the line as it was. */
 function Editor({
   initial,
+  onChange,
   onSave,
   onCancel
 }: {
   readonly initial: string
+  readonly onChange: (text: string) => void
   readonly onSave: (text: string) => void
   readonly onCancel: () => void
 }): React.JSX.Element {
@@ -182,6 +215,7 @@ function Editor({
         value={text}
         onChange={(event) => {
           setText(event.target.value)
+          onChange(event.target.value)
         }}
         onKeyDown={(event) => {
           if (event.key === 'Escape') onCancel()

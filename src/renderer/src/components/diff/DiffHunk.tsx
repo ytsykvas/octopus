@@ -62,6 +62,17 @@ interface DiffHunkProps {
  * gutter cannot give: a removed line has no number in the file as it now
  * stands, and an added line had none in the file as it was.
  */
+/**
+ * Where a line sits, which is what tells one row from another.
+ *
+ * The pair of numbers, because neither alone is enough: a removed line carries
+ * only the old one, an added line only the new, and a context line both. No two
+ * lines of a file share the pair.
+ */
+function lineKey(line: DiffLine): string {
+  return `${line.kind}:${String(line.oldNumber)}:${String(line.newNumber)}`
+}
+
 export function DiffHunk({ hunk, view, tokens, path, comments }: DiffHunkProps): React.JSX.Element {
   // Computed here rather than in the row, so a re-render for any other reason
   // — a comment typed, a file collapsed — does not pair the lines again.
@@ -76,14 +87,25 @@ export function DiffHunk({ hunk, view, tokens, path, comments }: DiffHunkProps):
         {hunk.heading !== '' && <span className="truncate">{hunk.heading}</span>}
       </div>
 
+      {/* Keyed by where the line sits rather than by its place in the list.
+          The diff re-reads itself when a turn ends, which is exactly when
+          someone is writing a note — and by index, a line that had moved was
+          drawn by the component that held a different one, so the open editor
+          and the sentence in it went with it. */}
       {view === 'unified'
-        ? hunk.lines.map((line, index) => (
-            <CommentedRow key={index} path={path} line={line} comments={comments}>
+        ? hunk.lines.map((line) => (
+            <CommentedRow key={lineKey(line)} path={path} line={line} comments={comments}>
               <UnifiedRow line={line} path={path} tokens={tokens.get(line)} />
             </CommentedRow>
           ))
-        : rows.map((row, index) => (
-            <SplitRowView key={index} row={row} path={path} comments={comments} tokens={tokens} />
+        : rows.map((row) => (
+            <SplitRowView
+              key={`${row.left ? lineKey(row.left) : ''}|${row.right ? lineKey(row.right) : ''}`}
+              row={row}
+              path={path}
+              comments={comments}
+              tokens={tokens}
+            />
           ))}
     </div>
   )

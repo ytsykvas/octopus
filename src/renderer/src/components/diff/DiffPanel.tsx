@@ -13,7 +13,11 @@ import type { FileDiff } from '@core/diff.js'
 import { shortBranchName } from '@core/branches.js'
 import type { WorkspaceView } from '@core/workspaces.js'
 
-import type { CommentAnchor, DiffCommentController } from '../../hooks/useDiffComments.js'
+import {
+  anchorKey,
+  type CommentAnchor,
+  type DiffCommentController
+} from '../../hooks/useDiffComments.js'
 import { useErrorMessage } from '../../hooks/useErrorMessage.js'
 import { useWorkspaceDiff } from '../../hooks/useWorkspaceDiff.js'
 import { DiffFile } from './DiffFile.js'
@@ -190,20 +194,53 @@ export function DiffPanel({
     [onError, describeFailure]
   )
 
+  /*
+   * The note being typed, and the place it belongs to.
+   *
+   * A ref rather than state, and that is the whole reason it is written this
+   * way: the surface below is memoised so a memoised file row can tell nothing
+   * about it moved, and a draft kept in state would rebuild it on every
+   * keystroke — redrawing every file in the diff per character typed.
+   *
+   * The anchor rides along so a draft is never handed to a different note. It
+   * is cleared when the editor closes, whichever way it closes.
+   */
+  const draft = useRef<{ anchor: CommentAnchor; text: string } | null>(null)
+
+  const readDraft = useCallback(
+    (anchor: CommentAnchor) =>
+      draft.current !== null && anchorKey(draft.current.anchor) === anchorKey(anchor)
+        ? draft.current.text
+        : null,
+    []
+  )
+
+  const onDraft = useCallback((anchor: CommentAnchor, text: string) => {
+    draft.current = { anchor, text }
+  }, [])
+
   const { add, remove, pending } = comments
   const surface = useMemo(
     () => ({
       pending,
       editing,
-      onEdit: setEditing,
+      readDraft,
+      onDraft,
+      onEdit: (anchor: CommentAnchor | null) => {
+        // Closing or moving the editor ends the draft. Kept, it would be
+        // offered to whichever note was opened next.
+        draft.current = null
+        setEditing(anchor)
+      },
       // The quote is put together here rather than in the row: a note may cover
       // more lines than the row it is shown against, and this is what holds them.
       onSave: (anchor: CommentAnchor, text: string) => {
+        draft.current = null
         add({ ...anchor, code: quote(lines, anchor), text })
       },
       onRemove: remove
     }),
-    [pending, editing, add, remove, lines]
+    [pending, editing, add, remove, lines, readDraft, onDraft]
   )
 
   if ((workspace?.id ?? null) !== shownId) {
