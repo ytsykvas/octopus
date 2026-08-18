@@ -13,6 +13,7 @@ import type { PermissionAnswer } from '@core/service.js'
 import type { ChatEntry } from '@core/transcript.js'
 
 import type { Failure, Result } from '../../../preload/index.js'
+import { onChatEvent } from './chatEvents.js'
 
 /** A tool call the agent is blocked on, waiting to be told whether it may run. */
 export interface PendingPermission {
@@ -190,69 +191,74 @@ export function useChat(
 
   const openChatId = chat?.id ?? null
 
-  useEffect(
-    () =>
-      window.octopus.chats.onEvent(({ chatId, event }) => {
-        // Events are broadcast to every window and cover every chat; this hook
-        // draws the one it is showing.
-        if (chatId !== openChatId) return
+  /*
+   * This conversation's events, and only this conversation's.
+   *
+   * Registered by id with the window's one subscription rather than taken from
+   * the bridge directly: the bridge hands out a listener per call, and a pane
+   * per conversation crossed Node's ceiling — while every pane was woken for
+   * every fragment of every other pane's stream and dropped it after comparing
+   * an id.
+   *
+   * Nothing to listen to before there is a record: a pane the user has not
+   * written in yet has no conversation to hear from.
+   */
+  useEffect(() => {
+    if (openChatId === null) return
 
-        if (event.type === 'text_delta') {
-          setStreaming((current) => ({ ...current, text: current.text + event.text }))
-          return
-        }
+    return onChatEvent(({ event }) => {
+      if (event.type === 'text_delta') {
+        setStreaming((current) => ({ ...current, text: current.text + event.text }))
+        return
+      }
 
-        if (event.type === 'thinking_delta') {
-          setStreaming((current) => ({ ...current, thinking: current.thinking + event.text }))
-          return
-        }
+      if (event.type === 'thinking_delta') {
+        setStreaming((current) => ({ ...current, thinking: current.thinking + event.text }))
+        return
+      }
 
-        // What is left of `isEphemeral` after the two deltas above is the rate
-        // limit, which describes the account rather than the conversation and
-        // is drawn in the attic by `useRateLimit`. Falling through cost twice:
-        // it wiped the answer being written, and left an entry that draws
-        // nothing in the middle of a run of tool calls, splitting the fold in
-        // two around a break the reader cannot see.
-        if (isEphemeral(event)) return
+      // What is left of `isEphemeral` after the two deltas above is the rate
+      // limit, which describes the account rather than the conversation and
+      // is drawn in the attic by `useRateLimit`. Falling through cost twice:
+      // it wiped the answer being written, and left an entry that draws
+      // nothing in the middle of a run of tool calls, splitting the fold in
+      // two around a break the reader cannot see.
+      if (isEphemeral(event)) return
 
-        // The user asked for the conversation to be forgotten, and the agent
-        // has forgotten it. What is on screen goes with it — the transcript on
-        // disk has already been deleted, so leaving the log would show a
-        // history that no longer exists anywhere and that nothing can continue.
-        if (event.type === 'conversation_reset' && event.cleared) {
-          setStreaming(NOTHING_STREAMING)
-          setEntries([])
-          return
-        }
-
-        // Anything else means the block being streamed has finished, and its
-        // complete form is in the event now arriving.
+      // The user asked for the conversation to be forgotten, and the agent
+      // has forgotten it. What is on screen goes with it — the transcript on
+      // disk has already been deleted, so leaving the log would show a
+      // history that no longer exists anywhere and that nothing can continue.
+      if (event.type === 'conversation_reset' && event.cleared) {
         setStreaming(NOTHING_STREAMING)
-        setEntries((current) => [
-          ...current,
-          { role: 'agent', at: new Date().toISOString(), event }
-        ])
+        setEntries([])
+        return
+      }
 
-        if (event.type === 'permission_request') {
-          setPending({
-            requestId: event.requestId,
-            toolName: event.toolName,
-            input: event.input
-          })
-        }
-        // Answered somewhere else — the other window on this workspace. The
-        // card here has to stop offering buttons for a question that is settled.
-        if (event.type === 'question_answered') {
-          setPending((current) => (current?.requestId === event.requestId ? null : current))
-        }
+      // Anything else means the block being streamed has finished, and its
+      // complete form is in the event now arriving.
+      setStreaming(NOTHING_STREAMING)
+      setEntries((current) => [...current, { role: 'agent', at: new Date().toISOString(), event }])
 
-        if (event.type === 'result' || event.type === 'error') {
-          setBusy(false)
-          setPending(null)
-        }
-      }),
-    [openChatId]
-  )
+      if (event.type === 'permission_request') {
+        setPending({
+          requestId: event.requestId,
+          toolName: event.toolName,
+          input: event.input
+        })
+      }
+      // Answered somewhere else — the other window on this workspace. The
+      // card here has to stop offering buttons for a question that is settled.
+      if (event.type === 'question_answered') {
+        setPending((current) => (current?.requestId === event.requestId ? null : current))
+      }
+
+      if (event.type === 'result' || event.type === 'error') {
+        setBusy(false)
+        setPending(null)
+      }
+    }, openChatId)
+  }, [openChatId])
 
   /**
    * The conversation's record, created if this is the first thing done to it.

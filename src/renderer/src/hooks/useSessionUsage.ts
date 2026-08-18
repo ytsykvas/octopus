@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 
 import type { SessionUsage } from '@core/service.js'
+import { onChatEvent } from './chatEvents.js'
 
 const NOTHING: SessionUsage = { context: null, subscription: null }
 
@@ -54,12 +55,11 @@ export function useSessionUsage(chatId: string | null): SessionUsage {
   useEffect(() => {
     if (chatId === null) return
 
-    return window.octopus.chats.onEvent((message) => {
-      if (message.chatId !== chatId) return
+    return onChatEvent((message) => {
       if (message.event.type === 'session_started' || message.event.type === 'result') {
         void refresh(chatId)
       }
-    })
+    }, chatId)
   }, [chatId, refresh])
 
   return usage

@@ -3,6 +3,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import type { WorkspaceDiff } from '@core/diff.js'
 
 import { useErrorMessage } from './useErrorMessage.js'
+import { onChatEvent } from './chatEvents.js'
 
 export interface WorkspaceDiffController {
   readonly diff: WorkspaceDiff | null
@@ -121,7 +122,7 @@ export function useWorkspaceDiff(
   }, [workspaceId, enabled, apply])
 
   useEffect(() => {
-    const unsubscribe = window.octopus.chats.onEvent((announced) => {
+    const unsubscribe = onChatEvent((announced) => {
       // Any chat in this workspace writes to the same worktree, so this filters
       // on the workspace rather than on the chat the way `useChat` does.
       if (announced.workspaceId !== workspaceId) return

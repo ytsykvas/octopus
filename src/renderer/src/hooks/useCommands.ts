@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 
 import type { AgentCommand } from '@core/chats.js'
+import { onChatEvent } from './chatEvents.js'
 
 /**
  * The slash commands this chat may use.
@@ -52,10 +53,7 @@ export function useCommands(chatId: string | null): readonly AgentCommand[] {
   useEffect(() => {
     if (chatId === null) return
 
-    return window.octopus.chats.onEvent((announced) => {
-      // Events are broadcast to every window and cover every chat.
-      if (announced.chatId !== chatId) return
-
+    return onChatEvent((announced) => {
       // Taken straight from the event rather than asked for again: the SDK
       // pushes the whole list, and a round trip would only be a chance for
       // the two to disagree. Replaced wholesale — a command withdrawn

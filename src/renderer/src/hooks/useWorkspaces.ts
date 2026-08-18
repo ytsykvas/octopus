@@ -6,6 +6,7 @@ import type { WorkspaceChat, WorkspaceView } from '@core/workspaces.js'
 
 import type { ConfirmRequest, ConfirmResult } from './useConfirm.js'
 import { useErrorMessage } from './useErrorMessage.js'
+import { onChatEvent } from './chatEvents.js'
 
 /**
  * How long to wait after a turn ends before asking git again.
@@ -146,7 +147,7 @@ export function useWorkspaces(
     // the ones this subscription started.
     const timers = settle.current
 
-    const unsubscribe = window.octopus.chats.onEvent((announced) => {
+    const unsubscribe = onChatEvent((announced) => {
       // A turn ends either way, and one that failed may well have written files
       // before it did.
       if (announced.event.type !== 'result' && announced.event.type !== 'error') return

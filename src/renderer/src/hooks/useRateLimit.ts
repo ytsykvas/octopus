@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 
 import type { RateLimit } from '@core/service.js'
+import { onChatEvent } from './chatEvents.js'
 
 /**
  * How much of the subscription's window is gone.
@@ -34,7 +35,7 @@ export function useRateLimit(): RateLimit | null {
 
   useEffect(
     () =>
-      window.octopus.chats.onEvent(({ event }) => {
+      onChatEvent(({ event }) => {
         if (event.type === 'rate_limit') setLimit(event)
       }),
     []

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 
 import type { AgentModel } from '@core/chats.js'
+import { onChatEvent } from './chatEvents.js'
 
 /**
  * The models this account may use.
@@ -39,7 +40,7 @@ export function useModels(): readonly AgentModel[] {
 
   useEffect(
     () =>
-      window.octopus.chats.onEvent(({ event }) => {
+      onChatEvent(({ event }) => {
         if (event.type === 'session_started') void refresh()
       }),
     [refresh]
