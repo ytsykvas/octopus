@@ -10,6 +10,15 @@ the committed tree with no changes at all, six with them. Run alone, or with
 So it is the **full** renderer suite that produces it, which points at something
 leaking between files rather than at the test.
 
+**A second test now shows it, which makes this a shape rather than one test.**
+On 2026-08-18, `src/renderer/src/components/chat/Chat.test.tsx` › "raises it
+once that conversation is the one showing" failed the same way in one full run —
+`findByText('The plan is ready')` timed out — then passed alone and through
+three consecutive full suites. The two have the same build: an agent event
+emitted outside `act`, a click, then a read of what the event was supposed to
+produce. Whatever the cause, it is not specific to ⌘T, and either test will do
+to reproduce it.
+
 ## Why it matters
 
 `npm run check` is what every commit goes through, and a gate that goes red
