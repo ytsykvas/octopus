@@ -129,10 +129,16 @@ export const en = {
   scripts: {
     build: 'Build',
     server: 'Server',
-    run: 'Run',
-    runAgain: 'Run again',
-    restart: 'Restart',
+    /* Named per script rather than shared. One installs dependencies and the
+       other holds a port; `Run` said only that they share an implementation.
+       `build` and `server` above are the headings; these are the buttons. */
+    buildStart: 'Build',
+    buildAgain: 'Rebuild',
+    serverStart: 'Start',
+    serverRestart: 'Restart',
     stop: 'Stop',
+    foldBuild: 'Fold the build away',
+    unfoldBuild: 'Show the build',
     edit: 'Write the script',
     noWorkspace: 'Select a workspace to run this in.',
     noSetup:

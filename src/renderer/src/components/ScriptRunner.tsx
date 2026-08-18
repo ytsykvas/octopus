@@ -19,7 +19,26 @@ interface ScriptRunnerProps {
 }
 
 /**
- * One of the two script tabs — build or server.
+ * What each half of the Scripts tab offers, first time and after.
+ *
+ * Keyed by kind so a third script would have to name its own words rather than
+ * inherit whichever pair happened to be first.
+ */
+const LABELS: Record<
+  ScriptKind,
+  {
+    readonly first: 'scripts.buildStart' | 'scripts.serverStart'
+    readonly again: 'scripts.buildAgain' | 'scripts.serverStart'
+  }
+> = {
+  setup: { first: 'scripts.buildStart', again: 'scripts.buildAgain' },
+  // A server that has stopped is started, not started again: what "again"
+  // would name is the run that ended, and there is nothing left of it.
+  run: { first: 'scripts.serverStart', again: 'scripts.serverStart' }
+}
+
+/**
+ * One half of the Scripts tab — build or server.
  *
  * Runs on a button rather than on opening the tab. Both scripts have side
  * effects worth choosing: setup installs things, and a server holds a port for
@@ -72,9 +91,28 @@ export function ScriptRunner({
           {kind === 'run' ? `OCTOPUS_PORT=${String(port)}` : scriptPath}
         </span>
 
-        {running ? (
+        {/* The words follow the script rather than the component. One control
+            installs dependencies and the other holds a port; labelling both of
+            them `Run` said only that they share an implementation.
+
+            The build has no Stop. A server is started and stopped for as long
+            as the work lasts; a build is run, read, and run again when
+            something changed — and `Rebuild` already ends the run it replaces,
+            because remounting `Terminal` is what kills the old process. So
+            stopping a build is rebuilding it, and a button for the half of that
+            nobody asks for is a button in the way. */}
+        {running && kind === 'run' ? (
           <>
-            <Button size="sm" onClick={start} title={t('scripts.restart')}>
+            {/* An icon rather than a word, the one place that happens here: the
+                server's row carries a port, two buttons and a pane that narrows
+                to 280px. Its name lives on the label, which is where a reader
+                who cannot see the icon was going to find it anyway. */}
+            <Button
+              size="sm"
+              onClick={start}
+              title={t('scripts.serverRestart')}
+              aria-label={t('scripts.serverRestart')}
+            >
               <RotateCw aria-hidden size={12} />
             </Button>
             {/* Stopping unmounts the terminal, which is what kills the
@@ -94,8 +132,8 @@ export function ScriptRunner({
           </>
         ) : (
           <Button size="sm" variant="accent" onClick={start}>
-            <Play aria-hidden size={12} />
-            {t(started ? 'scripts.runAgain' : 'scripts.run')}
+            {running ? <RotateCw aria-hidden size={12} /> : <Play aria-hidden size={12} />}
+            {t(LABELS[kind][started ? 'again' : 'first'])}
           </Button>
         )}
       </div>

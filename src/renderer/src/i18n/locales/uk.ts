@@ -127,10 +127,13 @@ export const uk: Translation = {
   scripts: {
     build: 'Білд',
     server: 'Сервер',
-    run: 'Запустити',
-    runAgain: 'Запустити знову',
-    restart: 'Перезапустити',
-    stop: 'Зупинити',
+    buildStart: 'Зібрати',
+    buildAgain: 'Ребілд',
+    serverStart: 'Старт',
+    serverRestart: 'Перезапустити',
+    stop: 'Стоп',
+    foldBuild: 'Згорнути білд',
+    unfoldBuild: 'Показати білд',
     edit: 'Написати скрипт',
     noWorkspace: 'Виберіть воркспейс, щоб запустити тут.',
     noSetup:

@@ -95,7 +95,7 @@ describe('ScriptRunner', () => {
 
     expect(screen.getByText(SETUP_SCRIPT)).toBeInTheDocument()
     expect(screen.getByText(/Runs setup.sh in this workspace/)).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Run' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Build' })).toBeInTheDocument()
     expect(octopus().terminal.create).not.toHaveBeenCalled()
   })
 
@@ -110,7 +110,7 @@ describe('ScriptRunner', () => {
       />
     )
 
-    await userEvent.click(screen.getByRole('button', { name: 'Run' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Build' }))
 
     await sessionsOpened(1)
     expect(octopus().terminal.create).toHaveBeenCalledWith(
@@ -135,7 +135,7 @@ describe('ScriptRunner', () => {
     )
 
     expect(screen.getByText('OCTOPUS_PORT=3111')).toBeInTheDocument()
-    await userEvent.click(screen.getByRole('button', { name: 'Run' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Start' }))
 
     await sessionsOpened(1)
     expect(octopus().terminal.create).toHaveBeenCalledWith(
@@ -153,7 +153,7 @@ describe('ScriptRunner', () => {
         onOpenSettings={vi.fn()}
       />
     )
-    await userEvent.click(screen.getByRole('button', { name: 'Run' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Start' }))
     await sessionsOpened(1)
 
     await userEvent.click(screen.getByRole('button', { name: 'Stop' }))
@@ -162,7 +162,7 @@ describe('ScriptRunner', () => {
       expect(octopus().terminal.dispose).toHaveBeenCalledWith(sessionId(1))
     })
     expect(screen.getByText(/Starts the dev server for this workspace/)).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Run' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Start' })).toBeInTheDocument()
   })
 
   // The output is why anyone is looking at this tab; a script that finished
@@ -177,15 +177,62 @@ describe('ScriptRunner', () => {
         onOpenSettings={vi.fn()}
       />
     )
-    await userEvent.click(screen.getByRole('button', { name: 'Run' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Build' }))
     await sessionsOpened(1)
 
     processExits(sessionId(1))
 
-    expect(screen.getByRole('button', { name: 'Run again' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Rebuild' })).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Stop' })).not.toBeInTheDocument()
     expect(screen.queryByText(/Runs setup.sh in this workspace/)).not.toBeInTheDocument()
     expect(octopus().terminal.dispose).not.toHaveBeenCalled()
+  })
+
+  /*
+   * A build offers no Stop, which is the whole of what makes the two halves
+   * different rather than one component wearing two labels. A server is started
+   * and stopped for as long as the work lasts; a build is run, read, and run
+   * again — and stopping one half way is not what anybody reaches for.
+   */
+  it('offers a build no way to stop, only to run it again', async () => {
+    render(
+      <ScriptRunner
+        workspace={anna}
+        kind="setup"
+        scriptPath={SETUP_SCRIPT}
+        port={3111}
+        onOpenSettings={vi.fn()}
+      />
+    )
+    await userEvent.click(screen.getByRole('button', { name: 'Build' }))
+    await sessionsOpened(1)
+
+    expect(screen.queryByRole('button', { name: 'Stop' })).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Rebuild' })).toBeInTheDocument()
+  })
+
+  /*
+   * Which leaves rebuilding as the way a run ends, so it has to actually end
+   * one: the old session is disposed and a new one opened, the same thing the
+   * server's Restart does.
+   */
+  it('ends the running build when it is rebuilt', async () => {
+    render(
+      <ScriptRunner
+        workspace={anna}
+        kind="setup"
+        scriptPath={SETUP_SCRIPT}
+        port={3111}
+        onOpenSettings={vi.fn()}
+      />
+    )
+    await userEvent.click(screen.getByRole('button', { name: 'Build' }))
+    await sessionsOpened(1)
+
+    await userEvent.click(screen.getByRole('button', { name: 'Rebuild' }))
+
+    await sessionsOpened(2)
+    expect(octopus().terminal.dispose).toHaveBeenCalledWith(sessionId(1))
   })
 
   it('starts a new session when restarted', async () => {
@@ -198,7 +245,7 @@ describe('ScriptRunner', () => {
         onOpenSettings={vi.fn()}
       />
     )
-    await userEvent.click(screen.getByRole('button', { name: 'Run' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Start' }))
     await sessionsOpened(1)
 
     await userEvent.click(screen.getByRole('button', { name: 'Restart' }))

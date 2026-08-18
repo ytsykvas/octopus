@@ -396,6 +396,11 @@ export function RightPanel({
               setBuildOpen(!buildOpen)
             }}
             aria-expanded={buildOpen}
+            // Named for what it does, not for what it says. The word on it is
+            // `Build`, and so is the word on the button that runs the build —
+            // two controls with one name, which is ambiguous to anything
+            // reading the pane aloud and to anything testing it.
+            aria-label={t(buildOpen ? 'scripts.foldBuild' : 'scripts.unfoldBuild')}
             className="focus-ring section-label border-line hover:bg-muted flex w-full shrink-0 items-center gap-1.5 border-b px-3 py-1.5 text-left"
           >
             {buildOpen ? (

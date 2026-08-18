@@ -510,6 +510,22 @@ setting rather than the same one.
 `setup.sh`, Server runs `run.sh` with the workspace's port in `$OCTOPUS_PORT`.
 Both run on a button: starting a server because a tab was clicked is a surprise.
 
+**The buttons say which script they are for.** The server is `Start`, `Restart`
+and `Stop`; the build is `Build` and then `Rebuild`. One component draws both,
+and labelling them all `Run` said only that — that they share an implementation,
+which is not a fact about either of them.
+
+**The build has no Stop**, and that is the asymmetry rather than an omission. A
+server is started and stopped for as long as the work lasts; a build is run,
+read, and run again when something changed. `Rebuild` already ends the run it
+replaces — remounting the terminal is what kills the old process — so stopping a
+build is rebuilding it, and a separate button for half of that is a button in
+the way.
+
+The fold control on the build's heading is named for what it does rather than
+for the word on it: `Build` is also what the button beside it says, and two
+controls with one name are ambiguous to anything reading the pane aloud.
+
 **The change count follows the work.** It used to be read when the list was —
 on create, rename, remove and first load — and never again, so the agent could
 rewrite twenty files while the row went on saying what it said an hour ago,

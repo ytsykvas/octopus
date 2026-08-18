@@ -122,7 +122,7 @@ const buildSection = (): HTMLElement => screen.getByRole('region', { name: 'Buil
 
 /** The build half's own heading, which is the control that folds it. */
 const buildHeading = (): HTMLElement =>
-  within(buildSection()).getByRole('button', { name: 'Build' })
+  within(buildSection()).getByRole('button', { name: /the build/ })
 
 /** What that control folds: everything under the heading. */
 function buildBody(): HTMLElement {
@@ -260,7 +260,7 @@ describe('RightPanel', () => {
     await userEvent.click(scriptsTab())
 
     expect(screen.getByText(SCRIPTS.setup)).toBeInTheDocument()
-    expect(within(buildSection()).getByRole('button', { name: 'Run' })).toBeInTheDocument()
+    expect(within(buildSection()).getByRole('button', { name: 'Build' })).toBeInTheDocument()
   })
 
   it("shows the active workspace's port on the server tab", async () => {
@@ -296,7 +296,7 @@ describe('RightPanel', () => {
     })
 
     await userEvent.click(scriptsTab())
-    await userEvent.click(within(buildSection()).getByRole('button', { name: 'Run' }))
+    await userEvent.click(within(buildSection()).getByRole('button', { name: 'Build' }))
     await waitFor(() => {
       expect(octopus().terminal.create).toHaveBeenCalledTimes(1)
     })
@@ -305,7 +305,7 @@ describe('RightPanel', () => {
 
     // Nothing has been started here, so this one offers to start — while the
     // one left behind is still going.
-    expect(within(buildSection()).getByRole('button', { name: 'Run' })).toBeInTheDocument()
+    expect(within(buildSection()).getByRole('button', { name: 'Build' })).toBeInTheDocument()
     expect(within(buildSection()).queryByRole('button', { name: 'Stop' })).not.toBeInTheDocument()
     expect(octopus().terminal.dispose).not.toHaveBeenCalled()
   })
@@ -540,7 +540,7 @@ describe('RightPanel', () => {
     expect(
       within(serverSection()).getByText('Select a workspace to run this in.')
     ).toBeInTheDocument()
-    expect(within(buildSection()).queryByRole('button', { name: 'Run' })).not.toBeInTheDocument()
+    expect(within(buildSection()).queryByRole('button', { name: 'Build' })).not.toBeInTheDocument()
   })
 
   // A session belongs to its workspace, not to whether its tab is on screen.
@@ -573,7 +573,7 @@ describe('RightPanel', () => {
     renderPanel({ workspaces: [anna], activeWorkspaceId: anna.id, scriptPaths: SCRIPTS })
 
     await user.click(scriptsTab())
-    await user.click(within(buildSection()).getByRole('button', { name: 'Run' }))
+    await user.click(within(buildSection()).getByRole('button', { name: 'Build' }))
     await waitFor(() => {
       expect(window.octopus.terminal.create).toHaveBeenCalledTimes(1)
     })
@@ -602,7 +602,7 @@ describe('RightPanel', () => {
     })
 
     await user.click(scriptsTab())
-    await user.click(within(buildSection()).getByRole('button', { name: 'Run' }))
+    await user.click(within(buildSection()).getByRole('button', { name: 'Build' }))
     await waitFor(() => {
       expect(openedDirectories()).toEqual(['/tmp/planner/anna'])
     })
@@ -621,13 +621,13 @@ describe('RightPanel', () => {
     })
 
     await user.click(scriptsTab())
-    await user.click(within(buildSection()).getByRole('button', { name: 'Run' }))
+    await user.click(within(buildSection()).getByRole('button', { name: 'Build' }))
     await waitFor(() => {
       expect(openedDirectories()).toHaveLength(1)
     })
 
     rerender({ activeWorkspaceId: bob.id })
-    await user.click(within(buildSection()).getByRole('button', { name: 'Run' }))
+    await user.click(within(buildSection()).getByRole('button', { name: 'Build' }))
 
     await waitFor(() => {
       expect(openedDirectories()).toEqual(['/tmp/planner/anna', '/tmp/planner/bob'])
@@ -665,7 +665,7 @@ describe('RightPanel', () => {
     })
 
     await user.click(scriptsTab())
-    await user.click(within(buildSection()).getByRole('button', { name: 'Run' }))
+    await user.click(within(buildSection()).getByRole('button', { name: 'Build' }))
     await waitFor(() => {
       expect(openedDirectories()).toHaveLength(1)
     })
@@ -683,10 +683,14 @@ describe('RightPanel', () => {
 
     await user.click(scriptsTab())
     expect(buildHeading()).toHaveAttribute('aria-expanded', 'true')
+    // Named for what pressing it does, which is the opposite in each state —
+    // a label that stayed put would leave the control describing the wrong one.
+    expect(buildHeading()).toHaveAccessibleName('Fold the build away')
 
     await user.click(buildHeading())
 
     expect(buildHeading()).toHaveAttribute('aria-expanded', 'false')
+    expect(buildHeading()).toHaveAccessibleName('Show the build')
     // Hidden rather than gone — the class says nothing without a stylesheet,
     // and jsdom has none, so this is what "folded" looks like from here.
     expect(buildBody()).toHaveAttribute('aria-hidden', 'true')
@@ -708,7 +712,7 @@ describe('RightPanel', () => {
     renderPanel({ workspaces: [anna], activeWorkspaceId: anna.id, scriptPaths: SCRIPTS })
 
     await user.click(scriptsTab())
-    await user.click(within(buildSection()).getByRole('button', { name: 'Run' }))
+    await user.click(within(buildSection()).getByRole('button', { name: 'Build' }))
     await waitFor(() => {
       expect(octopus().terminal.create).toHaveBeenCalledTimes(1)
     })
@@ -719,7 +723,7 @@ describe('RightPanel', () => {
     // Unfolded, the run is still the one that was started — a fold that had
     // ended it would offer to start again instead.
     await user.click(buildHeading())
-    expect(within(buildSection()).getByRole('button', { name: 'Stop' })).toBeInTheDocument()
+    expect(within(buildSection()).getByRole('button', { name: 'Rebuild' })).toBeInTheDocument()
     expect(octopus().terminal.create).toHaveBeenCalledTimes(1)
   })
 
@@ -747,7 +751,7 @@ describe('RightPanel', () => {
     renderPanel({ workspaces: [anna], activeWorkspaceId: anna.id, scriptPaths: SCRIPTS })
 
     await user.click(scriptsTab())
-    await user.click(within(serverSection()).getByRole('button', { name: 'Run' }))
+    await user.click(within(serverSection()).getByRole('button', { name: 'Start' }))
     await waitFor(() => {
       expect(openedDirectories()).toHaveLength(1)
     })
@@ -755,7 +759,7 @@ describe('RightPanel', () => {
     // The server is running; the build has not been started, so it still offers
     // to start rather than showing the server's output.
     expect(within(serverSection()).getByRole('button', { name: 'Stop' })).toBeInTheDocument()
-    expect(within(buildSection()).getByRole('button', { name: 'Run' })).toBeInTheDocument()
+    expect(within(buildSection()).getByRole('button', { name: 'Build' })).toBeInTheDocument()
     expect(within(buildSection()).queryByRole('button', { name: 'Stop' })).not.toBeInTheDocument()
     expect(window.octopus.terminal.create).toHaveBeenCalledTimes(1)
   })
