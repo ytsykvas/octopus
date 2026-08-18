@@ -7,8 +7,15 @@ twice during one session's work and then passed nine runs in a row — three on
 the committed tree with no changes at all, six with them. Run alone, or with
 `-t` selecting it, it has never failed: five isolated runs, all green.
 
-So it is the **full** renderer suite that produces it, which points at something
-leaking between files rather than at the test.
+So it was thought to be the **full** renderer suite that produces it, which
+pointed at something leaking between files rather than at the test.
+
+**That is now wrong, and it is the most useful thing known about this.** On
+2026-08-18 the ⌘T test failed on a run of `App.test.tsx` **alone** — one file,
+no other suite around it — and then passed four consecutive runs of that same
+file. Nothing leaking between files can explain that. Whatever this is lives
+inside the one file, or in the machine's load at the moment it runs, so the
+hunt for a global left behind by another test can stop.
 
 **A second test now shows it, which makes this a shape rather than one test.**
 On 2026-08-18, `src/renderer/src/components/chat/Chat.test.tsx` › "raises it
