@@ -3,7 +3,7 @@ import userEvent from '@testing-library/user-event'
 import { StrictMode } from 'react'
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest'
 
-import type { AccountsStatus } from '@core/accounts.js'
+import type { GitHubAccount } from '@core/accounts.js'
 import type { Config } from '@core/config.js'
 import type { RemoteRepository } from '@core/github.js'
 import type { ScriptKind } from '@core/scripts.js'
@@ -185,12 +185,9 @@ function edges(): { readonly list: HTMLElement; readonly panel: HTMLElement } {
  * opens looks like a broken picker rather than a stated precondition.
  */
 function givenGitHubConnected(): void {
-  vi.mocked(window.octopus.accounts.status).mockResolvedValue({
+  vi.mocked(window.octopus.accounts.github).mockResolvedValue({
     ok: true,
-    value: {
-      ...disconnectedAccounts(),
-      github: { connected: true, login: 'ytsykvas', name: 'Yurii' }
-    }
+    value: { connected: true, login: 'ytsykvas', name: 'Yurii' }
   })
 }
 
@@ -1048,8 +1045,8 @@ describe('App', () => {
   // The centre button disables itself, but the menu is a second door into the
   // same check, and it has to close while one is running.
   it('closes the add menu to a second check while one is running', async () => {
-    const check = pending<Result<AccountsStatus>>()
-    vi.mocked(window.octopus.accounts.status).mockReturnValue(check.promise)
+    const check = pending<Result<GitHubAccount>>()
+    vi.mocked(window.octopus.accounts.github).mockReturnValue(check.promise)
     const user = await openApp()
     await screen.findByText('Start with a repository')
 
@@ -1057,14 +1054,14 @@ describe('App', () => {
 
     expect(screen.getByRole('button', { name: 'Add repository' })).toBeDisabled()
     await act(async () => {
-      await check.settle({ ok: true, value: disconnectedAccounts() })
+      await check.settle({ ok: true, value: disconnectedAccounts().github })
     })
   })
 
   // `gh` missing and `gh` signed out are the same problem wearing two faces,
   // and both are fixed in the same place.
   it('sends the user to the Git settings when the check itself fails', async () => {
-    vi.mocked(window.octopus.accounts.status).mockResolvedValue({
+    vi.mocked(window.octopus.accounts.github).mockResolvedValue({
       ok: false,
       error: 'gh: command not found'
     })
@@ -1080,8 +1077,8 @@ describe('App', () => {
   // Every check spawns a `gh` process, so the button says what it is doing and
   // stops accepting clicks while it does — the label alone would not.
   it('checks the account once while the answer is still on its way', async () => {
-    const check = pending<Result<AccountsStatus>>()
-    vi.mocked(window.octopus.accounts.status).mockReturnValue(check.promise)
+    const check = pending<Result<GitHubAccount>>()
+    vi.mocked(window.octopus.accounts.github).mockReturnValue(check.promise)
     const user = await openApp()
     await screen.findByText('Start with a repository')
 
@@ -1089,9 +1086,11 @@ describe('App', () => {
     await user.click(button)
     await user.click(screen.getByRole('button', { name: 'Checking GitHub…' }))
 
-    expect(window.octopus.accounts.status).toHaveBeenCalledTimes(1)
+    expect(window.octopus.accounts.github).toHaveBeenCalledTimes(1)
+    // The click is about GitHub, so nothing starts a Claude CLI for it.
+    expect(window.octopus.accounts.status).not.toHaveBeenCalled()
     await act(async () => {
-      await check.settle({ ok: true, value: disconnectedAccounts() })
+      await check.settle({ ok: true, value: disconnectedAccounts().github })
     })
   })
 

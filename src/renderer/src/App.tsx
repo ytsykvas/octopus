@@ -270,11 +270,13 @@ export function App(): React.JSX.Element {
     setCheckingGitHub(true)
 
     try {
-      const result = await window.octopus.accounts.status()
+      // GitHub alone: `accounts.status()` also runs `claude auth status`, which
+      // this click has no use for and which it then waited on.
+      const result = await window.octopus.accounts.github()
       // A failed check and a signed-out account are one case here. `gh` missing,
       // `gh` signed out and a reply that does not parse all arrive as
       // `connected: false`, and Settings is where every one of them is fixed.
-      if (result.ok && result.value.github.connected) setPickingRepository(true)
+      if (result.ok && result.value.connected) setPickingRepository(true)
       else setSettingsSection('git')
     } finally {
       setCheckingGitHub(false)

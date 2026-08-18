@@ -37,6 +37,7 @@ export function installOctopusStub(): Api {
     },
     accounts: {
       status: vi.fn(() => ok(disconnectedAccounts())),
+      github: vi.fn(() => ok(disconnectedAccounts().github)),
       signInCommand: vi.fn((kind: string) =>
         kind === 'claude' ? ['claude', 'auth', 'login'] : ['gh', 'auth', 'login']
       ),

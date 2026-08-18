@@ -8,7 +8,13 @@ import type { Query, SDKMessage } from '@anthropic-ai/claude-agent-sdk'
 import { afterEach, beforeEach, describe, expect, it, type Mock, vi } from 'vitest'
 
 import type * as AccountsModule from '../core/accounts.js'
-import { type AccountsStatus, checkAccounts, type CommandExec, signOut } from '../core/accounts.js'
+import {
+  type AccountsStatus,
+  checkAccounts,
+  checkGitHubAccount,
+  type CommandExec,
+  signOut
+} from '../core/accounts.js'
 import type { QueryFn } from '../core/agent.js'
 import type { RemoteRepository } from '../core/github.js'
 import { createService, type OctopusService, type ServiceOptions } from '../core/service.js'
@@ -20,12 +26,14 @@ import type { TerminalManager } from './terminals.js'
 
 /**
  * The account calls are the one part of the table that cannot run for real:
- * `accounts:status` shells out to `claude` and `gh`, and `accounts:signOut`
- * would drop whoever runs the suite from their own CLI session.
+ * `accounts:status` and `accounts:github` shell out to `claude` and `gh`, and
+ * `accounts:signOut` would drop whoever runs the suite from their own CLI
+ * session.
  */
 vi.mock('../core/accounts.js', async (importOriginal) => ({
   ...(await importOriginal<typeof AccountsModule>()),
   checkAccounts: vi.fn(),
+  checkGitHubAccount: vi.fn(),
   signOut: vi.fn()
 }))
 
@@ -229,6 +237,9 @@ beforeEach(async () => {
   service = await createService(servicePaths(dir))
 
   vi.mocked(checkAccounts).mockReset().mockResolvedValue(CONNECTED)
+  vi.mocked(checkGitHubAccount)
+    .mockReset()
+    .mockResolvedValue({ connected: true, login: 'ytsykvas', name: 'Yurii' })
   vi.mocked(signOut).mockReset().mockResolvedValue(true)
 
   bench = harness()
@@ -297,6 +308,7 @@ describe('channel table', () => {
     'terminal:resize',
     'terminal:dispose',
     'accounts:status',
+    'accounts:github',
     'accounts:signOut',
     'dialog:pickDirectory'
   ]
@@ -898,6 +910,21 @@ describe('accounts', () => {
         github: { connected: false }
       }
     })
+  })
+
+  /*
+   * The button that opens the repository picker is about GitHub alone.
+   *
+   * It used to ask `accounts:status`, which queries both services — so a click
+   * started a `claude` process nobody asked for and then waited on whichever of
+   * the two answered last.
+   */
+  it('asks about GitHub without starting the Claude CLI', async () => {
+    await expect(invoke('accounts:github')).resolves.toEqual({
+      ok: true,
+      value: { connected: true, login: 'ytsykvas', name: 'Yurii' }
+    })
+    expect(vi.mocked(checkAccounts)).not.toHaveBeenCalled()
   })
 
   // `gh` prompts for an account unless it is told which one to drop, so the

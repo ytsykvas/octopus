@@ -22,10 +22,32 @@ const run = promisify(execFile)
  */
 export type CommandExec = (command: string, args: readonly string[]) => Promise<string>
 
-export const defaultExec: CommandExec = async (command, args) => {
-  const { stdout } = await run(command, [...args], { timeout: 15_000 })
-  return stdout
+/**
+ * An executor that gives up after `timeout` milliseconds.
+ *
+ * A factory rather than one constant, because how long is worth waiting depends
+ * on who is waiting. A check running behind the Settings card can take its
+ * time; one behind a button press cannot.
+ */
+export function execWithin(timeout: number): CommandExec {
+  return async (command, args) => {
+    const { stdout } = await run(command, [...args], { timeout })
+    return stdout
+  }
 }
+
+export const defaultExec: CommandExec = execWithin(15_000)
+
+/**
+ * How long a check behind a button press may take.
+ *
+ * Short because the answer is not the point of the click — it decides whether
+ * the repository picker opens or Settings does, and a check that has not
+ * answered in three seconds has told us enough to act on. Fifteen left the
+ * button disabled and reading "Checking GitHub…" for a quarter of a minute on
+ * a bad connection.
+ */
+export const BUTTON_TIMEOUT_MS = 3_000
 
 /** Fields we use from `claude auth status`; the rest is ignored. */
 const ClaudeStatusSchema = z.object({

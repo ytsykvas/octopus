@@ -1,6 +1,6 @@
 import { contextBridge, ipcRenderer } from 'electron'
 
-import type { AccountKind, AccountsStatus } from '@core/accounts.js'
+import type { AccountKind, AccountsStatus, GitHubAccount } from '@core/accounts.js'
 import type { AgentCommand, AgentModel, Chat, EffortChoice, WorkingMode } from '@core/chats.js'
 import type {
   ChatEvent,
@@ -70,6 +70,10 @@ const api = {
   accounts: {
     status: (): Promise<Result<AccountsStatus>> =>
       ipcRenderer.invoke('accounts:status') as Promise<Result<AccountsStatus>>,
+
+    /** GitHub alone, for a button that has no use for the other check. */
+    github: (): Promise<Result<GitHubAccount>> =>
+      ipcRenderer.invoke('accounts:github') as Promise<Result<GitHubAccount>>,
 
     /** Argv for the interactive sign-in; the UI hosts it in a terminal. */
     signInCommand: (kind: AccountKind): readonly string[] =>

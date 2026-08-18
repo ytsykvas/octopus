@@ -145,7 +145,8 @@ Output flows the other way, on `terminal:data` and `terminal:exit`.
 
 | Channel                | Arguments       | Notes                                                    |
 | ---------------------- | --------------- | -------------------------------------------------------- |
-| `accounts:status`      | —               | asks the `claude` and `gh` CLIs                          |
+| `accounts:status`      | —               | asks the `claude` and `gh` CLIs, for the Settings card   |
+| `accounts:github`      | —               | `gh` alone, on a short timeout: it sits behind a button  |
 | `accounts:signOut`     | `kind`, `login` | signing in is interactive and runs in a terminal instead |
 | `dialog:pickDirectory` | `title`         | `null` when cancelled                                    |
 

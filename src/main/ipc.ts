@@ -11,7 +11,14 @@ import type { OpenDialogOptions, WebContents } from 'electron'
 import { z } from 'zod'
 
 import type { Config } from '../core/config.js'
-import { type AccountKind, checkAccounts, signOut } from '../core/accounts.js'
+import {
+  type AccountKind,
+  BUTTON_TIMEOUT_MS,
+  checkAccounts,
+  checkGitHubAccount,
+  execWithin,
+  signOut
+} from '../core/accounts.js'
 import {
   ChatMessageSchema,
   ChatTitleSchema,
@@ -143,6 +150,18 @@ export function registerIpc(
   host.handle('projects:list', () => attempt(() => service.listProjects()))
 
   host.handle('accounts:status', () => attempt(() => checkAccounts()))
+
+  /*
+   * GitHub alone, for the button that is about GitHub alone.
+   *
+   * `accounts:status` queries both services, so a click on "Add from GitHub"
+   * started a Claude CLI process nobody asked for and then waited on whichever
+   * of the two answered last. The timeout is shorter for the same reason the
+   * channel exists: this one is a button press.
+   */
+  host.handle('accounts:github', () =>
+    attempt(() => checkGitHubAccount(execWithin(BUTTON_TIMEOUT_MS)))
+  )
 
   // Signing out asks nothing, so it runs silently rather than in a terminal.
   host.handle('accounts:signOut', (_event, kind: AccountKind, login: string | null) =>

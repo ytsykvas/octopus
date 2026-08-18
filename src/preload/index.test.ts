@@ -204,6 +204,7 @@ describe('channel names', () => {
     ],
     ['chats.rateLimit', () => method('chats', 'rateLimit')(), 'chats:rateLimit'],
     ['accounts.status', () => method('accounts', 'status')(), 'accounts:status'],
+    ['accounts.github', () => method('accounts', 'github')(), 'accounts:github'],
     [
       'dialog.pickDirectory',
       () => method('dialog', 'pickDirectory')('t' as never),
