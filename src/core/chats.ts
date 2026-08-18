@@ -47,11 +47,10 @@ export const DEFAULT_AGENT: AgentKind = 'claude'
 /**
  * What a conversation is doing.
  *
- * The workspace's own statuses minus `archived`, which is a decision taken
- * about a workspace and not something a conversation can be in. Kept as its own
- * enum rather than reusing `WorkspaceStatusSchema` for exactly that reason —
- * and because that one lives in `store.ts`, which the renderer may not import
- * values from (§11.1).
+ * The same four the workspace has — a workspace's status is derived from these
+ * now, so the two lists cannot disagree without one of them being wrong. Kept
+ * as its own enum all the same, because `WorkspaceStatusSchema` lives in
+ * `store.ts`, which the renderer may not import values from (§11.1).
  */
 export const CHAT_STATUSES = ['idle', 'running', 'waiting_permission', 'error'] as const
 export const ChatStatusSchema = z.enum(CHAT_STATUSES)

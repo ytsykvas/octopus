@@ -747,7 +747,7 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
           workspace.id === workspaceId
             ? {
                 ...workspace,
-                status: workspaceStatusFrom(chatsOfWorkspace(next, workspaceId), workspace.status)
+                status: workspaceStatusFrom(chatsOfWorkspace(next, workspaceId))
               }
             : workspace
         )

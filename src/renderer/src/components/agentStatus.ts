@@ -19,8 +19,8 @@ import type { WorkspaceView } from '@core/workspaces.js'
  * turn has stopped and is waiting on you, which is the one state worth crossing
  * the window for.
  *
- * Keyed by the workspace's wider enum so both callers fit; `archived` and
- * `idle` are deliberately absent, being the states with nothing to announce.
+ * Keyed by the workspace's enum so both callers fit; `idle` is deliberately
+ * absent, being the one state with nothing to announce.
  */
 export const AGENT_TONES: Partial<Record<WorkspaceView['status'], string>> = {
   running: 'bg-accent animate-pulse',

@@ -119,13 +119,13 @@ A **project** is a repository that has been added: `id`, `name`, `repoPath`,
 A **workspace** is a git worktree: `id`, `projectId`, `name`, `branch`, `path`,
 `status`, `port`, `createdAt`, `ownerId`.
 
-`status` is `idle`, `running`, `waiting_permission`, `error` or `archived`, and
+`status` is `idle`, `running`, `waiting_permission` or `error`, and
 the workspace list draws it — which is how work in a workspace nobody is looking
 at becomes visible at all. It is **settled on load**: `running` and
 `waiting_permission` describe a session, and no session survives the process
 that held it, so a workspace left mid-turn when the app quit would otherwise
-come back claiming to be working with nothing behind the claim. `error` and
-`archived` stay, being a record rather than a session.
+come back claiming to be working with nothing behind the claim. `error` stays,
+being a record rather than a session.
 
 `knownModels` is not a record of anything the user did: it is what the agent
 last said this account may use, kept only so the model picker works before the
@@ -236,8 +236,7 @@ nothing Node-only, and `store.ts` reaches `node:os` through `paths.ts`.
 
 `status` sits on the chat as well, and the workspace's own is **derived** from
 its conversations by `workspaceStatusFrom`: `waiting_permission` outranks
-`running`, which outranks `error`, which outranks `idle`, and `archived` — a
-decision about the workspace — overrules all of them. Before this, whichever
+`running`, which outranks `error`, which outranks `idle`. Before this, whichever
 conversation last had an event wrote the workspace's status, so the one that
 finished reported the two still working as idle.
 

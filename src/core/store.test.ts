@@ -770,11 +770,11 @@ describe('what a workspace is doing, from its conversations', () => {
   }
 
   it('is idle when it holds none at all', () => {
-    expect(workspaceStatusFrom([], 'idle')).toBe('idle')
+    expect(workspaceStatusFrom([])).toBe('idle')
   })
 
   it('is idle when every conversation is', () => {
-    expect(workspaceStatusFrom([chatWith('a', 'idle'), chatWith('b', 'idle')], 'idle')).toBe('idle')
+    expect(workspaceStatusFrom([chatWith('a', 'idle'), chatWith('b', 'idle')])).toBe('idle')
   })
 
   /*
@@ -784,31 +784,22 @@ describe('what a workspace is doing, from its conversations', () => {
    */
   it('waits for an answer over anything else', () => {
     expect(
-      workspaceStatusFrom(
-        [chatWith('a', 'running'), chatWith('b', 'waiting_permission'), chatWith('c', 'error')],
-        'idle'
-      )
+      workspaceStatusFrom([
+        chatWith('a', 'running'),
+        chatWith('b', 'waiting_permission'),
+        chatWith('c', 'error')
+      ])
     ).toBe('waiting_permission')
   })
 
   // The dot says what is happening now; a failed turn is a record of something
   // that already happened.
   it('reports work in flight over a turn that failed', () => {
-    expect(workspaceStatusFrom([chatWith('a', 'error'), chatWith('b', 'running')], 'idle')).toBe(
-      'running'
-    )
+    expect(workspaceStatusFrom([chatWith('a', 'error'), chatWith('b', 'running')])).toBe('running')
   })
 
   it('reports a failure when nothing is running', () => {
-    expect(workspaceStatusFrom([chatWith('a', 'idle'), chatWith('b', 'error')], 'idle')).toBe(
-      'error'
-    )
-  })
-
-  // A decision about the workspace, which nothing a conversation does can
-  // overrule.
-  it('leaves an archived workspace archived', () => {
-    expect(workspaceStatusFrom([chatWith('a', 'running')], 'archived')).toBe('archived')
+    expect(workspaceStatusFrom([chatWith('a', 'idle'), chatWith('b', 'error')])).toBe('error')
   })
 })
 

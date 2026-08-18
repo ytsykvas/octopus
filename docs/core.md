@@ -360,8 +360,8 @@ The status now sits on the **chat**, and the workspace's is computed from its
 conversations by `workspaceStatusFrom` — `waiting_permission` first, because
 that turn has stopped and is waiting on the user; then `running`, because the
 dot says what is happening now; then `error`, which is a record of something
-that already happened; then `idle`. `archived` is a decision about the workspace
-and nothing a conversation does overrules it.
+that already happened; then `idle`. The workspace's own status is not consulted:
+every value the enum holds is something a conversation is doing.
 
 Both move in one `commit` (`commitChats`), because two would leave a moment in
 which the chats say one thing and the workspace derived from them says another —

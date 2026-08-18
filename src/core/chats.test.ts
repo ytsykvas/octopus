@@ -554,11 +554,12 @@ describe('what a conversation may be doing', () => {
   })
 
   /*
-   * The one thing that separates this enum from the workspace's. Archiving is a
-   * decision taken about a workspace, and a conversation has no way to be in
-   * it — a record claiming otherwise is a file written by something else.
+   * The status is what the sidebar's dot is derived from, so a value nothing
+   * here knows would be drawn as whatever the fallback happens to be. A record
+   * carrying one was written by something other than this application, and
+   * refusing it is what makes that visible instead of silent.
    */
-  it('refuses archived, which is a workspace’s word', () => {
+  it('refuses a status it does not know', () => {
     expect(ChatSchema.safeParse({ ...record, status: 'archived' }).success).toBe(false)
   })
 

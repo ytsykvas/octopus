@@ -61,13 +61,7 @@ export const ProjectSchema = z.object({
   icon: ProjectIconSchema.nullable().optional()
 })
 
-export const WorkspaceStatusSchema = z.enum([
-  'idle',
-  'running',
-  'waiting_permission',
-  'error',
-  'archived'
-])
+export const WorkspaceStatusSchema = z.enum(['idle', 'running', 'waiting_permission', 'error'])
 
 export const WorkspaceSchema = z.object({
   id: z.string().min(1),
@@ -155,14 +149,12 @@ export async function loadState(filePath: string = stateFile()): Promise<State> 
  * `waiting_permission` wins because that turn has stopped and is waiting on the
  * user — the one state worth crossing the window for (§10.8). `running` beats
  * `error` because the dot says what is happening now, and a failed turn is a
- * record while a running one is an event. `archived` is a decision about the
- * workspace, which nothing a conversation does can overrule.
+ * record while a running one is an event.
+ *
+ * The workspace's own status is not consulted, and there is nothing left for it
+ * to say: every value the enum holds is something a conversation is doing.
  */
-export function workspaceStatusFrom(
-  chats: readonly Chat[],
-  current: Workspace['status']
-): Workspace['status'] {
-  if (current === 'archived') return 'archived'
+export function workspaceStatusFrom(chats: readonly Chat[]): Workspace['status'] {
   if (chats.some((chat) => chat.status === 'waiting_permission')) return 'waiting_permission'
   if (chats.some((chat) => chat.status === 'running')) return 'running'
   if (chats.some((chat) => chat.status === 'error')) return 'error'
@@ -177,8 +169,8 @@ export function workspaceStatusFrom(
  * app quit would come back claiming to be working, with nothing behind the
  * claim and nothing that would ever correct it.
  *
- * `error` and `archived` stay. One is a record of something that happened, the
- * other of a decision; neither is a session still being waited on.
+ * `error` stays. It is a record of something that happened rather than a
+ * session still being waited on.
  *
  * The workspaces are then derived from the settled chats rather than settled by
  * the same rule alongside them. Two lists settled independently agree today and
@@ -197,10 +189,7 @@ export function settleStatuses(state: State): State {
     chats,
     workspaces: state.workspaces.map((workspace) => ({
       ...workspace,
-      status: workspaceStatusFrom(
-        chats.filter((chat) => chat.workspaceId === workspace.id),
-        workspace.status
-      )
+      status: workspaceStatusFrom(chats.filter((chat) => chat.workspaceId === workspace.id))
     }))
   }
 }

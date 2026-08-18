@@ -18,7 +18,7 @@ export type WorkspaceId = string
 export type ChatId = string
 
 /** Where a workspace sits in its lifecycle. */
-export type WorkspaceStatus = 'idle' | 'running' | 'waiting_permission' | 'error' | 'archived'
+export type WorkspaceStatus = 'idle' | 'running' | 'waiting_permission' | 'error'
 
 export interface Project {
   readonly id: ProjectId
