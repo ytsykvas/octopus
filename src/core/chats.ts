@@ -347,12 +347,27 @@ export function defaultAgentModel(models: readonly AgentModel[]): AgentModel | u
  * hold `sonnet` while the session reports `claude-sonnet-5`, and reading that
  * as a change would have the interface announce one every time a session
  * started.
+ *
+ * Compared through what the entries resolve to rather than through the entries
+ * themselves. A catalogue holds several rows for one model — `default` and
+ * `opus[1m]` both resolve to `claude-opus-5[1m]` — so which row answers depends
+ * on which name was asked: `opus[1m]` finds itself, `claude-opus-5[1m]` finds
+ * `default`, being the first that resolves to it. Comparing the rows therefore
+ * made two names of one model differ, and it did so precisely when the account
+ * default was in play, which is the common case.
+ *
+ * The name is the fallback, for a catalogue that resolves nothing: the CLI in
+ * hand sends `resolvedModel` null for every row, and there an entry's own name
+ * is all there is to compare.
  */
 export function sameModel(one: string, other: string, models: readonly AgentModel[]): boolean {
   if (one === other) return true
 
   const found = findAgentModel(models, one)
-  return found !== undefined && findAgentModel(models, other)?.value === found.value
+  const against = findAgentModel(models, other)
+  if (found === undefined || against === undefined) return false
+
+  return (found.resolvedModel ?? found.value) === (against.resolvedModel ?? against.value)
 }
 
 /**

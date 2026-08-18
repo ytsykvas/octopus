@@ -414,6 +414,36 @@ describe('matching a model by either of its names', () => {
     expect(sameModel('sonnet', 'opus[1m]', CATALOGUE)).toBe(false)
   })
 
+  /*
+   * The collision this was written for, and the one it used to get wrong.
+   *
+   * `default` and `opus[1m]` both resolve to `claude-opus-5[1m]`, so the row
+   * that answers depends on the name asked: `opus[1m]` finds itself and
+   * `claude-opus-5[1m]` finds `default`. Compared as rows those differ, and a
+   * caller would have announced a model change every time the account default
+   * was in play.
+   */
+  it('reads a short name and a full one as the same model through the default row', () => {
+    expect(sameModel('opus[1m]', 'claude-opus-5[1m]', CATALOGUE)).toBe(true)
+    expect(sameModel('claude-opus-5[1m]', 'opus[1m]', CATALOGUE)).toBe(true)
+    expect(sameModel('default', 'claude-opus-5[1m]', CATALOGUE)).toBe(true)
+    expect(sameModel('default', 'opus[1m]', CATALOGUE)).toBe(true)
+  })
+
+  /*
+   * A catalogue that resolves nothing, which is what the CLI in hand sends:
+   * every row comes back with `resolvedModel` null. There is nothing linking
+   * two names then, and only the entry's own name can be compared — so a name
+   * the catalogue does not carry is not the same as one it does.
+   */
+  it('falls back to the entry’s own name when nothing resolves', () => {
+    const unresolved = CATALOGUE.map((model) => ({ ...model, resolvedModel: null }))
+
+    expect(sameModel('sonnet', 'claude-sonnet-5', unresolved)).toBe(false)
+    expect(sameModel('sonnet', 'opus[1m]', unresolved)).toBe(false)
+    expect(sameModel('opus[1m]', 'opus[1m]', unresolved)).toBe(true)
+  })
+
   // With nothing to resolve through, only an exact match can be trusted —
   // guessing would be worse than admitting the catalogue has not arrived.
   it('will not guess when the catalogue is empty', () => {
