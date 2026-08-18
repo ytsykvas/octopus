@@ -131,11 +131,10 @@ export const uk: Translation = {
   scripts: {
     build: 'Білд',
     server: 'Сервер',
-    buildStart: 'Зібрати',
-    buildAgain: 'Ребілд',
-    serverStart: 'Старт',
     serverRestart: 'Перезапустити',
     stop: 'Стоп',
+    openInBrowser: 'Відкрити localhost:{{port}}',
+    busy: 'працює…',
     foldBuild: 'Згорнути білд',
     unfoldBuild: 'Показати білд',
     edit: 'Написати скрипт',

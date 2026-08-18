@@ -12,7 +12,7 @@ else joins a home directory by hand.
   instructions/pull-request.md       guidance every project falls back to
   projects/<projectId>/
     env                              copied in as .env where a workspace has none
-    scripts/setup.sh                 prepares a new workspace, on the Build button
+    scripts/setup.sh                 prepares a new workspace, on Run
     scripts/run.sh                   starts the dev server
     instructions/pull-request.md     this project's own, which wins
   workspaces/<projectId>/<name>/     the git worktrees

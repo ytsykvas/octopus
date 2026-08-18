@@ -131,6 +131,9 @@ const scriptsTab = (): HTMLElement => screen.getByRole('button', { name: 'Script
  */
 const buildSection = (): HTMLElement => screen.getByRole('region', { name: 'Build' })
 
+/** The tab's own control, which is where all the pressing lives now. */
+const runButton = (): HTMLElement => screen.getByRole('button', { name: 'Run' })
+
 /** The build half's own heading, which is the control that folds it. */
 const buildHeading = (): HTMLElement =>
   within(buildSection()).getByRole('button', { name: /the build/ })
@@ -276,7 +279,8 @@ describe('RightPanel', () => {
     await userEvent.click(scriptsTab())
 
     expect(screen.getByText(SCRIPTS.setup)).toBeInTheDocument()
-    expect(within(buildSection()).getByRole('button', { name: 'Build' })).toBeInTheDocument()
+    // The half names the file it runs; the control that runs it is on the tab.
+    expect(within(buildSection()).queryByRole('button', { name: 'Run' })).not.toBeInTheDocument()
   })
 
   it("shows the active workspace's port on the server tab", async () => {
@@ -415,19 +419,240 @@ describe('RightPanel', () => {
     expect(screen.getByRole('button', { name: 'Run' })).toBeEnabled()
   })
 
-  // Both halves keep their own buttons, and those report an outcome the same
-  // way. A build run by hand is not the first step of a sequence nobody began.
-  it('starts no server after a build run from its own button', async () => {
+  // Neither half carries a control any more: four buttons in two places, two of
+  // them called the same thing, is what this replaced.
+  it('leaves the halves with nothing to press', async () => {
     renderPanel({ workspaces: [anna], activeWorkspaceId: anna.id, scriptPaths: SCRIPTS })
 
     await userEvent.click(scriptsTab())
-    await userEvent.click(within(buildSection()).getByRole('button', { name: 'Build' }))
+
+    // The fold and the env editor stay; what left is everything that starts,
+    // restarts or stops a script.
+    for (const name of ['Build', 'Rebuild', 'Start', 'Restart', 'Stop']) {
+      expect(within(buildSection()).queryByRole('button', { name })).not.toBeInTheDocument()
+      expect(within(serverSection()).queryByRole('button', { name })).not.toBeInTheDocument()
+    }
+  })
+
+  // What Run offers has already happened. Rebuilding from here is Stop and then
+  // Run — which is also the order that frees the port before anything binds it.
+  it('drops Run once the server is up', async () => {
+    renderPanel({ workspaces: [anna], activeWorkspaceId: anna.id, scriptPaths: SCRIPTS })
+
+    await userEvent.click(scriptsTab())
+    await userEvent.click(runButton())
+    await sessionsOpened(1)
+    processExits(1)
+    await sessionsOpened(2)
+
+    expect(screen.queryByRole('button', { name: 'Run' })).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Restart' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Stop' })).toBeInTheDocument()
+  })
+
+  it('offers Run again once the server has been stopped', async () => {
+    renderPanel({ workspaces: [anna], activeWorkspaceId: anna.id, scriptPaths: SCRIPTS })
+
+    await userEvent.click(scriptsTab())
+    await userEvent.click(runButton())
+    await sessionsOpened(1)
+    processExits(1)
+    await sessionsOpened(2)
+
+    await userEvent.click(screen.getByRole('button', { name: 'Stop' }))
+
+    expect(runButton()).toBeEnabled()
+  })
+
+  /*
+   * The port is the promise the pane has been making all along.
+   *
+   * A link rather than a button: `setWindowOpenHandler` in main already gives a
+   * `_blank` target to the system browser, so this needs no channel — and a
+   * link is what a reader expects to be able to copy.
+   */
+  it('offers the running server in the browser, on its own port', async () => {
+    renderPanel({ workspaces: [bob], activeWorkspaceId: bob.id, scriptPaths: SCRIPTS })
+
+    await userEvent.click(scriptsTab())
+    await userEvent.click(runButton())
+    await sessionsOpened(1)
+    processExits(1)
+    await sessionsOpened(2)
+
+    const link = screen.getByRole('link', { name: 'Open localhost:3222' })
+    expect(link).toHaveAttribute('href', 'http://localhost:3222')
+    expect(link).toHaveAttribute('target', '_blank')
+  })
+
+  it('offers no link while nothing is serving', async () => {
+    renderPanel({ workspaces: [anna], activeWorkspaceId: anna.id, scriptPaths: SCRIPTS })
+
+    await userEvent.click(scriptsTab())
+
+    expect(screen.queryByRole('link')).not.toBeInTheDocument()
+  })
+
+  /*
+   * A workspace whose directory has gone takes its run with it: `WorkspaceScripts`
+   * drops it, the runner unmounts, and the session is disposed. Leaving the
+   * controls up would offer a link to a refused port and a Restart that bumps a
+   * token no runner is mounted to hear.
+   */
+  it('takes the controls away when the workspace goes missing', async () => {
+    const { rerender } = renderPanel({
+      workspaces: [anna],
+      activeWorkspaceId: anna.id,
+      scriptPaths: SCRIPTS
+    })
+
+    await userEvent.click(scriptsTab())
+    await userEvent.click(runButton())
+    await sessionsOpened(1)
+    processExits(1)
+    await sessionsOpened(2)
+
+    rerender({ workspaces: [{ ...anna, missing: true }] })
+
+    expect(screen.queryByRole('link')).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Restart' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Stop' })).not.toBeInTheDocument()
+  })
+
+  it('refuses to run a workspace whose directory has gone', async () => {
+    renderPanel({
+      workspaces: [{ ...anna, missing: true }],
+      activeWorkspaceId: anna.id,
+      scriptPaths: SCRIPTS
+    })
+
+    await userEvent.click(scriptsTab())
+
+    expect(runButton()).toBeDisabled()
+  })
+
+  // The build is the step that takes the time; a second press while it runs
+  // would start it over rather than do anything anyone meant.
+  it('refuses a second Run while the build is going', async () => {
+    renderPanel({ workspaces: [anna], activeWorkspaceId: anna.id, scriptPaths: SCRIPTS })
+
+    await userEvent.click(scriptsTab())
+    await userEvent.click(runButton())
     await sessionsOpened(1)
 
-    processExits(1)
+    const button = screen.getByRole('button', { name: 'Building…' })
+    expect(button).toBeDisabled()
 
-    // Still the one session: nothing sequenced this, so nothing follows it.
+    await userEvent.click(button)
     expect(octopus().terminal.create).toHaveBeenCalledTimes(1)
+  })
+
+  /*
+   * The build's log is what a reader is looking at when the sequence has
+   * finished. Stopping the server must not take it away — `started` exists to
+   * keep output on screen past the process that produced it.
+   */
+  it('leaves the finished build on screen when the server is stopped', async () => {
+    renderPanel({ workspaces: [anna], activeWorkspaceId: anna.id, scriptPaths: SCRIPTS })
+
+    await userEvent.click(scriptsTab())
+    await userEvent.click(runButton())
+    await sessionsOpened(1)
+    processExits(1)
+    await sessionsOpened(2)
+
+    await userEvent.click(screen.getByRole('button', { name: 'Stop' }))
+
+    // The build's idle hint would be back if its terminal had been unmounted.
+    expect(
+      within(buildSection()).queryByText(/Runs setup.sh in this workspace/)
+    ).not.toBeInTheDocument()
+    // Only the server's session was ended.
+    expect(octopus().terminal.dispose).toHaveBeenCalledWith(sessionId(2))
+    expect(octopus().terminal.dispose).not.toHaveBeenCalledWith(sessionId(1))
+  })
+
+  // Nothing to restart and nothing to stop until something is serving. A
+  // control for a server that is not up is a control that cannot mean anything.
+  it('offers only Run while nothing is running', async () => {
+    renderPanel({ workspaces: [anna], activeWorkspaceId: anna.id, scriptPaths: SCRIPTS })
+
+    await userEvent.click(scriptsTab())
+
+    expect(runButton()).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Restart' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Stop' })).not.toBeInTheDocument()
+  })
+
+  // A build is not a server: it ends on its own, and until it does there is
+  // nothing to restart either.
+  it('offers neither while only the build is going', async () => {
+    renderPanel({ workspaces: [anna], activeWorkspaceId: anna.id, scriptPaths: SCRIPTS })
+
+    await userEvent.click(scriptsTab())
+    await userEvent.click(runButton())
+    await sessionsOpened(1)
+
+    expect(screen.queryByRole('button', { name: 'Restart' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Stop' })).not.toBeInTheDocument()
+  })
+
+  // The server ended on its own — crashed, or was killed from outside. The
+  // controls have to go with it, or they promise something that is not there.
+  it('takes them away again when the server ends by itself', async () => {
+    renderPanel({ workspaces: [anna], activeWorkspaceId: anna.id, scriptPaths: SCRIPTS })
+
+    await userEvent.click(scriptsTab())
+    await userEvent.click(runButton())
+    await sessionsOpened(1)
+    processExits(1)
+    await sessionsOpened(2)
+
+    expect(screen.getByRole('button', { name: 'Stop' })).toBeInTheDocument()
+
+    processExits(2)
+
+    expect(screen.queryByRole('button', { name: 'Restart' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Stop' })).not.toBeInTheDocument()
+  })
+
+  // Stopping ends whatever is going, and the sequence settles back to offering
+  // the whole of itself again.
+  it('stops a running server from the header', async () => {
+    renderPanel({ workspaces: [anna], activeWorkspaceId: anna.id, scriptPaths: SCRIPTS })
+
+    await userEvent.click(scriptsTab())
+    await userEvent.click(runButton())
+    await sessionsOpened(1)
+    processExits(1)
+    await sessionsOpened(2)
+
+    await userEvent.click(screen.getByRole('button', { name: 'Stop' }))
+
+    await waitFor(() => {
+      expect(octopus().terminal.dispose).toHaveBeenCalledWith(sessionId(2))
+    })
+    expect(screen.queryByRole('button', { name: 'Stop' })).not.toBeInTheDocument()
+  })
+
+  // The code changed under a running server and needs picking up, while the
+  // checkout did not — no reason to build again for that.
+  it('restarts the server without building again', async () => {
+    renderPanel({ workspaces: [anna], activeWorkspaceId: anna.id, scriptPaths: SCRIPTS })
+
+    await userEvent.click(scriptsTab())
+    await userEvent.click(runButton())
+    await sessionsOpened(1)
+    processExits(1)
+    await sessionsOpened(2)
+
+    await userEvent.click(screen.getByRole('button', { name: 'Restart' }))
+
+    await sessionsOpened(3)
+    // The third session is the server again, not another build.
+    expect(octopus().terminal.create).toHaveBeenLastCalledWith(
+      expect.objectContaining({ command: [SCRIPTS.run] })
+    )
   })
 
   // Always on the header, not only in the empty state: the moment an env turns
@@ -476,17 +701,17 @@ describe('RightPanel', () => {
     })
 
     await userEvent.click(scriptsTab())
-    await userEvent.click(within(buildSection()).getByRole('button', { name: 'Build' }))
+    await userEvent.click(runButton())
     await waitFor(() => {
       expect(octopus().terminal.create).toHaveBeenCalledTimes(1)
     })
 
     rerender({ activeWorkspaceId: bob.id })
 
-    // Nothing has been started here, so this one offers to start — while the
-    // one left behind is still going.
-    expect(within(buildSection()).getByRole('button', { name: 'Build' })).toBeInTheDocument()
-    expect(within(buildSection()).queryByRole('button', { name: 'Stop' })).not.toBeInTheDocument()
+    // Nothing has been started here, so the header offers the whole run —
+    // while the one left behind is still going.
+    expect(runButton()).toBeEnabled()
+    expect(screen.queryByRole('button', { name: 'Stop' })).not.toBeInTheDocument()
     expect(octopus().terminal.dispose).not.toHaveBeenCalled()
   })
 
@@ -753,7 +978,7 @@ describe('RightPanel', () => {
     renderPanel({ workspaces: [anna], activeWorkspaceId: anna.id, scriptPaths: SCRIPTS })
 
     await user.click(scriptsTab())
-    await user.click(within(buildSection()).getByRole('button', { name: 'Build' }))
+    await user.click(runButton())
     await waitFor(() => {
       expect(window.octopus.terminal.create).toHaveBeenCalledTimes(1)
     })
@@ -782,7 +1007,7 @@ describe('RightPanel', () => {
     })
 
     await user.click(scriptsTab())
-    await user.click(within(buildSection()).getByRole('button', { name: 'Build' }))
+    await user.click(runButton())
     await waitFor(() => {
       expect(openedDirectories()).toEqual(['/tmp/planner/anna'])
     })
@@ -801,13 +1026,13 @@ describe('RightPanel', () => {
     })
 
     await user.click(scriptsTab())
-    await user.click(within(buildSection()).getByRole('button', { name: 'Build' }))
+    await user.click(runButton())
     await waitFor(() => {
       expect(openedDirectories()).toHaveLength(1)
     })
 
     rerender({ activeWorkspaceId: bob.id })
-    await user.click(within(buildSection()).getByRole('button', { name: 'Build' }))
+    await user.click(runButton())
 
     await waitFor(() => {
       expect(openedDirectories()).toEqual(['/tmp/planner/anna', '/tmp/planner/bob'])
@@ -845,7 +1070,7 @@ describe('RightPanel', () => {
     })
 
     await user.click(scriptsTab())
-    await user.click(within(buildSection()).getByRole('button', { name: 'Build' }))
+    await user.click(runButton())
     await waitFor(() => {
       expect(openedDirectories()).toHaveLength(1)
     })
@@ -892,7 +1117,7 @@ describe('RightPanel', () => {
     renderPanel({ workspaces: [anna], activeWorkspaceId: anna.id, scriptPaths: SCRIPTS })
 
     await user.click(scriptsTab())
-    await user.click(within(buildSection()).getByRole('button', { name: 'Build' }))
+    await user.click(runButton())
     await waitFor(() => {
       expect(octopus().terminal.create).toHaveBeenCalledTimes(1)
     })
@@ -901,10 +1126,10 @@ describe('RightPanel', () => {
     expect(octopus().terminal.dispose).not.toHaveBeenCalled()
 
     // Unfolded, the run is still the one that was started — a fold that had
-    // ended it would offer to start again instead.
+    // ended it would have opened a second session on the way back.
     await user.click(buildHeading())
-    expect(within(buildSection()).getByRole('button', { name: 'Rebuild' })).toBeInTheDocument()
     expect(octopus().terminal.create).toHaveBeenCalledTimes(1)
+    expect(octopus().terminal.dispose).not.toHaveBeenCalled()
   })
 
   // A server runs for as long as the work does, so there is nothing to fold it
@@ -926,21 +1151,23 @@ describe('RightPanel', () => {
    * arrangement that could quietly merge them: one `WorkspaceScripts` drawn
    * twice, or one run showing in both places.
    */
+  // Two halves, two runs: the build's output stays the build's, and the server
+  // starting does not take the pane the build was read in.
   it('keeps the two scripts apart inside the one tab', async () => {
     const user = userEvent.setup()
     renderPanel({ workspaces: [anna], activeWorkspaceId: anna.id, scriptPaths: SCRIPTS })
 
     await user.click(scriptsTab())
-    await user.click(within(serverSection()).getByRole('button', { name: 'Start' }))
-    await waitFor(() => {
-      expect(openedDirectories()).toHaveLength(1)
-    })
+    await user.click(runButton())
+    await sessionsOpened(1)
+    processExits(1)
+    await sessionsOpened(2)
 
-    // The server is running; the build has not been started, so it still offers
-    // to start rather than showing the server's output.
-    expect(within(serverSection()).getByRole('button', { name: 'Stop' })).toBeInTheDocument()
-    expect(within(buildSection()).getByRole('button', { name: 'Build' })).toBeInTheDocument()
-    expect(within(buildSection()).queryByRole('button', { name: 'Stop' })).not.toBeInTheDocument()
-    expect(window.octopus.terminal.create).toHaveBeenCalledTimes(1)
+    // One session each, in the order the sequence asked for them.
+    expect(openedDirectories()).toEqual([anna.path, anna.path])
+    expect(vi.mocked(octopus().terminal.create).mock.calls.map(([spec]) => spec.command)).toEqual([
+      [SCRIPTS.setup],
+      [SCRIPTS.run]
+    ])
   })
 })

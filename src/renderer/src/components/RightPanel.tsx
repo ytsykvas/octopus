@@ -1,4 +1,4 @@
-import { ChevronDown, ChevronRight, Play } from 'lucide-react'
+import { ChevronDown, ChevronRight, ExternalLink, Play, RotateCw, Square } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
@@ -174,9 +174,22 @@ export function RightPanel({
   // server. It lives above both halves because neither half can see the other.
   const sequence = useRunSequence()
   const activeRun = sequence.runOf(activeWorkspaceId)
-  // Only the build blocks a second press. Once the server is up, pressing Run
-  // again is a rebuild and a restart, which is a thing people mean to do.
+  // The build is the step that takes the time, and a second press during it
+  // would start it over rather than do anything anybody meant.
   const building = activeRun.stage === 'building'
+  /*
+   * The workspace every control here acts on, or null where there is none.
+   *
+   * One value for both halves of "there is nothing to act on": no workspace
+   * chosen, or one whose directory has gone. A missing one matters as much as
+   * an absent one — `WorkspaceScripts` drops it, which unmounts its runner and
+   * disposes the session, so nothing is left for a token to reach. Left in, the
+   * header would offer a link to a refused port and a Restart that nobody
+   * hears.
+   */
+  const found = workspaces.find((item) => item.id === activeWorkspaceId) ?? null
+  const activeWorkspace = found !== null && !found.missing ? found : null
+
   /*
    * What Run does, or nothing where it has nothing to do: no workspace chosen,
    * no server script to start, or a build already going.
@@ -186,13 +199,30 @@ export function RightPanel({
    * unreachable line is a claim about behaviour nobody can check.
    */
   const runAll =
-    activeWorkspaceId === null || scriptPaths.run === null || building
+    activeWorkspace === null || scriptPaths.run === null || building
       ? undefined
       : (): void => {
           // Skipping a build nobody wrote rather than waiting for it: §4 says
           // no step is mandatory, and the half is showing an invitation to
           // write one rather than a runner that could answer.
-          sequence.start(activeWorkspaceId, scriptPaths.setup !== null)
+          sequence.start(activeWorkspace.id, scriptPaths.setup !== null)
+        }
+
+  const servingAt =
+    activeWorkspace !== null && activeRun.stage === 'serving' ? activeWorkspace : null
+
+  const restartServer =
+    servingAt === null
+      ? undefined
+      : (): void => {
+          sequence.restart(servingAt.id)
+        }
+
+  const stopRun =
+    servingAt === null
+      ? undefined
+      : (): void => {
+          sequence.stop(servingAt.id)
         }
 
   const tabs = useRef<HTMLDivElement>(null)
@@ -410,11 +440,11 @@ export function RightPanel({
         aria-hidden={tab !== 'scripts'}
         className={`flex min-h-0 flex-1 flex-col ${tab === 'scripts' ? '' : 'hidden'}`}
       >
-        {/* The whole point of the tab in one control: the first thing anybody
-            does with a new workspace is these two steps in this order, and the
-            second only makes sense after the first. The per-half buttons stay —
-            rebuilding without restarting the server, and restarting without
-            rebuilding, are both ordinary things to want. */}
+        {/* The whole point of the tab in one row: the first thing anybody does
+            with a new workspace is these two steps in this order, and the
+            second only makes sense after the first. The halves carry nothing —
+            four buttons across two of them, two saying the same word, is what
+            this replaced. */}
         <div className="border-line flex shrink-0 items-center gap-2 border-b px-3 py-1.5">
           <span className="text-ink-faint min-w-0 flex-1 truncate text-[11px]">
             {activeRun.stage === 'failed' ? (
@@ -424,10 +454,56 @@ export function RightPanel({
             )}
           </span>
 
-          <Button size="sm" variant="accent" disabled={runAll === undefined} onClick={runAll}>
-            <Play aria-hidden size={12} />
-            {t(building ? 'scripts.running' : 'scripts.runAll')}
-          </Button>
+          {/* Every control for the tab, and none in the halves — and only ever
+              the ones that can mean something. Run goes once the server is up:
+              what it offers has already happened, and a rebuild from there is
+              Stop and then Run, which is also the order that frees the port
+              before anything tries to bind it again. */}
+          {servingAt === null && (
+            <Button size="sm" variant="accent" disabled={runAll === undefined} onClick={runAll}>
+              <Play aria-hidden size={12} />
+              {t(building ? 'scripts.running' : 'scripts.runAll')}
+            </Button>
+          )}
+
+          {servingAt !== null && (
+            <>
+              {/* An anchor rather than a button: `setWindowOpenHandler` already
+                  hands a `_blank` target to the system browser, so this needs no
+                  channel of its own — and it is a link, which is what a reader
+                  expects to be able to copy or open in a new tab.
+
+                  Styled as a control because it stands in a row of them, and
+                  only while something is serving: a port with nothing behind it
+                  opens on a connection refused. */}
+              <a
+                href={`http://localhost:${String(servingAt.port)}`}
+                target="_blank"
+                rel="noreferrer"
+                title={t('scripts.openInBrowser', { port: servingAt.port })}
+                aria-label={t('scripts.openInBrowser', { port: servingAt.port })}
+                className="focus-ring border-line bg-canvas text-ink hover:bg-muted inline-flex h-6 items-center justify-center gap-1.5 rounded-[var(--radius-control)] border px-2 text-[11px] font-medium transition-colors"
+              >
+                <ExternalLink aria-hidden size={12} />
+              </a>
+
+              {/* The common half of a restart: the code changed under a running
+                  server and needs picking up, while the checkout did not. */}
+              <Button
+                size="sm"
+                onClick={restartServer}
+                title={t('scripts.serverRestart')}
+                aria-label={t('scripts.serverRestart')}
+              >
+                <RotateCw aria-hidden size={12} />
+              </Button>
+
+              <Button size="sm" variant="danger" onClick={stopRun}>
+                <Square aria-hidden size={12} />
+                {t('scripts.stop')}
+              </Button>
+            </>
+          )}
         </div>
 
         {/* A named region each, rather than two anonymous halves. Both are on
@@ -458,10 +534,9 @@ export function RightPanel({
                 setBuildOpen(!buildOpen)
               }}
               aria-expanded={buildOpen}
-              // Named for what it does, not for what it says. The word on it is
-              // `Build`, and so is the word on the button that runs the build —
-              // two controls with one name, which is ambiguous to anything
-              // reading the pane aloud and to anything testing it.
+              // Named for what it does rather than for the word on it:
+              // `Build` is also the heading it carries, and two controls with
+              // one name are ambiguous to anything reading the pane aloud.
               aria-label={t(buildOpen ? 'scripts.foldBuild' : 'scripts.unfoldBuild')}
               className="focus-ring section-label hover:bg-muted flex min-w-0 flex-1 items-center gap-1.5 px-3 py-1.5 text-left"
             >
@@ -496,6 +571,7 @@ export function RightPanel({
               visible={tab === 'scripts'}
               onOpenSettings={onEditScripts}
               tokenFor={(id) => sequence.runOf(id).build}
+              stopTokenFor={(id) => sequence.runOf(id).stop}
               onOutcome={(id, ok) => {
                 sequence.finished('setup', id, ok)
               }}
@@ -518,6 +594,7 @@ export function RightPanel({
             visible={tab === 'scripts'}
             onOpenSettings={onEditScripts}
             tokenFor={(id) => sequence.runOf(id).server}
+            stopTokenFor={(id) => sequence.runOf(id).stop}
             onOutcome={(id, ok) => {
               sequence.finished('run', id, ok)
             }}

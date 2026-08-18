@@ -4,9 +4,9 @@
 
 ## What happens
 
-The Build tab runs `setup.sh` and shows its output. When the process ends, the
-button returns to "Run again" — whether the script succeeded or failed with a
-compile error twenty lines up.
+The build half of the Scripts tab runs `setup.sh` and shows its output. When the
+process ends, the header goes back to offering the sequence — whether the script
+succeeded or failed with a compile error twenty lines up.
 
 Nothing in the app knows a build succeeded, so nothing can act on it.
 
@@ -51,10 +51,11 @@ or never run. Colour it with the `success` / `danger` tokens on the text, not as
 a filled background — §10.7. `onOutcome` already narrows the code to a boolean
 for the sequence, so it is the number itself that has to survive alongside it.
 
-That question is settled: the Server half does **not** block. `Run` refuses to
-go on after a failed build, and the server's own Start button still works —
-restarting a server without rebuilding is an ordinary thing to want, and §4 says
-no step is mandatory.
+That question is settled: nothing blocks. `Run` refuses to go on after a failed
+build and says so, which is the whole of it. The server half no longer has a
+Start of its own — every control moved to the tab's header — so "start the
+server without rebuilding" is now `Run` from an idle stage, and `Restart` once
+one is up.
 
 The obstacle this used to name is gone: `WorkspaceScripts` now keeps a runner
 per workspace mounted, so state held in `ScriptRunner` survives a tab switch and

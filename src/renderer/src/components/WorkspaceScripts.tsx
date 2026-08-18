@@ -29,6 +29,8 @@ interface WorkspaceScriptsProps {
    * runner, and a sequence started in one must not start the rest of them.
    */
   readonly tokenFor: (workspaceId: string) => number
+  /** The token that ends a run here; both halves watch the same one. */
+  readonly stopTokenFor: (workspaceId: string) => number
   readonly onOutcome: (workspaceId: string, ok: boolean) => void
 }
 
@@ -54,6 +56,7 @@ export function WorkspaceScripts({
   visible,
   onOpenSettings,
   tokenFor,
+  stopTokenFor,
   onOutcome
 }: WorkspaceScriptsProps): React.JSX.Element {
   const [openedIds, setOpenedIds] = useState<readonly string[]>([])
@@ -112,6 +115,7 @@ export function WorkspaceScripts({
             port={workspace.port}
             onOpenSettings={onOpenSettings}
             startToken={tokenFor(workspace.id)}
+            stopToken={stopTokenFor(workspace.id)}
             onOutcome={(ok) => {
               onOutcome(workspace.id, ok)
             }}

@@ -133,14 +133,18 @@ export const en = {
   scripts: {
     build: 'Build',
     server: 'Server',
-    /* Named per script rather than shared. One installs dependencies and the
-       other holds a port; `Run` said only that they share an implementation.
-       `build` and `server` above are the headings; these are the buttons. */
-    buildStart: 'Build',
-    buildAgain: 'Rebuild',
-    serverStart: 'Start',
+    /* Three controls for the whole tab, on its own header. There used to be
+       four across the two halves, two of which were called the same thing —
+       and `Run` and `Start` beside each other say nothing about which one a
+       reader wants. */
     serverRestart: 'Restart',
     stop: 'Stop',
+    /* Names the port rather than saying "open the app": every workspace serves
+       on one of its own, and which one is the fact worth carrying. */
+    openInBrowser: 'Open localhost:{{port}}',
+    /* Beside a half that is going, so the header's own words are free to say
+       what pressing something would do rather than what is already happening. */
+    busy: 'running…',
     foldBuild: 'Fold the build away',
     unfoldBuild: 'Show the build',
     edit: 'Write the script',

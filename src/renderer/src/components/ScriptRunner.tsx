@@ -1,5 +1,4 @@
-import { Play, RotateCw, Square } from 'lucide-react'
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import type { ScriptKind } from '@core/scripts.js'
@@ -25,27 +24,10 @@ interface ScriptRunnerProps {
    * instruction to a runner that is already going.
    */
   readonly startToken?: number
+  /** Bumped to end this run; 0 means never. */
+  readonly stopToken?: number
   /** Reports a run ending, and whether it ended well, to whatever sequenced it. */
   readonly onOutcome?: (ok: boolean) => void
-}
-
-/**
- * What each half of the Scripts tab offers, first time and after.
- *
- * Keyed by kind so a third script would have to name its own words rather than
- * inherit whichever pair happened to be first.
- */
-const LABELS: Record<
-  ScriptKind,
-  {
-    readonly first: 'scripts.buildStart' | 'scripts.serverStart'
-    readonly again: 'scripts.buildAgain' | 'scripts.serverStart'
-  }
-> = {
-  setup: { first: 'scripts.buildStart', again: 'scripts.buildAgain' },
-  // A server that has stopped is started, not started again: what "again"
-  // would name is the run that ended, and there is nothing left of it.
-  run: { first: 'scripts.serverStart', again: 'scripts.serverStart' }
 }
 
 /**
@@ -63,6 +45,7 @@ export function ScriptRunner({
   port,
   onOpenSettings,
   startToken = 0,
+  stopToken = 0,
   onOutcome
 }: ScriptRunnerProps): React.JSX.Element {
   const { t } = useTranslation()
@@ -89,6 +72,7 @@ export function ScriptRunner({
       scriptPath={scriptPath}
       port={port}
       startToken={startToken}
+      stopToken={stopToken}
       onOutcome={onOutcome}
     />
   )
@@ -100,6 +84,7 @@ interface RunnerProps {
   readonly scriptPath: string
   readonly port: number
   readonly startToken: number
+  readonly stopToken: number
   readonly onOutcome: ((ok: boolean) => void) | undefined
 }
 
@@ -117,6 +102,7 @@ function Runner({
   scriptPath,
   port,
   startToken,
+  stopToken,
   onOutcome
 }: RunnerProps): React.JSX.Element {
   const { t } = useTranslation()
@@ -132,7 +118,21 @@ function Runner({
   const [running, setRunning] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
+  /*
+   * The stop token as the run loop sees it.
+   *
+   * A ref, because `start` reads it after an await and a value captured in the
+   * closure would be the one from before. Kept in an effect rather than written
+   * during render, so it changes once the render that carries it has committed.
+   */
+  const latestStop = useRef(stopToken)
+  useEffect(() => {
+    latestStop.current = stopToken
+  }, [stopToken])
+
   const start = (): void => {
+    const stopWhenAsked = latestStop.current
+
     void (async () => {
       /*
        * The env goes in before either script, not only when the workspace was
@@ -145,6 +145,12 @@ function Runner({
        * and running this twice costs a stat.
        */
       const applied = await window.octopus.workspaces.applyEnv(workspace.id)
+
+      // A stop that landed while the env was being written wins. Starting
+      // afterwards would leave a server running with the header back on `Run`
+      // and no control anywhere that could reach it.
+      if (latestStop.current !== stopWhenAsked) return
+
       if (!applied.ok) {
         // Refusing to start is the point. Either script without its env fails
         // further in, complaining about whatever the missing value fed.
@@ -161,71 +167,58 @@ function Runner({
     })()
   }
 
+  /*
+   * The token as this half last acted on it — seeded, not started from zero.
+   *
+   * The token is a level rather than an edge: it stays put after the run it
+   * asked for has ended. Started from zero, a half that remounts with one
+   * standing would run the script again with nobody pressing anything — and
+   * `WorkspaceScripts` remounts every runner of a project each time that
+   * project is opened, so leaving one project and coming back re-ran every
+   * script every workspace in it had ever run.
+   */
+  const seenStart = useRef(startToken)
+
   useEffect(() => {
-    // Zero is the token nobody has claimed yet, so a half that mounts before
-    // anything asked of it stays where it is.
-    if (startToken === 0) return
+    if (startToken === seenStart.current) return
+
+    seenStart.current = startToken
     start()
     // The token is the whole trigger. `start` is rebuilt on every render, and
     // depending on it would restart the script on any state change at all.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [startToken])
 
+  // Adjusted during render rather than in an effect, the way `WorkspaceScripts`
+  // picks up a workspace: an effect runs after the paint, so the terminal would
+  // outlive the press that ended it by a frame. Unmounting it is what ends the
+  // process — the whole group of it, since `TerminalManager` signals the group
+  // a session leads.
+  const [seenStop, setSeenStop] = useState(stopToken)
+  if (stopToken !== seenStop) {
+    setSeenStop(stopToken)
+
+    // Only a half that is still going. A build has already exited by the time a
+    // server can be stopped, and unmounting its terminal would throw away the
+    // log somebody is reading — the one thing `started` exists to keep.
+    if (running) {
+      setStarted(false)
+      setRunning(false)
+    }
+  }
+
   return (
     <div className="flex min-h-0 flex-1 flex-col">
+      {/* What this half is, and nothing to press. Every control moved to the
+          tab's own header: the two halves are one question — what this
+          workspace runs — and answering it took four buttons in two places, two
+          of which were called the same thing. */}
       <div className="border-line flex shrink-0 items-center gap-2 border-b px-3 py-1.5">
         <span className="text-ink-faint min-w-0 flex-1 truncate font-mono text-[11px]">
           {kind === 'run' ? `OCTOPUS_PORT=${String(port)}` : scriptPath}
         </span>
 
-        {/* The words follow the script rather than the component. One control
-            installs dependencies and the other holds a port; labelling both of
-            them `Run` said only that they share an implementation.
-
-            The build has no Stop. A server is started and stopped for as long
-            as the work lasts; a build is run, read, and run again when
-            something changed — and `Rebuild` already ends the run it replaces,
-            because remounting `Terminal` is what kills the old process. So
-            stopping a build is rebuilding it, and a button for the half of that
-            nobody asks for is a button in the way. */}
-        {running && kind === 'run' ? (
-          <>
-            {/* An icon rather than a word, the one place that happens here: the
-                server's row carries a port, two buttons and a pane that narrows
-                to 280px. Its name lives on the label, which is where a reader
-                who cannot see the icon was going to find it anyway. */}
-            <Button
-              size="sm"
-              onClick={start}
-              title={t('scripts.serverRestart')}
-              aria-label={t('scripts.serverRestart')}
-            >
-              <RotateCw aria-hidden size={12} />
-            </Button>
-            {/* Stopping unmounts the terminal, which is what kills the
-                process — a server would otherwise hold its port for the rest
-                of the session. */}
-            <Button
-              size="sm"
-              variant="danger"
-              onClick={() => {
-                setStarted(false)
-                setRunning(false)
-                // Stopping is an outcome too: a sequence still waiting on the
-                // server has nothing left to wait for.
-                onOutcome?.(true)
-              }}
-            >
-              <Square aria-hidden size={12} />
-              {t('scripts.stop')}
-            </Button>
-          </>
-        ) : (
-          <Button size="sm" variant="accent" onClick={start}>
-            {running ? <RotateCw aria-hidden size={12} /> : <Play aria-hidden size={12} />}
-            {t(LABELS[kind][started ? 'again' : 'first'])}
-          </Button>
-        )}
+        {running && <span className="text-ink-faint text-[11px]">{t('scripts.busy')}</span>}
       </div>
 
       {/* Above the terminal rather than inside it: the run never began, so

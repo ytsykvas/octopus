@@ -536,33 +536,65 @@ so `Run` is disabled — the server half already carries that invitation.
 The sequence is **keyed by workspace**, exactly as the runs are: leaving one
 mid-build to look at another must not report the second as building.
 
-**The per-half buttons stay.** Rebuilding without restarting the server, and
-restarting the server without rebuilding, are both ordinary things to want.
-`Run` is the shortcut for the common case, not a replacement for either — and a
-build somebody ran from its own button does not start a server, because it is
-not the first step of a sequence anybody began.
+**Every control is on that header, and the halves carry none.** There were four
+across the two of them — `Build`/`Rebuild` in one, `Start`/`Restart`/`Stop` in
+the other — and beside a `Run` that does both, two of them said the same word
+twice. A half's job is to show what is happening; the pressing belongs where the
+whole sequence is decided.
 
-**Either button puts the project's env in place first**, and refuses to start if
+Three controls, and only ever the ones that can mean something:
+
+| Showing         | Controls                           |
+| --------------- | ---------------------------------- |
+| nothing running | `Run`                              |
+| building        | `Building…`, disabled              |
+| serving         | open in browser, `Restart`, `Stop` |
+
+The first of the three is a **link**, not a button: `setWindowOpenHandler` in
+main already hands a `_blank` target to the system browser, so it needs no
+channel of its own, and a link is what a reader expects to be able to copy. It
+names the port — every workspace serves on one of its own, and which one is the
+fact worth carrying.
+
+Never one that cannot mean anything. `Restart` and
+`Stop` do not exist before a server is up — the pane would be promising
+something it has not got. `Run` goes once one is: what it offers has already
+happened, and leaving it there asks the reader to work out how it differs from
+the `Restart` beside it.
+
+`Restart` is the common half of a restart: the code changed under a running
+server and needs picking up, while the checkout did not.
+
+A workspace whose directory has gone loses all of them, `Run` included.
+`WorkspaceScripts` drops a missing workspace, which unmounts its runner and
+disposes the session — so the server is already dead while the stage still says
+it is serving, and a control left up would point at a refused port.
+
+**`Stop` reaches only what is still going.** Both halves watch one token, since
+stopping means stopping this workspace rather than guessing which half is busy —
+but a half that has already exited keeps its terminal. The build's log is what a
+reader is looking at once the sequence has finished, and `started` exists to
+keep output on screen past the process that produced it.
+
+**There is no separate rebuild.** It is `Stop` and then `Run` — two presses, in
+the order that frees the port before anything tries to bind it again.
+
+**Every start puts the project's env in place first**, and refuses to run if
 that fails. A build or a server missing its env fails further in, complaining
 about whatever the missing value fed rather than about the env — and nothing
 here makes a build come first, so the server has to do it too. It never
 overwrites, so a workspace whose `.env` was edited by hand keeps what it has.
 
-**The buttons say which script they are for.** The server is `Start`, `Restart`
-and `Stop`; the build is `Build` and then `Rebuild`. One component draws both,
-and labelling them all `Run` said only that — that they share an implementation,
-which is not a fact about either of them.
-
-**The build has no Stop**, and that is the asymmetry rather than an omission. A
-server is started and stopped for as long as the work lasts; a build is run,
-read, and run again when something changed. `Rebuild` already ends the run it
-replaces — remounting the terminal is what kills the old process — so stopping a
-build is rebuilding it, and a separate button for half of that is a button in
-the way.
+**A build still cannot be stopped**, and that is the asymmetry rather than an
+omission. A server is started and stopped for as long as the work lasts; a build
+is run, read, and run again when something changed — and `Run` already ends the
+build it replaces, because remounting the terminal is what kills the old
+process. So stopping a build is running it again, and `Stop` stays with the
+thing it was asked for.
 
 The fold control on the build's heading is named for what it does rather than
-for the word on it: `Build` is also what the button beside it says, and two
-controls with one name are ambiguous to anything reading the pane aloud.
+for the word on it: `Build` is also the heading it carries, and two controls
+with one name are ambiguous to anything reading the pane aloud.
 
 **`Edit env` sits on that heading permanently**, not only while the build script
 is missing. The moment anyone notices an env is missing is a run that could not

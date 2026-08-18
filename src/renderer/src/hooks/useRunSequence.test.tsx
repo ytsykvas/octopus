@@ -7,7 +7,7 @@ describe('useRunSequence', () => {
   it('reports a workspace nobody has run as idle', () => {
     const { result } = renderHook(() => useRunSequence())
 
-    expect(result.current.runOf('anna')).toEqual({ stage: 'idle', build: 0, server: 0 })
+    expect(result.current.runOf('anna')).toEqual({ stage: 'idle', build: 0, server: 0, stop: 0 })
   })
 
   // The pane draws this before a workspace is chosen, and it must not have to
@@ -25,7 +25,12 @@ describe('useRunSequence', () => {
       result.current.start('anna', true)
     })
 
-    expect(result.current.runOf('anna')).toEqual({ stage: 'building', build: 1, server: 0 })
+    expect(result.current.runOf('anna')).toEqual({
+      stage: 'building',
+      build: 1,
+      server: 0,
+      stop: 0
+    })
   })
 
   it('starts the server once the build succeeds', () => {
@@ -38,7 +43,7 @@ describe('useRunSequence', () => {
       result.current.finished('setup', 'anna', true)
     })
 
-    expect(result.current.runOf('anna')).toEqual({ stage: 'serving', build: 1, server: 1 })
+    expect(result.current.runOf('anna')).toEqual({ stage: 'serving', build: 1, server: 1, stop: 0 })
   })
 
   // A server started on top of a broken build fails in a way that points at the
@@ -67,7 +72,7 @@ describe('useRunSequence', () => {
       result.current.start('anna', false)
     })
 
-    expect(result.current.runOf('anna')).toEqual({ stage: 'serving', build: 0, server: 1 })
+    expect(result.current.runOf('anna')).toEqual({ stage: 'serving', build: 0, server: 1, stop: 0 })
   })
 
   it('settles once the server ends', () => {
@@ -95,7 +100,7 @@ describe('useRunSequence', () => {
       result.current.finished('setup', 'anna', true)
     })
 
-    expect(result.current.runOf('anna')).toEqual({ stage: 'idle', build: 0, server: 0 })
+    expect(result.current.runOf('anna')).toEqual({ stage: 'idle', build: 0, server: 0, stop: 0 })
   })
 
   it('ignores a server ending while a build is still going', () => {
@@ -125,6 +130,72 @@ describe('useRunSequence', () => {
     expect(result.current.runOf('bob').build).toBe(0)
   })
 
+  // The code changed under a running server and needs picking up, while
+  // nothing about the checkout did — no reason to build again for that.
+  it('starts the server again without building', () => {
+    const { result } = renderHook(() => useRunSequence())
+
+    act(() => {
+      result.current.start('anna', true)
+    })
+    act(() => {
+      result.current.finished('setup', 'anna', true)
+    })
+    act(() => {
+      result.current.restart('anna')
+    })
+
+    const run = result.current.runOf('anna')
+    expect(run).toEqual({ stage: 'serving', build: 1, server: 2, stop: 0 })
+  })
+
+  it('ends what is running and settles', () => {
+    const { result } = renderHook(() => useRunSequence())
+
+    act(() => {
+      result.current.start('anna', false)
+    })
+    act(() => {
+      result.current.stop('anna')
+    })
+
+    const run = result.current.runOf('anna')
+    expect(run.stage).toBe('idle')
+    expect(run.stop).toBe(1)
+  })
+
+  // One token for both halves: stopping means stopping this workspace, and
+  // which half happens to be going is not a question the presser answered.
+  it('stops a build the same way it stops a server', () => {
+    const { result } = renderHook(() => useRunSequence())
+
+    act(() => {
+      result.current.start('anna', true)
+    })
+    act(() => {
+      result.current.stop('anna')
+    })
+
+    expect(result.current.runOf('anna').stage).toBe('idle')
+    expect(result.current.runOf('anna').stop).toBe(1)
+  })
+
+  // The controls that reach these are on screen only while a server is up.
+  // Inventing a run would report one that is not there.
+  it('does nothing when asked to restart or stop a workspace that never ran', () => {
+    const { result } = renderHook(() => useRunSequence())
+
+    act(() => {
+      result.current.restart('anna')
+    })
+    act(() => {
+      result.current.stop('bob')
+    })
+
+    expect(result.current.runOf('anna')).toEqual({ stage: 'idle', build: 0, server: 0, stop: 0 })
+    expect(result.current.runOf('bob')).toEqual({ stage: 'idle', build: 0, server: 0, stop: 0 })
+  })
+
   it('asks again rather than remembering it once asked', () => {
     const { result } = renderHook(() => useRunSequence())
 
@@ -140,6 +211,11 @@ describe('useRunSequence', () => {
 
     // The token, not a flag: the second press has to reach a half that already
     // ran once, and "start again" is the same instruction as "start".
-    expect(result.current.runOf('anna')).toEqual({ stage: 'building', build: 2, server: 0 })
+    expect(result.current.runOf('anna')).toEqual({
+      stage: 'building',
+      build: 2,
+      server: 0,
+      stop: 0
+    })
   })
 })

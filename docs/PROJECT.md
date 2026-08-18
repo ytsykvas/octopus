@@ -452,9 +452,9 @@ Further rules:
 
 ### 12.2 Scripts
 
-- `setup.sh` — prepares a workspace: installing dependencies, building what a fresh checkout needs. Runs on the Build button, not on workspace creation — no step is mandatory (§4).
+- `setup.sh` — prepares a workspace: installing dependencies, building what a fresh checkout needs. Runs on a button, not on workspace creation — no step is mandatory (§4).
 - `run.sh` — the dev server; receives `$OCTOPUS_PORT`.
-- One **Run** on the Scripts tab does both in order: build, then serve when the build succeeds. A failed build stops there; a missing build script is skipped rather than waited on. Each half keeps its own button as well.
+- One **Run** on the Scripts tab does both in order: build, then serve when the build succeeds. A failed build stops there; a missing build script is skipped rather than waited on. Once a server is up, Run gives way to a link to its port, **Restart** and **Stop**; the two halves carry no controls of their own.
 - The port is derived deterministically from the workspace id, range 3000–9000, checked for availability.
 - A project may also hold an **env file**. It is written into a workspace as `.env` when the workspace has none — at creation, and again before either script runs, so a workspace that predates the env picks it up. A file already in the worktree is never overwritten, and both copies are kept readable by their owner alone. This is why copying an env is no longer the first line of every setup script.
 

@@ -1,5 +1,6 @@
 import { act, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
+import type { ComponentProps } from 'react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import type { TerminalExit } from '@core/terminal.js'
@@ -20,6 +21,25 @@ function processExits(id: string): void {
   act(() => {
     for (const notify of listeners) notify({ id, exitCode: 0 })
   })
+}
+
+/**
+ * Mounts a half and then asks it to run.
+ *
+ * Two steps, because the token is an edge now: a half that mounts with one
+ * already standing deliberately does nothing.
+ */
+function mountAndStart(props: Omit<ComponentProps<typeof ScriptRunner>, 'startToken'>): {
+  rerender: (next: Partial<ComponentProps<typeof ScriptRunner>>) => void
+} {
+  const { rerender } = render(<ScriptRunner {...props} startToken={0} />)
+  rerender(<ScriptRunner {...props} startToken={1} />)
+
+  return {
+    rerender: (next) => {
+      rerender(<ScriptRunner {...props} startToken={1} {...next} />)
+    }
+  }
 }
 
 describe('ScriptRunner', () => {
@@ -95,205 +115,254 @@ describe('ScriptRunner', () => {
 
     expect(screen.getByText(SETUP_SCRIPT)).toBeInTheDocument()
     expect(screen.getByText(/Runs setup.sh in this workspace/)).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Build' })).toBeInTheDocument()
     expect(octopus().terminal.create).not.toHaveBeenCalled()
   })
 
-  it('runs the script in the workspace directory', async () => {
+  /*
+   * Every control lives on the tab's header now.
+   *
+   * The two halves were four buttons in two places, two of them called the
+   * same thing; a half's job is to show what is happening, and the pressing
+   * belongs where the whole sequence is decided.
+   */
+  it('carries no controls of its own', () => {
     render(
       <ScriptRunner
         workspace={anna}
-        kind="setup"
-        scriptPath={SETUP_SCRIPT}
+        kind="run"
+        scriptPath={RUN_SCRIPT}
         port={3111}
         onOpenSettings={vi.fn()}
       />
     )
 
-    await userEvent.click(screen.getByRole('button', { name: 'Build' }))
+    expect(screen.queryByRole('button')).not.toBeInTheDocument()
+  })
+
+  /*
+   * The token is a level, not an edge: it stays put after the run it asked for
+   * has ended. `WorkspaceScripts` remounts every runner of a project when that
+   * project is opened, so a half that started from zero re-ran its script with
+   * nobody pressing anything — for every workspace, not only the one on screen.
+   */
+  it('runs nothing when it mounts with a token already standing', () => {
+    render(
+      <ScriptRunner
+        workspace={anna}
+        kind="run"
+        scriptPath={RUN_SCRIPT}
+        port={3111}
+        onOpenSettings={vi.fn()}
+        startToken={7}
+      />
+    )
+
+    expect(octopus().terminal.create).not.toHaveBeenCalled()
+  })
+
+  it('runs the script in the workspace directory when asked', async () => {
+    mountAndStart({
+      workspace: anna,
+      kind: 'setup',
+      scriptPath: SETUP_SCRIPT,
+      port: 3111,
+      onOpenSettings: vi.fn()
+    })
 
     await sessionsOpened(1)
     expect(octopus().terminal.create).toHaveBeenCalledWith(
-      expect.objectContaining({
-        cwd: '/tmp/planner/anna',
-        command: [SETUP_SCRIPT],
-        env: {}
-      })
+      expect.objectContaining({ cwd: '/tmp/planner/anna', command: [SETUP_SCRIPT], env: {} })
     )
   })
 
-  // Several workspaces serve at once, so each one needs a port of its own.
   it('hands the server script the workspace port', async () => {
-    render(
-      <ScriptRunner
-        workspace={anna}
-        kind="run"
-        scriptPath={RUN_SCRIPT}
-        port={3111}
-        onOpenSettings={vi.fn()}
-      />
-    )
-
-    expect(screen.getByText('OCTOPUS_PORT=3111')).toBeInTheDocument()
-    await userEvent.click(screen.getByRole('button', { name: 'Start' }))
+    mountAndStart({
+      workspace: anna,
+      kind: 'run',
+      scriptPath: RUN_SCRIPT,
+      port: 3111,
+      onOpenSettings: vi.fn()
+    })
 
     await sessionsOpened(1)
     expect(octopus().terminal.create).toHaveBeenCalledWith(
-      expect.objectContaining({ env: { OCTOPUS_PORT: '3111' } })
+      expect.objectContaining({ command: [RUN_SCRIPT], env: { OCTOPUS_PORT: '3111' } })
     )
   })
 
-  it('kills the process when stopped', async () => {
-    render(
-      <ScriptRunner
-        workspace={anna}
-        kind="run"
-        scriptPath={RUN_SCRIPT}
-        port={3111}
-        onOpenSettings={vi.fn()}
-      />
-    )
-    await userEvent.click(screen.getByRole('button', { name: 'Start' }))
+  it('starts again when the token is bumped', async () => {
+    const { rerender } = mountAndStart({
+      workspace: anna,
+      kind: 'run',
+      scriptPath: RUN_SCRIPT,
+      port: 3111,
+      onOpenSettings: vi.fn()
+    })
     await sessionsOpened(1)
 
-    await userEvent.click(screen.getByRole('button', { name: 'Stop' }))
+    rerender({ startToken: 2 })
+
+    await sessionsOpened(2)
+    await waitFor(() => {
+      expect(octopus().terminal.dispose).toHaveBeenCalledWith(sessionId(1))
+    })
+  })
+
+  // Unmounting the terminal is what ends the process — and its whole group,
+  // since `TerminalManager` signals the group a session leads.
+  it('ends the run when the stop token is bumped', async () => {
+    const { rerender } = mountAndStart({
+      workspace: anna,
+      kind: 'run',
+      scriptPath: RUN_SCRIPT,
+      port: 3111,
+      onOpenSettings: vi.fn()
+    })
+    await sessionsOpened(1)
+
+    rerender({ stopToken: 1 })
 
     await waitFor(() => {
       expect(octopus().terminal.dispose).toHaveBeenCalledWith(sessionId(1))
     })
-    expect(screen.getByText(/Starts the dev server for this workspace/)).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Start' })).toBeInTheDocument()
+    expect(screen.getByText(/Starts the dev server/)).toBeInTheDocument()
   })
 
-  // The output is why anyone is looking at this tab; a script that finished
-  // must not take its own log off the screen.
-  it('keeps the output after the process ends on its own', async () => {
-    render(
-      <ScriptRunner
-        workspace={anna}
-        kind="setup"
-        scriptPath={SETUP_SCRIPT}
-        port={3111}
-        onOpenSettings={vi.fn()}
-      />
+  // A build has already exited by the time a server can be stopped, so the stop
+  // reaches it as a bystander — and unmounting its terminal would throw away
+  // the log somebody is reading, which is the one thing `started` exists for.
+  it('keeps a finished run on screen when the stop reaches it', async () => {
+    const { rerender } = mountAndStart({
+      workspace: anna,
+      kind: 'setup',
+      scriptPath: SETUP_SCRIPT,
+      port: 3111,
+      onOpenSettings: vi.fn()
+    })
+    await sessionsOpened(1)
+    processExits(sessionId(1))
+
+    rerender({ stopToken: 1 })
+
+    expect(screen.queryByText(/Runs setup.sh in this workspace/)).not.toBeInTheDocument()
+  })
+
+  // The window is one `env:apply` round trip. Starting after a stop that landed
+  // inside it leaves a server running with the header back on Run and no
+  // control anywhere that could reach it.
+  it('abandons a start that was stopped while the env was being written', async () => {
+    let release: (() => void) | null = null
+    vi.mocked(octopus().workspaces.applyEnv).mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          release = () => {
+            resolve({ ok: true, value: undefined })
+          }
+        })
     )
-    await userEvent.click(screen.getByRole('button', { name: 'Build' }))
+
+    const { rerender } = mountAndStart({
+      workspace: anna,
+      kind: 'run',
+      scriptPath: RUN_SCRIPT,
+      port: 3111,
+      onOpenSettings: vi.fn()
+    })
+
+    await waitFor(() => {
+      expect(release).not.toBeNull()
+    })
+
+    rerender({ stopToken: 1 })
+    await act(async () => {
+      release?.()
+      await Promise.resolve()
+    })
+
+    expect(octopus().terminal.create).not.toHaveBeenCalled()
+  })
+
+  // The output is why anyone is looking, and it has to survive the process
+  // that produced it.
+  it('keeps the output after the process ends on its own', async () => {
+    mountAndStart({
+      workspace: anna,
+      kind: 'setup',
+      scriptPath: SETUP_SCRIPT,
+      port: 3111,
+      onOpenSettings: vi.fn()
+    })
     await sessionsOpened(1)
 
     processExits(sessionId(1))
 
-    expect(screen.getByRole('button', { name: 'Rebuild' })).toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: 'Stop' })).not.toBeInTheDocument()
     expect(screen.queryByText(/Runs setup.sh in this workspace/)).not.toBeInTheDocument()
-    expect(octopus().terminal.dispose).not.toHaveBeenCalled()
   })
 
-  /*
-   * A build offers no Stop, which is the whole of what makes the two halves
-   * different rather than one component wearing two labels. A server is started
-   * and stopped for as long as the work lasts; a build is run, read, and run
-   * again — and stopping one half way is not what anybody reaches for.
-   */
-  it('offers a build no way to stop, only to run it again', async () => {
-    render(
-      <ScriptRunner
-        workspace={anna}
-        kind="setup"
-        scriptPath={SETUP_SCRIPT}
-        port={3111}
-        onOpenSettings={vi.fn()}
-      />
-    )
-    await userEvent.click(screen.getByRole('button', { name: 'Build' }))
-    await sessionsOpened(1)
-
-    expect(screen.queryByRole('button', { name: 'Stop' })).not.toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Rebuild' })).toBeInTheDocument()
-  })
-
-  /*
-   * Which leaves rebuilding as the way a run ends, so it has to actually end
-   * one: the old session is disposed and a new one opened, the same thing the
-   * server's Restart does.
-   */
-  it('ends the running build when it is rebuilt', async () => {
-    render(
-      <ScriptRunner
-        workspace={anna}
-        kind="setup"
-        scriptPath={SETUP_SCRIPT}
-        port={3111}
-        onOpenSettings={vi.fn()}
-      />
-    )
-    await userEvent.click(screen.getByRole('button', { name: 'Build' }))
-    await sessionsOpened(1)
-
-    await userEvent.click(screen.getByRole('button', { name: 'Rebuild' }))
-
-    await sessionsOpened(2)
-    expect(octopus().terminal.dispose).toHaveBeenCalledWith(sessionId(1))
-  })
-
-  it('starts a new session when restarted', async () => {
-    render(
-      <ScriptRunner
-        workspace={anna}
-        kind="run"
-        scriptPath={RUN_SCRIPT}
-        port={3111}
-        onOpenSettings={vi.fn()}
-      />
-    )
-    await userEvent.click(screen.getByRole('button', { name: 'Start' }))
-    await sessionsOpened(1)
-
-    await userEvent.click(screen.getByRole('button', { name: 'Restart' }))
-
-    await sessionsOpened(2)
-    await waitFor(() => {
-      expect(octopus().terminal.dispose).toHaveBeenCalledWith(sessionId(1))
+  // Beside a half that is going, so the header's own words stay free to say
+  // what pressing something would do rather than what is already happening.
+  it('says so while its script is running, and stops saying so when it ends', async () => {
+    mountAndStart({
+      workspace: anna,
+      kind: 'run',
+      scriptPath: RUN_SCRIPT,
+      port: 3111,
+      onOpenSettings: vi.fn()
     })
-    expect(octopus().terminal.dispose).not.toHaveBeenCalledWith(sessionId(2))
-  })
-  /*
-   * The env goes in before the build, not only when the workspace was made.
-   *
-   * A project that gained its env afterwards would otherwise build against
-   * nothing until the workspace was recreated — and the core never overwrites,
-   * so a `.env` edited inside the worktree survives this.
-   */
-  it('puts the project env in place before building', async () => {
-    render(
-      <ScriptRunner
-        workspace={anna}
-        kind="setup"
-        scriptPath={SETUP_SCRIPT}
-        port={3111}
-        onOpenSettings={vi.fn()}
-      />
-    )
+    await sessionsOpened(1)
 
-    await userEvent.click(screen.getByRole('button', { name: 'Build' }))
+    expect(await screen.findByText('running…')).toBeInTheDocument()
+
+    processExits(sessionId(1))
+
+    expect(screen.queryByText('running…')).not.toBeInTheDocument()
+  })
+
+  it('reports how the run ended to whatever sequenced it', async () => {
+    const onOutcome = vi.fn()
+    mountAndStart({
+      workspace: anna,
+      kind: 'setup',
+      scriptPath: SETUP_SCRIPT,
+      port: 3111,
+      onOpenSettings: vi.fn(),
+      onOutcome
+    })
+    await sessionsOpened(1)
+
+    processExits(sessionId(1))
+
+    expect(onOutcome).toHaveBeenCalledWith(true)
+  })
+
+  /*
+   * The env goes in before either script, not only when the workspace was made.
+   *
+   * A project that gained its env afterwards would otherwise run against
+   * nothing until the workspace was recreated, and the server is as likely to
+   * be the first thing started as the build.
+   */
+  it('puts the project env in place before running', async () => {
+    mountAndStart({
+      workspace: anna,
+      kind: 'setup',
+      scriptPath: SETUP_SCRIPT,
+      port: 3111,
+      onOpenSettings: vi.fn()
+    })
     await sessionsOpened(1)
 
     expect(octopus().workspaces.applyEnv).toHaveBeenCalledWith(anna.id)
   })
 
-  // Nothing makes a build come first: the server is as likely to be the first
-  // thing started, and a dev server is what reads the env in the first place.
-  it('puts the project env in place before starting the server too', async () => {
-    render(
-      <ScriptRunner
-        workspace={anna}
-        kind="run"
-        scriptPath={RUN_SCRIPT}
-        port={3111}
-        onOpenSettings={vi.fn()}
-      />
-    )
-
-    await userEvent.click(screen.getByRole('button', { name: 'Start' }))
+  it('puts it in place before the server too', async () => {
+    mountAndStart({
+      workspace: anna,
+      kind: 'run',
+      scriptPath: RUN_SCRIPT,
+      port: 3111,
+      onOpenSettings: vi.fn()
+    })
     await sessionsOpened(1)
 
     expect(octopus().workspaces.applyEnv).toHaveBeenCalledWith(anna.id)
@@ -301,25 +370,25 @@ describe('ScriptRunner', () => {
 
   // Starting anyway would fail further in, complaining about whatever the
   // missing value fed rather than about the env.
-  it('says so and does not build when the env cannot be written', async () => {
+  it('says so and starts nothing when the env cannot be written', async () => {
     vi.mocked(octopus().workspaces.applyEnv).mockResolvedValue({
       ok: false,
       error: 'Permission denied.'
     })
+    const onOutcome = vi.fn()
 
-    render(
-      <ScriptRunner
-        workspace={anna}
-        kind="setup"
-        scriptPath={SETUP_SCRIPT}
-        port={3111}
-        onOpenSettings={vi.fn()}
-      />
-    )
-
-    await userEvent.click(screen.getByRole('button', { name: 'Build' }))
+    mountAndStart({
+      workspace: anna,
+      kind: 'setup',
+      scriptPath: SETUP_SCRIPT,
+      port: 3111,
+      onOpenSettings: vi.fn(),
+      onOutcome
+    })
 
     expect(await screen.findByText(/Permission denied/)).toBeInTheDocument()
     expect(octopus().terminal.create).not.toHaveBeenCalled()
+    // A sequence waiting on this half would otherwise wait for ever.
+    expect(onOutcome).toHaveBeenCalledWith(false)
   })
 })

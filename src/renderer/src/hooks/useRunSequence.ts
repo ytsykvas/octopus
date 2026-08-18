@@ -21,9 +21,11 @@ export interface WorkspaceRun {
    */
   readonly build: number
   readonly server: number
+  /** Bumped to end whatever is running, build or server alike. */
+  readonly stop: number
 }
 
-const IDLE: WorkspaceRun = { stage: 'idle', build: 0, server: 0 }
+const IDLE: WorkspaceRun = { stage: 'idle', build: 0, server: 0, stop: 0 }
 
 export interface RunSequence {
   /** Where a workspace is; idle for one that has never been run. */
@@ -36,6 +38,15 @@ export interface RunSequence {
    * that is showing an invitation to write one rather than a runner.
    */
   readonly start: (workspaceId: string, withBuild: boolean) => void
+  /**
+   * Starts the server again without building.
+   *
+   * The common half of a restart: the code changed under a running server and
+   * it needs picking up, while nothing about the checkout did.
+   */
+  readonly restart: (workspaceId: string) => void
+  /** Ends whatever is running here. */
+  readonly stop: (workspaceId: string) => void
   /** A half's script ended, and whether it ended well. */
   readonly finished: (kind: ScriptKind, workspaceId: string, ok: boolean) => void
 }
@@ -67,13 +78,38 @@ export function useRunSequence(): RunSequence {
     })
   }, [])
 
+  /*
+   * Both act on a run that exists, and do nothing where none does.
+   *
+   * The controls that reach them are on screen only while a server is up.
+   * Inventing a run here would put a workspace into `serving` with nothing
+   * serving in it — a state the pane would then draw a Stop button for.
+   */
+  const restart = useCallback((workspaceId: string) => {
+    setRuns((current) => {
+      const run = current[workspaceId]
+      if (!run) return current
+
+      return { ...current, [workspaceId]: { ...run, stage: 'serving', server: run.server + 1 } }
+    })
+  }, [])
+
+  const stop = useCallback((workspaceId: string) => {
+    setRuns((current) => {
+      const run = current[workspaceId]
+      if (!run) return current
+
+      return { ...current, [workspaceId]: { ...run, stage: 'idle', stop: run.stop + 1 } }
+    })
+  }, [])
+
   const finished = useCallback((kind: ScriptKind, workspaceId: string, ok: boolean) => {
     setRuns((current) => {
       const run = current[workspaceId] ?? IDLE
 
-      // Only a run this sequence asked for advances it. Both halves keep their
-      // own buttons, and a build somebody ran by hand is not the first step of
-      // a sequence nobody began.
+      // Only a run this sequence asked for advances it. A half also reports the
+      // run its own start token began — a remount, a restart — and the outcome
+      // of one the sequence is not waiting on must not move it along.
       if (kind === 'setup' && run.stage === 'building') {
         return {
           ...current,
@@ -97,5 +133,5 @@ export function useRunSequence(): RunSequence {
     [runs]
   )
 
-  return { runOf, start, finished }
+  return { runOf, start, restart, stop, finished }
 }
