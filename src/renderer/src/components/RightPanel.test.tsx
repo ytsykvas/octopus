@@ -100,7 +100,9 @@ function renderPanel(overrides: Partial<Props> = {}): {
  * them says nothing without a stylesheet, and jsdom has none.
  */
 function shownTab(): HTMLElement {
-  const body = pane().querySelector<HTMLElement>('[aria-hidden="false"]')
+  // A direct child: the build half now marks its own folded body the same way,
+  // and a search through the whole pane would find that instead.
+  const body = pane().querySelector<HTMLElement>(':scope > [aria-hidden="false"]')
   if (!body) throw new Error('No tab body is showing')
 
   return body
@@ -117,6 +119,17 @@ const scriptsTab = (): HTMLElement => screen.getByRole('button', { name: 'Script
  * it means — `Run` alone matches twice, which is the point of the change.
  */
 const buildSection = (): HTMLElement => screen.getByRole('region', { name: 'Build' })
+
+/** The build half's own heading, which is the control that folds it. */
+const buildHeading = (): HTMLElement =>
+  within(buildSection()).getByRole('button', { name: 'Build' })
+
+/** What that control folds: everything under the heading. */
+function buildBody(): HTMLElement {
+  const body = buildSection().querySelector<HTMLElement>(':scope > [aria-hidden]')
+  if (!body) throw new Error('the build half has no body')
+  return body
+}
 const serverSection = (): HTMLElement => screen.getByRole('region', { name: 'Server' })
 
 function pane(): HTMLElement {
@@ -664,6 +677,66 @@ describe('RightPanel', () => {
 
   // The two script tabs are separate runs, so the one being watched must be
   // the one whose output is on screen.
+  it('folds the build half away and brings it back', async () => {
+    const user = userEvent.setup()
+    renderPanel({ workspaces: [anna], activeWorkspaceId: anna.id, scriptPaths: SCRIPTS })
+
+    await user.click(scriptsTab())
+    expect(buildHeading()).toHaveAttribute('aria-expanded', 'true')
+
+    await user.click(buildHeading())
+
+    expect(buildHeading()).toHaveAttribute('aria-expanded', 'false')
+    // Hidden rather than gone — the class says nothing without a stylesheet,
+    // and jsdom has none, so this is what "folded" looks like from here.
+    expect(buildBody()).toHaveAttribute('aria-hidden', 'true')
+
+    await user.click(buildHeading())
+
+    expect(buildHeading()).toHaveAttribute('aria-expanded', 'true')
+    expect(buildBody()).toHaveAttribute('aria-hidden', 'false')
+  })
+
+  /*
+   * The whole reason the fold is a class and not a conditional render.
+   * Unmounting the terminal is how Stop ends a run, so a fold that removed it
+   * would kill a `setup.sh` half way through and say nothing — the same
+   * mistake leaving the tab used to make.
+   */
+  it('leaves a running build alive while it is folded away', async () => {
+    const user = userEvent.setup()
+    renderPanel({ workspaces: [anna], activeWorkspaceId: anna.id, scriptPaths: SCRIPTS })
+
+    await user.click(scriptsTab())
+    await user.click(within(buildSection()).getByRole('button', { name: 'Run' }))
+    await waitFor(() => {
+      expect(octopus().terminal.create).toHaveBeenCalledTimes(1)
+    })
+
+    await user.click(buildHeading())
+    expect(octopus().terminal.dispose).not.toHaveBeenCalled()
+
+    // Unfolded, the run is still the one that was started — a fold that had
+    // ended it would offer to start again instead.
+    await user.click(buildHeading())
+    expect(within(buildSection()).getByRole('button', { name: 'Stop' })).toBeInTheDocument()
+    expect(octopus().terminal.create).toHaveBeenCalledTimes(1)
+  })
+
+  // A server runs for as long as the work does, so there is nothing to fold it
+  // out of the way for — and a control that folds away the thing being watched
+  // is one nobody asked for.
+  it('gives the server half nothing to fold', async () => {
+    const user = userEvent.setup()
+    renderPanel({ workspaces: [anna], activeWorkspaceId: anna.id, scriptPaths: SCRIPTS })
+
+    await user.click(scriptsTab())
+
+    expect(
+      within(serverSection()).queryByRole('button', { name: 'Server' })
+    ).not.toBeInTheDocument()
+  })
+
   /*
    * They were two tabs and are now two halves of one, which is exactly the
    * arrangement that could quietly merge them: one `WorkspaceScripts` drawn

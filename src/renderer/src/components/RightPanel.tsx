@@ -1,3 +1,4 @@
+import { ChevronDown, ChevronRight } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
@@ -146,6 +147,16 @@ export function RightPanel({
   const [dragWidth, setDragWidth] = useState<number | null>(null)
   const [windowWidth, setWindowWidth] = useState(() => window.innerWidth)
   const [minWidth, setMinWidth] = useState(MIN_WIDTH)
+  /*
+   * Whether the build half is open.
+   *
+   * Not stored, unlike the tab beside it. Which tab is showing is a standing
+   * preference — somebody who works with the server log open wants it back on
+   * every launch — and this is a mood about the workspace in front of you: the
+   * build was read, so it is out of the way until the next one.
+   */
+  const [buildOpen, setBuildOpen] = useState(true)
+
   const tabs = useRef<HTMLDivElement>(null)
 
   /*
@@ -365,18 +376,52 @@ export function RightPanel({
             screen at once now, so "the Run button" is ambiguous to anything
             reading the pane aloud — and to anything testing it. The heading is
             `aria-hidden` because the region already carries the same word. */}
-        <section aria-label={t('scripts.build')} className="flex min-h-0 flex-1 flex-col">
-          <p aria-hidden className="section-label border-line shrink-0 border-b px-3 py-1.5">
+        {/* The build half folds away and the server half does not, which is
+            not an oversight: a build is run once when a workspace is made and
+            then read, while a server runs for as long as the work does. Folding
+            the one that is finished is what gives the one that is still going
+            the whole pane.
+
+            Folded by a class, never by unmounting. Unmounting the terminal is
+            how Stop ends a run — the comment above says why at length — so a
+            fold that removed it would kill a `setup.sh` half way through
+            without saying so. */}
+        <section
+          aria-label={t('scripts.build')}
+          className={buildOpen ? 'flex min-h-0 flex-1 flex-col' : 'shrink-0'}
+        >
+          <button
+            type="button"
+            onClick={() => {
+              setBuildOpen(!buildOpen)
+            }}
+            aria-expanded={buildOpen}
+            className="focus-ring section-label border-line hover:bg-muted flex w-full shrink-0 items-center gap-1.5 border-b px-3 py-1.5 text-left"
+          >
+            {buildOpen ? (
+              <ChevronDown aria-hidden size={12} className="text-ink-faint shrink-0" />
+            ) : (
+              <ChevronRight aria-hidden size={12} className="text-ink-faint shrink-0" />
+            )}
             {t('scripts.build')}
-          </p>
-          <WorkspaceScripts
-            workspaces={scriptable}
-            activeId={activeWorkspaceId}
-            kind="setup"
-            scriptPath={scriptPaths.setup}
-            visible={tab === 'scripts'}
-            onOpenSettings={onEditScripts}
-          />
+          </button>
+
+          {/* `aria-hidden` beside the class, exactly as the tabs above do it:
+              the class says nothing to a screen reader, and nothing at all
+              without a stylesheet — which is also the only handle a test has. */}
+          <div
+            aria-hidden={!buildOpen}
+            className={buildOpen ? 'flex min-h-0 flex-1 flex-col' : 'hidden'}
+          >
+            <WorkspaceScripts
+              workspaces={scriptable}
+              activeId={activeWorkspaceId}
+              kind="setup"
+              scriptPath={scriptPaths.setup}
+              visible={tab === 'scripts'}
+              onOpenSettings={onEditScripts}
+            />
+          </div>
         </section>
 
         <section

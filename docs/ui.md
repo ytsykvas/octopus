@@ -530,6 +530,18 @@ together, so "the Run button" is ambiguous to anything reading the pane aloud �
 and each half keeps its own `min-h-0`, because a terminal measures itself against
 the box it is in and one never told it may be shorter grows instead of scrolling.
 
+**The build half folds away; the server half does not.** A build runs once when
+a workspace is made and is then read; a server runs for as long as the work
+does. Folding the finished one is what gives the one still going the whole pane,
+and a control that folded away the thing being watched would be one nobody
+asked for.
+
+It folds by a class and an `aria-hidden`, never by unmounting — unmounting the
+terminal is how Stop ends a run, so a fold that removed it would kill a
+`setup.sh` half way through without saying so. Whether it is folded is not
+stored, unlike the tab beside it: which tab is showing is a standing preference,
+and this is a mood about the workspace in front of you.
+
 **The pull request tab is the one place that reaches GitHub for something other
 than cloning.** It names the branch, and then either reports the request there
 is — number, title, a link out — or offers the form that opens one. Two things
