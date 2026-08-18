@@ -192,6 +192,9 @@ export const en = {
     editInstructions: 'Instructions for a new PR',
     ask: 'Ask the agent to describe it',
     noConversation: 'Open a conversation in this workspace first.',
+    /* Emptying the instruction is how a project says it adds nothing, so this
+       is a state somebody chose rather than one that went wrong. */
+    noInstruction: 'This project adds nothing to a description. Write an instruction first.',
     branch: 'Branch',
     nothingToOpen:
       'Nothing to open yet. This branch has no commits that {{base}} does not — make one first.',

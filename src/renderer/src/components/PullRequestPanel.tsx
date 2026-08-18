@@ -1,5 +1,5 @@
 import { ExternalLink, GitPullRequest } from 'lucide-react'
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import { shortBranchName } from '@core/branches.js'
@@ -57,6 +57,36 @@ export function PullRequestPanel({
   const describeFailure = useErrorMessage()
   const { view, loading, error, creating, create } = usePullRequest(workspace?.id ?? null, visible)
 
+  /*
+   * The instruction this workspace would send, read when the tab draws.
+   *
+   * Emptying a project's is a decision — it says the project adds nothing — and
+   * `effectiveInstruction` answers with that empty string. Sent, it fails
+   * validation as a message, and the reader gets a zod complaint about a
+   * message in a pane they were using to talk about instructions. Reading it
+   * here turns a failed press into a state the button can explain first.
+   */
+  const [instruction, setInstruction] = useState<string | null>(null)
+
+  useEffect(() => {
+    if (!visible || !workspace) return
+
+    const controller = new AbortController()
+
+    void (async () => {
+      const result = await window.octopus.workspaces.instruction(workspace.id, 'pullRequest')
+      if (controller.signal.aborted) return
+
+      // A read that failed stays null — unknown, not empty. The press then goes
+      // ahead and reports the real reason rather than this one guessing at it.
+      setInstruction(result.ok ? result.value : null)
+    })()
+
+    return () => {
+      controller.abort()
+    }
+  }, [visible, workspace])
+
   const [title, setTitle] = useState('')
   const [body, setBody] = useState('')
   const [draft, setDraft] = useState(false)
@@ -64,6 +94,21 @@ export function PullRequestPanel({
   if (!workspace) return <Notice>{t('pullRequest.noWorkspace')}</Notice>
   if (error !== null) return <Notice tone="danger">{error}</Notice>
   if (loading || !view) return <Notice>{t('pullRequest.loading')}</Notice>
+
+  /*
+   * What the ask button can do, or why it cannot.
+   *
+   * Two reasons now, and each is a state somebody chose rather than a failure:
+   * no conversation to send into, and a project that says it adds nothing. The
+   * conversation rides along so the enabled branch needs no second check for
+   * something already decided here.
+   */
+  const ask =
+    chatId === null
+      ? { ready: false as const, reason: 'pullRequest.noConversation' as const }
+      : instruction !== null && instruction.trim() === ''
+        ? { ready: false as const, reason: 'pullRequest.noInstruction' as const }
+        : { ready: true as const, chatId }
 
   const existing = view.request
 
@@ -88,8 +133,8 @@ export function PullRequestPanel({
         {/* Drawn twice rather than once with a guard inside the handler: the
             button is disabled without a conversation, so that guard could never
             be false, and a check nothing can reach is a claim nothing tests. */}
-        {chatId === null ? (
-          <Button variant="quiet" disabled title={t('pullRequest.noConversation')}>
+        {!ask.ready ? (
+          <Button variant="quiet" disabled title={t(ask.reason)}>
             {t('pullRequest.ask')}
           </Button>
         ) : (
@@ -97,7 +142,7 @@ export function PullRequestPanel({
             variant="quiet"
             onClick={() => {
               void (async () => {
-                const failure = await askForDescription(workspace.id, chatId)
+                const failure = await askForDescription(workspace.id, ask.chatId)
                 if (failure !== null) onError(describeFailure(failure))
               })()
             }}

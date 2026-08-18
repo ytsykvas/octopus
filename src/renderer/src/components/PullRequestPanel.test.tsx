@@ -110,6 +110,70 @@ describe('the pull request tab', () => {
   })
 
   // A conversation started by a button pressed for something else is a surprise.
+  /*
+   * Emptying a project's instruction is how it says it adds nothing — a
+   * decision, not a mistake. Sent, that empty string fails validation as a
+   * message, and the reader gets a zod complaint about a message in a pane they
+   * were using to talk about instructions.
+   */
+  // The tab was left while the read was in flight; its answer is about a pane
+  // that is no longer there.
+  it('drops an instruction that arrives after the tab has gone', async () => {
+    const gate: { settle: ((value: { ok: true; value: string }) => void) | null } = { settle: null }
+    vi.mocked(octopus().workspaces.instruction).mockReturnValue(
+      new Promise((resolve) => {
+        gate.settle = resolve
+      })
+    )
+    answer(view())
+
+    const { unmount } = render(
+      <PullRequestPanel
+        workspace={anna}
+        visible
+        chatId="chat-1"
+        onEditInstructions={vi.fn()}
+        onError={vi.fn()}
+      />
+    )
+
+    await waitFor(() => {
+      expect(gate.settle).not.toBeNull()
+    })
+    unmount()
+
+    gate.settle?.({ ok: true, value: '' })
+    await waitFor(() => {
+      expect(octopus().chats.send).not.toHaveBeenCalled()
+    })
+  })
+
+  it('will not ask when the project says it adds nothing', async () => {
+    vi.mocked(octopus().workspaces.instruction).mockResolvedValue({ ok: true, value: '   \n' })
+    answer(view())
+    renderPanel()
+
+    const button = await screen.findByRole('button', { name: 'Ask the agent to describe it' })
+    await waitFor(() => {
+      expect(button).toBeDisabled()
+    })
+    expect(button).toHaveAttribute(
+      'title',
+      'This project adds nothing to a description. Write an instruction first.'
+    )
+    expect(octopus().chats.send).not.toHaveBeenCalled()
+  })
+
+  it('asks once there is an instruction to send', async () => {
+    answer(view())
+    renderPanel()
+
+    const button = await screen.findByRole('button', { name: 'Ask the agent to describe it' })
+    await waitFor(() => {
+      expect(button).toBeEnabled()
+    })
+  })
+
   it('will not ask when there is no conversation to ask in', async () => {
     answer(view())
     renderPanel({ chatId: null })
