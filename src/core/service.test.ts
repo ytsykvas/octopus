@@ -92,14 +92,28 @@ describe('GitHub projects', () => {
   const repository: RemoteRepository = {
     name: 'planner',
     nameWithOwner: 'ytsykvas/planner',
+    owner: { login: 'ytsykvas' },
     description: null,
     isPrivate: true,
     updatedAt: '2026-08-01T00:00:00Z',
     defaultBranchRef: { name: 'main' }
   }
 
+  /** The GraphQL reply `gh api graphql` prints for that one repository. */
+  const reply = JSON.stringify({
+    data: {
+      viewer: {
+        login: 'ytsykvas',
+        repositories: {
+          pageInfo: { hasNextPage: false, endCursor: null },
+          nodes: [{ ...repository, isArchived: false, viewerPermission: 'ADMIN' }]
+        }
+      }
+    }
+  })
+
   it('lists what gh reports', async () => {
-    const commandExec: CommandExec = () => Promise.resolve(JSON.stringify([repository]))
+    const commandExec: CommandExec = () => Promise.resolve(reply)
     const withGitHub = await createService({ ...paths(dir), commandExec })
 
     await expect(withGitHub.listRemoteRepositories()).resolves.toHaveLength(1)
@@ -151,17 +165,17 @@ describe('GitHub projects', () => {
      * in four on one bad afternoon, none of them caused by anyone's change.
      * A gate that goes red on its own costs more than the test is worth.
      *
-     * The fake refuses anything but `repo list`, so the assertion below covers
-     * the whole chain: no executor supplied, `defaultExec` used, a binary
-     * called `gh` run, asked for the repository list, its answer parsed.
+     * The fake refuses anything but `api graphql`, so the assertion below
+     * covers the whole chain: no executor supplied, `defaultExec` used, a
+     * binary called `gh` run, asked for the repository list, its answer parsed.
      */
     const binDirectory = join(dir, 'bin')
     const answer = join(dir, 'repositories.json')
     await mkdir(binDirectory, { recursive: true })
-    await writeFile(answer, JSON.stringify([repository]), 'utf8')
+    await writeFile(answer, reply, 'utf8')
     await writeFile(
       join(binDirectory, 'gh'),
-      `#!/bin/sh\n[ "$1" = repo ] && [ "$2" = list ] || exit 1\ncat '${answer}'\n`,
+      `#!/bin/sh\n[ "$1" = api ] && [ "$2" = graphql ] || exit 1\ncat '${answer}'\n`,
       'utf8'
     )
     await chmod(join(binDirectory, 'gh'), 0o755)

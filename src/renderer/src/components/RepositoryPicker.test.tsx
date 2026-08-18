@@ -15,6 +15,7 @@ function repository(overrides: Partial<RemoteRepository> = {}): RemoteRepository
   return {
     name: 'planner',
     nameWithOwner: 'ytsykvas/planner',
+    owner: { login: 'ytsykvas' },
     description: 'Weekly planning',
     isPrivate: false,
     updatedAt: '2026-08-01T00:00:00.000Z',
@@ -117,6 +118,69 @@ describe('RepositoryPicker', () => {
     expect(await screen.findByText('ytsykvas/planner')).toBeInTheDocument()
     expect(screen.getByText('ytsykvas/ledger')).toBeInTheDocument()
     expect(screen.getByText('Weekly planning')).toBeInTheDocument()
+  })
+
+  /*
+   * The reason organisations reached this dialog at all.
+   *
+   * With a work organisation in it the list is several times longer, and its
+   * own name is the only thing anybody scans for.
+   */
+  it('puts each repository under a heading naming its owner', async () => {
+    offer(
+      repository(),
+      repository({
+        name: 'planner',
+        nameWithOwner: 'Hylab-Media/planner',
+        owner: { login: 'Hylab-Media' }
+      })
+    )
+    await renderPicker()
+
+    await screen.findByText('ytsykvas/planner')
+
+    const work = screen.getByRole('region', { name: 'Hylab-Media' })
+    expect(within(work).getByText('Hylab-Media/planner')).toBeInTheDocument()
+    expect(within(work).queryByText('ytsykvas/planner')).not.toBeInTheDocument()
+  })
+
+  // Core decides the order; the picker groups in the order it was handed, so
+  // one question has one answer rather than two that can drift.
+  it('keeps the order the account was given, its own owner first', async () => {
+    offer(
+      repository(),
+      repository({
+        name: 'esl',
+        nameWithOwner: 'Hylab-Media/esl',
+        owner: { login: 'Hylab-Media' }
+      })
+    )
+    await renderPicker()
+
+    await screen.findByText('ytsykvas/planner')
+
+    // Level 3: the dialog's own title is a heading too, and it is not a group.
+    const headings = screen.getAllByRole('heading', { level: 3 }).map((item) => item.textContent)
+    expect(headings).toEqual(['ytsykvas', 'Hylab-Media'])
+  })
+
+  it('drops a group the search empties', async () => {
+    offer(
+      repository(),
+      repository({
+        name: 'esl',
+        nameWithOwner: 'Hylab-Media/esl',
+        owner: { login: 'Hylab-Media' }
+      })
+    )
+    const user = userEvent.setup()
+    await renderPicker()
+    await screen.findByText('ytsykvas/planner')
+
+    await user.type(screen.getByRole('searchbox'), 'Hylab')
+
+    expect(screen.getByRole('region', { name: 'Hylab-Media' })).toBeInTheDocument()
+    expect(screen.queryByRole('region', { name: 'ytsykvas' })).not.toBeInTheDocument()
   })
 
   it('marks a private repository as private', async () => {

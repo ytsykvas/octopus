@@ -201,6 +201,7 @@ async function addProject(name = 'planner'): Promise<string> {
 const REPOSITORY: RemoteRepository = {
   name: 'planner',
   nameWithOwner: 'ytsykvas/planner',
+  owner: { login: 'ytsykvas' },
   description: null,
   isPrivate: false,
   updatedAt: '2026-08-08T00:00:00Z',
@@ -616,7 +617,18 @@ describe('reads that forward to the service', () => {
   })
 
   it('lists the repositories gh reports', async () => {
-    await useService({ commandExec: () => Promise.resolve(JSON.stringify([REPOSITORY])) })
+    const reply = JSON.stringify({
+      data: {
+        viewer: {
+          login: 'ytsykvas',
+          repositories: {
+            pageInfo: { hasNextPage: false, endCursor: null },
+            nodes: [{ ...REPOSITORY, isArchived: false, viewerPermission: 'ADMIN' }]
+          }
+        }
+      }
+    })
+    await useService({ commandExec: () => Promise.resolve(reply) })
 
     await expect(invoke('projects:listRemote')).resolves.toMatchObject({
       ok: true,

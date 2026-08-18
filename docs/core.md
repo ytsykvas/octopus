@@ -50,7 +50,7 @@ Nothing but zod behind them, so a **value** can cross into the window.
 
 | Module                                           | What it decides                                                                                                   |
 | ------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------- |
-| [`github.ts`](../src/core/github.ts)             | listing and cloning through the `gh` CLI                                                                          |
+| [`github.ts`](../src/core/github.ts)             | which repositories the account can push to, and cloning one, through the `gh` CLI                                 |
 | [`pullRequests.ts`](../src/core/pullRequests.ts) | a branch as a pull request: reading one, pushing, opening one through `gh`                                        |
 | [`accounts.ts`](../src/core/accounts.ts)         | whether `claude` and `gh` are signed in                                                                           |
 | [`terminal.ts`](../src/core/terminal.ts)         | what a pty should run, where, with which environment                                                              |

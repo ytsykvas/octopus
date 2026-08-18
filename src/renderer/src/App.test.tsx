@@ -76,6 +76,7 @@ const LEDGER = project({
 const LEDGER_REPOSITORY: RemoteRepository = {
   name: 'ledger',
   nameWithOwner: 'someone/ledger',
+  owner: { login: 'someone' },
   description: 'Double-entry bookkeeping',
   isPrivate: false,
   updatedAt: '2026-08-01T00:00:00.000Z'

@@ -893,6 +893,17 @@ telling a first-time user to add a repository in the left panel while having
 room for the button that adds one — an empty pane is usually a pane with space
 for the way out of it.
 
+**The repository picker groups by owner**, the account's own repositories first
+and then each organisation. Before organisations reached this dialog the list
+was one flat run of names; with a work organisation in it the list is several
+times longer, and its own name is the only thing anybody scans for. The order
+comes from core, and the picker groups in the order it was handed — one question
+with one answer rather than two that can drift.
+
+It offers only repositories the account can **push to**. octopus works by
+pushing a branch and opening a pull request from it, so a repository that can
+only be read looks like a working choice right up until the first push fails.
+
 The same goes for a message that names somewhere else. "Check the account in
 Settings" stood in the repository picker for a while with no way to reach
 Settings, which leaves the reader to close the dialog and go hunting. If a

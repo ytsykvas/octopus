@@ -36,15 +36,15 @@ The only channel outside this shape is `theme:get`, which cannot fail.
 
 ### Projects
 
-| Channel                  | Arguments     | Notes                                                    |
-| ------------------------ | ------------- | -------------------------------------------------------- |
-| `projects:list`          | —             |                                                          |
-| `projects:add`           | —             | opens a directory picker; `null` means cancelled         |
-| `projects:addFromGitHub` | `repository`  | asks for a destination the first time, then remembers it |
-| `projects:update`        | `id`, `patch` | patch validated with `ProjectPatchSchema`                |
-| `projects:remove`        | `id`          | deletes the workspaces and their branches too            |
-| `projects:branches`      | `id`          | remote branches, ordered with main/master/develop first  |
-| `projects:listRemote`    | —             | through the `gh` CLI                                     |
+| Channel                  | Arguments     | Notes                                                                                   |
+| ------------------------ | ------------- | --------------------------------------------------------------------------------------- |
+| `projects:list`          | —             |                                                                                         |
+| `projects:add`           | —             | opens a directory picker; `null` means cancelled                                        |
+| `projects:addFromGitHub` | `repository`  | asks for a destination the first time, then remembers it                                |
+| `projects:update`        | `id`, `patch` | patch validated with `ProjectPatchSchema`                                               |
+| `projects:remove`        | `id`          | deletes the workspaces and their branches too                                           |
+| `projects:branches`      | `id`          | remote branches, ordered with main/master/develop first                                 |
+| `projects:listRemote`    | —             | what the account can push to, personal and organisation alike, through `gh api graphql` |
 
 ### Scripts and instructions
 

@@ -81,6 +81,25 @@ export function RepositoryPicker({
     )
   }, [repositories, query])
 
+  /*
+   * The matches, owner by owner.
+   *
+   * First-seen order, not sorted here: core already put the account's own
+   * repositories first and the organisations after them, and re-deciding that
+   * in the renderer would be two answers to one question.
+   */
+  const groups = useMemo(() => {
+    const byOwner = new Map<string, RemoteRepository[]>()
+
+    for (const repository of matches) {
+      const owner = byOwner.get(repository.owner.login)
+      if (owner) owner.push(repository)
+      else byOwner.set(repository.owner.login, [repository])
+    }
+
+    return [...byOwner]
+  }, [matches])
+
   const add = async (repository: RemoteRepository): Promise<void> => {
     setCloning(repository.nameWithOwner)
     setError(null)
@@ -179,18 +198,28 @@ export function RepositoryPicker({
           <p className="text-ink-faint px-2">{t('repositories.noMatch', { query })}</p>
         )}
 
-        <ul className="space-y-px">
-          {matches.map((repository) => (
-            <li key={repository.nameWithOwner}>
-              <RepositoryRow
-                repository={repository}
-                busy={cloning === repository.nameWithOwner}
-                disabled={cloning !== null}
-                onAdd={() => void add(repository)}
-              />
-            </li>
-          ))}
-        </ul>
+        {/* A heading each rather than one flat list. With an organisation in
+            it the list is several times longer, and its own name is the only
+            thing anybody scans for. The login is a name, so it is not
+            translated and needs no string of its own. */}
+        {groups.map(([owner, repositories]) => (
+          <section key={owner} aria-label={owner}>
+            <h3 className="section-label text-ink-faint px-2 py-1.5">{owner}</h3>
+
+            <ul className="space-y-px">
+              {repositories.map((repository) => (
+                <li key={repository.nameWithOwner}>
+                  <RepositoryRow
+                    repository={repository}
+                    busy={cloning === repository.nameWithOwner}
+                    disabled={cloning !== null}
+                    onAdd={() => void add(repository)}
+                  />
+                </li>
+              ))}
+            </ul>
+          </section>
+        ))}
       </div>
     </Modal>
   )
