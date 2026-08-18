@@ -9,6 +9,7 @@ import {
   TriangleAlert,
   Wrench
 } from 'lucide-react'
+import { useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import { type AgentEvent, type ChangeContext, type TurnOutcome, turnOutcome } from '@core/events.js'
@@ -78,16 +79,27 @@ export function ChatLog({
 }: ChatLogProps): React.JSX.Element {
   const { t } = useTranslation()
   const streamingAnything = streaming.text !== '' || streaming.thinking !== ''
+
+  /*
+   * Both walks are held against `entries` rather than run on every render.
+   *
+   * A `text_delta` re-renders this pane, and grouping re-runs the line diff for
+   * every edit in the conversation: an `Edit` replacing a 400-line block is a
+   * 160,000-cell table, rebuilt on every chunk of the answer being typed out.
+   * The streamed text is its own state, so keyed this way the work happens when
+   * the log actually grows and not while it is being read.
+   */
   // Gathered once for the whole log: an answer is recorded as its own event, so
   // it sits further down than the question whose card draws it.
-  const answers = answersByRequest(entries)
+  const answers = useMemo(() => answersByRequest(entries), [entries])
+  const blocks = useMemo(() => groupToolRuns(entries), [entries])
 
   return (
     <div className="mx-auto flex w-full max-w-6xl flex-col gap-3 px-6 py-5">
       {/* The position is the key because the log is append-only: nothing is
           ever reordered or removed, so where a block starts identifies it for
           its whole life. Two identical rows have nothing else to tell apart. */}
-      {groupToolRuns(entries).map((block) => {
+      {blocks.map((block) => {
         if (block.kind === 'tools') return <ToolRun key={block.at} entries={block.entries} />
 
         if (block.kind === 'change') {

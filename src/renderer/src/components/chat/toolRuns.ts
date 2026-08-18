@@ -71,14 +71,28 @@ export function answersByRequest(
  * that answers it. Counting either as a step would put a number on the fold
  * that no row inside it accounts for.
  */
-function isToolRow(entry: ChatEntry): boolean {
+function isToolRow(entry: ChatEntry, change: Change | null = changeIn(entry)): boolean {
   return (
     entry.role === 'agent' &&
     entry.event.type === 'tool_use' &&
     readPlan(entry.event.name, entry.event.input) === null &&
     readQuestions(entry.event.name, entry.event.input) === null &&
-    readChange(entry.event.name, entry.event.input) === null
+    change === null
   )
+}
+
+/**
+ * What an entry changed, when it is a tool call at all.
+ *
+ * Taken as a parameter above rather than read twice: reading it runs a line
+ * diff, and the walk below needs the same answer to decide whether the entry is
+ * an ordinary tool row *and* to build the block if it is not. `toolCount` has
+ * no such answer to hand, which is what the default is for.
+ */
+function changeIn(entry: ChatEntry): Change | null {
+  return entry.role === 'agent' && entry.event.type === 'tool_use'
+    ? readChange(entry.event.name, entry.event.input)
+    : null
 }
 
 /**
@@ -180,18 +194,15 @@ export function groupToolRuns(entries: readonly ChatEntry[]): LogBlock[] {
       nothingDrawnYet = false
     }
 
-    if (isToolRow(entry) || (run.length > 0 && drawsNothing(entry))) {
+    const change = changeIn(entry)
+
+    if (isToolRow(entry, change) || (run.length > 0 && drawsNothing(entry))) {
       if (run.length === 0) runAt = index
       run.push(entry)
       continue
     }
 
     flush()
-
-    const change =
-      entry.role === 'agent' && entry.event.type === 'tool_use'
-        ? readChange(entry.event.name, entry.event.input)
-        : null
 
     if (change && entry.role === 'agent' && entry.event.type === 'tool_use') {
       blocks.push({
