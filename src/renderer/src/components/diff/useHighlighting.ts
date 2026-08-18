@@ -8,7 +8,20 @@ import { assignTokens, sideTexts } from './sides.js'
 
 export type Highlighting = ReadonlyMap<DiffLine, readonly Token[]>
 
-const NOTHING: Highlighting = new Map()
+/**
+ * The colours of every file, each file's under its own path.
+ *
+ * Nested rather than one map of every line, so a file's colours have an
+ * identity of their own. They arrive one file at a time, and a single map meant
+ * every arrival handed all forty files a value they had to treat as new — which
+ * is a redraw of the whole pane per file coloured.
+ */
+export type HighlightingByFile = ReadonlyMap<string, Highlighting>
+
+/** What a file with no colours gets, shared so it stays the same object. */
+export const NO_TOKENS: Highlighting = new Map()
+
+const NOTHING: HighlightingByFile = new Map()
 
 /**
  * Past this, a line is not code anyone is reading.
@@ -38,8 +51,8 @@ function drawableAsCode(
  * change never holds a frame. The core has already bounded how much can arrive
  * here, so there is no second budget to keep.
  */
-export function useHighlighting(diff: WorkspaceDiff | null): Highlighting {
-  const [tokens, setTokens] = useState<Highlighting>(NOTHING)
+export function useHighlighting(diff: WorkspaceDiff | null): HighlightingByFile {
+  const [tokens, setTokens] = useState<HighlightingByFile>(NOTHING)
 
   useEffect(() => {
     if (!diff) return
@@ -48,7 +61,7 @@ export function useHighlighting(diff: WorkspaceDiff | null): Highlighting {
     // `useSessionUsage` already guard their reads: a flag assigned only in the
     // cleanup reads as a constant to the type checker inside the loop.
     const controller = new AbortController()
-    const collected = new Map<DiffLine, readonly Token[]>()
+    const collected = new Map<string, Highlighting>()
 
     void (async () => {
       for (const file of diff.files) {
@@ -66,12 +79,12 @@ export function useHighlighting(diff: WorkspaceDiff | null): Highlighting {
         // the diff can have been replaced while this was running.
         if (controller.signal.aborted) return
 
-        for (const [line, lineTokens] of assignTokens(file.hunks, oldTokens, currentTokens)) {
-          collected.set(line, lineTokens)
-        }
+        collected.set(file.path, assignTokens(file.hunks, oldTokens, currentTokens))
 
-        // A fresh map each time: React compares by identity, and mutating the
-        // one already on screen would colour nothing until the next file.
+        // A fresh outer map each time: React compares by identity, and mutating
+        // the one already on screen would colour nothing until the next file.
+        // The inner maps are left alone, which is what lets the files that were
+        // already coloured skip the redraw.
         setTokens(new Map(collected))
       }
     })()

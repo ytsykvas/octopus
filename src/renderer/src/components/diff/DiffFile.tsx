@@ -6,7 +6,7 @@ import {
   MoreHorizontal,
   TriangleAlert
 } from 'lucide-react'
-import { useEffect, useState } from 'react'
+import { memo, useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import type { FileDiff, FileStatus } from '@core/diff.js'
@@ -81,7 +81,14 @@ interface DiffFileProps {
   readonly view: DiffView
   readonly tokens: Highlighting
   readonly comments: CommentSurface
-  readonly onToggle: () => void
+  /**
+   * Folds this file away, or opens it.
+   *
+   * Takes the path and the state to move to rather than closing over them, so
+   * one function serves every row: a handler built per file would change
+   * identity on every render and leave `memo` below nothing to compare.
+   */
+  readonly onToggle: (path: string, collapsed: boolean) => void
   readonly onOpen: (path: string) => void
 }
 
@@ -92,8 +99,20 @@ interface DiffFileProps {
  * scrolls and the file being read always names itself — the behaviour a long
  * review depends on, and one the browser gives for nothing as long as no
  * ancestor between here and the scroller hides its overflow.
+ *
+ * Memoised, which is the one thing standing between this pane and being
+ * pleasant on a large change. Colours arrive a file at a time and the pane's
+ * width changes on every pointer move of a drag; without this, each of those
+ * redrew every file, every hunk and every row. That was waste while the diff
+ * was only read — and it misbehaves now that a note covers a selection, because
+ * a redraw drops the passage the reader was dragging over and takes the button
+ * that acts on it with them.
+ *
+ * It only works while every prop keeps its identity between renders, which is
+ * what `DiffPanel` goes to some trouble over. A handler rebuilt per render
+ * would quietly turn this back into what it was.
  */
-export function DiffFile({
+export const DiffFile = memo(function DiffFile({
   file,
   collapsed,
   view,
@@ -139,7 +158,9 @@ export function DiffFile({
       <div className="bg-surface border-line sticky top-0 z-10 flex items-center gap-2 border-b px-2 py-1.5">
         <button
           type="button"
-          onClick={onToggle}
+          onClick={() => {
+            onToggle(file.path, !collapsed)
+          }}
           aria-expanded={!collapsed}
           // The path rather than the whole header: what is drawn inside is a
           // status letter and two counts that read as noise when spoken one
@@ -225,7 +246,7 @@ export function DiffFile({
       {!collapsed && <DiffBody file={file} view={view} tokens={tokens} comments={comments} />}
     </div>
   )
-}
+})
 
 function DiffBody({
   file,

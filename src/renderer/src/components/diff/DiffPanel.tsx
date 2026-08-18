@@ -6,7 +6,7 @@ import {
   RefreshCw,
   Rows3
 } from 'lucide-react'
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import type { FileDiff } from '@core/diff.js'
@@ -20,7 +20,7 @@ import { DiffFile } from './DiffFile.js'
 import type { DiffView } from './DiffHunk.js'
 import { MIN_SPLIT_COLUMNS, splitThreshold } from './measure.js'
 import { lineAddress, selectionAnchor } from './selectionAnchor.js'
-import { useHighlighting } from './useHighlighting.js'
+import { NO_TOKENS, useHighlighting } from './useHighlighting.js'
 
 /**
  * A file this big starts collapsed.
@@ -148,6 +148,64 @@ export function DiffPanel({
     }
   }, [diff])
 
+  /*
+   * The three things a file row is handed that are not plain data.
+   *
+   * Built here, above the guards, and held steady across renders. `DiffFile` is
+   * memoised — see the comment on it — and memoisation compares props by
+   * identity, so a handler rebuilt each render would defeat it entirely and put
+   * the whole pane back to redrawing on every colour and every pointer move of
+   * a drag.
+   *
+   * That is also why they are no longer written below the guards, where a
+   * workspace and a diff are known to exist. A hook cannot go there.
+   */
+  const toggleFile = useCallback((path: string, collapsed: boolean) => {
+    setChoices((current) => new Map(current).set(path, collapsed))
+  }, [])
+
+  /*
+   * Which workspace the rows belong to, kept where a steady handler can read it.
+   *
+   * `openFile` must not close over the workspace: it would then change with it,
+   * which is right, and with everything else that renders this pane, which is
+   * not. The guards below are what decide whether any row is drawn, so by the
+   * time a click arrives this has been set.
+   */
+  const openIn = useRef('')
+  useEffect(() => {
+    openIn.current = workspace?.id ?? ''
+  }, [workspace])
+
+  const openFile = useCallback(
+    (path: string) => {
+      void (async () => {
+        const result = await window.octopus.files.open(openIn.current, path)
+        // The main process goes to the trouble of reporting what the system
+        // said; throwing that away leaves a click that opened nothing looking
+        // like one that worked (§13).
+        if (!result.ok) onError(describeFailure(result))
+      })()
+    },
+    [onError, describeFailure]
+  )
+
+  const { add, remove, pending } = comments
+  const surface = useMemo(
+    () => ({
+      pending,
+      editing,
+      onEdit: setEditing,
+      // The quote is put together here rather than in the row: a note may cover
+      // more lines than the row it is shown against, and this is what holds them.
+      onSave: (anchor: CommentAnchor, text: string) => {
+        add({ ...anchor, code: quote(lines, anchor), text })
+      },
+      onRemove: remove
+    }),
+    [pending, editing, add, remove, lines]
+  )
+
   if ((workspace?.id ?? null) !== shownId) {
     setShownId(workspace?.id ?? null)
     setChoices(new Map())
@@ -167,28 +225,6 @@ export function DiffPanel({
 
   const setAll = (collapsed: boolean): void => {
     setChoices(new Map(diff.files.map((file) => [file.path, collapsed])))
-  }
-
-  const openFile = (path: string): void => {
-    void (async () => {
-      const result = await window.octopus.files.open(workspace.id, path)
-      // The main process goes to the trouble of reporting what the system said;
-      // throwing that away leaves a click that opened nothing looking like one
-      // that worked (§13).
-      if (!result.ok) onError(describeFailure(result))
-    })()
-  }
-
-  const surface = {
-    pending: comments.pending,
-    editing,
-    onEdit: setEditing,
-    // The quote is put together here rather than in the row: a note may cover
-    // more lines than the row it is shown against, and this is what holds them.
-    onSave: (anchor: CommentAnchor, text: string) => {
-      comments.add({ ...anchor, code: quote(lines, anchor), text })
-    },
-    onRemove: comments.remove
   }
 
   return (
@@ -264,11 +300,9 @@ export function DiffPanel({
             key={file.path}
             file={file}
             collapsed={isCollapsed(file)}
-            onToggle={() => {
-              setChoices(new Map(choices).set(file.path, !isCollapsed(file)))
-            }}
+            onToggle={toggleFile}
             view={effectiveView}
-            tokens={tokens}
+            tokens={tokens.get(file.path) ?? NO_TOKENS}
             comments={surface}
             onOpen={openFile}
           />

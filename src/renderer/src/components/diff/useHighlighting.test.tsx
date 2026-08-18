@@ -51,8 +51,35 @@ describe('the colours a diff is drawn in', () => {
     const { result } = renderHook(() => useHighlighting(diff))
 
     await waitFor(() => {
-      expect(result.current.get(line)?.[0]?.text).toBe('const x = 1')
+      expect(result.current.get('a.ts')?.get(line)?.[0]?.text).toBe('const x = 1')
     })
+  })
+
+  /*
+   * Files are coloured one at a time, and each arrival used to hand every file
+   * a value it had to treat as new — a redraw of the whole pane per file. The
+   * one already coloured keeps the same object, so a memoised row can tell that
+   * nothing about it moved.
+   */
+  it('leaves a file already coloured holding the same colours', async () => {
+    const first = added('const x = 1')
+    const second = added('const y = 2')
+    const diff = workspaceDiff([
+      fileDiff('a.ts', { hunks: [hunk({ lines: [first] })] }),
+      fileDiff('b.ts', { hunks: [hunk({ lines: [second] })] })
+    ])
+
+    const { result } = renderHook(() => useHighlighting(diff))
+
+    await waitFor(() => {
+      expect(result.current.get('a.ts')).toBeDefined()
+    })
+    const coloured = result.current.get('a.ts')
+
+    await waitFor(() => {
+      expect(result.current.get('b.ts')).toBeDefined()
+    })
+    expect(result.current.get('a.ts')).toBe(coloured)
   })
 
   it('has nothing to colour before a diff has been read', () => {
