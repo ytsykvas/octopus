@@ -719,7 +719,16 @@ Both side panes are resizable and their widths persist. The right pane's floor i
 **measured, not chosen**: it is whatever its four tabs need. The labels change
 width with the language, a number picked against English left the Ukrainian ones
 overflowing, and since the pane does not shrink, anything sticking out of it
-pushed the window wider and put a horizontal scrollbar under the application. The right pane's ceiling
+pushed the window wider and put a horizontal scrollbar under the application.
+
+**The tabs cannot wrap and cannot shrink**, and that is what makes the
+measurement mean anything. A button free to squash reports the width it was
+squashed to, so the floor came out under what the labels need and the pane
+squashed them again — a measurement taken from its own consequence. `Pull
+request` is where it showed: the label broke across two lines inside a row 32px
+tall. `shrink-0` and `whitespace-nowrap` on each tab are the whole fix.
+
+The right pane's ceiling
 is whatever the window has left after the left column and a usable centre, so it
 grows on a large display without a number to maintain. That column is passed
 down from `App`: it is the project strip plus a list that is resizable and folds

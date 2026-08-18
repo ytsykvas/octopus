@@ -203,6 +203,26 @@ describe('RightPanel', () => {
     expect(screen.getByRole('button', { name: 'Terminal' })).toHaveClass('tab-selected')
   })
 
+  /*
+   * The pane's floor is measured from this row, and a button that can squash
+   * reports the width it was squashed to — so the floor comes out under what
+   * the labels need and the pane squashes them again. `Pull request` is where
+   * it showed: the label broke across two lines inside a row 32px tall.
+   *
+   * jsdom does no layout, so the class is the only handle there is; it is also
+   * the whole mechanism.
+   */
+  it('gives its tabs no room to wrap or squash', () => {
+    renderPanel()
+
+    for (const label of ['Changes', 'Terminal', 'Scripts', 'Pull request']) {
+      expect(screen.getByRole('button', { name: label })).toHaveClass(
+        'shrink-0',
+        'whitespace-nowrap'
+      )
+    }
+  })
+
   it('opens on the tab it was given rather than on the first one', () => {
     renderPanel({ tab: 'terminal' })
 

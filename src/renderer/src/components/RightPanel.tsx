@@ -370,7 +370,12 @@ export function RightPanel({
             // to carry sits at 1.09:1 against the pane behind it — a difference
             // that measures as barely there and looks it. The hue is the open
             // project's, falling back to the accent when none is open.
-            className={`focus-ring -mb-px h-8 rounded-t-[8px] border px-3 font-medium transition-colors ${
+            /* `shrink-0` and no wrapping, which is what makes the measurement
+               below honest: a button free to squash reports the width it was
+               squashed to, and the pane then takes that for its floor and
+               squashes it again. `Pull request` is where it showed — the label
+               broke across two lines inside a row 32px tall. */
+            className={`focus-ring -mb-px h-8 shrink-0 rounded-t-[8px] border px-3 font-medium whitespace-nowrap transition-colors ${
               tab === item.id
                 ? 'tab-selected'
                 : 'text-ink-soft hover:bg-muted hover:text-ink border-transparent'
