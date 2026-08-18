@@ -12,10 +12,14 @@ const { FakePty, spawned } = vi.hoisted(() => {
     signal?: number
   }
 
+  let nextPid = 1000
+
   class FakePty {
     written: string[] = []
     resizes: [number, number][] = []
     killed = false
+    /** A real pty has one, and `dispose` signals the group it leads. */
+    readonly pid = nextPid++
 
     private data: ((chunk: string) => void) | null = null
     private exit: ((event: Exit) => void) | null = null
@@ -104,10 +108,15 @@ function target(): {
 
 let manager: InstanceType<typeof TerminalManager>
 let renderer: ReturnType<typeof target>
+/** Every signal the manager sent, instead of sending it. */
+let signals: [number, NodeJS.Signals][]
 
 beforeEach(() => {
   spawned.length = 0
-  manager = new TerminalManager()
+  signals = []
+  manager = new TerminalManager((pid, signal) => {
+    signals.push([pid, signal])
+  })
   renderer = target()
 })
 
@@ -247,12 +256,97 @@ describe('exit', () => {
 
 describe('disposal', () => {
   // An orphaned pty keeps a shell process alive after its window is gone.
-  it('kills the process and forgets the session', () => {
+  it('ends the session and forgets it', () => {
     const id = manager.create(SPEC, renderer as never)
     manager.dispose(id)
 
-    expect(spawned[0]?.killed).toBe(true)
+    expect(signals).toEqual([[-(spawned[0]?.pid ?? 0), 'SIGTERM']])
     expect(manager.size).toBe(0)
+  })
+
+  /*
+   * The bug this was written for.
+   *
+   * The shell runs `run.sh`, which runs the server, so the server is a
+   * grandchild — killing the pty's own process left it running, re-parented to
+   * init, still holding its port and its pid file. The next start then refused
+   * with "a server is already running".
+   */
+  it('signals the whole process group, not just the shell', () => {
+    const id = manager.create(SPEC, renderer as never)
+    const pid = spawned[0]?.pid ?? 0
+
+    manager.dispose(id)
+
+    // Negative: the process group the session leads. SIGTERM rather than a
+    // hangup, which a server reads as "reopen your logs" and survives.
+    expect(signals).toEqual([[-pid, 'SIGTERM']])
+  })
+
+  /*
+   * node-pty's own kill sends SIGHUP, and where a run script `exec`s into its
+   * server that server *is* the pty's pid. Fired in the same tick as the
+   * SIGTERM the hangup arrives first and kills it outright, so the SIGTERM
+   * handler never runs and the pid file it would have removed survives — which
+   * is the "a server is already running" this set out to end.
+   */
+  it('does not hang up in the same tick as the graceful signal', () => {
+    vi.useFakeTimers()
+    try {
+      const id = manager.create(SPEC, renderer as never)
+
+      manager.dispose(id)
+
+      expect(signals).toHaveLength(1)
+      expect(spawned[0]?.killed).toBe(false)
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  // The fallback is for a process that ignores SIGTERM, and only for that one.
+  it('hangs up on a session that has not gone once the grace is over', () => {
+    vi.useFakeTimers()
+    try {
+      const id = manager.create(SPEC, renderer as never)
+      manager.dispose(id)
+
+      vi.advanceTimersByTime(5_000)
+
+      expect(spawned[0]?.killed).toBe(true)
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('leaves a session that shut down politely alone', () => {
+    vi.useFakeTimers()
+    try {
+      const id = manager.create(SPEC, renderer as never)
+      manager.dispose(id)
+
+      spawned[0]?.end({ exitCode: 0 })
+      vi.advanceTimersByTime(5_000)
+
+      expect(spawned[0]?.killed).toBe(false)
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  // A script that has just finished takes its group with it, and the signal
+  // then lands on nothing. That is the ordinary case, not a failure.
+  it('carries on when the group has already gone', () => {
+    const throwing = new TerminalManager(() => {
+      throw new Error('ESRCH')
+    })
+    const id = throwing.create(SPEC, renderer as never)
+
+    expect(() => {
+      throwing.dispose(id)
+    }).not.toThrow()
+
+    expect(throwing.size).toBe(0)
   })
 
   it('disposing twice is harmless', () => {
@@ -279,7 +373,7 @@ describe('disposal', () => {
 
     renderer.close()
 
-    expect(spawned.every((pty) => pty.killed)).toBe(true)
+    expect(signals.map(([pid]) => pid)).toEqual(spawned.map((pty) => -pty.pid))
     expect(manager.size).toBe(0)
   })
 
@@ -290,8 +384,7 @@ describe('disposal', () => {
 
     renderer.close()
 
-    expect(spawned[0]?.killed).toBe(true)
-    expect(spawned[1]?.killed).toBe(false)
+    expect(signals).toEqual([[-(spawned[0]?.pid ?? 0), 'SIGTERM']])
     expect(manager.size).toBe(1)
   })
 
@@ -301,7 +394,7 @@ describe('disposal', () => {
 
     manager.disposeAll()
 
-    expect(spawned.every((pty) => pty.killed)).toBe(true)
+    expect(signals.map(([pid]) => pid)).toEqual(spawned.map((pty) => -pty.pid))
     expect(manager.size).toBe(0)
   })
 })

@@ -69,6 +69,27 @@ the menu, hand Electron to the IPC layer. Everything with a decision in it was
 moved out, which is why `ipc.ts`, `result.ts` and `theme.ts` exist as separate
 files — a 357-line entry point could only be tested by mocking half of Electron.
 
+`terminals.ts` is the one part of `main/` that owns something rather than
+forwarding it: pseudo-terminals are process resources bound to a window, which
+is why they cannot live in the core. Ending one is the whole of what it knows
+that nothing else does.
+
+**A session is ended by signalling its process group, not its own process.** A
+dev server is a grandchild — the shell runs `run.sh`, which runs the server — so
+killing the pty's process leaves the server alive, re-parented to init, still
+holding its port and its pid file. node-pty gives each session its own group
+through `setsid`, so a negative pid reaches the whole tree and nothing outside
+it, and the group outlives its leader while a member is still in it.
+
+**SIGTERM, and only later a hangup.** To a server a hangup often means "reopen
+your logs" and it carries on; SIGTERM is the shutdown it cleans up after. The
+`pty.kill()` node-pty offers sends SIGHUP, and where a run script `exec`s into
+its server that server _is_ the pty's pid — fired in the same tick, the hangup
+arrives first and the SIGTERM handler never runs, so the pid file survives and
+the next start reports a server already running. It stays as the fallback for a
+process that ignores SIGTERM, two seconds later, cancelled the moment the
+session exits on its own.
+
 ## The path of one call
 
 Removing a workspace, end to end:
