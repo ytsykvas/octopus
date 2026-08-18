@@ -22,7 +22,9 @@ const { FakePty, spawned } = vi.hoisted(() => {
     readonly pid = nextPid++
 
     private data: ((chunk: string) => void) | null = null
-    private exit: ((event: Exit) => void) | null = null
+    /* A list, not a field: `dispose` subscribes beside the one `create` made,
+       and a fake that kept only the last would hide whichever ran first. */
+    private readonly exits: ((event: Exit) => void)[] = []
 
     constructor(
       readonly file: string,
@@ -35,7 +37,7 @@ const { FakePty, spawned } = vi.hoisted(() => {
     }
 
     onExit(handler: (event: Exit) => void): void {
-      this.exit = handler
+      this.exits.push(handler)
     }
 
     write(chunk: string): void {
@@ -57,7 +59,7 @@ const { FakePty, spawned } = vi.hoisted(() => {
 
     /** Pretends the shell ended. */
     end(event: Exit): void {
-      this.exit?.(event)
+      for (const notify of [...this.exits]) notify(event)
     }
   }
 
@@ -258,7 +260,7 @@ describe('disposal', () => {
   // An orphaned pty keeps a shell process alive after its window is gone.
   it('ends the session and forgets it', () => {
     const id = manager.create(SPEC, renderer as never)
-    manager.dispose(id)
+    void manager.dispose(id)
 
     expect(signals).toEqual([[-(spawned[0]?.pid ?? 0), 'SIGTERM']])
     expect(manager.size).toBe(0)
@@ -276,7 +278,7 @@ describe('disposal', () => {
     const id = manager.create(SPEC, renderer as never)
     const pid = spawned[0]?.pid ?? 0
 
-    manager.dispose(id)
+    void manager.dispose(id)
 
     // Negative: the process group the session leads. SIGTERM rather than a
     // hangup, which a server reads as "reopen your logs" and survives.
@@ -295,7 +297,7 @@ describe('disposal', () => {
     try {
       const id = manager.create(SPEC, renderer as never)
 
-      manager.dispose(id)
+      void manager.dispose(id)
 
       expect(signals).toHaveLength(1)
       expect(spawned[0]?.killed).toBe(false)
@@ -309,7 +311,7 @@ describe('disposal', () => {
     vi.useFakeTimers()
     try {
       const id = manager.create(SPEC, renderer as never)
-      manager.dispose(id)
+      void manager.dispose(id)
 
       vi.advanceTimersByTime(5_000)
 
@@ -323,7 +325,7 @@ describe('disposal', () => {
     vi.useFakeTimers()
     try {
       const id = manager.create(SPEC, renderer as never)
-      manager.dispose(id)
+      void manager.dispose(id)
 
       spawned[0]?.end({ exitCode: 0 })
       vi.advanceTimersByTime(5_000)
@@ -332,6 +334,78 @@ describe('disposal', () => {
     } finally {
       vi.useRealTimers()
     }
+  })
+
+  /*
+   * A restart is a disposal and a start with nothing in between, and a dev
+   * server does not release its port the instant it is asked to. The caller can
+   * only wait if something tells it when the waiting is over.
+   */
+  it('answers when the session has gone, not when it was signalled', async () => {
+    const id = manager.create(SPEC, renderer as never)
+
+    let ended = false
+    const answer = manager.dispose(id).then(() => {
+      ended = true
+    })
+
+    await Promise.resolve()
+    expect(ended).toBe(false)
+
+    spawned[0]?.end({ exitCode: 0 })
+
+    await answer
+    expect(ended).toBe(true)
+  })
+
+  it('answers for a session it has already forgotten', async () => {
+    await expect(manager.dispose('term-999')).resolves.toBeUndefined()
+  })
+
+  // Otherwise a process that ignores SIGTERM would hold the caller for ever.
+  it('answers once the fallback has hung up on a process that ignored it', async () => {
+    vi.useFakeTimers()
+    try {
+      const id = manager.create(SPEC, renderer as never)
+      const answer = manager.dispose(id)
+
+      vi.advanceTimersByTime(5_000)
+      // `pty.kill()` is what a real pty answers with; the fake says so itself.
+      spawned[0]?.end({ exitCode: 0, signal: 1 })
+
+      await expect(answer).resolves.toBeUndefined()
+      expect(spawned[0]?.killed).toBe(true)
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  /*
+   * A reload keeps the WebContents and loses everything the renderer knew, so
+   * a dev server would carry on with nothing on screen able to reach it.
+   */
+  it('ends one window\u2019s sessions and leaves another\u2019s alone', async () => {
+    const other = target()
+    const mine = manager.create(SPEC, renderer as never)
+    const theirs = manager.create(SPEC, other as never)
+
+    const ended = manager.disposeFor(renderer as never)
+    spawned[0]?.end({ exitCode: 0 })
+    await ended
+
+    expect(signals).toEqual([[-(spawned[0]?.pid ?? 0), 'SIGTERM']])
+    expect(manager.size).toBe(1)
+    // The surviving one is the other window's, not ours.
+    manager.write(mine, 'x')
+    manager.write(theirs, 'y')
+    expect(spawned[1]?.written).toEqual(['y'])
+  })
+
+  it('has nothing to end for a window with no sessions', async () => {
+    manager.create(SPEC, renderer as never)
+
+    await expect(manager.disposeFor(target() as never)).resolves.toBeUndefined()
+    expect(manager.size).toBe(1)
   })
 
   // A script that has just finished takes its group with it, and the signal
@@ -343,7 +417,7 @@ describe('disposal', () => {
     const id = throwing.create(SPEC, renderer as never)
 
     expect(() => {
-      throwing.dispose(id)
+      void throwing.dispose(id)
     }).not.toThrow()
 
     expect(throwing.size).toBe(0)
@@ -351,16 +425,16 @@ describe('disposal', () => {
 
   it('disposing twice is harmless', () => {
     const id = manager.create(SPEC, renderer as never)
-    manager.dispose(id)
+    void manager.dispose(id)
 
     expect(() => {
-      manager.dispose(id)
+      void manager.dispose(id)
     }).not.toThrow()
   })
 
   it('ignores an id it never issued', () => {
     expect(() => {
-      manager.dispose('term-999')
+      void manager.dispose('term-999')
     }).not.toThrow()
   })
 

@@ -563,7 +563,18 @@ happened, and leaving it there asks the reader to work out how it differs from
 the `Restart` beside it.
 
 `Restart` is the common half of a restart: the code changed under a running
-server and needs picking up, while the checkout did not.
+server and needs picking up, while the checkout did not. It **waits** — the old
+session has to be gone before the new one binds, and `dispose` answers when it
+is rather than when it was asked, so the second server no longer fails on a port
+the first has not let go of yet.
+
+**The port is checked, and only said.** octopus assigns one, hands it over as
+`$OCTOPUS_PORT` and links to it, and a script is free to ignore all of that: a
+`run.sh` of `rails s` binds 3000 whatever it was told, and the link then opens on
+nothing. Five attempts a second apart — long enough that a slow boot is not
+called a mistake — and then a line saying nothing is listening there. Nothing is
+disabled and the link stays: §4 says the layer is thin, and being wrong about
+somebody's script must not block them.
 
 A workspace whose directory has gone loses all of them, `Run` included.
 `WorkspaceScripts` drops a missing workspace, which unmounts its runner and

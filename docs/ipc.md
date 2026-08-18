@@ -140,7 +140,7 @@ without creating one — the first message is what brings it into being.
 | `terminal:create`  | `spec`               | answers with a session id                                 |
 | `terminal:write`   | `id`, `data`         |                                                           |
 | `terminal:resize`  | `id`, `cols`, `rows` | a resize after the session ended is ignored, not an error |
-| `terminal:dispose` | `id`                 |                                                           |
+| `terminal:dispose` | `id`                 | resolves when the session has gone, not when it was asked |
 
 Output flows the other way, on `terminal:data` and `terminal:exit`.
 

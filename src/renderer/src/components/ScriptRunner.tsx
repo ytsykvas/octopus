@@ -130,6 +130,20 @@ function Runner({
     latestStop.current = stopToken
   }, [stopToken])
 
+  /*
+   * A start asked for while one is already going.
+   *
+   * Held rather than done, because a restart is two steps: the old session has
+   * to be gone before the new one binds the port. `Terminal` says when through
+   * `onClosed`, and this remembers that somebody asked in between.
+   *
+   * A ref, not state: `onClosed` reaches the terminal through a ref of its own,
+   * which stops updating the moment that terminal unmounts — and unmounting is
+   * the first half of the restart. Read from state it would be the value from
+   * before the press.
+   */
+  const pendingStart = useRef<number | null>(null)
+
   const start = (): void => {
     const stopWhenAsked = latestStop.current
 
@@ -161,10 +175,29 @@ function Runner({
       }
 
       setError(null)
-      setRun((current) => current + 1)
-      setStarted(true)
-      setRunning(true)
+
+      // Already going: end it and wait. Remounting `Terminal` now would open the
+      // next session while the last one still holds the port, and the failure
+      // reads as the new server's fault.
+      if (started) {
+        // The stop token as it stood when the restart was asked for. A stop
+        // arriving before the old session closes moves it, and that is how the
+        // restart knows the press it was waiting for has been countermanded —
+        // without writing a ref during render, which is where the stop is seen.
+        pendingStart.current = latestStop.current
+        setStarted(false)
+        setRunning(false)
+        return
+      }
+
+      begin()
     })()
+  }
+
+  const begin = (): void => {
+    setRun((current) => current + 1)
+    setStarted(true)
+    setRunning(true)
   }
 
   /*
@@ -237,6 +270,16 @@ function Runner({
             onExit={(exitCode) => {
               setRunning(false)
               onOutcome?.(exitCode === 0)
+            }}
+            onClosed={() => {
+              // The port is free now, which is the whole reason the restart
+              // waited. A stop in the meantime cleared the flag.
+              const asked = pendingStart.current
+              pendingStart.current = null
+
+              // A stop that landed while this was closing countermanded it: the
+              // press after the restart asked for nothing to be running.
+              if (asked !== null && asked === latestStop.current) begin()
             }}
           />
         </div>

@@ -90,6 +90,20 @@ the next start reports a server already running. It stays as the fallback for a
 process that ignores SIGTERM, two seconds later, cancelled the moment the
 session exits on its own.
 
+**Ending one answers when it has ended**, not when it was asked to. A restart is
+a disposal and a start with nothing in between, and a dev server does not
+release its port the instant it is told to — so the next one bound against the
+last and failed on the port, blaming itself. `dispose` returns a promise that
+resolves on the pty's exit, and the renderer waits on it before opening the
+session that replaces it.
+
+**Sessions end with the document that started them.** A reload keeps the
+`WebContents` and loses everything the renderer knew, so `disposeFor` ends that
+window's sessions on `did-start-loading`. Without it a server carried on with
+nothing on screen able to reach it: no Stop, no output, and a port held by
+something the pane had forgotten. A Vite HMR update is not a navigation, so in
+development an edit can still leave one behind — nothing in `main` can see it.
+
 ## The path of one call
 
 Removing a workspace, end to end:

@@ -36,8 +36,14 @@ const GRACE_MS = 2_000
 /** How a signal reaches a process, injected so tests never send a real one. */
 export type Kill = (pid: number, signal: NodeJS.Signals) => void
 
+/** A live session, and the window it belongs to. */
+interface Session {
+  readonly pty: IPty
+  readonly target: WebContents
+}
+
 export class TerminalManager {
-  private readonly sessions = new Map<TerminalId, IPty>()
+  private readonly sessions = new Map<TerminalId, Session>()
   private nextId = 1
 
   /**
@@ -82,20 +88,20 @@ export class TerminalManager {
     // shell — and anything it started, a dev server included — keeps running
     // with nothing left to talk to.
     target.once('destroyed', () => {
-      this.dispose(id)
+      void this.dispose(id)
     })
 
-    this.sessions.set(id, pty)
+    this.sessions.set(id, { pty, target })
     return id
   }
 
   write(id: TerminalId, data: string): void {
-    this.sessions.get(id)?.write(data)
+    this.sessions.get(id)?.pty.write(data)
   }
 
   resize(id: TerminalId, cols: number, rows: number): void {
     // A resize arriving after the session ended is normal, not an error.
-    this.sessions.get(id)?.resize(cols, rows)
+    this.sessions.get(id)?.pty.resize(cols, rows)
   }
 
   /**
@@ -123,10 +129,11 @@ export class TerminalManager {
    * the pid file it would have removed survives, which is the "a server is
    * already running" this whole thing set out to end.
    */
-  dispose(id: TerminalId): void {
-    const pty = this.sessions.get(id)
-    if (!pty) return
+  dispose(id: TerminalId): Promise<void> {
+    const session = this.sessions.get(id)
+    if (!session) return Promise.resolve()
 
+    const { pty } = session
     this.sessions.delete(id)
 
     try {
@@ -136,20 +143,47 @@ export class TerminalManager {
       // ordinary case for a script that has just finished.
     }
 
-    const fallback = setTimeout(() => {
-      pty.kill()
-    }, GRACE_MS)
+    /*
+     * Answers when the session has gone, not when it has been signalled.
+     *
+     * A restart is a disposal and a start with nothing in between, and a dev
+     * server does not release its port the instant it is asked to: the next one
+     * then binds against the last one and fails on the port, blaming itself.
+     * The caller can now wait, and the only thing that knows when to stop
+     * waiting is here.
+     */
+    return new Promise((resolve) => {
+      const fallback = setTimeout(() => {
+        pty.kill()
+      }, GRACE_MS)
 
-    // Cleared on the way out, so a session that shut down politely is never
-    // signalled again — and so the timer does not hold the process open.
-    pty.onExit(() => {
-      clearTimeout(fallback)
+      // Cleared on the way out, so a session that shut down politely is never
+      // signalled again — and so the timer does not hold the process open.
+      pty.onExit(() => {
+        clearTimeout(fallback)
+        resolve()
+      })
     })
+  }
+
+  /**
+   * Ends every session of one window.
+   *
+   * A reload keeps the `WebContents` and loses everything the renderer knew, so
+   * without this a dev server carries on with nothing on screen that can reach
+   * it: no Stop, no output, and a port held by something the pane has forgotten.
+   */
+  async disposeFor(target: WebContents): Promise<void> {
+    const theirs = [...this.sessions]
+      .filter(([, session]) => session.target === target)
+      .map(([id]) => id)
+
+    await Promise.all(theirs.map((id) => this.dispose(id)))
   }
 
   /** Kills every session — called when the application quits. */
   disposeAll(): void {
-    for (const id of [...this.sessions.keys()]) this.dispose(id)
+    for (const id of [...this.sessions.keys()]) void this.dispose(id)
   }
 
   get size(): number {

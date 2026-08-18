@@ -183,9 +183,9 @@ export function registerIpc(
     terminals.resize(id, cols, rows)
   })
 
-  host.handle('terminal:dispose', (_event, id: string) => {
-    terminals.dispose(id)
-  })
+  // Answers when the session has gone rather than when it was asked to go: a
+  // restart waits on this before binding the port again.
+  host.handle('terminal:dispose', (_event, id: string) => terminals.dispose(id))
 
   // The patch is validated rather than trusted: it arrives from the renderer
   // and its base branch reaches a git command.

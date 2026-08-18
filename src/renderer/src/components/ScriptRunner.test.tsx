@@ -228,6 +228,98 @@ describe('ScriptRunner', () => {
     expect(screen.getByText(/Starts the dev server/)).toBeInTheDocument()
   })
 
+  /*
+   * A restart is a disposal and a start, and a dev server does not release its
+   * port the instant it is asked to. Opening the next session before the last
+   * one has gone fails on the port and blames the new server for it.
+   */
+  it('opens the next session only once the last one has closed', async () => {
+    let release: (() => void) | null = null
+    vi.mocked(octopus().terminal.dispose).mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          release = () => {
+            resolve()
+          }
+        })
+    )
+
+    const { rerender } = mountAndStart({
+      workspace: anna,
+      kind: 'run',
+      scriptPath: RUN_SCRIPT,
+      port: 3111,
+      onOpenSettings: vi.fn()
+    })
+    await sessionsOpened(1)
+
+    rerender({ startToken: 2 })
+
+    await waitFor(() => {
+      expect(release).not.toBeNull()
+    })
+    // The old one is going and the new one is not there yet.
+    expect(octopus().terminal.create).toHaveBeenCalledTimes(1)
+
+    await act(async () => {
+      release?.()
+      await Promise.resolve()
+    })
+
+    await sessionsOpened(2)
+  })
+
+  // Nothing to wait for, so nothing waits: a first start must not be held up by
+  // a session that was never there.
+  it('does not wait when there is nothing running yet', async () => {
+    vi.mocked(octopus().terminal.dispose).mockImplementation(() => new Promise(() => undefined))
+
+    mountAndStart({
+      workspace: anna,
+      kind: 'run',
+      scriptPath: RUN_SCRIPT,
+      port: 3111,
+      onOpenSettings: vi.fn()
+    })
+
+    await sessionsOpened(1)
+  })
+
+  // The press that arrived after the restart asked for nothing to be running.
+  it('abandons a pending restart when a stop arrives', async () => {
+    let release: (() => void) | null = null
+    vi.mocked(octopus().terminal.dispose).mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          release = () => {
+            resolve()
+          }
+        })
+    )
+
+    const { rerender } = mountAndStart({
+      workspace: anna,
+      kind: 'run',
+      scriptPath: RUN_SCRIPT,
+      port: 3111,
+      onOpenSettings: vi.fn()
+    })
+    await sessionsOpened(1)
+
+    rerender({ startToken: 2 })
+    await waitFor(() => {
+      expect(release).not.toBeNull()
+    })
+
+    rerender({ startToken: 2, stopToken: 1 })
+    await act(async () => {
+      release?.()
+      await Promise.resolve()
+    })
+
+    expect(octopus().terminal.create).toHaveBeenCalledTimes(1)
+  })
+
   // A build has already exited by the time a server can be stopped, so the stop
   // reaches it as a bystander — and unmounting its terminal would throw away
   // the log somebody is reading, which is the one thing `started` exists for.

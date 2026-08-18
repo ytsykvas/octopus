@@ -356,6 +356,53 @@ describe('Terminal', () => {
 
   // A shell started for a workspace the user has already closed would otherwise
   // survive with nothing on screen attached to it.
+  /*
+   * `onExit` says the process reported a code; this says the session is gone and
+   * its port is free. A restart waits on the second, not the first.
+   */
+  it('says when its session has closed, once the disposal answers', async () => {
+    // A holder rather than a bare `let`: the assignment happens inside a
+    // callback, and narrowing would otherwise call it unreachable.
+    const gate: { release: (() => void) | null } = { release: null }
+    vi.mocked(window.octopus.terminal.dispose).mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          gate.release = () => {
+            resolve()
+          }
+        })
+    )
+    const onClosed = vi.fn()
+
+    const { unmount } = render(<Terminal cwd="/tmp/work" onClosed={onClosed} />)
+    await sessionStarted()
+
+    unmount()
+    await waitFor(() => {
+      expect(gate.release).not.toBeNull()
+    })
+    expect(onClosed).not.toHaveBeenCalled()
+
+    gate.release?.()
+
+    await waitFor(() => {
+      expect(onClosed).toHaveBeenCalledTimes(1)
+    })
+  })
+
+  it('says nothing when there was no session to close', async () => {
+    const onClosed = vi.fn()
+    vi.mocked(window.octopus.terminal.create).mockResolvedValue({ ok: false, error: 'no shell' })
+
+    const { unmount } = render(<Terminal cwd="/tmp/work" onClosed={onClosed} />)
+    await sessionStarted()
+
+    unmount()
+    await Promise.resolve()
+
+    expect(onClosed).not.toHaveBeenCalled()
+  })
+
   it('kills a session that arrives after it has gone away', async () => {
     let start: ((result: Result<string>) => void) | undefined
     vi.mocked(window.octopus.terminal.create).mockReturnValue(

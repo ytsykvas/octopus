@@ -96,9 +96,9 @@ const api = {
       void ipcRenderer.invoke('terminal:resize', id, cols, rows)
     },
 
-    dispose: (id: string): void => {
-      void ipcRenderer.invoke('terminal:dispose', id)
-    },
+    /** Resolves once the session has actually ended, not once it was asked to. */
+    dispose: (id: string): Promise<void> =>
+      ipcRenderer.invoke('terminal:dispose', id) as Promise<void>,
 
     onData: (handler: (output: TerminalOutput) => void): (() => void) => {
       const listener = (_event: unknown, output: TerminalOutput): void => {

@@ -33,6 +33,13 @@ interface TerminalProps {
   /** Extra environment for the session — how a script learns its port. */
   readonly env?: Readonly<Record<string, string>>
   readonly onExit?: (exitCode: number | null) => void
+  /**
+   * Called once this session has actually ended, after unmounting.
+   *
+   * `onExit` says the process reported an exit code; this says the session is
+   * gone and its port is free — which is what a restart has to wait for.
+   */
+  readonly onClosed?: () => void
 }
 
 /**
@@ -45,15 +52,23 @@ interface TerminalProps {
  * xterm.js only renders and forwards keystrokes; the pseudo-terminal itself
  * lives in the main process (§11.1).
  */
-export function Terminal({ cwd, command, env, onExit }: TerminalProps): React.JSX.Element {
+export function Terminal({
+  cwd,
+  command,
+  env,
+  onExit,
+  onClosed
+}: TerminalProps): React.JSX.Element {
   const host = useRef<HTMLDivElement>(null)
   // Kept in a ref so the effect below never re-runs on a changed callback,
   // which would tear the session down mid-login.
   const exitHandler = useRef(onExit)
+  const closedHandler = useRef(onClosed)
 
   useEffect(() => {
     exitHandler.current = onExit
-  }, [onExit])
+    closedHandler.current = onClosed
+  }, [onExit, onClosed])
 
   useEffect(() => {
     const container = host.current
@@ -127,7 +142,7 @@ export function Terminal({ cwd, command, env, onExit }: TerminalProps): React.JS
 
       // The component may have unmounted while the session was starting.
       if (lifetime.signal.aborted) {
-        window.octopus.terminal.dispose(result.value)
+        void window.octopus.terminal.dispose(result.value)
         return
       }
 
@@ -150,7 +165,13 @@ export function Terminal({ cwd, command, env, onExit }: TerminalProps): React.JS
       observer.disconnect()
       unsubscribeData()
       unsubscribeExit()
-      if (sessionId) window.octopus.terminal.dispose(sessionId)
+      // The dispose answers when the session has gone, so this is the one
+      // moment anything can be told the port is free again.
+      if (sessionId) {
+        void window.octopus.terminal.dispose(sessionId).then(() => {
+          closedHandler.current?.()
+        })
+      }
       term.dispose()
     }
     // The session is tied to this command and directory; changing either means

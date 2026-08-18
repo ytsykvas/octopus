@@ -18,7 +18,7 @@ import { focusExisting } from './windows.js'
 
 /** Canvas colours from the design system (§10) — so the window does not flash white on launch. */
 
-function createWindow(theme: ThemeName): BrowserWindow {
+function createWindow(theme: ThemeName, terminals: TerminalManager): BrowserWindow {
   const window = new BrowserWindow({
     width: 1280,
     height: 820,
@@ -40,6 +40,13 @@ function createWindow(theme: ThemeName): BrowserWindow {
 
   window.on('ready-to-show', () => {
     window.show()
+  })
+
+  // A reload keeps this WebContents and loses everything the renderer knew, so
+  // the sessions it can no longer reach go with the document that started them.
+  // Fires on the first load too, where there is nothing to end.
+  window.webContents.on('did-start-loading', () => {
+    void terminals.disposeFor(window.webContents)
   })
 
   // External links open in the browser, not inside the application.
@@ -180,11 +187,14 @@ async function start(): Promise<void> {
   })
   watchSystemTheme(service)
   registerMenu()
-  createWindow(resolveTheme(service.getConfig().theme, nativeTheme.shouldUseDarkColors))
+  createWindow(resolveTheme(service.getConfig().theme, nativeTheme.shouldUseDarkColors), terminals)
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) {
-      createWindow(resolveTheme(service.getConfig().theme, nativeTheme.shouldUseDarkColors))
+      createWindow(
+        resolveTheme(service.getConfig().theme, nativeTheme.shouldUseDarkColors),
+        terminals
+      )
     }
   })
 }

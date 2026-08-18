@@ -47,7 +47,9 @@ export function installOctopusStub(): Api {
       create: vi.fn(() => ok('term-1')),
       write: vi.fn(),
       resize: vi.fn(),
-      dispose: vi.fn(),
+      // Resolves, because it now answers when the session has actually gone and
+      // a restart waits on that.
+      dispose: vi.fn(() => Promise.resolve()),
       onData: vi.fn(subscription),
       onExit: vi.fn(subscription)
     },
