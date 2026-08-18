@@ -27,7 +27,7 @@ interface ComposerAtticProps {
    * `/clear` gets its whole behaviour, transcript deletion included, from the
    * path a typed command already takes.
    */
-  readonly onSend: (text: string) => void
+  readonly onSend: (text: string) => Promise<boolean>
 }
 
 /**
@@ -89,7 +89,7 @@ export function ComposerAttic({
       destructive: true
     })
 
-    if (confirmed) onSend(CLEAR)
+    if (confirmed) void onSend(CLEAR)
   }
 
   const countdownFor = (window: UsageWindow): string | null =>
@@ -184,7 +184,7 @@ export function ComposerAttic({
                 description: t('chat.contextCompactNote'),
                 icon: <FoldVertical aria-hidden size={12} />,
                 onSelect: () => {
-                  onSend(COMPACT)
+                  void onSend(COMPACT)
                 }
               },
               {

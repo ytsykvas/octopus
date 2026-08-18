@@ -39,7 +39,14 @@ export interface ChatController {
   readonly pending: PendingPermission | null
   readonly loading: boolean
   readonly error: string | null
-  readonly send: (text: string) => Promise<void>
+  /**
+   * Sends a message, answering whether it went.
+   *
+   * The outcome is reported rather than swallowed because the composer clears
+   * on the strength of it: a review is minutes of reading, and dropping it on
+   * a send that failed leaves nowhere to get it back from.
+   */
+  readonly send: (text: string) => Promise<boolean>
   readonly interrupt: () => Promise<void>
   /** `feedback` accompanies a refusal and reaches the agent as the reason. */
   readonly answer: (requestId: string, answer: PermissionAnswer, feedback?: string) => Promise<void>
@@ -277,7 +284,7 @@ export function useChat(
   const send = useCallback(
     async (text: string) => {
       const target = await ensureChat()
-      if (!target) return
+      if (!target) return false
 
       // Drawn before the round trip: the message is the user's own, and
       // waiting for the disk to confirm it makes typing feel unresponsive.
@@ -290,7 +297,10 @@ export function useChat(
       if (!sent.ok) {
         setError(describeFailure(sent))
         setBusy(false)
+        return false
       }
+
+      return true
     },
     [ensureChat, describeFailure]
   )

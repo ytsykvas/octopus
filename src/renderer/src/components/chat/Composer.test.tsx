@@ -22,7 +22,10 @@ function renderComposer(overrides: Partial<ComposerProps> = {}): {
   onPlanModel: ReturnType<typeof vi.fn>
   rerender: (next: Partial<ComposerProps>) => void
 } {
-  const onSend = vi.fn()
+  // Answers that the message went, which is what the composer clears on. A
+  // mock that answered nothing would model a send that failed, and every test
+  // about clearing would be asserting the failure path by accident.
+  const onSend = vi.fn<(text: string) => Promise<boolean>>().mockResolvedValue(true)
   const onStop = vi.fn()
   const onWorkingMode = vi.fn()
   const onEffort = vi.fn()
@@ -291,6 +294,28 @@ describe('review notes riding with the message', () => {
     await user.click(screen.getByRole('button', { name: 'Send' }))
 
     expect(onCommentsSent).toHaveBeenCalled()
+  })
+
+  /*
+   * A review is minutes of reading, and nothing writes it to disk.
+   *
+   * The send is fire-and-forget from here — no session, the agent busy, the IPC
+   * call refused — and the notes used to be cleared on the line after it, which
+   * left a failed send with nowhere at all to get the review back from.
+   */
+  it('keeps them when the message did not go', async () => {
+    const user = userEvent.setup()
+    const onCommentsSent = vi.fn()
+    const { onSend } = renderComposer({ comments: [NOTE], onCommentsSent })
+    onSend.mockResolvedValue(false)
+
+    await user.type(screen.getByRole('textbox'), 'fix these')
+    await user.click(screen.getByRole('button', { name: 'Send' }))
+
+    expect(onSend).toHaveBeenCalled()
+    expect(onCommentsSent).not.toHaveBeenCalled()
+    // The typed message is the same bargain and is kept for the same reason.
+    expect(screen.getByRole('textbox')).toHaveValue('fix these')
   })
 
   it('gives a note back before it is sent', async () => {

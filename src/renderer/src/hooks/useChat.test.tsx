@@ -317,6 +317,49 @@ describe('the record the pane creates for itself', () => {
     expect(result.current.busy).toBe(true)
   })
 
+  /*
+   * The composer clears the field and the review on this answer.
+   *
+   * A review is minutes of reading and nothing writes it to disk, so a send
+   * reported as having gone when it did not is the one way to lose it outright.
+   */
+  it('answers whether the message went', async () => {
+    const created = chat()
+    vi.mocked(octopus().chats.open).mockResolvedValue({ ok: true, value: created })
+
+    const { result } = renderHook(() =>
+      useChat(null, 'planner/anna', 'idle', describeFailure, noted)
+    )
+
+    let went: boolean | undefined
+    await act(async () => {
+      went = await result.current.send('add a test')
+    })
+    expect(went).toBe(true)
+
+    vi.mocked(octopus().chats.send).mockResolvedValue({ ok: false, error: 'no session' })
+    await act(async () => {
+      went = await result.current.send('add another')
+    })
+    expect(went).toBe(false)
+  })
+
+  // The conversation could not be created, so there was never anywhere to send.
+  it('answers no when the conversation could not be opened', async () => {
+    vi.mocked(octopus().chats.open).mockResolvedValue({ ok: false, error: 'no workspace' })
+
+    const { result } = renderHook(() =>
+      useChat(null, 'planner/anna', 'idle', describeFailure, noted)
+    )
+
+    let went: boolean | undefined
+    await act(async () => {
+      went = await result.current.send('add a test')
+    })
+
+    expect(went).toBe(false)
+  })
+
   it('tells the strip about the record it created', async () => {
     const created = chat()
     vi.mocked(octopus().chats.open).mockResolvedValue({ ok: true, value: created })

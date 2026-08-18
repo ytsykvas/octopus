@@ -232,7 +232,7 @@ export function ChatSession({
         commands={commands}
         usage={usage}
         limit={rateLimit}
-        onSend={(text) => void chat.send(text)}
+        onSend={chat.send}
         onStop={() => void chat.interrupt()}
         comments={comments.pending}
         onRemoveComment={comments.remove}

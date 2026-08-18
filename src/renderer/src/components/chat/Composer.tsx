@@ -73,7 +73,8 @@ interface ComposerProps {
   /** What the next message is up against; the strip hides when there is none. */
   readonly usage: SessionUsage
   readonly limit: RateLimit | null
-  readonly onSend: (text: string) => void
+  /** Answers whether the message went; the field and the notes clear only then. */
+  readonly onSend: (text: string) => Promise<boolean>
   readonly onStop: () => void
   /**
    * Review notes waiting to go out with this message.
@@ -265,11 +266,25 @@ export function Composer({
     // and the review is the thing being sent.
     if (trimmed === '' && comments.length === 0) return
 
-    onSend(withComments(trimmed, comments, t('diff.commentIntro')))
-    onCommentsSent()
-    write('')
+    // The suggestion list closes at once: it is about the keystroke, not about
+    // the message, and leaving it open over a send in flight reads as stuck.
     setDismissed(false)
     setActive(0)
+
+    /*
+     * Cleared only once the message is known to have gone.
+     *
+     * It used to clear on the next line, and the send is fire-and-forget — no
+     * session, the agent busy, the IPC call refused — so a failure took the
+     * review with it. A review is minutes of reading and nothing writes it to
+     * disk, which left nowhere at all to get it back from.
+     */
+    void (async () => {
+      if (!(await onSend(withComments(trimmed, comments, t('diff.commentIntro'))))) return
+
+      onCommentsSent()
+      write('')
+    })()
   }
 
   /**
