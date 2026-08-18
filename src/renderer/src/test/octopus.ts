@@ -88,7 +88,8 @@ export function installOctopusStub(): Api {
       // to act on, and the one most tests are about.
       pullRequest: vi.fn(() => ok({ request: null, pushed: false, dirty: false, ahead: 1 })),
       createPullRequest: vi.fn(() => ok('https://github.com/ytsykvas/octopus/pull/1')),
-      instruction: vi.fn(() => ok('Describe what changed and why.'))
+      instruction: vi.fn(() => ok('Describe what changed and why.')),
+      applyEnv: vi.fn(() => ok(undefined))
     },
     files: {
       open: vi.fn(() => ok(undefined))
@@ -110,6 +111,8 @@ export function installOctopusStub(): Api {
       readScript: vi.fn(() => ok('#!/bin/sh\n')),
       saveScript: vi.fn(() => ok(undefined)),
       scriptPaths: vi.fn(() => ok({ setup: null, run: null })),
+      readEnv: vi.fn(() => ok('')),
+      saveEnv: vi.fn(() => ok(undefined)),
       readInstruction: vi.fn(() => ok('# Pull request descriptions\n')),
       saveInstruction: vi.fn(() => ok(undefined))
     }

@@ -1,65 +1,49 @@
-# `setup.sh` cannot find the repository it belongs to
+# `setup.sh` gets no environment at all
 
 **Found:** 2026-08-12, while checking whether the setup script runs on workspace
-creation.
+creation. **Narrowed:** 2026-08-18, when the project env file landed.
 
 ## What happens
 
-The first thing most setup scripts need is a file from the original checkout —
-usually `.env`, which is gitignored and therefore absent from a fresh worktree.
-The script has no way to locate it.
+`ScriptRunner` passes `{}` to the setup script. `run.sh` gets `OCTOPUS_PORT`;
+`setup.sh` gets nothing — including any pointer back to the repository the
+workspace was cut from.
 
-Three things go wrong together:
+## What has since been fixed
 
-1. **No environment.** `ScriptRunner` passes `{}` to the setup script. `run.sh`
-   gets `OCTOPUS_PORT`; `setup.sh` gets nothing at all, including any pointer to
-   the repository root.
-2. **The template's hint is wrong.** It suggests `cp ../../.env .env`. A
-   workspace lives at `~/.octopus/workspaces/<project>/<workspace>/`, so `../../`
-   is `~/.octopus/workspaces/` — our own data directory, not the user's
-   repository. Following the hint copies nothing, or something surprising.
-3. **The docs describe behaviour that does not exist.** §12.2 of PROJECT.md says
-   the setup script "runs after the worktree is created". It does not: it runs
-   when the Build tab's button is pressed. That is the intended design — the
-   sentence is what is out of date.
+The reason this was first written is gone. The env file no longer has to be
+fetched by hand: a project keeps one in octopus and it is written into every
+workspace that lacks a `.env`, at creation and before either script runs. The
+template's wrong `cp ../../.env .env` hint is gone with it, and §12.2 no longer
+claims `setup.sh` runs on workspace creation.
 
-## Why it matters
-
-Every new workspace starts as a bare checkout with no dependencies installed. A
-setup script is the answer to that, and it currently cannot do the one thing it
-most needs to do without hard-coding an absolute path — which then breaks for
-every other project, since the script is per-project but the path is per-machine.
+What remains is the general case. A setup script that needs anything else from
+the original checkout — a certificate, a fixture directory, a local config the
+env cannot express — still has no way to name where it is, and hard-coding an
+absolute path breaks for every other machine, since the script is per-project
+but the path is not.
 
 ## Evidence
 
-- `src/renderer/src/components/ScriptRunner.tsx:109` — `env={kind === 'run' ? { OCTOPUS_PORT: String(port) } : {}}`
-- `src/core/scripts.ts:44-50` — the setup template, with the `cp ../../.env .env` hint
-- `src/core/paths.ts:94-100` — `workspacePath`, which is what makes `../../` wrong
-- `docs/PROJECT.md` §12.2 — the stale sentence
+- `src/renderer/src/components/ScriptRunner.tsx` — `env={kind === 'run' ? { OCTOPUS_PORT: String(port) } : {}}`
+- `src/core/scripts.ts:35` — `PORT_VARIABLE`, the only variable there is
 
 ## What is already decided
 
 Running is manual, by button. Conductor runs setup automatically on workspace
-creation and blocks the workspace if it fails; we deliberately do not. Do not
-reopen that — fix the sentence, not the behaviour.
+creation and blocks the workspace if it fails; we deliberately do not.
 
 ## Sketch
 
-Give the setup script the same treatment `run.sh` already gets: an environment.
-At minimum the repository root, which `store.ts` knows and the renderer can
-pass. Conductor's equivalent is `CONDUCTOR_ROOT_PATH`; ours would be
-`OCTOPUS_ROOT_PATH`, defined next to `PORT_VARIABLE` in `scripts.ts` so the two
-names stay together.
-
-Then the template hint becomes correct and portable:
+Give the setup script an environment too. At minimum the repository root, which
+`store.ts` knows and the renderer already has on the project. Conductor's
+equivalent is `CONDUCTOR_ROOT_PATH`; ours would be `OCTOPUS_ROOT_PATH`, defined
+next to `PORT_VARIABLE` in `scripts.ts` so the two names stay together.
 
 ```sh
-cp "$OCTOPUS_ROOT_PATH/.env" .env
+cp "$OCTOPUS_ROOT_PATH/certs/dev.pem" certs/
 ```
 
-Worth considering at the same time, but a separate decision: whether copying
-gitignored files deserves to be its own feature rather than a line everyone
-writes by hand. Conductor has one — `.worktreeinclude` plus a default `.env*`
-pattern, described in `.claude/skills/conductor-study/references/features.md`.
-Cheap for us, and it removes the most common reason to write a setup script at
-all.
+Worth deciding at the same time: whether the server script should have it as
+well. It probably should — one environment for both halves is easier to
+describe than two, and the only reason `run.sh` has one today is the port.

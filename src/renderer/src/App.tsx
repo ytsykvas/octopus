@@ -584,6 +584,10 @@ export function App(): React.JSX.Element {
               setEditingProjectId(openProjectId)
               setEditingProjectSection('scripts')
             }}
+            onEditEnv={() => {
+              setEditingProjectId(openProjectId)
+              setEditingProjectSection('env')
+            }}
             // The instruction the pull request tab would send is the project's,
             // so the tab opens the place it is written rather than carrying a
             // second editor of its own.

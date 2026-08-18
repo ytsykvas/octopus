@@ -1,4 +1,4 @@
-import { BookText, GitBranch, Info, Terminal, TriangleAlert } from 'lucide-react'
+import { BookText, GitBranch, Info, KeyRound, Terminal, TriangleAlert } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
@@ -32,7 +32,7 @@ interface ProjectSettingsProps {
   readonly initialSection?: SectionId
 }
 
-export type SectionId = 'general' | 'git' | 'scripts' | 'instructions' | 'danger'
+export type SectionId = 'general' | 'git' | 'scripts' | 'env' | 'instructions' | 'danger'
 
 const SECTIONS: readonly {
   readonly id: SectionId
@@ -40,6 +40,7 @@ const SECTIONS: readonly {
     | 'project.sectionGeneral'
     | 'project.sectionGit'
     | 'project.sectionScripts'
+    | 'project.sectionEnv'
     | 'project.sectionInstructions'
     | 'project.sectionDanger'
   readonly Icon: typeof Info
@@ -48,6 +49,9 @@ const SECTIONS: readonly {
   { id: 'general', labelKey: 'project.sectionGeneral', Icon: Info },
   { id: 'git', labelKey: 'project.sectionGit', Icon: GitBranch },
   { id: 'scripts', labelKey: 'project.sectionScripts', Icon: Terminal },
+  // Next to the scripts: the env is what they read, and before this it was the
+  // first thing the build script had to fetch for itself.
+  { id: 'env', labelKey: 'project.sectionEnv', Icon: KeyRound },
   { id: 'instructions', labelKey: 'project.sectionInstructions', Icon: BookText },
   { id: 'danger', labelKey: 'project.sectionDanger', Icon: TriangleAlert, destructive: true }
 ]
@@ -274,6 +278,24 @@ export function ProjectSettings({
                 }
               />
             </>
+          )}
+
+          {/* Its own section rather than a third editor under Scripts. The
+              Build header offers a button for each, and two buttons opening the
+              same panel would be two names for one action — while what they
+              lead to genuinely differs: one file is run, the other is copied. */}
+          {section === 'env' && (
+            <FileEditor
+              label={t('project.env')}
+              hint={t('project.envHint')}
+              placeholder="KEY=value"
+              rows={12}
+              read={async () => {
+                const result = await window.octopus.projects.readEnv(project.id)
+                return result.ok ? result.value : null
+              }}
+              save={(contents) => void window.octopus.projects.saveEnv(project.id, contents)}
+            />
           )}
 
           {/* Nothing reads this yet — pull requests are still ahead. It is here

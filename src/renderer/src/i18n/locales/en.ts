@@ -86,6 +86,7 @@ export const en = {
     sectionGeneral: 'General',
     sectionGit: 'Git',
     sectionScripts: 'Scripts',
+    sectionEnv: 'Env',
     sectionInstructions: 'Instructions',
     sectionDanger: 'Danger zone',
     done: 'Done',
@@ -105,7 +106,10 @@ export const en = {
     iconNone: 'Initials',
     setupScript: 'Build script',
     setupScriptHint:
-      'Runs in a new workspace: copy an .env, install dependencies, anything a fresh checkout needs. Saved as setup.sh.',
+      'Runs in a new workspace: install dependencies, build what has to be built, anything a fresh checkout needs. Saved as setup.sh.',
+    env: 'Env file',
+    envHint:
+      'Written into a workspace as .env when it has none — at creation, and again before a build. A file already there is never overwritten. Kept readable by you alone.',
     runScript: 'Server script',
     runScriptHint:
       'Starts the dev server. $OCTOPUS_PORT is set to the workspace\u2019s own port, so several can serve at once. Saved as run.sh.',
@@ -140,9 +144,22 @@ export const en = {
     foldBuild: 'Fold the build away',
     unfoldBuild: 'Show the build',
     edit: 'Write the script',
+    /* Beside the build rather than in the project dialog alone: the env is what
+       a build reads, and the moment you notice one is missing is the moment the
+       build in front of you did not find it. */
+    editEnv: 'Edit env',
+    /* The whole tab in one control: build, then serve. `Run` rather than
+       `Build and start`, because the two steps are one intention — the second
+       is only ever wanted after the first. */
+    runAll: 'Run',
+    running: 'Building\u2026',
+    runHint: 'Builds this workspace, then starts its server.',
+    runBuilding: 'Building. The server starts when this finishes.',
+    runServing: 'Serving.',
+    buildFailed: 'The build failed, so the server was not started.',
     noWorkspace: 'Select a workspace to run this in.',
     noSetup:
-      'No build script yet. It runs in a fresh workspace — copying an .env, installing dependencies, whatever a checkout needs before work can start.',
+      'No build script yet. It runs in a fresh workspace — installing dependencies, whatever a checkout needs before work can start.',
     noRun:
       'No server script yet. It starts the dev server, and receives a port of its own so several workspaces can serve at once.',
     placeholder: '#!/bin/sh',

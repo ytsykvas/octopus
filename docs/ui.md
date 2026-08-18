@@ -515,9 +515,38 @@ where the agent writes unasked is the one worth noticing without looking for it.
 interfaces call it, and a translated name for a borrowed one reads as a second
 setting rather than the same one.
 
-**The right pane** holds Changes, Terminal, Build and Server. Build runs
-`setup.sh`, Server runs `run.sh` with the workspace's port in `$OCTOPUS_PORT`.
-Both run on a button: starting a server because a tab was clicked is a surprise.
+**The right pane** holds Changes, Terminal, Scripts and Pull request. The
+Scripts tab runs `setup.sh` on its build half and `run.sh` on its server half,
+with the workspace's port in `$OCTOPUS_PORT`. Both run on a button: starting a
+server because a tab was clicked is a surprise.
+
+**One `Run` sits above both halves**, and is the whole tab in one control: it
+builds, and starts the server when the build succeeds. The first thing anybody
+does with a new workspace is these two steps in this order, and the second only
+makes sense after the first — two buttons made the reader supply the ordering
+every time.
+
+A failed build stops it there and says so. A server started on top of a broken
+build fails in a way that points at the server rather than at the build that
+actually broke. A project with no build script skips straight to serving: §4
+says no step is mandatory, and waiting on a half that is showing an invitation
+to write one would simply hang. With no server script there is nothing to run,
+so `Run` is disabled — the server half already carries that invitation.
+
+The sequence is **keyed by workspace**, exactly as the runs are: leaving one
+mid-build to look at another must not report the second as building.
+
+**The per-half buttons stay.** Rebuilding without restarting the server, and
+restarting the server without rebuilding, are both ordinary things to want.
+`Run` is the shortcut for the common case, not a replacement for either — and a
+build somebody ran from its own button does not start a server, because it is
+not the first step of a sequence anybody began.
+
+**Either button puts the project's env in place first**, and refuses to start if
+that fails. A build or a server missing its env fails further in, complaining
+about whatever the missing value fed rather than about the env — and nothing
+here makes a build come first, so the server has to do it too. It never
+overwrites, so a workspace whose `.env` was edited by hand keeps what it has.
 
 **The buttons say which script they are for.** The server is `Start`, `Restart`
 and `Stop`; the build is `Build` and then `Rebuild`. One component draws both,
@@ -534,6 +563,14 @@ the way.
 The fold control on the build's heading is named for what it does rather than
 for the word on it: `Build` is also what the button beside it says, and two
 controls with one name are ambiguous to anything reading the pane aloud.
+
+**`Edit env` sits on that heading permanently**, not only while the build script
+is missing. The moment anyone notices an env is missing is a run that could not
+find it, and by then the empty state that might have carried the button is gone.
+It is a **sibling** of the fold control rather than a child of it, so reaching
+for the env cannot put the build away. It opens the project dialog on its own
+`Env` section — the button beside it opens `Scripts`, and two buttons leading to
+one panel would be two names for one action.
 
 **The change count follows the work.** It used to be read when the list was —
 on create, rename, remove and first load — and never again, so the agent could

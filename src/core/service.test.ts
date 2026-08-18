@@ -833,6 +833,87 @@ describe('project scripts', () => {
   })
 })
 
+describe('project env', () => {
+  async function withProject(): Promise<string> {
+    const repo = join(dir, 'planner')
+    await initRepo(repo)
+    return (await service.addProjectFromPath(repo)).id
+  }
+
+  // No template, unlike a script: an env nobody wrote has nothing to guess at.
+  it('is empty before anything has been written', async () => {
+    const id = await withProject()
+    await expect(service.readProjectEnv(id)).resolves.toBe('')
+  })
+
+  it('reads back what was saved', async () => {
+    const id = await withProject()
+    await service.saveProjectEnv(id, 'API_KEY=secret\n')
+
+    await expect(service.readProjectEnv(id)).resolves.toBe('API_KEY=secret\n')
+  })
+
+  it('keeps each project\u2019s env to itself', async () => {
+    const first = await withProject()
+
+    const other = join(dir, 'esl')
+    await initRepo(other)
+    const second = (await service.addProjectFromPath(other)).id
+
+    await service.saveProjectEnv(first, 'FROM=planner\n')
+
+    await expect(service.readProjectEnv(second)).resolves.toBe('')
+  })
+
+  it('refuses to touch the env of a project that does not exist', async () => {
+    await expect(service.readProjectEnv('missing')).rejects.toThrow()
+    await expect(service.saveProjectEnv('missing', 'A=1')).rejects.toThrow()
+    await expect(service.applyWorkspaceEnv('missing')).rejects.toThrow()
+  })
+
+  // The whole point: a fresh worktree has no `.env`, because it is gitignored.
+  it('gives a new workspace the project env', async () => {
+    const id = await withProject()
+    await service.saveProjectEnv(id, 'API_KEY=secret\n')
+
+    const workspace = await service.createWorkspaceIn(id)
+
+    await expect(readFile(join(workspace.path, '.env'), 'utf8')).resolves.toBe('API_KEY=secret\n')
+  })
+
+  it('leaves a workspace alone when the project has no env', async () => {
+    const id = await withProject()
+    const workspace = await service.createWorkspaceIn(id)
+
+    await expect(access(join(workspace.path, '.env'))).rejects.toThrow()
+  })
+
+  // A workspace made before the env existed picks it up on the next build,
+  // rather than staying broken until somebody recreates it.
+  it('fills in a workspace that predates the env', async () => {
+    const id = await withProject()
+    const workspace = await service.createWorkspaceIn(id)
+
+    await service.saveProjectEnv(id, 'API_KEY=late\n')
+    await service.applyWorkspaceEnv(workspace.id)
+
+    await expect(readFile(join(workspace.path, '.env'), 'utf8')).resolves.toBe('API_KEY=late\n')
+  })
+
+  it('never overwrites an env the workspace already has', async () => {
+    const id = await withProject()
+    await service.saveProjectEnv(id, 'API_KEY=project\n')
+
+    const workspace = await service.createWorkspaceIn(id)
+    await writeFile(join(workspace.path, '.env'), 'API_KEY=edited by hand\n', 'utf8')
+    await service.applyWorkspaceEnv(workspace.id)
+
+    await expect(readFile(join(workspace.path, '.env'), 'utf8')).resolves.toBe(
+      'API_KEY=edited by hand\n'
+    )
+  })
+})
+
 describe('project instructions', () => {
   async function withProject(): Promise<string> {
     const repo = join(dir, 'planner')

@@ -1,9 +1,13 @@
 /**
  * Per-project shell scripts (§12.2).
  *
- * Two of them: `setup.sh` runs once a worktree exists — copying `.env`,
- * installing dependencies — and `run.sh` starts the dev server, receiving the
- * workspace's port as `$OCTOPUS_PORT`.
+ * Two of them: `setup.sh` prepares a workspace — installing dependencies and
+ * whatever else a fresh checkout needs — and `run.sh` starts the dev server,
+ * receiving the workspace's port as `$OCTOPUS_PORT`.
+ *
+ * Copying the env is deliberately not among them any more: `env.ts` writes it
+ * into every workspace that lacks one, which is what made the first line of
+ * nearly every setup script unnecessary.
  *
  * They are plain shell files on disk rather than a string in the config. A
  * build step grows conditionals and loops soon enough, and a text field is a
@@ -45,7 +49,6 @@ const TEMPLATES: Record<ScriptKind, string> = {
 # Runs in a new workspace directory, once its worktree exists.
 # Use it for whatever a fresh checkout needs before work can start.
 
-# cp ../../.env .env
 # npm install
 `,
   run: `#!/bin/sh

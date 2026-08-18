@@ -1,12 +1,14 @@
-import { ChevronDown, ChevronRight } from 'lucide-react'
+import { ChevronDown, ChevronRight, Play } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import type { ProjectColor } from '@core/colors.js'
 import type { RightPanelTab } from '@core/config.js'
 import type { DiffCommentController } from '../hooks/useDiffComments.js'
+import { useRunSequence } from '../hooks/useRunSequence.js'
 import type { WorkspaceView } from '@core/workspaces.js'
 
+import { Button } from './Button.js'
 import { DiffPanel } from './diff/DiffPanel.js'
 import type { DiffView } from './diff/DiffHunk.js'
 import { ResizeHandle } from './ResizeHandle.js'
@@ -66,6 +68,15 @@ function measureTabs(row: HTMLElement): number {
  */
 const MIN_CENTRE_WIDTH = 360
 
+/** What the row above the two halves says while the sequence runs its course. */
+const STAGE_HINTS = {
+  idle: 'scripts.runHint',
+  building: 'scripts.runBuilding',
+  serving: 'scripts.runServing',
+  // Never read: a failed stage prints its own sentence, in the danger colour.
+  failed: 'scripts.runHint'
+} as const
+
 /**
  * How much of the window the left column takes, passed in rather than assumed.
  *
@@ -96,6 +107,8 @@ interface RightPanelProps {
   /** Absolute paths of the project's scripts; null when never written. */
   readonly scriptPaths: { readonly setup: string | null; readonly run: string | null }
   readonly onEditScripts: () => void
+  /** Opens the project's env file, which every workspace is given a copy of. */
+  readonly onEditEnv: () => void
   /** Opens the project's pull request instructions, from the tab about them. */
   readonly onEditInstructions: () => void
   /** The conversation a prompt would go to; null when the workspace has none. */
@@ -129,6 +142,7 @@ export function RightPanel({
   projectId,
   scriptPaths,
   onEditScripts,
+  onEditEnv,
   onEditInstructions,
   chatId,
   width,
@@ -156,6 +170,30 @@ export function RightPanel({
    * build was read, so it is out of the way until the next one.
    */
   const [buildOpen, setBuildOpen] = useState(true)
+  // One button that takes a workspace from a bare checkout to a running
+  // server. It lives above both halves because neither half can see the other.
+  const sequence = useRunSequence()
+  const activeRun = sequence.runOf(activeWorkspaceId)
+  // Only the build blocks a second press. Once the server is up, pressing Run
+  // again is a rebuild and a restart, which is a thing people mean to do.
+  const building = activeRun.stage === 'building'
+  /*
+   * What Run does, or nothing where it has nothing to do: no workspace chosen,
+   * no server script to start, or a build already going.
+   *
+   * A handler that is absent rather than one that guards inside itself — the
+   * guard could only ever be reached through a button that is disabled, and an
+   * unreachable line is a claim about behaviour nobody can check.
+   */
+  const runAll =
+    activeWorkspaceId === null || scriptPaths.run === null || building
+      ? undefined
+      : (): void => {
+          // Skipping a build nobody wrote rather than waiting for it: §4 says
+          // no step is mandatory, and the half is showing an invitation to
+          // write one rather than a runner that could answer.
+          sequence.start(activeWorkspaceId, scriptPaths.setup !== null)
+        }
 
   const tabs = useRef<HTMLDivElement>(null)
 
@@ -372,6 +410,26 @@ export function RightPanel({
         aria-hidden={tab !== 'scripts'}
         className={`flex min-h-0 flex-1 flex-col ${tab === 'scripts' ? '' : 'hidden'}`}
       >
+        {/* The whole point of the tab in one control: the first thing anybody
+            does with a new workspace is these two steps in this order, and the
+            second only makes sense after the first. The per-half buttons stay —
+            rebuilding without restarting the server, and restarting without
+            rebuilding, are both ordinary things to want. */}
+        <div className="border-line flex shrink-0 items-center gap-2 border-b px-3 py-1.5">
+          <span className="text-ink-faint min-w-0 flex-1 truncate text-[11px]">
+            {activeRun.stage === 'failed' ? (
+              <span className="text-danger">{t('scripts.buildFailed')}</span>
+            ) : (
+              t(STAGE_HINTS[activeRun.stage])
+            )}
+          </span>
+
+          <Button size="sm" variant="accent" disabled={runAll === undefined} onClick={runAll}>
+            <Play aria-hidden size={12} />
+            {t(building ? 'scripts.running' : 'scripts.runAll')}
+          </Button>
+        </div>
+
         {/* A named region each, rather than two anonymous halves. Both are on
             screen at once now, so "the Run button" is ambiguous to anything
             reading the pane aloud — and to anything testing it. The heading is
@@ -390,26 +448,38 @@ export function RightPanel({
           aria-label={t('scripts.build')}
           className={buildOpen ? 'flex min-h-0 flex-1 flex-col' : 'shrink-0'}
         >
-          <button
-            type="button"
-            onClick={() => {
-              setBuildOpen(!buildOpen)
-            }}
-            aria-expanded={buildOpen}
-            // Named for what it does, not for what it says. The word on it is
-            // `Build`, and so is the word on the button that runs the build —
-            // two controls with one name, which is ambiguous to anything
-            // reading the pane aloud and to anything testing it.
-            aria-label={t(buildOpen ? 'scripts.foldBuild' : 'scripts.unfoldBuild')}
-            className="focus-ring section-label border-line hover:bg-muted flex w-full shrink-0 items-center gap-1.5 border-b px-3 py-1.5 text-left"
-          >
-            {buildOpen ? (
-              <ChevronDown aria-hidden size={12} className="text-ink-faint shrink-0" />
-            ) : (
-              <ChevronRight aria-hidden size={12} className="text-ink-faint shrink-0" />
-            )}
-            {t('scripts.build')}
-          </button>
+          {/* The row carries the border, not the toggle: the env button is a
+              sibling rather than a child, so reaching for it cannot fold the
+              build away by accident. */}
+          <div className="border-line flex shrink-0 items-center gap-2 border-b pr-2">
+            <button
+              type="button"
+              onClick={() => {
+                setBuildOpen(!buildOpen)
+              }}
+              aria-expanded={buildOpen}
+              // Named for what it does, not for what it says. The word on it is
+              // `Build`, and so is the word on the button that runs the build —
+              // two controls with one name, which is ambiguous to anything
+              // reading the pane aloud and to anything testing it.
+              aria-label={t(buildOpen ? 'scripts.foldBuild' : 'scripts.unfoldBuild')}
+              className="focus-ring section-label hover:bg-muted flex min-w-0 flex-1 items-center gap-1.5 px-3 py-1.5 text-left"
+            >
+              {buildOpen ? (
+                <ChevronDown aria-hidden size={12} className="text-ink-faint shrink-0" />
+              ) : (
+                <ChevronRight aria-hidden size={12} className="text-ink-faint shrink-0" />
+              )}
+              {t('scripts.build')}
+            </button>
+
+            {/* Always here, not only while the build script is missing. The env
+                is the thing a build most often turns out to be lacking, and by
+                then the empty state that held this button is long gone. */}
+            <Button size="sm" onClick={onEditEnv}>
+              {t('scripts.editEnv')}
+            </Button>
+          </div>
 
           {/* `aria-hidden` beside the class, exactly as the tabs above do it:
               the class says nothing to a screen reader, and nothing at all
@@ -425,6 +495,10 @@ export function RightPanel({
               scriptPath={scriptPaths.setup}
               visible={tab === 'scripts'}
               onOpenSettings={onEditScripts}
+              tokenFor={(id) => sequence.runOf(id).build}
+              onOutcome={(id, ok) => {
+                sequence.finished('setup', id, ok)
+              }}
             />
           </div>
         </section>
@@ -443,6 +517,10 @@ export function RightPanel({
             scriptPath={scriptPaths.run}
             visible={tab === 'scripts'}
             onOpenSettings={onEditScripts}
+            tokenFor={(id) => sequence.runOf(id).server}
+            onOutcome={(id, ok) => {
+              sequence.finished('run', id, ok)
+            }}
           />
         </section>
       </div>

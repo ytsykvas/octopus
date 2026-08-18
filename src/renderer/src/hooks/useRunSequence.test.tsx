@@ -1,0 +1,145 @@
+import { act, renderHook } from '@testing-library/react'
+import { describe, expect, it } from 'vitest'
+
+import { useRunSequence } from './useRunSequence.js'
+
+describe('useRunSequence', () => {
+  it('reports a workspace nobody has run as idle', () => {
+    const { result } = renderHook(() => useRunSequence())
+
+    expect(result.current.runOf('anna')).toEqual({ stage: 'idle', build: 0, server: 0 })
+  })
+
+  // The pane draws this before a workspace is chosen, and it must not have to
+  // invent an id to ask about.
+  it('reports no workspace as idle too', () => {
+    const { result } = renderHook(() => useRunSequence())
+
+    expect(result.current.runOf(null).stage).toBe('idle')
+  })
+
+  it('asks the build half to start', () => {
+    const { result } = renderHook(() => useRunSequence())
+
+    act(() => {
+      result.current.start('anna', true)
+    })
+
+    expect(result.current.runOf('anna')).toEqual({ stage: 'building', build: 1, server: 0 })
+  })
+
+  it('starts the server once the build succeeds', () => {
+    const { result } = renderHook(() => useRunSequence())
+
+    act(() => {
+      result.current.start('anna', true)
+    })
+    act(() => {
+      result.current.finished('setup', 'anna', true)
+    })
+
+    expect(result.current.runOf('anna')).toEqual({ stage: 'serving', build: 1, server: 1 })
+  })
+
+  // A server started on top of a broken build fails in a way that points at the
+  // server rather than at the build that actually broke.
+  it('stops at a failed build rather than serving anyway', () => {
+    const { result } = renderHook(() => useRunSequence())
+
+    act(() => {
+      result.current.start('anna', true)
+    })
+    act(() => {
+      result.current.finished('setup', 'anna', false)
+    })
+
+    const run = result.current.runOf('anna')
+    expect(run.stage).toBe('failed')
+    expect(run.server).toBe(0)
+  })
+
+  // §4: no step is mandatory. Waiting for a build nobody wrote would hang on a
+  // half that is showing an invitation to write one.
+  it('goes straight to the server when there is no build script', () => {
+    const { result } = renderHook(() => useRunSequence())
+
+    act(() => {
+      result.current.start('anna', false)
+    })
+
+    expect(result.current.runOf('anna')).toEqual({ stage: 'serving', build: 0, server: 1 })
+  })
+
+  it('settles once the server ends', () => {
+    const { result } = renderHook(() => useRunSequence())
+
+    act(() => {
+      result.current.start('anna', false)
+    })
+    act(() => {
+      result.current.finished('run', 'anna', true)
+    })
+
+    expect(result.current.runOf('anna').stage).toBe('idle')
+  })
+
+  /*
+   * Both halves keep their own buttons, and those report an outcome the same
+   * way. A build somebody ran by hand is not the first step of a sequence
+   * nobody began — treating it as one would start a server unasked.
+   */
+  it('ignores a run nobody sequenced', () => {
+    const { result } = renderHook(() => useRunSequence())
+
+    act(() => {
+      result.current.finished('setup', 'anna', true)
+    })
+
+    expect(result.current.runOf('anna')).toEqual({ stage: 'idle', build: 0, server: 0 })
+  })
+
+  it('ignores a server ending while a build is still going', () => {
+    const { result } = renderHook(() => useRunSequence())
+
+    act(() => {
+      result.current.start('anna', true)
+    })
+    act(() => {
+      result.current.finished('run', 'anna', true)
+    })
+
+    expect(result.current.runOf('anna').stage).toBe('building')
+  })
+
+  // A sequence belongs to the workspace it was started in, exactly as the run
+  // does: leaving one mid-build to look at another must not report the second
+  // as building.
+  it('keeps each workspace to its own sequence', () => {
+    const { result } = renderHook(() => useRunSequence())
+
+    act(() => {
+      result.current.start('anna', true)
+    })
+
+    expect(result.current.runOf('bob').stage).toBe('idle')
+    expect(result.current.runOf('bob').build).toBe(0)
+  })
+
+  it('asks again rather than remembering it once asked', () => {
+    const { result } = renderHook(() => useRunSequence())
+
+    act(() => {
+      result.current.start('anna', true)
+    })
+    act(() => {
+      result.current.finished('setup', 'anna', false)
+    })
+    act(() => {
+      result.current.start('anna', true)
+    })
+
+    // The token, not a flag: the second press has to reach a half that already
+    // ran once, and "start again" is the same instruction as "start".
+    expect(result.current.runOf('anna')).toEqual({ stage: 'building', build: 2, server: 0 })
+  })
+})

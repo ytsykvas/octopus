@@ -256,4 +256,70 @@ describe('ScriptRunner', () => {
     })
     expect(octopus().terminal.dispose).not.toHaveBeenCalledWith(sessionId(2))
   })
+  /*
+   * The env goes in before the build, not only when the workspace was made.
+   *
+   * A project that gained its env afterwards would otherwise build against
+   * nothing until the workspace was recreated — and the core never overwrites,
+   * so a `.env` edited inside the worktree survives this.
+   */
+  it('puts the project env in place before building', async () => {
+    render(
+      <ScriptRunner
+        workspace={anna}
+        kind="setup"
+        scriptPath={SETUP_SCRIPT}
+        port={3111}
+        onOpenSettings={vi.fn()}
+      />
+    )
+
+    await userEvent.click(screen.getByRole('button', { name: 'Build' }))
+    await sessionsOpened(1)
+
+    expect(octopus().workspaces.applyEnv).toHaveBeenCalledWith(anna.id)
+  })
+
+  // Nothing makes a build come first: the server is as likely to be the first
+  // thing started, and a dev server is what reads the env in the first place.
+  it('puts the project env in place before starting the server too', async () => {
+    render(
+      <ScriptRunner
+        workspace={anna}
+        kind="run"
+        scriptPath={RUN_SCRIPT}
+        port={3111}
+        onOpenSettings={vi.fn()}
+      />
+    )
+
+    await userEvent.click(screen.getByRole('button', { name: 'Start' }))
+    await sessionsOpened(1)
+
+    expect(octopus().workspaces.applyEnv).toHaveBeenCalledWith(anna.id)
+  })
+
+  // Starting anyway would fail further in, complaining about whatever the
+  // missing value fed rather than about the env.
+  it('says so and does not build when the env cannot be written', async () => {
+    vi.mocked(octopus().workspaces.applyEnv).mockResolvedValue({
+      ok: false,
+      error: 'Permission denied.'
+    })
+
+    render(
+      <ScriptRunner
+        workspace={anna}
+        kind="setup"
+        scriptPath={SETUP_SCRIPT}
+        port={3111}
+        onOpenSettings={vi.fn()}
+      />
+    )
+
+    await userEvent.click(screen.getByRole('button', { name: 'Build' }))
+
+    expect(await screen.findByText(/Permission denied/)).toBeInTheDocument()
+    expect(octopus().terminal.create).not.toHaveBeenCalled()
+  })
 })

@@ -1,5 +1,5 @@
 import { execFile } from 'node:child_process'
-import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
+import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { promisify } from 'node:util'
@@ -271,6 +271,9 @@ describe('channel table', () => {
     'scripts:read',
     'scripts:save',
     'scripts:paths',
+    'env:read',
+    'env:save',
+    'env:apply',
     'instructions:read',
     'instructions:save',
     'instructions:effective',
@@ -384,6 +387,11 @@ describe('validation at the boundary', () => {
 
   it('rejects a script kind it does not know', async () => {
     const result = await invoke('scripts:read', 'nothing', 'malicious')
+    expect(result).toMatchObject({ ok: false })
+  })
+
+  it('rejects an env body longer than a file has any business being', async () => {
+    const result = await invoke('env:save', 'nothing', 'A=1\n'.repeat(20_000))
     expect(result).toMatchObject({ ok: false })
   })
 
@@ -678,6 +686,38 @@ describe('scripts and instructions of a real project', () => {
       ok: true,
       value: { setup: expect.stringContaining('setup.sh'), run: null }
     })
+  })
+
+  // No template here, unlike a script: an env nobody wrote has no contents
+  // worth guessing at, and a starting body would be copied into workspaces.
+  it('reads an empty env for a project that has none', async () => {
+    const projectId = await addProject()
+
+    await expect(invoke('env:read', projectId)).resolves.toEqual({ ok: true, value: '' })
+  })
+
+  it('reads back the env it saved', async () => {
+    const projectId = await addProject()
+
+    expect(await invoke('env:save', projectId, 'API_KEY=secret\n')).toMatchObject({ ok: true })
+
+    await expect(invoke('env:read', projectId)).resolves.toEqual({
+      ok: true,
+      value: 'API_KEY=secret\n'
+    })
+  })
+
+  it('writes the env into a workspace on request', async () => {
+    const projectId = await addProject()
+    await invoke('env:save', projectId, 'API_KEY=secret\n')
+
+    const workspace = await createWorkspace(projectId)
+
+    // Already there from creation; applying again is what a build does, and it
+    // has to stay harmless.
+    expect(await invoke('env:apply', workspace.id)).toMatchObject({ ok: true })
+
+    await expect(readFile(join(workspace.path, '.env'), 'utf8')).resolves.toBe('API_KEY=secret\n')
   })
 
   it('reads a template for an instruction nobody has written yet', async () => {

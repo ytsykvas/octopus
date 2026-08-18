@@ -1,10 +1,10 @@
-import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { type ComponentProps, useState } from 'react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { octopus } from '../test/octopus.js'
-import { openedDirectories, sessionId, stubTerminalHost } from '../test/terminal.js'
+import { openedDirectories, sessionId, sessionsOpened, stubTerminalHost } from '../test/terminal.js'
 import { commentController } from '../test/comments.js'
 import { workspaceView } from '../test/workspaces.js'
 import { RightPanel } from './RightPanel.js'
@@ -15,6 +15,16 @@ const anna = workspaceView('anna')
 const bob = workspaceView('bob', { port: 3222 })
 
 const SCRIPTS = { setup: '/tmp/scripts/planner/setup.sh', run: '/tmp/scripts/planner/run.sh' }
+
+/** Every listener hears every exit; a terminal keeps only its own. */
+const exits: ((exit: { id: string; exitCode: number | null }) => void)[] = []
+
+/** Ends the n-th session opened in this test, the way the main process would. */
+function processExits(n: number, exitCode = 0): void {
+  act(() => {
+    for (const notify of exits) notify({ id: sessionId(n), exitCode })
+  })
+}
 
 /**
  * The pane's ceiling is derived from the window, so a test that narrows the
@@ -68,6 +78,7 @@ function renderPanel(overrides: Partial<Props> = {}): {
     projectId: 'planner',
     scriptPaths: { setup: null, run: null },
     onEditScripts: vi.fn(),
+    onEditEnv: vi.fn(),
     onEditInstructions: vi.fn(),
     chatId: null,
     width: 360,
@@ -143,6 +154,11 @@ describe('RightPanel', () => {
   beforeEach(() => {
     stubTerminalHost()
     window.innerWidth = ROOMY
+    exits.length = 0
+    vi.mocked(octopus().terminal.onExit).mockImplementation((handler) => {
+      exits.push(handler)
+      return vi.fn()
+    })
   })
 
   afterEach(() => {
@@ -279,6 +295,170 @@ describe('RightPanel', () => {
     await userEvent.click(within(buildSection()).getByRole('button', { name: 'Write the script' }))
 
     expect(onEditScripts).toHaveBeenCalled()
+  })
+
+  /*
+   * The whole point of the tab in one control.
+   *
+   * The first thing anybody does with a new workspace is these two steps in
+   * this order, and the second only makes sense after the first — so the test
+   * follows the same order: build, exit zero, then a server.
+   */
+  it('builds and then serves on one press of Run', async () => {
+    renderPanel({ workspaces: [anna], activeWorkspaceId: anna.id, scriptPaths: SCRIPTS })
+
+    await userEvent.click(scriptsTab())
+    await userEvent.click(screen.getByRole('button', { name: 'Run' }))
+
+    await sessionsOpened(1)
+    expect(openedDirectories()).toEqual([anna.path])
+
+    processExits(1)
+
+    await sessionsOpened(2)
+    expect(octopus().terminal.create).toHaveBeenLastCalledWith(
+      expect.objectContaining({ command: [SCRIPTS.run] })
+    )
+  })
+
+  // A server that ends has been stopped, or has crashed in a way its own output
+  // describes far better than the row above it could. Either way the sequence
+  // is over and the button goes back to offering the whole of it again.
+  it('settles once the server ends', async () => {
+    renderPanel({ workspaces: [anna], activeWorkspaceId: anna.id, scriptPaths: SCRIPTS })
+
+    await userEvent.click(scriptsTab())
+    await userEvent.click(screen.getByRole('button', { name: 'Run' }))
+    await sessionsOpened(1)
+    processExits(1)
+    await sessionsOpened(2)
+
+    expect(screen.getByText('Serving.')).toBeInTheDocument()
+
+    processExits(2)
+
+    expect(await screen.findByText(/Builds this workspace/)).toBeInTheDocument()
+  })
+
+  // A server started on top of a broken build fails in a way that points at the
+  // server rather than at the build that actually broke.
+  it('does not serve when the build fails, and says why', async () => {
+    renderPanel({ workspaces: [anna], activeWorkspaceId: anna.id, scriptPaths: SCRIPTS })
+
+    await userEvent.click(scriptsTab())
+    await userEvent.click(screen.getByRole('button', { name: 'Run' }))
+    await sessionsOpened(1)
+
+    processExits(1, 1)
+
+    expect(await screen.findByText(/The build failed/)).toBeInTheDocument()
+    expect(octopus().terminal.create).toHaveBeenCalledTimes(1)
+  })
+
+  // §4: no step is mandatory. Waiting for a build nobody wrote would hang on a
+  // half showing an invitation to write one rather than a runner that answers.
+  it('goes straight to the server when the project has no build script', async () => {
+    renderPanel({
+      workspaces: [anna],
+      activeWorkspaceId: anna.id,
+      scriptPaths: { setup: null, run: SCRIPTS.run }
+    })
+
+    await userEvent.click(scriptsTab())
+    await userEvent.click(screen.getByRole('button', { name: 'Run' }))
+
+    await sessionsOpened(1)
+    expect(octopus().terminal.create).toHaveBeenLastCalledWith(
+      expect.objectContaining({ command: [SCRIPTS.run] })
+    )
+  })
+
+  // Nothing to run: the server half already carries the invitation to write it,
+  // and a Run that did half the job would be worse than one that waits.
+  it('offers no Run while the server script is missing', async () => {
+    renderPanel({
+      workspaces: [anna],
+      activeWorkspaceId: anna.id,
+      scriptPaths: { setup: SCRIPTS.setup, run: null }
+    })
+
+    await userEvent.click(scriptsTab())
+
+    expect(screen.getByRole('button', { name: 'Run' })).toBeDisabled()
+  })
+
+  it('offers no Run before a workspace is chosen', async () => {
+    renderPanel({ workspaces: [anna], activeWorkspaceId: null, scriptPaths: SCRIPTS })
+
+    await userEvent.click(scriptsTab())
+
+    expect(screen.getByRole('button', { name: 'Run' })).toBeDisabled()
+  })
+
+  // A sequence belongs to the workspace it was started in, exactly as the run
+  // does — the two halves keep a runner each per workspace for the same reason.
+  it('reports the build as running only in the workspace it was started in', async () => {
+    const { rerender } = renderPanel({
+      workspaces: [anna, bob],
+      activeWorkspaceId: anna.id,
+      scriptPaths: SCRIPTS
+    })
+
+    await userEvent.click(scriptsTab())
+    await userEvent.click(screen.getByRole('button', { name: 'Run' }))
+    await sessionsOpened(1)
+
+    expect(screen.getByRole('button', { name: 'Building…' })).toBeInTheDocument()
+
+    rerender({ activeWorkspaceId: bob.id })
+
+    expect(screen.getByRole('button', { name: 'Run' })).toBeEnabled()
+  })
+
+  // Both halves keep their own buttons, and those report an outcome the same
+  // way. A build run by hand is not the first step of a sequence nobody began.
+  it('starts no server after a build run from its own button', async () => {
+    renderPanel({ workspaces: [anna], activeWorkspaceId: anna.id, scriptPaths: SCRIPTS })
+
+    await userEvent.click(scriptsTab())
+    await userEvent.click(within(buildSection()).getByRole('button', { name: 'Build' }))
+    await sessionsOpened(1)
+
+    processExits(1)
+
+    // Still the one session: nothing sequenced this, so nothing follows it.
+    expect(octopus().terminal.create).toHaveBeenCalledTimes(1)
+  })
+
+  // Always on the header, not only in the empty state: the moment an env turns
+  // out to be missing is a build that could not find it, and by then the empty
+  // state that used to carry this button is long gone.
+  it('offers the env from the build header once a script exists', async () => {
+    const onEditEnv = vi.fn()
+    renderPanel({
+      workspaces: [anna],
+      activeWorkspaceId: anna.id,
+      scriptPaths: SCRIPTS,
+      onEditEnv
+    })
+
+    await userEvent.click(scriptsTab())
+    await userEvent.click(within(buildSection()).getByRole('button', { name: 'Edit env' }))
+
+    expect(onEditEnv).toHaveBeenCalled()
+  })
+
+  // A sibling of the fold toggle rather than a child of it: reaching for the
+  // env must not put the build away.
+  it('leaves the build open when the env button is used', async () => {
+    renderPanel({ workspaces: [anna], activeWorkspaceId: anna.id, scriptPaths: SCRIPTS })
+
+    await userEvent.click(scriptsTab())
+    await userEvent.click(within(buildSection()).getByRole('button', { name: 'Edit env' }))
+
+    expect(
+      within(buildSection()).getByRole('button', { name: 'Fold the build away' })
+    ).toHaveAttribute('aria-expanded', 'true')
   })
 
   /*

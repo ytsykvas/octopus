@@ -22,6 +22,14 @@ interface WorkspaceScriptsProps {
    */
   readonly visible: boolean
   readonly onOpenSettings: () => void
+  /**
+   * This half's start token for a given workspace, from the Run sequence.
+   *
+   * A function rather than one number: every workspace here keeps its own
+   * runner, and a sequence started in one must not start the rest of them.
+   */
+  readonly tokenFor: (workspaceId: string) => number
+  readonly onOutcome: (workspaceId: string, ok: boolean) => void
 }
 
 /**
@@ -44,7 +52,9 @@ export function WorkspaceScripts({
   kind,
   scriptPath,
   visible,
-  onOpenSettings
+  onOpenSettings,
+  tokenFor,
+  onOutcome
 }: WorkspaceScriptsProps): React.JSX.Element {
   const [openedIds, setOpenedIds] = useState<readonly string[]>([])
   const [lastActiveId, setLastActiveId] = useState<string | null>(null)
@@ -101,6 +111,10 @@ export function WorkspaceScripts({
             scriptPath={scriptPath}
             port={workspace.port}
             onOpenSettings={onOpenSettings}
+            startToken={tokenFor(workspace.id)}
+            onOutcome={(ok) => {
+              onOutcome(workspace.id, ok)
+            }}
           />
         </div>
       ))}

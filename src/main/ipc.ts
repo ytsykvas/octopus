@@ -27,6 +27,7 @@ import {
   PlanFeedbackSchema,
   WorkingModeSchema
 } from '../core/chats.js'
+import { EnvBodySchema } from '../core/env.js'
 import type { RemoteRepository } from '../core/github.js'
 import { InstructionBodySchema, InstructionKindSchema } from '../core/instructions.js'
 import { NewPullRequestSchema } from '../core/pullRequests.js'
@@ -214,6 +215,20 @@ export function registerIpc(
 
   host.handle('scripts:paths', (_event, projectId: string) =>
     attempt(() => service.projectScriptPaths(projectId))
+  )
+
+  host.handle('env:read', (_event, projectId: string) =>
+    attempt(() => service.readProjectEnv(projectId))
+  )
+
+  host.handle('env:save', (_event, projectId: string, contents: unknown) =>
+    attempt(() => service.saveProjectEnv(projectId, EnvBodySchema.parse(contents)))
+  )
+
+  // Keyed by workspace rather than project: the env is written into a worktree,
+  // and only the workspace knows where that is.
+  host.handle('env:apply', (_event, workspaceId: string) =>
+    attempt(() => service.applyWorkspaceEnv(workspaceId))
   )
 
   // `null` is the installation's own instruction rather than a project's, which

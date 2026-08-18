@@ -1,10 +1,11 @@
 import { Play, RotateCw, Square } from 'lucide-react'
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import type { ScriptKind } from '@core/scripts.js'
 import type { WorkspaceView } from '@core/workspaces.js'
 
+import { useErrorMessage } from '../hooks/useErrorMessage.js'
 import { Button } from './Button.js'
 import { Terminal } from './Terminal.js'
 
@@ -16,6 +17,16 @@ interface ScriptRunnerProps {
   /** Passed to `run.sh` so several workspaces can serve at once. */
   readonly port: number
   readonly onOpenSettings: () => void
+  /**
+   * Bumped by the Run button to ask this half to start; 0 means never.
+   *
+   * A number rather than a callback handed upwards: the sequence must be able
+   * to ask twice in a row, and "start again" and "start" are the same
+   * instruction to a runner that is already going.
+   */
+  readonly startToken?: number
+  /** Reports a run ending, and whether it ended well, to whatever sequenced it. */
+  readonly onOutcome?: (ok: boolean) => void
 }
 
 /**
@@ -50,24 +61,11 @@ export function ScriptRunner({
   kind,
   scriptPath,
   port,
-  onOpenSettings
+  onOpenSettings,
+  startToken = 0,
+  onOutcome
 }: ScriptRunnerProps): React.JSX.Element {
   const { t } = useTranslation()
-  // Bumped to restart: remounting Terminal is what ends the old session and
-  // begins a new one, since the session is tied to the component's lifetime.
-  const [run, setRun] = useState(0)
-  // Two states, not one. `started` keeps the terminal on screen — the output is
-  // why anyone is looking, and it must survive the process exiting. `running`
-  // only tracks whether that process is still alive, which is what the buttons
-  // reflect.
-  const [started, setStarted] = useState(false)
-  const [running, setRunning] = useState(false)
-
-  const start = (): void => {
-    setRun((current) => current + 1)
-    setStarted(true)
-    setRunning(true)
-  }
 
   if (!workspace) {
     return <Hint>{t('scripts.noWorkspace')}</Hint>
@@ -83,6 +81,95 @@ export function ScriptRunner({
       </Hint>
     )
   }
+
+  return (
+    <Runner
+      workspace={workspace}
+      kind={kind}
+      scriptPath={scriptPath}
+      port={port}
+      startToken={startToken}
+      onOutcome={onOutcome}
+    />
+  )
+}
+
+interface RunnerProps {
+  readonly workspace: WorkspaceView
+  readonly kind: ScriptKind
+  readonly scriptPath: string
+  readonly port: number
+  readonly startToken: number
+  readonly onOutcome: ((ok: boolean) => void) | undefined
+}
+
+/**
+ * The half that has something to run, once both questions above are settled.
+ *
+ * Split from the component around it so nothing in here has to ask again
+ * whether there is a workspace or a script — there are, or it was not drawn.
+ * That is what lets the effect below live beside the state it drives rather
+ * than above two early returns.
+ */
+function Runner({
+  workspace,
+  kind,
+  scriptPath,
+  port,
+  startToken,
+  onOutcome
+}: RunnerProps): React.JSX.Element {
+  const { t } = useTranslation()
+  const describeFailure = useErrorMessage()
+  // Bumped to restart: remounting Terminal is what ends the old session and
+  // begins a new one, since the session is tied to the component's lifetime.
+  const [run, setRun] = useState(0)
+  // Two states, not one. `started` keeps the terminal on screen — the output is
+  // why anyone is looking, and it must survive the process exiting. `running`
+  // only tracks whether that process is still alive, which is what the buttons
+  // reflect.
+  const [started, setStarted] = useState(false)
+  const [running, setRunning] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  const start = (): void => {
+    void (async () => {
+      /*
+       * The env goes in before either script, not only when the workspace was
+       * made. A project that gained its env afterwards would otherwise run
+       * against nothing until the workspace was recreated, and the server is as
+       * likely to be the first thing started as the build — nothing here makes
+       * a build come first.
+       *
+       * It never overwrites, so a `.env` edited inside the worktree survives,
+       * and running this twice costs a stat.
+       */
+      const applied = await window.octopus.workspaces.applyEnv(workspace.id)
+      if (!applied.ok) {
+        // Refusing to start is the point. Either script without its env fails
+        // further in, complaining about whatever the missing value fed.
+        setError(describeFailure(applied))
+        // A sequence waiting on this half would otherwise wait for ever.
+        onOutcome?.(false)
+        return
+      }
+
+      setError(null)
+      setRun((current) => current + 1)
+      setStarted(true)
+      setRunning(true)
+    })()
+  }
+
+  useEffect(() => {
+    // Zero is the token nobody has claimed yet, so a half that mounts before
+    // anything asked of it stays where it is.
+    if (startToken === 0) return
+    start()
+    // The token is the whole trigger. `start` is rebuilt on every render, and
+    // depending on it would restart the script on any state change at all.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [startToken])
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
@@ -124,6 +211,9 @@ export function ScriptRunner({
               onClick={() => {
                 setStarted(false)
                 setRunning(false)
+                // Stopping is an outcome too: a sequence still waiting on the
+                // server has nothing left to wait for.
+                onOutcome?.(true)
               }}
             >
               <Square aria-hidden size={12} />
@@ -138,6 +228,12 @@ export function ScriptRunner({
         )}
       </div>
 
+      {/* Above the terminal rather than inside it: the run never began, so
+          there is no output for this to belong to. */}
+      {error !== null && (
+        <p className="text-danger border-line shrink-0 border-b px-3 py-1.5">{error}</p>
+      )}
+
       {started ? (
         <div className="relative flex-1">
           <Terminal
@@ -145,8 +241,9 @@ export function ScriptRunner({
             cwd={workspace.path}
             command={[scriptPath]}
             env={kind === 'run' ? { OCTOPUS_PORT: String(port) } : {}}
-            onExit={() => {
+            onExit={(exitCode) => {
               setRunning(false)
+              onOutcome?.(exitCode === 0)
             }}
           />
         </div>

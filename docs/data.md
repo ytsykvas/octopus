@@ -11,7 +11,8 @@ else joins a home directory by hand.
   chats/<chatId>.jsonl               one conversation each, append-only
   instructions/pull-request.md       guidance every project falls back to
   projects/<projectId>/
-    scripts/setup.sh                 runs in a new workspace
+    env                              copied in as .env where a workspace has none
+    scripts/setup.sh                 prepares a new workspace, on the Build button
     scripts/run.sh                   starts the dev server
     instructions/pull-request.md     this project's own, which wins
   workspaces/<projectId>/<name>/     the git worktrees
@@ -403,3 +404,22 @@ checkout of someone's project, not a place to leave ours.
 
 Scripts are saved executable. Without the bit, running one fails with
 "permission denied", which says nothing about what to do.
+
+## The project env
+
+`projects/<slug>/env` holds one env body per project, and `env.ts` writes it
+into a workspace as `.env` — at creation, and again before either script runs,
+so a workspace that predates the env picks it up rather than staying broken
+until somebody recreates it.
+
+It **never overwrites**. The write uses the `wx` flag rather than checking
+first: a `.env` edited inside the worktree survives, and there is no window
+between the check and the write. A blank body copies nothing at all — an empty
+`.env` is not neutral, since some tools prefer it to their own defaults.
+
+Both copies are written `0o600`. It carries credentials, so the `0o755` a script
+gets would be wrong twice over.
+
+Unlike a script, a missing env reads back as an empty string rather than a
+template. A shell file needs its shebang to run; a starting env body would be
+content nobody asked to have copied into their workspaces.

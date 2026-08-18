@@ -58,7 +58,7 @@ Each workspace owns:
 task → workspace → agent works → diff → PR → merge → archive
        (worktree    (isolated,    (review) (gh)        (worktree removed,
         + branch     own session)                       history kept)
-        + setup.sh)
+        + .env)
 ```
 
 ---
@@ -452,9 +452,11 @@ Further rules:
 
 ### 12.2 Scripts
 
-- `setup.sh` — runs after the worktree is created (copying `.env`, installing dependencies).
+- `setup.sh` — prepares a workspace: installing dependencies, building what a fresh checkout needs. Runs on the Build button, not on workspace creation — no step is mandatory (§4).
 - `run.sh` — the dev server; receives `$OCTOPUS_PORT`.
+- One **Run** on the Scripts tab does both in order: build, then serve when the build succeeds. A failed build stops there; a missing build script is skipped rather than waited on. Each half keeps its own button as well.
 - The port is derived deterministically from the workspace id, range 3000–9000, checked for availability.
+- A project may also hold an **env file**. It is written into a workspace as `.env` when the workspace has none — at creation, and again before either script runs, so a workspace that predates the env picks it up. A file already in the worktree is never overwritten, and both copies are kept readable by their owner alone. This is why copying an env is no longer the first line of every setup script.
 
 ### 12.3 The agent — the key requirement
 
@@ -489,6 +491,7 @@ Everything under one directory (Conductor spreads across `~/conductor` and `~/.c
   config.json                global settings
   state.json                 workspaces, session ids, statuses
   projects/<slug>/
+    env                      copied into workspaces that have no .env
     scripts/setup.sh
     scripts/run.sh
   workspaces/<slug>/<name>/  ← git worktree

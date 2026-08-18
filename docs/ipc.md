@@ -1,7 +1,7 @@
 # IPC
 
 Every call from the interface to the rest of the application goes through one
-of 50 channels. The table lives in [`src/main/ipc.ts`](../src/main/ipc.ts); the
+of 57 channels. The table lives in [`src/main/ipc.ts`](../src/main/ipc.ts); the
 renderer never names a channel itself, it calls
 [`src/preload/index.ts`](../src/preload/index.ts).
 
@@ -46,13 +46,16 @@ The only channel outside this shape is `theme:get`, which cannot fail.
 | `projects:branches`      | `id`          | remote branches, ordered with main/master/develop first                                 |
 | `projects:listRemote`    | —             | what the account can push to, personal and organisation alike, through `gh api graphql` |
 
-### Scripts and instructions
+### Scripts, env and instructions
 
 | Channel                  | Arguments             | Notes                                                                                                                                        |
 | ------------------------ | --------------------- | -------------------------------------------------------------------------------------------------------------------------------------------- |
 | `scripts:read`           | `id`, `kind`          | a missing script comes back as a template                                                                                                    |
 | `scripts:save`           | `id`, `kind`, `body`  | written executable                                                                                                                           |
 | `scripts:paths`          | `id`                  | `null` where nothing has been written                                                                                                        |
+| `env:read`               | `id`                  | empty where nothing has been written — no template                                                                                           |
+| `env:save`               | `id`, `body`          | written `0o600`; it holds credentials                                                                                                        |
+| `env:apply`              | `workspaceId`         | writes it into the worktree as `.env`, never over a file already there                                                                       |
 | `instructions:read`      | `id`, `kind`          | `null` id is the installation's own                                                                                                          |
 | `instructions:save`      | `id`, `kind`, `body`  | same, and it needs no project to exist                                                                                                       |
 | `instructions:effective` | `workspaceId`, `kind` | what this workspace would send: its project's, or the installation's. Resolved in core so the renderer need not know the order and ask twice |

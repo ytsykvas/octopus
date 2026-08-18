@@ -21,10 +21,22 @@ terminal output yourself.
 It also means a server started on top of a broken build fails in a way that
 points at the server rather than at the build that actually broke.
 
+## What has since changed
+
+The code is no longer discarded. `Runner` in `ScriptRunner.tsx` reports it
+upwards as `onOutcome(exitCode === 0)`, and `useRunSequence` uses that to decide
+whether the `Run` button goes on to the server — a failed build now stops the
+sequence and says so above both halves.
+
+What is still missing is the standing answer. Outside a sequence, and after one
+has finished, both halves look identical whether the last build succeeded, fell
+over, or never happened. The sequence knows for the length of one run; nothing
+remembers.
+
 ## Evidence
 
-- `src/renderer/src/components/Terminal.tsx:35` — `onExit?: (exitCode: number | null) => void`. The code is already delivered to the caller.
-- `src/renderer/src/components/ScriptRunner.tsx:110-112` — the handler takes no argument and only clears `running`. The exit code is discarded one line before it becomes useful.
+- `src/renderer/src/components/Terminal.tsx:35` — `onExit?: (exitCode: number | null) => void`.
+- `src/renderer/src/components/ScriptRunner.tsx` — `onOutcome` narrows it to a boolean and keeps none of it.
 
 ## What is already decided
 
@@ -34,16 +46,16 @@ for the part of that decision that still contradicts §12.2.
 
 ## Sketch
 
-Keep the last exit code in `ScriptRunner` and show it: succeeded, failed with a
-code, or never run. Colour it with the `success` / `danger` tokens on the text,
-not as a filled background — §10.7.
+Keep the last exit code in `Runner` and show it: succeeded, failed with a code,
+or never run. Colour it with the `success` / `danger` tokens on the text, not as
+a filled background — §10.7. `onOutcome` already narrows the code to a boolean
+for the sequence, so it is the number itself that has to survive alongside it.
 
-Open, and worth deciding before building: whether the Server tab should _block_
-on a missing or failed build, or merely say so. Blocking is tempting and
-probably wrong — restarting a server without rebuilding is an ordinary thing to
-want, and §4 says no step is mandatory. A line of text on the Server tab saying
-the last build failed is likely the whole feature.
+That question is settled: the Server half does **not** block. `Run` refuses to
+go on after a failed build, and the server's own Start button still works —
+restarting a server without rebuilding is an ordinary thing to want, and §4 says
+no step is mandatory.
 
-Note the state cannot survive today anyway: `ScriptRunner` is remounted on every
-tab switch. [right-panel-kills-running-scripts.md](right-panel-kills-running-scripts.md)
-has to land first, or the exit code is forgotten the moment you leave the tab.
+The obstacle this used to name is gone: `WorkspaceScripts` now keeps a runner
+per workspace mounted, so state held in `ScriptRunner` survives a tab switch and
+an exit code kept there would still be there when you come back.

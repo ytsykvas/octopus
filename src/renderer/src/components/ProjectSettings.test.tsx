@@ -371,6 +371,42 @@ describe('ProjectSettings', () => {
     )
   })
 
+  // Its own section rather than a third editor under Scripts: the Build header
+  // has a button for each, and two of them opening one panel would be two names
+  // for one action.
+  it('offers the env in a section of its own', async () => {
+    vi.mocked(window.octopus.projects.readEnv).mockResolvedValue({
+      ok: true,
+      value: 'API_KEY=secret'
+    })
+    const user = userEvent.setup()
+    await renderDialog()
+
+    await openSection(user, 'Env')
+
+    expect(await screen.findByDisplayValue('API_KEY=secret')).toBeInTheDocument()
+  })
+
+  it('saves an edited env against the project it belongs to', async () => {
+    vi.mocked(window.octopus.projects.readEnv).mockResolvedValue({
+      ok: true,
+      value: 'API_KEY=secret'
+    })
+    const user = userEvent.setup()
+    await renderDialog()
+
+    await openSection(user, 'Env')
+    const env = await screen.findByDisplayValue('API_KEY=secret')
+    await user.clear(env)
+    await user.type(env, 'API_KEY=rotated')
+    await user.tab()
+
+    expect(window.octopus.projects.saveEnv).toHaveBeenCalledExactlyOnceWith(
+      'planner',
+      'API_KEY=rotated'
+    )
+  })
+
   /*
    * Opened where the caller already knows the question — the pull request tab
    * asks for the instructions section rather than dropping the reader on
@@ -501,6 +537,20 @@ describe('ProjectSettings', () => {
     const editors = await screen.findAllByRole('textbox')
     expect(editors).toHaveLength(2)
     for (const editor of editors) expect(editor).toHaveValue('')
+    expect(screen.queryByText(/permission denied/)).toBeNull()
+  })
+
+  it('leaves the env editor empty when the file cannot be read', async () => {
+    vi.mocked(window.octopus.projects.readEnv).mockResolvedValue({
+      ok: false,
+      error: 'EACCES: permission denied'
+    })
+    const user = userEvent.setup()
+    await renderDialog()
+
+    await openSection(user, 'Env')
+
+    expect(await screen.findByRole('textbox')).toHaveValue('')
     expect(screen.queryByText(/permission denied/)).toBeNull()
   })
 

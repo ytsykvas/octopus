@@ -1288,6 +1288,28 @@ describe('App', () => {
     expect(await screen.findByRole('dialog', { name: 'Project settings' })).toBeInTheDocument()
   })
 
+  // A different section from the one beside it: the env is a file the scripts
+  // read rather than another script, so the two buttons lead to two places.
+  it('opens the env section from the build header', async () => {
+    givenTwoProjects()
+    const user = await openApp()
+    await user.click(await screen.findByRole('button', { name: 'PL' }))
+    await user.click(screen.getByRole('button', { name: 'Scripts' }))
+    await user.click(await screen.findByText('anna'))
+
+    await user.click(
+      await within(screen.getByRole('region', { name: 'Build' })).findByRole('button', {
+        name: 'Edit env'
+      })
+    )
+
+    const dialog = await screen.findByRole('dialog', { name: 'Project settings' })
+    expect(within(dialog).getByRole('button', { name: 'Env' })).toHaveAttribute(
+      'aria-current',
+      'true'
+    )
+  })
+
   /*
    * A workspace can outlive its project on screen: the two lists are read
    * separately, so a refresh may drop the project while the workspace list the
