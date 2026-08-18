@@ -289,6 +289,57 @@ describe('useWorkspaces', () => {
     expect(window.octopus.workspaces.list).toHaveBeenCalledTimes(reads + 1)
   })
 
+  /*
+   * Two turns, two projects, and a settle window that holds both.
+   *
+   * The pending re-read used to be one timer for everything, cleared before the
+   * project was even consulted — so the second event cancelled the first's read
+   * and scheduled its own, and the first project's rows went on showing the
+   * count they had before the agent touched anything. Several agents working at
+   * once is this application's whole premise, so this is not a corner.
+   */
+  it('re-reads both projects when two turns end together', async () => {
+    workspacesPerProject({ planner: [anna], website: [carol] })
+    const projects = [planner, website]
+
+    const { result } = renderHook(() => useWorkspaces(projects, accepts(), vi.fn<OnError>()))
+    await waitFor(() => {
+      expect(result.current.flat).toEqual([anna, carol])
+    })
+    vi.mocked(window.octopus.workspaces.list).mockClear()
+
+    emitTurnEnd(anna.id)
+    emitTurnEnd(carol.id)
+    await after(400)
+
+    const asked = vi
+      .mocked(window.octopus.workspaces.list)
+      .mock.calls.map(([projectId]) => projectId)
+    expect(asked).toContain('planner')
+    expect(asked).toContain('website')
+  })
+
+  // A window closed inside the settling delay has nothing left to update, and
+  // the read would put git to work on the way to a hook that is gone.
+  it('drops a pending re-read when the window closes', async () => {
+    workspacesPerProject({ planner: [anna] })
+    const projects = [planner]
+
+    const { result, unmount } = renderHook(() =>
+      useWorkspaces(projects, accepts(), vi.fn<OnError>())
+    )
+    await waitFor(() => {
+      expect(result.current.flat).toEqual([anna])
+    })
+    vi.mocked(window.octopus.workspaces.list).mockClear()
+
+    emitTurnEnd(anna.id)
+    unmount()
+    await after(400)
+
+    expect(window.octopus.workspaces.list).not.toHaveBeenCalled()
+  })
+
   it('asks nothing for a turn in a project it does not know', async () => {
     workspacesPerProject({ planner: [anna] })
     const projects = [planner]

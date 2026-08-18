@@ -116,8 +116,18 @@ export function useWorkspaces(
     [patchWorkspace]
   )
 
-  /** The pending re-read, so a turn ending twice over is one of them. */
-  const settle = useRef<ReturnType<typeof setTimeout> | null>(null)
+  /**
+   * The pending re-read, so a turn ending twice over is one of them.
+   *
+   * One per project rather than one in all. A single timer was cleared by
+   * whichever project the next event came from, so two turns finishing within
+   * the settle window in **different** projects left one of them with no
+   * re-read at all — its rows going on showing the count they had before the
+   * agent touched anything, until something else happened to refresh the list.
+   * Several agents working at once is this application's whole premise, so that
+   * is not a corner.
+   */
+  const settle = useRef(new Map<string, ReturnType<typeof setTimeout>>())
 
   /*
    * The changed-file count, re-read when the work that changes it stops.
@@ -141,20 +151,29 @@ export function useWorkspaces(
       )?.id
       if (projectId === undefined) return
 
-      if (settle.current !== null) clearTimeout(settle.current)
-      settle.current = setTimeout(() => {
-        void (async () => {
-          const result = await window.octopus.workspaces.list(projectId)
-          if (!result.ok) return
+      const pending = settle.current.get(projectId)
+      if (pending !== undefined) clearTimeout(pending)
 
-          setByProject((current) => new Map(current).set(projectId, result.value))
-        })()
-      }, SETTLE_MS)
+      const timers = settle.current
+      timers.set(
+        projectId,
+        setTimeout(() => {
+          timers.delete(projectId)
+
+          void (async () => {
+            const result = await window.octopus.workspaces.list(projectId)
+            if (!result.ok) return
+
+            setByProject((current) => new Map(current).set(projectId, result.value))
+          })()
+        }, SETTLE_MS)
+      )
     })
 
     return () => {
       unsubscribe()
-      if (settle.current !== null) clearTimeout(settle.current)
+      for (const pending of settle.current.values()) clearTimeout(pending)
+      settle.current.clear()
     }
   }, [])
 
