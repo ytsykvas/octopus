@@ -1,5 +1,7 @@
 import { z } from 'zod'
 
+import { EXIT_PLAN_MODE } from '@core/chats.js'
+
 /**
  * The fields worth showing from a tool call, in the order they are looked for.
  *
@@ -30,9 +32,15 @@ const PLAN_SCHEMA = z.object({ plan: z.string().min(1) })
  * Summarised like any other tool call it disappeared entirely — the summary
  * looks for `file_path`, `command` and their like, and a plan has none of them,
  * so the row showed a tool name and nothing else while the plan sat inside it.
+ *
+ * The name comes from the core rather than being written out again. It belongs
+ * to the SDK and has changed once already; matched against a copy, a rename
+ * would leave the core stripping the new name from standing approvals while
+ * this went on matching the old one — and a plan drawn as an ordinary tool call
+ * gets no dialog, no approval, and a turn that simply stops.
  */
 export function readPlan(toolName: string, input: unknown): string | null {
-  if (toolName !== 'ExitPlanMode') return null
+  if (toolName !== EXIT_PLAN_MODE) return null
 
   const parsed = PLAN_SCHEMA.safeParse(input)
   return parsed.success ? parsed.data.plan : null
