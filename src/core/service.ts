@@ -1547,10 +1547,15 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
        * assumed.
        *
        * The agent's own CLI changes mode by itself — it leaves plan mode once a
-       * plan is settled — and announces nothing when it does: no message in the
-       * SDK carries a mode except the one at startup. Set only at the start and
-       * on a user's change, the session drifted, and the footer ended up
-       * promising "without asking" over an agent asking about every edit.
+       * plan is settled. Set only at the start and on a user's change, the
+       * session drifted, and the footer ended up promising "without asking"
+       * over an agent asking about every edit.
+       *
+       * The mode can now be read: `SDKStatusMessage` carries an optional
+       * `permissionMode`, and a live session emits those messages routinely.
+       * Re-asserted all the same, because a push is not a guarantee — reading
+       * the mode from a message that arrives means trusting that it always
+       * does, and the failure it would bring back is a silent one.
        *
        * The toggle wins over whatever the CLI decided. A setting that turns
        * itself off is worse than a turn planned once more than needed.
