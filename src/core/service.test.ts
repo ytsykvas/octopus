@@ -3084,6 +3084,30 @@ describe('the agent chat', () => {
     })
 
     /*
+     * `/effort high` changes the level inside the CLI and announces nothing.
+     *
+     * Unlike the model there is no reading that reports the truth — the context
+     * response carries the model and no effort — so a level set by a command
+     * survived every message after it, beside a picker naming a different one.
+     * Re-asserting is what keeps the control honest, at the price of a command's
+     * effort lasting one turn.
+     */
+    it('re-asserts the effort on every message, as it does the mode', async () => {
+      const { service, workspaceId } = await withWorkspace()
+      const chat = await service.openChat(workspaceId)
+      await service.setChatEffort(chat.id, 'high')
+      await service.sendToChat(chat.id, 'first')
+
+      // The session exists by now, so this is the message that has to say it
+      // again — whatever the CLI was told in between.
+      await service.sendToChat(chat.id, 'second')
+
+      expect(agent().flagSettings()).toEqual([
+        { effortLevel: 'high', ultracode: false, enableWorkflows: false }
+      ])
+    })
+
+    /*
      * There is no longer a level that is not pushed. Clearing the override used
      * to mean "whatever the agent would choose", which a running session cannot
      * be told — so that one change was written and not sent. The composer names

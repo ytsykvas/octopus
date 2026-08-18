@@ -464,6 +464,15 @@ conversation whose two differ, and the coding model everywhere else. The effort
 control follows the same reading — so a plan model that takes no effort greys it
 out for as long as planning lasts, and gives it back afterwards.
 
+**The three settings in the row do not all behave the same way, on purpose.**
+The **model** is read back: the context reading names what the session is
+running, so `/model opus` moves the chip and the record stays what was chosen
+here. The **mode** and the **effort** are re-asserted on every message instead,
+because neither can be read — no SDK message reports the effort, and
+`applyFlagSettings` answers nothing. So `/effort high` and `/permissions` last
+one turn each: the control names the level the next message will run at, which
+is the reading that matters at the moment anyone consults it.
+
 **Every row of the panel names a model.** The catalogue's first entry does not:
 the CLI calls it `Default (recommended)`, which tells a reader nothing about
 what they are about to talk to. It does say what it _resolves_ to, and the

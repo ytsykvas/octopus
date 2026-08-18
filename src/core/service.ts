@@ -1598,8 +1598,26 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
        * on the model that wrote it. That is not a re-assertion but a second
        * instruction, given later than `/model` was, and the later one wins.
        */
+      /*
+       * Effort is re-asserted for the same reason the mode is, and unlike the
+       * model there is nothing to read instead.
+       *
+       * `/effort high` changes the level inside the CLI and announces nothing:
+       * the context reading names the running model and carries no effort, and
+       * `applyFlagSettings` returns void, so there is no reading that reports
+       * the truth. Left alone, a level set by a command survived every message
+       * after it, next to a picker naming a different one — and effort is what
+       * a turn costs and how long it takes.
+       *
+       * The price is that `/effort` lasts one turn. That is the same bargain
+       * `/permissions` already lives with, and `docs/ui.md` says so rather than
+       * leaving it to be discovered.
+       */
       const running = sessions.get(chatId)
-      if (running) await running.setPermissionMode(sessionMode(chat))
+      if (running) {
+        await running.setPermissionMode(sessionMode(chat))
+        await running.setEffort(chat.effort)
+      }
 
       const session = running ?? startFor(chat, workspace)
       session.send(text)
