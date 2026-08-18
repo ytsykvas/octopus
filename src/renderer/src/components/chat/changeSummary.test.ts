@@ -136,6 +136,38 @@ describe('what a tool call changed', () => {
     expect(change?.lines).toHaveLength(4)
   })
 
+  /*
+   * The counts stay what they are — one occurrence's worth, which is all the
+   * call carries — and the flag is what stops them being drawn as a total.
+   */
+  it('marks an edit that replaced its text everywhere', () => {
+    const everywhere = readChange('Edit', {
+      file_path: '/a.ts',
+      old_string: 'oldName',
+      new_string: 'newName',
+      replace_all: true
+    })
+
+    expect(everywhere?.everywhere).toBe(true)
+    expect(everywhere?.added).toBe(1)
+    expect(everywhere?.removed).toBe(1)
+  })
+
+  it('leaves an ordinary edit and a write alone', () => {
+    expect(
+      readChange('Edit', { file_path: '/a.ts', old_string: 'a', new_string: 'b' })?.everywhere
+    ).toBe(false)
+    expect(
+      readChange('Edit', {
+        file_path: '/a.ts',
+        old_string: 'a',
+        new_string: 'b',
+        replace_all: false
+      })?.everywhere
+    ).toBe(false)
+    expect(readChange('Write', { file_path: '/a.ts', content: 'x\n' })?.everywhere).toBe(false)
+  })
+
   it('answers nothing for a tool that changes no file', () => {
     expect(readChange('Grep', { pattern: 'octopus' })).toBeNull()
     expect(readChange('Bash', { command: 'ls' })).toBeNull()

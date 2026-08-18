@@ -366,6 +366,12 @@ export const en = {
     toolSteps_many: '{{count}} steps',
     toolSteps_other: '{{count}} steps',
 
+    /* Where the `+1 −1` normally sits, for an edit that replaced its text
+       everywhere it appeared. No number, because the call carries none: it is
+       handed one pair of fragments however many places it applies them to, and
+       a rename through twelve of them used to read `+1 −1`. */
+    changeEverywhere: 'replaced everywhere',
+
     plan: 'Plan',
     executePlan: 'Execute',
     executePlanMessage: 'Carry out the plan “{{title}}”.',

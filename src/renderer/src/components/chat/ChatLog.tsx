@@ -405,6 +405,8 @@ function ChangeBlock({
   change: Change
   context: ChangeContext | null
 }): React.JSX.Element {
+  const { t } = useTranslation()
+
   return (
     <div className="border-line min-w-0 rounded-[var(--radius-control)] border">
       <div className="border-line text-ink-soft flex min-w-0 items-baseline gap-2 border-b px-2.5 py-1.5">
@@ -418,11 +420,21 @@ function ChangeBlock({
           {shown(change.path)}
         </span>
 
-        <span className="ml-auto shrink-0 font-mono text-[11px]">
-          {change.added > 0 && <span className="text-success">+{change.added}</span>}
-          {change.added > 0 && change.removed > 0 && ' '}
-          {change.removed > 0 && <span className="text-danger">−{change.removed}</span>}
-        </span>
+        {/* The counts describe one occurrence, which is all an `Edit` carries.
+            With `replace_all` that is not a total, and drawing it as one said
+            `+1 −1` over a rename through twelve places — so the number gives
+            way to the fact it cannot state. */}
+        {change.everywhere ? (
+          <span className="text-ink-faint ml-auto shrink-0 text-[11px]">
+            {t('chat.changeEverywhere')}
+          </span>
+        ) : (
+          <span className="ml-auto shrink-0 font-mono text-[11px]">
+            {change.added > 0 && <span className="text-success">+{change.added}</span>}
+            {change.added > 0 && change.removed > 0 && ' '}
+            {change.removed > 0 && <span className="text-danger">−{change.removed}</span>}
+          </span>
+        )}
       </div>
 
       {/* Capped rather than folded: the median change is two lines, so a click

@@ -282,6 +282,38 @@ describe('what the log shows', () => {
     expect(row('+two')).toBe('+two')
   })
 
+  /*
+   * A rename goes through `replace_all`, and the call says nothing about how
+   * many places it touched — it carries one pair of fragments. Drawn as a count
+   * that was `+1 −1` over twelve changed lines, which is not incomplete but
+   * wrong: the block is what gets read instead of the diff.
+   */
+  it('says an edit replaced its text everywhere rather than counting once', () => {
+    renderLog({
+      entries: [
+        fromAgent({
+          type: 'tool_use',
+          toolUseId: 'c-1',
+          name: 'Edit',
+          input: {
+            file_path: '/a.ts',
+            old_string: 'oldName',
+            new_string: 'newName',
+            replace_all: true
+          }
+        })
+      ]
+    })
+
+    expect(screen.getByText('replaced everywhere')).toBeVisible()
+    expect(screen.queryByText('+1')).not.toBeInTheDocument()
+    expect(screen.queryByText('−1')).not.toBeInTheDocument()
+
+    // The lines stay: they are exactly right for each place it landed.
+    expect(screen.getByText('-oldName')).toBeVisible()
+    expect(screen.getByText('+newName')).toBeVisible()
+  })
+
   // What stood there before is not in the call, so a `Write` says only what it
   // knows: everything is new.
   it('shows a written file as all additions', () => {

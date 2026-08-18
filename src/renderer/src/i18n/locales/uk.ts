@@ -309,6 +309,8 @@ export const uk: Translation = {
     toolSteps_many: '{{count}} дій',
     toolSteps_other: '{{count}} дій',
 
+    changeEverywhere: 'замінено всюди',
+
     plan: 'План',
     executePlan: 'Виконати',
     executePlanMessage: 'Виконай план «{{title}}».',

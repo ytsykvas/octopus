@@ -12,12 +12,22 @@ export interface Change {
   readonly lines: readonly ChangeLine[]
   readonly added: number
   readonly removed: number
+  /**
+   * Whether the text was replaced everywhere it appeared, rather than once.
+   *
+   * The counts describe a single occurrence, which is all the call carries: an
+   * `Edit` is handed one pair of fragments however many places it applies them
+   * to. Where this is set the counts are not a total and must not be drawn as
+   * one — a rename through twelve places said `+1 −1`.
+   */
+  readonly everywhere: boolean
 }
 
 const EditSchema = z.object({
   file_path: z.string().min(1),
   old_string: z.string(),
-  new_string: z.string()
+  new_string: z.string(),
+  replace_all: z.boolean().optional()
 })
 
 const WriteSchema = z.object({
@@ -132,12 +142,13 @@ export function lineDiff(before: string, after: string): ChangeLine[] {
   return lines
 }
 
-function summarise(path: string, lines: ChangeLine[]): Change {
+function summarise(path: string, lines: ChangeLine[], everywhere = false): Change {
   return {
     path,
     lines,
     added: lines.filter((line) => line.sign === '+').length,
-    removed: lines.filter((line) => line.sign === '-').length
+    removed: lines.filter((line) => line.sign === '-').length,
+    everywhere
   }
 }
 
@@ -151,6 +162,11 @@ function summarise(path: string, lines: ChangeLine[]): Change {
  * A `Write` is reported as all additions. What stood there before is not in the
  * call, and a "before" invented for the sake of a tidier diff would be the one
  * part of this the reader could not check.
+ *
+ * An `Edit` with `replace_all` is one pair of fragments applied to every place
+ * the text appears, and the call says nothing about how many that was. The
+ * lines are still exactly right for each of them; only the counts stop being a
+ * total, which is what `everywhere` warns the block about.
  */
 export function readChange(toolName: string, input: unknown): Change | null {
   if (toolName === 'Edit') {
@@ -159,7 +175,8 @@ export function readChange(toolName: string, input: unknown): Change | null {
 
     return summarise(
       parsed.data.file_path,
-      lineDiff(parsed.data.old_string, parsed.data.new_string)
+      lineDiff(parsed.data.old_string, parsed.data.new_string),
+      parsed.data.replace_all ?? false
     )
   }
 
