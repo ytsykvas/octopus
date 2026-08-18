@@ -141,6 +141,11 @@ export function useWorkspaces(
    * to run `git status` over every workspace of every project.
    */
   useEffect(() => {
+    // Read into a variable here rather than in the cleanup: a ref may point at
+    // something else by the time a cleanup runs, and the timers to clear are
+    // the ones this subscription started.
+    const timers = settle.current
+
     const unsubscribe = window.octopus.chats.onEvent((announced) => {
       // A turn ends either way, and one that failed may well have written files
       // before it did.
@@ -151,10 +156,9 @@ export function useWorkspaces(
       )?.id
       if (projectId === undefined) return
 
-      const pending = settle.current.get(projectId)
+      const pending = timers.get(projectId)
       if (pending !== undefined) clearTimeout(pending)
 
-      const timers = settle.current
       timers.set(
         projectId,
         setTimeout(() => {
@@ -172,8 +176,8 @@ export function useWorkspaces(
 
     return () => {
       unsubscribe()
-      for (const pending of settle.current.values()) clearTimeout(pending)
-      settle.current.clear()
+      for (const pending of timers.values()) clearTimeout(pending)
+      timers.clear()
     }
   }, [])
 
