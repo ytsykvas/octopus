@@ -1,6 +1,7 @@
 import { execFile } from 'node:child_process'
 import {
   access,
+  chmod,
   mkdir,
   mkdtemp,
   readFile,
@@ -141,10 +142,39 @@ describe('GitHub projects', () => {
   })
 
   it('falls back to the real gh when no executor is supplied', async () => {
-    // No commandExec: the service must still expose the capability rather
-    // than crashing, whatever the machine's gh reports.
-    const plain = await createService(paths(join(dir, 'plain')))
-    await expect(plain.listRemoteRepositories()).resolves.toBeInstanceOf(Array)
+    /*
+     * No commandExec: the service must reach for the real `gh` rather than
+     * leaving the capability undefined.
+     *
+     * Proved against a fake `gh` on `PATH`, not against GitHub. This test used
+     * to call the live API, and failed whenever that request did — three runs
+     * in four on one bad afternoon, none of them caused by anyone's change.
+     * A gate that goes red on its own costs more than the test is worth.
+     *
+     * The fake refuses anything but `repo list`, so the assertion below covers
+     * the whole chain: no executor supplied, `defaultExec` used, a binary
+     * called `gh` run, asked for the repository list, its answer parsed.
+     */
+    const binDirectory = join(dir, 'bin')
+    const answer = join(dir, 'repositories.json')
+    await mkdir(binDirectory, { recursive: true })
+    await writeFile(answer, JSON.stringify([repository]), 'utf8')
+    await writeFile(
+      join(binDirectory, 'gh'),
+      `#!/bin/sh\n[ "$1" = repo ] && [ "$2" = list ] || exit 1\ncat '${answer}'\n`,
+      'utf8'
+    )
+    await chmod(join(binDirectory, 'gh'), 0o755)
+
+    const previousPath = process.env.PATH
+    process.env.PATH = `${binDirectory}:${previousPath ?? ''}`
+
+    try {
+      const plain = await createService(paths(join(dir, 'plain')))
+      await expect(plain.listRemoteRepositories()).resolves.toEqual([repository])
+    } finally {
+      process.env.PATH = previousPath
+    }
   })
 })
 
