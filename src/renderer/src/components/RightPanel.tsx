@@ -6,6 +6,7 @@ import type { ProjectColor } from '@core/colors.js'
 import type { RightPanelTab } from '@core/config.js'
 import type { DiffCommentController } from '../hooks/useDiffComments.js'
 import { useRunSequence } from '../hooks/useRunSequence.js'
+import { useServingPort } from '../hooks/useServingPort.js'
 import type { WorkspaceView } from '@core/workspaces.js'
 
 import { Button } from './Button.js'
@@ -210,6 +211,9 @@ export function RightPanel({
 
   const servingAt =
     activeWorkspace !== null && activeRun.stage === 'serving' ? activeWorkspace : null
+  // Asked only while something is serving: a port nothing was told to bind is
+  // not a port anybody is waiting on.
+  const silentPort = useServingPort(servingAt?.id ?? null)
 
   const restartServer =
     servingAt === null
@@ -454,6 +458,12 @@ export function RightPanel({
           <span className="text-ink-faint min-w-0 flex-1 truncate text-[11px]">
             {activeRun.stage === 'failed' ? (
               <span className="text-danger">{t('scripts.buildFailed')}</span>
+            ) : servingAt !== null && silentPort ? (
+              /* Said rather than enforced. The script is the user's, and being
+                 wrong about it must not take the link or the controls away. */
+              <span className="text-warning">
+                {t('scripts.portSilent', { port: servingAt.port })}
+              </span>
             ) : (
               t(STAGE_HINTS[activeRun.stage])
             )}

@@ -161,6 +161,9 @@ export const en = {
     runBuilding: 'Building. The server starts when this finishes.',
     runServing: 'Serving.',
     buildFailed: 'The build failed, so the server was not started.',
+    /* Said rather than enforced: the script belongs to whoever wrote it, and
+       being wrong about it must not take the link or the controls away. */
+    portSilent: 'Running, but nothing is listening on {{port}}. Does the script use $OCTOPUS_PORT?',
     noWorkspace: 'Select a workspace to run this in.',
     noSetup:
       'No build script yet. It runs in a fresh workspace — installing dependencies, whatever a checkout needs before work can start.',

@@ -126,6 +126,7 @@ function terminalsStub(): { manager: TerminalManager; sessions: TerminalSpies } 
       create: vi.fn(() => 'term-1'),
       ...sessions,
       disposeAll: vi.fn(),
+      disposeFor: vi.fn(() => Promise.resolve()),
       size: 0
     } as unknown as TerminalManager,
     sessions
@@ -274,6 +275,7 @@ describe('channel table', () => {
     'env:read',
     'env:save',
     'env:apply',
+    'workspaces:serving',
     'instructions:read',
     'instructions:save',
     'instructions:effective',
@@ -690,6 +692,18 @@ describe('scripts and instructions of a real project', () => {
 
   // No template here, unlike a script: an env nobody wrote has no contents
   // worth guessing at, and a starting body would be copied into workspaces.
+  // The port is ours to decide, so the channel takes a workspace rather than a
+  // number to connect to.
+  it('reports whether a workspace\u2019s own port is answering', async () => {
+    const projectId = await addProject()
+    const workspace = await createWorkspace(projectId)
+
+    await expect(invoke('workspaces:serving', workspace.id)).resolves.toEqual({
+      ok: true,
+      value: false
+    })
+  })
+
   it('reads an empty env for a project that has none', async () => {
     const projectId = await addProject()
 

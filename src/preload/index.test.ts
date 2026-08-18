@@ -123,6 +123,11 @@ describe('channel names', () => {
       'instructions:read'
     ],
     ['workspaces.applyEnv', () => method('workspaces', 'applyEnv')('w' as never), 'env:apply'],
+    [
+      'workspaces.serving',
+      () => method('workspaces', 'serving')('w' as never),
+      'workspaces:serving'
+    ],
     ['workspaces.list', () => method('workspaces', 'list')('p' as never), 'workspaces:list'],
     ['workspaces.create', () => method('workspaces', 'create')('p' as never), 'workspaces:create'],
     [

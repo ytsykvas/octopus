@@ -1,7 +1,7 @@
 # IPC
 
 Every call from the interface to the rest of the application goes through one
-of 57 channels. The table lives in [`src/main/ipc.ts`](../src/main/ipc.ts); the
+of 58 channels. The table lives in [`src/main/ipc.ts`](../src/main/ipc.ts); the
 renderer never names a channel itself, it calls
 [`src/preload/index.ts`](../src/preload/index.ts).
 
@@ -56,6 +56,7 @@ The only channel outside this shape is `theme:get`, which cannot fail.
 | `env:read`               | `id`                  | empty where nothing has been written — no template                                                                                           |
 | `env:save`               | `id`, `body`          | written `0o600`; it holds credentials                                                                                                        |
 | `env:apply`              | `workspaceId`         | writes it into the worktree as `.env`, never over a file already there                                                                       |
+| `workspaces:serving`     | `workspaceId`         | whether anything is listening on the port this workspace was given                                                                           |
 | `instructions:read`      | `id`, `kind`          | `null` id is the installation's own                                                                                                          |
 | `instructions:save`      | `id`, `kind`, `body`  | same, and it needs no project to exist                                                                                                       |
 | `instructions:effective` | `workspaceId`, `kind` | what this workspace would send: its project's, or the installation's. Resolved in core so the renderer need not know the order and ask twice |

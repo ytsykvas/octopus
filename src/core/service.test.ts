@@ -914,6 +914,24 @@ describe('project env', () => {
   })
 })
 
+describe('a workspace\u2019s port', () => {
+  // octopus assigns the port and hands it over as `$OCTOPUS_PORT`; a script is
+  // free to bind its framework's own default instead, and then the link the
+  // pane offers opens on nothing.
+  it('reports nothing listening on a port nobody bound', async () => {
+    const repo = join(dir, 'planner')
+    await initRepo(repo)
+    const project = await service.addProjectFromPath(repo)
+    const workspace = await service.createWorkspaceIn(project.id)
+
+    await expect(service.isWorkspaceServing(workspace.id)).resolves.toBe(false)
+  })
+
+  it('refuses to ask about a workspace that does not exist', async () => {
+    await expect(service.isWorkspaceServing('missing')).rejects.toThrow()
+  })
+})
+
 describe('project instructions', () => {
   async function withProject(): Promise<string> {
     const repo = join(dir, 'planner')

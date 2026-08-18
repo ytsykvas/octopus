@@ -44,6 +44,7 @@ import {
 } from './chats.js'
 import { type EditTarget, readChangeContext, readEditTarget } from './changeContext.js'
 import { readWorkspaceDiff, type WorkspaceDiff } from './diff.js'
+import { isListening } from './ports.js'
 import { applyProjectEnv, readProjectEnv, writeProjectEnv } from './env.js'
 import { type Config, ConfigSchema, loadConfig, saveConfig, toSdkSettingSources } from './config.js'
 import { type AgentEvent, isEphemeral } from './events.js'
@@ -290,6 +291,14 @@ export interface OctopusService {
    * recreated. Never overwrites — see `applyProjectEnv`.
    */
   applyWorkspaceEnv(workspaceId: string): Promise<void>
+
+  /**
+   * Whether anything is listening on the port this workspace was given.
+   *
+   * Read on demand rather than remembered: it is a fact about the machine, and
+   * a script that ignores `$OCTOPUS_PORT` makes our own record of it a lie.
+   */
+  isWorkspaceServing(workspaceId: string): Promise<boolean>
 
   /**
    * Guidance handed to the agent, or a starting template if none is written.
@@ -1252,6 +1261,10 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
     async applyWorkspaceEnv(workspaceId) {
       const workspace = requireWorkspace(workspaceId)
       await applyProjectEnv(workspace.projectId, workspace.path, dataRoot)
+    },
+
+    async isWorkspaceServing(workspaceId) {
+      return isListening(requireWorkspace(workspaceId).port)
     },
 
     async readProjectInstruction(projectId, kind) {

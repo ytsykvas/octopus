@@ -231,6 +231,12 @@ export function registerIpc(
     attempt(() => service.applyWorkspaceEnv(workspaceId))
   )
 
+  // Keyed by workspace rather than taking a port: a port from the renderer is a
+  // number to connect to, and this one is ours to decide.
+  host.handle('workspaces:serving', (_event, workspaceId: string) =>
+    attempt(() => service.isWorkspaceServing(workspaceId))
+  )
+
   // `null` is the installation's own instruction rather than a project's, which
   // is why the id is not narrowed to a string here.
   host.handle('instructions:read', (_event, projectId: string | null, kind: unknown) =>

@@ -322,7 +322,11 @@ const api = {
      * picks it up instead of staying broken until it is recreated.
      */
     applyEnv: (workspaceId: string): Promise<Result<void>> =>
-      ipcRenderer.invoke('env:apply', workspaceId) as Promise<Result<void>>
+      ipcRenderer.invoke('env:apply', workspaceId) as Promise<Result<void>>,
+
+    /** Whether anything is listening on the port this workspace was given. */
+    serving: (workspaceId: string): Promise<Result<boolean>> =>
+      ipcRenderer.invoke('workspaces:serving', workspaceId) as Promise<Result<boolean>>
   },
 
   files: {

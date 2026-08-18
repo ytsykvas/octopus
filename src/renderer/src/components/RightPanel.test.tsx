@@ -592,6 +592,64 @@ describe('RightPanel', () => {
     expect(octopus().terminal.dispose).not.toHaveBeenCalledWith(sessionId(1))
   })
 
+  /*
+   * octopus assigns the port, hands it over as `$OCTOPUS_PORT` and links to it —
+   * and a script is free to ignore all of that. `rails s` binds 3000 whatever it
+   * was told, so the link opens on nothing and the pane is what looks broken.
+   */
+  it('says when nothing is listening on the port it handed out', async () => {
+    vi.mocked(octopus().workspaces.serving).mockResolvedValue({ ok: true, value: false })
+
+    /* Five attempts a second apart, so the pane never calls a slow boot a
+       mistake. Driven rather than waited for — and installed before the run
+       starts, since a timer scheduled on the real clock is not one these can
+       advance. `shouldAdvanceTime` keeps `userEvent` working meanwhile. */
+    vi.useFakeTimers({ shouldAdvanceTime: true })
+
+    try {
+      renderPanel({ workspaces: [bob], activeWorkspaceId: bob.id, scriptPaths: SCRIPTS })
+
+      await userEvent.click(scriptsTab())
+      await userEvent.click(runButton())
+      await sessionsOpened(1)
+      processExits(1)
+      await sessionsOpened(2)
+
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(6_000)
+      })
+    } finally {
+      vi.useRealTimers()
+    }
+
+    expect(screen.getByText(/nothing is listening on 3222/)).toBeInTheDocument()
+    // Said rather than enforced: the link and the controls stay.
+    expect(screen.getByRole('link', { name: 'Open localhost:3222' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Stop' })).toBeInTheDocument()
+  })
+
+  it('says nothing while the port answers', async () => {
+    renderPanel({ workspaces: [bob], activeWorkspaceId: bob.id, scriptPaths: SCRIPTS })
+
+    await userEvent.click(scriptsTab())
+    await userEvent.click(runButton())
+    await sessionsOpened(1)
+    processExits(1)
+    await sessionsOpened(2)
+
+    expect(await screen.findByText('Serving.')).toBeInTheDocument()
+    expect(screen.queryByText(/nothing is listening/)).not.toBeInTheDocument()
+  })
+
+  // A port nothing was told to bind is not a port anybody is waiting on.
+  it('does not ask about a port while nothing is serving', async () => {
+    renderPanel({ workspaces: [anna], activeWorkspaceId: anna.id, scriptPaths: SCRIPTS })
+
+    await userEvent.click(scriptsTab())
+
+    expect(octopus().workspaces.serving).not.toHaveBeenCalled()
+  })
+
   // Nothing to restart and nothing to stop until something is serving. A
   // control for a server that is not up is a control that cannot mean anything.
   it('offers only Run while nothing is running', async () => {
