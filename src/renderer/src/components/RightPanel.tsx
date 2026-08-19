@@ -110,8 +110,8 @@ interface RightPanelProps {
   /** Absolute paths of the project's scripts; null when never written. */
   readonly scriptPaths: { readonly setup: string | null; readonly run: string | null }
   readonly onEditScripts: () => void
-  /** Opens the project's env file, which every workspace is given a copy of. */
-  readonly onEditEnv: () => void
+  /** Opens the list of files every workspace is given a copy of. */
+  readonly onEditFiles: () => void
   /** Opens the project's pull request instructions, from the tab about them. */
   readonly onEditInstructions: () => void
   /** The conversation a prompt would go to; null when the workspace has none. */
@@ -146,7 +146,7 @@ export function RightPanel({
   rootPath,
   scriptPaths,
   onEditScripts,
-  onEditEnv,
+  onEditFiles,
   onEditInstructions,
   chatId,
   width,
@@ -569,8 +569,8 @@ export function RightPanel({
             {/* Always here, not only while the build script is missing. The env
                 is the thing a build most often turns out to be lacking, and by
                 then the empty state that held this button is long gone. */}
-            <Button size="sm" onClick={onEditEnv}>
-              {t('scripts.editEnv')}
+            <Button size="sm" onClick={onEditFiles}>
+              {t('scripts.editFiles')}
             </Button>
           </div>
 

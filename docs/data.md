@@ -11,7 +11,7 @@ else joins a home directory by hand.
   chats/<chatId>.jsonl               one conversation each, append-only
   instructions/pull-request.md       guidance every project falls back to
   projects/<projectId>/
-    env                              copied in as .env where a workspace has none
+    carry                            paths carried from the checkout into a workspace
     scripts/setup.sh                 prepares a new workspace, on Run
     scripts/run.sh                   starts the dev server
     instructions/pull-request.md     this project's own, which wins
@@ -405,21 +405,22 @@ checkout of someone's project, not a place to leave ours.
 Scripts are saved executable. Without the bit, running one fails with
 "permission denied", which says nothing about what to do.
 
-## The project env
+## Files carried into a workspace
 
-`projects/<slug>/env` holds one env body per project, and `env.ts` writes it
-into a workspace as `.env` — at creation, and again before either script runs,
-so a workspace that predates the env picks it up rather than staying broken
-until somebody recreates it.
+`projects/<projectId>/carry` holds one path per line, relative to the project's
+checkout. `carry.ts` copies each into a new workspace at creation, and again
+before a run so a workspace that predates a list entry picks it up.
 
-It **never overwrites**. The write uses the `wx` flag rather than checking
-first: a `.env` edited inside the worktree survives, and there is no window
-between the check and the write. A blank body copies nothing at all — an empty
-`.env` is not neutral, since some tools prefer it to their own defaults.
+**A list of paths, not the contents.** Keeping contents here would be a copy
+that goes stale, and it did: a `.env` snapshot taken while it pointed at
+production kept pointing there long after the checkout had moved on. The
+checkout is the source; the list only says which parts of it travel.
 
-Both copies are written `0o600`. It carries credentials, so the `0o755` a script
-gets would be wrong twice over.
+It **never overwrites** — `COPYFILE_EXCL`, so a file edited inside the worktree
+survives and there is no window between a check and a write. A path the checkout
+does not have is passed over rather than failed on: a list is written once and a
+project's needs change.
 
-Unlike a script, a missing env reads back as an empty string rather than a
-template. A shell file needs its shebang to run; a starting env body would be
-content nobody asked to have copied into their workspaces.
+Anything absolute, or reaching outside the checkout with `..`, is dropped rather
+than refused. The list is typed by hand, and one bad line should not stop the
+rest of a workspace being prepared.

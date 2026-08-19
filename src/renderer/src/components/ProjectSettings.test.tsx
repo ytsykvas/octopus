@@ -375,33 +375,33 @@ describe('ProjectSettings', () => {
   // has a button for each, and two of them opening one panel would be two names
   // for one action.
   it('offers the env in a section of its own', async () => {
-    vi.mocked(window.octopus.projects.readEnv).mockResolvedValue({
+    vi.mocked(window.octopus.projects.readCarryList).mockResolvedValue({
       ok: true,
       value: 'API_KEY=secret'
     })
     const user = userEvent.setup()
     await renderDialog()
 
-    await openSection(user, 'Env')
+    await openSection(user, 'Files')
 
     expect(await screen.findByDisplayValue('API_KEY=secret')).toBeInTheDocument()
   })
 
   it('saves an edited env against the project it belongs to', async () => {
-    vi.mocked(window.octopus.projects.readEnv).mockResolvedValue({
+    vi.mocked(window.octopus.projects.readCarryList).mockResolvedValue({
       ok: true,
       value: 'API_KEY=secret'
     })
     const user = userEvent.setup()
     await renderDialog()
 
-    await openSection(user, 'Env')
+    await openSection(user, 'Files')
     const env = await screen.findByDisplayValue('API_KEY=secret')
     await user.clear(env)
     await user.type(env, 'API_KEY=rotated')
     await user.tab()
 
-    expect(window.octopus.projects.saveEnv).toHaveBeenCalledExactlyOnceWith(
+    expect(window.octopus.projects.saveCarryList).toHaveBeenCalledExactlyOnceWith(
       'planner',
       'API_KEY=rotated'
     )
@@ -541,14 +541,14 @@ describe('ProjectSettings', () => {
   })
 
   it('leaves the env editor empty when the file cannot be read', async () => {
-    vi.mocked(window.octopus.projects.readEnv).mockResolvedValue({
+    vi.mocked(window.octopus.projects.readCarryList).mockResolvedValue({
       ok: false,
       error: 'EACCES: permission denied'
     })
     const user = userEvent.setup()
     await renderDialog()
 
-    await openSection(user, 'Env')
+    await openSection(user, 'Files')
 
     expect(await screen.findByRole('textbox')).toHaveValue('')
     expect(screen.queryByText(/permission denied/)).toBeNull()

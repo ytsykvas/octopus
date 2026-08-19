@@ -55,7 +55,7 @@ Nothing but zod behind them, so a **value** can cross into the window.
 | [`accounts.ts`](../src/core/accounts.ts)         | whether `claude` and `gh` are signed in                                                                           |
 | [`terminal.ts`](../src/core/terminal.ts)         | what a pty should run, where, with which environment                                                              |
 | [`scripts.ts`](../src/core/scripts.ts)           | `setup.sh` and `run.sh`                                                                                           |
-| [`env.ts`](../src/core/env.ts)                   | the project's env file, and putting it into a workspace that has none                                             |
+| [`carry.ts`](../src/core/carry.ts)               | which of the checkout's gitignored files travel into a workspace, and copying them                                |
 | [`ports.ts`](../src/core/ports.ts)               | whether anything is listening where a workspace was told to serve                                                 |
 | [`instructions.ts`](../src/core/instructions.ts) | prose handed to the agent, per project and for the installation; `effectiveInstruction` is the order between them |
 | [`agent.ts`](../src/core/agent.ts)               | the Agent SDK: session lifecycle and event mapping                                                                |

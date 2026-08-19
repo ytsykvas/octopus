@@ -316,13 +316,15 @@ const api = {
       ipcRenderer.invoke('instructions:effective', workspaceId, kind) as Promise<Result<string>>,
 
     /**
-     * Writes the project's env into this workspace, unless it already has one.
+     * Copies the project's carried files into this workspace, where it lacks
+     * them.
      *
-     * Called before a build, so a workspace made before the env was written
-     * picks it up instead of staying broken until it is recreated.
+     * Called before a run, so a workspace made before the list mentioned a file
+     * picks it up instead of staying broken until it is recreated. Answers with
+     * the paths it wrote.
      */
-    applyEnv: (workspaceId: string): Promise<Result<void>> =>
-      ipcRenderer.invoke('env:apply', workspaceId) as Promise<Result<void>>,
+    carry: (workspaceId: string): Promise<Result<string[]>> =>
+      ipcRenderer.invoke('carry:apply', workspaceId) as Promise<Result<string[]>>,
 
     /** Whether anything is listening on the port this workspace was given. */
     serving: (workspaceId: string): Promise<Result<boolean>> =>
@@ -377,12 +379,12 @@ const api = {
     saveScript: (projectId: string, kind: ScriptKind, contents: string): Promise<Result<void>> =>
       ipcRenderer.invoke('scripts:save', projectId, kind, contents) as Promise<Result<void>>,
 
-    /** The project's env; empty when none has been written. */
-    readEnv: (projectId: string): Promise<Result<string>> =>
-      ipcRenderer.invoke('env:read', projectId) as Promise<Result<string>>,
+    /** Which of the checkout's files travel into a workspace, one path per line. */
+    readCarryList: (projectId: string): Promise<Result<string>> =>
+      ipcRenderer.invoke('carry:read', projectId) as Promise<Result<string>>,
 
-    saveEnv: (projectId: string, contents: string): Promise<Result<void>> =>
-      ipcRenderer.invoke('env:save', projectId, contents) as Promise<Result<void>>,
+    saveCarryList: (projectId: string, contents: string): Promise<Result<void>> =>
+      ipcRenderer.invoke('carry:save', projectId, contents) as Promise<Result<void>>,
 
     /**
      * Guidance for the agent; a missing one comes back as a template.

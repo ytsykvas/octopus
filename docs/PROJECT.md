@@ -456,7 +456,8 @@ Further rules:
 - `run.sh` — the dev server; receives `$OCTOPUS_PORT`.
 - One **Run** on the Scripts tab does both in order: build, then serve when the build succeeds. A failed build stops there; a missing build script is skipped rather than waited on. Once a server is up, Run gives way to a link to its port, **Restart** and **Stop**; the two halves carry no controls of their own.
 - The port is derived deterministically from the workspace id, range 3000–9000, checked for availability.
-- A project may also hold an **env file**. It is written into a workspace as `.env` when the workspace has none — at creation, and again before either script runs, so a workspace that predates the env picks it up. A file already in the worktree is never overwritten, and both copies are kept readable by their owner alone. This is why copying an env is no longer the first line of every setup script.
+- A project also holds a **list of files to carry**: one path per line, relative to the checkout. A worktree holds what git tracks and nothing else, so gitignored files — an `.env`, a `config/master.key` — have to be brought. Copied at creation and again before a run, never over a file the worktree already has. This is why fetching them is no longer the first line of every setup script.
+- Both scripts are given `$OCTOPUS_ROOT_PATH` (the checkout) and `$OCTOPUS_WORKSPACE_NAME`; only the server also gets `$OCTOPUS_PORT`.
 
 ### 12.3 The agent — the key requirement
 
@@ -491,7 +492,7 @@ Everything under one directory (Conductor spreads across `~/conductor` and `~/.c
   config.json                global settings
   state.json                 workspaces, session ids, statuses
   projects/<slug>/
-    env                      copied into workspaces that have no .env
+    carry                    which of the checkout's files travel into a workspace
     scripts/setup.sh
     scripts/run.sh
   workspaces/<slug>/<name>/  ← git worktree

@@ -50,13 +50,13 @@ export function projectScriptsDir(projectId: ProjectId, root: string = rootDir()
 }
 
 /**
- * A project's env file, copied into workspaces that have none.
+ * The list of files a project carries into every new workspace.
  *
- * `env` rather than `.env`: inside our own directory there is nothing to hide
- * from a listing, and a dotfile only makes it harder to find by hand.
+ * Beside the env it replaces: a worktree holds what git tracks and nothing
+ * else, and this is how the rest gets there.
  */
-export function projectEnv(projectId: ProjectId, root: string = rootDir()): string {
-  return join(projectDir(projectId, root), 'env')
+export function projectCarry(projectId: ProjectId, root: string = rootDir()): string {
+  return join(projectDir(projectId, root), 'carry')
 }
 
 /** Directory holding a project's instruction files for the agent. */

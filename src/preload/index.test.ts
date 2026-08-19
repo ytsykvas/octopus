@@ -111,18 +111,22 @@ describe('channel names', () => {
       () => method('projects', 'scriptPaths')('p' as never),
       'scripts:paths'
     ],
-    ['projects.readEnv', () => method('projects', 'readEnv')('p' as never), 'env:read'],
     [
-      'projects.saveEnv',
-      () => method('projects', 'saveEnv')('p' as never, 'A=1' as never),
-      'env:save'
+      'projects.readCarryList',
+      () => method('projects', 'readCarryList')('p' as never),
+      'carry:read'
+    ],
+    [
+      'projects.saveCarryList',
+      () => method('projects', 'saveCarryList')('p' as never, '.env' as never),
+      'carry:save'
     ],
     [
       'projects.readInstruction',
       () => method('projects', 'readInstruction')('p' as never, 'pullRequest' as never),
       'instructions:read'
     ],
-    ['workspaces.applyEnv', () => method('workspaces', 'applyEnv')('w' as never), 'env:apply'],
+    ['workspaces.carry', () => method('workspaces', 'carry')('w' as never), 'carry:apply'],
     [
       'workspaces.serving',
       () => method('workspaces', 'serving')('w' as never),

@@ -79,7 +79,7 @@ function renderPanel(overrides: Partial<Props> = {}): {
     rootPath: '/Users/test/planner',
     scriptPaths: { setup: null, run: null },
     onEditScripts: vi.fn(),
-    onEditEnv: vi.fn(),
+    onEditFiles: vi.fn(),
     onEditInstructions: vi.fn(),
     chatId: null,
     width: 360,
@@ -738,18 +738,18 @@ describe('RightPanel', () => {
   // out to be missing is a build that could not find it, and by then the empty
   // state that used to carry this button is long gone.
   it('offers the env from the build header once a script exists', async () => {
-    const onEditEnv = vi.fn()
+    const onEditFiles = vi.fn()
     renderPanel({
       workspaces: [anna],
       activeWorkspaceId: anna.id,
       scriptPaths: SCRIPTS,
-      onEditEnv
+      onEditFiles
     })
 
     await userEvent.click(scriptsTab())
-    await userEvent.click(within(buildSection()).getByRole('button', { name: 'Edit env' }))
+    await userEvent.click(within(buildSection()).getByRole('button', { name: 'Edit files' }))
 
-    expect(onEditEnv).toHaveBeenCalled()
+    expect(onEditFiles).toHaveBeenCalled()
   })
 
   // A sibling of the fold toggle rather than a child of it: reaching for the
@@ -758,7 +758,7 @@ describe('RightPanel', () => {
     renderPanel({ workspaces: [anna], activeWorkspaceId: anna.id, scriptPaths: SCRIPTS })
 
     await userEvent.click(scriptsTab())
-    await userEvent.click(within(buildSection()).getByRole('button', { name: 'Edit env' }))
+    await userEvent.click(within(buildSection()).getByRole('button', { name: 'Edit files' }))
 
     expect(
       within(buildSection()).getByRole('button', { name: 'Fold the build away' })

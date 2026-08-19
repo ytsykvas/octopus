@@ -86,7 +86,7 @@ export const en = {
     sectionGeneral: 'General',
     sectionGit: 'Git',
     sectionScripts: 'Scripts',
-    sectionEnv: 'Env',
+    sectionFiles: 'Files',
     sectionInstructions: 'Instructions',
     sectionDanger: 'Danger zone',
     done: 'Done',
@@ -107,9 +107,9 @@ export const en = {
     setupScript: 'Build script',
     setupScriptHint:
       'Runs in a new workspace: install dependencies, build what has to be built, anything a fresh checkout needs. Saved as setup.sh.',
-    env: 'Env file',
-    envHint:
-      'Written into a workspace as .env when it has none — at creation, and again before a build. A file already there is never overwritten. Kept readable by you alone.',
+    files: 'Files carried into a workspace',
+    filesHint:
+      'One path per line, relative to the repository. A worktree holds what git tracks and nothing else, so gitignored files — an .env, a config/master.key — have to be brought. Copied at creation and again before a run; a file already there is never overwritten.',
     runScript: 'Server script',
     runScriptHint:
       'Starts the dev server. $OCTOPUS_PORT is set to the workspace\u2019s own port, so several can serve at once. Saved as run.sh.',
@@ -148,10 +148,10 @@ export const en = {
     foldBuild: 'Fold the build away',
     unfoldBuild: 'Show the build',
     edit: 'Write the script',
-    /* Beside the build rather than in the project dialog alone: the env is what
+    /* Beside the build rather than in the project dialog alone: these are what
        a build reads, and the moment you notice one is missing is the moment the
        build in front of you did not find it. */
-    editEnv: 'Edit env',
+    editFiles: 'Edit files',
     /* The whole tab in one control: build, then serve. `Run` rather than
        `Build and start`, because the two steps are one intention — the second
        is only ever wanted after the first. */

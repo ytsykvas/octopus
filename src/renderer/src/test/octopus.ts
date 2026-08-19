@@ -91,7 +91,7 @@ export function installOctopusStub(): Api {
       pullRequest: vi.fn(() => ok({ request: null, pushed: false, dirty: false, ahead: 1 })),
       createPullRequest: vi.fn(() => ok('https://github.com/ytsykvas/octopus/pull/1')),
       instruction: vi.fn(() => ok('Describe what changed and why.')),
-      applyEnv: vi.fn(() => ok(undefined)),
+      carry: vi.fn(() => ok([])),
       // The port answers by default: a test about a script that ignores
       // `$OCTOPUS_PORT` says so, and the rest are not about ports at all.
       serving: vi.fn(() => ok(true))
@@ -116,8 +116,8 @@ export function installOctopusStub(): Api {
       readScript: vi.fn(() => ok('#!/bin/sh\n')),
       saveScript: vi.fn(() => ok(undefined)),
       scriptPaths: vi.fn(() => ok({ setup: null, run: null })),
-      readEnv: vi.fn(() => ok('')),
-      saveEnv: vi.fn(() => ok(undefined)),
+      readCarryList: vi.fn(() => ok('.env\n')),
+      saveCarryList: vi.fn(() => ok(undefined)),
       readInstruction: vi.fn(() => ok('# Pull request descriptions\n')),
       saveInstruction: vi.fn(() => ok(undefined))
     }

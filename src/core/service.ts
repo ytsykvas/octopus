@@ -45,7 +45,7 @@ import {
 import { type EditTarget, readChangeContext, readEditTarget } from './changeContext.js'
 import { readWorkspaceDiff, type WorkspaceDiff } from './diff.js'
 import { isListening } from './ports.js'
-import { applyProjectEnv, readProjectEnv, writeProjectEnv } from './env.js'
+import { carryInto, readCarryList, writeCarryList } from './carry.js'
 import { type Config, ConfigSchema, loadConfig, saveConfig, toSdkSettingSources } from './config.js'
 import { type AgentEvent, isEphemeral } from './events.js'
 import { cloneRepository, listRepositories, type RemoteRepository } from './github.js'
@@ -275,22 +275,17 @@ export interface OctopusService {
    */
   projectScriptPaths(projectId: string): Promise<Record<ScriptKind, string | null>>
 
+  /** Which of the checkout's files travel into a workspace, one path per line. */
+  readProjectCarryList(projectId: string): Promise<string>
+  saveProjectCarryList(projectId: string, contents: string): Promise<void>
   /**
-   * The project's env, or an empty string when none has been written.
+   * Copies them into a workspace that is missing them.
    *
-   * No template to fall back on, unlike a script: an env nobody wrote has no
-   * contents worth guessing at.
+   * Called before a run as well as at creation, so a workspace made before the
+   * list mentioned a file picks it up rather than staying broken until it is
+   * recreated. Never overwrites — see `carryInto`.
    */
-  readProjectEnv(projectId: string): Promise<string>
-  saveProjectEnv(projectId: string, contents: string): Promise<void>
-  /**
-   * Puts the project's env into a workspace that has none.
-   *
-   * Called before a build as well as at creation, so a workspace made before
-   * the env existed picks it up rather than staying broken until it is
-   * recreated. Never overwrites — see `applyProjectEnv`.
-   */
-  applyWorkspaceEnv(workspaceId: string): Promise<void>
+  carryIntoWorkspace(workspaceId: string): Promise<string[]>
 
   /**
    * Whether anything is listening on the port this workspace was given.
@@ -1248,19 +1243,21 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
       return { setup: await resolve('setup'), run: await resolve('run') }
     },
 
-    async readProjectEnv(projectId) {
+    async readProjectCarryList(projectId) {
       requireProject(projectId)
-      return readProjectEnv(projectId, dataRoot)
+      return readCarryList(projectId, dataRoot)
     },
 
-    async saveProjectEnv(projectId, contents) {
+    async saveProjectCarryList(projectId, contents) {
       requireProject(projectId)
-      await writeProjectEnv(projectId, contents, dataRoot)
+      await writeCarryList(projectId, contents, dataRoot)
     },
 
-    async applyWorkspaceEnv(workspaceId) {
+    async carryIntoWorkspace(workspaceId) {
       const workspace = requireWorkspace(workspaceId)
-      await applyProjectEnv(workspace.projectId, workspace.path, dataRoot)
+      const project = requireProject(workspace.projectId)
+
+      return carryInto(project.id, project.repoPath, workspace.path, dataRoot)
     },
 
     async isWorkspaceServing(workspaceId) {
@@ -1340,10 +1337,10 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
       const workspace = await createWorkspace(project, state, exec, { root: dataRoot })
 
       try {
-        // Inside the rollback, not after it: a worktree whose env could not be
-        // written is a workspace that will fail its first build, and undoing it
-        // says so at the one moment somebody is watching.
-        await applyProjectEnv(project.id, workspace.path, dataRoot)
+        // Inside the rollback, not after it: a worktree missing the files it
+        // cannot run without is a workspace that will fail its first build, and
+        // undoing it says so at the one moment somebody is watching.
+        await carryInto(project.id, project.repoPath, workspace.path, dataRoot)
         await commit((current) => addWorkspace(current, workspace))
       } catch (error) {
         await rollbackWorkspace(workspace, exec)

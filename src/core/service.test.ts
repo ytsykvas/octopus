@@ -833,84 +833,85 @@ describe('project scripts', () => {
   })
 })
 
-describe('project env', () => {
-  async function withProject(): Promise<string> {
+describe('files carried into a workspace', () => {
+  async function withProject(): Promise<{ id: string; repo: string }> {
     const repo = join(dir, 'planner')
     await initRepo(repo)
-    return (await service.addProjectFromPath(repo)).id
+    return { id: (await service.addProjectFromPath(repo)).id, repo }
   }
 
-  // No template, unlike a script: an env nobody wrote has nothing to guess at.
-  it('is empty before anything has been written', async () => {
-    const id = await withProject()
-    await expect(service.readProjectEnv(id)).resolves.toBe('')
+  // `.env` alone: the file almost every project needs and the one nobody
+  // expects to have to ask for.
+  it('starts from a list naming the env', async () => {
+    const { id } = await withProject()
+    await expect(service.readProjectCarryList(id)).resolves.toContain('.env')
   })
 
-  it('reads back what was saved', async () => {
-    const id = await withProject()
-    await service.saveProjectEnv(id, 'API_KEY=secret\n')
+  it('reads back the list it saved', async () => {
+    const { id } = await withProject()
+    await service.saveProjectCarryList(id, '.env\nconfig/master.key\n')
 
-    await expect(service.readProjectEnv(id)).resolves.toBe('API_KEY=secret\n')
+    await expect(service.readProjectCarryList(id)).resolves.toBe('.env\nconfig/master.key\n')
   })
 
-  it('keeps each project\u2019s env to itself', async () => {
-    const first = await withProject()
-
-    const other = join(dir, 'esl')
-    await initRepo(other)
-    const second = (await service.addProjectFromPath(other)).id
-
-    await service.saveProjectEnv(first, 'FROM=planner\n')
-
-    await expect(service.readProjectEnv(second)).resolves.toBe('')
-  })
-
-  it('refuses to touch the env of a project that does not exist', async () => {
-    await expect(service.readProjectEnv('missing')).rejects.toThrow()
-    await expect(service.saveProjectEnv('missing', 'A=1')).rejects.toThrow()
-    await expect(service.applyWorkspaceEnv('missing')).rejects.toThrow()
-  })
-
-  // The whole point: a fresh worktree has no `.env`, because it is gitignored.
-  it('gives a new workspace the project env', async () => {
-    const id = await withProject()
-    await service.saveProjectEnv(id, 'API_KEY=secret\n')
+  /*
+   * The whole point: a worktree holds what git tracks and nothing else, so a
+   * gitignored secret is missing from every fresh one.
+   */
+  it('carries a gitignored file out of the checkout', async () => {
+    const { id, repo } = await withProject()
+    await writeFile(join(repo, '.env'), 'API_KEY=secret\n', 'utf8')
+    await mkdir(join(repo, 'config'), { recursive: true })
+    await writeFile(join(repo, 'config', 'master.key'), 'abc123\n', 'utf8')
+    await service.saveProjectCarryList(id, '.env\nconfig/master.key\n')
 
     const workspace = await service.createWorkspaceIn(id)
 
     await expect(readFile(join(workspace.path, '.env'), 'utf8')).resolves.toBe('API_KEY=secret\n')
-  })
-
-  it('leaves a workspace alone when the project has no env', async () => {
-    const id = await withProject()
-    const workspace = await service.createWorkspaceIn(id)
-
-    await expect(access(join(workspace.path, '.env'))).rejects.toThrow()
-  })
-
-  // A workspace made before the env existed picks it up on the next build,
-  // rather than staying broken until somebody recreates it.
-  it('fills in a workspace that predates the env', async () => {
-    const id = await withProject()
-    const workspace = await service.createWorkspaceIn(id)
-
-    await service.saveProjectEnv(id, 'API_KEY=late\n')
-    await service.applyWorkspaceEnv(workspace.id)
-
-    await expect(readFile(join(workspace.path, '.env'), 'utf8')).resolves.toBe('API_KEY=late\n')
-  })
-
-  it('never overwrites an env the workspace already has', async () => {
-    const id = await withProject()
-    await service.saveProjectEnv(id, 'API_KEY=project\n')
-
-    const workspace = await service.createWorkspaceIn(id)
-    await writeFile(join(workspace.path, '.env'), 'API_KEY=edited by hand\n', 'utf8')
-    await service.applyWorkspaceEnv(workspace.id)
-
-    await expect(readFile(join(workspace.path, '.env'), 'utf8')).resolves.toBe(
-      'API_KEY=edited by hand\n'
+    await expect(readFile(join(workspace.path, 'config', 'master.key'), 'utf8')).resolves.toBe(
+      'abc123\n'
     )
+  })
+
+  it('says which files it carried', async () => {
+    const { id, repo } = await withProject()
+    await writeFile(join(repo, '.env'), 'A=1\n', 'utf8')
+    await service.saveProjectCarryList(id, '.env\nnot-there\n')
+
+    const workspace = await service.createWorkspaceIn(id)
+    // Already carried at creation, so a second pass writes nothing.
+    await expect(service.carryIntoWorkspace(workspace.id)).resolves.toEqual([])
+  })
+
+  // A workspace made before the list mentioned a file picks it up rather than
+  // staying broken until it is recreated.
+  it('fills in a file the list gained later', async () => {
+    const { id, repo } = await withProject()
+    const workspace = await service.createWorkspaceIn(id)
+
+    await writeFile(join(repo, 'later.txt'), 'hello\n', 'utf8')
+    await service.saveProjectCarryList(id, 'later.txt\n')
+
+    await expect(service.carryIntoWorkspace(workspace.id)).resolves.toEqual(['later.txt'])
+    await expect(readFile(join(workspace.path, 'later.txt'), 'utf8')).resolves.toBe('hello\n')
+  })
+
+  it('never writes over what the workspace already has', async () => {
+    const { id, repo } = await withProject()
+    await writeFile(join(repo, '.env'), 'FROM=checkout\n', 'utf8')
+    await service.saveProjectCarryList(id, '.env\n')
+
+    const workspace = await service.createWorkspaceIn(id)
+    await writeFile(join(workspace.path, '.env'), 'FROM=hand\n', 'utf8')
+
+    await expect(service.carryIntoWorkspace(workspace.id)).resolves.toEqual([])
+    await expect(readFile(join(workspace.path, '.env'), 'utf8')).resolves.toBe('FROM=hand\n')
+  })
+
+  it('refuses to touch a project or workspace that does not exist', async () => {
+    await expect(service.readProjectCarryList('missing')).rejects.toThrow()
+    await expect(service.saveProjectCarryList('missing', '.env')).rejects.toThrow()
+    await expect(service.carryIntoWorkspace('missing')).rejects.toThrow()
   })
 })
 

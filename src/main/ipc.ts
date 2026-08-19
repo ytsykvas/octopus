@@ -27,7 +27,7 @@ import {
   PlanFeedbackSchema,
   WorkingModeSchema
 } from '../core/chats.js'
-import { EnvBodySchema } from '../core/env.js'
+import { CarryListSchema } from '../core/carry.js'
 import type { RemoteRepository } from '../core/github.js'
 import { InstructionBodySchema, InstructionKindSchema } from '../core/instructions.js'
 import { NewPullRequestSchema } from '../core/pullRequests.js'
@@ -217,18 +217,18 @@ export function registerIpc(
     attempt(() => service.projectScriptPaths(projectId))
   )
 
-  host.handle('env:read', (_event, projectId: string) =>
-    attempt(() => service.readProjectEnv(projectId))
+  host.handle('carry:read', (_event, projectId: string) =>
+    attempt(() => service.readProjectCarryList(projectId))
   )
 
-  host.handle('env:save', (_event, projectId: string, contents: unknown) =>
-    attempt(() => service.saveProjectEnv(projectId, EnvBodySchema.parse(contents)))
+  host.handle('carry:save', (_event, projectId: string, contents: unknown) =>
+    attempt(() => service.saveProjectCarryList(projectId, CarryListSchema.parse(contents)))
   )
 
-  // Keyed by workspace rather than project: the env is written into a worktree,
-  // and only the workspace knows where that is.
-  host.handle('env:apply', (_event, workspaceId: string) =>
-    attempt(() => service.applyWorkspaceEnv(workspaceId))
+  // Keyed by workspace rather than project: the files land in a worktree, and
+  // only the workspace knows where that is.
+  host.handle('carry:apply', (_event, workspaceId: string) =>
+    attempt(() => service.carryIntoWorkspace(workspaceId))
   )
 
   // Keyed by workspace rather than taking a port: a port from the renderer is a

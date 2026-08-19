@@ -1299,12 +1299,12 @@ describe('App', () => {
 
     await user.click(
       await within(screen.getByRole('region', { name: 'Build' })).findByRole('button', {
-        name: 'Edit env'
+        name: 'Edit files'
       })
     )
 
     const dialog = await screen.findByRole('dialog', { name: 'Project settings' })
-    expect(within(dialog).getByRole('button', { name: 'Env' })).toHaveAttribute(
+    expect(within(dialog).getByRole('button', { name: 'Files' })).toHaveAttribute(
       'aria-current',
       'true'
     )

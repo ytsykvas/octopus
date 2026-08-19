@@ -46,16 +46,16 @@ The only channel outside this shape is `theme:get`, which cannot fail.
 | `projects:branches`      | `id`          | remote branches, ordered with main/master/develop first                                 |
 | `projects:listRemote`    | —             | what the account can push to, personal and organisation alike, through `gh api graphql` |
 
-### Scripts, env and instructions
+### Scripts, carried files and instructions
 
 | Channel                  | Arguments             | Notes                                                                                                                                        |
 | ------------------------ | --------------------- | -------------------------------------------------------------------------------------------------------------------------------------------- |
 | `scripts:read`           | `id`, `kind`          | a missing script comes back as a template                                                                                                    |
 | `scripts:save`           | `id`, `kind`, `body`  | written executable                                                                                                                           |
 | `scripts:paths`          | `id`                  | `null` where nothing has been written                                                                                                        |
-| `env:read`               | `id`                  | empty where nothing has been written — no template                                                                                           |
-| `env:save`               | `id`, `body`          | written `0o600`; it holds credentials                                                                                                        |
-| `env:apply`              | `workspaceId`         | writes it into the worktree as `.env`, never over a file already there                                                                       |
+| `carry:read`             | `id`                  | one path per line; a project that has said nothing gets a list naming `.env`                                                                 |
+| `carry:save`             | `id`, `body`          | the list, not the files                                                                                                                      |
+| `carry:apply`            | `workspaceId`         | copies them from the checkout, never over a file already there; answers with what it wrote                                                   |
 | `workspaces:serving`     | `workspaceId`         | whether anything is listening on the port this workspace was given                                                                           |
 | `instructions:read`      | `id`, `kind`          | `null` id is the installation's own                                                                                                          |
 | `instructions:save`      | `id`, `kind`, `body`  | same, and it needs no project to exist                                                                                                       |

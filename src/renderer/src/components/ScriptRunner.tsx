@@ -155,26 +155,25 @@ function Runner({
 
     void (async () => {
       /*
-       * The env goes in before either script, not only when the workspace was
-       * made. A project that gained its env afterwards would otherwise run
-       * against nothing until the workspace was recreated, and the server is as
-       * likely to be the first thing started as the build — nothing here makes
-       * a build come first.
+       * The carried files go in before either script, not only when the
+       * workspace was made. A project that added one to its list afterwards
+       * would otherwise run without it until the workspace was recreated, and
+       * the server is as likely to be the first thing started as the build.
        *
-       * It never overwrites, so a `.env` edited inside the worktree survives,
-       * and running this twice costs a stat.
+       * Nothing is overwritten, so a file edited inside the worktree survives,
+       * and running this twice costs a stat each.
        */
-      const applied = await window.octopus.workspaces.applyEnv(workspace.id)
+      const carried = await window.octopus.workspaces.carry(workspace.id)
 
       // A stop that landed while the env was being written wins. Starting
       // afterwards would leave a server running with the header back on `Run`
       // and no control anywhere that could reach it.
       if (latestStop.current !== stopWhenAsked) return
 
-      if (!applied.ok) {
-        // Refusing to start is the point. Either script without its env fails
-        // further in, complaining about whatever the missing value fed.
-        setError(describeFailure(applied))
+      if (!carried.ok) {
+        // Refusing to start is the point. A script missing what it needs fails
+        // further in, complaining about whatever the missing file fed.
+        setError(describeFailure(carried))
         // A sequence waiting on this half would otherwise wait for ever.
         onOutcome?.(false)
         return
