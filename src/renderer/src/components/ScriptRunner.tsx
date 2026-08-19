@@ -176,10 +176,18 @@ function Runner({
 
       setError(null)
 
-      // Already going: end it and wait. Remounting `Terminal` now would open the
-      // next session while the last one still holds the port, and the failure
-      // reads as the new server's fault.
-      if (started) {
+      /*
+       * Still going: end it and wait. Remounting `Terminal` now would open the
+       * next session while the last one still holds the port, and the failure
+       * reads as the new server's fault.
+       *
+       * `running`, not `started`. A half keeps its terminal on screen after the
+       * process exits — that is what `started` is for — and waiting on a session
+       * that has already gone waits for ever: `Terminal` disposes nothing when
+       * its session is null, so the `onClosed` this is holding out for never
+       * comes. A finished build is not something to wait behind.
+       */
+      if (running) {
         // The stop token as it stood when the restart was asked for. A stop
         // arriving before the old session closes moves it, and that is how the
         // restart knows the press it was waiting for has been countermanded —

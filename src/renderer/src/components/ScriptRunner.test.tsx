@@ -269,6 +269,32 @@ describe('ScriptRunner', () => {
     await sessionsOpened(2)
   })
 
+  /*
+   * A half keeps its terminal on screen after the process exits — that is what
+   * `started` is for. Waiting behind one waits for ever: `Terminal` disposes
+   * nothing when its session is already null, so the close it holds out for
+   * never comes and the run sits at `Building…` with nothing running.
+   */
+  it('does not wait behind a run that has already ended', async () => {
+    const { rerender } = mountAndStart({
+      workspace: anna,
+      kind: 'setup',
+      scriptPath: SETUP_SCRIPT,
+      port: 3111,
+      onOpenSettings: vi.fn()
+    })
+    await sessionsOpened(1)
+    processExits(sessionId(1))
+
+    // The terminal is still on screen, holding the output, but nothing is alive
+    // in it — and `dispose` never resolves here, so a wait would hang.
+    vi.mocked(octopus().terminal.dispose).mockImplementation(() => new Promise(() => undefined))
+
+    rerender({ startToken: 2 })
+
+    await sessionsOpened(2)
+  })
+
   // Nothing to wait for, so nothing waits: a first start must not be held up by
   // a session that was never there.
   it('does not wait when there is nothing running yet', async () => {
