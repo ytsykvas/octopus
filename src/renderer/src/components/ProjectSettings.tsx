@@ -1,4 +1,12 @@
-import { BookText, GitBranch, Info, KeyRound, Terminal, TriangleAlert } from 'lucide-react'
+import {
+  BookText,
+  GitBranch,
+  Info,
+  KeyRound,
+  Terminal,
+  TriangleAlert,
+  Variable
+} from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
@@ -32,7 +40,7 @@ interface ProjectSettingsProps {
   readonly initialSection?: SectionId
 }
 
-export type SectionId = 'general' | 'git' | 'scripts' | 'files' | 'instructions' | 'danger'
+export type SectionId = 'general' | 'git' | 'scripts' | 'files' | 'env' | 'instructions' | 'danger'
 
 const SECTIONS: readonly {
   readonly id: SectionId
@@ -41,6 +49,7 @@ const SECTIONS: readonly {
     | 'project.sectionGit'
     | 'project.sectionScripts'
     | 'project.sectionFiles'
+    | 'project.sectionEnv'
     | 'project.sectionInstructions'
     | 'project.sectionDanger'
   readonly Icon: typeof Info
@@ -52,6 +61,9 @@ const SECTIONS: readonly {
   // Next to the scripts: these are what they need present, and before this
   // fetching them was the first thing every build script had to do.
   { id: 'files', labelKey: 'project.sectionFiles', Icon: KeyRound },
+  // Beside the files rather than inside them: one says which of the checkout's
+  // files travel, the other says what to write once they have.
+  { id: 'env', labelKey: 'project.sectionEnv', Icon: Variable },
   { id: 'instructions', labelKey: 'project.sectionInstructions', Icon: BookText },
   { id: 'danger', labelKey: 'project.sectionDanger', Icon: TriangleAlert, destructive: true }
 ]
@@ -312,9 +324,24 @@ export function ProjectSettings({
             />
           )}
 
-          {/* What the pull request tab's "ask the agent to describe" button
-              sends. This one wins over the installation's wherever it exists —
-              emptied included, which is how a project says it adds nothing. */}
+          {/* Variables rather than files, and the answer for a project cloned
+              from GitHub: a fresh clone has no gitignored `.env` to carry, so
+              there is nothing to list and these are typed instead. They are
+              written at the end of the workspace's `.env`, where last wins. */}
+          {section === 'env' && (
+            <FileEditor
+              label={t('project.env')}
+              hint={t('project.envHint')}
+              placeholder={'MYSQL_HOST=dev.example\nAPI_KEY=…'}
+              rows={12}
+              read={async () => {
+                const result = await window.octopus.projects.readEnv(project.id)
+                return result.ok ? result.value : null
+              }}
+              save={(contents) => void window.octopus.projects.saveEnv(project.id, contents)}
+            />
+          )}
+
           {section === 'instructions' && (
             <FileEditor
               label={t('project.pullRequestInstruction')}

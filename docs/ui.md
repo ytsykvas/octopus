@@ -597,11 +597,13 @@ keep output on screen past the process that produced it.
 **There is no separate rebuild.** It is `Stop` and then `Run` — two presses, in
 the order that frees the port before anything tries to bind it again.
 
-**Every start copies the project's carried files in first**, and refuses to run
-if that fails. A build or a server missing its env fails further in, complaining
+**Every start puts the project's env in place first**, and refuses to run if
+that fails. A build or a server missing its env fails further in, complaining
 about whatever the missing value fed rather than about the env — and nothing
-here makes a build come first, so the server has to do it too. It never
-overwrites, so a file edited inside the worktree keeps what it has.
+here makes a build come first, so the server has to do it too. That means both
+halves of it: the carried files, which never overwrite, so a file edited inside
+the worktree keeps what it has; then the block of typed overrides, appended
+below them.
 
 **A build still cannot be stopped**, and that is the asymmetry rather than an
 omission. A server is started and stopped for as long as the work lasts; a build
@@ -621,6 +623,13 @@ It is a **sibling** of the fold control rather than a child of it, so reaching
 for the env cannot put the build away. It opens the project dialog on its own
 `Files` section — the button beside it opens `Scripts`, and two buttons leading to
 one panel would be two names for one action.
+
+**Files and Env are two sections, because they are two mechanisms.** `Files`
+names paths copied out of the checkout; `Env` holds `KEY=value` lines typed by
+hand. The split is not tidiness: the copy answers nothing for a project cloned
+from GitHub, where the gitignored files were never on GitHub to clone, and
+typing the variables is the only answer there. One editor holding both would
+have to explain why half of it does nothing for half the projects.
 
 **The change count follows the work.** It used to be read when the list was —
 on create, rename, remove and first load — and never again, so the agent could

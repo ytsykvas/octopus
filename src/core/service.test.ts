@@ -840,6 +840,70 @@ describe('project scripts', () => {
   })
 })
 
+describe('env overrides a project adds', () => {
+  async function withProject(): Promise<{ id: string; repo: string }> {
+    const repo = join(dir, 'planner')
+    await initRepo(repo)
+    return { id: (await service.addProjectFromPath(repo)).id, repo }
+  }
+
+  it('is empty before anything has been written', async () => {
+    const { id } = await withProject()
+    await expect(service.readProjectEnv(id)).resolves.toBe('')
+  })
+
+  it('reads back what was saved', async () => {
+    const { id } = await withProject()
+    await service.saveProjectEnv(id, 'A=1\n')
+
+    await expect(service.readProjectEnv(id)).resolves.toBe('A=1\n')
+  })
+
+  /*
+   * Last wins. The checkout's `.env` is whatever it happened to hold — one left
+   * on a production block handed a workspace production — and this is what
+   * settles it without editing anybody's file.
+   */
+  it('writes them below whatever the checkout carried in', async () => {
+    const { id, repo } = await withProject()
+    await writeFile(join(repo, '.env'), 'MYSQL_HOST=production\n', 'utf8')
+    await service.saveProjectEnv(id, 'MYSQL_HOST=dev.example\n')
+
+    const workspace = await service.createWorkspaceIn(id)
+
+    const contents = await readFile(join(workspace.path, '.env'), 'utf8')
+    expect(contents.indexOf('production')).toBeLessThan(contents.indexOf('dev.example'))
+  })
+
+  // The whole answer for a project cloned from GitHub: nothing to copy, so the
+  // block is the file.
+  it('gives a workspace an env where the checkout had none', async () => {
+    const { id } = await withProject()
+    await service.saveProjectEnv(id, 'API_KEY=secret\n')
+
+    const workspace = await service.createWorkspaceIn(id)
+
+    await expect(readFile(join(workspace.path, '.env'), 'utf8')).resolves.toContain(
+      'API_KEY=secret'
+    )
+  })
+
+  it('updates the block on a workspace that predates a change', async () => {
+    const { id } = await withProject()
+    const workspace = await service.createWorkspaceIn(id)
+
+    await service.saveProjectEnv(id, 'A=2\n')
+    await service.prepareWorkspace(workspace.id)
+
+    await expect(readFile(join(workspace.path, '.env'), 'utf8')).resolves.toContain('A=2')
+  })
+
+  it('refuses to touch a project that does not exist', async () => {
+    await expect(service.readProjectEnv('missing')).rejects.toThrow()
+    await expect(service.saveProjectEnv('missing', 'A=1')).rejects.toThrow()
+  })
+})
+
 describe('the cleanup script', () => {
   // `setup.sh` gives a workspace things of its own; nothing took them back, so
   // a project that made a database per workspace accumulated them for ever.
@@ -928,7 +992,7 @@ describe('files carried into a workspace', () => {
 
     const workspace = await service.createWorkspaceIn(id)
     // Already carried at creation, so a second pass writes nothing.
-    await expect(service.carryIntoWorkspace(workspace.id)).resolves.toEqual([])
+    await expect(service.prepareWorkspace(workspace.id)).resolves.toEqual([])
   })
 
   // A workspace made before the list mentioned a file picks it up rather than
@@ -940,7 +1004,7 @@ describe('files carried into a workspace', () => {
     await writeFile(join(repo, 'later.txt'), 'hello\n', 'utf8')
     await service.saveProjectCarryList(id, 'later.txt\n')
 
-    await expect(service.carryIntoWorkspace(workspace.id)).resolves.toEqual(['later.txt'])
+    await expect(service.prepareWorkspace(workspace.id)).resolves.toEqual(['later.txt'])
     await expect(readFile(join(workspace.path, 'later.txt'), 'utf8')).resolves.toBe('hello\n')
   })
 
@@ -952,14 +1016,14 @@ describe('files carried into a workspace', () => {
     const workspace = await service.createWorkspaceIn(id)
     await writeFile(join(workspace.path, '.env'), 'FROM=hand\n', 'utf8')
 
-    await expect(service.carryIntoWorkspace(workspace.id)).resolves.toEqual([])
+    await expect(service.prepareWorkspace(workspace.id)).resolves.toEqual([])
     await expect(readFile(join(workspace.path, '.env'), 'utf8')).resolves.toBe('FROM=hand\n')
   })
 
   it('refuses to touch a project or workspace that does not exist', async () => {
     await expect(service.readProjectCarryList('missing')).rejects.toThrow()
     await expect(service.saveProjectCarryList('missing', '.env')).rejects.toThrow()
-    await expect(service.carryIntoWorkspace('missing')).rejects.toThrow()
+    await expect(service.prepareWorkspace('missing')).rejects.toThrow()
   })
 })
 

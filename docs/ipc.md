@@ -1,7 +1,7 @@
 # IPC
 
 Every call from the interface to the rest of the application goes through one
-of 58 channels. The table lives in [`src/main/ipc.ts`](../src/main/ipc.ts); the
+of 61 channels. The table lives in [`src/main/ipc.ts`](../src/main/ipc.ts); the
 renderer never names a channel itself, it calls
 [`src/preload/index.ts`](../src/preload/index.ts).
 
@@ -55,7 +55,9 @@ The only channel outside this shape is `theme:get`, which cannot fail.
 | `scripts:paths`          | `id`                  | `null` where nothing has been written                                                                                                        |
 | `carry:read`             | `id`                  | one path per line; a project that has said nothing gets a list naming `.env`                                                                 |
 | `carry:save`             | `id`, `body`          | the list, not the files                                                                                                                      |
-| `carry:apply`            | `workspaceId`         | copies them from the checkout, never over a file already there; answers with what it wrote                                                   |
+| `env:read`               | `id`                  | the project's env overrides; empty where it has none, since a variable nobody wrote has no value worth guessing at                           |
+| `env:save`               | `id`, `body`          | validated for length, written `0o600`                                                                                                        |
+| `workspace:prepare`      | `workspaceId`         | carries the listed files in, never over a file already there, then writes the env block below them; answers with what it copied              |
 | `workspaces:serving`     | `workspaceId`         | whether anything is listening on the port this workspace was given                                                                           |
 | `instructions:read`      | `id`, `kind`          | `null` id is the installation's own                                                                                                          |
 | `instructions:save`      | `id`, `kind`, `body`  | same, and it needs no project to exist                                                                                                       |

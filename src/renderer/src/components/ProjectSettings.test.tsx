@@ -397,7 +397,7 @@ describe('ProjectSettings', () => {
   // Its own section rather than a third editor under Scripts: the Build header
   // has a button for each, and two of them opening one panel would be two names
   // for one action.
-  it('offers the env in a section of its own', async () => {
+  it('offers the carried files in a section of their own', async () => {
     vi.mocked(window.octopus.projects.readCarryList).mockResolvedValue({
       ok: true,
       value: 'API_KEY=secret'
@@ -410,7 +410,7 @@ describe('ProjectSettings', () => {
     expect(await screen.findByDisplayValue('API_KEY=secret')).toBeInTheDocument()
   })
 
-  it('saves an edited env against the project it belongs to', async () => {
+  it('saves an edited file list against the project it belongs to', async () => {
     vi.mocked(window.octopus.projects.readCarryList).mockResolvedValue({
       ok: true,
       value: 'API_KEY=secret'
@@ -427,6 +427,44 @@ describe('ProjectSettings', () => {
     expect(window.octopus.projects.saveCarryList).toHaveBeenCalledExactlyOnceWith(
       'planner',
       'API_KEY=rotated'
+    )
+  })
+
+  /*
+   * Where a project cloned from GitHub gets its `.env` at all: the checkout is
+   * a fresh clone, so there was never a gitignored file to carry, and these are
+   * typed rather than copied.
+   */
+  it('offers the env overrides in a section of their own', async () => {
+    vi.mocked(window.octopus.projects.readEnv).mockResolvedValue({
+      ok: true,
+      value: 'MYSQL_HOST=dev.example'
+    })
+    const user = userEvent.setup()
+    await renderDialog()
+
+    await openSection(user, 'Env')
+
+    expect(await screen.findByDisplayValue('MYSQL_HOST=dev.example')).toBeInTheDocument()
+  })
+
+  it('saves edited env overrides against the project they belong to', async () => {
+    vi.mocked(window.octopus.projects.readEnv).mockResolvedValue({
+      ok: true,
+      value: 'MYSQL_HOST=dev.example'
+    })
+    const user = userEvent.setup()
+    await renderDialog()
+
+    await openSection(user, 'Env')
+    const env = await screen.findByDisplayValue('MYSQL_HOST=dev.example')
+    await user.clear(env)
+    await user.type(env, 'MYSQL_HOST=other.example')
+    await user.tab()
+
+    expect(window.octopus.projects.saveEnv).toHaveBeenCalledExactlyOnceWith(
+      'planner',
+      'MYSQL_HOST=other.example'
     )
   })
 
@@ -563,7 +601,7 @@ describe('ProjectSettings', () => {
     expect(screen.queryByText(/permission denied/)).toBeNull()
   })
 
-  it('leaves the env editor empty when the file cannot be read', async () => {
+  it('leaves the file list empty when it cannot be read', async () => {
     vi.mocked(window.octopus.projects.readCarryList).mockResolvedValue({
       ok: false,
       error: 'EACCES: permission denied'
@@ -572,6 +610,20 @@ describe('ProjectSettings', () => {
     await renderDialog()
 
     await openSection(user, 'Files')
+
+    expect(await screen.findByRole('textbox')).toHaveValue('')
+    expect(screen.queryByText(/permission denied/)).toBeNull()
+  })
+
+  it('leaves the env editor empty when the file cannot be read', async () => {
+    vi.mocked(window.octopus.projects.readEnv).mockResolvedValue({
+      ok: false,
+      error: 'EACCES: permission denied'
+    })
+    const user = userEvent.setup()
+    await renderDialog()
+
+    await openSection(user, 'Env')
 
     expect(await screen.findByRole('textbox')).toHaveValue('')
     expect(screen.queryByText(/permission denied/)).toBeNull()

@@ -59,6 +59,16 @@ export function projectCarry(projectId: ProjectId, root: string = rootDir()): st
   return join(projectDir(projectId, root), 'carry')
 }
 
+/**
+ * A project's env overrides, written last into every workspace's `.env`.
+ *
+ * `env` rather than `.env`: inside our own directory there is nothing to hide
+ * from a listing, and a dotfile only makes it harder to find by hand.
+ */
+export function projectEnv(projectId: ProjectId, root: string = rootDir()): string {
+  return join(projectDir(projectId, root), 'env')
+}
+
 /** Directory holding a project's instruction files for the agent. */
 export function projectInstructionsDir(projectId: ProjectId, root: string = rootDir()): string {
   return join(projectDir(projectId, root), 'instructions')

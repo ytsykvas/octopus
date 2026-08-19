@@ -12,6 +12,7 @@ else joins a home directory by hand.
   instructions/pull-request.md       guidance every project falls back to
   projects/<projectId>/
     carry                            paths carried from the checkout into a workspace
+    env                              variables written last into every workspace's .env
     scripts/setup.sh                 prepares a new workspace, on Run
     scripts/run.sh                   starts the dev server
     scripts/archive.sh               takes back what setup gave out, on removal
@@ -440,3 +441,51 @@ project's needs change.
 Anything absolute, or reaching outside the checkout with `..`, is dropped rather
 than refused. The list is typed by hand, and one bad line should not stop the
 rest of a workspace being prepared.
+
+## Env overrides typed against a project
+
+`projects/<projectId>/env` holds variables typed in project settings, mode
+`0o600` because they are credentials. They are written into each workspace's
+`.env` — appended, between two markers:
+
+```
+…everything carried from the checkout…
+
+# >>> octopus: project overrides
+MYSQL_HOST=dev.example
+# <<< octopus
+```
+
+**At the end, because last wins.** `dotenv` and every implementation of it keeps
+the final definition of a name, so the block overrides whatever the copied file
+held. That matters twice.
+
+The first is a project **cloned from GitHub**, where the carry list answers
+nothing: a fresh clone has no `.env` and no `config/master.key` by definition —
+they are gitignored, so GitHub never had them. There is nothing to copy, and the
+first sign of it is the framework complaining about credentials. Here the block
+is not an override at all; it is the file, created holding only itself.
+
+The second is a checkout pointing somewhere it should not. A `.env` left on the
+production block hands every workspace production, quietly, and the block puts
+that right without editing anyone's file.
+
+**Two markers rather than one**, so a rewrite replaces only what we wrote. With
+a single opening marker the tidiest implementation is to truncate there — and
+that eats any line somebody added inside the workspace afterwards. An opening
+marker with no closing one means the file was edited into a shape we did not
+write; everything from it on is replaced, since keeping half a block is worse.
+
+Emptying the overrides removes the block and leaves the rest of the file alone.
+
+**Appended, and nothing else.** These do not reach the process environment: the
+terminal and the agent see them only through whatever loads `.env` from the
+workspace directory. `bin/rails console` will; a bare `psql` in the Terminal tab
+will not, because nothing exported them into the shell. That is the price of
+appending, and it is the right price — appending is what works when the app
+reads `.env` and the process environment does not reach it.
+
+Files and variables are put in place together, at creation and again before a
+run, so a workspace that predates either picks it up. The files go first: the
+block has to end up below whatever was copied, which is the whole reason it
+wins.

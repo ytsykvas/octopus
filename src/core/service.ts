@@ -46,6 +46,7 @@ import { type EditTarget, readChangeContext, readEditTarget } from './changeCont
 import { readWorkspaceDiff, type WorkspaceDiff } from './diff.js'
 import { isListening, settlePort } from './ports.js'
 import { carryInto, readCarryList, writeCarryList } from './carry.js'
+import { applyEnvOverrides, readProjectEnv, writeProjectEnv } from './env.js'
 import { runArchiveScript } from './archive.js'
 import { type Config, ConfigSchema, loadConfig, saveConfig, toSdkSettingSources } from './config.js'
 import { type AgentEvent, isEphemeral } from './events.js'
@@ -279,14 +280,22 @@ export interface OctopusService {
   /** Which of the checkout's files travel into a workspace, one path per line. */
   readProjectCarryList(projectId: string): Promise<string>
   saveProjectCarryList(projectId: string, contents: string): Promise<void>
+  /** Variables written last into every workspace's `.env`, so they win. */
+  readProjectEnv(projectId: string): Promise<string>
+  saveProjectEnv(projectId: string, contents: string): Promise<void>
+
   /**
-   * Copies them into a workspace that is missing them.
+   * Puts a workspace in a state its scripts can run in.
    *
-   * Called before a run as well as at creation, so a workspace made before the
-   * list mentioned a file picks it up rather than staying broken until it is
-   * recreated. Never overwrites — see `carryInto`.
+   * Two things, because they are one moment: the carried files land, and then
+   * the project's env overrides are written at the end of the workspace's
+   * `.env`. Done at creation and again before a run, so a workspace made before
+   * either changed picks the change up rather than staying broken until it is
+   * recreated.
+   *
+   * Answers with the files it copied; nothing is ever overwritten.
    */
-  carryIntoWorkspace(workspaceId: string): Promise<string[]>
+  prepareWorkspace(workspaceId: string): Promise<string[]>
 
   /**
    * Whether anything is listening on the port this workspace was given.
@@ -1267,11 +1276,26 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
       await writeCarryList(projectId, contents, dataRoot)
     },
 
-    async carryIntoWorkspace(workspaceId) {
+    async readProjectEnv(projectId) {
+      requireProject(projectId)
+      return readProjectEnv(projectId, dataRoot)
+    },
+
+    async saveProjectEnv(projectId, contents) {
+      requireProject(projectId)
+      await writeProjectEnv(projectId, contents, dataRoot)
+    },
+
+    async prepareWorkspace(workspaceId) {
       const workspace = requireWorkspace(workspaceId)
       const project = requireProject(workspace.projectId)
 
-      return carryInto(project.id, project.repoPath, workspace.path, dataRoot)
+      const carried = await carryInto(project.id, project.repoPath, workspace.path, dataRoot)
+      // After the files, never before: the block has to end up below whatever
+      // was copied, which is the whole reason it wins.
+      await applyEnvOverrides(project.id, workspace.path, dataRoot)
+
+      return carried
     },
 
     async isWorkspaceServing(workspaceId) {
@@ -1374,6 +1398,7 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
         // cannot run without is a workspace that will fail its first build, and
         // undoing it says so at the one moment somebody is watching.
         await carryInto(project.id, project.repoPath, workspace.path, dataRoot)
+        await applyEnvOverrides(project.id, workspace.path, dataRoot)
         await commit((current) => addWorkspace(current, workspace))
       } catch (error) {
         await rollbackWorkspace(workspace, exec)

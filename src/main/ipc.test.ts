@@ -274,7 +274,9 @@ describe('channel table', () => {
     'scripts:paths',
     'carry:read',
     'carry:save',
-    'carry:apply',
+    'workspace:prepare',
+    'env:read',
+    'env:save',
     'workspaces:serving',
     'workspaces:port',
     'instructions:read',
@@ -395,6 +397,11 @@ describe('validation at the boundary', () => {
 
   it('rejects a carry list longer than a list has any business being', async () => {
     const result = await invoke('carry:save', 'nothing', '.env\n'.repeat(20_000))
+    expect(result).toMatchObject({ ok: false })
+  })
+
+  it('rejects an env block longer than a block has any business being', async () => {
+    const result = await invoke('env:save', 'nothing', 'A=1\n'.repeat(20_000))
     expect(result).toMatchObject({ ok: false })
   })
 
@@ -703,7 +710,10 @@ describe('scripts and instructions of a real project', () => {
     await expect(readFile(join(workspace.path, '.env'), 'utf8')).resolves.toBe('API_KEY=secret\n')
     // Already there from creation; a second pass is what a run does, and it
     // has to stay harmless.
-    await expect(invoke('carry:apply', workspace.id)).resolves.toEqual({ ok: true, value: [] })
+    await expect(invoke('workspace:prepare', workspace.id)).resolves.toEqual({
+      ok: true,
+      value: []
+    })
   })
 
   // The port is ours to decide, so the channel takes a workspace rather than a
@@ -728,6 +738,27 @@ describe('scripts and instructions of a real project', () => {
       ok: true,
       value: workspace.port
     })
+  })
+
+  // Last wins, so the block goes below whatever the checkout carried in — and
+  // it is the whole file where a clone had nothing to carry.
+  it('writes a project\u2019s env overrides at the end of a workspace\u2019s env', async () => {
+    const projectId = await addProject()
+    await writeFile(join(dir, 'planner', '.env'), 'MYSQL_HOST=production\n', 'utf8')
+    await invoke('carry:save', projectId, '.env\n')
+    await invoke('env:save', projectId, 'MYSQL_HOST=dev.example\n')
+
+    const workspace = await createWorkspace(projectId)
+
+    const contents = await readFile(join(workspace.path, '.env'), 'utf8')
+    expect(contents.indexOf('production')).toBeLessThan(contents.indexOf('dev.example'))
+  })
+
+  it('reads back the env block a project saved', async () => {
+    const projectId = await addProject()
+    await invoke('env:save', projectId, 'A=1\n')
+
+    await expect(invoke('env:read', projectId)).resolves.toEqual({ ok: true, value: 'A=1\n' })
   })
 
   it('starts from a list that names the env', async () => {

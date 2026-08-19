@@ -173,7 +173,7 @@ function Runner({
        * Nothing is overwritten, so a file edited inside the worktree survives,
        * and running this twice costs a stat each.
        */
-      const carried = await window.octopus.workspaces.carry(workspace.id)
+      const carried = await window.octopus.workspaces.prepare(workspace.id)
 
       // A stop that landed while the env was being written wins. Starting
       // afterwards would leave a server running with the header back on `Run`

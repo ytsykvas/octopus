@@ -511,7 +511,7 @@ describe('ScriptRunner', () => {
   // control anywhere that could reach it.
   it('abandons a start that was stopped while the env was being written', async () => {
     let release: (() => void) | null = null
-    vi.mocked(octopus().workspaces.carry).mockImplementation(
+    vi.mocked(octopus().workspaces.prepare).mockImplementation(
       () =>
         new Promise((resolve) => {
           release = () => {
@@ -616,7 +616,7 @@ describe('ScriptRunner', () => {
     })
     await sessionsOpened(1)
 
-    expect(octopus().workspaces.carry).toHaveBeenCalledWith(anna.id)
+    expect(octopus().workspaces.prepare).toHaveBeenCalledWith(anna.id)
   })
 
   it('puts it in place before the server too', async () => {
@@ -630,13 +630,13 @@ describe('ScriptRunner', () => {
     })
     await sessionsOpened(1)
 
-    expect(octopus().workspaces.carry).toHaveBeenCalledWith(anna.id)
+    expect(octopus().workspaces.prepare).toHaveBeenCalledWith(anna.id)
   })
 
   // Starting anyway would fail further in, complaining about whatever the
   // missing value fed rather than about the env.
   it('says so and starts nothing when the env cannot be written', async () => {
-    vi.mocked(octopus().workspaces.carry).mockResolvedValue({
+    vi.mocked(octopus().workspaces.prepare).mockResolvedValue({
       ok: false,
       error: 'Permission denied.'
     })

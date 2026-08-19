@@ -323,8 +323,8 @@ const api = {
      * picks it up instead of staying broken until it is recreated. Answers with
      * the paths it wrote.
      */
-    carry: (workspaceId: string): Promise<Result<string[]>> =>
-      ipcRenderer.invoke('carry:apply', workspaceId) as Promise<Result<string[]>>,
+    prepare: (workspaceId: string): Promise<Result<string[]>> =>
+      ipcRenderer.invoke('workspace:prepare', workspaceId) as Promise<Result<string[]>>,
 
     /** Whether anything is listening on the port this workspace was given. */
     serving: (workspaceId: string): Promise<Result<boolean>> =>
@@ -394,6 +394,13 @@ const api = {
 
     saveCarryList: (projectId: string, contents: string): Promise<Result<void>> =>
       ipcRenderer.invoke('carry:save', projectId, contents) as Promise<Result<void>>,
+
+    /** Variables written last into every workspace's `.env`, so they win. */
+    readEnv: (projectId: string): Promise<Result<string>> =>
+      ipcRenderer.invoke('env:read', projectId) as Promise<Result<string>>,
+
+    saveEnv: (projectId: string, contents: string): Promise<Result<void>> =>
+      ipcRenderer.invoke('env:save', projectId, contents) as Promise<Result<void>>,
 
     /**
      * Guidance for the agent; a missing one comes back as a template.

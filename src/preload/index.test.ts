@@ -126,7 +126,17 @@ describe('channel names', () => {
       () => method('projects', 'readInstruction')('p' as never, 'pullRequest' as never),
       'instructions:read'
     ],
-    ['workspaces.carry', () => method('workspaces', 'carry')('w' as never), 'carry:apply'],
+    [
+      'workspaces.prepare',
+      () => method('workspaces', 'prepare')('w' as never),
+      'workspace:prepare'
+    ],
+    ['projects.readEnv', () => method('projects', 'readEnv')('p' as never), 'env:read'],
+    [
+      'projects.saveEnv',
+      () => method('projects', 'saveEnv')('p' as never, 'A=1' as never),
+      'env:save'
+    ],
     ['workspaces.port', () => method('workspaces', 'port')('w' as never), 'workspaces:port'],
     [
       'workspaces.serving',
