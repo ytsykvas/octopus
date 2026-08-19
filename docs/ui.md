@@ -627,6 +627,18 @@ single button could only ever reach one of them, and for a project cloned from
 GitHub that was reliably the wrong one — nothing gitignored was ever on GitHub
 to copy.
 
+The third is disabled with no workspace selected. It was not, and the dialog it
+asks for is rendered behind a workspace check — so the click was lost and the
+flag stayed armed, springing the dialog open by itself on the next workspace
+picked. It also closes when the workspace changes: the file belongs to the one it
+was opened from.
+
+**That dialog is mounted outside every tab pane**, where the app's other modals
+are. Inside one it survived a tab change — a pane is hidden with `display: none`
+rather than unmounted, so React never unmounted the `Modal` and never called
+`close()`. The dialog stayed open in the top layer, unpainted, and the whole
+window went inert.
+
 The third opens the workspace's env file **as it stands on disk**, read-only.
 Not a preview assembled from the project's block: what the scripts will read
 includes the carried lines, a hand edit made inside the worktree, and the port
@@ -635,6 +647,14 @@ except reality.
 
 The Env section names the file before the block, because the file is the
 question a project answers once and the block is the one it keeps editing.
+
+The project dialog's **Instructions** section lists what the agent picks up on
+its own, in three states rather than two: absent, on disk but not read, or read.
+The distinction is the whole point — "on disk" is a stat and "read" is a claim
+about what the session was started with, and printing the first under the
+second's name made the panel wrong in every `settingSources` mode at once. Its
+`notes` are keyed by position: one line can carry the same complaint twice, and
+identical strings collide as keys.
 
 `FileEditor` can carry `notes` — a function run against the text on every
 keystroke, whose answers appear under the box. The env block uses it; told on

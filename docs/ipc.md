@@ -1,7 +1,7 @@
 # IPC
 
 Every call from the interface to the rest of the application goes through one
-of 63 channels. The table lives in [`src/main/ipc.ts`](../src/main/ipc.ts); the
+of 64 channels. The table lives in [`src/main/ipc.ts`](../src/main/ipc.ts); the
 renderer never names a channel itself, it calls
 [`src/preload/index.ts`](../src/preload/index.ts).
 
@@ -59,6 +59,7 @@ The only channel outside this shape is `theme:get`, which cannot fail.
 | `env:save`               | `id`, `body`          | validated for length, written `0o600`                                                                                                        |
 | `workspace:prepare`      | `workspaceId`         | carries the listed files in, never over a file already there, then writes the env block below them; answers with what it copied              |
 | `env:ignored`            | `id`                  | whether git would keep the env file out of a commit — asked of the checkout, whose `.gitignore` every worktree shares                        |
+| `instructions:sources`   | `id`                  | what the project offers the agent and what it will actually read — `present` and `loaded` are separate answers                               |
 | `workspace:env`          | `workspaceId`         | the workspace's env file as it stands, `null` where it has none. The file, never a reconstruction                                            |
 | `workspaces:serving`     | `workspaceId`         | whether anything is listening on the port this workspace was given                                                                           |
 | `instructions:read`      | `id`, `kind`          | `null` id is the installation's own                                                                                                          |

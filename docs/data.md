@@ -499,7 +499,25 @@ that eats any line somebody added inside the workspace afterwards. An opening
 marker with no closing one means the file was edited into a shape we did not
 write; everything from it on is replaced, since keeping half a block is worse.
 
-Emptying the overrides removes the block and leaves the rest of the file alone.
+Emptying the overrides removes the block. Where the block was **all** the file
+held, the file goes with it — an empty file is still a file, and `carryInto`
+copies with `COPYFILE_EXCL`, so one left behind would refuse the real `.env` for
+ever. The same reason a file holding nothing but a block is discarded before the
+carry runs: for a project cloned from GitHub the block creates that file, and
+without this the checkout's own `.env`, appearing later, could never arrive.
+
+Writing it twice lands the same file. It did not: `withoutBlock` left a newline
+where the block had been and the write added its own separator, so the file
+gained a blank line at the head on every run.
+
+**A marker of ours pasted into the body is taken out**, and warned about. Left
+in, the next read cuts at that closing marker, promotes the rest of our own block
+to somebody else's content and appends a fresh one below it — copying a
+workspace's env back into the box was all it took.
+
+Changing which file a project names sweeps the block out of the old one in every
+existing workspace. Nothing else would ever revisit it, and what stayed behind
+was live: credentials, and a port frozen at the moment of the switch.
 
 **`$OCTOPUS_PORT` in the block becomes the workspace's own port**, along with
 the rest of the names the scripts get — `$OCTOPUS_PORT_1`…`_9`,
