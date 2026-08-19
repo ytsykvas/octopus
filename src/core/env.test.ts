@@ -7,6 +7,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import {
   applyEnvOverrides,
   discardIfOnlyBlock,
+  removeEnvBlock,
   projectEnvPath,
   readProjectEnv,
   readWorkspaceEnv,
@@ -324,5 +325,73 @@ describe('discardIfOnlyBlock', () => {
     await applyEnvOverrides('planner', { ...values(), envFile: '.env.local' }, root)
 
     await expect(discardIfOnlyBlock(workspace, '.env.local')).resolves.toBe(true)
+  })
+})
+
+describe('a block whose body carries our own markers', () => {
+  // The file grew by a line on every prepare, without bound.
+  it('does not grow the file run after run', async () => {
+    await writeProjectEnv(
+      'planner',
+      'A=1\n# >>> octopus: project overrides\nB=2\n# <<< octopus\n',
+      root
+    )
+
+    await applyEnvOverrides('planner', values(), root)
+    const once = await envFile()
+    await applyEnvOverrides('planner', values(), root)
+    await applyEnvOverrides('planner', values(), root)
+
+    await expect(envFile()).resolves.toBe(once)
+  })
+
+  it('keeps exactly one block, holding both variables', async () => {
+    await writeProjectEnv('planner', 'A=1\n# <<< octopus\nB=2\n', root)
+    await applyEnvOverrides('planner', values(), root)
+
+    const contents = await envFile()
+    expect(contents.match(/<<< octopus/g)).toHaveLength(1)
+    expect(contents).toContain('A=1')
+    expect(contents).toContain('B=2')
+  })
+})
+
+describe('removeEnvBlock', () => {
+  /*
+   * For the file a project used to name. `applyEnvOverrides` only ever touches
+   * the one named now, so changing the setting left a live block —
+   * credentials, and a port frozen at the moment of the switch — in a file the
+   * stack very likely still reads.
+   */
+  it('takes the block out and leaves the rest', async () => {
+    await writeFile(join(workspace, '.env'), 'FROM=checkout\n', 'utf8')
+    await writeProjectEnv('planner', 'A=1\n', root)
+    await applyEnvOverrides('planner', values(), root)
+
+    await expect(removeEnvBlock(workspace, '.env')).resolves.toBe(true)
+
+    const contents = await envFile()
+    expect(contents).toBe('FROM=checkout\n')
+  })
+
+  // An empty file is still a file, and `carryInto` would refuse to write over
+  // it — the same reason `applyEnvOverrides` removes one.
+  it('removes a file the block was all of', async () => {
+    await writeProjectEnv('planner', 'A=1\n', root)
+    await applyEnvOverrides('planner', values(), root)
+
+    await expect(removeEnvBlock(workspace, '.env')).resolves.toBe(true)
+    await expect(stat(join(workspace, '.env'))).rejects.toThrow()
+  })
+
+  it('leaves a file with no block of ours alone', async () => {
+    await writeFile(join(workspace, '.env'), 'FROM=checkout\n', 'utf8')
+
+    await expect(removeEnvBlock(workspace, '.env')).resolves.toBe(false)
+    await expect(envFile()).resolves.toBe('FROM=checkout\n')
+  })
+
+  it('says no where there is no file', async () => {
+    await expect(removeEnvBlock(workspace, '.env.local')).resolves.toBe(false)
   })
 })

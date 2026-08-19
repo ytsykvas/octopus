@@ -119,9 +119,11 @@ export const en = {
       'Which file in the workspace the variables are written into, relative to its root. .env suits most stacks; Vite reads .env.local and would ignore anything written beside it.',
     env: 'Variables added to every workspace',
     envHint:
-      'One KEY=value per line. Written at the end of the workspace\u2019s .env, so they win over whatever was copied — and they are the whole file where a clone had none to copy. $OCTOPUS_PORT becomes the workspace\u2019s own port, so a value naming one differs per workspace. Kept on this machine, never in the repository.',
+      'One KEY=value per line. Written at the end of {{file}} in the workspace, so they win over whatever was copied — and they are the whole file where a clone had none to copy. $OCTOPUS_PORT becomes the workspace\u2019s own port, so a value naming one differs per workspace. Kept on this machine, never in the repository.',
     envNotIgnored:
-      'git does not ignore {{file}} in this repository, so what you type here will show up in the workspace as a change — and can be committed. Add it to .gitignore.',
+      'git does not ignore {{file}} in this repository, so what you type here will show up in the workspace as a change — and can be committed. Add it to .gitignore, or if the repository tracks it, stop tracking it first.',
+    envMarker:
+      'Line {{line}}: this is one of octopus\u2019s own markers — it is removed before the block is written.',
     envNoAssignment: 'Line {{line}}: “{{subject}}” is not KEY=value, so nothing will read it.',
     envBadName: 'Line {{line}}: “{{subject}}” is not a name an env file can hold.',
     envDuplicate: 'Line {{line}}: {{subject}} is set again — only the last one counts.',
@@ -140,6 +142,11 @@ export const en = {
     sourceUserMemory: 'Your CLAUDE.md',
     sourceCommands: 'Slash commands',
     sourceAgents: 'Subagents',
+    sourceMcp: 'MCP servers (.mcp.json)',
+    sourceSkills: 'Skills',
+    sourceUserCommands: 'Your slash commands',
+    sourceUserAgents: 'Your subagents',
+    sourceNotLoaded: 'on disk, not read',
     sourcePresent: 'loaded',
     sourceAbsent: 'none',
     sourceCount: '{{count}} loaded',

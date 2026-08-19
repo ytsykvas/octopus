@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { checkEnvBody, substituteEnv, type WorkspaceValues } from './envBlock.js'
+import { checkEnvBody, substituteEnv, withoutMarkers, type WorkspaceValues } from './envBlock.js'
 
 /** The values a workspace stands for while the block is written. */
 function values(): WorkspaceValues {
@@ -132,5 +132,31 @@ describe('checkEnvBody', () => {
       { line: 1, reason: 'badName', subject: 'MY KEY' },
       { line: 2, reason: 'badName', subject: 'MY KEY' }
     ])
+  })
+})
+
+describe('a marker pasted into the body', () => {
+  /*
+   * Easiest to do by copying a workspace's env back into the box. Left in,
+   * `withoutBlock` cuts at the closing one, promotes the rest of the block to
+   * somebody else's content and appends a fresh block below it — the file grew
+   * a line on every run.
+   */
+  it('is warned about, which the comment skip used to swallow', () => {
+    expect(checkEnvBody('A=1\n# >>> octopus: project overrides\nB=2\n# <<< octopus')).toEqual([
+      { line: 2, reason: 'marker', subject: '# >>> octopus: project overrides' },
+      { line: 4, reason: 'marker', subject: '# <<< octopus' }
+    ])
+  })
+
+  it('is taken out, because the warning is only advisory', () => {
+    expect(withoutMarkers('A=1\n# >>> octopus: project overrides\nB=2\n# <<< octopus\n')).toBe(
+      'A=1\nB=2\n'
+    )
+  })
+
+  it('leaves an ordinary comment alone', () => {
+    expect(withoutMarkers('# mine\nA=1')).toBe('# mine\nA=1')
+    expect(checkEnvBody('# mine\nA=1')).toEqual([])
   })
 })

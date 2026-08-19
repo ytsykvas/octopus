@@ -292,9 +292,14 @@ export function createDefaultConfig(
  * The config as it may be found on disk, before `migrateConfig` has run.
  *
  * The same split `store.ts` makes between `StoredState` and `State`: a version
- * the current build no longer writes still has to parse, or the file would fail
- * validation and be replaced by defaults — losing every other setting to fix
- * one.
+ * the current build no longer writes still has to parse here, or every other
+ * setting in the file would be unreachable because of one number.
+ *
+ * A version this build has never heard of is a different matter and is **not**
+ * accepted: `readJsonFile` throws `InvalidFileError`, `createService` does not
+ * catch it, and the app says so and quits. That is deliberate — a newer build
+ * wrote that file, and starting anyway would write it back in an older shape,
+ * silently discarding whatever the newer one had put there.
  */
 export const StoredConfigSchema = ConfigSchema.extend({
   version: z.union([z.literal(1), z.literal(2)])

@@ -27,7 +27,14 @@ import { join } from 'node:path'
 
 import { z } from 'zod'
 
-import { CLOSE, OPEN, substituteEnv, withoutBlock, type WorkspaceValues } from './envBlock.js'
+import {
+  CLOSE,
+  OPEN,
+  substituteEnv,
+  withoutBlock,
+  withoutMarkers,
+  type WorkspaceValues
+} from './envBlock.js'
 import { projectEnv } from './paths.js'
 import { writeTextFile } from './persist.js'
 import type { ProjectId } from './types.js'
@@ -83,6 +90,37 @@ export async function readWorkspaceEnv(
 }
 
 /**
+ * Takes our block out of a file, leaving everything else.
+ *
+ * For the file a project **used** to name. `applyEnvOverrides` only ever
+ * touches the one named now, so changing the setting left a live block —
+ * credentials, and a port frozen at the moment of the switch — in a file the
+ * stack very likely still reads.
+ *
+ * A file left holding nothing goes, for the same reason `applyEnvOverrides`
+ * removes it: an empty file is still a file, and `carryInto` would refuse to
+ * write over it.
+ */
+export async function removeEnvBlock(workspacePath: string, envFile: string): Promise<boolean> {
+  const path = join(workspacePath, envFile)
+
+  let existing: string
+  try {
+    existing = await readFile(path, 'utf8')
+  } catch {
+    return false
+  }
+
+  const kept = withoutBlock(existing)
+  if (kept === existing) return false
+
+  if (kept.trim() === '') await rm(path, { force: true })
+  else await writeTextFile(path, kept, MODE)
+
+  return true
+}
+
+/**
  * Removes a workspace env file that holds nothing but our own block.
  *
  * Called **before** the carried files land, and it exists because the two
@@ -134,7 +172,9 @@ export async function applyEnvOverrides(
   root?: string
 ): Promise<boolean> {
   const stored = (await readProjectEnv(projectId, root)).trim()
-  const body = substituteEnv(stored, values)
+  // Markers out before anything else: one left in the body would make the next
+  // read cut in the middle of our own block.
+  const body = substituteEnv(withoutMarkers(stored), values).trim()
   const path = join(values.path, values.envFile)
 
   let existing = ''
@@ -158,8 +198,21 @@ export async function applyEnvOverrides(
     return true
   }
 
-  const separator = kept === '' || kept.endsWith('\n') ? '' : '\n'
-  await writeTextFile(path, `${kept}${separator}\n${OPEN}\n${body}\n${CLOSE}\n`, MODE)
+  /*
+   * The kept part with its trailing blank lines taken off, so writing twice
+   * lands the same file.
+   *
+   * Without it each run left a newline where the last block had been and then
+   * added its own separator, so the file gained a blank line at the head every
+   * time — an idempotent operation that was not.
+   */
+  const head = kept.replace(/\s+$/, '')
+
+  await writeTextFile(
+    path,
+    head === '' ? `${OPEN}\n${body}\n${CLOSE}\n` : `${head}\n\n${OPEN}\n${body}\n${CLOSE}\n`,
+    MODE
+  )
 
   return true
 }

@@ -66,6 +66,20 @@ const BARE = /\$(OCTOPUS_[A-Z0-9_]+)/g
  * Substituted **on the way into the workspace**, never in the stored block:
  * the port can move between runs, and a stored number would be yesterday's.
  */
+/**
+ * The body with any marker line of ours taken out.
+ *
+ * Belt to `checkEnvBody`'s braces: the warning is advisory and the block is
+ * written anyway, so the thing that would corrupt the file has to be removed
+ * rather than merely mentioned.
+ */
+export function withoutMarkers(body: string): string {
+  return body
+    .split('\n')
+    .filter((line) => line.trim() !== OPEN && line.trim() !== CLOSE)
+    .join('\n')
+}
+
 export function substituteEnv(body: string, values: WorkspaceValues): string {
   const table = scriptEnv('run', values)
   const swap = (whole: string, name: string): string => table[name] ?? whole
@@ -79,7 +93,7 @@ export function substituteEnv(body: string, values: WorkspaceValues): string {
 export interface EnvProblem {
   /** 1-based, so it matches what the editor shows. */
   readonly line: number
-  readonly reason: 'noAssignment' | 'badName' | 'duplicate' | 'unknownVariable'
+  readonly reason: 'noAssignment' | 'badName' | 'duplicate' | 'unknownVariable' | 'marker'
   /** The name at fault where there is one — a key, or a variable reference. */
   readonly subject: string
 }
@@ -110,6 +124,20 @@ export function checkEnvBody(body: string): EnvProblem[] {
   body.split('\n').forEach((raw, index) => {
     const line = index + 1
     const text = raw.trim().replace(EXPORT, '')
+
+    /*
+     * A marker of ours, pasted in — most easily by copying a workspace's env
+     * back into the box. Left in, `withoutBlock` would cut at the closing one
+     * and promote the rest of the block to somebody else's content, appending a
+     * fresh block below it on every run: the file grew a line each time.
+     *
+     * Checked before the comment skip, which is what let it through.
+     */
+    if (text === OPEN || text === CLOSE) {
+      problems.push({ line, reason: 'marker', subject: text })
+      return
+    }
+
     if (text === '' || text.startsWith('#')) return
 
     const equals = text.indexOf('=')

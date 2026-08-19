@@ -107,7 +107,11 @@ export async function writeTextFile(
   await mkdir(dirname(filePath), { recursive: true })
 
   try {
-    await writeFile(tempPath, contents, 'utf8')
+    // The mode twice, and both are needed. On the write it is what stops the
+    // contents existing at the default mode even for the length of the write;
+    // `chmod` is what applies it to a temporary file left behind by an earlier
+    // failure, which `open(2)` would not.
+    await writeFile(tempPath, contents, mode === undefined ? 'utf8' : { encoding: 'utf8', mode })
     if (mode !== undefined) await chmod(tempPath, mode)
     await rename(tempPath, filePath)
   } catch (error) {

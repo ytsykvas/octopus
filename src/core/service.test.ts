@@ -1009,6 +1009,46 @@ describe('env overrides a project adds', () => {
     await expect(service.readWorkspaceEnv('missing')).rejects.toThrow()
   })
 
+  /*
+   * `applyEnvOverrides` only ever touches the file named now, so changing the
+   * setting left a live block — credentials, and a port frozen at the moment of
+   * the switch — in a file the stack very likely still reads.
+   */
+  it('takes the block out of the file the project stops naming', async () => {
+    const { id } = await withProject()
+    await service.saveProjectEnv(id, 'API_KEY=secret\n')
+    const workspace = await service.createWorkspaceIn(id)
+    await expect(readFile(join(workspace.path, '.env'), 'utf8')).resolves.toContain('API_KEY')
+
+    await service.updateProjectById(id, { envFile: '.env.local' })
+
+    await expect(readFile(join(workspace.path, '.env'), 'utf8')).rejects.toThrow()
+  })
+
+  it('leaves the rest of that file where there was any', async () => {
+    const { id, repo } = await withProject()
+    await writeFile(join(repo, '.env'), 'FROM=checkout\n', 'utf8')
+    await service.saveProjectCarryList(id, '.env\n')
+    await service.saveProjectEnv(id, 'API_KEY=secret\n')
+    const workspace = await service.createWorkspaceIn(id)
+
+    await service.updateProjectById(id, { envFile: '.env.local' })
+
+    const contents = await readFile(join(workspace.path, '.env'), 'utf8')
+    expect(contents).toContain('FROM=checkout')
+    expect(contents).not.toContain('API_KEY')
+  })
+
+  it('touches nothing when the file was not what changed', async () => {
+    const { id } = await withProject()
+    await service.saveProjectEnv(id, 'API_KEY=secret\n')
+    const workspace = await service.createWorkspaceIn(id)
+
+    await service.updateProjectById(id, { name: 'Renamed' })
+
+    await expect(readFile(join(workspace.path, '.env'), 'utf8')).resolves.toContain('API_KEY')
+  })
+
   // The file gets credentials written into it inside a directory the agent
   // commits from freely.
   it('says whether git would keep the env file out of a commit', async () => {

@@ -453,8 +453,12 @@ value again: a config that says 2 holds a choice, isolation included.
 
 The same split `store.ts` makes between what is on disk and what the app works
 with. A version the current build no longer writes still has to **parse**, or
-the file would fail validation and be replaced by defaults — losing every other
-setting to fix one.
+every other setting in the file would be unreachable because of one number.
+
+A version this build has never heard of is refused instead: the read throws, the
+app says so and quits. Deliberate — a newer build wrote that file, and starting
+anyway would write it back in an older shape and silently discard whatever the
+newer one had put there.
 
 ## Env overrides typed against a project
 
