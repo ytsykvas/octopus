@@ -279,6 +279,8 @@ describe('channel table', () => {
     'env:save',
     'env:ignored',
     'instructions:sources',
+    'trust:read',
+    'trust:approve',
     'workspace:env',
     'workspaces:serving',
     'workspaces:port',
@@ -780,6 +782,26 @@ describe('scripts and instructions of a real project', () => {
 
     await writeFile(join(dir, 'planner', '.gitignore'), '.env\n', 'utf8')
     await expect(invoke('env:ignored', projectId)).resolves.toEqual({ ok: true, value: true })
+  })
+
+  // A repository that ships settings can pre-approve tools and declare shell
+  // hooks, and octopus loads them as the CLI does.
+  it('says what a repository can grant itself, and takes the approval', async () => {
+    const projectId = await addProject()
+    const workspace = await createWorkspace(projectId)
+    await mkdir(join(workspace.path, '.claude'), { recursive: true })
+    await writeFile(join(workspace.path, '.claude', 'settings.json'), '{"a":1}', 'utf8')
+
+    await expect(invoke('trust:read', workspace.id)).resolves.toMatchObject({
+      ok: true,
+      value: { approved: false }
+    })
+
+    await expect(invoke('trust:approve', workspace.id)).resolves.toMatchObject({ ok: true })
+    await expect(invoke('trust:read', workspace.id)).resolves.toMatchObject({
+      ok: true,
+      value: { approved: true }
+    })
   })
 
   // octopus loads every settings source, so the agent arrives carrying whatever

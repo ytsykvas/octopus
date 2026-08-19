@@ -230,6 +230,16 @@ export function registerIpc(
     attempt(() => service.readWorkspaceEnv(workspaceId))
   )
 
+  // Keyed by workspace: the files live in the worktree a session runs in, and
+  // a branch may carry different ones from the branch beside it.
+  host.handle('trust:read', (_event, workspaceId: string) =>
+    attempt(() => service.workspaceTrust(workspaceId))
+  )
+
+  host.handle('trust:approve', (_event, workspaceId: string) =>
+    attempt(() => service.approveWorkspaceSettings(workspaceId))
+  )
+
   host.handle('instructions:sources', (_event, projectId: string) =>
     attempt(() => service.projectInstructionSources(projectId))
   )

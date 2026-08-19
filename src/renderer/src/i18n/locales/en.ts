@@ -605,6 +605,15 @@ export const en = {
     installedAt: 'First run'
   },
 
+  trust: {
+    title: 'What this repository can do',
+    explain:
+      'octopus loads the same settings as Claude Code in a terminal, so this repository can pre-approve tools without asking, run its own commands around every tool call, and start MCP servers. Read what it ships before allowing it. Only these files need approving — instructions like CLAUDE.md do not, and are read either way once you approve.',
+    approve: 'Allow these',
+    notice:
+      'This project ships settings that would pre-approve tools and run its own commands. Until you have read them, the agent works without anything from this repository — including its CLAUDE.md.',
+    review: 'Review'
+  },
   errors: {
     notARepository: '{{path}} is not a git repository.',
     emptyRepository:

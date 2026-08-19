@@ -55,7 +55,14 @@ import {
   writeProjectEnv
 } from './env.js'
 import { runArchiveScript } from './archive.js'
-import { type Config, ConfigSchema, loadConfig, saveConfig, toSdkSettingSources } from './config.js'
+import {
+  type Config,
+  ConfigSchema,
+  loadConfig,
+  saveConfig,
+  type SettingSourceName,
+  toSdkSettingSources
+} from './config.js'
 import { type AgentEvent, isEphemeral } from './events.js'
 import { cloneRepository, listRepositories, type RemoteRepository } from './github.js'
 import type { GitExec } from './git.js'
@@ -69,6 +76,7 @@ import {
 } from './pullRequests.js'
 import { gitIn, isIgnored } from './git.js'
 import { type InstructionSource, instructionSources } from './instructionSources.js'
+import { type CapabilityFile, capabilityFiles, trustDigest, withApproval } from './repoTrust.js'
 import {
   effectiveInstruction,
   type InstructionKind,
@@ -306,6 +314,20 @@ export interface OctopusService {
    * has been written for it; this is how the app can say what that was.
    */
   projectInstructionSources(projectId: string): Promise<InstructionSource[]>
+  /**
+   * What this workspace's repository can grant itself, and whether it has been
+   * approved.
+   *
+   * A repository ships `.claude/settings.json`, hook scripts and `.mcp.json`;
+   * octopus loads them as the CLI does, so opening a clone would hand it those
+   * unless somebody has read them.
+   */
+  workspaceTrust(workspaceId: string): Promise<{
+    readonly approved: boolean
+    readonly files: readonly CapabilityFile[]
+  }>
+  /** Records that these files were read, so the next session may load them. */
+  approveWorkspaceSettings(workspaceId: string): Promise<void>
   /**
    * A workspace's env file as it stands, or null where it has none.
    *
@@ -1170,12 +1192,44 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
     }
   }
 
-  function startFor(chat: Chat, workspace: Workspace): AgentSession {
+  /**
+   * The settings sources this workspace may load.
+   *
+   * Narrowed to the user's own layer while the repository's capability files
+   * are unapproved. octopus loads every source as the CLI does, so a clone's
+   * `.claude/settings.json` would otherwise pre-approve tools and declare shell
+   * hooks the moment somebody opened it.
+   *
+   * Fail safe rather than closed: the agent still runs, it just reads nothing
+   * of the project's — and because one flag governs both, that includes its
+   * `CLAUDE.md`. Loud on purpose, and the chat says so.
+   *
+   * A worktree that grants nothing digests to the empty string and needs no
+   * approval, which is most repositories.
+   */
+  async function sourcesFor(workspace: Workspace): Promise<SettingSourceName[]> {
+    const configured = toSdkSettingSources(config.settingSources)
+    // `requireProject`, not a lookup with a fallback: a workspace whose project
+    // is gone is a broken state, and quietly handing it the full set of sources
+    // is the one answer it must not get.
+    const project = requireProject(workspace.projectId)
+
+    const digest = trustDigest(await capabilityFiles(workspace.path))
+    if (digest === '' || project.approvedSettings.includes(digest)) return configured
+
+    return configured.filter((source) => source === 'user')
+  }
+
+  function startFor(
+    chat: Chat,
+    workspace: Workspace,
+    settingSources: readonly SettingSourceName[]
+  ): AgentSession {
     const session = startSession(
       {
         cwd: workspace.path,
         resume: chat.sessionId,
-        settingSources: toSdkSettingSources(config.settingSources),
+        settingSources,
         permissionMode: sessionMode(chat),
         model: sessionModel(chat),
         effort: chat.effort,
@@ -1365,6 +1419,29 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
         project.repoPath,
         toSdkSettingSources(config.settingSources),
         carriedPaths(await readCarryList(project.id, dataRoot))
+      )
+    },
+
+    async workspaceTrust(workspaceId) {
+      const workspace = requireWorkspace(workspaceId)
+      const project = requireProject(workspace.projectId)
+      const files = await capabilityFiles(workspace.path)
+      const digest = trustDigest(files)
+
+      // Nothing to grant is nothing to approve, which is most repositories.
+      return { approved: digest === '' || project.approvedSettings.includes(digest), files }
+    },
+
+    async approveWorkspaceSettings(workspaceId) {
+      const workspace = requireWorkspace(workspaceId)
+      const project = requireProject(workspace.projectId)
+      const digest = trustDigest(await capabilityFiles(workspace.path))
+      if (digest === '') return
+
+      await commit((current) =>
+        updateProject(current, project.id, {
+          approvedSettings: withApproval(project.approvedSettings, digest)
+        })
       )
     },
 
@@ -1862,7 +1939,7 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
         await running.setEffort(chat.effort)
       }
 
-      const session = running ?? startFor(chat, workspace)
+      const session = running ?? startFor(chat, workspace, await sourcesFor(workspace))
       session.send(text)
 
       await setChatStatus(chatId, 'running')

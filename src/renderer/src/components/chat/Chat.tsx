@@ -2,7 +2,12 @@ import type { Chat as ChatRecord, Effort, WorkingMode } from '@core/chats.js'
 import type { ProjectColor } from '@core/colors.js'
 import type { WorkspaceView } from '@core/workspaces.js'
 
+import { useEffect, useState } from 'react'
+import { useTranslation } from 'react-i18next'
+
 import type { ChatTabsController } from '../../hooks/useChatTabs.js'
+import { Button } from '../Button.js'
+import { RepoTrustReview } from '../RepoTrustReview.js'
 import type { DiffCommentController } from '../../hooks/useDiffComments.js'
 import { ChatSession } from './ChatSession.js'
 import { ChatTabs } from './ChatTabs.js'
@@ -74,6 +79,46 @@ export function Chat({
   defaultModel,
   defaultPlanModel
 }: ChatProps): React.JSX.Element {
+  const { t } = useTranslation()
+  const [reviewing, setReviewing] = useState(false)
+  /*
+   * The verdict, and the workspace it belongs to.
+   *
+   * Reset during render rather than in the effect, the way `useServingPort`
+   * does it: an effect runs after the paint, so the next workspace would show
+   * one frame of the last one's answer — and here that frame is a warning
+   * about a repository it is not about.
+   */
+  const [trust, setTrust] = useState<{ id: string; untrusted: boolean }>({
+    id: workspace.id,
+    untrusted: false
+  })
+  if (trust.id !== workspace.id) setTrust({ id: workspace.id, untrusted: false })
+  const untrusted = trust.id === workspace.id && trust.untrusted
+
+  /*
+   * Asked per workspace, because the files live in the worktree a session runs
+   * in — a branch may carry different ones from the branch beside it.
+   *
+   * Only ever turned on here. Approving turns it off, and a fresh workspace
+   * asks again from scratch.
+   */
+  useEffect(() => {
+    const controller = new AbortController()
+
+    void (async () => {
+      const answer = await window.octopus.workspaces.trust(workspace.id)
+      // A question that could not be answered is not evidence of anything.
+      if (!controller.signal.aborted && answer.ok) {
+        setTrust({ id: workspace.id, untrusted: !answer.value.approved })
+      }
+    })()
+
+    return () => {
+      controller.abort()
+    }
+  }, [workspace.id])
+
   return (
     <div
       className="flex min-h-0 flex-1 flex-col"
@@ -95,6 +140,37 @@ export function Chat({
           <ChatTabs tabs={tabs} />
         </div>
       </header>
+
+      {/* Pinned under the header rather than inside the scroller, where
+          `chat.error` lives: this is a standing fact about the workspace, not
+          an event in one conversation, and a notice that scrolls away is one
+          nobody reads twice. */}
+      {untrusted && (
+        <div className="border-warning/30 bg-warning-bg mx-6 mt-3 flex items-start gap-3 rounded-[var(--radius-control)] border px-3 py-2">
+          <p className="min-w-0 flex-1 leading-relaxed">{t('trust.notice')}</p>
+          <Button
+            size="sm"
+            onClick={() => {
+              setReviewing(true)
+            }}
+          >
+            {t('trust.review')}
+          </Button>
+        </div>
+      )}
+
+      {reviewing && (
+        <RepoTrustReview
+          workspaceId={workspace.id}
+          onApproved={() => {
+            setReviewing(false)
+            setTrust({ id: workspace.id, untrusted: false })
+          }}
+          onClose={() => {
+            setReviewing(false)
+          }}
+        />
+      )}
 
       {tabs.tabs.map((tab) => (
         <ChatSession

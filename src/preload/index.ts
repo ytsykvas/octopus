@@ -23,6 +23,7 @@ import type { RemoveOptions, WorkspaceView } from '@core/workspaces.js'
 import type { InstructionKind } from '@core/instructions.js'
 import type { ScriptKind } from '@core/scripts.js'
 import type { InstructionSource } from '@core/instructionSources.js'
+import type { CapabilityFile } from '@core/repoTrust.js'
 import type { Project, ProjectPatch } from '@core/store.js'
 import type { ThemeName } from '@core/types.js'
 
@@ -326,6 +327,18 @@ const api = {
      */
     prepare: (workspaceId: string): Promise<Result<string[]>> =>
       ipcRenderer.invoke('workspace:prepare', workspaceId) as Promise<Result<string[]>>,
+
+    /** What this repository can grant itself, and whether it was approved. */
+    trust: (
+      workspaceId: string
+    ): Promise<Result<{ approved: boolean; files: readonly CapabilityFile[] }>> =>
+      ipcRenderer.invoke('trust:read', workspaceId) as Promise<
+        Result<{ approved: boolean; files: readonly CapabilityFile[] }>
+      >,
+
+    /** Records that those files were read. */
+    approveSettings: (workspaceId: string): Promise<Result<void>> =>
+      ipcRenderer.invoke('trust:approve', workspaceId) as Promise<Result<void>>,
 
     /** The workspace's env file as it stands, or null where it has none. */
     env: (workspaceId: string): Promise<Result<string | null>> =>

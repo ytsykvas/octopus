@@ -53,6 +53,7 @@ beforeEach(async () => {
     baseBranch: 'main',
     branchPrefix: 'ytsykvas',
     envFile: '.env',
+    approvedSettings: [],
     color: 'blue'
   }
   state = addProject(EMPTY_STATE, project)

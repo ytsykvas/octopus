@@ -78,7 +78,16 @@ export const ProjectSchema = z.object({
    * and a project on one of those had nowhere to put its variables while this
    * was a constant.
    */
-  envFile: z.string().min(1).default(DEFAULT_ENV_FILE)
+  envFile: z.string().min(1).default(DEFAULT_ENV_FILE),
+  /**
+   * Digests of this repository's capability files that somebody has read.
+   *
+   * A repository can pre-approve tools and declare shell hooks through
+   * `.claude/settings.json`, and octopus loads it as the CLI does — so opening
+   * a clone grants it that unless somebody has looked. A **set**, so moving
+   * between two branches whose settings differ does not ask on every switch.
+   */
+  approvedSettings: z.array(z.string()).default([])
 })
 
 export const WorkspaceStatusSchema = z.enum(['idle', 'running', 'waiting_permission', 'error'])
@@ -282,7 +291,8 @@ export const ProjectPatchSchema = ProjectSchema.pick({
   baseBranch: true,
   color: true,
   icon: true,
-  envFile: true
+  envFile: true,
+  approvedSettings: true
 }).partial()
 
 export type ProjectPatch = z.infer<typeof ProjectPatchSchema>
@@ -331,7 +341,10 @@ export function updateProject(state: State, projectId: string, patch: ProjectPat
             ...(patch.icon !== undefined && { icon: patch.icon }),
             ...(name !== undefined && { name }),
             ...(baseBranch !== undefined && { baseBranch }),
-            ...(envFile !== undefined && { envFile })
+            ...(envFile !== undefined && { envFile }),
+            ...(patch.approvedSettings !== undefined && {
+              approvedSettings: patch.approvedSettings
+            })
           }
         : project
     )

@@ -148,6 +148,12 @@ describe('channel names', () => {
       'instructions:sources'
     ],
     ['workspaces.env', () => method('workspaces', 'env')('w' as never), 'workspace:env'],
+    ['workspaces.trust', () => method('workspaces', 'trust')('w' as never), 'trust:read'],
+    [
+      'workspaces.approveSettings',
+      () => method('workspaces', 'approveSettings')('w' as never),
+      'trust:approve'
+    ],
     ['workspaces.port', () => method('workspaces', 'port')('w' as never), 'workspaces:port'],
     [
       'workspaces.serving',

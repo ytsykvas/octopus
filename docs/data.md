@@ -460,6 +460,25 @@ app says so and quits. Deliberate — a newer build wrote that file, and startin
 anyway would write it back in an older shape and silently discard whatever the
 newer one had put there.
 
+## What a repository is allowed to grant itself
+
+`approvedSettings` on a project holds sha256 digests of the files in a worktree
+that grant capability: `.claude/settings.json`, `.claude/settings.local.json`,
+`.mcp.json`, and every file under `.claude/hooks/`. The hook scripts are in there
+because the settings only **name** them — digesting the settings alone would let
+a repository change what runs while the line that runs it stays put. The path
+goes into the digest beside the contents, so moving a hook to another name counts
+as a change.
+
+A **set**, capped at ten: two branches whose settings differ would otherwise ask
+on every switch. A worktree that grants nothing digests to the empty string,
+which is how "nothing to approve" is told apart from "approved" without a second
+field.
+
+Read from the worktree a session runs in, not the checkout — the SDK is pointed
+at the worktree, and a branch may carry different settings from the one beside
+it.
+
 ## Env overrides typed against a project
 
 `projects/<projectId>/env` holds variables typed in project settings, mode

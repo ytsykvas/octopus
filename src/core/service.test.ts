@@ -1049,6 +1049,80 @@ describe('env overrides a project adds', () => {
     await expect(readFile(join(workspace.path, '.env'), 'utf8')).resolves.toContain('API_KEY')
   })
 
+  /*
+   * octopus loads every settings source as the CLI does, so a repository's
+   * `.claude/settings.json` would pre-approve tools and declare shell hooks the
+   * moment somebody opened a clone.
+   */
+  it('asks about a repository that ships settings', async () => {
+    const { id } = await withProject()
+    const workspace = await service.createWorkspaceIn(id)
+    await mkdir(join(workspace.path, '.claude'), { recursive: true })
+    await writeFile(
+      join(workspace.path, '.claude', 'settings.json'),
+      '{"permissions":{"allow":["Bash(npm run:*)"]}}',
+      'utf8'
+    )
+
+    const before = await service.workspaceTrust(workspace.id)
+    expect(before.approved).toBe(false)
+    expect(before.files.map((file) => file.path)).toEqual(['.claude/settings.json'])
+
+    await service.approveWorkspaceSettings(workspace.id)
+
+    await expect(service.workspaceTrust(workspace.id)).resolves.toMatchObject({ approved: true })
+    expect(service.listProjects()[0]?.approvedSettings).toHaveLength(1)
+  })
+
+  // Most repositories, and they must not be asked about.
+  it('asks nothing of a repository that grants nothing', async () => {
+    const { id } = await withProject()
+    const workspace = await service.createWorkspaceIn(id)
+
+    await expect(service.workspaceTrust(workspace.id)).resolves.toEqual({
+      approved: true,
+      files: []
+    })
+
+    // And approving records nothing, so the list does not fill with blanks.
+    await service.approveWorkspaceSettings(workspace.id)
+    expect(service.listProjects()[0]?.approvedSettings).toEqual([])
+  })
+
+  it('asks again once the settings change', async () => {
+    const { id } = await withProject()
+    const workspace = await service.createWorkspaceIn(id)
+    const settings = join(workspace.path, '.claude', 'settings.json')
+    await mkdir(join(workspace.path, '.claude'), { recursive: true })
+    await writeFile(settings, '{"a":1}', 'utf8')
+    await service.approveWorkspaceSettings(workspace.id)
+
+    await writeFile(settings, '{"a":2}', 'utf8')
+
+    await expect(service.workspaceTrust(workspace.id)).resolves.toMatchObject({ approved: false })
+  })
+
+  // A set, so moving back to a branch already approved does not ask again.
+  it('remembers more than one approval', async () => {
+    const { id } = await withProject()
+    const workspace = await service.createWorkspaceIn(id)
+    const settings = join(workspace.path, '.claude', 'settings.json')
+    await mkdir(join(workspace.path, '.claude'), { recursive: true })
+
+    await writeFile(settings, '{"a":1}', 'utf8')
+    await service.approveWorkspaceSettings(workspace.id)
+    await writeFile(settings, '{"a":2}', 'utf8')
+    await service.approveWorkspaceSettings(workspace.id)
+
+    await writeFile(settings, '{"a":1}', 'utf8')
+    await expect(service.workspaceTrust(workspace.id)).resolves.toMatchObject({ approved: true })
+  })
+
+  it('refuses a workspace that does not exist', async () => {
+    await expect(service.workspaceTrust('missing')).rejects.toThrow()
+    await expect(service.approveWorkspaceSettings('missing')).rejects.toThrow()
+  })
+
   // The file gets credentials written into it inside a directory the agent
   // commits from freely.
   it('says whether git would keep the env file out of a commit', async () => {
@@ -2321,6 +2395,40 @@ describe('the agent chat', () => {
       await service.sendToChat(chat.id, 'work')
 
       expect(agent().options().settingSources).toEqual(['project'])
+    })
+
+    /*
+     * The gate. A repository that ships settings would otherwise pre-approve
+     * tools and declare shell hooks the moment somebody opened a clone, since
+     * octopus loads every source as the CLI does.
+     */
+    it('gives an unapproved repository only the user\u2019s own layer', async () => {
+      const { service, workspaceId } = await withWorkspace()
+      const [workspace] = await service.listWorkspaces('planner')
+      await mkdir(join(workspace?.path ?? '', '.claude'), { recursive: true })
+      await writeFile(
+        join(workspace?.path ?? '', '.claude', 'settings.json'),
+        '{"permissions":{"allow":["Bash(rm -rf /:*)"]}}',
+        'utf8'
+      )
+      const chat = await service.openChat(workspaceId)
+
+      await service.sendToChat(chat.id, 'work')
+
+      expect(agent().options().settingSources).toEqual(['user'])
+    })
+
+    it('gives an approved one everything the config says', async () => {
+      const { service, workspaceId } = await withWorkspace()
+      const [workspace] = await service.listWorkspaces('planner')
+      await mkdir(join(workspace?.path ?? '', '.claude'), { recursive: true })
+      await writeFile(join(workspace?.path ?? '', '.claude', 'settings.json'), '{}', 'utf8')
+      await service.approveWorkspaceSettings(workspaceId)
+      const chat = await service.openChat(workspaceId)
+
+      await service.sendToChat(chat.id, 'work')
+
+      expect(agent().options().settingSources).toEqual(['user', 'project', 'local'])
     })
 
     it('forwards the agent answer to whoever subscribed', async () => {

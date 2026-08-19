@@ -137,7 +137,9 @@ export async function createProject(
     baseBranch: info.baseBranch,
     branchPrefix,
     color: nextProjectColor(state.projects.map((project) => project.color)),
-    envFile: DEFAULT_ENV_FILE
+    envFile: DEFAULT_ENV_FILE,
+    // Nothing has been read yet, which is exactly what an empty list says.
+    approvedSettings: []
   }
 }
 

@@ -20,6 +20,7 @@ const project = (id: string, name: string): Project => ({
   baseBranch: 'main',
   branchPrefix: 'ytsykvas',
   envFile: '.env',
+  approvedSettings: [],
   color: 'blue'
 })
 

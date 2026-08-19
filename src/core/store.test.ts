@@ -45,6 +45,7 @@ const project: Project = {
   baseBranch: 'main',
   branchPrefix: 'ytsykvas',
   envFile: '.env',
+  approvedSettings: [],
   color: 'blue'
 }
 
