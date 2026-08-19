@@ -79,7 +79,7 @@ describe('default paths', () => {
     try {
       const withDefaults = await createService()
       expect(withDefaults.listProjects()).toHaveLength(0)
-      expect(withDefaults.getConfig().version).toBe(1)
+      expect(withDefaults.getConfig().version).toBe(2)
 
       // The config must land in the .octopus subdirectory of the home directory.
       await expect(readFile(join(dir, '.octopus', 'config.json'), 'utf8')).resolves.toContain(
@@ -415,8 +415,11 @@ describe('workspaces', () => {
 })
 
 describe('config', () => {
+  // octopus is a harness around Claude Code, not a filter on it: a fresh
+  // install reads the project's `CLAUDE.md`, commands and skills, as the CLI
+  // does.
   it('is created with defaults on first run', () => {
-    expect(service.getConfig().settingSources).toBe('none')
+    expect(service.getConfig().settingSources).toBe('all')
   })
 
   it('persists updates across a restart', async () => {

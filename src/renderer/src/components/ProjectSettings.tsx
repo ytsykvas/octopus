@@ -14,6 +14,7 @@ import { shortBranchName } from '@core/branches.js'
 import { PROJECT_COLORS } from '@core/colors.js'
 import { PROJECT_ICONS } from '@core/icons.js'
 import { checkEnvBody } from '@core/envBlock.js'
+import type { InstructionSource } from '@core/instructionSources.js'
 import { initials } from '@core/initials.js'
 import type { Project, ProjectPatch } from '@core/store.js'
 
@@ -52,6 +53,17 @@ const ENV_PROBLEMS = {
   badName: 'project.envBadName',
   duplicate: 'project.envDuplicate',
   unknownVariable: 'project.envUnknownVariable'
+} as const
+
+/** What each source is called to the reader. */
+const SOURCE_LABELS = {
+  projectMemory: 'project.sourceProjectMemory',
+  projectSettings: 'project.sourceProjectSettings',
+  localSettings: 'project.sourceLocalSettings',
+  userSettings: 'project.sourceUserSettings',
+  userMemory: 'project.sourceUserMemory',
+  commands: 'project.sourceCommands',
+  agents: 'project.sourceAgents'
 } as const
 
 export type SectionId = 'general' | 'git' | 'scripts' | 'files' | 'env' | 'instructions' | 'danger'
@@ -110,6 +122,7 @@ export function ProjectSettings({
    * than one that arrives a moment late.
    */
   const [envIgnored, setEnvIgnored] = useState(true)
+  const [sources, setSources] = useState<readonly InstructionSource[]>([])
   const [branches, setBranches] = useState<readonly string[]>([])
   const [error, setError] = useState<string | null>(null)
 
@@ -158,6 +171,20 @@ export function ProjectSettings({
       controller.abort()
     }
   }, [section, project.id, project.envFile])
+
+  useEffect(() => {
+    if (section !== 'instructions') return
+    const controller = new AbortController()
+
+    void (async () => {
+      const answer = await window.octopus.projects.instructionSources(project.id)
+      if (!controller.signal.aborted && answer.ok) setSources(answer.value)
+    })()
+
+    return () => {
+      controller.abort()
+    }
+  }, [section, project.id])
 
   const commitEnvFile = (): void => {
     const trimmed = envFile.trim()
@@ -432,20 +459,44 @@ export function ProjectSettings({
           )}
 
           {section === 'instructions' && (
-            <FileEditor
-              label={t('project.pullRequestInstruction')}
-              hint={t('project.pullRequestInstructionHint')}
-              read={async () => {
-                const result = await window.octopus.projects.readInstruction(
-                  project.id,
-                  'pullRequest'
-                )
-                return result.ok ? result.value : null
-              }}
-              save={(contents) =>
-                void window.octopus.projects.saveInstruction(project.id, 'pullRequest', contents)
-              }
-            />
+            <>
+              {/* What the agent picks up on its own. octopus loads every
+                  settings source, as the plain CLI does, so this is the only
+                  place the app can say what that turned out to be. */}
+              <Field label={t('project.sources')} hint={t('project.sourcesHint')}>
+                <ul className="max-w-lg space-y-1">
+                  {sources.map((entry) => (
+                    <li key={entry.id} className="flex items-baseline justify-between gap-3">
+                      <span className={entry.present ? '' : 'text-ink-faint'}>
+                        {t(SOURCE_LABELS[entry.id])}
+                      </span>
+                      <span className="text-ink-faint font-mono text-[11px]">
+                        {entry.present
+                          ? entry.count === null
+                            ? t('project.sourcePresent')
+                            : t('project.sourceCount', { count: entry.count })
+                          : t('project.sourceAbsent')}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              </Field>
+
+              <FileEditor
+                label={t('project.pullRequestInstruction')}
+                hint={t('project.pullRequestInstructionHint')}
+                read={async () => {
+                  const result = await window.octopus.projects.readInstruction(
+                    project.id,
+                    'pullRequest'
+                  )
+                  return result.ok ? result.value : null
+                }}
+                save={(contents) =>
+                  void window.octopus.projects.saveInstruction(project.id, 'pullRequest', contents)
+                }
+              />
+            </>
           )}
 
           {/* Reaching removal now takes choosing the section it lives in, which

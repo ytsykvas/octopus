@@ -13,17 +13,27 @@ the public documentation presents a simplified picture.
 
 ## The project's core principle
 
+octopus is a **harness** around Claude Code, not a filter on it: it adds nothing
+of its own to the context and withholds nothing the user has put there (§4,
+§12.3 docs/PROJECT.md).
+
 ```ts
-settingSources: []
+settingSources: ['user', 'project', 'local'] // the default; the CLI's own set
 ```
 
-This is the technical answer to the complaint about Conductor (§4, §12.3
-docs/PROJECT.md). With an empty list the SDK loads **nothing implicitly** —
-neither user settings nor `CLAUDE.md`. Everything reaching the agent's context
-is put there deliberately.
+The SDK is explicit that `'project'` is what loads `CLAUDE.md`, and it turns out
+to gate `.claude/commands/` as well. The value is a user setting —
+nothing / `['project']` / all three — but the default is the full set, and an
+agent that knows less here than in a terminal is a defect.
 
-Do not change this value "to make it work" — the config is meant to expose an
-explicit switch: nothing / `['project']` / `['user','project','local']`.
+**This reverses what this skill used to say.** Until 2026-08-19 it read "do not
+change this value", because loading nothing was taken to be the answer to
+Conductor. It was not: the objection is to material **we** add that nobody wrote,
+not to the instructions a user wrote for their own agent. If you find that
+argument still standing anywhere, it is stale — fix it.
+
+What must stay true: no text of ours in the system prompt, no bundled skill of
+ours, and any prose the app sends goes as a **visible** user message.
 
 ## Basic run
 
@@ -35,7 +45,7 @@ const session = query({
   options: {
     cwd: workspace.path,
     resume: workspace.sessionId ?? undefined,
-    settingSources: [],
+    settingSources: ['user', 'project', 'local'],
     systemPrompt: { type: 'preset', preset: 'claude_code' },
     canUseTool: async (toolName, input) => {
       /* our own permission dialog */
@@ -156,9 +166,9 @@ keys**, so everything that has to change together goes in one call: a flag sent
 after a level replaces the level rather than joining it.
 
 At start-up the same layer is `Options.settings`, which takes a `Settings` object
-directly. It is not a `settingSource`, so passing it does not weaken the
-`settingSources: []` rule above — but say every key explicitly, `false` included,
-because with no sources loaded there is nothing else to turn one back off.
+directly. Say every key explicitly, `false` included: with settings files now
+loaded, a key left unsaid is answered by whichever file happens to mention it,
+and a session that quietly kept the last one's answer is a state nobody chose.
 
 ## Permissions
 

@@ -278,6 +278,7 @@ describe('channel table', () => {
     'env:read',
     'env:save',
     'env:ignored',
+    'instructions:sources',
     'workspace:env',
     'workspaces:serving',
     'workspaces:port',
@@ -612,7 +613,7 @@ describe('reads that forward to the service', () => {
   it('answers config:get with the stored config', async () => {
     await expect(invoke('config:get')).resolves.toMatchObject({
       ok: true,
-      value: { version: 1, theme: 'system' }
+      value: { version: 2, theme: 'system' }
     })
   })
 
@@ -779,6 +780,20 @@ describe('scripts and instructions of a real project', () => {
 
     await writeFile(join(dir, 'planner', '.gitignore'), '.env\n', 'utf8')
     await expect(invoke('env:ignored', projectId)).resolves.toEqual({ ok: true, value: true })
+  })
+
+  // octopus loads every settings source, so the agent arrives carrying whatever
+  // the repository wrote for it. This is how the app can say what that was.
+  it('reports what the project offers the agent', async () => {
+    const projectId = await addProject()
+    await writeFile(join(dir, 'planner', 'CLAUDE.md'), '# rules\n', 'utf8')
+
+    const answer = await invoke('instructions:sources', projectId)
+
+    expect(answer).toMatchObject({ ok: true })
+    expect((answer as { value: { id: string; present: boolean }[] }).value).toContainEqual(
+      expect.objectContaining({ id: 'projectMemory', present: true })
+    )
   })
 
   it('reads back the env block a project saved', async () => {

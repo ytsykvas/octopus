@@ -82,10 +82,14 @@ It also ships a **Claude Code plugin skill** at
 and review. It instructs the agent to branch on `CONDUCTOR_IS_LOCAL`, and to prefer
 Conductor's own `DiffComment` tool over posting to GitHub.
 
-**This is the practice octopus was built to reject** (§2, §4, §12.3
-`settingSources: []`). Worth knowing precisely, because the objection is to _hidden_
-injection — and Conductor's is documented and editable, which is a weaker target than
-"opaque". The sharper complaint is that it is on by default.
+**octopus does not do this** (§2, §4): it adds no prompt of its own to any action.
+Worth knowing precisely, because the objection is to _hidden_ injection — and
+Conductor's is documented and editable, which is a weaker target than "opaque".
+
+Note what is **not** the objection: reading the repository's `AGENTS.md`,
+`CLAUDE.md` and `.claude/commands` is the user's own material and octopus loads all
+of it, as the CLI does. Until 2026-08-19 it did not, and that was a mistake made in
+this file's name.
 
 ### Repository instruction slots
 

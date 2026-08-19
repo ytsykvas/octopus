@@ -24,7 +24,15 @@ This way of working is already in use through [Conductor](https://www.conductor.
 | Extra material injected into agent instructions | context receives things we never wrote; agent behaviour becomes opaque |
 | Inflexible workflow                             | an imposed order of steps instead of one's own                         |
 
-The first matters more: hidden prompt injection directly affects the quality of the agent's work and the ability to understand why it behaved as it did.
+octopus once answered the first by loading nothing at all — no `CLAUDE.md`, no
+settings, no commands, no skills. That was the wrong lesson, and it is worth
+recording rather than quietly deleting: the objection was to material **we add**
+that nobody wrote, not to material the user wrote for their own agent. Refusing
+to read the project's own instructions did not make the agent more transparent;
+it made it less capable than the same model in a terminal.
+
+The rule now is narrower and holds: octopus adds nothing of its own to the
+context, and withholds nothing the user has put there.
 
 **Conductor's UI draws no complaints** — its layout is considered good and is taken as the model (§10.8).
 
@@ -65,7 +73,7 @@ task → workspace → agent works → diff → PR → merge → archive
 
 ## 4. Guiding principles
 
-**Transparency over convenience.** The agent receives exactly what we deliberately gave it. No hidden additions to the system prompt, no implicit loading of settings. If something enters the context, it is visible in the config.
+**We add nothing, and we withhold nothing.** octopus puts no text of its own into the agent's context — no additions to the system prompt, no bundled skill, and the one piece of prose it sends goes as a visible user message. It equally does not stand between the agent and what the user has written for it: `CLAUDE.md`, settings, commands, skills and subagents all load, exactly as they do in a terminal. An agent that knows less here than there is a defect, not a feature.
 
 **A thin layer.** The application manages worktrees, processes and the UI. It does not try to outsmart the agent, rewrite prompts or decide on the user's behalf.
 
@@ -474,7 +482,7 @@ const q = query({
   options: {
     cwd: workspace.path,
     resume: chat.sessionId, // continues after an application restart
-    settingSources: [], // ← nothing is loaded implicitly
+    settingSources: ['user', 'project', 'local'], // ← as the CLI loads them
     systemPrompt: { type: 'preset', preset: 'claude_code' },
     canUseTool: async (req) => {
       /* our own permission dialog */
@@ -483,7 +491,11 @@ const q = query({
 })
 ```
 
-**`settingSources: []` is the technical answer to the main complaint about Conductor.** The SDK loads no settings and no `CLAUDE.md` implicitly; everything entering the context is added by us, deliberately. The config exposes a switch: nothing / `project` / `user + project + local`.
+**octopus is a harness around Claude Code, not a filter on it.** Every settings source is loaded, so the agent arrives knowing what the project and the user have written for it: `CLAUDE.md`, `.claude/settings.json` at all three levels, file-based subagents, `.claude/commands/`, skills, hooks, MCP servers. `Must include 'project' to load CLAUDE.md files` is the SDK's own wording, and it is why the old default made the agent worse than the terminal.
+
+The config keeps the switch — nothing / `project` / `user + project + local` — for anyone who wants isolation; it is simply no longer what everybody gets. Version 2 of the config raises an install that was still on `nothing`.
+
+What octopus does **not** do is add: no text is appended to the system prompt, no skill of ours is bundled, and the one piece of prose the app sends — the pull request instruction — is sent as a visible user message the reader can see in the log. The project settings dialog lists what the agent picked up on its own, so "what is it working from" is a question the app can answer.
 
 Session control: `interrupt()`, `setModel()`, `setPermissionMode()`, `streamInput()`, `close()`.
 The `sessionId` from `SDKSystemMessage` is persisted — that is what enables resuming after a restart. It is stored on the **chat**, not the workspace: one session per workspace would make a second agent in the same worktree a migration, while one per chat makes it another record. That is exactly how it played out — three conversations per workspace shipped as a widened interface over the shape that was already there (§10.8).

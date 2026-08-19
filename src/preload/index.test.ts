@@ -142,6 +142,11 @@ describe('channel names', () => {
       () => method('projects', 'isEnvIgnored')('p' as never),
       'env:ignored'
     ],
+    [
+      'projects.instructionSources',
+      () => method('projects', 'instructionSources')('p' as never),
+      'instructions:sources'
+    ],
     ['workspaces.env', () => method('workspaces', 'env')('w' as never), 'workspace:env'],
     ['workspaces.port', () => method('workspaces', 'port')('w' as never), 'workspaces:port'],
     [

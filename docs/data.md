@@ -45,7 +45,7 @@ Validated by `ConfigSchema` in [`config.ts`](../src/core/config.ts).
 | `version`                         | format version, for future migrations                                                                                                                              |
 | `branchPrefix`                    | branches are `<prefix>/<workspace>`                                                                                                                                |
 | `cloneDirectory`                  | where GitHub clones land; empty means "ask, then remember"                                                                                                         |
-| `settingSources`                  | what the agent may load — `none` is the transparency default (§4)                                                                                                  |
+| `settingSources`                  | what the agent loads for itself — `all` by default, as the CLI does; `none` is available for isolation (§4)                                                        |
 | `workingMode`                     | what a new chat may do before asking; planning is not one of them                                                                                                  |
 | `effort`                          | how much thinking a new chat asks for; `medium` unless changed. Five levels, never `ultracode` — see below                                                         |
 | `model`, `planModel`              | the pair a new chat starts on — which model writes the code, which one plans                                                                                       |
@@ -198,8 +198,9 @@ first message has started a session.
 
 Custom commands only appear at all when `settingSources` includes `project`.
 The setting is described as controlling `CLAUDE.md` and settings files, and it
-turns out to gate `.claude/commands/` too — measured, not read off the types. On
-the default (`none`) the list holds only the agent's own built-in commands.
+turns out to gate `.claude/commands/` too — measured, not read off the types.
+That measurement is why the default is now `all`: on `none` the list held only
+the agent's own built-in commands, and the project's were simply absent.
 
 The last two were one three-valued `permissionMode` until approving a plan had
 to put the conversation back into a mode, and there was none to go back to —
@@ -441,6 +442,19 @@ project's needs change.
 Anything absolute, or reaching outside the checkout with `..`, is dropped rather
 than refused. The list is typed by hand, and one bad line should not stop the
 rest of a workspace being prepared.
+
+## Config version 2
+
+Version 1 shipped `settingSources: 'none'`, and a default only ever reaches a
+config being created — so every install already carrying it would keep an agent
+that cannot read the project's own `CLAUDE.md`. `migrateConfig` raises `none` to
+`all` on the way from 1 to 2 and writes the result back, then never touches the
+value again: a config that says 2 holds a choice, isolation included.
+
+The same split `store.ts` makes between what is on disk and what the app works
+with. A version the current build no longer writes still has to **parse**, or
+the file would fail validation and be replaced by defaults — losing every other
+setting to fix one.
 
 ## Env overrides typed against a project
 

@@ -130,6 +130,19 @@ export const en = {
     runScript: 'Server script',
     runScriptHint:
       'Starts the dev server. $OCTOPUS_PORT is set to the workspace\u2019s own port, so several can serve at once. Saved as run.sh.',
+    sources: 'What the agent picks up on its own',
+    sourcesHint:
+      'octopus loads the same settings as Claude Code in a terminal, so the agent arrives knowing what this repository and this machine have written for it. None of it is sent by octopus.',
+    sourceProjectMemory: 'CLAUDE.md in this repository',
+    sourceProjectSettings: '.claude/settings.json',
+    sourceLocalSettings: '.claude/settings.local.json',
+    sourceUserSettings: 'Your settings.json',
+    sourceUserMemory: 'Your CLAUDE.md',
+    sourceCommands: 'Slash commands',
+    sourceAgents: 'Subagents',
+    sourcePresent: 'loaded',
+    sourceAbsent: 'none',
+    sourceCount: '{{count}} loaded',
     pullRequestInstruction: 'Pull request descriptions',
     pullRequestInstructionHint:
       'Sent to the agent when you ask it to describe a change for a pull request in this project. Used instead of the one in Settings; empty means this project adds nothing.',
@@ -521,13 +534,14 @@ export const en = {
 
     settingSources: 'Instruction sources',
     settingSourcesHint:
-      'Controls what the agent loads besides what this app sends. "Nothing" keeps the context fully under your control.',
+      'What the agent loads for itself. "Everything" is what Claude Code does in a terminal, and what octopus ships: the project\'s CLAUDE.md, its commands, skills and subagents. Narrow it only if you want an agent that knows less than your terminal does.',
     settingSourcesNone: 'Nothing',
-    settingSourcesNoneHint: 'The agent receives only what octopus passes explicitly.',
+    settingSourcesNoneHint:
+      'The agent reads no CLAUDE.md, no commands and no skills. Isolation, at the cost of an agent that knows nothing about the project.',
     settingSourcesProject: 'Project only',
     settingSourcesProjectHint: "Loads the repository's own CLAUDE.md and settings.",
     settingSourcesAll: 'Everything',
-    settingSourcesAllHint: 'Loads user, project and local settings, as the plain CLI would.',
+    settingSourcesAllHint: 'User, project and local settings — what the plain CLI loads.',
 
     effort: 'Default effort',
     effortHint:

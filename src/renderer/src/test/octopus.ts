@@ -123,6 +123,7 @@ export function installOctopusStub(): Api {
       readEnv: vi.fn(() => ok('')),
       saveEnv: vi.fn(() => ok(undefined)),
       isEnvIgnored: vi.fn(() => ok(true)),
+      instructionSources: vi.fn(() => ok([])),
       readInstruction: vi.fn(() => ok('# Pull request descriptions\n')),
       saveInstruction: vi.fn(() => ok(undefined))
     }
@@ -157,7 +158,7 @@ function chatFixture(): Chat {
 
 function defaultConfig(): Config {
   return {
-    version: 1 as const,
+    version: 2 as const,
     branchPrefix: 'ytsykvas',
     cloneDirectory: '',
     settingSources: 'none' as const,

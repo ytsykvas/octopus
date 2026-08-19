@@ -22,6 +22,7 @@ import type { Workspace } from '@core/store.js'
 import type { RemoveOptions, WorkspaceView } from '@core/workspaces.js'
 import type { InstructionKind } from '@core/instructions.js'
 import type { ScriptKind } from '@core/scripts.js'
+import type { InstructionSource } from '@core/instructionSources.js'
 import type { Project, ProjectPatch } from '@core/store.js'
 import type { ThemeName } from '@core/types.js'
 
@@ -405,6 +406,10 @@ const api = {
 
     saveEnv: (projectId: string, contents: string): Promise<Result<void>> =>
       ipcRenderer.invoke('env:save', projectId, contents) as Promise<Result<void>>,
+
+    /** What this project offers the agent, and what this machine adds. */
+    instructionSources: (projectId: string): Promise<Result<InstructionSource[]>> =>
+      ipcRenderer.invoke('instructions:sources', projectId) as Promise<Result<InstructionSource[]>>,
 
     /** Whether git would keep the env file out of a commit. */
     isEnvIgnored: (projectId: string): Promise<Result<boolean>> =>

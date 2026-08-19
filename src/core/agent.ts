@@ -37,10 +37,12 @@ export type QueryFn = (params: {
 /**
  * Tools that read and never change anything, so they are not worth a prompt.
  *
- * With `settingSources: []` nothing is pre-approved, and without this list the
- * permission dialog would appear for every file the agent opens — which is
- * most of what it does. A prompt that fires constantly is one people learn to
- * dismiss without reading, which costs more transparency than it buys.
+ * A floor, not a ceiling. Every other tool still runs — it asks first, and the
+ * user's own `permissions.allow` now answers alongside this, since octopus
+ * loads their settings as the CLI does. What this list buys is that the dialog
+ * does not fire for every file the agent opens, which is most of what it does:
+ * a prompt that fires constantly is one people learn to dismiss without
+ * reading.
  *
  * Network tools are absent deliberately: fetching a URL leaves the machine,
  * and that is a decision worth showing.
@@ -351,9 +353,9 @@ export function startSession(options: SessionOptions, hooks: SessionHooks): Agen
       // The flag-settings layer, which is where `ultracode` lives: it is not an
       // option of its own, and asking for it is asking for two things at once —
       // the orchestration, and the feature it orchestrates with. Both are said
-      // explicitly, `false` included, because `settingSources: []` means nothing
-      // else is loaded to say otherwise, and a session that quietly kept the
-      // last one's workflows would be a state nobody chose.
+      // explicitly, `false` included: a session that quietly kept the last
+      // one's workflows would be a state nobody chose, and leaving one unsaid
+      // hands the answer to whichever settings file happens to mention it.
       settings: { ultracode, enableWorkflows: ultracode },
       settingSources: [...options.settingSources],
       systemPrompt: { type: 'preset', preset: 'claude_code' },

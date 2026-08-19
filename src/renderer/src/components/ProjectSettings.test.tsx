@@ -644,6 +644,46 @@ describe('ProjectSettings', () => {
     expect(await screen.findByDisplayValue('Lead with the why.')).toBeInTheDocument()
   })
 
+  /*
+   * octopus loads the same settings Claude Code does in a terminal, so the
+   * agent arrives carrying whatever the repository wrote for it — and this is
+   * the only place the app can say what that turned out to be.
+   */
+  it('lists what the agent picks up on its own', async () => {
+    vi.mocked(window.octopus.projects.instructionSources).mockResolvedValue({
+      ok: true,
+      value: [
+        { id: 'projectMemory', path: '/repo/CLAUDE.md', present: true, count: null },
+        { id: 'projectSettings', path: '/repo/.claude/settings.json', present: false, count: null },
+        { id: 'commands', path: '/repo/.claude/commands', present: true, count: 3 }
+      ]
+    })
+    const user = userEvent.setup()
+    await renderDialog()
+
+    await openSection(user, 'Instructions')
+
+    expect(await screen.findByText('CLAUDE.md in this repository')).toBeInTheDocument()
+    expect(screen.getByText('3 loaded')).toBeInTheDocument()
+    expect(screen.getByText('none')).toBeInTheDocument()
+  })
+
+  // A list that could not be read is not an empty project; it says nothing
+  // rather than claiming the agent picks up nothing.
+  it('lists nothing when the sources could not be read', async () => {
+    vi.mocked(window.octopus.projects.instructionSources).mockResolvedValue({
+      ok: false,
+      error: 'EACCES'
+    })
+    const user = userEvent.setup()
+    await renderDialog()
+
+    await openSection(user, 'Instructions')
+
+    expect(await screen.findByText('What the agent picks up on its own')).toBeInTheDocument()
+    expect(screen.queryByText('loaded')).toBeNull()
+  })
+
   it('shows the pull request instructions under Instructions', async () => {
     vi.mocked(window.octopus.projects.readInstruction).mockResolvedValue({
       ok: true,

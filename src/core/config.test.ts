@@ -9,6 +9,8 @@ import {
   ConfigSchema,
   createDefaultConfig,
   loadConfig,
+  migrateConfig,
+  type StoredConfig,
   saveConfig,
   toSdkSettingSources
 } from './config.js'
@@ -30,8 +32,14 @@ afterEach(async () => {
 })
 
 describe('createDefaultConfig', () => {
-  it('loads no setting sources by default — transparency out of the box', () => {
-    expect(createDefaultConfig('ytsykvas', NOW, () => UUID).settingSources).toBe('none')
+  /*
+   * octopus is a harness around Claude Code, not a filter on it. The old
+   * default loaded nothing, which cost the agent the project's own `CLAUDE.md`,
+   * its commands and its skills — the same model, knowing less than it does in
+   * a terminal.
+   */
+  it('loads every setting source by default, as the CLI does', () => {
+    expect(createDefaultConfig('ytsykvas', NOW, () => UUID).settingSources).toBe('all')
   })
 
   it('keeps the branch prefix it was given', () => {
@@ -336,5 +344,73 @@ describe('sidebarWidth', () => {
   it('rejects a fractional width', () => {
     const base = createDefaultConfig('ytsykvas', NOW, () => UUID)
     expect(ConfigSchema.safeParse({ ...base, sidebarWidth: 240.5 }).success).toBe(false)
+  })
+})
+
+describe('migrateConfig', () => {
+  /** A config as version 1 wrote it. */
+  function stored(overrides: Partial<StoredConfig> = {}): StoredConfig {
+    return { ...createDefaultConfig('ytsykvas', NOW, () => UUID), version: 1, ...overrides }
+  }
+
+  /*
+   * The reason this migration exists. A default only reaches a config being
+   * created, so every install already carrying `none` would keep an agent that
+   * cannot read the project's `CLAUDE.md` for ever.
+   */
+  it('raises a version 1 config off none, which is why it exists', () => {
+    expect(migrateConfig(stored({ settingSources: 'none' }))).toMatchObject({
+      version: 2,
+      settingSources: 'all'
+    })
+  })
+
+  it('leaves a version 1 choice that was not none alone', () => {
+    expect(migrateConfig(stored({ settingSources: 'project' })).settingSources).toBe('project')
+  })
+
+  // Once a config says 2, whatever it holds is a choice — including isolation.
+  it('never touches a config that is already on 2', () => {
+    const chosen = { ...stored({ settingSources: 'none' }), version: 2 as const }
+
+    expect(migrateConfig(chosen).settingSources).toBe('none')
+  })
+
+  it('keeps every other setting as it was', () => {
+    const config = stored({ branchPrefix: 'anna', sidebarWidth: 300 })
+
+    expect(migrateConfig(config)).toMatchObject({ branchPrefix: 'anna', sidebarWidth: 300 })
+  })
+})
+
+describe('loading a config from an older version', () => {
+  it('migrates it and writes the result back', async () => {
+    const file = join(dir, 'config.json')
+    await writeFile(
+      file,
+      JSON.stringify({
+        ...createDefaultConfig('ytsykvas', NOW, () => UUID),
+        version: 1,
+        settingSources: 'none'
+      }),
+      'utf8'
+    )
+
+    await expect(loadConfig(file)).resolves.toMatchObject({ version: 2, settingSources: 'all' })
+
+    // Written back, so the next read has nothing to migrate.
+    const again = JSON.parse(await readFile(file, 'utf8')) as { version: number }
+    expect(again.version).toBe(2)
+  })
+
+  it('leaves a current config untouched on disk', async () => {
+    const file = join(dir, 'config.json')
+    const current = {
+      ...createDefaultConfig('ytsykvas', NOW, () => UUID),
+      settingSources: 'none' as const
+    }
+    await writeFile(file, JSON.stringify(current), 'utf8')
+
+    await expect(loadConfig(file)).resolves.toMatchObject({ settingSources: 'none' })
   })
 })

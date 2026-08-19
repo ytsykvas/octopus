@@ -13,7 +13,7 @@ type SettingsProps = React.ComponentProps<typeof Settings>
 
 function config(overrides: Partial<Config> = {}): Config {
   return {
-    version: 1,
+    version: 2,
     branchPrefix: 'ytsykvas',
     cloneDirectory: '',
     settingSources: 'none',

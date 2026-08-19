@@ -128,6 +128,19 @@ export const uk: Translation = {
     runScript: 'Скрипт сервера',
     runScriptHint:
       'Запускає dev-сервер. $OCTOPUS_PORT — власний порт воркспейсу, тож кілька можуть працювати одночасно. Зберігається як run.sh.',
+    sources: 'Що агент бере сам',
+    sourcesHint:
+      'Октопус завантажує ті самі налаштування, що й Claude Code у терміналі, тож агент приходить, уже знаючи все, що цей репозиторій і ця машина для нього написали. Нічого з цього октопус не надсилає.',
+    sourceProjectMemory: 'CLAUDE.md цього репозиторію',
+    sourceProjectSettings: '.claude/settings.json',
+    sourceLocalSettings: '.claude/settings.local.json',
+    sourceUserSettings: 'Ваш settings.json',
+    sourceUserMemory: 'Ваш CLAUDE.md',
+    sourceCommands: 'Слеш-команди',
+    sourceAgents: 'Субагенти',
+    sourcePresent: 'завантажено',
+    sourceAbsent: 'немає',
+    sourceCount: 'завантажено: {{count}}',
     pullRequestInstruction: 'Опис pull request',
     pullRequestInstructionHint:
       'Надсилається агенту, коли ви просите його описати зміну для pull request у цьому проєкті. Використовується замість тієї, що в Налаштуваннях; порожня означає, що проєкт нічого не додає.',
@@ -438,14 +451,14 @@ export const uk: Translation = {
 
     settingSources: 'Джерела інструкцій',
     settingSourcesHint:
-      'Визначає, що агент підтягує додатково до того, що надсилає застосунок. «Нічого» лишає контекст повністю під вашим контролем.',
+      'Що агент завантажує сам. «Усе» — це те, що робить Claude Code у терміналі, і те, з чим октопус постачається: CLAUDE.md проєкту, його команди, скіли й субагенти. Звужуйте, лише якщо свідомо хочете агента, який знає менше за ваш термінал.',
     settingSourcesNone: 'Нічого',
-    settingSourcesNoneHint: 'Агент отримує лише те, що octopus передає явно.',
+    settingSourcesNoneHint:
+      'Агент не читає ні CLAUDE.md, ні команд, ні скілів. Ізоляція ціною агента, який нічого не знає про проєкт.',
     settingSourcesProject: 'Лише проєкт',
     settingSourcesProjectHint: 'Підтягує CLAUDE.md і налаштування самого репозиторію.',
     settingSourcesAll: 'Усе',
-    settingSourcesAllHint:
-      'Підтягує користувацькі, проєктні й локальні налаштування — як звичайний CLI.',
+    settingSourcesAllHint: 'Налаштування користувача, проєкту й локальні — те саме, що читає CLI.',
 
     effort: 'Зусилля за замовчуванням',
     effortHint:

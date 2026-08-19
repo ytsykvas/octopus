@@ -91,8 +91,16 @@ export const StoredRightPanelTabSchema = z
   .transform((tab): RightPanelTab => (tab === 'build' || tab === 'server' ? 'scripts' : tab))
 
 export const ConfigSchema = z.object({
-  /** Format version — needed once the config has to be migrated. */
-  version: z.literal(1),
+  /**
+   * Format version.
+   *
+   * 2 raised `settingSources` from `none` to `all`. That was not a fix to a
+   * shape but a reversal of a decision: version 1 kept the agent from reading
+   * the project's own `CLAUDE.md`, and only a migration could undo it for
+   * anybody already installed. A config already on 2 is never touched again, so
+   * choosing `none` deliberately survives.
+   */
+  version: z.literal(2),
 
   /** Branch prefix for workspaces, e.g. a GitHub username. */
   branchPrefix: z.string().min(1),
@@ -257,9 +265,9 @@ export function createDefaultConfig(
   const effort: Effort = DEFAULT_EFFORT
 
   return {
-    version: 1,
+    version: 2,
     branchPrefix,
-    settingSources: 'none',
+    settingSources: 'all',
     workingMode,
     effort,
     // Nothing to name: no catalogue has arrived on a first run, and the two
@@ -280,13 +288,59 @@ export function createDefaultConfig(
   }
 }
 
+/**
+ * The config as it may be found on disk, before `migrateConfig` has run.
+ *
+ * The same split `store.ts` makes between `StoredState` and `State`: a version
+ * the current build no longer writes still has to parse, or the file would fail
+ * validation and be replaced by defaults — losing every other setting to fix
+ * one.
+ */
+export const StoredConfigSchema = ConfigSchema.extend({
+  version: z.union([z.literal(1), z.literal(2)])
+})
+
+export type StoredConfig = z.infer<typeof StoredConfigSchema>
+
+/**
+ * Brings a config written by an older build up to date.
+ *
+ * Version 1 shipped `settingSources: 'none'`, which stopped the agent from
+ * loading the project's `CLAUDE.md`, its `.claude/` settings, its commands and
+ * its skills — an agent less capable than the same model in a terminal. The
+ * default is now `all`; an install already carrying `none` would keep it for
+ * ever without this, since a default only reaches a config that is being
+ * created.
+ *
+ * Only on the way from 1. Once a config says 2, whatever it holds is a choice.
+ */
+export function migrateConfig(config: StoredConfig): Config {
+  if (config.version === 2) return { ...config, version: 2 }
+
+  return {
+    ...config,
+    version: 2,
+    settingSources: config.settingSources === 'none' ? 'all' : config.settingSources
+  }
+}
+
 /** Reads the config, creating and persisting it if the file is missing. */
 export async function loadConfig(
   filePath: string = configFile(),
   defaults: Config = createDefaultConfig('octopus')
 ): Promise<Config> {
-  const existing = await readJsonFile<Config | null>(filePath, ConfigSchema.nullable(), null)
-  if (existing) return existing
+  const existing = await readJsonFile<StoredConfig | null>(
+    filePath,
+    StoredConfigSchema.nullable(),
+    null
+  )
+  if (existing) {
+    const migrated = migrateConfig(existing)
+    // Written back, not only held in memory: the next read should not have to
+    // migrate again, and the file is what the user is invited to open (§4).
+    if (migrated.version !== existing.version) await writeJsonFile(filePath, ConfigSchema, migrated)
+    return migrated
+  }
 
   await writeJsonFile(filePath, ConfigSchema, defaults)
   return defaults

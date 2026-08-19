@@ -9,15 +9,22 @@ Two complaints, recorded in §2, and only the first really matters:
 
 1. **Material injected into agent instructions that we never wrote.** Conductor injects
    system prompts about workspaces, plus action-triggered prompts, plus a bundled
-   proprietary skill. octopus's answer is technical, not rhetorical:
-   `settingSources: []` in the Agent SDK call (§12.3), with a config switch offering
-   `none` / `project` / `all` — `SettingSourcesModeSchema` in `config.ts`.
+   proprietary skill. octopus's answer is that it injects **none of those** — no
+   system-prompt text of its own, no bundled skill, and the one piece of prose it
+   sends (the pull request instruction) goes as a visible user message.
+
+   It is **not** that octopus withholds the user's own instructions. It once did —
+   `settingSources: []` — and that was withdrawn on 2026-08-19: the default is now the
+   CLI's full set, so `CLAUDE.md`, commands, skills and subagents all load. The switch
+   in `SettingSourcesModeSchema` survives for anyone wanting isolation.
+
 2. **An imposed order of steps.** No step in octopus is mandatory: a workspace can be
    created and abandoned, work can happen without a PR.
 
-Any suggestion that quietly adds implicit context to the agent violates the first
-principle. Flag it rather than proposing it — that is the one place where "Conductor
-does it" is an argument _against_.
+A suggestion that octopus should add context of its own — a system prompt, a bundled
+skill, prose slipped in behind the log — still violates the principle. Flag it. A
+suggestion that the agent should read more of what the **user** wrote is the opposite
+and is welcome: withholding that was the mistake this file used to defend.
 
 ## Declared non-goals — never propose these
 

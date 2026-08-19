@@ -61,6 +61,7 @@ import {
   readPullRequest
 } from './pullRequests.js'
 import { gitIn, isIgnored } from './git.js'
+import { type InstructionSource, instructionSources } from './instructionSources.js'
 import {
   effectiveInstruction,
   type InstructionKind,
@@ -291,6 +292,13 @@ export interface OctopusService {
    * that file, in a directory an agent commits from freely.
    */
   isProjectEnvIgnored(projectId: string): Promise<boolean>
+  /**
+   * What this project offers the agent, and what this machine adds.
+   *
+   * octopus loads every settings source, so the agent arrives carrying whatever
+   * has been written for it; this is how the app can say what that was.
+   */
+  projectInstructionSources(projectId: string): Promise<InstructionSource[]>
   /**
    * A workspace's env file as it stands, or null where it has none.
    *
@@ -1299,6 +1307,10 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
     async saveProjectEnv(projectId, contents) {
       requireProject(projectId)
       await writeProjectEnv(projectId, contents, dataRoot)
+    },
+
+    async projectInstructionSources(projectId) {
+      return instructionSources(requireProject(projectId).repoPath)
     },
 
     async isProjectEnvIgnored(projectId) {

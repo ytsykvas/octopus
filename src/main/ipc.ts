@@ -230,6 +230,10 @@ export function registerIpc(
     attempt(() => service.readWorkspaceEnv(workspaceId))
   )
 
+  host.handle('instructions:sources', (_event, projectId: string) =>
+    attempt(() => service.projectInstructionSources(projectId))
+  )
+
   // Asked of the checkout, which shares its `.gitignore` with every worktree
   // made from it.
   host.handle('env:ignored', (_event, projectId: string) =>

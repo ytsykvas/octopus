@@ -45,7 +45,7 @@ function project(overrides: Partial<Project> = {}): Project {
 
 function config(overrides: Partial<Config> = {}): Config {
   return {
-    version: 1,
+    version: 2,
     branchPrefix: 'ytsykvas',
     cloneDirectory: '',
     settingSources: 'none',
