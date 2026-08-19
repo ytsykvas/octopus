@@ -46,6 +46,7 @@ import { type EditTarget, readChangeContext, readEditTarget } from './changeCont
 import { readWorkspaceDiff, type WorkspaceDiff } from './diff.js'
 import { isListening } from './ports.js'
 import { carryInto, readCarryList, writeCarryList } from './carry.js'
+import { runArchiveScript } from './archive.js'
 import { type Config, ConfigSchema, loadConfig, saveConfig, toSdkSettingSources } from './config.js'
 import { type AgentEvent, isEphemeral } from './events.js'
 import { cloneRepository, listRepositories, type RemoteRepository } from './github.js'
@@ -1240,7 +1241,11 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
           ? scriptPath(kind, projectId, dataRoot)
           : null
 
-      return { setup: await resolve('setup'), run: await resolve('run') }
+      return {
+        setup: await resolve('setup'),
+        run: await resolve('run'),
+        archive: await resolve('archive')
+      }
     },
 
     async readProjectCarryList(projectId) {
@@ -1366,6 +1371,16 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
       // stop existing, and a live agent would keep a child process pointed at
       // a path that is no longer there.
       await closeChatsOf(workspaceId)
+
+      // Also before it goes, and for the same reason — the script runs in the
+      // worktree. Whatever it says, the removal continues: a workspace that
+      // cannot be deleted because a cleanup script is broken is the worse
+      // problem of the two.
+      await runArchiveScript(
+        project.id,
+        { rootPath: project.repoPath, workspaceName: workspace.name, path: workspace.path },
+        dataRoot
+      )
 
       await removeWorkspace(
         workspace,

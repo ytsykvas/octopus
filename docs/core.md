@@ -54,7 +54,8 @@ Nothing but zod behind them, so a **value** can cross into the window.
 | [`pullRequests.ts`](../src/core/pullRequests.ts) | a branch as a pull request: reading one, pushing, opening one through `gh`                                        |
 | [`accounts.ts`](../src/core/accounts.ts)         | whether `claude` and `gh` are signed in                                                                           |
 | [`terminal.ts`](../src/core/terminal.ts)         | what a pty should run, where, with which environment                                                              |
-| [`scripts.ts`](../src/core/scripts.ts)           | `setup.sh` and `run.sh`                                                                                           |
+| [`scripts.ts`](../src/core/scripts.ts)           | `setup.sh`, `run.sh` and `archive.sh`, and the environment each is given                                          |
+| [`archive.ts`](../src/core/archive.ts)           | running the cleanup script on the way out, without letting it block a removal                                     |
 | [`carry.ts`](../src/core/carry.ts)               | which of the checkout's gitignored files travel into a workspace, and copying them                                |
 | [`ports.ts`](../src/core/ports.ts)               | whether anything is listening where a workspace was told to serve                                                 |
 | [`instructions.ts`](../src/core/instructions.ts) | prose handed to the agent, per project and for the installation; `effectiveInstruction` is the order between them |

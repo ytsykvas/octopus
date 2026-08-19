@@ -679,7 +679,7 @@ describe('scripts and instructions of a real project', () => {
 
     await expect(invoke('scripts:paths', projectId)).resolves.toEqual({
       ok: true,
-      value: { setup: null, run: null }
+      value: { setup: null, run: null, archive: null }
     })
 
     await invoke('scripts:save', projectId, 'setup', '#!/bin/sh\nnpm install\n')

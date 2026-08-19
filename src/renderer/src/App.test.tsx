@@ -146,7 +146,10 @@ function givenWorkspacesStillLoading(): void {
 /** Where each project keeps its scripts, for the ones a test names. */
 function givenScriptsOf(paths: Record<string, Record<ScriptKind, string | null>>): void {
   vi.mocked(window.octopus.projects.scriptPaths).mockImplementation((projectId: string) =>
-    Promise.resolve({ ok: true, value: paths[projectId] ?? { setup: null, run: null } })
+    Promise.resolve({
+      ok: true,
+      value: paths[projectId] ?? { setup: null, run: null, archive: null }
+    })
   )
 }
 
@@ -1235,7 +1238,7 @@ describe('App', () => {
 
   it('shows the scripts of the project that is open, and re-reads them on a switch', async () => {
     givenTwoProjects()
-    givenScriptsOf({ planner: { setup: '/tmp/planner/setup.sh', run: null } })
+    givenScriptsOf({ planner: { setup: '/tmp/planner/setup.sh', run: null, archive: null } })
     const user = await openApp()
     await user.click(await screen.findByRole('button', { name: 'PL' }))
     await user.click(screen.getByRole('button', { name: 'Scripts' }))
@@ -1257,7 +1260,7 @@ describe('App', () => {
     vi.mocked(window.octopus.projects.scriptPaths).mockImplementation(() =>
       Promise.resolve({
         ok: true,
-        value: { setup: written ? '/tmp/planner/setup.sh' : null, run: null }
+        value: { setup: written ? '/tmp/planner/setup.sh' : null, run: null, archive: null }
       })
     )
     const user = await openApp()
@@ -1400,7 +1403,7 @@ describe('App', () => {
     vi.mocked(window.octopus.projects.scriptPaths).mockImplementation((projectId: string) =>
       projectId === 'planner'
         ? abandoned.promise
-        : Promise.resolve({ ok: true, value: { setup: null, run: null } })
+        : Promise.resolve({ ok: true, value: { setup: null, run: null, archive: null } })
     )
     const user = await openApp()
     await user.click(await screen.findByRole('button', { name: 'PL' }))
@@ -1409,7 +1412,10 @@ describe('App', () => {
     await user.click(await screen.findByText('carol'))
 
     await act(async () => {
-      await abandoned.settle({ ok: true, value: { setup: '/tmp/planner/setup.sh', run: null } })
+      await abandoned.settle({
+        ok: true,
+        value: { setup: '/tmp/planner/setup.sh', run: null, archive: null }
+      })
     })
 
     expect(screen.queryByText('/tmp/planner/setup.sh')).not.toBeInTheDocument()

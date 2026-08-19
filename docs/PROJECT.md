@@ -454,6 +454,7 @@ Further rules:
 
 - `setup.sh` — prepares a workspace: installing dependencies, building what a fresh checkout needs. Runs on a button, not on workspace creation — no step is mandatory (§4).
 - `run.sh` — the dev server; receives `$OCTOPUS_PORT`.
+- `archive.sh` — runs when a workspace is removed, in its directory, while it still exists. It takes back what setup gave out — a database or a container named after the workspace. Nothing it does can stop the removal: a workspace that cannot be deleted because a cleanup script is broken is the worse problem of the two.
 - One **Run** on the Scripts tab does both in order: build, then serve when the build succeeds. A failed build stops there; a missing build script is skipped rather than waited on. Once a server is up, Run gives way to a link to its port, **Restart** and **Stop**; the two halves carry no controls of their own.
 - The port is derived deterministically from the workspace id, range 3000–9000, checked for availability.
 - A project also holds a **list of files to carry**: one path per line, relative to the checkout. A worktree holds what git tracks and nothing else, so gitignored files — an `.env`, a `config/master.key` — have to be brought. Copied at creation and again before a run, never over a file the worktree already has. This is why fetching them is no longer the first line of every setup script.
@@ -495,6 +496,7 @@ Everything under one directory (Conductor spreads across `~/conductor` and `~/.c
     carry                    which of the checkout's files travel into a workspace
     scripts/setup.sh
     scripts/run.sh
+    scripts/archive.sh
   workspaces/<slug>/<name>/  ← git worktree
 ```
 

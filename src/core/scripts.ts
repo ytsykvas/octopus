@@ -20,10 +20,10 @@ import { dirname } from 'node:path'
 
 import { z } from 'zod'
 
-import { projectScriptsDir, runScript, setupScript } from './paths.js'
+import { archiveScript, projectScriptsDir, runScript, setupScript } from './paths.js'
 import type { ProjectId } from './types.js'
 
-export const ScriptKindSchema = z.enum(['setup', 'run'])
+export const ScriptKindSchema = z.enum(['setup', 'run', 'archive'])
 export type ScriptKind = z.infer<typeof ScriptKindSchema>
 
 /**
@@ -91,6 +91,16 @@ const TEMPLATES: Record<ScriptKind, string> = {
 # npm install
 # createdb "myapp_$${WORKSPACE_VARIABLE}"
 `,
+  archive: `#!/bin/sh
+# Runs when this workspace is removed, in its directory, while it still exists.
+#
+# Use it to take back whatever the setup script gave out — a database, a
+# container, a directory named after the workspace. Nothing here can stop the
+# removal: a workspace you cannot delete is worse than one that left something
+# behind.
+
+# dropdb --if-exists "myapp_$${WORKSPACE_VARIABLE}"
+`,
   run: `#!/bin/sh
 # Starts the dev server for this workspace.
 # $${PORT_VARIABLE} is set for you — each workspace gets its own port, so
@@ -100,8 +110,14 @@ const TEMPLATES: Record<ScriptKind, string> = {
 `
 }
 
+const FILES: Record<ScriptKind, (projectId: ProjectId, root?: string) => string> = {
+  setup: setupScript,
+  run: runScript,
+  archive: archiveScript
+}
+
 export function scriptPath(kind: ScriptKind, projectId: ProjectId, root?: string): string {
-  return kind === 'setup' ? setupScript(projectId, root) : runScript(projectId, root)
+  return FILES[kind](projectId, root)
 }
 
 /**

@@ -74,10 +74,11 @@ function pending<T>(): { promise: Promise<T>; settle: (value: T) => void } {
   }
 }
 
-/** A repository whose two scripts differ, so the editors can be told apart. */
+/** A repository whose three scripts differ, so the editors can be told apart. */
 function offerScripts(): void {
+  const bodies = { setup: 'npm install', run: 'npm run dev', archive: 'dropdb mine' }
   vi.mocked(window.octopus.projects.readScript).mockImplementation((_projectId, kind) =>
-    Promise.resolve({ ok: true, value: kind === 'setup' ? 'npm install' : 'npm run dev' })
+    Promise.resolve({ ok: true, value: bodies[kind] })
   )
 }
 
@@ -322,7 +323,7 @@ describe('ProjectSettings', () => {
     ).toBeInTheDocument()
   })
 
-  it('offers both scripts under Scripts', async () => {
+  it('offers every script under Scripts', async () => {
     offerScripts()
     const user = userEvent.setup()
     await renderDialog()
@@ -331,6 +332,8 @@ describe('ProjectSettings', () => {
 
     expect(await screen.findByDisplayValue('npm install')).toBeInTheDocument()
     expect(screen.getByDisplayValue('npm run dev')).toBeInTheDocument()
+    // The one that takes back what the build gave out.
+    expect(screen.getByDisplayValue('dropdb mine')).toBeInTheDocument()
   })
 
   it('saves an edited setup script against the project it belongs to', async () => {
@@ -348,6 +351,26 @@ describe('ProjectSettings', () => {
       'planner',
       'setup',
       'npm ci'
+    )
+  })
+
+  // The editors differ only in the file they carry, which is exactly the thing
+  // a copy of one of them would get wrong.
+  it('saves an edited cleanup script as the cleanup script', async () => {
+    offerScripts()
+    const user = userEvent.setup()
+    await renderDialog()
+
+    await openSection(user, 'Scripts')
+    const script = await screen.findByDisplayValue('dropdb mine')
+    await user.clear(script)
+    await user.type(script, 'dropdb yours')
+    await user.tab()
+
+    expect(window.octopus.projects.saveScript).toHaveBeenCalledExactlyOnceWith(
+      'planner',
+      'archive',
+      'dropdb yours'
     )
   })
 
@@ -524,7 +547,7 @@ describe('ProjectSettings', () => {
 
   // A file that cannot be read leaves an empty editor rather than one holding
   // the error: whatever sits in the box is what gets written back to the file.
-  it('leaves both script editors empty when the files cannot be read', async () => {
+  it('leaves every script editor empty when the files cannot be read', async () => {
     vi.mocked(window.octopus.projects.readScript).mockResolvedValue({
       ok: false,
       error: 'EACCES: permission denied'
@@ -535,7 +558,7 @@ describe('ProjectSettings', () => {
     await openSection(user, 'Scripts')
 
     const editors = await screen.findAllByRole('textbox')
-    expect(editors).toHaveLength(2)
+    expect(editors).toHaveLength(3)
     for (const editor of editors) expect(editor).toHaveValue('')
     expect(screen.queryByText(/permission denied/)).toBeNull()
   })

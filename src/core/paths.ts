@@ -88,6 +88,11 @@ export function setupScript(projectId: ProjectId, root: string = rootDir()): str
   return join(projectScriptsDir(projectId, root), 'setup.sh')
 }
 
+/** Script run when a workspace is removed, to take back what setup gave out. */
+export function archiveScript(projectId: ProjectId, root: string = rootDir()): string {
+  return join(projectScriptsDir(projectId, root), 'archive.sh')
+}
+
 /** Script that starts the dev server; receives `$OCTOPUS_PORT`. */
 export function runScript(projectId: ProjectId, root: string = rootDir()): string {
   return join(projectScriptsDir(projectId, root), 'run.sh')

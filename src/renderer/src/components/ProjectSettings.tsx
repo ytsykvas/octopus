@@ -266,6 +266,19 @@ export function ProjectSettings({
               />
 
               <FileEditor
+                label={t('project.archiveScript')}
+                hint={t('project.archiveScriptHint')}
+                placeholder="#!/bin/sh"
+                read={async () => {
+                  const result = await window.octopus.projects.readScript(project.id, 'archive')
+                  return result.ok ? result.value : null
+                }}
+                save={(contents) =>
+                  void window.octopus.projects.saveScript(project.id, 'archive', contents)
+                }
+              />
+
+              <FileEditor
                 label={t('project.runScript')}
                 hint={t('project.runScriptHint')}
                 placeholder="#!/bin/sh"

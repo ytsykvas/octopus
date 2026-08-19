@@ -115,7 +115,7 @@ export function installOctopusStub(): Api {
       branches: vi.fn(() => ok(['origin/main'])),
       readScript: vi.fn(() => ok('#!/bin/sh\n')),
       saveScript: vi.fn(() => ok(undefined)),
-      scriptPaths: vi.fn(() => ok({ setup: null, run: null })),
+      scriptPaths: vi.fn(() => ok({ setup: null, run: null, archive: null })),
       readCarryList: vi.fn(() => ok('.env\n')),
       saveCarryList: vi.fn(() => ok(undefined)),
       readInstruction: vi.fn(() => ok('# Pull request descriptions\n')),

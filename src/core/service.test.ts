@@ -794,7 +794,11 @@ describe('project scripts', () => {
   it('reports no path until a script exists, then its location', async () => {
     const id = await withProject()
 
-    await expect(service.projectScriptPaths(id)).resolves.toEqual({ setup: null, run: null })
+    await expect(service.projectScriptPaths(id)).resolves.toEqual({
+      setup: null,
+      run: null,
+      archive: null
+    })
 
     await service.saveProjectScript(id, 'run', 'echo serving\n')
     const paths = await service.projectScriptPaths(id)
@@ -830,6 +834,47 @@ describe('project scripts', () => {
     const paths = await service.projectScriptPaths(id)
     expect(paths.setup).not.toContain(join(dir, 'planner', '.git'))
     expect(paths.setup).toContain(join('projects', id, 'scripts'))
+  })
+})
+
+describe('the cleanup script', () => {
+  // `setup.sh` gives a workspace things of its own; nothing took them back, so
+  // a project that made a database per workspace accumulated them for ever.
+  it('runs in the workspace before the worktree goes', async () => {
+    const repo = join(dir, 'planner')
+    await initRepo(repo)
+    const project = await service.addProjectFromPath(repo)
+    const workspace = await service.createWorkspaceIn(project.id)
+
+    const marker = join(dir, 'archived.txt')
+    await service.saveProjectScript(
+      project.id,
+      'archive',
+      `#!/bin/sh\nprintf '%s' "$OCTOPUS_WORKSPACE_NAME" > '${marker}'\n`
+    )
+
+    await service.removeWorkspaceById(workspace.id, { deleteBranch: false })
+
+    await expect(readFile(marker, 'utf8')).resolves.toBe(workspace.name)
+    await expect(service.listWorkspaces(project.id)).resolves.toHaveLength(0)
+  })
+
+  /*
+   * A workspace that cannot be deleted because a cleanup script is broken is a
+   * worse problem than the one being cleaned up.
+   */
+  it('removes the workspace even when the script fails', async () => {
+    const repo = join(dir, 'planner')
+    await initRepo(repo)
+    const project = await service.addProjectFromPath(repo)
+    const workspace = await service.createWorkspaceIn(project.id)
+
+    await service.saveProjectScript(project.id, 'archive', '#!/bin/sh\nexit 3\n')
+
+    await expect(
+      service.removeWorkspaceById(workspace.id, { deleteBranch: false })
+    ).resolves.toBeUndefined()
+    await expect(service.listWorkspaces(project.id)).resolves.toHaveLength(0)
   })
 })
 

@@ -14,6 +14,7 @@ else joins a home directory by hand.
     carry                            paths carried from the checkout into a workspace
     scripts/setup.sh                 prepares a new workspace, on Run
     scripts/run.sh                   starts the dev server
+    scripts/archive.sh               takes back what setup gave out, on removal
     instructions/pull-request.md     this project's own, which wins
   workspaces/<projectId>/<name>/     the git worktrees
 ```
@@ -401,6 +402,13 @@ which is the point of not owning the workflow (§4).
 
 They live under the data root, **not in the repository**: a workspace is a
 checkout of someone's project, not a place to leave ours.
+
+There are three of them now, and the third runs on the way out. `archive.sh`
+is given the same environment as the others and the workspace as its working
+directory, so it can drop a database named after it — and **it cannot stop the
+removal**. A failure, a hang, a script that was never written: all end with the
+workspace gone. A workspace that cannot be deleted because a cleanup script is
+broken is a worse problem than the one being cleaned up.
 
 Scripts are saved executable. Without the bit, running one fails with
 "permission denied", which says nothing about what to do.
