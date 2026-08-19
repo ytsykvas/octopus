@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
-import type { ScriptKind } from '@core/scripts.js'
+import { type ScriptKind, scriptEnv } from '@core/scripts.js'
 import type { WorkspaceView } from '@core/workspaces.js'
 
 import { useErrorMessage } from '../hooks/useErrorMessage.js'
@@ -15,6 +15,8 @@ interface ScriptRunnerProps {
   readonly scriptPath: string | null
   /** Passed to `run.sh` so several workspaces can serve at once. */
   readonly port: number
+  /** The project's own checkout, which a script cannot work out for itself. */
+  readonly rootPath: string
   readonly onOpenSettings: () => void
   /**
    * Bumped by the Run button to ask this half to start; 0 means never.
@@ -43,6 +45,7 @@ export function ScriptRunner({
   kind,
   scriptPath,
   port,
+  rootPath,
   onOpenSettings,
   startToken = 0,
   stopToken = 0,
@@ -71,6 +74,7 @@ export function ScriptRunner({
       kind={kind}
       scriptPath={scriptPath}
       port={port}
+      rootPath={rootPath}
       startToken={startToken}
       stopToken={stopToken}
       onOutcome={onOutcome}
@@ -83,6 +87,7 @@ interface RunnerProps {
   readonly kind: ScriptKind
   readonly scriptPath: string
   readonly port: number
+  readonly rootPath: string
   readonly startToken: number
   readonly stopToken: number
   readonly onOutcome: ((ok: boolean) => void) | undefined
@@ -101,6 +106,7 @@ function Runner({
   kind,
   scriptPath,
   port,
+  rootPath,
   startToken,
   stopToken,
   onOutcome
@@ -274,7 +280,7 @@ function Runner({
             key={run}
             cwd={workspace.path}
             command={[scriptPath]}
-            env={kind === 'run' ? { OCTOPUS_PORT: String(port) } : {}}
+            env={scriptEnv(kind, { rootPath, workspaceName: workspace.name, port })}
             onExit={(exitCode) => {
               setRunning(false)
               onOutcome?.(exitCode === 0)

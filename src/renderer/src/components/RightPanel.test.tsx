@@ -76,6 +76,7 @@ function renderPanel(overrides: Partial<Props> = {}): {
     activeWorkspaceId: null,
     color: null,
     projectId: 'planner',
+    rootPath: '/Users/test/planner',
     scriptPaths: { setup: null, run: null },
     onEditScripts: vi.fn(),
     onEditEnv: vi.fn(),

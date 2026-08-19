@@ -6,6 +6,9 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 
 import {
   PORT_VARIABLE,
+  ROOT_VARIABLE,
+  scriptEnv,
+  WORKSPACE_VARIABLE,
   readScript,
   scriptExists,
   scriptPath,
@@ -117,5 +120,31 @@ describe('scriptsDirectory', () => {
     const dir = scriptsDirectory('planner', root)
     expect(scriptPath('setup', 'planner', root).startsWith(dir)).toBe(true)
     await expect(writeFile(join(dir, 'probe'), 'x', 'utf8')).resolves.toBeUndefined()
+  })
+})
+
+describe('scriptEnv', () => {
+  const values = { rootPath: '/Users/test/planner', workspaceName: 'anna', port: 3323 }
+
+  /*
+   * A script runs inside a worktree, which is a copy of the repository and not
+   * the repository: anything gitignored is missing and the way back is not
+   * something a script can work out. Without this it can only hard-code an
+   * absolute path, which then breaks on every other machine.
+   */
+  it('tells both scripts where the checkout is and what this workspace is called', () => {
+    for (const kind of ['setup', 'run'] as const) {
+      const env = scriptEnv(kind, values)
+
+      expect(env[ROOT_VARIABLE]).toBe('/Users/test/planner')
+      expect(env[WORKSPACE_VARIABLE]).toBe('anna')
+    }
+  })
+
+  // The port is the one thing that is about serving rather than about the
+  // workspace, so the build has no use for it.
+  it('gives the port to the server alone', () => {
+    expect(scriptEnv('run', values)[PORT_VARIABLE]).toBe('3323')
+    expect(scriptEnv('setup', values)).not.toHaveProperty(PORT_VARIABLE)
   })
 })

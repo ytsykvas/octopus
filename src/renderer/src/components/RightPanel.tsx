@@ -105,6 +105,8 @@ interface RightPanelProps {
    * scripts must stay standing through that.
    */
   readonly projectId: string | null
+  /** The open project's checkout, handed to every script it runs. */
+  readonly rootPath: string
   /** Absolute paths of the project's scripts; null when never written. */
   readonly scriptPaths: { readonly setup: string | null; readonly run: string | null }
   readonly onEditScripts: () => void
@@ -141,6 +143,7 @@ export function RightPanel({
   activeWorkspaceId,
   color,
   projectId,
+  rootPath,
   scriptPaths,
   onEditScripts,
   onEditEnv,
@@ -584,6 +587,7 @@ export function RightPanel({
               kind="setup"
               scriptPath={scriptPaths.setup}
               visible={tab === 'scripts'}
+              rootPath={rootPath}
               onOpenSettings={onEditScripts}
               tokenFor={(id) => sequence.runOf(id).build}
               stopTokenFor={(id) => sequence.runOf(id).stop}
@@ -607,6 +611,7 @@ export function RightPanel({
             kind="run"
             scriptPath={scriptPaths.run}
             visible={tab === 'scripts'}
+            rootPath={rootPath}
             onOpenSettings={onEditScripts}
             tokenFor={(id) => sequence.runOf(id).server}
             stopTokenFor={(id) => sequence.runOf(id).stop}

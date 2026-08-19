@@ -59,6 +59,7 @@ describe('ScriptRunner', () => {
         kind="setup"
         scriptPath={SETUP_SCRIPT}
         port={3111}
+        rootPath="/Users/test/planner"
         onOpenSettings={vi.fn()}
       />
     )
@@ -75,6 +76,7 @@ describe('ScriptRunner', () => {
         kind="setup"
         scriptPath={null}
         port={3111}
+        rootPath="/Users/test/planner"
         onOpenSettings={onOpenSettings}
       />
     )
@@ -92,6 +94,7 @@ describe('ScriptRunner', () => {
         kind="run"
         scriptPath={null}
         port={3111}
+        rootPath="/Users/test/planner"
         onOpenSettings={vi.fn()}
       />
     )
@@ -109,6 +112,7 @@ describe('ScriptRunner', () => {
         kind="setup"
         scriptPath={SETUP_SCRIPT}
         port={3111}
+        rootPath="/Users/test/planner"
         onOpenSettings={vi.fn()}
       />
     )
@@ -132,6 +136,7 @@ describe('ScriptRunner', () => {
         kind="run"
         scriptPath={RUN_SCRIPT}
         port={3111}
+        rootPath="/Users/test/planner"
         onOpenSettings={vi.fn()}
       />
     )
@@ -152,6 +157,7 @@ describe('ScriptRunner', () => {
         kind="run"
         scriptPath={RUN_SCRIPT}
         port={3111}
+        rootPath="/Users/test/planner"
         onOpenSettings={vi.fn()}
         startToken={7}
       />
@@ -166,12 +172,37 @@ describe('ScriptRunner', () => {
       kind: 'setup',
       scriptPath: SETUP_SCRIPT,
       port: 3111,
+      rootPath: '/Users/test/planner',
       onOpenSettings: vi.fn()
     })
 
     await sessionsOpened(1)
     expect(octopus().terminal.create).toHaveBeenCalledWith(
-      expect.objectContaining({ cwd: '/tmp/planner/anna', command: [SETUP_SCRIPT], env: {} })
+      expect.objectContaining({ cwd: '/tmp/planner/anna', command: [SETUP_SCRIPT] })
+    )
+  })
+
+  /*
+   * A worktree is a copy of the repository and not the repository: anything
+   * gitignored is missing, and `../../` from a workspace is our own data
+   * directory rather than the user's code. A script cannot work the way back
+   * out for itself.
+   */
+  it('tells the script where the checkout is and what this workspace is called', async () => {
+    mountAndStart({
+      workspace: anna,
+      kind: 'setup',
+      scriptPath: SETUP_SCRIPT,
+      port: 3111,
+      rootPath: '/Users/test/planner',
+      onOpenSettings: vi.fn()
+    })
+
+    await sessionsOpened(1)
+    expect(octopus().terminal.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        env: { OCTOPUS_ROOT_PATH: '/Users/test/planner', OCTOPUS_WORKSPACE_NAME: 'anna' }
+      })
     )
   })
 
@@ -181,12 +212,20 @@ describe('ScriptRunner', () => {
       kind: 'run',
       scriptPath: RUN_SCRIPT,
       port: 3111,
+      rootPath: '/Users/test/planner',
       onOpenSettings: vi.fn()
     })
 
     await sessionsOpened(1)
     expect(octopus().terminal.create).toHaveBeenCalledWith(
-      expect.objectContaining({ command: [RUN_SCRIPT], env: { OCTOPUS_PORT: '3111' } })
+      expect.objectContaining({
+        command: [RUN_SCRIPT],
+        env: {
+          OCTOPUS_ROOT_PATH: '/Users/test/planner',
+          OCTOPUS_WORKSPACE_NAME: 'anna',
+          OCTOPUS_PORT: '3111'
+        }
+      })
     )
   })
 
@@ -196,6 +235,7 @@ describe('ScriptRunner', () => {
       kind: 'run',
       scriptPath: RUN_SCRIPT,
       port: 3111,
+      rootPath: '/Users/test/planner',
       onOpenSettings: vi.fn()
     })
     await sessionsOpened(1)
@@ -216,6 +256,7 @@ describe('ScriptRunner', () => {
       kind: 'run',
       scriptPath: RUN_SCRIPT,
       port: 3111,
+      rootPath: '/Users/test/planner',
       onOpenSettings: vi.fn()
     })
     await sessionsOpened(1)
@@ -249,6 +290,7 @@ describe('ScriptRunner', () => {
       kind: 'run',
       scriptPath: RUN_SCRIPT,
       port: 3111,
+      rootPath: '/Users/test/planner',
       onOpenSettings: vi.fn()
     })
     await sessionsOpened(1)
@@ -281,6 +323,7 @@ describe('ScriptRunner', () => {
       kind: 'setup',
       scriptPath: SETUP_SCRIPT,
       port: 3111,
+      rootPath: '/Users/test/planner',
       onOpenSettings: vi.fn()
     })
     await sessionsOpened(1)
@@ -305,6 +348,7 @@ describe('ScriptRunner', () => {
       kind: 'run',
       scriptPath: RUN_SCRIPT,
       port: 3111,
+      rootPath: '/Users/test/planner',
       onOpenSettings: vi.fn()
     })
 
@@ -328,6 +372,7 @@ describe('ScriptRunner', () => {
       kind: 'run',
       scriptPath: RUN_SCRIPT,
       port: 3111,
+      rootPath: '/Users/test/planner',
       onOpenSettings: vi.fn()
     })
     await sessionsOpened(1)
@@ -355,6 +400,7 @@ describe('ScriptRunner', () => {
       kind: 'setup',
       scriptPath: SETUP_SCRIPT,
       port: 3111,
+      rootPath: '/Users/test/planner',
       onOpenSettings: vi.fn()
     })
     await sessionsOpened(1)
@@ -384,6 +430,7 @@ describe('ScriptRunner', () => {
       kind: 'run',
       scriptPath: RUN_SCRIPT,
       port: 3111,
+      rootPath: '/Users/test/planner',
       onOpenSettings: vi.fn()
     })
 
@@ -408,6 +455,7 @@ describe('ScriptRunner', () => {
       kind: 'setup',
       scriptPath: SETUP_SCRIPT,
       port: 3111,
+      rootPath: '/Users/test/planner',
       onOpenSettings: vi.fn()
     })
     await sessionsOpened(1)
@@ -425,6 +473,7 @@ describe('ScriptRunner', () => {
       kind: 'run',
       scriptPath: RUN_SCRIPT,
       port: 3111,
+      rootPath: '/Users/test/planner',
       onOpenSettings: vi.fn()
     })
     await sessionsOpened(1)
@@ -443,6 +492,7 @@ describe('ScriptRunner', () => {
       kind: 'setup',
       scriptPath: SETUP_SCRIPT,
       port: 3111,
+      rootPath: '/Users/test/planner',
       onOpenSettings: vi.fn(),
       onOutcome
     })
@@ -466,6 +516,7 @@ describe('ScriptRunner', () => {
       kind: 'setup',
       scriptPath: SETUP_SCRIPT,
       port: 3111,
+      rootPath: '/Users/test/planner',
       onOpenSettings: vi.fn()
     })
     await sessionsOpened(1)
@@ -479,6 +530,7 @@ describe('ScriptRunner', () => {
       kind: 'run',
       scriptPath: RUN_SCRIPT,
       port: 3111,
+      rootPath: '/Users/test/planner',
       onOpenSettings: vi.fn()
     })
     await sessionsOpened(1)
@@ -500,6 +552,7 @@ describe('ScriptRunner', () => {
       kind: 'setup',
       scriptPath: SETUP_SCRIPT,
       port: 3111,
+      rootPath: '/Users/test/planner',
       onOpenSettings: vi.fn(),
       onOutcome
     })

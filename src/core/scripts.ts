@@ -39,6 +39,41 @@ export const ScriptBodySchema = z.string().max(64_000)
 export const PORT_VARIABLE = 'OCTOPUS_PORT'
 
 /**
+ * Where the project's own checkout is, and what this workspace is called.
+ *
+ * A script runs inside a worktree, which is a copy of the repository and not
+ * the repository: anything gitignored is missing, and the path back is not
+ * something a script can work out — `../../` is our own data directory, not
+ * the user's code. Without these a setup script can only hard-code an absolute
+ * path, which then breaks on every other machine.
+ *
+ * The name is what a script needs to give this workspace something of its own:
+ * a database, a container, a directory. Conductor's equivalents are
+ * `CONDUCTOR_ROOT_PATH` and `CONDUCTOR_WORKSPACE_NAME`.
+ */
+export const ROOT_VARIABLE = 'OCTOPUS_ROOT_PATH'
+export const WORKSPACE_VARIABLE = 'OCTOPUS_WORKSPACE_NAME'
+
+/**
+ * The environment a script is given.
+ *
+ * Both get the root and the name; only the server gets the port, which is the
+ * one thing that is about serving rather than about the workspace.
+ */
+export function scriptEnv(
+  kind: ScriptKind,
+  values: { readonly rootPath: string; readonly workspaceName: string; readonly port: number }
+): Record<string, string> {
+  const env: Record<string, string> = {
+    [ROOT_VARIABLE]: values.rootPath,
+    [WORKSPACE_VARIABLE]: values.workspaceName
+  }
+
+  if (kind === 'run') env[PORT_VARIABLE] = String(values.port)
+  return env
+}
+
+/**
  * Starting point for a script that has never been written.
  *
  * A comment rather than an empty file: the first thing anyone needs to know is
@@ -48,8 +83,13 @@ const TEMPLATES: Record<ScriptKind, string> = {
   setup: `#!/bin/sh
 # Runs in a new workspace directory, once its worktree exists.
 # Use it for whatever a fresh checkout needs before work can start.
+#
+# $${ROOT_VARIABLE} is the project's own checkout — where anything gitignored
+# still lives — and $${WORKSPACE_VARIABLE} is this workspace's name, for
+# giving it a database or a directory of its own.
 
 # npm install
+# createdb "myapp_$${WORKSPACE_VARIABLE}"
 `,
   run: `#!/bin/sh
 # Starts the dev server for this workspace.

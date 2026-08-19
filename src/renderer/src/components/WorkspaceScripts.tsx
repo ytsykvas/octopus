@@ -21,6 +21,8 @@ interface WorkspaceScriptsProps {
    * asked about.
    */
   readonly visible: boolean
+  /** The project's checkout, handed to every script as `$OCTOPUS_ROOT_PATH`. */
+  readonly rootPath: string
   readonly onOpenSettings: () => void
   /**
    * This half's start token for a given workspace, from the Run sequence.
@@ -54,6 +56,7 @@ export function WorkspaceScripts({
   kind,
   scriptPath,
   visible,
+  rootPath,
   onOpenSettings,
   tokenFor,
   stopTokenFor,
@@ -94,6 +97,7 @@ export function WorkspaceScripts({
             kind={kind}
             scriptPath={scriptPath}
             port={0}
+            rootPath={rootPath}
             onOpenSettings={onOpenSettings}
           />
         </div>
@@ -113,6 +117,7 @@ export function WorkspaceScripts({
             kind={kind}
             scriptPath={scriptPath}
             port={workspace.port}
+            rootPath={rootPath}
             onOpenSettings={onOpenSettings}
             startToken={tokenFor(workspace.id)}
             stopToken={stopTokenFor(workspace.id)}

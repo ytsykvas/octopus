@@ -606,6 +606,7 @@ export function App(): React.JSX.Element {
             onError={setError}
             // The room the pane must leave alone. Folded away, the list takes
             // none of it — and the pane may have that room too.
+            rootPath={selectedProject?.repoPath ?? ''}
             leftWidth={TAB_STRIP_WIDTH + (sidebarOpen ? sidebarWidth : 0)}
           />
         )}
