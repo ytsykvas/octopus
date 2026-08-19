@@ -935,6 +935,59 @@ describe('env overrides a project adds', () => {
     await expect(readFile(join(workspace.path, '.env'), 'utf8')).rejects.toThrow()
   })
 
+  /*
+   * The deadlock the two mechanisms made together. A project cloned from
+   * GitHub has no `.env` to carry — the case the block exists for — so the
+   * block creates the file; `carryInto` then never writes over what the
+   * worktree has, and the real `.env` appearing later could never arrive. The
+   * run reported success the whole time.
+   */
+  it('lets the real env arrive after the block created the file', async () => {
+    const { id, repo } = await withProject()
+    await service.saveProjectCarryList(id, '.env\n')
+    await service.saveProjectEnv(id, 'OVERRIDE=1\n')
+
+    // No `.env` in the checkout yet, exactly as a fresh clone has none.
+    const workspace = await service.createWorkspaceIn(id)
+    await expect(readFile(join(workspace.path, '.env'), 'utf8')).resolves.toContain('OVERRIDE=1')
+
+    await writeFile(join(repo, '.env'), 'DATABASE_URL=postgres://real\n', 'utf8')
+    await expect(service.prepareWorkspace(workspace.id)).resolves.toEqual(['.env'])
+
+    const contents = await readFile(join(workspace.path, '.env'), 'utf8')
+    expect(contents).toContain('DATABASE_URL=postgres://real')
+    // And the block still wins, below it.
+    expect(contents.indexOf('DATABASE_URL')).toBeLessThan(contents.indexOf('OVERRIDE=1'))
+  })
+
+  // A file with anything of the user's in it is not ours to remove.
+  it('leaves a workspace env holding more than the block alone', async () => {
+    const { id } = await withProject()
+    await service.saveProjectEnv(id, 'OVERRIDE=1\n')
+    const workspace = await service.createWorkspaceIn(id)
+
+    await writeFile(
+      join(workspace.path, '.env'),
+      `MINE=kept\n${await readFile(join(workspace.path, '.env'), 'utf8')}`,
+      'utf8'
+    )
+    await service.prepareWorkspace(workspace.id)
+
+    await expect(readFile(join(workspace.path, '.env'), 'utf8')).resolves.toContain('MINE=kept')
+  })
+
+  // Emptying the overrides has to take the file with it, or the state recurs.
+  it('removes a file that is left holding nothing', async () => {
+    const { id } = await withProject()
+    await service.saveProjectEnv(id, 'OVERRIDE=1\n')
+    const workspace = await service.createWorkspaceIn(id)
+
+    await service.saveProjectEnv(id, '')
+    await service.prepareWorkspace(workspace.id)
+
+    await expect(readFile(join(workspace.path, '.env'), 'utf8')).rejects.toThrow()
+  })
+
   // The file itself, never a reconstruction: what the scripts read includes
   // the carried lines and any hand edit made inside the worktree.
   it('reads a workspace\u2019s env file as it stands', async () => {
@@ -1159,6 +1212,48 @@ describe('the port a workspace serves on', () => {
     } finally {
       await new Promise((resolve) => squatter.close(resolve))
     }
+  })
+
+  /*
+   * The choice has to be serialised, not only the write. Each settlement reads
+   * the ports every other workspace holds, then awaits a probe per block, then
+   * commits — so two overlapping calls both saw a pool in which neither had
+   * moved, and both took the same block.
+   */
+  it('hands two workspaces settling at once two different blocks', async () => {
+    const { id: first, port } = await withWorkspace()
+    const project = service.listProjects()[0]
+    const second = await service.createWorkspaceIn(project?.id ?? '')
+
+    // Something on the first workspace's port, so both have to move — which is
+    // what puts them in the window where they can choose alike.
+    const squatter = createServer()
+    await new Promise<void>((resolve) => {
+      squatter.listen(port, '127.0.0.1', resolve)
+    })
+
+    try {
+      const [a, b] = await Promise.all([
+        service.ensureWorkspacePort(first),
+        service.ensureWorkspacePort(second.id)
+      ])
+
+      expect(a).not.toBe(b)
+    } finally {
+      await new Promise((resolve) => squatter.close(resolve))
+    }
+  })
+
+  // A failure must not stop the workspace queued behind it from being served.
+  it('settles the next port after one that could not be settled', async () => {
+    const { id } = await withWorkspace()
+
+    await expect(
+      Promise.all([
+        service.ensureWorkspacePort('missing').catch(() => 'refused'),
+        service.ensureWorkspacePort(id)
+      ])
+    ).resolves.toEqual(['refused', expect.any(Number)])
   })
 
   it('refuses to settle a port for a workspace that does not exist', async () => {

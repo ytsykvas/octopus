@@ -6,6 +6,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 
 import {
   applyEnvOverrides,
+  discardIfOnlyBlock,
   projectEnvPath,
   readProjectEnv,
   readWorkspaceEnv,
@@ -146,6 +147,18 @@ describe('applyEnvOverrides', () => {
     expect(contents).not.toContain('octopus')
   })
 
+  // Emptied and holding nothing else: the file goes, or `carryInto` would
+  // refuse to write over it for ever after.
+  it('removes a file the block was all of', async () => {
+    await writeProjectEnv('planner', 'A=1\n', root)
+    await applyEnvOverrides('planner', values(), root)
+
+    await writeProjectEnv('planner', '', root)
+    await applyEnvOverrides('planner', values(), root)
+
+    await expect(stat(join(workspace, '.env'))).rejects.toThrow()
+  })
+
   it('writes nothing at all for a project that never overrode anything', async () => {
     await writeFile(join(workspace, '.env'), 'FROM=checkout\n', 'utf8')
 
@@ -269,5 +282,47 @@ describe('readWorkspaceEnv', () => {
   // caller says so rather than showing an empty box.
   it('answers with nothing where there is no file', async () => {
     await expect(readWorkspaceEnv(workspace, '.env')).resolves.toBeNull()
+  })
+})
+
+describe('discardIfOnlyBlock', () => {
+  /*
+   * The deadlock this breaks: `carryInto` never writes over a file the worktree
+   * has, so a file holding only our own block kept the real one out for ever.
+   * Removing it is safe because the block is written again moments later.
+   */
+  it('removes a file that is nothing but our block', async () => {
+    await writeProjectEnv('planner', 'A=1\n', root)
+    await applyEnvOverrides('planner', values(), root)
+
+    await expect(discardIfOnlyBlock(workspace, '.env')).resolves.toBe(true)
+    await expect(stat(join(workspace, '.env'))).rejects.toThrow()
+  })
+
+  it('keeps a file with a line of somebody else\u2019s in it', async () => {
+    await writeProjectEnv('planner', 'A=1\n', root)
+    await applyEnvOverrides('planner', values(), root)
+    await writeFile(join(workspace, '.env'), `MINE=1\n${await envFile()}`, 'utf8')
+
+    await expect(discardIfOnlyBlock(workspace, '.env')).resolves.toBe(false)
+    await expect(envFile()).resolves.toContain('MINE=1')
+  })
+
+  it('keeps a file that holds no block at all', async () => {
+    await writeFile(join(workspace, '.env'), 'FROM=checkout\n', 'utf8')
+
+    await expect(discardIfOnlyBlock(workspace, '.env')).resolves.toBe(false)
+    await expect(envFile()).resolves.toBe('FROM=checkout\n')
+  })
+
+  it('says no where there is no file', async () => {
+    await expect(discardIfOnlyBlock(workspace, '.env')).resolves.toBe(false)
+  })
+
+  it('reads whichever file the project named', async () => {
+    await writeProjectEnv('planner', 'A=1\n', root)
+    await applyEnvOverrides('planner', { ...values(), envFile: '.env.local' }, root)
+
+    await expect(discardIfOnlyBlock(workspace, '.env.local')).resolves.toBe(true)
   })
 })

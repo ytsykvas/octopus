@@ -22,7 +22,7 @@
  * the files.
  */
 
-import { readFile } from 'node:fs/promises'
+import { readFile, rm } from 'node:fs/promises'
 import { join } from 'node:path'
 
 import { z } from 'zod'
@@ -83,6 +83,40 @@ export async function readWorkspaceEnv(
 }
 
 /**
+ * Removes a workspace env file that holds nothing but our own block.
+ *
+ * Called **before** the carried files land, and it exists because the two
+ * mechanisms deadlocked. `carryInto` copies with `COPYFILE_EXCL`, so it never
+ * writes over a file the worktree already has — correct, and it made the block
+ * a permanent obstacle: for a project cloned from GitHub the worktree has no env
+ * file, the block creates one, and the real `.env` appearing in the checkout
+ * later could never be copied in again. `carryInto` swallowed the `EEXIST` and
+ * the run reported success.
+ *
+ * Deleting is safe precisely because the block is regenerated a few lines
+ * later. A file with anything of the user's in it — a carried line, a hand edit
+ * — is left alone: `withoutBlock` is what tells the two apart.
+ *
+ * Answers with whether it removed anything.
+ */
+export async function discardIfOnlyBlock(workspacePath: string, envFile: string): Promise<boolean> {
+  const path = join(workspacePath, envFile)
+
+  let existing: string
+  try {
+    existing = await readFile(path, 'utf8')
+  } catch {
+    return false
+  }
+
+  // Nothing of ours in it, or something of somebody else's alongside: keep it.
+  if (!existing.includes(OPEN) || withoutBlock(existing).trim() !== '') return false
+
+  await rm(path, { force: true })
+  return true
+}
+
+/**
  * Writes a project's overrides into a workspace's `.env`, replacing any earlier
  * block.
  *
@@ -112,12 +146,15 @@ export async function applyEnvOverrides(
 
   const kept = withoutBlock(existing)
 
-  // Nothing to add: the block goes, and a file that held only a block is left
-  // empty rather than carrying a header for nothing.
+  // Nothing to add: the block goes. A file that held only a block goes with it,
+  // rather than being left empty — an empty file is still a file, and
+  // `carryInto` would refuse to write over it for ever after.
   if (body === '') {
     if (kept === existing) return false
 
-    await writeTextFile(path, kept, MODE)
+    if (kept.trim() === '') await rm(path, { force: true })
+    else await writeTextFile(path, kept, MODE)
+
     return true
   }
 

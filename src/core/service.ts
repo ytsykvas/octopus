@@ -46,7 +46,13 @@ import { type EditTarget, readChangeContext, readEditTarget } from './changeCont
 import { readWorkspaceDiff, type WorkspaceDiff } from './diff.js'
 import { isListening, settlePort } from './ports.js'
 import { carryInto, readCarryList, writeCarryList } from './carry.js'
-import { applyEnvOverrides, readProjectEnv, readWorkspaceEnv, writeProjectEnv } from './env.js'
+import {
+  applyEnvOverrides,
+  discardIfOnlyBlock,
+  readProjectEnv,
+  readWorkspaceEnv,
+  writeProjectEnv
+} from './env.js'
 import { runArchiveScript } from './archive.js'
 import { type Config, ConfigSchema, loadConfig, saveConfig, toSdkSettingSources } from './config.js'
 import { type AgentEvent, isEphemeral } from './events.js'
@@ -681,6 +687,26 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
       throw new WorkspaceError('worktreeMissing', { chatId }, `Chat ${chatId} not found.`)
     }
     return chat
+  }
+
+  /**
+   * Port settlements, run one after another.
+   *
+   * The choice has to be serialised, not only the write. `settlePort` reads the
+   * ports every other workspace holds, then awaits a probe per block, then
+   * commits — and `commit` orders the writes without ordering what led to them.
+   * Two settlements overlapping inside that window both saw a pool in which
+   * neither had moved, and both took the same free block.
+   */
+  let portChoices: Promise<unknown> = Promise.resolve()
+
+  function settlingOneAtATime<T>(choose: () => Promise<T>): Promise<T> {
+    const next = portChoices.then(choose, choose)
+    // Swallowed on the chain only: the caller still gets the rejection, and a
+    // failure must not stop the workspace behind it from being served.
+    portChoices = next.catch(() => undefined)
+
+    return next
   }
 
   function emit(event: ChatEvent): void {
@@ -1329,6 +1355,11 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
       const workspace = requireWorkspace(workspaceId)
       const project = requireProject(workspace.projectId)
 
+      // Before the carry, because a file holding only our own block would
+      // otherwise stand in the way of the real one for ever: `carryInto` never
+      // writes over what the worktree already has.
+      await discardIfOnlyBlock(workspace.path, project.envFile)
+
       const carried = await carryInto(project.id, project.repoPath, workspace.path, dataRoot)
       // After the files, never before: the block has to end up below whatever
       // was copied, which is the whole reason it wins.
@@ -1356,22 +1387,26 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
     },
 
     async ensureWorkspacePort(workspaceId) {
-      const workspace = requireWorkspace(workspaceId)
+      return settlingOneAtATime(async () => {
+        // Read inside the chain, not outside it: the whole point is that this
+        // sees what the settlement before it committed.
+        const workspace = requireWorkspace(workspaceId)
 
-      const free = await settlePort(
-        workspace.port,
-        state.workspaces.flatMap((other) => (other.id === workspaceId ? [] : [other.port]))
-      )
-      if (free === workspace.port) return free
-
-      await commit((current) => ({
-        ...current,
-        workspaces: current.workspaces.map((other) =>
-          other.id === workspaceId ? { ...other, port: free } : other
+        const free = await settlePort(
+          workspace.port,
+          state.workspaces.flatMap((other) => (other.id === workspaceId ? [] : [other.port]))
         )
-      }))
+        if (free === workspace.port) return free
 
-      return free
+        await commit((current) => ({
+          ...current,
+          workspaces: current.workspaces.map((other) =>
+            other.id === workspaceId ? { ...other, port: free } : other
+          )
+        }))
+
+        return free
+      })
     },
 
     async readProjectInstruction(projectId, kind) {
@@ -1450,6 +1485,7 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
         // Inside the rollback, not after it: a worktree missing the files it
         // cannot run without is a workspace that will fail its first build, and
         // undoing it says so at the one moment somebody is watching.
+        await discardIfOnlyBlock(workspace.path, project.envFile)
         await carryInto(project.id, project.repoPath, workspace.path, dataRoot)
         await applyEnvOverrides(
           project.id,
