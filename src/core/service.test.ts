@@ -919,6 +919,19 @@ describe('env overrides a project adds', () => {
     expect(first.port).not.toBe(second.port)
   })
 
+  // `.env` is only most stacks: Vite reads `.env.local` and would ignore
+  // anything written beside it.
+  it('goes into the file the project names', async () => {
+    const { id } = await withProject()
+    await service.updateProjectById(id, { envFile: '.env.local' })
+    await service.saveProjectEnv(id, 'A=1\n')
+
+    const workspace = await service.createWorkspaceIn(id)
+
+    await expect(readFile(join(workspace.path, '.env.local'), 'utf8')).resolves.toContain('A=1')
+    await expect(readFile(join(workspace.path, '.env'), 'utf8')).rejects.toThrow()
+  })
+
   it('refuses to touch a project that does not exist', async () => {
     await expect(service.readProjectEnv('missing')).rejects.toThrow()
     await expect(service.saveProjectEnv('missing', 'A=1')).rejects.toThrow()

@@ -31,8 +31,14 @@ import type { ProjectId } from './types.js'
 /** A block of overrides as accepted from the renderer. */
 export const EnvBodySchema = z.string().max(16_000)
 
-/** The file the block is written into, inside the workspace. */
-export const WORKSPACE_ENV_FILE = '.env'
+/**
+ * The file the block goes into where a project has not said otherwise.
+ *
+ * `.env` is what most stacks read; the ones that do not — Vite wants
+ * `.env.local` — say so per project, which is why this is a default rather
+ * than a constant everything joins to.
+ */
+export const DEFAULT_ENV_FILE = '.env'
 
 /**
  * What wraps the block once it is in somebody's `.env`.
@@ -50,6 +56,8 @@ const MODE = 0o600
 /** What a workspace the block is being written for is worth knowing about. */
 export interface WorkspaceValues {
   readonly path: string
+  /** Which file to write, relative to the worktree. */
+  readonly envFile: string
   readonly rootPath: string
   readonly workspaceName: string
   readonly port: number
@@ -157,7 +165,7 @@ export async function applyEnvOverrides(
 ): Promise<boolean> {
   const stored = (await readProjectEnv(projectId, root)).trim()
   const body = substituteEnv(stored, values)
-  const path = join(values.path, WORKSPACE_ENV_FILE)
+  const path = join(values.path, values.envFile)
 
   let existing = ''
   try {

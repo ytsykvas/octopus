@@ -1301,6 +1301,7 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
         project.id,
         {
           path: workspace.path,
+          envFile: project.envFile,
           rootPath: project.repoPath,
           workspaceName: workspace.name,
           port: workspace.port
@@ -1415,6 +1416,7 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
           project.id,
           {
             path: workspace.path,
+            envFile: project.envFile,
             rootPath: project.repoPath,
             workspaceName: workspace.name,
             port: workspace.port

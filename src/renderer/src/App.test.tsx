@@ -37,6 +37,7 @@ function project(overrides: Partial<Project> = {}): Project {
     repoPath: '/Users/someone/code/planner',
     baseBranch: 'origin/main',
     branchPrefix: 'ytsykvas',
+    envFile: '.env',
     color: 'blue',
     ...overrides
   }

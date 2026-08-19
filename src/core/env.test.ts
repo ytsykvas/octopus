@@ -9,7 +9,6 @@ import {
   projectEnvPath,
   readProjectEnv,
   substituteEnv,
-  WORKSPACE_ENV_FILE,
   type WorkspaceValues,
   writeProjectEnv
 } from './env.js'
@@ -19,12 +18,18 @@ let workspace: string
 
 /** The values a workspace stands for while the block is written. */
 function values(): WorkspaceValues {
-  return { path: workspace, rootPath: '/Users/test/planner', workspaceName: 'anna', port: 3100 }
+  return {
+    path: workspace,
+    envFile: '.env',
+    rootPath: '/Users/test/planner',
+    workspaceName: 'anna',
+    port: 3100
+  }
 }
 
 /** The workspace's `.env` as it stands. */
 async function envFile(): Promise<string> {
-  return readFile(join(workspace, WORKSPACE_ENV_FILE), 'utf8')
+  return readFile(join(workspace, '.env'), 'utf8')
 }
 
 beforeEach(async () => {

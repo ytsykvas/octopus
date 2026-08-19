@@ -87,6 +87,7 @@ export function ProjectSettings({
 
   const [section, setSection] = useState<SectionId>(initialSection ?? 'general')
   const [name, setName] = useState(project.name)
+  const [envFile, setEnvFile] = useState(project.envFile)
   const [branches, setBranches] = useState<readonly string[]>([])
   const [error, setError] = useState<string | null>(null)
 
@@ -118,6 +119,22 @@ export function ProjectSettings({
     }
 
     void onUpdate({ name: trimmed })
+  }
+
+  const commitEnvFile = (): void => {
+    const trimmed = envFile.trim()
+    // An empty field is a slip, not an instruction to write the block nowhere.
+    if (trimmed === '' || trimmed === project.envFile) {
+      setEnvFile(project.envFile)
+      return
+    }
+
+    void (async () => {
+      // A path climbing out of the worktree is refused by the core, and the
+      // field has to go back to what is actually stored rather than keep
+      // showing something that was not saved.
+      if (!(await onUpdate({ envFile: trimmed }))) setEnvFile(project.envFile)
+    })()
   }
 
   const changeBranch = (baseBranch: string): void => {
@@ -329,17 +346,38 @@ export function ProjectSettings({
               there is nothing to list and these are typed instead. They are
               written at the end of the workspace's `.env`, where last wins. */}
           {section === 'env' && (
-            <FileEditor
-              label={t('project.env')}
-              hint={t('project.envHint')}
-              placeholder={'MYSQL_HOST=dev.example\nAPP_URL=http://localhost:$OCTOPUS_PORT'}
-              rows={12}
-              read={async () => {
-                const result = await window.octopus.projects.readEnv(project.id)
-                return result.ok ? result.value : null
-              }}
-              save={(contents) => void window.octopus.projects.saveEnv(project.id, contents)}
-            />
+            <>
+              {/* Which file, because `.env` is only most stacks. Vite reads
+                  `.env.local` and would ignore anything written beside it, so a
+                  project on one had nowhere at all to put its variables. */}
+              <Field label={t('project.envFile')} hint={t('project.envFileHint')}>
+                <input
+                  value={envFile}
+                  onChange={(event) => {
+                    setEnvFile(event.target.value)
+                  }}
+                  onBlur={commitEnvFile}
+                  onKeyDown={(event) => {
+                    if (event.key === 'Enter') event.currentTarget.blur()
+                    if (event.key === 'Escape') setEnvFile(project.envFile)
+                  }}
+                  spellCheck={false}
+                  className="input focus-ring max-w-sm font-mono"
+                />
+              </Field>
+
+              <FileEditor
+                label={t('project.env')}
+                hint={t('project.envHint')}
+                placeholder={'MYSQL_HOST=dev.example\nAPP_URL=http://localhost:$OCTOPUS_PORT'}
+                rows={12}
+                read={async () => {
+                  const result = await window.octopus.projects.readEnv(project.id)
+                  return result.ok ? result.value : null
+                }}
+                save={(contents) => void window.octopus.projects.saveEnv(project.id, contents)}
+              />
+            </>
           )}
 
           {section === 'instructions' && (

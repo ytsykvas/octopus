@@ -1,4 +1,4 @@
-import { render, screen, within } from '@testing-library/react'
+import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent, { type UserEvent } from '@testing-library/user-event'
 import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 
@@ -19,6 +19,7 @@ function project(overrides: Partial<Project> = {}): Project {
     repoPath: '/Users/someone/code/planner',
     baseBranch: 'origin/main',
     branchPrefix: 'ytsykvas',
+    envFile: '.env',
     color: 'blue',
     ...overrides
   }
@@ -430,6 +431,50 @@ describe('ProjectSettings', () => {
     )
   })
 
+  it('saves the env file a project names', async () => {
+    const user = userEvent.setup()
+    const props = await renderDialog()
+
+    await openSection(user, 'Env')
+    const field = screen.getByDisplayValue('.env')
+    await user.clear(field)
+    await user.type(field, '.env.local')
+    await user.tab()
+
+    expect(props.onUpdate).toHaveBeenCalledWith({ envFile: '.env.local' })
+  })
+
+  it('puts the stored name back when the field is left empty', async () => {
+    const user = userEvent.setup()
+    const props = await renderDialog()
+
+    await openSection(user, 'Env')
+    const field = screen.getByDisplayValue('.env')
+    await user.clear(field)
+    await user.tab()
+
+    expect(field).toHaveValue('.env')
+    expect(props.onUpdate).not.toHaveBeenCalled()
+  })
+
+  // The core refuses a path that climbs out of the worktree, and the field
+  // cannot go on showing something that was not saved.
+  it('puts the stored name back when the core refuses the one typed', async () => {
+    const user = userEvent.setup()
+    const props = await renderDialog({ onUpdate: vi.fn().mockResolvedValue(false) })
+
+    await openSection(user, 'Env')
+    const field = screen.getByDisplayValue('.env')
+    await user.clear(field)
+    await user.type(field, '../.env')
+    await user.tab()
+
+    await waitFor(() => {
+      expect(field).toHaveValue('.env')
+    })
+    expect(props.onUpdate).toHaveBeenCalledWith({ envFile: '../.env' })
+  })
+
   /*
    * Where a project cloned from GitHub gets its `.env` at all: the checkout is
    * a fresh clone, so there was never a gitignored file to carry, and these are
@@ -625,7 +670,12 @@ describe('ProjectSettings', () => {
 
     await openSection(user, 'Env')
 
-    expect(await screen.findByRole('textbox')).toHaveValue('')
+    // Two boxes in this section now — the file it goes into, and the block.
+    const editors = await screen.findAllByRole('textbox')
+    expect(editors.filter((editor) => editor.tagName === 'TEXTAREA')).toHaveLength(1)
+    for (const editor of editors) {
+      if (editor.tagName === 'TEXTAREA') expect(editor).toHaveValue('')
+    }
     expect(screen.queryByText(/permission denied/)).toBeNull()
   })
 

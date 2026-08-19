@@ -6,6 +6,8 @@
  * binding, status and port.
  */
 
+import { isAbsolute, normalize } from 'node:path'
+
 import { z } from 'zod'
 
 import {
@@ -16,6 +18,7 @@ import {
   ChatSchema
 } from './chats.js'
 import { nextProjectColor, type ProjectColor, ProjectColorSchema } from './colors.js'
+import { DEFAULT_ENV_FILE } from './env.js'
 import { ProjectIconSchema } from './icons.js'
 
 export {
@@ -65,7 +68,17 @@ export const ProjectSchema = z.object({
    * not chosen says nothing about the project. `null` is accepted alongside
    * "absent" because that is what clearing a chosen icon writes.
    */
-  icon: ProjectIconSchema.nullable().optional()
+  icon: ProjectIconSchema.nullable().optional(),
+  /**
+   * Which file the env overrides are written into, relative to the worktree.
+   *
+   * Defaulted rather than required, so a project written before this existed
+   * still loads — and `.env` is what most stacks read. Rails and dotenv do;
+   * Vite reads `.env.local` and Next `NEXT_PUBLIC_*` out of `.env.local` too,
+   * and a project on one of those had nowhere to put its variables while this
+   * was a constant.
+   */
+  envFile: z.string().min(1).default(DEFAULT_ENV_FILE)
 })
 
 export const WorkspaceStatusSchema = z.enum(['idle', 'running', 'waiting_permission', 'error'])
@@ -268,7 +281,8 @@ export const ProjectPatchSchema = ProjectSchema.pick({
   name: true,
   baseBranch: true,
   color: true,
-  icon: true
+  icon: true,
+  envFile: true
 }).partial()
 
 export type ProjectPatch = z.infer<typeof ProjectPatchSchema>
@@ -294,6 +308,17 @@ export function updateProject(state: State, projectId: string, patch: ProjectPat
     throw new StateConflictError('A base branch cannot be empty')
   }
 
+  const envFile = patch.envFile?.trim()
+  if (envFile !== undefined) {
+    if (envFile === '') throw new StateConflictError('An env file cannot be empty')
+
+    // It is joined to a worktree path, so it has to stay inside one. The same
+    // rule the carry list applies to every line it reads, for the same reason.
+    if (isAbsolute(envFile) || normalize(envFile).startsWith('..')) {
+      throw new StateConflictError('An env file has to sit inside the workspace')
+    }
+  }
+
   return {
     ...state,
     projects: state.projects.map((project) =>
@@ -305,7 +330,8 @@ export function updateProject(state: State, projectId: string, patch: ProjectPat
             // "back to the initials". Only `undefined` means "leave it alone".
             ...(patch.icon !== undefined && { icon: patch.icon }),
             ...(name !== undefined && { name }),
-            ...(baseBranch !== undefined && { baseBranch })
+            ...(baseBranch !== undefined && { baseBranch }),
+            ...(envFile !== undefined && { envFile })
           }
         : project
     )

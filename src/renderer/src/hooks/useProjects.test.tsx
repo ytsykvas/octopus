@@ -16,6 +16,7 @@ const planner: Project = {
   repoPath: '/repos/planner',
   baseBranch: 'main',
   branchPrefix: 'ytsykvas',
+  envFile: '.env',
   color: 'blue'
 }
 
@@ -25,6 +26,7 @@ const website: Project = {
   repoPath: '/repos/website',
   baseBranch: 'main',
   branchPrefix: 'ytsykvas',
+  envFile: '.env',
   color: 'green'
 }
 

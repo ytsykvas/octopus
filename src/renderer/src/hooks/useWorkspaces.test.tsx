@@ -19,6 +19,7 @@ const project = (id: string, name: string): Project => ({
   repoPath: `/repos/${id}`,
   baseBranch: 'main',
   branchPrefix: 'ytsykvas',
+  envFile: '.env',
   color: 'blue'
 })
 

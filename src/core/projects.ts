@@ -15,6 +15,7 @@ import {
   repositoryName,
   toSlug
 } from './git.js'
+import { DEFAULT_ENV_FILE } from './env.js'
 import { nextProjectColor } from './colors.js'
 import type { Project, State } from './store.js'
 
@@ -135,7 +136,8 @@ export async function createProject(
     repoPath: info.root,
     baseBranch: info.baseBranch,
     branchPrefix,
-    color: nextProjectColor(state.projects.map((project) => project.color))
+    color: nextProjectColor(state.projects.map((project) => project.color)),
+    envFile: DEFAULT_ENV_FILE
   }
 }
 

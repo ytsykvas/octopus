@@ -22,6 +22,7 @@ import {
   modelsUnchanged,
   PROJECT_COLORS,
   type Project,
+  ProjectSchema,
   rememberModels,
   removeProject,
   removeWorkspace,
@@ -43,6 +44,7 @@ const project: Project = {
   repoPath: '/repos/planner',
   baseBranch: 'main',
   branchPrefix: 'ytsykvas',
+  envFile: '.env',
   color: 'blue'
 }
 
@@ -766,5 +768,61 @@ describe('removing a conversation', () => {
    */
   it('says nothing about an id that is not there', () => {
     expect(removeChat(twoChats, 'chat-9').chats).toHaveLength(2)
+  })
+})
+
+describe('the env file a project writes its variables into', () => {
+  // `.env` is only most stacks. Vite reads `.env.local` and would ignore
+  // anything written beside it, so a project on one had nowhere to put them.
+  it('is changed like any other editable field', () => {
+    const next = updateProject(withProject, 'planner', { envFile: '.env.local' })
+
+    expect(next.projects[0]?.envFile).toBe('.env.local')
+  })
+
+  it('drops the spaces around it', () => {
+    const next = updateProject(withProject, 'planner', { envFile: '  .env.local  ' })
+
+    expect(next.projects[0]?.envFile).toBe('.env.local')
+  })
+
+  it('refuses to be emptied, since the block has to go somewhere', () => {
+    expect(() => updateProject(withProject, 'planner', { envFile: '   ' })).toThrow(
+      StateConflictError
+    )
+  })
+
+  /*
+   * It is joined to a worktree path, so it has to stay inside one — the same
+   * rule the carry list applies to every line it reads. A block of credentials
+   * written to an absolute path is a file nobody expected to be touched.
+   */
+  it('refuses a path that climbs out of the workspace', () => {
+    expect(() => updateProject(withProject, 'planner', { envFile: '../.env' })).toThrow(
+      StateConflictError
+    )
+    expect(() => updateProject(withProject, 'planner', { envFile: '/etc/passwd' })).toThrow(
+      StateConflictError
+    )
+  })
+
+  it('allows a file in a directory of the workspace', () => {
+    const next = updateProject(withProject, 'planner', { envFile: 'config/.env' })
+
+    expect(next.projects[0]?.envFile).toBe('config/.env')
+  })
+
+  // A project written before the field existed still loads, which is what a
+  // default is for — the version stays at 1.
+  it('falls back to .env for a project stored without one', () => {
+    const stored = ProjectSchema.parse({
+      id: 'planner',
+      name: 'planner',
+      repoPath: '/repos/planner',
+      baseBranch: 'main',
+      branchPrefix: 'ytsykvas'
+    })
+
+    expect(stored.envFile).toBe('.env')
   })
 })
