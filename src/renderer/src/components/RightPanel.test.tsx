@@ -497,6 +497,8 @@ describe('RightPanel', () => {
    * link is what a reader expects to be able to copy.
    */
   it('offers the running server in the browser, on its own port', async () => {
+    // Nothing had taken it, so the run stays where the workspace was recorded.
+    vi.mocked(octopus().workspaces.port).mockResolvedValue({ ok: true, value: bob.port })
     renderPanel({ workspaces: [bob], activeWorkspaceId: bob.id, scriptPaths: SCRIPTS })
 
     await userEvent.click(scriptsTab())
@@ -508,6 +510,27 @@ describe('RightPanel', () => {
     const link = screen.getByRole('link', { name: 'Open localhost:3222' })
     expect(link).toHaveAttribute('href', 'http://localhost:3222')
     expect(link).toHaveAttribute('target', '_blank')
+  })
+
+  /*
+   * The workspaces list carries the port as it was last written to disk, and
+   * nothing refreshes it after a run settles on another block — so the link
+   * pointed at the port the run had just moved away from.
+   */
+  it('follows the port a run had to move to', async () => {
+    vi.mocked(octopus().workspaces.port).mockResolvedValue({ ok: true, value: 3190 })
+    renderPanel({ workspaces: [bob], activeWorkspaceId: bob.id, scriptPaths: SCRIPTS })
+
+    await userEvent.click(scriptsTab())
+    await userEvent.click(runButton())
+    await sessionsOpened(1)
+    processExits(1)
+    await sessionsOpened(2)
+
+    expect(screen.getByRole('link', { name: 'Open localhost:3190' })).toHaveAttribute(
+      'href',
+      'http://localhost:3190'
+    )
   })
 
   it('offers no link while nothing is serving', async () => {
@@ -604,6 +627,7 @@ describe('RightPanel', () => {
    */
   it('says when nothing is listening on the port it handed out', async () => {
     vi.mocked(octopus().workspaces.serving).mockResolvedValue({ ok: true, value: false })
+    vi.mocked(octopus().workspaces.port).mockResolvedValue({ ok: true, value: bob.port })
 
     /* Five attempts a second apart, so the pane never calls a slow boot a
        mistake. Driven rather than waited for — and installed before the run

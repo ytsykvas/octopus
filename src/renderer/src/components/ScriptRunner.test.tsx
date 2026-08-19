@@ -365,6 +365,118 @@ describe('ScriptRunner', () => {
   })
 
   /*
+   * Its terminal goes with it, so the build really is over — and the sequence
+   * that was waiting for it to report has no other way of hearing.
+   */
+  it('says so when it goes while its process is still running', async () => {
+    const onGone = vi.fn()
+    const props = {
+      workspace: anna,
+      kind: 'setup' as const,
+      scriptPath: SETUP_SCRIPT,
+      port: 3111,
+      rootPath: '/Users/test/planner',
+      onOpenSettings: vi.fn(),
+      onGone
+    }
+    // The token is a level, so a runner mounted with one already standing does
+    // not run: it has to be bumped after the mount.
+    const { rerender, unmount } = render(<ScriptRunner {...props} startToken={0} />)
+    rerender(<ScriptRunner {...props} startToken={1} />)
+    await sessionsOpened(1)
+
+    unmount()
+
+    expect(onGone).toHaveBeenCalledTimes(1)
+  })
+
+  it('says nothing when it goes with nothing running', () => {
+    const onGone = vi.fn()
+    const { unmount } = render(
+      <ScriptRunner
+        workspace={anna}
+        kind="setup"
+        scriptPath={SETUP_SCRIPT}
+        port={3111}
+        rootPath="/Users/test/planner"
+        onOpenSettings={vi.fn()}
+        onGone={onGone}
+      />
+    )
+
+    unmount()
+
+    expect(onGone).not.toHaveBeenCalled()
+  })
+
+  /*
+   * `settlePort` answers "is anything listening here", and on a restart the
+   * thing listening is us. Asked before the old session is torn down, it moved
+   * the workspace to another block on every press — back and forth, taking the
+   * whole `$OCTOPUS_PORT_1..9` block with it and pointing the open browser tab
+   * at a port nothing binds.
+   *
+   * The existing restart tests could not see this: the stub answers with a
+   * fixed port whatever is asked.
+   */
+  it('asks for a port only once its own server has gone', async () => {
+    const order: string[] = []
+    vi.mocked(octopus().terminal.dispose).mockImplementation(() => {
+      order.push('dispose')
+      return Promise.resolve()
+    })
+    vi.mocked(octopus().workspaces.port).mockImplementation(() => {
+      order.push('port')
+      return Promise.resolve({ ok: true, value: 3111 })
+    })
+
+    const { rerender } = mountAndStart({
+      workspace: anna,
+      kind: 'run',
+      scriptPath: RUN_SCRIPT,
+      port: 3111,
+      rootPath: '/Users/test/planner',
+      onOpenSettings: vi.fn()
+    })
+    await sessionsOpened(1)
+
+    rerender({ startToken: 2 })
+    await sessionsOpened(2)
+
+    // The first start had nothing to tear down; the restart tore down first.
+    expect(order).toEqual(['port', 'dispose', 'port'])
+  })
+
+  // The env block may name the port, so it must not be written before the
+  // teardown either — it would hold the number this run is about to leave.
+  it('writes the env only once its own server has gone', async () => {
+    const order: string[] = []
+    vi.mocked(octopus().terminal.dispose).mockImplementation(() => {
+      order.push('dispose')
+      return Promise.resolve()
+    })
+    vi.mocked(octopus().workspaces.prepare).mockImplementation(() => {
+      order.push('prepare')
+      return Promise.resolve({ ok: true, value: [] })
+    })
+
+    const { rerender } = mountAndStart({
+      workspace: anna,
+      kind: 'run',
+      scriptPath: RUN_SCRIPT,
+      port: 3111,
+      rootPath: '/Users/test/planner',
+      onOpenSettings: vi.fn()
+    })
+    await sessionsOpened(1)
+
+    rerender({ startToken: 2 })
+    await sessionsOpened(2)
+
+    expect(order).toEqual(['prepare', 'dispose', 'prepare'])
+  })
+
+  /*
    * A restart is a disposal and a start, and a dev server does not release its
    * port the instant it is asked to. Opening the next session before the last
    * one has gone fails on the port and blames the new server for it.

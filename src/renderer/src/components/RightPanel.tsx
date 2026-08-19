@@ -179,6 +179,14 @@ export function RightPanel({
    */
   const [buildOpen, setBuildOpen] = useState(true)
   const [showingEnv, setShowingEnv] = useState(false)
+  /*
+   * Where each workspace's server actually ended up.
+   *
+   * The workspaces list carries the port as it was last written to disk, and
+   * nothing refreshes it after a run settles on another block — so the header
+   * linked to the port the run had just moved away from.
+   */
+  const [settledPorts, setSettledPorts] = useState<Record<string, number>>({})
   // One button that takes a workspace from a bare checkout to a running
   // server. It lives above both halves because neither half can see the other.
   const sequence = useRunSequence()
@@ -218,10 +226,12 @@ export function RightPanel({
         }
 
   const servingAt =
-    activeWorkspace !== null && activeRun.stage === 'serving' ? activeWorkspace : null
+    activeWorkspace !== null && activeRun.stage === 'serving'
+      ? { ...activeWorkspace, port: settledPorts[activeWorkspace.id] ?? activeWorkspace.port }
+      : null
   // Asked only while something is serving: a port nothing was told to bind is
   // not a port anybody is waiting on.
-  const silentPort = useServingPort(servingAt?.id ?? null)
+  const silentPort = useServingPort(servingAt?.id ?? null, activeRun.server)
 
   const restartServer =
     servingAt === null
@@ -638,6 +648,12 @@ export function RightPanel({
               onOutcome={(id, ok) => {
                 sequence.finished('setup', id, ok)
               }}
+              // A build only ever leaves `building` by reporting itself
+              // finished, so a runner that goes while one is in flight would
+              // strand the workspace with Run disabled and nothing to press.
+              onGone={(id) => {
+                sequence.abandon(id)
+              }}
             />
           </div>
         </section>
@@ -661,6 +677,9 @@ export function RightPanel({
             stopTokenFor={(id) => sequence.runOf(id).stop}
             onOutcome={(id, ok) => {
               sequence.finished('run', id, ok)
+            }}
+            onPort={(id, settled) => {
+              setSettledPorts((current) => ({ ...current, [id]: settled }))
             }}
           />
         </section>

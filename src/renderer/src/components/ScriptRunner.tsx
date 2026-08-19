@@ -20,6 +20,21 @@ interface ScriptRunnerProps {
   readonly rootPath: string
   readonly onOpenSettings: () => void
   /**
+   * The port this run actually settled on.
+   *
+   * A port free when the workspace was made can be taken by the time it runs,
+   * and the header links to it — from the workspaces list, which nothing
+   * refreshes after a settle. So the runner says where it went.
+   */
+  readonly onPort?: (port: number) => void
+  /**
+   * This half has gone while its process was still running.
+   *
+   * A build is only ever left behind by a runner reporting it finished, so an
+   * unmount mid-build stranded the workspace with nothing to press.
+   */
+  readonly onGone?: () => void
+  /**
    * Bumped by the Run button to ask this half to start; 0 means never.
    *
    * A number rather than a callback handed upwards: the sequence must be able
@@ -48,6 +63,8 @@ export function ScriptRunner({
   port,
   rootPath,
   onOpenSettings,
+  onPort,
+  onGone,
   startToken = 0,
   stopToken = 0,
   onOutcome
@@ -76,6 +93,8 @@ export function ScriptRunner({
       scriptPath={scriptPath}
       port={port}
       rootPath={rootPath}
+      onPort={onPort}
+      onGone={onGone}
       startToken={startToken}
       stopToken={stopToken}
       onOutcome={onOutcome}
@@ -89,6 +108,8 @@ interface RunnerProps {
   readonly scriptPath: string
   readonly port: number
   readonly rootPath: string
+  readonly onPort: ((port: number) => void) | undefined
+  readonly onGone: (() => void) | undefined
   readonly startToken: number
   readonly stopToken: number
   readonly onOutcome: ((ok: boolean) => void) | undefined
@@ -108,6 +129,8 @@ function Runner({
   scriptPath,
   port: recordedPort,
   rootPath,
+  onPort,
+  onGone,
   startToken,
   stopToken,
   onOutcome
@@ -135,6 +158,27 @@ function Runner({
   const [port, setPort] = useState(recordedPort)
 
   /*
+   * Whether this half is still going, as an unmount can read it.
+   *
+   * A cleanup closes over the render that installed it, so plain state would
+   * always say what it said when the component first mounted.
+   */
+  const stillRunning = useRef(running)
+  useEffect(() => {
+    stillRunning.current = running
+  }, [running])
+
+  useEffect(
+    () => () => {
+      if (stillRunning.current) onGone?.()
+    },
+    // Once, on the way out. `onGone` is rebuilt every render and depending on
+    // it would fire the cleanup on each one.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    []
+  )
+
+  /*
    * The stop token as the run loop sees it.
    *
    * A ref, because `start` reads it after an await and a value captured in the
@@ -160,7 +204,15 @@ function Runner({
    */
   const pendingStart = useRef<number | null>(null)
 
-  const start = (): void => {
+  /**
+   * Everything a start does once nothing of ours is listening.
+   *
+   * Its own function because a restart arrives here twice removed — through the
+   * teardown below and then the session's `onClosed`. Calling `start` again
+   * from there would read a `running` captured in an older render and wait for
+   * a teardown that has already happened.
+   */
+  const launch = (): void => {
     const stopWhenAsked = latestStop.current
 
     void (async () => {
@@ -187,6 +239,7 @@ function Runner({
         }
 
         setPort(settled.value)
+        onPort?.(settled.value)
       }
 
       /*
@@ -215,31 +268,41 @@ function Runner({
       }
 
       setError(null)
-
-      /*
-       * Still going: end it and wait. Remounting `Terminal` now would open the
-       * next session while the last one still holds the port, and the failure
-       * reads as the new server's fault.
-       *
-       * `running`, not `started`. A half keeps its terminal on screen after the
-       * process exits — that is what `started` is for — and waiting on a session
-       * that has already gone waits for ever: `Terminal` disposes nothing when
-       * its session is null, so the `onClosed` this is holding out for never
-       * comes. A finished build is not something to wait behind.
-       */
-      if (running) {
-        // The stop token as it stood when the restart was asked for. A stop
-        // arriving before the old session closes moves it, and that is how the
-        // restart knows the press it was waiting for has been countermanded —
-        // without writing a ref during render, which is where the stop is seen.
-        pendingStart.current = latestStop.current
-        setStarted(false)
-        setRunning(false)
-        return
-      }
-
       begin()
     })()
+  }
+
+  const start = (): void => {
+    /*
+     * Still going: end it and wait, before anything else.
+     *
+     * First, because remounting `Terminal` while the last session holds the
+     * port makes the failure read as the new server's fault. And first because
+     * of the port: `settlePort` answers "is anything listening here", and on a
+     * restart the thing listening is **us**. Asked before the teardown, it
+     * moved the workspace to another block on every press — back and forth,
+     * taking `$OCTOPUS_PORT_1..9` with it and pointing the open browser tab at
+     * a port nothing binds. The precondition `ports.ts` states in words — only
+     * while nothing of ours is alive here — is kept by asking afterwards.
+     *
+     * `running`, not `started`. A half keeps its terminal on screen after the
+     * process exits — that is what `started` is for — and waiting on a session
+     * that has already gone waits for ever: `Terminal` disposes nothing when
+     * its session is null, so the `onClosed` this is holding out for never
+     * comes. A finished build is not something to wait behind.
+     */
+    if (running) {
+      // The stop token as it stood when the restart was asked for. A stop
+      // arriving before the old session closes moves it, and that is how the
+      // restart knows the press it was waiting for has been countermanded —
+      // without writing a ref during render, which is where the stop is seen.
+      pendingStart.current = latestStop.current
+      setStarted(false)
+      setRunning(false)
+      return
+    }
+
+    launch()
   }
 
   const begin = (): void => {
@@ -325,9 +388,15 @@ function Runner({
               const asked = pendingStart.current
               pendingStart.current = null
 
+              // `start`, not `begin`: the whole sequence again, now that
+              // nothing of ours is listening. Going straight to `begin` skipped
+              // both the port and the env — so a restart reused a number
+              // settled while the old server still held it, and never rewrote
+              // the block that names it.
+              //
               // A stop that landed while this was closing countermanded it: the
               // press after the restart asked for nothing to be running.
-              if (asked !== null && asked === latestStop.current) begin()
+              if (asked !== null && asked === latestStop.current) launch()
             }}
           />
         </div>

@@ -219,3 +219,59 @@ describe('useRunSequence', () => {
     })
   })
 })
+
+describe('a runner that goes mid-build', () => {
+  /*
+   * `building` is left only by a runner reporting the build it finished, and
+   * Stop is on screen only while `serving`. So an unmount mid-build left the
+   * workspace with Run disabled reading "Building…" and nothing to press.
+   */
+  it('stops the workspace being reported as building', () => {
+    const { result } = renderHook(() => useRunSequence())
+
+    act(() => {
+      result.current.start('anna', true)
+    })
+    expect(result.current.runOf('anna').stage).toBe('building')
+
+    act(() => {
+      result.current.abandon('anna')
+    })
+
+    expect(result.current.runOf('anna').stage).toBe('idle')
+  })
+
+  // Nothing failed — the pane was put away — so `failed` would draw an error
+  // about a build nobody watched end.
+  it('goes back to idle rather than failed', () => {
+    const { result } = renderHook(() => useRunSequence())
+
+    act(() => {
+      result.current.start('anna', true)
+      result.current.abandon('anna')
+    })
+
+    expect(result.current.runOf('anna').stage).not.toBe('failed')
+  })
+
+  it('leaves a serving workspace alone', () => {
+    const { result } = renderHook(() => useRunSequence())
+
+    act(() => {
+      result.current.start('anna', false)
+      result.current.abandon('anna')
+    })
+
+    expect(result.current.runOf('anna').stage).toBe('serving')
+  })
+
+  it('does nothing for a workspace that never ran', () => {
+    const { result } = renderHook(() => useRunSequence())
+
+    act(() => {
+      result.current.abandon('nobody')
+    })
+
+    expect(result.current.runOf('nobody').stage).toBe('idle')
+  })
+})

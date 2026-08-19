@@ -34,6 +34,10 @@ interface WorkspaceScriptsProps {
   /** The token that ends a run here; both halves watch the same one. */
   readonly stopTokenFor: (workspaceId: string) => number
   readonly onOutcome: (workspaceId: string, ok: boolean) => void
+  /** Where a run's server actually ended up, which the header links to. */
+  readonly onPort?: (workspaceId: string, port: number) => void
+  /** A runner that was still going has unmounted. */
+  readonly onGone?: (workspaceId: string) => void
 }
 
 /**
@@ -60,7 +64,9 @@ export function WorkspaceScripts({
   onOpenSettings,
   tokenFor,
   stopTokenFor,
-  onOutcome
+  onOutcome,
+  onPort,
+  onGone
 }: WorkspaceScriptsProps): React.JSX.Element {
   const [openedIds, setOpenedIds] = useState<readonly string[]>([])
   const [lastActiveId, setLastActiveId] = useState<string | null>(null)
@@ -119,6 +125,12 @@ export function WorkspaceScripts({
             port={workspace.port}
             rootPath={rootPath}
             onOpenSettings={onOpenSettings}
+            onPort={(settled) => {
+              onPort?.(workspace.id, settled)
+            }}
+            onGone={() => {
+              onGone?.(workspace.id)
+            }}
             startToken={tokenFor(workspace.id)}
             stopToken={stopTokenFor(workspace.id)}
             onOutcome={(ok) => {

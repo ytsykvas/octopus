@@ -47,6 +47,8 @@ export interface RunSequence {
   readonly restart: (workspaceId: string) => void
   /** Ends whatever is running here. */
   readonly stop: (workspaceId: string) => void
+  /** The runner that was building has gone; the workspace is not building. */
+  readonly abandon: (workspaceId: string) => void
   /** A half's script ended, and whether it ended well. */
   readonly finished: (kind: ScriptKind, workspaceId: string, ok: boolean) => void
 }
@@ -94,6 +96,26 @@ export function useRunSequence(): RunSequence {
     })
   }, [])
 
+  /*
+   * The runner that was going has gone.
+   *
+   * `building` is left only by a runner reporting the build it finished, and
+   * `Stop` is on screen only while `serving` — so an unmount mid-build stranded
+   * the workspace with Run disabled reading "Building…" and nothing to press.
+   * A build whose terminal is gone is not building, whatever the sequence
+   * remembers.
+   *
+   * Back to `idle`, not `failed`: nothing failed, the pane was put away.
+   */
+  const abandon = useCallback((workspaceId: string) => {
+    setRuns((current) => {
+      const run = current[workspaceId]
+      if (run?.stage !== 'building') return current
+
+      return { ...current, [workspaceId]: { ...run, stage: 'idle' } }
+    })
+  }, [])
+
   const stop = useCallback((workspaceId: string) => {
     setRuns((current) => {
       const run = current[workspaceId]
@@ -133,5 +155,5 @@ export function useRunSequence(): RunSequence {
     [runs]
   )
 
-  return { runOf, start, restart, stop, finished }
+  return { runOf, start, restart, stop, abandon, finished }
 }

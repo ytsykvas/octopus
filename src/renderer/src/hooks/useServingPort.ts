@@ -18,17 +18,23 @@ const INTERVAL_MS = 1_000
  * was told, so the link opens on nothing and the pane is the thing that looks
  * broken. Asking is the only way to know, and false is the honest answer until
  * we have asked enough times to mean it.
+ *
+ * Keyed on the **run**, not the workspace: what is being measured is a server
+ * start, and a restart is another one. Keyed on the workspace alone, the
+ * verdict of the first start stood for every later run of it — including a
+ * restart that fixed the very thing the warning complained about.
  */
-export function useServingPort(workspaceId: string | null): boolean {
+export function useServingPort(workspaceId: string | null, run = 0): boolean {
+  const key = workspaceId === null ? null : `${workspaceId}#${String(run)}`
   const [state, setState] = useState<{ id: string | null; silent: boolean }>({
-    id: workspaceId,
+    id: key,
     silent: false
   })
 
   // Adjusted during render rather than in an effect: an effect runs after the
   // paint, so a workspace that has just started would inherit one frame of the
   // last one's answer.
-  if (state.id !== workspaceId) setState({ id: workspaceId, silent: false })
+  if (state.id !== key) setState({ id: key, silent: false })
 
   useEffect(() => {
     if (workspaceId === null) return
@@ -46,7 +52,7 @@ export function useServingPort(workspaceId: string | null): boolean {
 
       attempts += 1
       if (attempts >= ATTEMPTS) {
-        setState({ id: workspaceId, silent: true })
+        setState({ id: key, silent: true })
         return
       }
 
@@ -59,7 +65,7 @@ export function useServingPort(workspaceId: string | null): boolean {
       stopped = true
       clearTimeout(timer)
     }
-  }, [workspaceId])
+  }, [key, workspaceId])
 
-  return state.id === workspaceId && state.silent
+  return state.id === key && state.silent
 }
