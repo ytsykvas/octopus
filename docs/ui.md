@@ -621,8 +621,15 @@ is missing. The moment anyone notices an env is missing is a run that could not
 find it, and by then the empty state that might have carried the button is gone.
 It is a **sibling** of the fold control rather than a child of it, so reaching
 for the env cannot put the build away. It opens the project dialog on its own
-`Files` section — the button beside it opens `Scripts`, and two buttons leading to
-one panel would be two names for one action.
+`Files` section — the button beside it opens `Scripts`, and two buttons leading
+to one panel would be two names for one action.
+
+The Env section names the file before the block, because the file is the
+question a project answers once and the block is the one it keeps editing.
+
+`FileEditor` can carry `notes` — a function run against the text on every
+keystroke, whose answers appear under the box. The env block uses it; told on
+blur instead, a warning arrives after the attention that could act on it.
 
 **Files and Env are two sections, because they are two mechanisms.** `Files`
 names paths copied out of the checkout; `Env` holds `KEY=value` lines typed by

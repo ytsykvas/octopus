@@ -475,6 +475,121 @@ describe('ProjectSettings', () => {
     expect(props.onUpdate).toHaveBeenCalledWith({ envFile: '../.env' })
   })
 
+  it('leaves the field on Enter and puts it back on Escape', async () => {
+    const user = userEvent.setup()
+    const props = await renderDialog()
+
+    await openSection(user, 'Env')
+    const field = screen.getByDisplayValue('.env')
+    await user.click(field)
+    await user.type(field, '.local{Enter}')
+
+    expect(props.onUpdate).toHaveBeenCalledWith({ envFile: '.env.local' })
+
+    await user.click(field)
+    await user.type(field, 'x{Escape}')
+    expect(field).toHaveValue('.env')
+  })
+
+  /*
+   * Warnings while it is typed, never a refusal to save: the file is read by
+   * somebody else's parser, and ours cannot be the authority on what that one
+   * accepts. Told on blur they would arrive after the attention that could act
+   * on them.
+   */
+  it('says what is wrong with the block as it is typed', async () => {
+    const user = userEvent.setup()
+    await renderDialog()
+
+    await openSection(user, 'Env')
+    const editor = await screen.findByPlaceholderText(/MYSQL_HOST/)
+    await user.type(editor, 'MYSQL_HOST dev.example')
+
+    expect(await screen.findByText(/is not KEY=value/)).toBeInTheDocument()
+  })
+
+  it('says nothing about a block that is fine', async () => {
+    const user = userEvent.setup()
+    await renderDialog()
+
+    await openSection(user, 'Env')
+    const editor = await screen.findByPlaceholderText(/MYSQL_HOST/)
+    await user.type(editor, 'MYSQL_HOST=dev.example')
+
+    expect(screen.queryByText(/is not KEY=value/)).toBeNull()
+  })
+
+  /*
+   * octopus writes credentials into that file, inside a directory the agent
+   * commits from freely. A repository that does not ignore it turns the block
+   * into a change waiting to be committed.
+   */
+  it('warns when git does not ignore the file the block goes into', async () => {
+    vi.mocked(window.octopus.projects.isEnvIgnored).mockResolvedValue({ ok: true, value: false })
+    vi.mocked(window.octopus.projects.readEnv).mockResolvedValue({ ok: true, value: 'A=1' })
+    const user = userEvent.setup()
+    await renderDialog()
+
+    await openSection(user, 'Env')
+
+    expect(await screen.findByText(/does not ignore/)).toBeInTheDocument()
+  })
+
+  // A warning about nothing. There is no secret in an empty block.
+  it('says nothing about an unignored file while the block is empty', async () => {
+    vi.mocked(window.octopus.projects.isEnvIgnored).mockResolvedValue({ ok: true, value: false })
+    const user = userEvent.setup()
+    await renderDialog()
+
+    await openSection(user, 'Env')
+
+    expect(screen.queryByText(/does not ignore/)).toBeNull()
+  })
+
+  /*
+   * An answer landing after the reader has moved on belongs to a question
+   * nobody is watching, and writing state then is React's "update on an
+   * unmounted component".
+   */
+  it('drops a gitignore answer that arrives after the section has changed', async () => {
+    const gate: { land: (() => void) | null } = { land: null }
+    vi.mocked(window.octopus.projects.isEnvIgnored).mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          gate.land = () => {
+            resolve({ ok: true, value: false })
+          }
+        })
+    )
+    vi.mocked(window.octopus.projects.readEnv).mockResolvedValue({ ok: true, value: 'A=1' })
+    const user = userEvent.setup()
+    await renderDialog()
+
+    await openSection(user, 'Env')
+    await openSection(user, 'General')
+    gate.land?.()
+    await openSection(user, 'Env')
+
+    expect(await screen.findByDisplayValue('A=1')).toBeInTheDocument()
+    expect(screen.queryByText(/does not ignore/)).toBeNull()
+  })
+
+  // Git failing to answer is not evidence of exposure.
+  it('says nothing when git could not answer', async () => {
+    vi.mocked(window.octopus.projects.isEnvIgnored).mockResolvedValue({
+      ok: false,
+      error: 'not a git repository'
+    })
+    vi.mocked(window.octopus.projects.readEnv).mockResolvedValue({ ok: true, value: 'A=1' })
+    const user = userEvent.setup()
+    await renderDialog()
+
+    await openSection(user, 'Env')
+
+    expect(await screen.findByDisplayValue('A=1')).toBeInTheDocument()
+    expect(screen.queryByText(/does not ignore/)).toBeNull()
+  })
+
   /*
    * Where a project cloned from GitHub gets its `.env` at all: the checkout is
    * a fresh clone, so there was never a gitignored file to carry, and these are

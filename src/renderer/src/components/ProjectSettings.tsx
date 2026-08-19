@@ -13,6 +13,7 @@ import { useTranslation } from 'react-i18next'
 import { shortBranchName } from '@core/branches.js'
 import { PROJECT_COLORS } from '@core/colors.js'
 import { PROJECT_ICONS } from '@core/icons.js'
+import { checkEnvBody } from '@core/envBlock.js'
 import { initials } from '@core/initials.js'
 import type { Project, ProjectPatch } from '@core/store.js'
 
@@ -39,6 +40,19 @@ interface ProjectSettingsProps {
    */
   readonly initialSection?: SectionId
 }
+
+/**
+ * What each kind of problem in an env block is called to the reader.
+ *
+ * Spelled out rather than built from the reason, so the locale files can be
+ * typed: a key assembled at runtime is a key TypeScript cannot check.
+ */
+const ENV_PROBLEMS = {
+  noAssignment: 'project.envNoAssignment',
+  badName: 'project.envBadName',
+  duplicate: 'project.envDuplicate',
+  unknownVariable: 'project.envUnknownVariable'
+} as const
 
 export type SectionId = 'general' | 'git' | 'scripts' | 'files' | 'env' | 'instructions' | 'danger'
 
@@ -88,6 +102,14 @@ export function ProjectSettings({
   const [section, setSection] = useState<SectionId>(initialSection ?? 'general')
   const [name, setName] = useState(project.name)
   const [envFile, setEnvFile] = useState(project.envFile)
+  /**
+   * Whether git would keep the env file out of a commit.
+   *
+   * `true` until answered, so the warning cannot flash on a file that turns
+   * out to be ignored after all — an alarm that appears and withdraws is worse
+   * than one that arrives a moment late.
+   */
+  const [envIgnored, setEnvIgnored] = useState(true)
   const [branches, setBranches] = useState<readonly string[]>([])
   const [error, setError] = useState<string | null>(null)
 
@@ -120,6 +142,22 @@ export function ProjectSettings({
 
     void onUpdate({ name: trimmed })
   }
+
+  useEffect(() => {
+    if (section !== 'env') return
+    const controller = new AbortController()
+
+    void (async () => {
+      const answer = await window.octopus.projects.isEnvIgnored(project.id)
+      // A git that could not answer is not evidence of exposure, so it says
+      // nothing rather than warning about a question nobody got to ask.
+      if (!controller.signal.aborted) setEnvIgnored(!answer.ok || answer.value)
+    })()
+
+    return () => {
+      controller.abort()
+    }
+  }, [section, project.id, project.envFile])
 
   const commitEnvFile = (): void => {
     const trimmed = envFile.trim()
@@ -376,6 +414,19 @@ export function ProjectSettings({
                   return result.ok ? result.value : null
                 }}
                 save={(contents) => void window.octopus.projects.saveEnv(project.id, contents)}
+                notes={(contents) => [
+                  // Only once there is something to expose. An empty block in a
+                  // file git does not ignore is a warning about nothing.
+                  ...(envIgnored || contents.trim() === ''
+                    ? []
+                    : [t('project.envNotIgnored', { file: project.envFile })]),
+                  ...checkEnvBody(contents).map((problem) =>
+                    t(ENV_PROBLEMS[problem.reason], {
+                      line: problem.line,
+                      subject: problem.subject
+                    })
+                  )
+                ]}
               />
             </>
           )}

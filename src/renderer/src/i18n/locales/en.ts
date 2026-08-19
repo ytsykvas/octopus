@@ -120,6 +120,13 @@ export const en = {
     env: 'Variables added to every workspace',
     envHint:
       'One KEY=value per line. Written at the end of the workspace\u2019s .env, so they win over whatever was copied — and they are the whole file where a clone had none to copy. $OCTOPUS_PORT becomes the workspace\u2019s own port, so a value naming one differs per workspace. Kept on this machine, never in the repository.',
+    envNotIgnored:
+      'git does not ignore {{file}} in this repository, so what you type here will show up in the workspace as a change — and can be committed. Add it to .gitignore.',
+    envNoAssignment: 'Line {{line}}: “{{subject}}” is not KEY=value, so nothing will read it.',
+    envBadName: 'Line {{line}}: “{{subject}}” is not a name an env file can hold.',
+    envDuplicate: 'Line {{line}}: {{subject}} is set again — only the last one counts.',
+    envUnknownVariable:
+      'Line {{line}}: ${{subject}} is not one of ours, so it stays in the file as text.',
     runScript: 'Server script',
     runScriptHint:
       'Starts the dev server. $OCTOPUS_PORT is set to the workspace\u2019s own port, so several can serve at once. Saved as run.sh.',

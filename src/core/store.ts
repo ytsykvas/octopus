@@ -18,7 +18,7 @@ import {
   ChatSchema
 } from './chats.js'
 import { nextProjectColor, type ProjectColor, ProjectColorSchema } from './colors.js'
-import { DEFAULT_ENV_FILE } from './env.js'
+import { DEFAULT_ENV_FILE } from './envBlock.js'
 import { ProjectIconSchema } from './icons.js'
 
 export {

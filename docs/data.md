@@ -446,7 +446,12 @@ rest of a workspace being prepared.
 
 `projects/<projectId>/env` holds variables typed in project settings, mode
 `0o600` because they are credentials. They are written into each workspace's
-`.env` — appended, between two markers:
+env file — `.env` unless the project says otherwise, since `.env` is only most
+stacks: Vite reads `.env.local` and would ignore anything written beside it. The
+name is a project field in `state.json`, defaulted rather than migrated, and
+refused if it climbs out of the worktree.
+
+Appended, between two markers:
 
 ```
 …everything carried from the checkout…
@@ -490,6 +495,13 @@ in one workspace and nowhere else.
 password frequently contains a `$`; substituting every `$word` would corrupt one
 silently. Anything unrecognised is left exactly as typed.
 
+The block is **checked as it is typed**, and the four things it looks for are
+the four that fail silently: a line that is not an assignment, a key no parser
+accepts, a key written twice — only the last counts — and a mistyped
+`$OCTOPUS_…`, which reaches the file as literal text. They are warnings and
+never a refusal: the file is read by somebody else's parser, and ours cannot be
+the authority on what that one accepts.
+
 Substituted on the way into the workspace, never in the stored block — the port
 can move between runs, and a stored number would be yesterday's. This is why a
 run **settles the port first and prepares second**: preparing first would write
@@ -501,6 +513,14 @@ workspace directory. `bin/rails console` will; a bare `psql` in the Terminal tab
 will not, because nothing exported them into the shell. That is the price of
 appending, and it is the right price — appending is what works when the app
 reads `.env` and the process environment does not reach it.
+
+**git has to be ignoring that file.** octopus writes credentials into a
+directory the agent commits from freely, so a repository whose `.gitignore` does
+not cover the env file turns the block into a change waiting to be committed —
+and a **tracked** env file is worse still. The checkout is asked with
+`git check-ignore`, which consults the index and so answers "no" to both, and
+the project's Env section says so while there is anything in the block to
+expose.
 
 Files and variables are put in place together, at creation and again before a
 run, so a workspace that predates either picks it up. The files go first: the

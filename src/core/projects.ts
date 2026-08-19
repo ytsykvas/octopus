@@ -15,7 +15,7 @@ import {
   repositoryName,
   toSlug
 } from './git.js'
-import { DEFAULT_ENV_FILE } from './env.js'
+import { DEFAULT_ENV_FILE } from './envBlock.js'
 import { nextProjectColor } from './colors.js'
 import type { Project, State } from './store.js'
 

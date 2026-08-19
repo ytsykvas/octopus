@@ -25,6 +25,7 @@ import {
   type GitExec,
   gitIn,
   hasCommits,
+  isIgnored,
   OUTPUT_TOO_LARGE,
   repositoryName,
   toSlug
@@ -411,4 +412,43 @@ describe('toSlug produces something git will accept as a branch', () => {
       await expect(exec(['branch', '--list', branch])).resolves.toContain(branch)
     })
   }
+})
+
+describe('isIgnored', () => {
+  /*
+   * Asked about the env file, which octopus writes into every worktree. A
+   * project whose `.gitignore` does not cover it gets a file full of
+   * credentials in `git status`, where the agent may commit it like anything
+   * else.
+   */
+  it('says yes to a path the repository ignores', async () => {
+    await initRepo(dir)
+    await writeFile(join(dir, '.gitignore'), '.env\n', 'utf8')
+
+    await expect(isIgnored(exec, '.env')).resolves.toBe(true)
+  })
+
+  it('says no to a path nothing ignores', async () => {
+    await initRepo(dir)
+
+    await expect(isIgnored(exec, '.env')).resolves.toBe(false)
+  })
+
+  // The worse case of the two, and it answers the same way: a tracked env file
+  // is already in the history.
+  it('says no to a path the repository tracks', async () => {
+    await initRepo(dir)
+    await writeFile(join(dir, '.env'), 'A=1\n', 'utf8')
+    await exec(['add', '.env'])
+    await exec(['commit', '-q', '-m', 'env'])
+    await writeFile(join(dir, '.gitignore'), '.env\n', 'utf8')
+
+    await expect(isIgnored(exec, '.env')).resolves.toBe(false)
+  })
+
+  // Exit 1 is an answer; anything else is git failing, and swallowing it would
+  // report "not ignored" about a question that was never asked.
+  it('lets a real failure through', async () => {
+    await expect(isIgnored(gitIn('/nowhere-at-all'), '.env')).rejects.toThrow(GitError)
+  })
 })

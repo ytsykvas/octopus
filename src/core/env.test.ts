@@ -4,14 +4,8 @@ import { join } from 'node:path'
 
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 
-import {
-  applyEnvOverrides,
-  projectEnvPath,
-  readProjectEnv,
-  substituteEnv,
-  type WorkspaceValues,
-  writeProjectEnv
-} from './env.js'
+import { applyEnvOverrides, projectEnvPath, readProjectEnv, writeProjectEnv } from './env.js'
+import type { WorkspaceValues } from './envBlock.js'
 
 let root: string
 let workspace: string
@@ -67,54 +61,6 @@ describe('readProjectEnv', () => {
 
     const mode = (await stat(projectEnvPath('planner', root))).mode & 0o777
     expect(mode).toBe(0o600)
-  })
-})
-
-describe('substituteEnv', () => {
-  /*
-   * The block is one text for the whole project and the port is the one thing
-   * that differs per workspace, so without this a value naming the port could
-   * not be written at all.
-   */
-  it('puts the workspace\u2019s own port where the block asks for it', () => {
-    expect(substituteEnv('URL=http://localhost:$OCTOPUS_PORT/auth', values())).toBe(
-      'URL=http://localhost:3100/auth'
-    )
-  })
-
-  it('reads the braced form too, since both get typed', () => {
-    expect(substituteEnv('URL=http://localhost:${OCTOPUS_PORT}/auth', values())).toBe(
-      'URL=http://localhost:3100/auth'
-    )
-  })
-
-  it('knows the rest of the block of ports', () => {
-    expect(substituteEnv('API=$OCTOPUS_PORT_1', values())).toBe('API=3101')
-  })
-
-  it('knows the checkout and the workspace by name', () => {
-    expect(
-      substituteEnv('DB=planner_$OCTOPUS_WORKSPACE_NAME\nROOT=$OCTOPUS_ROOT_PATH', values())
-    ).toBe('DB=planner_anna\nROOT=/Users/test/planner')
-  })
-
-  /*
-   * The reason only our own names are recognised. A value in an env file is
-   * frequently a password and a password frequently contains a `$`; mangling
-   * one silently is the worst way to lose an afternoon.
-   */
-  it('leaves a password holding a dollar exactly as it was typed', () => {
-    const password = 'PASSWORD=p$ssw0rd$HOME${weird}'
-
-    expect(substituteEnv(password, values())).toBe(password)
-  })
-
-  it('leaves a name of ours it does not recognise alone', () => {
-    expect(substituteEnv('X=$OCTOPUS_NOTHING', values())).toBe('X=$OCTOPUS_NOTHING')
-  })
-
-  it('changes nothing in a block that asks for nothing', () => {
-    expect(substituteEnv('MYSQL_HOST=dev.example', values())).toBe('MYSQL_HOST=dev.example')
   })
 })
 

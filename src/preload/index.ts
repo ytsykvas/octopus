@@ -402,6 +402,10 @@ const api = {
     saveEnv: (projectId: string, contents: string): Promise<Result<void>> =>
       ipcRenderer.invoke('env:save', projectId, contents) as Promise<Result<void>>,
 
+    /** Whether git would keep the env file out of a commit. */
+    isEnvIgnored: (projectId: string): Promise<Result<boolean>> =>
+      ipcRenderer.invoke('env:ignored', projectId) as Promise<Result<boolean>>,
+
     /**
      * Guidance for the agent; a missing one comes back as a template.
      *

@@ -10,6 +10,13 @@ interface FileEditorProps {
   /** Loads the current contents; a file that does not exist yields a template. */
   readonly read: () => Promise<string | null>
   readonly save: (contents: string) => void
+  /**
+   * What is wrong with the text as it stands, shown under the box.
+   *
+   * Warnings, never a refusal to save: the file is read by somebody else's
+   * parser, and ours cannot be the authority on what that one accepts.
+   */
+  readonly notes?: (contents: string) => readonly string[]
 }
 
 /**
@@ -25,7 +32,8 @@ export function FileEditor({
   placeholder,
   rows = 16,
   read,
-  save
+  save,
+  notes
 }: FileEditorProps): React.JSX.Element {
   const [body, setBody] = useState('')
   const [saved, setSaved] = useState('')
@@ -59,6 +67,10 @@ export function FileEditor({
     save(body)
   }
 
+  // Recomputed as it is typed, which is what makes a warning worth anything:
+  // told on blur, it arrives after the attention that could act on it.
+  const problems = notes?.(body) ?? []
+
   return (
     <Field label={label} hint={hint}>
       <textarea
@@ -72,6 +84,14 @@ export function FileEditor({
         placeholder={placeholder}
         className="focus-ring border-line bg-canvas w-full resize-y rounded-[var(--radius-control)] border px-2 py-1.5 font-mono text-[11px] leading-relaxed"
       />
+
+      {problems.length > 0 && (
+        <ul className="text-warning mt-1.5 space-y-0.5">
+          {problems.map((problem) => (
+            <li key={problem}>{problem}</li>
+          ))}
+        </ul>
+      )}
     </Field>
   )
 }

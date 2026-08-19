@@ -115,6 +115,29 @@ export async function findRepositoryRoot(exec: GitExec): Promise<string | null> 
   }
 }
 
+/**
+ * Whether git would keep this path out of a commit.
+ *
+ * Asked about the env file, which octopus writes into every worktree: a project
+ * whose `.gitignore` does not cover it gets a file full of credentials sitting
+ * in `git status`, where the agent is as free to commit it as anything else.
+ *
+ * `check-ignore` answers by exit status — 0 ignored, 1 not — so a rejection
+ * cannot simply be read as "no". Anything other than 1 is a real failure and
+ * stays one. The index is consulted, which is what makes a **tracked** env file
+ * answer "no" as well; that is the worse case of the two and deserves the same
+ * warning.
+ */
+export async function isIgnored(exec: GitExec, path: string): Promise<boolean> {
+  try {
+    await exec(['check-ignore', '-q', '--', path])
+    return true
+  } catch (error) {
+    if (error instanceof GitError && error.code === '1') return false
+    throw error
+  }
+}
+
 /** Whether the repository has at least one commit — an empty one cannot host a worktree. */
 export async function hasCommits(exec: GitExec): Promise<boolean> {
   try {

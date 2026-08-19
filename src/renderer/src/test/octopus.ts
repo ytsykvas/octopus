@@ -121,12 +121,17 @@ export function installOctopusStub(): Api {
       saveCarryList: vi.fn(() => ok(undefined)),
       readEnv: vi.fn(() => ok('')),
       saveEnv: vi.fn(() => ok(undefined)),
+      isEnvIgnored: vi.fn(() => ok(true)),
       readInstruction: vi.fn(() => ok('# Pull request descriptions\n')),
       saveInstruction: vi.fn(() => ok(undefined))
     }
   }
 
-  Object.defineProperty(window, 'octopus', { value: api, writable: true, configurable: true })
+  Object.defineProperty(window, 'octopus', {
+    value: api,
+    writable: true,
+    configurable: true
+  })
   return api
 }
 

@@ -137,6 +137,11 @@ describe('channel names', () => {
       () => method('projects', 'saveEnv')('p' as never, 'A=1' as never),
       'env:save'
     ],
+    [
+      'projects.isEnvIgnored',
+      () => method('projects', 'isEnvIgnored')('p' as never),
+      'env:ignored'
+    ],
     ['workspaces.port', () => method('workspaces', 'port')('w' as never), 'workspaces:port'],
     [
       'workspaces.serving',
@@ -251,12 +256,16 @@ describe('channel names', () => {
 describe('arguments reach main unchanged', () => {
   it('passes the project id and patch through', () => {
     method('projects', 'update')('planner' as never, { name: 'x' } as never)
-    expect(invoke).toHaveBeenCalledWith('projects:update', 'planner', { name: 'x' })
+    expect(invoke).toHaveBeenCalledWith('projects:update', 'planner', {
+      name: 'x'
+    })
   })
 
   it('passes removal options through', () => {
     method('workspaces', 'remove')('planner/anna' as never, { force: true } as never)
-    expect(invoke).toHaveBeenCalledWith('workspaces:remove', 'planner/anna', { force: true })
+    expect(invoke).toHaveBeenCalledWith('workspaces:remove', 'planner/anna', {
+      force: true
+    })
   })
 })
 
@@ -415,7 +424,11 @@ describe('the rest of the surface', () => {
       payload: unknown
     ) => void
 
-    const status = { chatId: 'chat-1', workspaceId: 'planner/kyiv', status: 'running' }
+    const status = {
+      chatId: 'chat-1',
+      workspaceId: 'planner/kyiv',
+      status: 'running'
+    }
     listener({}, status)
     expect(handler).toHaveBeenCalledWith(status)
 
