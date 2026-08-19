@@ -653,9 +653,15 @@ describe('ProjectSettings', () => {
     vi.mocked(window.octopus.projects.instructionSources).mockResolvedValue({
       ok: true,
       value: [
-        { id: 'projectMemory', path: '/repo/CLAUDE.md', present: true, count: null },
-        { id: 'projectSettings', path: '/repo/.claude/settings.json', present: false, count: null },
-        { id: 'commands', path: '/repo/.claude/commands', present: true, count: 3 }
+        { id: 'projectMemory', path: '/repo/CLAUDE.md', present: true, loaded: true, count: null },
+        {
+          id: 'projectSettings',
+          path: '/repo/.claude/settings.json',
+          present: false,
+          loaded: false,
+          count: null
+        },
+        { id: 'commands', path: '/repo/.claude/commands', present: true, loaded: true, count: 3 }
       ]
     })
     const user = userEvent.setup()
@@ -666,6 +672,35 @@ describe('ProjectSettings', () => {
     expect(await screen.findByText('CLAUDE.md in this repository')).toBeInTheDocument()
     expect(screen.getByText('3 loaded')).toBeInTheDocument()
     expect(screen.getByText('none')).toBeInTheDocument()
+  })
+
+  /*
+   * "On disk" is a stat and "read" is a claim about what the agent was started
+   * with. Saying the first under the second's name made this panel wrong in
+   * every mode at once — it read "loaded" for seven rows while the agent had
+   * been given no settings sources at all.
+   */
+  it('separates a file that is there from one the agent will read', async () => {
+    vi.mocked(window.octopus.projects.instructionSources).mockResolvedValue({
+      ok: true,
+      value: [
+        {
+          id: 'localSettings',
+          path: '/repo/.claude/settings.local.json',
+          present: true,
+          loaded: false,
+          count: null
+        },
+        { id: 'skills', path: '/repo/.claude/skills', present: true, loaded: true, count: 8 }
+      ]
+    })
+    const user = userEvent.setup()
+    await renderDialog()
+
+    await openSection(user, 'Instructions')
+
+    expect(await screen.findByText('on disk, not read')).toBeInTheDocument()
+    expect(screen.getByText('8 loaded')).toBeInTheDocument()
   })
 
   // A list that could not be read is not an empty project; it says nothing

@@ -52,7 +52,8 @@ const ENV_PROBLEMS = {
   noAssignment: 'project.envNoAssignment',
   badName: 'project.envBadName',
   duplicate: 'project.envDuplicate',
-  unknownVariable: 'project.envUnknownVariable'
+  unknownVariable: 'project.envUnknownVariable',
+  marker: 'project.envMarker'
 } as const
 
 /** What each source is called to the reader. */
@@ -60,10 +61,14 @@ const SOURCE_LABELS = {
   projectMemory: 'project.sourceProjectMemory',
   projectSettings: 'project.sourceProjectSettings',
   localSettings: 'project.sourceLocalSettings',
+  mcp: 'project.sourceMcp',
   userSettings: 'project.sourceUserSettings',
   userMemory: 'project.sourceUserMemory',
   commands: 'project.sourceCommands',
-  agents: 'project.sourceAgents'
+  agents: 'project.sourceAgents',
+  skills: 'project.sourceSkills',
+  userCommands: 'project.sourceUserCommands',
+  userAgents: 'project.sourceUserAgents'
 } as const
 
 export type SectionId = 'general' | 'git' | 'scripts' | 'files' | 'env' | 'instructions' | 'danger'
@@ -433,7 +438,7 @@ export function ProjectSettings({
 
               <FileEditor
                 label={t('project.env')}
-                hint={t('project.envHint')}
+                hint={t('project.envHint', { file: project.envFile })}
                 placeholder={'MYSQL_HOST=dev.example\nAPP_URL=http://localhost:$OCTOPUS_PORT'}
                 rows={12}
                 read={async () => {
@@ -467,15 +472,21 @@ export function ProjectSettings({
                 <ul className="max-w-lg space-y-1">
                   {sources.map((entry) => (
                     <li key={entry.id} className="flex items-baseline justify-between gap-3">
-                      <span className={entry.present ? '' : 'text-ink-faint'}>
+                      <span className={entry.loaded ? '' : 'text-ink-faint'}>
                         {t(SOURCE_LABELS[entry.id])}
                       </span>
+                      {/* Three answers, not two. "On disk" is a stat; "loaded"
+                          is a claim about what the agent was started with, and
+                          saying the first under the second's name made this
+                          panel wrong in every mode at once. */}
                       <span className="text-ink-faint font-mono text-[11px]">
-                        {entry.present
-                          ? entry.count === null
-                            ? t('project.sourcePresent')
-                            : t('project.sourceCount', { count: entry.count })
-                          : t('project.sourceAbsent')}
+                        {!entry.present
+                          ? t('project.sourceAbsent')
+                          : !entry.loaded
+                            ? t('project.sourceNotLoaded')
+                            : entry.count === null
+                              ? t('project.sourcePresent')
+                              : t('project.sourceCount', { count: entry.count })}
                       </span>
                     </li>
                   ))}

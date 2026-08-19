@@ -1,14 +1,24 @@
 /**
- * What a checkout and this machine offer the agent.
+ * What a workspace offers the agent, and whether the agent will read it.
  *
- * octopus loads every settings source, as the CLI does, so the agent arrives
- * carrying whatever the repository and the user have written for it. That is
- * the point — and it also means nobody can say from inside the app what the
- * agent is working from.
+ * octopus loads every settings source by default, as the CLI does, so the agent
+ * arrives carrying whatever the repository and the user have written for it.
+ * That is the point — and it also means nobody can say from inside the app what
+ * the agent is working from.
  *
- * This answers that by looking, not by guessing: the files are read off disk
- * rather than asked of the SDK, so the list is the same whether a session is
- * running or not.
+ * Two facts, kept apart on purpose. **Present** is a stat: the file is there.
+ * **Loaded** is a claim about the SDK, and it depends on `settingSources`, which
+ * the user can narrow to `project` or to nothing at all. Reporting the first
+ * under the word "loaded" is how the panel came to be wrong in all three modes
+ * at once.
+ *
+ * Read from the project's checkout, which is what the reader can open — but the
+ * agent runs in a **worktree**, and the two differ in one place that matters:
+ * `.claude/settings.local.json` is gitignored by Claude Code's own convention,
+ * so no worktree has it unless the project's carry list names it. Reporting it
+ * as loaded because the checkout has one was a systematic falsehood. `chats.ts`
+ * already writes the rule down: which commands exist is a fact about a working
+ * directory and the branch checked out in it.
  *
  * The first step of the skills feature, too. Once this can say what a project
  * offers, switching individual pieces on and off is a change to the list rather
@@ -19,7 +29,9 @@ import { readdir, stat } from 'node:fs/promises'
 import { homedir } from 'node:os'
 import { join } from 'node:path'
 
-/** One thing the agent may pick up, and whether it is actually there. */
+import type { SettingSourceName } from './config.js'
+
+/** One thing the agent may pick up, and what is true about it. */
 export interface InstructionSource {
   /** Stable name, so the interface can label it in the reader's language. */
   readonly id:
@@ -29,10 +41,17 @@ export interface InstructionSource {
     | 'userSettings'
     | 'userMemory'
     | 'commands'
+    | 'userCommands'
     | 'agents'
+    | 'userAgents'
+    | 'skills'
+    | 'mcp'
   /** Where it would be, so somebody can go and open it. */
   readonly path: string
+  /** It is on disk. */
   readonly present: boolean
+  /** The agent will read it — `present`, and its source is switched on. */
+  readonly loaded: boolean
   /**
    * How many entries a directory holds, or null for a single file.
    *
@@ -42,6 +61,30 @@ export interface InstructionSource {
    */
   readonly count: number | null
 }
+
+/**
+ * Which settings source each thing comes from.
+ *
+ * `project` is what loads `CLAUDE.md`, and it turns out to gate
+ * `.claude/commands/` too — measured, not read off the types. `.mcp.json` is
+ * read from the working directory on the same footing.
+ */
+const SOURCE_OF = {
+  projectMemory: 'project',
+  projectSettings: 'project',
+  commands: 'project',
+  agents: 'project',
+  skills: 'project',
+  mcp: 'project',
+  localSettings: 'local',
+  userSettings: 'user',
+  userMemory: 'user',
+  userCommands: 'user',
+  userAgents: 'user'
+} as const satisfies Record<InstructionSource['id'], SettingSourceName>
+
+/** Where the local settings sit, relative to a checkout — and to a worktree. */
+const LOCAL_SETTINGS = '.claude/settings.local.json'
 
 async function fileExists(path: string): Promise<boolean> {
   try {
@@ -55,56 +98,78 @@ async function fileExists(path: string): Promise<boolean> {
  * How many files a directory holds, or null where there is no directory.
  *
  * Files only: `.claude/commands/` may hold subdirectories that group commands,
- * and counting those as commands would overstate what the agent has.
+ * and counting those as commands would overstate what the agent has. Skills are
+ * the exception — one is a directory holding a `SKILL.md` — so they are counted
+ * by directory instead.
  */
-async function fileCount(path: string): Promise<number | null> {
+async function countIn(path: string, kind: 'files' | 'directories'): Promise<number | null> {
   try {
     const entries = await readdir(path, { withFileTypes: true })
-    return entries.filter((entry) => entry.isFile()).length
+    return entries.filter((entry) => (kind === 'files' ? entry.isFile() : entry.isDirectory()))
+      .length
   } catch {
     return null
   }
 }
 
 /**
- * Everything the agent working in this checkout may load.
+ * Everything the agent working in this directory may load.
  *
- * `home` is a parameter for the same reason it is one in `paths.ts`: a test
- * that needed the real home directory would be testing the machine it runs on.
+ * `carried` is the project's list of files copied into each workspace, which is
+ * the only way a gitignored file reaches the directory a session runs in.
+ *
+ * `home` is a parameter for the same reason it is one in `paths.ts`: a test that
+ * needed the real home directory would be testing the machine it runs on.
  */
 export async function instructionSources(
-  repoPath: string,
+  cwd: string,
+  sources: readonly SettingSourceName[],
+  carried: readonly string[] = [],
   home: string = homedir()
 ): Promise<InstructionSource[]> {
-  const claude = join(repoPath, '.claude')
+  const claude = join(cwd, '.claude')
   const userClaude = join(home, '.claude')
 
   const files = [
-    { id: 'projectMemory', path: join(repoPath, 'CLAUDE.md') },
+    { id: 'projectMemory', path: join(cwd, 'CLAUDE.md') },
     { id: 'projectSettings', path: join(claude, 'settings.json') },
-    { id: 'localSettings', path: join(claude, 'settings.local.json') },
+    { id: 'localSettings', path: join(cwd, LOCAL_SETTINGS) },
+    { id: 'mcp', path: join(cwd, '.mcp.json') },
     { id: 'userSettings', path: join(userClaude, 'settings.json') },
     { id: 'userMemory', path: join(userClaude, 'CLAUDE.md') }
   ] as const
 
   const directories = [
-    { id: 'commands', path: join(claude, 'commands') },
-    { id: 'agents', path: join(claude, 'agents') }
+    { id: 'commands', path: join(claude, 'commands'), holds: 'files' },
+    { id: 'agents', path: join(claude, 'agents'), holds: 'files' },
+    { id: 'skills', path: join(claude, 'skills'), holds: 'directories' },
+    { id: 'userCommands', path: join(userClaude, 'commands'), holds: 'files' },
+    { id: 'userAgents', path: join(userClaude, 'agents'), holds: 'files' }
   ] as const
+
+  const on = (id: InstructionSource['id'], present: boolean): boolean => {
+    if (!present || !sources.includes(SOURCE_OF[id])) return false
+
+    // The one row the checkout cannot answer for. A worktree holds what git
+    // tracks, and this file is gitignored — so it reaches a workspace only by
+    // being on the carry list.
+    if (id === 'localSettings') return carried.includes(LOCAL_SETTINGS)
+
+    return true
+  }
 
   return [
     ...(await Promise.all(
-      files.map(async ({ id, path }) => ({
-        id,
-        path,
-        present: await fileExists(path),
-        count: null
-      }))
+      files.map(async ({ id, path }) => {
+        const present = await fileExists(path)
+        return { id, path, present, loaded: on(id, present), count: null }
+      })
     )),
     ...(await Promise.all(
-      directories.map(async ({ id, path }) => {
-        const count = await fileCount(path)
-        return { id, path, present: count !== null, count }
+      directories.map(async ({ id, path, holds }) => {
+        const count = await countIn(path, holds)
+        const present = count !== null
+        return { id, path, present, loaded: on(id, present), count }
       })
     ))
   ]

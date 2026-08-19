@@ -45,10 +45,11 @@ import {
 import { type EditTarget, readChangeContext, readEditTarget } from './changeContext.js'
 import { readWorkspaceDiff, type WorkspaceDiff } from './diff.js'
 import { isListening, settlePort } from './ports.js'
-import { carryInto, readCarryList, writeCarryList } from './carry.js'
+import { carriedPaths, carryInto, readCarryList, writeCarryList } from './carry.js'
 import {
   applyEnvOverrides,
   discardIfOnlyBlock,
+  removeEnvBlock,
   readProjectEnv,
   readWorkspaceEnv,
   writeProjectEnv
@@ -1276,7 +1277,26 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
         await assertBranchExists(makeExec(project.repoPath), patch.baseBranch)
       }
 
+      const wasEnvFile = project.envFile
+
       await commit((current) => updateProject(current, projectId, patch))
+
+      /*
+       * The block in the file the project used to name.
+       *
+       * Nothing else would ever revisit it: `applyEnvOverrides` only touches
+       * the file named now, so every existing workspace kept a second, live
+       * block — credentials and a `$OCTOPUS_PORT` frozen at the moment of the
+       * switch — in a file its stack very likely still reads.
+       *
+       * After the commit, so a rejected patch leaves the old file alone.
+       */
+      const envFile = findProject(state, projectId)?.envFile
+      if (envFile !== undefined && envFile !== wasEnvFile) {
+        for (const workspace of workspacesOfProject(state, projectId)) {
+          await removeEnvBlock(workspace.path, wasEnvFile)
+        }
+      }
     },
 
     async listProjectBranches(projectId) {
@@ -1336,7 +1356,16 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
     },
 
     async projectInstructionSources(projectId) {
-      return instructionSources(requireProject(projectId).repoPath)
+      const project = requireProject(projectId)
+
+      // The mode, because "loaded" is a claim about the SDK and not about the
+      // disk; the carry list, because it is what puts a gitignored file into a
+      // worktree.
+      return instructionSources(
+        project.repoPath,
+        toSdkSettingSources(config.settingSources),
+        carriedPaths(await readCarryList(project.id, dataRoot))
+      )
     },
 
     async isProjectEnvIgnored(projectId) {
