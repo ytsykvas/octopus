@@ -187,6 +187,18 @@ export function RightPanel({
    * linked to the port the run had just moved away from.
    */
   const [settledPorts, setSettledPorts] = useState<Record<string, number>>({})
+  /*
+   * The env dialog belongs to the workspace it was opened from.
+   *
+   * Adjusted during render rather than in an effect, the way `useServingPort`
+   * does it: an effect runs after the paint, and the next workspace would show
+   * one frame of the last one's file.
+   */
+  const [envFor, setEnvFor] = useState(activeWorkspaceId)
+  if (envFor !== activeWorkspaceId) {
+    setEnvFor(activeWorkspaceId)
+    if (showingEnv) setShowingEnv(false)
+  }
   // One button that takes a workspace from a bare checkout to a running
   // server. It lives above both halves because neither half can see the other.
   const sequence = useRunSequence()
@@ -350,6 +362,20 @@ export function RightPanel({
       }}
       className="border-line bg-surface relative flex shrink-0 flex-col border-l"
     >
+      {/* Outside every tab pane, where the other dialogs of the app are.
+          Mounted inside one, it survived a tab change — the pane is hidden with
+          `display: none` rather than unmounted, so React never unmounted the
+          `Modal` and never called `close()`. The dialog stayed open in the top
+          layer, unpainted, and the whole window went inert. */}
+      {showingEnv && activeWorkspaceId !== null && (
+        <WorkspaceEnv
+          workspaceId={activeWorkspaceId}
+          onClose={() => {
+            setShowingEnv(false)
+          }}
+        />
+      )}
+
       <ResizeHandle
         width={applied}
         min={minWidth}
@@ -553,15 +579,6 @@ export function RightPanel({
             how Stop ends a run — the comment above says why at length — so a
             fold that removed it would kill a `setup.sh` half way through
             without saying so. */}
-        {showingEnv && activeWorkspaceId !== null && (
-          <WorkspaceEnv
-            workspaceId={activeWorkspaceId}
-            onClose={() => {
-              setShowingEnv(false)
-            }}
-          />
-        )}
-
         <section
           aria-label={t('scripts.build')}
           className={buildOpen ? 'flex min-h-0 flex-1 flex-col' : 'shrink-0'}
@@ -615,6 +632,10 @@ export function RightPanel({
                 {
                   id: 'show',
                   label: t('scripts.showEnv'),
+                  // Nothing to show without a workspace, and setting the flag
+                  // anyway armed a dialog that sprang open by itself on the
+                  // next one picked.
+                  disabled: activeWorkspaceId === null,
                   onSelect: () => {
                     setShowingEnv(true)
                   }

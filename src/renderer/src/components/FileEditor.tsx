@@ -87,8 +87,11 @@ export function FileEditor({
 
       {problems.length > 0 && (
         <ul className="text-warning mt-1.5 space-y-0.5">
-          {problems.map((problem) => (
-            <li key={problem}>{problem}</li>
+          {problems.map((problem, index) => (
+            // By position: one line can carry the same complaint twice — a
+            // variable misspelled the same way in two places — and identical
+            // strings collide as keys.
+            <li key={index}>{problem}</li>
           ))}
         </ul>
       )}

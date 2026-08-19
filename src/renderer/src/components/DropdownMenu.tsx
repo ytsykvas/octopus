@@ -14,6 +14,13 @@ export interface MenuAction {
   /** Renders the item in the danger colour — for actions that destroy something. */
   readonly destructive?: boolean
   /**
+   * The item is there but cannot be chosen.
+   *
+   * Shown rather than hidden: a menu whose contents move about is harder to
+   * learn than one where an item is visibly unavailable.
+   */
+  readonly disabled?: boolean
+  /**
    * Marks the item as one choice among several, and whether it is the current
    * one. Set it on every item of such a menu, not only the chosen one: it is
    * what turns them from commands into a group with a state, both for the eye
@@ -191,11 +198,12 @@ export function DropdownMenu({
                 {...(action.selected === undefined
                   ? { role: 'menuitem' }
                   : { role: 'menuitemradio', 'aria-checked': action.selected })}
+                disabled={action.disabled ?? false}
                 onClick={() => {
                   setOpen(false)
                   action.onSelect()
                 }}
-                className={`row focus-ring flex w-full items-center gap-2.5 px-2.5 py-1.5 text-left ${
+                className={`row focus-ring flex w-full items-center gap-2.5 px-2.5 py-1.5 text-left disabled:pointer-events-none disabled:opacity-40 ${
                   action.destructive === true
                     ? 'text-danger hover:bg-danger-bg'
                     : 'text-ink-soft hover:text-ink'

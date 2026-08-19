@@ -834,6 +834,37 @@ describe('RightPanel', () => {
     expect(screen.queryByText(/A=1/)).toBeNull()
   })
 
+  // The dialog belongs to the workspace it was opened from; carrying it to the
+  // next one would show that one's file under this one's name.
+  it('closes the env when the workspace changes', async () => {
+    vi.mocked(octopus().workspaces.env).mockResolvedValue({ ok: true, value: 'A=1\n' })
+    const { rerender } = renderPanel({
+      workspaces: [anna, bob],
+      activeWorkspaceId: anna.id,
+      scriptPaths: SCRIPTS
+    })
+
+    await userEvent.click(scriptsTab())
+    await userEvent.click(within(buildSection()).getByRole('button', { name: 'Env' }))
+    await userEvent.click(screen.getByRole('menuitem', { name: "This workspace's env" }))
+    await screen.findByText(/A=1/)
+
+    rerender({ activeWorkspaceId: bob.id })
+
+    expect(screen.queryByText(/A=1/)).toBeNull()
+  })
+
+  // Nothing to show, so the item cannot be chosen — setting the flag anyway
+  // armed a dialog that sprang open by itself on the next workspace picked.
+  it('offers no env to show with no workspace selected', async () => {
+    renderPanel({ workspaces: [], activeWorkspaceId: null, scriptPaths: SCRIPTS })
+
+    await userEvent.click(scriptsTab())
+    await userEvent.click(within(buildSection()).getByRole('button', { name: 'Env' }))
+
+    expect(screen.getByRole('menuitem', { name: "This workspace's env" })).toBeDisabled()
+  })
+
   it('says so where the workspace has no env file at all', async () => {
     vi.mocked(octopus().workspaces.env).mockResolvedValue({ ok: true, value: null })
     renderPanel({ workspaces: [anna], activeWorkspaceId: anna.id, scriptPaths: SCRIPTS })
