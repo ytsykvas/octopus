@@ -21,6 +21,7 @@ import { dirname } from 'node:path'
 import { z } from 'zod'
 
 import { archiveScript, projectScriptsDir, runScript, setupScript } from './paths.js'
+import { blockPorts } from './ports.js'
 import type { ProjectId } from './types.js'
 
 export const ScriptKindSchema = z.enum(['setup', 'run', 'archive'])
@@ -69,7 +70,20 @@ export function scriptEnv(
     [WORKSPACE_VARIABLE]: values.workspaceName
   }
 
-  if (kind === 'run') env[PORT_VARIABLE] = String(values.port)
+  /*
+   * Ten, not one, and each named rather than left to arithmetic.
+   *
+   * A stack is often more than one process — a dev server, an API, a
+   * mailcatcher — and the second had nowhere to go but a number nothing was
+   * holding for it. Conductor documents a range and leaves the sums to the
+   * script; a variable per port is the same thing somebody can discover.
+   */
+  if (kind === 'run') {
+    blockPorts(values.port).forEach((port, offset) => {
+      env[offset === 0 ? PORT_VARIABLE : `${PORT_VARIABLE}_${String(offset)}`] = String(port)
+    })
+  }
+
   return env
 }
 
@@ -104,7 +118,8 @@ const TEMPLATES: Record<ScriptKind, string> = {
   run: `#!/bin/sh
 # Starts the dev server for this workspace.
 # $${PORT_VARIABLE} is set for you — each workspace gets its own port, so
-# several can run at once.
+# several can run at once. Nine more come with it, $${PORT_VARIABLE}_1 through
+# $${PORT_VARIABLE}_9, for whatever else this stack needs to listen on.
 
 # npm run dev -- --port "$${PORT_VARIABLE}"
 `

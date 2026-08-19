@@ -10,6 +10,7 @@ import type { Chat } from './chats.js'
 import { GitError, type GitExec, gitIn } from './git.js'
 import { NAME_POOL_SIZE, type Random, WORKSPACE_NAMES } from './names.js'
 import { addProject, EMPTY_STATE, type Project, type State, type Workspace } from './store.js'
+import { POOL_START } from './ports.js'
 import { listWorktrees } from './worktree.js'
 import {
   branchFor,
@@ -76,6 +77,23 @@ async function create(): Promise<Workspace> {
   state = { ...state, workspaces: [...state.workspaces, workspace] }
   return workspace
 }
+
+describe('a pool with nothing free in it', () => {
+  /*
+   * Everything else about the workspace works, so refusing to make it would
+   * cost more than the clash. A port that is taken says so the moment a server
+   * binds — in the script's own words rather than an invented failure of ours.
+   */
+  it('falls back to the first block rather than refusing', async () => {
+    const workspace = await createWorkspace(project, state, exec, {
+      root,
+      random: first,
+      answers: () => Promise.resolve(true)
+    })
+
+    expect(workspace.port).toBe(POOL_START)
+  })
+})
 
 describe('branchFor', () => {
   it('joins the prefix and a slugged name', () => {

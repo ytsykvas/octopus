@@ -127,6 +127,7 @@ describe('channel names', () => {
       'instructions:read'
     ],
     ['workspaces.carry', () => method('workspaces', 'carry')('w' as never), 'carry:apply'],
+    ['workspaces.port', () => method('workspaces', 'port')('w' as never), 'workspaces:port'],
     [
       'workspaces.serving',
       () => method('workspaces', 'serving')('w' as never),

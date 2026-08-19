@@ -33,6 +33,13 @@ export { PROJECT_ICONS, type ProjectIcon } from './icons.js'
 import { stateFile, stateTempFile } from './paths.js'
 import { readJsonFile, writeJsonFile } from './persist.js'
 
+/*
+ * The widest a stored port may be, not where one comes from.
+ *
+ * Allocation moved to `ports.ts`, which hands out blocks from a small pool —
+ * but a workspace made before that keeps the port it was given, and this has to
+ * keep loading it.
+ */
 export const PORT_RANGE_START = 3000
 export const PORT_RANGE_END = 9000
 
@@ -228,30 +235,6 @@ export async function saveState(
   tempPath: string = stateTempFile()
 ): Promise<void> {
   await writeJsonFile(filePath, StateSchema, state, tempPath)
-}
-
-/**
- * Derives a workspace port deterministically from its id.
- *
- * Determinism matters: the port must stay the same across restarts so browser
- * bookmarks keep working. Taken ports are passed in separately to keep the
- * function pure.
- */
-export function assignPort(workspaceId: string, taken: readonly number[] = []): number {
-  const span = PORT_RANGE_END - PORT_RANGE_START + 1
-
-  let hash = 0
-  for (const char of workspaceId) {
-    hash = (hash * 31 + char.charCodeAt(0)) % span
-  }
-
-  const busy = new Set(taken)
-  for (let offset = 0; offset < span; offset++) {
-    const port = PORT_RANGE_START + ((hash + offset) % span)
-    if (!busy.has(port)) return port
-  }
-
-  throw new StateConflictError('No free ports left in the 3000-9000 range')
 }
 
 export function findProject(state: State, projectId: string): Project | undefined {

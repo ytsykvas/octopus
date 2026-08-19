@@ -568,6 +568,13 @@ session has to be gone before the new one binds, and `dispose` answers when it
 is rather than when it was asked, so the second server no longer fails on a port
 the first has not let go of yet.
 
+**The number can change between runs, and nothing announces it.** A port free
+when the workspace was made can belong to something else by the time anybody
+runs it, so before a server starts — and only while nothing of that workspace is
+alive — it is checked, and a taken one moves to a free block. The row already
+shows the port and the link already follows it, so a sentence saying it moved
+would be telling the reader something two other things on screen already say.
+
 **The port is checked, and only said.** octopus assigns one, hands it over as
 `$OCTOPUS_PORT` and links to it, and a script is free to ignore all of that: a
 `run.sh` of `rails s` binds 3000 whatever it was told, and the link then opens on

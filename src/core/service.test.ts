@@ -1,4 +1,5 @@
 import { execFile } from 'node:child_process'
+import { createServer } from 'node:net'
 import {
   access,
   chmod,
@@ -31,6 +32,7 @@ import {
   type OctopusService,
   type WorkspaceStatusEvent
 } from './service.js'
+import { BLOCK, POOL_START } from './ports.js'
 import { listWorktrees } from './worktree.js'
 import { WorkspaceError } from './workspaces.js'
 
@@ -957,6 +959,75 @@ describe('files carried into a workspace', () => {
     await expect(service.readProjectCarryList('missing')).rejects.toThrow()
     await expect(service.saveProjectCarryList('missing', '.env')).rejects.toThrow()
     await expect(service.carryIntoWorkspace('missing')).rejects.toThrow()
+  })
+})
+
+describe('the port a workspace serves on', () => {
+  async function withWorkspace(): Promise<{ id: string; port: number }> {
+    const repo = join(dir, 'planner')
+    await initRepo(repo)
+    const project = await service.addProjectFromPath(repo)
+    const workspace = await service.createWorkspaceIn(project.id)
+    return { id: workspace.id, port: workspace.port }
+  }
+
+  // A pool of blocks, lowest first, so the numbers read in the order the
+  // workspaces were made.
+  it('hands out a block from the pool', async () => {
+    const { port } = await withWorkspace()
+
+    expect(port).toBe(POOL_START)
+  })
+
+  it('gives the next workspace the next block', async () => {
+    const repo = join(dir, 'planner')
+    await initRepo(repo)
+    const project = await service.addProjectFromPath(repo)
+
+    const first = await service.createWorkspaceIn(project.id)
+    const second = await service.createWorkspaceIn(project.id)
+
+    expect(second.port).toBe(first.port + BLOCK)
+  })
+
+  // Nothing of ours is running, so whatever answers is somebody else's — which
+  // is exactly what makes the answer knowable here.
+  it('keeps the port when nothing is answering on it', async () => {
+    const { id, port } = await withWorkspace()
+
+    await expect(service.ensureWorkspacePort(id)).resolves.toBe(port)
+  })
+
+  /*
+   * The whole point. A port free when the workspace was made can belong to
+   * something else by the time anybody runs it, and the old scheme handed it
+   * out anyway — the server then failed as it bound, blaming itself.
+   */
+  it('moves to a free block when something has taken its port', async () => {
+    const { id, port } = await withWorkspace()
+    // A second workspace, so the block it holds is one this move steps over.
+    const project = service.listProjects()[0]
+    await service.createWorkspaceIn(project?.id ?? '')
+
+    const squatter = createServer()
+    await new Promise<void>((resolve) => {
+      squatter.listen(port, '127.0.0.1', resolve)
+    })
+
+    try {
+      const settled = await service.ensureWorkspacePort(id)
+
+      expect(settled).not.toBe(port)
+      // Persisted, not just answered: the pane and the link both read it back.
+      expect(service.listWorkspaces.length).toBeGreaterThan(0)
+      await expect(service.ensureWorkspacePort(id)).resolves.toBe(settled)
+    } finally {
+      await new Promise((resolve) => squatter.close(resolve))
+    }
+  })
+
+  it('refuses to settle a port for a workspace that does not exist', async () => {
+    await expect(service.ensureWorkspacePort('missing')).rejects.toThrow()
   })
 })
 

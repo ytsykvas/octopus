@@ -121,6 +121,14 @@ A **project** is a repository that has been added: `id`, `name`, `repoPath`,
 A **workspace** is a git worktree: `id`, `projectId`, `name`, `branch`, `path`,
 `status`, `port`, `createdAt`, `ownerId`.
 
+`port` is **allocated, not derived**. It used to be a hash of the id, so it
+survived a restart and a bookmark kept working — but the hash asked only our own
+records whether a port was free, and one another application was holding got
+handed out anyway. Now it is the lowest block of ten in the pool that no
+workspace holds and nothing answers on, and it can change: a run whose port has
+been taken since moves to a free block. A bookmark can therefore go stale, which
+is a smaller cost than a server that cannot start.
+
 `status` is `idle`, `running`, `waiting_permission` or `error`, and
 the workspace list draws it — which is how work in a workspace nobody is looking
 at becomes visible at all. It is **settled on load**: `running` and

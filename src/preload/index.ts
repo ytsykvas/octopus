@@ -328,7 +328,16 @@ const api = {
 
     /** Whether anything is listening on the port this workspace was given. */
     serving: (workspaceId: string): Promise<Result<boolean>> =>
-      ipcRenderer.invoke('workspaces:serving', workspaceId) as Promise<Result<boolean>>
+      ipcRenderer.invoke('workspaces:serving', workspaceId) as Promise<Result<boolean>>,
+
+    /**
+     * The port to serve on, moved if the old one has been taken since.
+     *
+     * Asked before a run rather than remembered: a port free when the workspace
+     * was made can belong to something else by the time anybody runs it.
+     */
+    port: (workspaceId: string): Promise<Result<number>> =>
+      ipcRenderer.invoke('workspaces:port', workspaceId) as Promise<Result<number>>
   },
 
   files: {

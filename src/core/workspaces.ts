@@ -16,7 +16,8 @@ import type { AgentKind, Chat, ChatStatus } from './chats.js'
 import { anyBranchExists, type GitExec, toSlug } from './git.js'
 import { nextWorkspaceName, type Random } from './names.js'
 import { workspacePath } from './paths.js'
-import { assignPort, type Project, type State, type Workspace } from './store.js'
+import { firstFreeBlock, POOL_START } from './ports.js'
+import type { Project, State, Workspace } from './store.js'
 import {
   addWorktree,
   changedFiles,
@@ -126,6 +127,8 @@ interface CreateOptions {
   readonly exists?: (path: string) => Promise<boolean>
   /** Injectable so tests get a fixed name instead of a random one. */
   readonly random?: Random
+  /** Injectable so a test never opens a socket to find a free port. */
+  readonly answers?: (port: number) => Promise<boolean>
 }
 
 /**
@@ -177,10 +180,18 @@ export async function createWorkspace(
     branch,
     path: await canonicalPath(exec, branch, path),
     status: 'idle',
-    port: assignPort(
-      id,
-      state.workspaces.map((workspace) => workspace.port)
-    ),
+    /*
+     * The lowest block nothing is using. A pool that is entirely spoken for
+     * falls back to its first block rather than refusing to make the
+     * workspace: everything else about it works, and a port that clashes says
+     * so the moment a server binds — which is the script's own words rather
+     * than an invented failure from us.
+     */
+    port:
+      (await firstFreeBlock(
+        state.workspaces.map((workspace) => workspace.port),
+        options.answers
+      )) ?? POOL_START,
     createdAt: new Date().toISOString(),
     ownerId: null
   }

@@ -11,7 +11,6 @@ import {
   AgentModelSchema,
   addProject,
   addWorkspace,
-  assignPort,
   type Chat,
   chatsOfWorkspace,
   commandsUnchanged,
@@ -22,8 +21,6 @@ import {
   migrate,
   modelsUnchanged,
   PROJECT_COLORS,
-  PORT_RANGE_END,
-  PORT_RANGE_START,
   type Project,
   rememberModels,
   removeProject,
@@ -267,59 +264,6 @@ describe('migration', () => {
     }
 
     expect(migrate(stored).projects[1]?.color).not.toBe(PROJECT_COLORS[0])
-  })
-})
-
-describe('assignPort', () => {
-  it('returns the same port for the same workspace', () => {
-    expect(assignPort('kyiv')).toBe(assignPort('kyiv'))
-  })
-
-  it('stays within the allowed range', () => {
-    for (const id of ['kyiv', 'lviv', 'osaka', 'a', 'a-very-long-workspace-name']) {
-      const port = assignPort(id)
-      expect(port).toBeGreaterThanOrEqual(PORT_RANGE_START)
-      expect(port).toBeLessThanOrEqual(PORT_RANGE_END)
-    }
-  })
-
-  it('skips ports already taken', () => {
-    const first = assignPort('kyiv')
-    expect(assignPort('kyiv', [first])).not.toBe(first)
-  })
-
-  it('usually gives different workspaces different ports', () => {
-    expect(assignPort('kyiv')).not.toBe(assignPort('lviv'))
-  })
-
-  it('is stable for the same id, so a restart keeps the port', () => {
-    expect(assignPort('planner/anna')).toBe(assignPort('planner/anna'))
-  })
-
-  it('stays in range for an id that is empty or non-Latin', () => {
-    for (const id of ['', 'проєкт/гілка', '🎉']) {
-      const port = assignPort(id)
-      expect(port).toBeGreaterThanOrEqual(PORT_RANGE_START)
-      expect(port).toBeLessThanOrEqual(PORT_RANGE_END)
-    }
-  })
-
-  // The hash collides long before the range fills; what matters is that a
-  // collision walks on to a free port rather than handing out a taken one.
-  it('never hands out a port already in use', () => {
-    const ports = new Set<number>()
-
-    for (let i = 0; i < 500; i++) {
-      const port = assignPort(`planner/w-${String(i)}`, [...ports])
-      expect(ports.has(port)).toBe(false)
-      ports.add(port)
-    }
-  })
-
-  it('throws when the whole range is taken', () => {
-    const span = PORT_RANGE_END - PORT_RANGE_START + 1
-    const all = Array.from({ length: span }, (_, i) => PORT_RANGE_START + i)
-    expect(() => assignPort('kyiv', all)).toThrow(StateConflictError)
   })
 })
 

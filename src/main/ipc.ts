@@ -237,6 +237,12 @@ export function registerIpc(
     attempt(() => service.isWorkspaceServing(workspaceId))
   )
 
+  // Asked before a run, and only while nothing of this workspace is alive —
+  // which is what lets it treat anything on the port as somebody else's.
+  host.handle('workspaces:port', (_event, workspaceId: string) =>
+    attempt(() => service.ensureWorkspacePort(workspaceId))
+  )
+
   // `null` is the installation's own instruction rather than a project's, which
   // is why the id is not narrowed to a string here.
   host.handle('instructions:read', (_event, projectId: string | null, kind: unknown) =>

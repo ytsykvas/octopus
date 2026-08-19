@@ -57,7 +57,7 @@ Nothing but zod behind them, so a **value** can cross into the window.
 | [`scripts.ts`](../src/core/scripts.ts)           | `setup.sh`, `run.sh` and `archive.sh`, and the environment each is given                                          |
 | [`archive.ts`](../src/core/archive.ts)           | running the cleanup script on the way out, without letting it block a removal                                     |
 | [`carry.ts`](../src/core/carry.ts)               | which of the checkout's gitignored files travel into a workspace, and copying them                                |
-| [`ports.ts`](../src/core/ports.ts)               | whether anything is listening where a workspace was told to serve                                                 |
+| [`ports.ts`](../src/core/ports.ts)               | which block of ten a workspace gets, and whether anything is already answering there                              |
 | [`instructions.ts`](../src/core/instructions.ts) | prose handed to the agent, per project and for the installation; `effectiveInstruction` is the order between them |
 | [`agent.ts`](../src/core/agent.ts)               | the Agent SDK: session lifecycle and event mapping                                                                |
 

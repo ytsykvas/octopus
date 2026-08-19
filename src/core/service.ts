@@ -44,7 +44,7 @@ import {
 } from './chats.js'
 import { type EditTarget, readChangeContext, readEditTarget } from './changeContext.js'
 import { readWorkspaceDiff, type WorkspaceDiff } from './diff.js'
-import { isListening } from './ports.js'
+import { isListening, settlePort } from './ports.js'
 import { carryInto, readCarryList, writeCarryList } from './carry.js'
 import { runArchiveScript } from './archive.js'
 import { type Config, ConfigSchema, loadConfig, saveConfig, toSdkSettingSources } from './config.js'
@@ -295,6 +295,15 @@ export interface OctopusService {
    * a script that ignores `$OCTOPUS_PORT` makes our own record of it a lie.
    */
   isWorkspaceServing(workspaceId: string): Promise<boolean>
+
+  /**
+   * The port this workspace should serve on, moving it if the old one is gone.
+   *
+   * Asked before a run starts and only while nothing of this workspace is
+   * alive, which is what makes the answer knowable: with nothing of ours
+   * running, whatever is answering on that port belongs to somebody else.
+   */
+  ensureWorkspacePort(workspaceId: string): Promise<number>
 
   /**
    * Guidance handed to the agent, or a starting template if none is written.
@@ -1267,6 +1276,25 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
 
     async isWorkspaceServing(workspaceId) {
       return isListening(requireWorkspace(workspaceId).port)
+    },
+
+    async ensureWorkspacePort(workspaceId) {
+      const workspace = requireWorkspace(workspaceId)
+
+      const free = await settlePort(
+        workspace.port,
+        state.workspaces.flatMap((other) => (other.id === workspaceId ? [] : [other.port]))
+      )
+      if (free === workspace.port) return free
+
+      await commit((current) => ({
+        ...current,
+        workspaces: current.workspaces.map((other) =>
+          other.id === workspaceId ? { ...other, port: free } : other
+        )
+      }))
+
+      return free
     },
 
     async readProjectInstruction(projectId, kind) {

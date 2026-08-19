@@ -105,7 +105,7 @@ function Runner({
   workspace,
   kind,
   scriptPath,
-  port,
+  port: recordedPort,
   rootPath,
   startToken,
   stopToken,
@@ -123,6 +123,15 @@ function Runner({
   const [started, setStarted] = useState(false)
   const [running, setRunning] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  /*
+   * The port this half is serving on.
+   *
+   * Held rather than taken from the prop each render: the prop is what the
+   * workspace was last recorded with, and a run that had to move needs the
+   * number it actually moved to — on the row, in the link, and in the script's
+   * environment.
+   */
+  const [port, setPort] = useState(recordedPort)
 
   /*
    * The stop token as the run loop sees it.
@@ -177,6 +186,26 @@ function Runner({
         // A sequence waiting on this half would otherwise wait for ever.
         onOutcome?.(false)
         return
+      }
+
+      /*
+       * The port, settled before anything binds it.
+       *
+       * A port free when this workspace was made can belong to something else
+       * by now, and the answer is only knowable while nothing of ours is alive
+       * here — so it is asked on the way into a run rather than remembered.
+       */
+      if (kind === 'run') {
+        const settled = await window.octopus.workspaces.port(workspace.id)
+        if (latestStop.current !== stopWhenAsked) return
+
+        if (!settled.ok) {
+          setError(describeFailure(settled))
+          onOutcome?.(false)
+          return
+        }
+
+        setPort(settled.value)
       }
 
       setError(null)

@@ -276,6 +276,7 @@ describe('channel table', () => {
     'carry:save',
     'carry:apply',
     'workspaces:serving',
+    'workspaces:port',
     'instructions:read',
     'instructions:save',
     'instructions:effective',
@@ -714,6 +715,18 @@ describe('scripts and instructions of a real project', () => {
     await expect(invoke('workspaces:serving', workspace.id)).resolves.toEqual({
       ok: true,
       value: false
+    })
+  })
+
+  // Asked on the way into a run: a port free when the workspace was made can
+  // belong to something else by then.
+  it('settles the port a workspace should serve on', async () => {
+    const projectId = await addProject()
+    const workspace = await createWorkspace(projectId)
+
+    await expect(invoke('workspaces:port', workspace.id)).resolves.toEqual({
+      ok: true,
+      value: workspace.port
     })
   })
 

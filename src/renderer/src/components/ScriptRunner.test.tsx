@@ -150,6 +150,98 @@ describe('ScriptRunner', () => {
    * project is opened, so a half that started from zero re-ran its script with
    * nobody pressing anything — for every workspace, not only the one on screen.
    */
+  /*
+   * A port free when the workspace was made can belong to something else by the
+   * time anybody runs it, and the old scheme handed it out anyway — the server
+   * then failed as it bound, blaming itself.
+   */
+  it('serves on the port it was moved to, not the one on record', async () => {
+    vi.mocked(octopus().workspaces.port).mockResolvedValue({ ok: true, value: 3220 })
+
+    mountAndStart({
+      workspace: anna,
+      kind: 'run',
+      scriptPath: RUN_SCRIPT,
+      port: 3111,
+      rootPath: '/Users/test/planner',
+      onOpenSettings: vi.fn()
+    })
+    await sessionsOpened(1)
+
+    expect(octopus().terminal.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        env: expect.objectContaining({ OCTOPUS_PORT: '3220' }) as unknown
+      })
+    )
+    expect(await screen.findByText('OCTOPUS_PORT=3220')).toBeInTheDocument()
+  })
+
+  // The same window as the env write, one step later: a stop that lands while
+  // the port is being settled asked for nothing to be running.
+  it('abandons a start that was stopped while the port was being settled', async () => {
+    const gate: { release: (() => void) | null } = { release: null }
+    vi.mocked(octopus().workspaces.port).mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          gate.release = () => {
+            resolve({ ok: true, value: 3220 })
+          }
+        })
+    )
+
+    const { rerender } = mountAndStart({
+      workspace: anna,
+      kind: 'run',
+      scriptPath: RUN_SCRIPT,
+      port: 3111,
+      rootPath: '/Users/test/planner',
+      onOpenSettings: vi.fn()
+    })
+
+    await waitFor(() => {
+      expect(gate.release).not.toBeNull()
+    })
+
+    rerender({ stopToken: 1 })
+    await act(async () => {
+      gate.release?.()
+      await Promise.resolve()
+    })
+
+    expect(octopus().terminal.create).not.toHaveBeenCalled()
+  })
+
+  // The build binds nothing, so there is nothing to settle for it.
+  it('does not ask about a port for the build', async () => {
+    mountAndStart({
+      workspace: anna,
+      kind: 'setup',
+      scriptPath: SETUP_SCRIPT,
+      port: 3111,
+      rootPath: '/Users/test/planner',
+      onOpenSettings: vi.fn()
+    })
+    await sessionsOpened(1)
+
+    expect(octopus().workspaces.port).not.toHaveBeenCalled()
+  })
+
+  it('says so and starts nothing when the port cannot be settled', async () => {
+    vi.mocked(octopus().workspaces.port).mockResolvedValue({ ok: false, error: 'no workspace' })
+
+    mountAndStart({
+      workspace: anna,
+      kind: 'run',
+      scriptPath: RUN_SCRIPT,
+      port: 3111,
+      rootPath: '/Users/test/planner',
+      onOpenSettings: vi.fn()
+    })
+
+    expect(await screen.findByText(/no workspace/)).toBeInTheDocument()
+    expect(octopus().terminal.create).not.toHaveBeenCalled()
+  })
+
   it('runs nothing when it mounts with a token already standing', () => {
     render(
       <ScriptRunner
@@ -220,11 +312,14 @@ describe('ScriptRunner', () => {
     expect(octopus().terminal.create).toHaveBeenCalledWith(
       expect.objectContaining({
         command: [RUN_SCRIPT],
-        env: {
+        env: expect.objectContaining({
           OCTOPUS_ROOT_PATH: '/Users/test/planner',
           OCTOPUS_WORKSPACE_NAME: 'anna',
-          OCTOPUS_PORT: '3111'
-        }
+          OCTOPUS_PORT: '3111',
+          // Nine more come with it, for whatever else the stack listens on.
+          OCTOPUS_PORT_1: '3112',
+          OCTOPUS_PORT_9: '3120'
+        }) as unknown
       })
     )
   })
