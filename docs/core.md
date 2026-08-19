@@ -27,14 +27,14 @@ Nothing but zod behind them, so a **value** can cross into the window.
 
 ### Storage
 
-| Module                                             | What it decides                                                |
-| -------------------------------------------------- | -------------------------------------------------------------- |
-| [`paths.ts`](../src/core/paths.ts)                 | every path under `~/.octopus`, in one place                    |
-| [`persist.ts`](../src/core/persist.ts)             | atomic writes, validated reads, honest failures                |
-| [`config.ts`](../src/core/config.ts)               | settings and their bounds                                      |
-| [`store.ts`](../src/core/store.ts)                 | projects, workspaces and chats, and the migrations             |
-| [`transcript.ts`](../src/core/transcript.ts)       | chat history as append-only JSONL                              |
-| [`changeContext.ts`](../src/core/changeContext.ts) | the lines an edit landed among, read while they are still true |
+| Module                                             | What it decides                                                     |
+| -------------------------------------------------- | ------------------------------------------------------------------- |
+| [`paths.ts`](../src/core/paths.ts)                 | every path under `~/.octopus`, in one place                         |
+| [`persist.ts`](../src/core/persist.ts)             | atomic writes of JSON and of text, validated reads, honest failures |
+| [`config.ts`](../src/core/config.ts)               | settings and their bounds                                           |
+| [`store.ts`](../src/core/store.ts)                 | projects, workspaces and chats, and the migrations                  |
+| [`transcript.ts`](../src/core/transcript.ts)       | chat history as append-only JSONL                                   |
+| [`changeContext.ts`](../src/core/changeContext.ts) | the lines an edit landed among, read while they are still true      |
 
 ### git
 
@@ -304,7 +304,19 @@ does not draw it.
 
 `persist.ts` writes to a fixed temporary path and renames it, so two saves in
 flight race for that one file — the first rename wins and the second fails with
-`ENOENT`. Agent events arrive from a callback nobody awaits, so a status change
+`ENOENT`.
+
+`writeTextFile` shares that mechanism, and the env block is written through it
+with no queue in front. The race is bounded rather than prevented, which is
+deliberate: writing the block is idempotent and convergent — every run strips any
+block of ours and appends a fresh one — so two of them land the same file, and
+the only cost of losing the race is one spurious `ENOENT`. A queue would buy
+nothing here, and a lock file would live inside somebody's repository.
+
+That function also **re-asserts the mode** rather than passing it to `writeFile`,
+whose `mode` option reaches `open(2)` and is ignored unless the call creates the
+file. Appending credentials to a `.env` carried in from a checkout would
+otherwise leave it as readable as the copy was. Agent events arrive from a callback nobody awaits, so a status change
 from the agent and one the user asked for genuinely do land together. `commit`
 serialises them, and takes a **function** of the current state rather than a
 finished one: a queued write computed from a stale snapshot would silently undo

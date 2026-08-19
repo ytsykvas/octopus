@@ -522,6 +522,13 @@ and a **tracked** env file is worse still. The checkout is asked with
 the project's Env section says so while there is anything in the block to
 expose.
 
+The file is **replaced, not rewritten in place** — written beside itself and
+renamed over, which is atomic on POSIX. A dev server reads its `.env` at boot and
+`run.sh` starts moments after the block was written; truncating in place leaves a
+window in which a variable silently has no value, and nothing reports that as an
+error. The rename also carries the mode with it, which is how `0600` reaches a
+file that was carried in from a checkout at `0644`.
+
 Files and variables are put in place together, at creation and again before a
 run, so a workspace that predates either picks it up. The files go first: the
 block has to end up below whatever was copied, which is the whole reason it

@@ -1,11 +1,17 @@
-import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
+import { chmod, mkdir, mkdtemp, readFile, rm, stat, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { z } from 'zod'
 
-import { describeError, InvalidFileError, readJsonFile, writeJsonFile } from './persist.js'
+import {
+  describeError,
+  InvalidFileError,
+  readJsonFile,
+  writeJsonFile,
+  writeTextFile
+} from './persist.js'
 
 const Schema = z.object({
   name: z.string(),
@@ -112,6 +118,98 @@ describe('writeJsonFile', () => {
   it('ends the file with a newline, keeping it git-friendly', async () => {
     await writeJsonFile(file, Schema, FALLBACK)
     await expect(readFile(file, 'utf8')).resolves.toMatch(/\n$/)
+  })
+})
+
+describe('writeTextFile', () => {
+  /** The mode of a path, as the three digits anybody reads. */
+  async function modeOf(path: string): Promise<number> {
+    return (await stat(path)).mode & 0o777
+  }
+
+  it('writes contents that read back', async () => {
+    const path = join(dir, '.env')
+    await writeTextFile(path, 'A=1\n')
+
+    await expect(readFile(path, 'utf8')).resolves.toBe('A=1\n')
+  })
+
+  it('creates the directory when it is missing', async () => {
+    const nested = join(dir, 'a', 'b', '.env')
+    await writeTextFile(nested, 'A=1\n')
+
+    await expect(readFile(nested, 'utf8')).resolves.toBe('A=1\n')
+  })
+
+  it('gives a new file the mode it was asked for', async () => {
+    const path = join(dir, '.env')
+    await writeTextFile(path, 'A=1\n', 0o600)
+
+    await expect(modeOf(path)).resolves.toBe(0o600)
+  })
+
+  /*
+   * The defect this exists for. `writeFile`'s `mode` option reaches `open(2)`,
+   * where it is ignored unless the call creates the file — so appending
+   * credentials to a file copied in from somewhere else left it as permissive
+   * as the copy was.
+   */
+  it('resets the mode of a file that already exists', async () => {
+    const path = join(dir, '.env')
+    await writeFile(path, 'FROM=checkout\n', { encoding: 'utf8', mode: 0o644 })
+
+    await writeTextFile(path, 'A=1\n', 0o600)
+
+    await expect(modeOf(path)).resolves.toBe(0o600)
+  })
+
+  it('leaves the mode alone when none is asked for', async () => {
+    const path = join(dir, 'notes.txt')
+    await writeFile(path, 'first\n', { encoding: 'utf8', mode: 0o644 })
+
+    await writeTextFile(path, 'second\n')
+
+    await expect(modeOf(path)).resolves.toBe(0o644)
+  })
+
+  it('leaves no temporary file behind after a successful write', async () => {
+    const path = join(dir, '.env')
+    await writeTextFile(path, 'A=1\n')
+
+    await expect(readFile(`${path}.tmp`, 'utf8')).rejects.toThrow()
+  })
+
+  /*
+   * These land in a git worktree, where a leftover `.env.tmp` is an untracked
+   * file somebody has to explain. A directory at the target is the honest way
+   * to fail after the temporary file exists: the write succeeds, the rename
+   * cannot.
+   */
+  it('takes its temporary file with it when the rename fails', async () => {
+    const path = join(dir, '.env')
+    await mkdir(path)
+    await writeFile(join(path, 'inside'), 'x', 'utf8')
+
+    await expect(writeTextFile(path, 'A=1\n')).rejects.toThrow()
+    await expect(stat(`${path}.tmp`)).rejects.toThrow()
+  })
+
+  // The guarantee the module claims: the old version or the new one, never a
+  // mix — and never nothing at all.
+  it('leaves the old contents in place when the write fails', async () => {
+    const closed = join(dir, 'closed')
+    await mkdir(closed)
+    const path = join(closed, '.env')
+    await writeFile(path, 'FROM=checkout\n', 'utf8')
+    await chmod(closed, 0o500)
+
+    try {
+      await expect(writeTextFile(path, 'A=1\n')).rejects.toThrow()
+      await expect(readFile(path, 'utf8')).resolves.toBe('FROM=checkout\n')
+    } finally {
+      // Or the directory could not be cleaned up after the test.
+      await chmod(closed, 0o700)
+    }
   })
 })
 

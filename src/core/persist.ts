@@ -9,7 +9,7 @@
  * which is atomic on POSIX.
  */
 
-import { mkdir, readFile, rename, writeFile } from 'node:fs/promises'
+import { chmod, mkdir, readFile, rename, rm, writeFile } from 'node:fs/promises'
 import { dirname } from 'node:path'
 
 import type { z } from 'zod'
@@ -78,6 +78,42 @@ export async function readJsonFile<T>(
   }
 
   return result.data
+}
+
+/**
+ * Writes a text file atomically, and with the mode it is asked for.
+ *
+ * The mode is set with `chmod` rather than left to `writeFile`'s option, which
+ * is the whole reason this exists. Node passes that option to `open(2)`, where
+ * it is **ignored unless the call creates the file** — so appending credentials
+ * to a file that was copied in from somewhere else left it as permissive as the
+ * copy was. Renaming the temporary file over the target carries the mode with
+ * it, whatever the target had before.
+ *
+ * The temporary file is a sibling of the target because `rename` is only atomic
+ * within a filesystem, and across some it fails outright.
+ *
+ * A failed write takes its temporary file with it. That matters here more than
+ * for JSON: these land in a git worktree, where a leftover `.env.tmp` is an
+ * untracked file somebody has to explain.
+ */
+export async function writeTextFile(
+  filePath: string,
+  contents: string,
+  mode?: number
+): Promise<void> {
+  const tempPath = `${filePath}.tmp`
+
+  await mkdir(dirname(filePath), { recursive: true })
+
+  try {
+    await writeFile(tempPath, contents, 'utf8')
+    if (mode !== undefined) await chmod(tempPath, mode)
+    await rename(tempPath, filePath)
+  } catch (error) {
+    await rm(tempPath, { force: true })
+    throw error
+  }
 }
 
 /**

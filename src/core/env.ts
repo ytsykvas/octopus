@@ -22,13 +22,14 @@
  * the files.
  */
 
-import { mkdir, readFile, writeFile } from 'node:fs/promises'
-import { dirname, join } from 'node:path'
+import { readFile } from 'node:fs/promises'
+import { join } from 'node:path'
 
 import { z } from 'zod'
 
 import { CLOSE, OPEN, substituteEnv, withoutBlock, type WorkspaceValues } from './envBlock.js'
 import { projectEnv } from './paths.js'
+import { writeTextFile } from './persist.js'
 import type { ProjectId } from './types.js'
 
 /** A block of overrides as accepted from the renderer. */
@@ -60,10 +61,7 @@ export async function writeProjectEnv(
   contents: string,
   root?: string
 ): Promise<void> {
-  const path = projectEnvPath(projectId, root)
-
-  await mkdir(dirname(path), { recursive: true })
-  await writeFile(path, contents, { encoding: 'utf8', mode: MODE })
+  await writeTextFile(projectEnvPath(projectId, root), contents, MODE)
 }
 
 /**
@@ -119,15 +117,12 @@ export async function applyEnvOverrides(
   if (body === '') {
     if (kept === existing) return false
 
-    await writeFile(path, kept, { encoding: 'utf8', mode: MODE })
+    await writeTextFile(path, kept, MODE)
     return true
   }
 
   const separator = kept === '' || kept.endsWith('\n') ? '' : '\n'
-  await writeFile(path, `${kept}${separator}\n${OPEN}\n${body}\n${CLOSE}\n`, {
-    encoding: 'utf8',
-    mode: MODE
-  })
+  await writeTextFile(path, `${kept}${separator}\n${OPEN}\n${body}\n${CLOSE}\n`, MODE)
 
   return true
 }

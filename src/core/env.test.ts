@@ -1,6 +1,6 @@
-import { mkdtemp, readFile, rm, stat, writeFile } from 'node:fs/promises'
+import { mkdir, mkdtemp, readFile, rm, stat, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
-import { join } from 'node:path'
+import { dirname, join } from 'node:path'
 
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 
@@ -67,6 +67,18 @@ describe('readProjectEnv', () => {
 
     const mode = (await stat(projectEnvPath('planner', root))).mode & 0o777
     expect(mode).toBe(0o600)
+  })
+
+  // The mode has to be re-asserted on every write, not assumed from the one
+  // that created the file.
+  it('closes a block file that was left open', async () => {
+    const path = projectEnvPath('planner', root)
+    await mkdir(dirname(path), { recursive: true })
+    await writeFile(path, 'A=1\n', { encoding: 'utf8', mode: 0o644 })
+
+    await writeProjectEnv('planner', 'A=2\n', root)
+
+    expect((await stat(path)).mode & 0o777).toBe(0o600)
   })
 })
 
@@ -178,6 +190,42 @@ describe('applyEnvOverrides', () => {
 
   it('keeps the workspace file readable by its owner alone', async () => {
     await writeProjectEnv('planner', 'A=1\n', root)
+    await applyEnvOverrides('planner', values(), root)
+
+    const mode = (await stat(join(workspace, '.env'))).mode & 0o777
+    expect(mode).toBe(0o600)
+  })
+
+  /*
+   * The ordinary case, and the one the test above misses. A workspace's `.env`
+   * is usually carried in from the checkout, where it is as readable as any
+   * other file — and appending credentials to it must not leave it that way.
+   */
+  it('closes a file that was carried in readable by everybody', async () => {
+    await writeFile(join(workspace, '.env'), 'FROM=checkout\n', { encoding: 'utf8', mode: 0o644 })
+    await writeProjectEnv('planner', 'A=1\n', root)
+
+    await applyEnvOverrides('planner', values(), root)
+
+    const mode = (await stat(join(workspace, '.env'))).mode & 0o777
+    expect(mode).toBe(0o600)
+  })
+
+  // It is written inside a git worktree, where anything left over is an
+  // untracked file somebody has to explain.
+  it('leaves no temporary file in the workspace', async () => {
+    await writeProjectEnv('planner', 'A=1\n', root)
+    await applyEnvOverrides('planner', values(), root)
+
+    await expect(stat(join(workspace, '.env.tmp'))).rejects.toThrow()
+  })
+
+  it('closes the file it empties, too', async () => {
+    await writeFile(join(workspace, '.env'), 'FROM=checkout\n', { encoding: 'utf8', mode: 0o644 })
+    await writeProjectEnv('planner', 'A=1\n', root)
+    await applyEnvOverrides('planner', values(), root)
+
+    await writeProjectEnv('planner', '', root)
     await applyEnvOverrides('planner', values(), root)
 
     const mode = (await stat(join(workspace, '.env'))).mode & 0o777
