@@ -1,8 +1,9 @@
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { type ComponentProps, useState } from 'react'
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 
+import { stubDialogElement } from '../test/dialog.js'
 import { octopus } from '../test/octopus.js'
 import { openedDirectories, sessionId, sessionsOpened, stubTerminalHost } from '../test/terminal.js'
 import { commentController } from '../test/comments.js'
@@ -80,6 +81,7 @@ function renderPanel(overrides: Partial<Props> = {}): {
     scriptPaths: { setup: null, run: null },
     onEditScripts: vi.fn(),
     onEditFiles: vi.fn(),
+    onEditEnv: vi.fn(),
     onEditInstructions: vi.fn(),
     chatId: null,
     width: 360,
@@ -153,6 +155,8 @@ function pane(): HTMLElement {
 
   return section
 }
+
+beforeAll(stubDialogElement)
 
 describe('RightPanel', () => {
   beforeEach(() => {
@@ -737,7 +741,7 @@ describe('RightPanel', () => {
   // Always on the header, not only in the empty state: the moment an env turns
   // out to be missing is a build that could not find it, and by then the empty
   // state that used to carry this button is long gone.
-  it('offers the env from the build header once a script exists', async () => {
+  it('offers the carried files from the build header once a script exists', async () => {
     const onEditFiles = vi.fn()
     renderPanel({
       workspaces: [anna],
@@ -747,9 +751,87 @@ describe('RightPanel', () => {
     })
 
     await userEvent.click(scriptsTab())
-    await userEvent.click(within(buildSection()).getByRole('button', { name: 'Edit files' }))
+    await userEvent.click(within(buildSection()).getByRole('button', { name: 'Env' }))
+    await userEvent.click(screen.getByRole('menuitem', { name: 'Files carried in…' }))
 
     expect(onEditFiles).toHaveBeenCalled()
+  })
+
+  /*
+   * Three answers, genuinely different: the variables are typed, the files are
+   * copied, and the third is not an edit at all. One button could only ever
+   * reach one of them — for a project cloned from GitHub, reliably the wrong
+   * one, since nothing gitignored was ever on GitHub to copy.
+   */
+  it('offers the variables from the same menu', async () => {
+    const onEditEnv = vi.fn()
+    renderPanel({
+      workspaces: [anna],
+      activeWorkspaceId: anna.id,
+      scriptPaths: SCRIPTS,
+      onEditEnv
+    })
+
+    await userEvent.click(scriptsTab())
+    await userEvent.click(within(buildSection()).getByRole('button', { name: 'Env' }))
+    await userEvent.click(screen.getByRole('menuitem', { name: 'Variables…' }))
+
+    expect(onEditEnv).toHaveBeenCalled()
+  })
+
+  // The file the scripts will actually read, carried lines and hand edits
+  // included — which no preview assembled from the block would show.
+  it('shows the workspace\u2019s own env file', async () => {
+    vi.mocked(octopus().workspaces.env).mockResolvedValue({
+      ok: true,
+      value: 'MYSQL_HOST=dev.example\n'
+    })
+    renderPanel({ workspaces: [anna], activeWorkspaceId: anna.id, scriptPaths: SCRIPTS })
+
+    await userEvent.click(scriptsTab())
+    await userEvent.click(within(buildSection()).getByRole('button', { name: 'Env' }))
+    await userEvent.click(screen.getByRole('menuitem', { name: "This workspace's env" }))
+
+    expect(await screen.findByText(/MYSQL_HOST=dev.example/)).toBeInTheDocument()
+    expect(octopus().workspaces.env).toHaveBeenCalledWith(anna.id)
+  })
+
+  it('puts the env away again', async () => {
+    vi.mocked(octopus().workspaces.env).mockResolvedValue({ ok: true, value: 'A=1\n' })
+    renderPanel({ workspaces: [anna], activeWorkspaceId: anna.id, scriptPaths: SCRIPTS })
+
+    await userEvent.click(scriptsTab())
+    await userEvent.click(within(buildSection()).getByRole('button', { name: 'Env' }))
+    await userEvent.click(screen.getByRole('menuitem', { name: "This workspace's env" }))
+    await screen.findByText(/A=1/)
+
+    await userEvent.click(screen.getByRole('button', { name: 'Close' }))
+
+    expect(screen.queryByText(/A=1/)).toBeNull()
+  })
+
+  it('says so where the workspace has no env file at all', async () => {
+    vi.mocked(octopus().workspaces.env).mockResolvedValue({ ok: true, value: null })
+    renderPanel({ workspaces: [anna], activeWorkspaceId: anna.id, scriptPaths: SCRIPTS })
+
+    await userEvent.click(scriptsTab())
+    await userEvent.click(within(buildSection()).getByRole('button', { name: 'Env' }))
+    await userEvent.click(screen.getByRole('menuitem', { name: "This workspace's env" }))
+
+    expect(await screen.findByText(/no env file yet/)).toBeInTheDocument()
+  })
+
+  // A file that could not be read is not an empty one, and an empty box would
+  // say it was.
+  it('says the same when the file could not be read', async () => {
+    vi.mocked(octopus().workspaces.env).mockResolvedValue({ ok: false, error: 'EACCES' })
+    renderPanel({ workspaces: [anna], activeWorkspaceId: anna.id, scriptPaths: SCRIPTS })
+
+    await userEvent.click(scriptsTab())
+    await userEvent.click(within(buildSection()).getByRole('button', { name: 'Env' }))
+    await userEvent.click(screen.getByRole('menuitem', { name: "This workspace's env" }))
+
+    expect(await screen.findByText(/no env file yet/)).toBeInTheDocument()
   })
 
   // A sibling of the fold toggle rather than a child of it: reaching for the
@@ -758,7 +840,7 @@ describe('RightPanel', () => {
     renderPanel({ workspaces: [anna], activeWorkspaceId: anna.id, scriptPaths: SCRIPTS })
 
     await userEvent.click(scriptsTab())
-    await userEvent.click(within(buildSection()).getByRole('button', { name: 'Edit files' }))
+    await userEvent.click(within(buildSection()).getByRole('button', { name: 'Env' }))
 
     expect(
       within(buildSection()).getByRole('button', { name: 'Fold the build away' })

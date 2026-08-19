@@ -46,7 +46,7 @@ import { type EditTarget, readChangeContext, readEditTarget } from './changeCont
 import { readWorkspaceDiff, type WorkspaceDiff } from './diff.js'
 import { isListening, settlePort } from './ports.js'
 import { carryInto, readCarryList, writeCarryList } from './carry.js'
-import { applyEnvOverrides, readProjectEnv, writeProjectEnv } from './env.js'
+import { applyEnvOverrides, readProjectEnv, readWorkspaceEnv, writeProjectEnv } from './env.js'
 import { runArchiveScript } from './archive.js'
 import { type Config, ConfigSchema, loadConfig, saveConfig, toSdkSettingSources } from './config.js'
 import { type AgentEvent, isEphemeral } from './events.js'
@@ -291,6 +291,13 @@ export interface OctopusService {
    * that file, in a directory an agent commits from freely.
    */
   isProjectEnvIgnored(projectId: string): Promise<boolean>
+  /**
+   * A workspace's env file as it stands, or null where it has none.
+   *
+   * The file itself, not a reconstruction: what the scripts will read is the
+   * only version worth showing.
+   */
+  readWorkspaceEnv(workspaceId: string): Promise<string | null>
 
   /**
    * Puts a workspace in a state its scripts can run in.
@@ -1004,12 +1011,7 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
     if (config.alwaysAllowedTools.includes(toolName)) return { allow: true }
 
     const requestId = uuid()
-    handleEvent(chat, {
-      type: 'permission_request',
-      requestId,
-      toolName,
-      input
-    })
+    handleEvent(chat, { type: 'permission_request', requestId, toolName, input })
 
     return new Promise<PermissionOutcome>((resolve) => {
       pending.set(requestId, {
@@ -1304,6 +1306,13 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
       return isIgnored(makeExec(project.repoPath), project.envFile)
     },
 
+    async readWorkspaceEnv(workspaceId) {
+      const workspace = requireWorkspace(workspaceId)
+      const project = requireProject(workspace.projectId)
+
+      return readWorkspaceEnv(workspace.path, project.envFile)
+    },
+
     async prepareWorkspace(workspaceId) {
       const workspace = requireWorkspace(workspaceId)
       const project = requireProject(workspace.projectId)
@@ -1423,9 +1432,7 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
       const project = requireProject(projectId)
       const exec = makeExec(project.repoPath)
 
-      const workspace = await createWorkspace(project, state, exec, {
-        root: dataRoot
-      })
+      const workspace = await createWorkspace(project, state, exec, { root: dataRoot })
 
       try {
         // Inside the rollback, not after it: a worktree missing the files it
@@ -1475,20 +1482,13 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
       // problem of the two.
       await runArchiveScript(
         project.id,
-        {
-          rootPath: project.repoPath,
-          workspaceName: workspace.name,
-          path: workspace.path
-        },
+        { rootPath: project.repoPath, workspaceName: workspace.name, path: workspace.path },
         dataRoot
       )
 
       await removeWorkspace(
         workspace,
-        {
-          repository: makeExec(project.repoPath),
-          workspace: makeExec(workspace.path)
-        },
+        { repository: makeExec(project.repoPath), workspace: makeExec(workspace.path) },
         // The base branch travels with the request so "is this merged" can be
         // answered before the worktree is destroyed rather than after.
         { ...options, baseBranch: project.baseBranch }
@@ -1641,9 +1641,7 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
       try {
         // `dir` rather than letting it search: without one the SDK looks
         // through every project directory for a session id.
-        forked = await runForkSession(source.sessionId, {
-          dir: workspace.path
-        })
+        forked = await runForkSession(source.sessionId, { dir: workspace.path })
       } catch (error) {
         throw new ChatError('forkFailed', { chatId }, describeError(error))
       }
@@ -1854,11 +1852,7 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
 
       for (const [requestId, request] of pending) {
         if (request.chatId === chatId) {
-          return {
-            requestId,
-            toolName: request.toolName,
-            input: request.input
-          }
+          return { requestId, toolName: request.toolName, input: request.input }
         }
       }
 
@@ -1949,19 +1943,12 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
       // Recorded before the answer goes out. It is what the card is redrawn
       // from after a restart, and the agent may well have moved on by the time
       // a later write lands.
-      handleEvent(chat, {
-        type: 'question_answered',
-        requestId,
-        answers: [...answers]
-      })
+      handleEvent(chat, { type: 'question_answered', requestId, answers: [...answers] })
 
       pending.delete(requestId)
       // The whole point: the tool reads the user's choices off its own input,
       // so the reply that releases it carries them.
-      request.resolve({
-        allow: true,
-        updatedInput: withAnswers(asked, answers)
-      })
+      request.resolve({ allow: true, updatedInput: withAnswers(asked, answers) })
       await setChatStatus(request.chatId, 'running')
     },
 

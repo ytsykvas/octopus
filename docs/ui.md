@@ -616,13 +616,22 @@ The fold control on the build's heading is named for what it does rather than
 for the word on it: `Build` is also the heading it carries, and two controls
 with one name are ambiguous to anything reading the pane aloud.
 
-**`Edit files` sits on that heading permanently**, not only while the build script
+**An `Env` menu sits on that heading permanently**, not only while the build script
 is missing. The moment anyone notices an env is missing is a run that could not
 find it, and by then the empty state that might have carried the button is gone.
 It is a **sibling** of the fold control rather than a child of it, so reaching
-for the env cannot put the build away. It opens the project dialog on its own
-`Files` section — the button beside it opens `Scripts`, and two buttons leading
-to one panel would be two names for one action.
+for the env cannot put the build away. It is a menu rather than a button because there are
+three answers and they are genuinely different: the variables are typed, the
+files are copied, and showing this workspace's env is not an edit at all. A
+single button could only ever reach one of them, and for a project cloned from
+GitHub that was reliably the wrong one — nothing gitignored was ever on GitHub
+to copy.
+
+The third opens the workspace's env file **as it stands on disk**, read-only.
+Not a preview assembled from the project's block: what the scripts will read
+includes the carried lines, a hand edit made inside the worktree, and the port
+as it was actually settled, and a reconstruction would agree with all of that
+except reality.
 
 The Env section names the file before the block, because the file is the
 question a project answers once and the block is the one it keeps editing.

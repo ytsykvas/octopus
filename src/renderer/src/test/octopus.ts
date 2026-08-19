@@ -92,6 +92,7 @@ export function installOctopusStub(): Api {
       createPullRequest: vi.fn(() => ok('https://github.com/ytsykvas/octopus/pull/1')),
       instruction: vi.fn(() => ok('Describe what changed and why.')),
       prepare: vi.fn(() => ok([])),
+      env: vi.fn(() => ok('')),
       // The port answers by default: a test about a script that ignores
       // `$OCTOPUS_PORT` says so, and the rest are not about ports at all.
       serving: vi.fn(() => ok(true)),
@@ -127,11 +128,7 @@ export function installOctopusStub(): Api {
     }
   }
 
-  Object.defineProperty(window, 'octopus', {
-    value: api,
-    writable: true,
-    configurable: true
-  })
+  Object.defineProperty(window, 'octopus', { value: api, writable: true, configurable: true })
   return api
 }
 

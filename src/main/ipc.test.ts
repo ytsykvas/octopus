@@ -114,10 +114,7 @@ interface TerminalSpies {
   readonly dispose: Mock<(id: string) => void>
 }
 
-function terminalsStub(): {
-  manager: TerminalManager
-  sessions: TerminalSpies
-} {
+function terminalsStub(): { manager: TerminalManager; sessions: TerminalSpies } {
   const sessions: TerminalSpies = {
     write: vi.fn(),
     resize: vi.fn(),
@@ -281,6 +278,7 @@ describe('channel table', () => {
     'env:read',
     'env:save',
     'env:ignored',
+    'workspace:env',
     'workspaces:serving',
     'workspaces:port',
     'instructions:read',
@@ -357,9 +355,7 @@ describe('validation at the boundary', () => {
   // These arrive from the renderer and end up in a file, a command line or a
   // working directory. Types guarantee nothing across the process boundary.
   it('rejects a project patch with an unknown colour', async () => {
-    const result = await invoke('projects:update', 'nothing', {
-      color: 'chartreuse'
-    })
+    const result = await invoke('projects:update', 'nothing', { color: 'chartreuse' })
     expect(result).toMatchObject({ ok: false })
   })
 
@@ -392,9 +388,7 @@ describe('validation at the boundary', () => {
   })
 
   it('rejects a project patch with an icon nothing can draw', async () => {
-    const result = await invoke('projects:update', 'nothing', {
-      icon: 'unicorn'
-    })
+    const result = await invoke('projects:update', 'nothing', { icon: 'unicorn' })
     expect(result).toMatchObject({ ok: false })
   })
 
@@ -437,9 +431,7 @@ describe('validation at the boundary', () => {
   })
 
   it('rejects an instruction body that is not a string', async () => {
-    const result = await invoke('instructions:save', 'nothing', 'pullRequest', {
-      not: 'a string'
-    })
+    const result = await invoke('instructions:save', 'nothing', 'pullRequest', { not: 'a string' })
     expect(result).toMatchObject({ ok: false })
   })
 
@@ -459,9 +451,7 @@ describe('failures come back as results', () => {
   })
 
   it('carries a code the renderer can localise', async () => {
-    const result = await invoke('projects:update', 'no-such-project', {
-      name: 'x'
-    })
+    const result = await invoke('projects:update', 'no-such-project', { name: 'x' })
     expect(result).toMatchObject({ ok: false })
   })
 })
@@ -551,9 +541,7 @@ describe('directory pickers', () => {
     // proves the configured directory was used instead of a prompt.
     bench.picked = { canceled: true, filePaths: [] }
 
-    expect(await invoke('projects:addFromGitHub', REPOSITORY)).toMatchObject({
-      ok: true
-    })
+    expect(await invoke('projects:addFromGitHub', REPOSITORY)).toMatchObject({ ok: true })
     expect(cloning.listProjects()).toHaveLength(1)
   })
 
@@ -577,9 +565,7 @@ describe('directory pickers', () => {
 
     bench.picked = { canceled: false, filePaths: [destination] }
 
-    expect(await invoke('projects:addFromGitHub', REPOSITORY)).toMatchObject({
-      ok: false
-    })
+    expect(await invoke('projects:addFromGitHub', REPOSITORY)).toMatchObject({ ok: false })
   })
 })
 
@@ -587,20 +573,14 @@ describe('adding a project from disk', () => {
   it('adds nothing when the picker is cancelled', async () => {
     bench.picked = { canceled: true, filePaths: [] }
 
-    await expect(invoke('projects:add')).resolves.toEqual({
-      ok: true,
-      value: null
-    })
+    await expect(invoke('projects:add')).resolves.toEqual({ ok: true, value: null })
     expect(service.listProjects()).toHaveLength(0)
   })
 
   it('adds nothing when the picker answers without a path', async () => {
     bench.picked = { canceled: false, filePaths: [] }
 
-    await expect(invoke('projects:add')).resolves.toEqual({
-      ok: true,
-      value: null
-    })
+    await expect(invoke('projects:add')).resolves.toEqual({ ok: true, value: null })
     expect(service.listProjects()).toHaveLength(0)
   })
 
@@ -611,10 +591,7 @@ describe('adding a project from disk', () => {
     bench.window = null
     bench.picked = { canceled: false, filePaths: [repo] }
 
-    expect(await invoke('projects:add')).toMatchObject({
-      ok: true,
-      value: { name: 'planner' }
-    })
+    expect(await invoke('projects:add')).toMatchObject({ ok: true, value: { name: 'planner' } })
     expect(service.listProjects()).toHaveLength(1)
   })
 
@@ -779,6 +756,17 @@ describe('scripts and instructions of a real project', () => {
     expect(contents.indexOf('production')).toBeLessThan(contents.indexOf('dev.example'))
   })
 
+  it('reads a workspace\u2019s env file as it stands', async () => {
+    const projectId = await addProject()
+    await invoke('env:save', projectId, 'A=1\n')
+    const workspace = await createWorkspace(projectId)
+
+    await expect(invoke('workspace:env', workspace.id)).resolves.toMatchObject({
+      ok: true,
+      value: expect.stringContaining('A=1')
+    })
+  })
+
   /*
    * octopus writes credentials into that file, in a directory an agent commits
    * from freely. A repository that does not ignore it turns the block into a
@@ -787,26 +775,17 @@ describe('scripts and instructions of a real project', () => {
   it('says whether git would keep the env file out of a commit', async () => {
     const projectId = await addProject()
 
-    await expect(invoke('env:ignored', projectId)).resolves.toEqual({
-      ok: true,
-      value: false
-    })
+    await expect(invoke('env:ignored', projectId)).resolves.toEqual({ ok: true, value: false })
 
     await writeFile(join(dir, 'planner', '.gitignore'), '.env\n', 'utf8')
-    await expect(invoke('env:ignored', projectId)).resolves.toEqual({
-      ok: true,
-      value: true
-    })
+    await expect(invoke('env:ignored', projectId)).resolves.toEqual({ ok: true, value: true })
   })
 
   it('reads back the env block a project saved', async () => {
     const projectId = await addProject()
     await invoke('env:save', projectId, 'A=1\n')
 
-    await expect(invoke('env:read', projectId)).resolves.toEqual({
-      ok: true,
-      value: 'A=1\n'
-    })
+    await expect(invoke('env:read', projectId)).resolves.toEqual({ ok: true, value: 'A=1\n' })
   })
 
   it('starts from a list that names the env', async () => {
@@ -843,10 +822,7 @@ describe('workspaces of a real project', () => {
   it('lists nothing before one is created', async () => {
     const projectId = await addProject()
 
-    await expect(invoke('workspaces:list', projectId)).resolves.toEqual({
-      ok: true,
-      value: []
-    })
+    await expect(invoke('workspaces:list', projectId)).resolves.toEqual({ ok: true, value: [] })
   })
 
   it('renames a workspace and lists it under the new name', async () => {
@@ -886,10 +862,7 @@ describe('workspaces of a real project', () => {
     expect(await invoke('workspaces:remove', workspace.id, { force: true })).toMatchObject({
       ok: true
     })
-    await expect(invoke('workspaces:list', projectId)).resolves.toEqual({
-      ok: true,
-      value: []
-    })
+    await expect(invoke('workspaces:list', projectId)).resolves.toEqual({ ok: true, value: [] })
   })
 
   it('carries a workspace’s diff across', async () => {
@@ -924,9 +897,7 @@ describe('workspaces of a real project', () => {
     const projectId = await addProject('opening')
     const origin = join(dir, 'origin.git')
     await run('git', ['init', '-q', '--bare', origin])
-    await run('git', ['remote', 'add', 'origin', origin], {
-      cwd: join(dir, 'opening')
-    })
+    await run('git', ['remote', 'add', 'origin', origin], { cwd: join(dir, 'opening') })
 
     const asked: string[][] = []
     service = await useService({
@@ -980,9 +951,7 @@ describe('workspaces of a real project', () => {
     const projectId = await addProject()
     const workspace = await createWorkspace(projectId)
     await service.updateProjectById(projectId, { baseBranch: 'main' })
-    await run('git', ['branch', '-m', 'main', 'trunk'], {
-      cwd: join(dir, 'planner')
-    })
+    await run('git', ['branch', '-m', 'main', 'trunk'], { cwd: join(dir, 'planner') })
 
     await expect(invoke('workspaces:diff', workspace.id)).resolves.toMatchObject({
       ok: false,
@@ -1012,9 +981,7 @@ describe('workspaces of a real project', () => {
     const projectId = await addProject()
     const workspace = await createWorkspace(projectId)
 
-    expect(await invoke('files:open', workspace.id, 42)).toMatchObject({
-      ok: false
-    })
+    expect(await invoke('files:open', workspace.id, 42)).toMatchObject({ ok: false })
   })
 
   // A refusal from the system is the only sign that nothing opened; swallowing
@@ -1036,14 +1003,9 @@ describe('workspaces of a real project', () => {
     const projectId = await addProject()
     await invoke('workspaces:create', projectId)
 
-    expect(await invoke('projects:remove', projectId)).toMatchObject({
-      ok: true
-    })
+    expect(await invoke('projects:remove', projectId)).toMatchObject({ ok: true })
     expect(service.listProjects()).toHaveLength(0)
-    await expect(invoke('workspaces:list', projectId)).resolves.toEqual({
-      ok: true,
-      value: []
-    })
+    await expect(invoke('workspaces:list', projectId)).resolves.toEqual({ ok: true, value: [] })
   })
 })
 
@@ -1116,10 +1078,7 @@ describe('the agent chat', () => {
     const projectId = await addProject()
     const workspace = await createWorkspace(projectId)
 
-    await expect(invoke('chats:list', workspace.id)).resolves.toEqual({
-      ok: true,
-      value: []
-    })
+    await expect(invoke('chats:list', workspace.id)).resolves.toEqual({ ok: true, value: [] })
   })
 
   it('opens a chat and lists it afterwards', async () => {
@@ -1127,10 +1086,7 @@ describe('the agent chat', () => {
     const workspace = await createWorkspace(projectId)
 
     const opened = await invoke('chats:open', workspace.id)
-    expect(opened).toMatchObject({
-      ok: true,
-      value: { workspaceId: workspace.id }
-    })
+    expect(opened).toMatchObject({ ok: true, value: { workspaceId: workspace.id } })
 
     await expect(invoke('chats:list', workspace.id)).resolves.toMatchObject({
       ok: true,
@@ -1173,10 +1129,7 @@ describe('the agent chat', () => {
   it('names a conversation, and refuses one longer than a tab can hold', async () => {
     const projectId = await addProject()
     const workspace = await createWorkspace(projectId)
-    const opened = (await invoke('chats:open', workspace.id)) as {
-      ok: true
-      value: { id: string }
-    }
+    const opened = (await invoke('chats:open', workspace.id)) as { ok: true; value: { id: string } }
 
     await expect(invoke('chats:rename', opened.value.id, 'auth refactor')).resolves.toEqual({
       ok: true,
@@ -1197,10 +1150,7 @@ describe('the agent chat', () => {
   it('carries a refused fork back with its code', async () => {
     const projectId = await addProject()
     const workspace = await createWorkspace(projectId)
-    const opened = (await invoke('chats:open', workspace.id)) as {
-      ok: true
-      value: { id: string }
-    }
+    const opened = (await invoke('chats:open', workspace.id)) as { ok: true; value: { id: string } }
 
     await expect(invoke('chats:fork', opened.value.id)).resolves.toMatchObject({
       ok: false,
@@ -1227,9 +1177,7 @@ describe('the agent chat', () => {
     const opened = await invoke('chats:open', workspace.id)
     const chatId = chatIdOf(opened)
 
-    await expect(invoke('chats:send', chatId, '')).resolves.toMatchObject({
-      ok: false
-    })
+    await expect(invoke('chats:send', chatId, '')).resolves.toMatchObject({ ok: false })
     await expect(invoke('chats:send', chatId, 'x'.repeat(100_001))).resolves.toMatchObject({
       ok: false
     })
@@ -1347,10 +1295,7 @@ describe('the agent chat', () => {
   })
 
   it('reports no models before a session has ever run', async () => {
-    await expect(invoke('chats:models')).resolves.toEqual({
-      ok: true,
-      value: []
-    })
+    await expect(invoke('chats:models')).resolves.toEqual({ ok: true, value: [] })
   })
 
   // Per chat, unlike the models: a project's own commands live in its
@@ -1442,10 +1387,7 @@ describe('the agent chat', () => {
   // Nothing has run yet, so there is nothing to report — and an API key
   // session never reports one at all.
   it('answers with no rate limit before any turn has run', async () => {
-    await expect(invoke('chats:rateLimit')).resolves.toEqual({
-      ok: true,
-      value: null
-    })
+    await expect(invoke('chats:rateLimit')).resolves.toEqual({ ok: true, value: null })
   })
 
   // Events keep arriving long after the call that started them returned, and a

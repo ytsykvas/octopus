@@ -226,6 +226,10 @@ export function registerIpc(
     attempt(() => service.saveProjectCarryList(projectId, CarryListSchema.parse(contents)))
   )
 
+  host.handle('workspace:env', (_event, workspaceId: string) =>
+    attempt(() => service.readWorkspaceEnv(workspaceId))
+  )
+
   // Asked of the checkout, which shares its `.gitignore` with every worktree
   // made from it.
   host.handle('env:ignored', (_event, projectId: string) =>

@@ -326,6 +326,10 @@ const api = {
     prepare: (workspaceId: string): Promise<Result<string[]>> =>
       ipcRenderer.invoke('workspace:prepare', workspaceId) as Promise<Result<string[]>>,
 
+    /** The workspace's env file as it stands, or null where it has none. */
+    env: (workspaceId: string): Promise<Result<string | null>> =>
+      ipcRenderer.invoke('workspace:env', workspaceId) as Promise<Result<string | null>>,
+
     /** Whether anything is listening on the port this workspace was given. */
     serving: (workspaceId: string): Promise<Result<boolean>> =>
       ipcRenderer.invoke('workspaces:serving', workspaceId) as Promise<Result<boolean>>,

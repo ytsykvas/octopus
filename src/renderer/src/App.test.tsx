@@ -1294,7 +1294,7 @@ describe('App', () => {
 
   // A different section from the one beside it: the env is a file the scripts
   // read rather than another script, so the two buttons lead to two places.
-  it('opens the env section from the build header', async () => {
+  it('opens the carried files from the build header', async () => {
     givenTwoProjects()
     const user = await openApp()
     await user.click(await screen.findByRole('button', { name: 'PL' }))
@@ -1303,12 +1303,36 @@ describe('App', () => {
 
     await user.click(
       await within(screen.getByRole('region', { name: 'Build' })).findByRole('button', {
-        name: 'Edit files'
+        name: 'Env'
       })
     )
+    await user.click(screen.getByRole('menuitem', { name: 'Files carried in…' }))
 
     const dialog = await screen.findByRole('dialog', { name: 'Project settings' })
     expect(within(dialog).getByRole('button', { name: 'Files' })).toHaveAttribute(
+      'aria-current',
+      'true'
+    )
+  })
+
+  // The other half of the same menu, and the one that answers for a project
+  // cloned from GitHub — where nothing gitignored was ever there to copy.
+  it('opens the variables from the build header', async () => {
+    givenTwoProjects()
+    const user = await openApp()
+    await user.click(await screen.findByRole('button', { name: 'PL' }))
+    await user.click(screen.getByRole('button', { name: 'Scripts' }))
+    await user.click(await screen.findByText('anna'))
+
+    await user.click(
+      await within(screen.getByRole('region', { name: 'Build' })).findByRole('button', {
+        name: 'Env'
+      })
+    )
+    await user.click(screen.getByRole('menuitem', { name: 'Variables…' }))
+
+    const dialog = await screen.findByRole('dialog', { name: 'Project settings' })
+    expect(within(dialog).getByRole('button', { name: 'Env' })).toHaveAttribute(
       'aria-current',
       'true'
     )

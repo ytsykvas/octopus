@@ -67,6 +67,24 @@ export async function writeProjectEnv(
 }
 
 /**
+ * A workspace's env file as it stands, or null where it has none.
+ *
+ * Read rather than reconstructed: the point of showing it is the file the
+ * scripts will actually read, carried lines and hand edits included. A preview
+ * built from the block alone would agree with everything except reality.
+ */
+export async function readWorkspaceEnv(
+  workspacePath: string,
+  envFile: string
+): Promise<string | null> {
+  try {
+    return await readFile(join(workspacePath, envFile), 'utf8')
+  } catch {
+    return null
+  }
+}
+
+/**
  * Writes a project's overrides into a workspace's `.env`, replacing any earlier
  * block.
  *

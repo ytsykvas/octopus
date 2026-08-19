@@ -11,9 +11,11 @@ import type { WorkspaceView } from '@core/workspaces.js'
 
 import { Button } from './Button.js'
 import { DiffPanel } from './diff/DiffPanel.js'
+import { DropdownMenu } from './DropdownMenu.js'
 import type { DiffView } from './diff/DiffHunk.js'
 import { ResizeHandle } from './ResizeHandle.js'
 import { PullRequestPanel } from './PullRequestPanel.js'
+import { WorkspaceEnv } from './WorkspaceEnv.js'
 import { WorkspaceScripts } from './WorkspaceScripts.js'
 import { WorkspaceTerminals } from './WorkspaceTerminals.js'
 
@@ -112,6 +114,7 @@ interface RightPanelProps {
   readonly onEditScripts: () => void
   /** Opens the list of files every workspace is given a copy of. */
   readonly onEditFiles: () => void
+  readonly onEditEnv: () => void
   /** Opens the project's pull request instructions, from the tab about them. */
   readonly onEditInstructions: () => void
   /** The conversation a prompt would go to; null when the workspace has none. */
@@ -147,6 +150,7 @@ export function RightPanel({
   scriptPaths,
   onEditScripts,
   onEditFiles,
+  onEditEnv,
   onEditInstructions,
   chatId,
   width,
@@ -174,6 +178,7 @@ export function RightPanel({
    * build was read, so it is out of the way until the next one.
    */
   const [buildOpen, setBuildOpen] = useState(true)
+  const [showingEnv, setShowingEnv] = useState(false)
   // One button that takes a workspace from a bare checkout to a running
   // server. It lives above both halves because neither half can see the other.
   const sequence = useRunSequence()
@@ -538,6 +543,15 @@ export function RightPanel({
             how Stop ends a run — the comment above says why at length — so a
             fold that removed it would kill a `setup.sh` half way through
             without saying so. */}
+        {showingEnv && activeWorkspaceId !== null && (
+          <WorkspaceEnv
+            workspaceId={activeWorkspaceId}
+            onClose={() => {
+              setShowingEnv(false)
+            }}
+          />
+        )}
+
         <section
           aria-label={t('scripts.build')}
           className={buildOpen ? 'flex min-h-0 flex-1 flex-col' : 'shrink-0'}
@@ -568,10 +582,40 @@ export function RightPanel({
 
             {/* Always here, not only while the build script is missing. The env
                 is the thing a build most often turns out to be lacking, and by
-                then the empty state that held this button is long gone. */}
-            <Button size="sm" onClick={onEditFiles}>
-              {t('scripts.editFiles')}
-            </Button>
+                then the empty state that held this button is long gone.
+
+                A menu rather than a button because there are now three
+                answers, and they are genuinely different: the variables are
+                typed, the files are copied, and the third is not an edit at
+                all. One button could only ever reach one of them, which for a
+                project cloned from GitHub was reliably the wrong one — nothing
+                gitignored was ever on GitHub to copy. */}
+            <DropdownMenu
+              actions={[
+                {
+                  id: 'variables',
+                  label: t('scripts.editEnv'),
+                  onSelect: onEditEnv
+                },
+                {
+                  id: 'files',
+                  label: t('scripts.editFiles'),
+                  onSelect: onEditFiles
+                },
+                {
+                  id: 'show',
+                  label: t('scripts.showEnv'),
+                  onSelect: () => {
+                    setShowingEnv(true)
+                  }
+                }
+              ]}
+              trigger={({ onClick, open }) => (
+                <Button size="sm" onClick={onClick} aria-expanded={open}>
+                  {t('scripts.env')}
+                </Button>
+              )}
+            />
           </div>
 
           {/* `aria-hidden` beside the class, exactly as the tabs above do it:

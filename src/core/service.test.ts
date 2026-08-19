@@ -197,10 +197,7 @@ describe('GitHub projects', () => {
 
 describe('workspaces', () => {
   /** A service with one project already added, as the UI would have. */
-  async function withProject(): Promise<{
-    service: OctopusService
-    projectId: string
-  }> {
+  async function withProject(): Promise<{ service: OctopusService; projectId: string }> {
     const repo = join(dir, 'planner')
     await initRepo(repo)
 
@@ -426,10 +423,7 @@ describe('config', () => {
     await service.updateConfig({ theme: 'dark', branchPrefix: 'ytsykvas' })
 
     const restarted = await createService(paths(dir))
-    expect(restarted.getConfig()).toMatchObject({
-      theme: 'dark',
-      branchPrefix: 'ytsykvas'
-    })
+    expect(restarted.getConfig()).toMatchObject({ theme: 'dark', branchPrefix: 'ytsykvas' })
   })
 
   it('returns the updated config', async () => {
@@ -584,9 +578,7 @@ describe('projects', () => {
     await run('git', ['fetch', '-q', 'origin'], { cwd: repo })
 
     const project = await service.addProjectFromPath(repo)
-    await service.updateProjectById(project.id, {
-      baseBranch: 'origin/develop'
-    })
+    await service.updateProjectById(project.id, { baseBranch: 'origin/develop' })
 
     expect(service.listProjects()[0]?.baseBranch).toBe('origin/develop')
   })
@@ -940,6 +932,27 @@ describe('env overrides a project adds', () => {
     await expect(readFile(join(workspace.path, '.env'), 'utf8')).rejects.toThrow()
   })
 
+  // The file itself, never a reconstruction: what the scripts read includes
+  // the carried lines and any hand edit made inside the worktree.
+  it('reads a workspace\u2019s env file as it stands', async () => {
+    const { id } = await withProject()
+    await service.saveProjectEnv(id, 'A=1\n')
+    const workspace = await service.createWorkspaceIn(id)
+
+    await expect(service.readWorkspaceEnv(workspace.id)).resolves.toContain('A=1')
+  })
+
+  it('answers with nothing for a workspace whose project adds none', async () => {
+    const { id } = await withProject()
+    const workspace = await service.createWorkspaceIn(id)
+
+    await expect(service.readWorkspaceEnv(workspace.id)).resolves.toBeNull()
+  })
+
+  it('refuses a workspace that does not exist', async () => {
+    await expect(service.readWorkspaceEnv('missing')).rejects.toThrow()
+  })
+
   // The file gets credentials written into it inside a directory the agent
   // commits from freely.
   it('says whether git would keep the env file out of a commit', async () => {
@@ -1288,14 +1301,8 @@ describe('the agent chat', () => {
     subscription_type: 'max',
     rate_limits_available: true,
     rate_limits: {
-      five_hour: {
-        utilization: 18,
-        resets_at: '2026-08-12T19:50:00.149775+00:00'
-      },
-      seven_day: {
-        utilization: 84,
-        resets_at: '2026-08-12T22:00:00.149796+00:00'
-      }
+      five_hour: { utilization: 18, resets_at: '2026-08-12T19:50:00.149775+00:00' },
+      seven_day: { utilization: 84, resets_at: '2026-08-12T22:00:00.149796+00:00' }
     }
   }
 
@@ -1452,14 +1459,7 @@ describe('the agent chat', () => {
     return {
       type: 'user',
       message: {
-        content: [
-          {
-            type: 'tool_result',
-            tool_use_id: id,
-            is_error: !ok,
-            content: 'done'
-          }
-        ]
+        content: [{ type: 'tool_result', tool_use_id: id, is_error: !ok, content: 'done' }]
       },
       parent_tool_use_id: null,
       uuid: 'u-result',
@@ -1501,12 +1501,7 @@ describe('the agent chat', () => {
     const events: ChatEvent[] = []
     service.onAgentEvent((event) => events.push(event))
 
-    return {
-      service,
-      projectId: project.id,
-      workspaceId: workspace.id,
-      events
-    }
+    return { service, projectId: project.id, workspaceId: workspace.id, events }
   }
 
   beforeEach(() => {
@@ -1542,14 +1537,8 @@ describe('the agent chat', () => {
           model: 'claude-opus-5[1m]'
         },
         subscription: {
-          fiveHour: {
-            utilization: 18,
-            resetsAt: '2026-08-12T19:50:00.149775+00:00'
-          },
-          sevenDay: {
-            utilization: 84,
-            resetsAt: '2026-08-12T22:00:00.149796+00:00'
-          }
+          fiveHour: { utilization: 18, resetsAt: '2026-08-12T19:50:00.149775+00:00' },
+          sevenDay: { utilization: 84, resetsAt: '2026-08-12T22:00:00.149796+00:00' }
         }
       })
     })
@@ -1624,11 +1613,7 @@ describe('the agent chat', () => {
   })
 
   describe('the models the account may use', () => {
-    const OPUS: ModelInfo = {
-      value: 'claude-opus-5',
-      displayName: 'Opus 5',
-      description: ''
-    }
+    const OPUS: ModelInfo = { value: 'claude-opus-5', displayName: 'Opus 5', description: '' }
 
     it('knows none until a session has run', async () => {
       const { service } = await withWorkspace()
@@ -1661,10 +1646,7 @@ describe('the agent chat', () => {
         expect(service.knownModels()).toHaveLength(1)
       })
 
-      const restarted = await createService({
-        ...paths(dir),
-        query: fakeQuery()
-      })
+      const restarted = await createService({ ...paths(dir), query: fakeQuery() })
 
       expect(restarted.knownModels()[0]?.value).toBe('claude-opus-5')
     })
@@ -1778,10 +1760,7 @@ describe('the agent chat', () => {
         expect(service.chatCommands(chat.id)).toHaveLength(1)
       })
 
-      const reopened = await createService({
-        ...paths(dir),
-        query: fakeQuery()
-      })
+      const reopened = await createService({ ...paths(dir), query: fakeQuery() })
       expect(reopened.chatCommands(chat.id)).toHaveLength(1)
     })
 
@@ -2079,14 +2058,7 @@ describe('the agent chat', () => {
     it('recognises the command by an alias the agent reported', async () => {
       const { service, workspaceId } = await withWorkspace()
       offeredCommands = () =>
-        Promise.resolve([
-          {
-            name: 'clear',
-            description: '',
-            argumentHint: '',
-            aliases: ['reset']
-          }
-        ])
+        Promise.resolve([{ name: 'clear', description: '', argumentHint: '', aliases: ['reset'] }])
 
       const chat = await service.openChat(workspaceId)
       await service.sendToChat(chat.id, 'work')
@@ -2328,10 +2300,7 @@ describe('the agent chat', () => {
       await service.closeChats()
 
       agents = []
-      const restarted = await createService({
-        ...paths(dir),
-        query: fakeQuery()
-      })
+      const restarted = await createService({ ...paths(dir), query: fakeQuery() })
       await restarted.sendToChat(chat.id, 'and again')
 
       expect(agent().options().resume).toBe('sess-1')
@@ -2408,10 +2377,7 @@ describe('the agent chat', () => {
       agent().emit(rateLimitMessage)
 
       await vi.waitFor(() => {
-        expect(service.getRateLimit()).toMatchObject({
-          status: 'allowed_warning',
-          utilization: 62
-        })
+        expect(service.getRateLimit()).toMatchObject({ status: 'allowed_warning', utilization: 62 })
       })
     })
 
@@ -2429,10 +2395,7 @@ describe('the agent chat', () => {
 
       await expect(readFile(join(dir, 'state.json'), 'utf8')).resolves.not.toContain('rate_limit')
 
-      const restarted = await createService({
-        ...paths(dir),
-        query: fakeQuery()
-      })
+      const restarted = await createService({ ...paths(dir), query: fakeQuery() })
       expect(restarted.getRateLimit()).toBeNull()
     })
 
@@ -2491,10 +2454,7 @@ describe('the agent chat', () => {
         expect(service.listChats(workspaceId)[0]?.sessionId).toBe('sess-1')
       })
 
-      const restarted = await createService({
-        ...paths(dir),
-        query: fakeQuery()
-      })
+      const restarted = await createService({ ...paths(dir), query: fakeQuery() })
       expect(restarted.listChats(workspaceId)[0]?.sessionId).toBe('sess-1')
       const [workspace] = await restarted.listWorkspaces('planner')
       expect(workspace?.status).toBe('idle')
@@ -2519,10 +2479,7 @@ describe('the agent chat', () => {
       await vi.waitFor(async () => {
         await expect(service.chatHistory(chat.id)).resolves.toEqual([
           expect.objectContaining({ role: 'user', text: 'add a test' }),
-          expect.objectContaining({
-            role: 'agent',
-            event: { type: 'text', text: 'done' }
-          })
+          expect.objectContaining({ role: 'agent', event: { type: 'text', text: 'done' } })
         ])
       })
     })
@@ -2557,10 +2514,7 @@ describe('the agent chat', () => {
       const chat = await service.openChat(workspaceId)
       await service.sendToChat(chat.id, 'remember this')
 
-      const restarted = await createService({
-        ...paths(dir),
-        query: fakeQuery()
-      })
+      const restarted = await createService({ ...paths(dir), query: fakeQuery() })
 
       await expect(restarted.chatHistory(chat.id)).resolves.toHaveLength(1)
     })
@@ -2571,10 +2525,7 @@ describe('the agent chat', () => {
       const repo = join(dir, 'planner')
       await initRepo(repo)
 
-      const service = await createService({
-        ...paths(dir),
-        query: fakeQuery()
-      })
+      const service = await createService({ ...paths(dir), query: fakeQuery() })
       const project = await service.addProjectFromPath(repo)
       const workspace = await service.createWorkspaceIn(project.id)
 
@@ -2678,9 +2629,7 @@ describe('the agent chat', () => {
       expect(service.getConfig().alwaysAllowedTools).toEqual(['Edit'])
 
       // The second call must not ask at all.
-      await expect(agent().ask('Edit')).resolves.toMatchObject({
-        behavior: 'allow'
-      })
+      await expect(agent().ask('Edit')).resolves.toMatchObject({ behavior: 'allow' })
     })
 
     it('does not list a tool twice however often it is waved through', async () => {
@@ -2690,9 +2639,7 @@ describe('the agent chat', () => {
       await service.sendToChat(chat.id, 'edit it')
 
       // Already allowed, so this one never reaches the user.
-      await expect(agent().ask('Edit')).resolves.toMatchObject({
-        behavior: 'allow'
-      })
+      await expect(agent().ask('Edit')).resolves.toMatchObject({ behavior: 'allow' })
       expect(events.some((entry) => entry.event.type === 'permission_request')).toBe(false)
 
       void agent().ask('Write')
@@ -2744,9 +2691,7 @@ describe('the agent chat', () => {
       await service.answerPermission(await waitForRequest(events), 'allow')
 
       const stored: unknown = JSON.parse(await readFile(join(dir, 'state.json'), 'utf8'))
-      expect(stored).toMatchObject({
-        chats: [{ id: chat.id, planMode: false }]
-      })
+      expect(stored).toMatchObject({ chats: [{ id: chat.id, planMode: false }] })
     })
 
     /*
@@ -2862,10 +2807,7 @@ describe('the agent chat', () => {
       const decision = agent().ask('Bash', { command: 'rm -rf /' })
       await service.answerPermission(await waitForRequest(events), 'deny', '   ')
 
-      await expect(decision).resolves.toEqual({
-        behavior: 'deny',
-        message: DENIED
-      })
+      await expect(decision).resolves.toEqual({ behavior: 'deny', message: DENIED })
     })
 
     /*
@@ -2963,11 +2905,7 @@ describe('the agent chat', () => {
       expect(recorded?.event).toEqual({
         type: 'change_context',
         toolUseId: 'c-1',
-        context: {
-          before: ['one', 'two'],
-          after: ['four', 'five'],
-          startLine: 3
-        }
+        context: { before: ['one', 'two'], after: ['four', 'five'], startLine: 3 }
       })
     })
 
@@ -3134,10 +3072,7 @@ describe('the agent chat', () => {
       await service.sendToChat(chat.id, 'write it')
 
       agent().emit(
-        toolCallMessage('c-1', 'Write', {
-          file_path: 'notes.txt',
-          content: 'all of it'
-        })
+        toolCallMessage('c-1', 'Write', { file_path: 'notes.txt', content: 'all of it' })
       )
       agent().emit(toolResultMessage('c-1', true))
 
@@ -3225,10 +3160,7 @@ describe('the agent chat', () => {
 
       await service.interruptChat(chat.id)
 
-      await expect(decision).resolves.toMatchObject({
-        behavior: 'deny',
-        message: ABANDONED
-      })
+      await expect(decision).resolves.toMatchObject({ behavior: 'deny', message: ABANDONED })
       expect(service.pendingPermission(chat.id)).toBeNull()
     })
 
@@ -3580,10 +3512,7 @@ describe('the agent chat', () => {
 
       expect(service.listChats(workspaceId)[0]?.effort).toBe('ultracode')
       expect(agent().options().effort).toBe('xhigh')
-      expect(agent().options().settings).toEqual({
-        ultracode: true,
-        enableWorkflows: true
-      })
+      expect(agent().options().settings).toEqual({ ultracode: true, enableWorkflows: true })
     })
 
     /*
@@ -3909,24 +3838,14 @@ describe('the agent chat', () => {
       await service.sendToChat(chat.id, 'which one?')
 
       const decision = agent().ask('AskUserQuestion', ASKED)
-      return {
-        service,
-        chatId: chat.id,
-        requestId: await waitForRequest(events),
-        decision,
-        events
-      }
+      return { service, chatId: chat.id, requestId: await waitForRequest(events), decision, events }
     }
 
     it('hands the tool the answers, written into its own arguments', async () => {
       const { service, requestId, decision } = await withQuestion()
 
       await service.answerQuestions(requestId, [
-        {
-          question: 'Which library should we use?',
-          selected: ['Luxon'],
-          other: null
-        }
+        { question: 'Which library should we use?', selected: ['Luxon'], other: null }
       ])
 
       await expect(decision).resolves.toMatchObject({
@@ -3942,11 +3861,7 @@ describe('the agent chat', () => {
       const { service, chatId, requestId } = await withQuestion()
 
       await service.answerQuestions(requestId, [
-        {
-          question: 'Which library should we use?',
-          selected: ['Luxon'],
-          other: 'or Temporal'
-        }
+        { question: 'Which library should we use?', selected: ['Luxon'], other: 'or Temporal' }
       ])
 
       await vi.waitFor(async () => {
@@ -4014,10 +3929,7 @@ describe('the agent chat', () => {
 
       await service.interruptChat(chatId)
 
-      await expect(decision).resolves.toMatchObject({
-        behavior: 'deny',
-        message: ABANDONED
-      })
+      await expect(decision).resolves.toMatchObject({ behavior: 'deny', message: ABANDONED })
     })
   })
 
@@ -4033,10 +3945,7 @@ describe('the agent chat', () => {
 
     it('starts from the settings a first conversation would', async () => {
       const { service, workspaceId } = await withWorkspace()
-      await service.updateConfig({
-        workingMode: 'acceptEdits',
-        effort: 'high'
-      })
+      await service.updateConfig({ workingMode: 'acceptEdits', effort: 'high' })
 
       const created = await service.createChat(workspaceId)
 
@@ -4104,14 +4013,7 @@ describe('the agent chat', () => {
       service.onChatStatus((event) => statuses.push(event))
       service.onWorkspaceStatus((event) => workspaces.push(event))
 
-      return {
-        service,
-        workspaceId,
-        first: first.id,
-        second: second.id,
-        statuses,
-        workspaces
-      }
+      return { service, workspaceId, first: first.id, second: second.id, statuses, workspaces }
     }
 
     // Every subscriber is dropped when its window closes; one left behind
@@ -4238,13 +4140,7 @@ describe('the agent chat', () => {
        * meanwhile.
        */
       expect(view?.chats).toEqual([
-        {
-          id: first.id,
-          agent: 'claude',
-          title: null,
-          status: 'running',
-          started: false
-        },
+        { id: first.id, agent: 'claude', title: null, status: 'running', started: false },
         {
           id: second.id,
           agent: 'claude',
@@ -4314,10 +4210,7 @@ describe('the agent chat', () => {
       const chat = await service.openChat(workspaceId)
       await service.renameChat(chat.id, 'auth refactor')
 
-      const reopened = await createService({
-        ...paths(dir),
-        query: fakeQuery()
-      })
+      const reopened = await createService({ ...paths(dir), query: fakeQuery() })
 
       expect(reopened.listChats(workspaceId)[0]?.title).toBe('auth refactor')
     })
@@ -4519,9 +4412,7 @@ describe('the agent chat', () => {
       await service.createChat(workspaceId)
       await service.createChat(workspaceId)
 
-      await expect(service.forkChat(chatId)).rejects.toMatchObject({
-        code: 'tooManyChats'
-      })
+      await expect(service.forkChat(chatId)).rejects.toMatchObject({ code: 'tooManyChats' })
     })
 
     it('refuses an id nothing answers to', async () => {

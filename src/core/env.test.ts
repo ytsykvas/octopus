@@ -4,7 +4,13 @@ import { join } from 'node:path'
 
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 
-import { applyEnvOverrides, projectEnvPath, readProjectEnv, writeProjectEnv } from './env.js'
+import {
+  applyEnvOverrides,
+  projectEnvPath,
+  readProjectEnv,
+  readWorkspaceEnv,
+  writeProjectEnv
+} from './env.js'
 import type { WorkspaceValues } from './envBlock.js'
 
 let root: string
@@ -185,5 +191,35 @@ describe('applyEnvOverrides', () => {
     await applyEnvOverrides('planner', values(), root)
 
     await expect(envFile()).resolves.toContain('FROM=checkout\n')
+  })
+})
+
+describe('readWorkspaceEnv', () => {
+  /*
+   * The file itself, never a reconstruction from the project's block: what the
+   * scripts read includes the carried lines, a hand edit made inside the
+   * worktree and the port as it was actually settled.
+   */
+  it('is the file as it stands, block and all', async () => {
+    await writeFile(join(workspace, '.env'), 'FROM=checkout\n', 'utf8')
+    await writeProjectEnv('planner', 'A=1\n', root)
+    await applyEnvOverrides('planner', values(), root)
+
+    const contents = await readWorkspaceEnv(workspace, '.env')
+
+    expect(contents).toContain('FROM=checkout')
+    expect(contents).toContain('A=1')
+  })
+
+  it('reads whichever file the project named', async () => {
+    await writeFile(join(workspace, '.env.local'), 'A=1\n', 'utf8')
+
+    await expect(readWorkspaceEnv(workspace, '.env.local')).resolves.toBe('A=1\n')
+  })
+
+  // The ordinary state of a workspace whose project adds nothing, and the
+  // caller says so rather than showing an empty box.
+  it('answers with nothing where there is no file', async () => {
+    await expect(readWorkspaceEnv(workspace, '.env')).resolves.toBeNull()
   })
 })

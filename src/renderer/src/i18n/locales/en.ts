@@ -168,7 +168,12 @@ export const en = {
     /* Beside the build rather than in the project dialog alone: these are what
        a build reads, and the moment you notice one is missing is the moment the
        build in front of you did not find it. */
-    editFiles: 'Edit files',
+    env: 'Env',
+    editEnv: 'Variables…',
+    showEnv: "This workspace's env",
+    noEnv:
+      'This workspace has no env file yet. One appears when the project carries a file in or adds variables of its own.',
+    editFiles: 'Files carried in…',
     /* The whole tab in one control: build, then serve. `Run` rather than
        `Build and start`, because the two steps are one intention — the second
        is only ever wanted after the first. */
