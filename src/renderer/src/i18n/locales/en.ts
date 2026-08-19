@@ -116,7 +116,7 @@ export const en = {
       'Runs when a workspace is removed, in its directory, while it still exists. Use it to take back what the build script gave out — a database or a container named after the workspace. Nothing it does can stop the removal. Saved as archive.sh.',
     env: 'Variables added to every workspace',
     envHint:
-      'One KEY=value per line. Written at the end of the workspace\u2019s .env, so they win over whatever was copied — and they are the whole file where a clone had none to copy. Kept on this machine, never in the repository.',
+      'One KEY=value per line. Written at the end of the workspace\u2019s .env, so they win over whatever was copied — and they are the whole file where a clone had none to copy. $OCTOPUS_PORT becomes the workspace\u2019s own port, so a value naming one differs per workspace. Kept on this machine, never in the repository.',
     runScript: 'Server script',
     runScriptHint:
       'Starts the dev server. $OCTOPUS_PORT is set to the workspace\u2019s own port, so several can serve at once. Saved as run.sh.',

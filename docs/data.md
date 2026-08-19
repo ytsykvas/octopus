@@ -478,6 +478,23 @@ write; everything from it on is replaced, since keeping half a block is worse.
 
 Emptying the overrides removes the block and leaves the rest of the file alone.
 
+**`$OCTOPUS_PORT` in the block becomes the workspace's own port**, along with
+the rest of the names the scripts get — `$OCTOPUS_PORT_1`…`_9`,
+`$OCTOPUS_ROOT_PATH`, `$OCTOPUS_WORKSPACE_NAME`, in either the bare or the
+`${…}` form. The block is one text for the whole project and the port is the one
+thing that differs per workspace, so without this a value naming a port could
+not be written at all: hard-code 3000 in a redirect URI and single sign-on works
+in one workspace and nowhere else.
+
+**Only those names.** A value in an env file is frequently a password and a
+password frequently contains a `$`; substituting every `$word` would corrupt one
+silently. Anything unrecognised is left exactly as typed.
+
+Substituted on the way into the workspace, never in the stored block — the port
+can move between runs, and a stored number would be yesterday's. This is why a
+run **settles the port first and prepares second**: preparing first would write
+the number the run is about to move away from.
+
 **Appended, and nothing else.** These do not reach the process environment: the
 terminal and the agent see them only through whatever loads `.env` from the
 workspace directory. `bin/rails console` will; a bare `psql` in the Terminal tab

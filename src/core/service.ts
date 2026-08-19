@@ -1293,7 +1293,20 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
       const carried = await carryInto(project.id, project.repoPath, workspace.path, dataRoot)
       // After the files, never before: the block has to end up below whatever
       // was copied, which is the whole reason it wins.
-      await applyEnvOverrides(project.id, workspace.path, dataRoot)
+      //
+      // The port is read here rather than passed in, so it is whatever the
+      // workspace holds at this moment — which is why a run settles the port
+      // first and prepares second.
+      await applyEnvOverrides(
+        project.id,
+        {
+          path: workspace.path,
+          rootPath: project.repoPath,
+          workspaceName: workspace.name,
+          port: workspace.port
+        },
+        dataRoot
+      )
 
       return carried
     },
@@ -1398,7 +1411,16 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
         // cannot run without is a workspace that will fail its first build, and
         // undoing it says so at the one moment somebody is watching.
         await carryInto(project.id, project.repoPath, workspace.path, dataRoot)
-        await applyEnvOverrides(project.id, workspace.path, dataRoot)
+        await applyEnvOverrides(
+          project.id,
+          {
+            path: workspace.path,
+            rootPath: project.repoPath,
+            workspaceName: workspace.name,
+            port: workspace.port
+          },
+          dataRoot
+        )
         await commit((current) => addWorkspace(current, workspace))
       } catch (error) {
         await rollbackWorkspace(workspace, exec)

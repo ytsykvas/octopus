@@ -25,6 +25,7 @@ import { dirname, join } from 'node:path'
 import { z } from 'zod'
 
 import { projectEnv } from './paths.js'
+import { scriptEnv } from './scriptEnv.js'
 import type { ProjectId } from './types.js'
 
 /** A block of overrides as accepted from the renderer. */
@@ -45,6 +46,49 @@ const CLOSE = '# <<< octopus'
 
 /** It carries credentials, so it is readable by its owner and nobody else. */
 const MODE = 0o600
+
+/** What a workspace the block is being written for is worth knowing about. */
+export interface WorkspaceValues {
+  readonly path: string
+  readonly rootPath: string
+  readonly workspaceName: string
+  readonly port: number
+}
+
+/**
+ * A `$NAME` or `${NAME}` in the block, where the name is one of ours.
+ *
+ * **Ours only.** A value in an env file is frequently a password, and a
+ * password frequently contains a `$`; substituting every `$word` would corrupt
+ * one silently, which is the worst way to lose an afternoon. An unrecognised
+ * name is left exactly as it was typed.
+ */
+const BRACED = /\$\{(OCTOPUS_[A-Z0-9_]+)\}/g
+const BARE = /\$(OCTOPUS_[A-Z0-9_]+)/g
+
+/**
+ * The block with our names replaced by this workspace's values.
+ *
+ * The block is one text for the whole project, and the port is the one thing
+ * that differs per workspace — so a value that has to name the port could not
+ * be written at all without this. `KEYCLOAK_REDIRECT_URI` is the worked
+ * example: hard-code 3000 in it and single sign-on works in one workspace and
+ * nowhere else.
+ *
+ * The names are the ones the scripts already get, so there is one vocabulary
+ * rather than two.
+ *
+ * Substituted **on the way into the workspace**, never in the stored block:
+ * the port can move between runs, and a stored number would be yesterday's.
+ */
+export function substituteEnv(body: string, values: WorkspaceValues): string {
+  const table = scriptEnv('run', values)
+  const swap = (whole: string, name: string): string => table[name] ?? whole
+
+  // Braced first, so `${OCTOPUS_PORT}` is not left holding stray braces. What
+  // survives that pass keeps its braces and so cannot match the bare form.
+  return body.replace(BRACED, swap).replace(BARE, swap)
+}
 
 export function projectEnvPath(projectId: ProjectId, root?: string): string {
   return projectEnv(projectId, root)
@@ -108,11 +152,12 @@ function withoutBlock(contents: string): string {
  */
 export async function applyEnvOverrides(
   projectId: ProjectId,
-  workspacePath: string,
+  values: WorkspaceValues,
   root?: string
 ): Promise<boolean> {
-  const body = (await readProjectEnv(projectId, root)).trim()
-  const path = join(workspacePath, WORKSPACE_ENV_FILE)
+  const stored = (await readProjectEnv(projectId, root)).trim()
+  const body = substituteEnv(stored, values)
+  const path = join(values.path, WORKSPACE_ENV_FILE)
 
   let existing = ''
   try {

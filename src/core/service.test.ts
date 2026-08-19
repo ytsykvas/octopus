@@ -898,6 +898,27 @@ describe('env overrides a project adds', () => {
     await expect(readFile(join(workspace.path, '.env'), 'utf8')).resolves.toContain('A=2')
   })
 
+  /*
+   * The block is one text for the whole project, so without this the one value
+   * that has to differ per workspace could not be written at all — a redirect
+   * URI naming a port works in one workspace and nowhere else.
+   */
+  it('writes each workspace\u2019s own port where the block asks for one', async () => {
+    const { id } = await withProject()
+    await service.saveProjectEnv(id, 'URL=http://localhost:$OCTOPUS_PORT/auth\n')
+
+    const first = await service.createWorkspaceIn(id)
+    const second = await service.createWorkspaceIn(id)
+
+    await expect(readFile(join(first.path, '.env'), 'utf8')).resolves.toContain(
+      `localhost:${String(first.port)}/auth`
+    )
+    await expect(readFile(join(second.path, '.env'), 'utf8')).resolves.toContain(
+      `localhost:${String(second.port)}/auth`
+    )
+    expect(first.port).not.toBe(second.port)
+  })
+
   it('refuses to touch a project that does not exist', async () => {
     await expect(service.readProjectEnv('missing')).rejects.toThrow()
     await expect(service.saveProjectEnv('missing', 'A=1')).rejects.toThrow()

@@ -165,6 +165,31 @@ function Runner({
 
     void (async () => {
       /*
+       * The port, settled before anything binds it — and before the env is
+       * written, which is the order that matters.
+       *
+       * A port free when this workspace was made can belong to something else
+       * by now, and the answer is only knowable while nothing of ours is alive
+       * here — so it is asked on the way into a run rather than remembered.
+       *
+       * The env block may name the port, and it is written with whatever the
+       * workspace holds at that moment. Preparing first would bake in the
+       * number this run is about to move away from.
+       */
+      if (kind === 'run') {
+        const settled = await window.octopus.workspaces.port(workspace.id)
+        if (latestStop.current !== stopWhenAsked) return
+
+        if (!settled.ok) {
+          setError(describeFailure(settled))
+          onOutcome?.(false)
+          return
+        }
+
+        setPort(settled.value)
+      }
+
+      /*
        * The carried files go in before either script, not only when the
        * workspace was made. A project that added one to its list afterwards
        * would otherwise run without it until the workspace was recreated, and
@@ -187,26 +212,6 @@ function Runner({
         // A sequence waiting on this half would otherwise wait for ever.
         onOutcome?.(false)
         return
-      }
-
-      /*
-       * The port, settled before anything binds it.
-       *
-       * A port free when this workspace was made can belong to something else
-       * by now, and the answer is only knowable while nothing of ours is alive
-       * here — so it is asked on the way into a run rather than remembered.
-       */
-      if (kind === 'run') {
-        const settled = await window.octopus.workspaces.port(workspace.id)
-        if (latestStop.current !== stopWhenAsked) return
-
-        if (!settled.ok) {
-          setError(describeFailure(settled))
-          onOutcome?.(false)
-          return
-        }
-
-        setPort(settled.value)
       }
 
       setError(null)

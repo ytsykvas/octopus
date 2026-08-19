@@ -619,6 +619,35 @@ describe('ScriptRunner', () => {
     expect(octopus().workspaces.prepare).toHaveBeenCalledWith(anna.id)
   })
 
+  /*
+   * The order, not just the fact. The env block may name the port, and it is
+   * written with whatever the workspace holds at that moment — so preparing
+   * first would bake in the number this very run is about to move away from.
+   */
+  it('settles the port before writing the env, not after', async () => {
+    const order: string[] = []
+    vi.mocked(octopus().workspaces.port).mockImplementation(() => {
+      order.push('port')
+      return Promise.resolve({ ok: true, value: 3220 })
+    })
+    vi.mocked(octopus().workspaces.prepare).mockImplementation(() => {
+      order.push('prepare')
+      return Promise.resolve({ ok: true, value: [] })
+    })
+
+    mountAndStart({
+      workspace: anna,
+      kind: 'run',
+      scriptPath: RUN_SCRIPT,
+      port: 3111,
+      rootPath: '/Users/test/planner',
+      onOpenSettings: vi.fn()
+    })
+    await sessionsOpened(1)
+
+    expect(order).toEqual(['port', 'prepare'])
+  })
+
   it('puts it in place before the server too', async () => {
     mountAndStart({
       workspace: anna,

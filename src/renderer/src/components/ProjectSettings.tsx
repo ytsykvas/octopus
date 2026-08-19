@@ -332,7 +332,7 @@ export function ProjectSettings({
             <FileEditor
               label={t('project.env')}
               hint={t('project.envHint')}
-              placeholder={'MYSQL_HOST=dev.example\nAPI_KEY=…'}
+              placeholder={'MYSQL_HOST=dev.example\nAPP_URL=http://localhost:$OCTOPUS_PORT'}
               rows={12}
               read={async () => {
                 const result = await window.octopus.projects.readEnv(project.id)
