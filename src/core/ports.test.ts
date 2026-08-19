@@ -4,8 +4,6 @@ import { createServer, type Server, type Socket } from 'node:net'
 import { afterEach, describe, expect, it } from 'vitest'
 
 import {
-  BLOCK,
-  blockPorts,
   type Connect,
   firstFreeBlock,
   isListening,
@@ -13,6 +11,7 @@ import {
   POOL_START,
   settlePort
 } from './ports.js'
+import { BLOCK, blockPorts } from './scriptEnv.js'
 
 /**
  * A socket that goes nowhere, so the timeout can be driven rather than waited

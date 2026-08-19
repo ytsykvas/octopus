@@ -13,7 +13,8 @@
 import { execFile } from 'node:child_process'
 import { promisify } from 'node:util'
 
-import { ROOT_VARIABLE, scriptPath, WORKSPACE_VARIABLE } from './scripts.js'
+import { ROOT_VARIABLE, WORKSPACE_VARIABLE } from './scriptEnv.js'
+import { scriptPath } from './scripts.js'
 import type { ProjectId } from './types.js'
 
 const run = promisify(execFile)

@@ -32,7 +32,8 @@ import {
   type OctopusService,
   type WorkspaceStatusEvent
 } from './service.js'
-import { BLOCK, POOL_START } from './ports.js'
+import { POOL_START } from './ports.js'
+import { BLOCK } from './scriptEnv.js'
 import { listWorktrees } from './worktree.js'
 import { WorkspaceError } from './workspaces.js'
 

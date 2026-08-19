@@ -4,17 +4,8 @@ import { join } from 'node:path'
 
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 
-import {
-  PORT_VARIABLE,
-  ROOT_VARIABLE,
-  scriptEnv,
-  WORKSPACE_VARIABLE,
-  readScript,
-  scriptExists,
-  scriptPath,
-  scriptsDirectory,
-  writeScript
-} from './scripts.js'
+import { PORT_VARIABLE, ROOT_VARIABLE, scriptEnv, WORKSPACE_VARIABLE } from './scriptEnv.js'
+import { readScript, scriptExists, scriptPath, scriptsDirectory, writeScript } from './scripts.js'
 
 let root: string
 

@@ -12,18 +12,10 @@
 
 import { createConnection, type Socket } from 'node:net'
 
+import { BLOCK } from './scriptEnv.js'
+
 /** Loopback only: a workspace's dev server is not somebody else's to reach. */
 const HOST = '127.0.0.1'
-
-/**
- * How many ports one workspace owns.
- *
- * One is not enough for a stack that is more than one process — a dev server, an
- * API, a mailcatcher — and a project that needs a second has nowhere to put it
- * without guessing at a number nothing is holding for it. Ten is what Conductor
- * gives, and it is enough that nobody counts.
- */
-export const BLOCK = 10
 
 /**
  * Where the blocks live.
@@ -80,11 +72,6 @@ export async function isListening(
       finish(false)
     })
   })
-}
-
-/** Every port a workspace owns, its own first. */
-export function blockPorts(port: number): number[] {
-  return Array.from({ length: BLOCK }, (_, offset) => port + offset)
 }
 
 /**

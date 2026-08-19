@@ -21,7 +21,7 @@ import { dirname } from 'node:path'
 import { z } from 'zod'
 
 import { archiveScript, projectScriptsDir, runScript, setupScript } from './paths.js'
-import { blockPorts } from './ports.js'
+import { PORT_VARIABLE, ROOT_VARIABLE, WORKSPACE_VARIABLE } from './scriptEnv.js'
 import type { ProjectId } from './types.js'
 
 export const ScriptKindSchema = z.enum(['setup', 'run', 'archive'])
@@ -35,57 +35,6 @@ export type ScriptKind = z.infer<typeof ScriptKindSchema>
  * discovering the disk filled up.
  */
 export const ScriptBodySchema = z.string().max(64_000)
-
-/** Environment variable carrying the port `run.sh` should listen on. */
-export const PORT_VARIABLE = 'OCTOPUS_PORT'
-
-/**
- * Where the project's own checkout is, and what this workspace is called.
- *
- * A script runs inside a worktree, which is a copy of the repository and not
- * the repository: anything gitignored is missing, and the path back is not
- * something a script can work out — `../../` is our own data directory, not
- * the user's code. Without these a setup script can only hard-code an absolute
- * path, which then breaks on every other machine.
- *
- * The name is what a script needs to give this workspace something of its own:
- * a database, a container, a directory. Conductor's equivalents are
- * `CONDUCTOR_ROOT_PATH` and `CONDUCTOR_WORKSPACE_NAME`.
- */
-export const ROOT_VARIABLE = 'OCTOPUS_ROOT_PATH'
-export const WORKSPACE_VARIABLE = 'OCTOPUS_WORKSPACE_NAME'
-
-/**
- * The environment a script is given.
- *
- * Both get the root and the name; only the server gets the port, which is the
- * one thing that is about serving rather than about the workspace.
- */
-export function scriptEnv(
-  kind: ScriptKind,
-  values: { readonly rootPath: string; readonly workspaceName: string; readonly port: number }
-): Record<string, string> {
-  const env: Record<string, string> = {
-    [ROOT_VARIABLE]: values.rootPath,
-    [WORKSPACE_VARIABLE]: values.workspaceName
-  }
-
-  /*
-   * Ten, not one, and each named rather than left to arithmetic.
-   *
-   * A stack is often more than one process — a dev server, an API, a
-   * mailcatcher — and the second had nowhere to go but a number nothing was
-   * holding for it. Conductor documents a range and leaves the sums to the
-   * script; a variable per port is the same thing somebody can discover.
-   */
-  if (kind === 'run') {
-    blockPorts(values.port).forEach((port, offset) => {
-      env[offset === 0 ? PORT_VARIABLE : `${PORT_VARIABLE}_${String(offset)}`] = String(port)
-    })
-  }
-
-  return env
-}
 
 /**
  * Starting point for a script that has never been written.

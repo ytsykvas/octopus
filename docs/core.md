@@ -48,18 +48,19 @@ Nothing but zod behind them, so a **value** can cross into the window.
 
 ### External tools and processes
 
-| Module                                           | What it decides                                                                                                   |
-| ------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------- |
-| [`github.ts`](../src/core/github.ts)             | which repositories the account can push to, and cloning one, through the `gh` CLI                                 |
-| [`pullRequests.ts`](../src/core/pullRequests.ts) | a branch as a pull request: reading one, pushing, opening one through `gh`                                        |
-| [`accounts.ts`](../src/core/accounts.ts)         | whether `claude` and `gh` are signed in                                                                           |
-| [`terminal.ts`](../src/core/terminal.ts)         | what a pty should run, where, with which environment                                                              |
-| [`scripts.ts`](../src/core/scripts.ts)           | `setup.sh`, `run.sh` and `archive.sh`, and the environment each is given                                          |
-| [`archive.ts`](../src/core/archive.ts)           | running the cleanup script on the way out, without letting it block a removal                                     |
-| [`carry.ts`](../src/core/carry.ts)               | which of the checkout's gitignored files travel into a workspace, and copying them                                |
-| [`ports.ts`](../src/core/ports.ts)               | which block of ten a workspace gets, and whether anything is already answering there                              |
-| [`instructions.ts`](../src/core/instructions.ts) | prose handed to the agent, per project and for the installation; `effectiveInstruction` is the order between them |
-| [`agent.ts`](../src/core/agent.ts)               | the Agent SDK: session lifecycle and event mapping                                                                |
+| Module                                           | What it decides                                                                                                                                                                                                           |
+| ------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| [`github.ts`](../src/core/github.ts)             | which repositories the account can push to, and cloning one, through the `gh` CLI                                                                                                                                         |
+| [`pullRequests.ts`](../src/core/pullRequests.ts) | a branch as a pull request: reading one, pushing, opening one through `gh`                                                                                                                                                |
+| [`accounts.ts`](../src/core/accounts.ts)         | whether `claude` and `gh` are signed in                                                                                                                                                                                   |
+| [`terminal.ts`](../src/core/terminal.ts)         | what a pty should run, where, with which environment                                                                                                                                                                      |
+| [`scripts.ts`](../src/core/scripts.ts)           | `setup.sh`, `run.sh` and `archive.sh`: where each lives, and the template a missing one comes back as                                                                                                                     |
+| [`scriptEnv.ts`](../src/core/scriptEnv.ts)       | the variables a script is given, and the block of ports a workspace owns. No Node imports at all: the renderer needs the value, and a module reaching `node:os` behind it broke the window while every check stayed green |
+| [`archive.ts`](../src/core/archive.ts)           | running the cleanup script on the way out, without letting it block a removal                                                                                                                                             |
+| [`carry.ts`](../src/core/carry.ts)               | which of the checkout's gitignored files travel into a workspace, and copying them                                                                                                                                        |
+| [`ports.ts`](../src/core/ports.ts)               | which block of ten a workspace gets, and whether anything is already answering there                                                                                                                                      |
+| [`instructions.ts`](../src/core/instructions.ts) | prose handed to the agent, per project and for the installation; `effectiveInstruction` is the order between them                                                                                                         |
+| [`agent.ts`](../src/core/agent.ts)               | the Agent SDK: session lifecycle and event mapping                                                                                                                                                                        |
 
 ### The façade
 
@@ -73,9 +74,12 @@ proxy — an IPC handler should only have to forward the call.
 testable without mocking modules.
 
 ```ts
-export function rootDir(home: string = homedir()): string
-export async function listWorktrees(exec: GitExec): Promise<Worktree[]>
-export function nextWorkspaceName(taken: readonly string[], random: Random = Math.random): string
+export function rootDir(home: string = homedir()): string;
+export async function listWorktrees(exec: GitExec): Promise<Worktree[]>;
+export function nextWorkspaceName(
+  taken: readonly string[],
+  random: Random = Math.random,
+): string;
 ```
 
 The clock and randomness are parameters too. Without that, a test either asserts

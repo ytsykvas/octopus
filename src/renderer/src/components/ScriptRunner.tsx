@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
-import { type ScriptKind, scriptEnv } from '@core/scripts.js'
+import { scriptEnv } from '@core/scriptEnv.js'
+import type { ScriptKind } from '@core/scripts.js'
 import type { WorkspaceView } from '@core/workspaces.js'
 
 import { useErrorMessage } from '../hooks/useErrorMessage.js'
