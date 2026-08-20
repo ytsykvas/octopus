@@ -80,7 +80,9 @@ describe('the instruction every project falls back to', () => {
 
     await openSection(user, 'Instructions')
 
-    expect(await screen.findByDisplayValue('Lead with the why.')).toBeInTheDocument()
+    expect(await screen.findByLabelText('Pull request descriptions')).toHaveValue(
+      'Lead with the why.'
+    )
     expect(octopus().projects.readInstruction).toHaveBeenCalledWith(null, 'pullRequest')
   })
 
@@ -96,8 +98,34 @@ describe('the instruction every project falls back to', () => {
 
     await openSection(user, 'Instructions')
 
-    expect(await screen.findByRole('textbox')).toHaveValue('')
+    expect(await screen.findByLabelText('Pull request descriptions')).toHaveValue('')
     expect(screen.queryByText(/EACCES/)).not.toBeInTheDocument()
+  })
+
+  /*
+   * Five buttons on the pull request tab send five different pieces of prose,
+   * and §4 is that none of them reaches the agent without the reader being able
+   * to see and change it first. One editor per kind is what makes that true.
+   */
+  it('offers an editor for every instruction the app can send', async () => {
+    const user = userEvent.setup()
+    await renderSettings()
+
+    await openSection(user, 'Instructions')
+
+    for (const label of [
+      'Pull request descriptions',
+      'Answering a review',
+      'Reviewing a change',
+      'A review from several angles',
+      'Resolving conflicts'
+    ]) {
+      expect(await screen.findByLabelText(label)).toBeInTheDocument()
+    }
+
+    expect(
+      vi.mocked(octopus().projects.readInstruction).mock.calls.map(([, kind]) => kind)
+    ).toEqual(['pullRequest', 'addressReview', 'review', 'multiAgentReview', 'resolveConflicts'])
   })
 
   it('saves it when the editor loses focus', async () => {
@@ -106,7 +134,7 @@ describe('the instruction every project falls back to', () => {
     await renderSettings()
 
     await openSection(user, 'Instructions')
-    const editor = await screen.findByDisplayValue('old')
+    const editor = await screen.findByLabelText('Pull request descriptions')
     await user.clear(editor)
     await user.type(editor, 'Say what changed.')
     await user.tab()

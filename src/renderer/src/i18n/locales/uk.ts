@@ -148,9 +148,6 @@ export const uk: Translation = {
     sourcePresent: 'завантажено',
     sourceAbsent: 'немає',
     sourceCount: 'завантажено: {{count}}',
-    pullRequestInstruction: 'Опис pull request',
-    pullRequestInstructionHint:
-      'Надсилається агенту, коли ви просите його описати зміну для pull request у цьому проєкті. Використовується замість тієї, що в Налаштуваннях; порожня означає, що проєкт нічого не додає.',
     repository: 'Репозиторій',
     dangerZone: 'Небезпечна зона',
     removeHint: 'Прибирає проєкт з Octopus. Репозиторій лишається на диску.'
@@ -207,6 +204,25 @@ export const uk: Translation = {
     expand: 'Показати панель',
     terminalPlaceholder: 'Виберіть воркспейс, щоб відкрити термінал у його теці.',
     resize: 'Змінити ширину панелі'
+  },
+
+  instructions: {
+    scopeGlobal: 'Проєкт може написати власну — тоді діятиме вона.',
+    scopeProject:
+      'Діє замість тієї, що в Налаштуваннях; порожня означає, що проєкт нічого не додає.',
+
+    pullRequest: 'Описи pull request',
+    pullRequestHint: 'Надсилається, коли ви просите агента описати зміну для pull request.',
+    addressReview: 'Опрацювати ревю',
+    addressReviewHint: 'Надсилається, коли ви віддаєте агентові ревю на pull request.',
+    review: 'Зробити ревю',
+    reviewHint: 'Надсилається, коли ви просите агента відревʼювати сам pull request.',
+    multiAgentReview: 'Ревю з кількох боків',
+    multiAgentReviewHint:
+      'Надсилається, коли ви просите ревю кількома субагентами одночасно, кожен читає щось своє.',
+    resolveConflicts: 'Розвʼязати конфлікти',
+    resolveConflictsHint:
+      'Надсилається, коли pull request конфліктує з базовою гілкою і ви просите агента це владнати.'
   },
 
   pullRequest: {
@@ -431,9 +447,6 @@ export const uk: Translation = {
     sectionGit: 'Git',
     sectionAgent: 'Агент',
     sectionInstructions: 'Інструкції',
-    pullRequestInstruction: 'Опис pull request',
-    pullRequestInstructionHint:
-      'Надсилається агенту, коли ви просите його описати зміну для pull request. Проєкт може написати свою інструкцію, і тоді використовується вона.',
     sectionAccounts: 'Claude',
     sectionAbout: 'Про застосунок',
 

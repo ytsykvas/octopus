@@ -150,9 +150,6 @@ export const en = {
     sourcePresent: 'loaded',
     sourceAbsent: 'none',
     sourceCount: '{{count}} loaded',
-    pullRequestInstruction: 'Pull request descriptions',
-    pullRequestInstructionHint:
-      'Sent to the agent when you ask it to describe a change for a pull request in this project. Used instead of the one in Settings; empty means this project adds nothing.',
     repository: 'Repository',
     dangerZone: 'Danger zone',
     removeHint: 'Removes the project from octopus. The repository stays on disk.'
@@ -227,6 +224,31 @@ export const en = {
     expand: 'Show panel',
     terminalPlaceholder: 'Select a workspace to open a terminal in its directory.',
     resize: 'Resize panel'
+  },
+
+  /*
+   * The five pieces of prose the pull request tab can send.
+   *
+   * Named for what the button does rather than for the file, because the button
+   * is where they are met. The scope sentence is appended to each hint by
+   * `InstructionEditors`, so the difference between the two dialogs is said once.
+   */
+  instructions: {
+    scopeGlobal: 'A project can write its own, which is used instead of this one.',
+    scopeProject: 'Used instead of the one in Settings; empty means this project adds nothing.',
+
+    pullRequest: 'Pull request descriptions',
+    pullRequestHint: 'Sent when you ask the agent to describe a change for a pull request.',
+    addressReview: 'Answering a review',
+    addressReviewHint: 'Sent when you hand the review on a pull request to the agent to deal with.',
+    review: 'Reviewing a change',
+    reviewHint: 'Sent when you ask the agent to review the pull request itself.',
+    multiAgentReview: 'A review from several angles',
+    multiAgentReviewHint:
+      'Sent when you ask for a review run by several subagents at once, each reading for one thing.',
+    resolveConflicts: 'Resolving conflicts',
+    resolveConflictsHint:
+      'Sent when the pull request conflicts with its base branch and you ask the agent to settle it.'
   },
 
   pullRequest: {
@@ -514,9 +536,6 @@ export const en = {
     sectionInstructions: 'Instructions',
     /* The global one. What a project's own instruction overrides, and what
        applies wherever a project has not written one. */
-    pullRequestInstruction: 'Pull request descriptions',
-    pullRequestInstructionHint:
-      'Sent to the agent when you ask it to describe a change for a pull request. A project can write its own, which is used instead of this one.',
     sectionAccounts: 'Claude',
     sectionAbout: 'About',
 

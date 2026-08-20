@@ -26,6 +26,7 @@ import { Modal } from './Modal.js'
 import { ProjectGlyph } from './ProjectGlyph.js'
 import { SectionRail } from './SectionRail.js'
 import { FileEditor } from './FileEditor.js'
+import { InstructionEditors } from './InstructionEditors.js'
 
 interface ProjectSettingsProps {
   readonly project: Project
@@ -502,20 +503,7 @@ export function ProjectSettings({
                 </ul>
               </Field>
 
-              <FileEditor
-                label={t('project.pullRequestInstruction')}
-                hint={t('project.pullRequestInstructionHint')}
-                read={async () => {
-                  const result = await window.octopus.projects.readInstruction(
-                    project.id,
-                    'pullRequest'
-                  )
-                  return result.ok ? result.value : null
-                }}
-                save={(contents) =>
-                  void window.octopus.projects.saveInstruction(project.id, 'pullRequest', contents)
-                }
-              />
+              <InstructionEditors projectId={project.id} />
             </>
           )}
 

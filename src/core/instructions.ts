@@ -17,10 +17,25 @@ import { dirname } from 'node:path'
 
 import { z } from 'zod'
 
-import { globalPullRequestInstruction, pullRequestInstruction } from './paths.js'
+import { globalInstruction, projectInstruction } from './paths.js'
 import type { ProjectId } from './types.js'
 
-export const InstructionKindSchema = z.enum(['pullRequest'])
+/**
+ * The prose the pull request tab can send, one kind per button.
+ *
+ * All five go out as ordinary user messages the reader can see in the log and
+ * edit before they are ever sent (§4). That is the whole reason they are files
+ * rather than strings in the app: a prompt nobody can read is a prompt nobody
+ * can correct, and octopus adds nothing to the agent's context that the user
+ * has not written.
+ */
+export const InstructionKindSchema = z.enum([
+  'pullRequest',
+  'addressReview',
+  'review',
+  'multiAgentReview',
+  'resolveConflicts'
+])
 export type InstructionKind = z.infer<typeof InstructionKindSchema>
 
 /**
@@ -48,7 +63,76 @@ How the agent should describe the work in a pull request for this project.
   configuration, a follow-up that was deliberately left out.
 - Keep the project's own conventions — issue references, a changelog entry,
   whatever this repository already does.
+`,
+
+  addressReview: `# Answering a review
+
+Read the review on this pull request and deal with it.
+
+- Read every comment first, then decide. Some of them will be about the same
+  thing, and one change may answer several.
+- Where a comment is right, make the change. Where it is not, say so in the
+  reply rather than changing the code to end the conversation.
+- Where a comment asks a question, answer it — do not treat it as a request.
+- Leave the branch committed and pushed, so the request carries the answer.
+`,
+
+  review: `# Reviewing this change
+
+Review the pull request as though it were somebody else's, before anyone else
+has to.
+
+- Read the diff against what the change set out to do, not line by line.
+- Look for what would fail: an unhandled case, a check that cannot fire, a
+  claim in a comment the code no longer keeps.
+- Say what is fine as well as what is not. A review that only lists faults
+  cannot be told from one that ran out of time.
+- Do not change the code. This is a reading, and what to do about it is the
+  next decision rather than part of this one.
+`,
+
+  multiAgentReview: `# A review from several angles at once
+
+Review this pull request with several subagents, each reading for one thing,
+then reconcile what they found.
+
+- Give each one a different lens — correctness, tests, security, performance,
+  the interface it presents — so they are not four copies of one reading.
+- Verify a finding before reporting it. A plausible fault that does not
+  reproduce costs more to dismiss than it did to raise.
+- Reconcile at the end: drop the duplicates, say which findings disagree with
+  each other, and rank what is left by what it would cost to leave.
+- Do not change the code.
+`,
+
+  resolveConflicts: `# Resolving the conflicts
+
+This branch conflicts with its base. Merge the base in and settle it.
+
+- Fetch and merge the base branch rather than rebasing: the branch is already
+  pushed, and a rebase rewrites what the pull request is made of.
+- For each conflict, work out what both sides were doing before choosing.
+  Taking one side wholesale is how a change quietly disappears.
+- Build and run the tests afterwards. A file that merged cleanly can still be
+  wrong once both changes are in it.
+- Commit and push, so the request stops showing a conflict.
 `
+}
+
+/**
+ * Where each kind is written, at both scopes.
+ *
+ * A `Record` keyed by the kind rather than a function per file, so a sixth kind
+ * arriving without a home is a compile error here — which is also what makes
+ * the uniqueness test worth having: totality is checked by the compiler, and
+ * two kinds pointing at one file is not.
+ */
+const FILES: Record<InstructionKind, string> = {
+  pullRequest: 'pull-request.md',
+  addressReview: 'address-review.md',
+  review: 'review.md',
+  multiAgentReview: 'multi-agent-review.md',
+  resolveConflicts: 'resolve-conflicts.md'
 }
 
 /**
@@ -60,29 +144,13 @@ How the agent should describe the work in a pull request for this project.
  */
 export type InstructionScope = ProjectId | null
 
-/**
- * Where each kind of instruction lives, at each scope.
- *
- * A map keyed by the kind, so adding a second one is a compile error here
- * rather than something that quietly falls through to the first file.
- */
-const PATHS: Record<
-  InstructionKind,
-  {
-    project: (projectId: ProjectId, root?: string) => string
-    global: (root?: string) => string
-  }
-> = {
-  pullRequest: { project: pullRequestInstruction, global: globalPullRequestInstruction }
-}
-
 export function instructionPath(
   kind: InstructionKind,
   scope: InstructionScope,
   root?: string
 ): string {
-  const paths = PATHS[kind]
-  return scope === null ? paths.global(root) : paths.project(scope, root)
+  const file = FILES[kind]
+  return scope === null ? globalInstruction(file, root) : projectInstruction(scope, file, root)
 }
 
 /**

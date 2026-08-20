@@ -6,6 +6,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 
 import {
   effectiveInstruction,
+  InstructionKindSchema,
   instructionPath,
   readInstruction,
   writeInstruction
@@ -35,6 +36,32 @@ describe('instructionPath', () => {
 
   it('falls back to the real root when none is given', () => {
     expect(instructionPath('pullRequest', 'planner')).toContain('.octopus')
+    expect(instructionPath('pullRequest', null)).toContain('.octopus')
+  })
+
+  /*
+   * Totality is the compiler's job — a kind without a file does not build. What
+   * it cannot see is two kinds pointing at one file, which reads as one
+   * instruction being edited from two places and overwriting itself. Line
+   * coverage would not notice either: indexing a record is one line however
+   * many keys it has, so this iterates the enum rather than sampling it.
+   */
+  it('gives every kind a file of its own, at both scopes', () => {
+    const kinds = InstructionKindSchema.options
+
+    for (const scope of [null, 'planner'] as const) {
+      const paths = kinds.map((kind) => instructionPath(kind, scope, root))
+
+      expect(new Set(paths).size).toBe(kinds.length)
+    }
+  })
+
+  it('has something written for every kind to start from', async () => {
+    for (const kind of InstructionKindSchema.options) {
+      // Not merely present: an empty template is how a project says it adds
+      // nothing, and a kind that started that way could never say it.
+      await expect(readInstruction(kind, 'planner', root)).resolves.not.toBe('')
+    }
   })
 })
 

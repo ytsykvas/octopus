@@ -77,6 +77,12 @@ export function FileEditor({
         value={body}
         spellCheck={false}
         rows={rows}
+        /* `Field` draws the label as a paragraph, which names nothing to a
+           screen reader. One editor to a section, that was merely thin; five
+           instruction editors one after another are five unnamed boxes, and the
+           only way to tell them apart is to see them. It is also the only handle
+           a test has on the right one. */
+        aria-label={label}
         onChange={(event) => {
           setBody(event.target.value)
         }}

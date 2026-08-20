@@ -1626,7 +1626,7 @@ describe('App', () => {
     await user.click(await screen.findByRole('button', { name: 'Instructions for a new PR' }))
 
     expect(await screen.findByRole('dialog', { name: 'Project settings' })).toBeInTheDocument()
-    expect(screen.getByDisplayValue(/Pull request descriptions/)).toBeInTheDocument()
+    expect(screen.getByLabelText('Pull request descriptions')).toBeInTheDocument()
   })
 
   it('opens the pull request with ⌘⇧P', async () => {

@@ -642,7 +642,9 @@ describe('ProjectSettings', () => {
     })
     await renderDialog({ initialSection: 'instructions' })
 
-    expect(await screen.findByDisplayValue('Lead with the why.')).toBeInTheDocument()
+    expect(await screen.findByLabelText('Pull request descriptions')).toHaveValue(
+      'Lead with the why.'
+    )
   })
 
   /*
@@ -743,7 +745,9 @@ describe('ProjectSettings', () => {
 
     await openSection(user, 'Instructions')
 
-    expect(await screen.findByDisplayValue('Open with a one-line summary.')).toBeInTheDocument()
+    expect(await screen.findByLabelText('Pull request descriptions')).toHaveValue(
+      'Open with a one-line summary.'
+    )
     expect(window.octopus.projects.readInstruction).toHaveBeenCalledWith('planner', 'pullRequest')
   })
 
@@ -820,7 +824,7 @@ describe('ProjectSettings', () => {
     await renderDialog()
 
     await openSection(user, 'Instructions')
-    const instructions = await screen.findByDisplayValue('Open with a one-line summary.')
+    const instructions = await screen.findByLabelText('Pull request descriptions')
     await user.clear(instructions)
     await user.type(instructions, 'Lead with the why.')
     await user.tab()
@@ -860,7 +864,7 @@ describe('ProjectSettings', () => {
 
     await openSection(user, 'Files')
 
-    expect(await screen.findByRole('textbox')).toHaveValue('')
+    expect(await screen.findByLabelText('Files carried into a workspace')).toHaveValue('')
     expect(screen.queryByText(/permission denied/)).toBeNull()
   })
 
@@ -893,7 +897,7 @@ describe('ProjectSettings', () => {
 
     await openSection(user, 'Instructions')
 
-    expect(await screen.findByRole('textbox')).toHaveValue('')
+    expect(await screen.findByLabelText('Pull request descriptions')).toHaveValue('')
     expect(screen.queryByText(/permission denied/)).toBeNull()
   })
 })

@@ -11,7 +11,7 @@ import type {
 } from '@core/config.js'
 
 import { useModels } from '../hooks/useModels.js'
-import { FileEditor } from './FileEditor.js'
+import { InstructionEditors } from './InstructionEditors.js'
 import { Button } from './Button.js'
 import { modelRows } from './chat/modelRows.js'
 import { Field } from './Field.js'
@@ -123,21 +123,7 @@ interface SectionProps {
  * editors for one kind of thing would be two places for them to disagree.
  */
 function InstructionsSection(): React.JSX.Element {
-  const { t } = useTranslation()
-
-  return (
-    <FileEditor
-      label={t('settings.pullRequestInstruction')}
-      hint={t('settings.pullRequestInstructionHint')}
-      read={async () => {
-        const result = await window.octopus.projects.readInstruction(null, 'pullRequest')
-        return result.ok ? result.value : null
-      }}
-      save={(contents) => {
-        void window.octopus.projects.saveInstruction(null, 'pullRequest', contents)
-      }}
-    />
-  )
+  return <InstructionEditors projectId={null} />
 }
 
 function GeneralSection({ config, onChange }: SectionProps): React.JSX.Element {

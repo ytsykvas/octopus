@@ -74,9 +74,21 @@ export function projectInstructionsDir(projectId: ProjectId, root: string = root
   return join(projectDir(projectId, root), 'instructions')
 }
 
-/** How the agent should write a pull request description for this project. */
-export function pullRequestInstruction(projectId: ProjectId, root: string = rootDir()): string {
-  return join(projectInstructionsDir(projectId, root), 'pull-request.md')
+/**
+ * One of a project's instruction files, named by the caller.
+ *
+ * The filename comes from `instructions.ts` rather than living here as a
+ * function per kind. There are five of them and each has two scopes, and ten
+ * near-identical one-line functions is a list to keep in step rather than a
+ * boundary — while the map over there is a `Record<InstructionKind, string>`,
+ * so a sixth kind without a home is a compile error.
+ */
+export function projectInstruction(
+  projectId: ProjectId,
+  file: string,
+  root: string = rootDir()
+): string {
+  return join(projectInstructionsDir(projectId, root), file)
 }
 
 /**
@@ -89,8 +101,8 @@ export function globalInstructionsDir(root: string = rootDir()): string {
   return join(root, 'instructions')
 }
 
-export function globalPullRequestInstruction(root: string = rootDir()): string {
-  return join(globalInstructionsDir(root), 'pull-request.md')
+export function globalInstruction(file: string, root: string = rootDir()): string {
+  return join(globalInstructionsDir(root), file)
 }
 
 /** Script run right after `git worktree add`. */
