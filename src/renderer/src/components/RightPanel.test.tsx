@@ -319,12 +319,18 @@ describe('RightPanel', () => {
     expect(screen.getByText('OCTOPUS_PORT=3222')).toBeInTheDocument()
   })
 
+  /*
+   * Reached without unfolding anything. The build starts folded, so if that
+   * half were the only one offering the editor, a project with no scripts would
+   * open on a tab that says nothing and leads nowhere — the server half is open
+   * and offers the same way in.
+   */
   it('sends the user to the script editor when the project has no script', async () => {
     const onEditScripts = vi.fn()
     renderPanel({ workspaces: [anna], activeWorkspaceId: anna.id, onEditScripts })
 
     await userEvent.click(scriptsTab())
-    await userEvent.click(within(buildSection()).getByRole('button', { name: 'Write the script' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Write the script' }))
 
     expect(onEditScripts).toHaveBeenCalled()
   })
@@ -894,10 +900,15 @@ describe('RightPanel', () => {
 
   // A sibling of the fold toggle rather than a child of it: reaching for the
   // env must not put the build away.
-  it('leaves the build open when the env button is used', async () => {
+  /*
+   * The env button is a sibling of the toggle rather than a child of it, so
+   * reaching for it cannot fold the build — or unfold it — by accident.
+   */
+  it('leaves the build as it was when the env button is used', async () => {
     renderPanel({ workspaces: [anna], activeWorkspaceId: anna.id, scriptPaths: SCRIPTS })
 
     await userEvent.click(scriptsTab())
+    await userEvent.click(within(buildSection()).getByRole('button', { name: 'Show the build' }))
     await userEvent.click(within(buildSection()).getByRole('button', { name: 'Env' }))
 
     expect(
@@ -1301,28 +1312,43 @@ describe('RightPanel', () => {
 
   // The two script tabs are separate runs, so the one being watched must be
   // the one whose output is on screen.
-  it('folds the build half away and brings it back', async () => {
+  /*
+   * Folded to start with, every time. What a build prints is the same hundred
+   * lines on every run and is worth reading on the one that fails — which the
+   * header says in a colour without the log being open — so unfolded by default
+   * it took half the tab from the server log nobody folds away.
+   */
+  it('starts with the build folded away', async () => {
     const user = userEvent.setup()
     renderPanel({ workspaces: [anna], activeWorkspaceId: anna.id, scriptPaths: SCRIPTS })
 
     await user.click(scriptsTab())
-    expect(buildHeading()).toHaveAttribute('aria-expanded', 'true')
+
+    expect(buildHeading()).toHaveAttribute('aria-expanded', 'false')
+    // Hidden rather than gone — the class says nothing without a stylesheet,
+    // and jsdom has none, so this is what "folded" looks like from here.
+    expect(buildBody()).toHaveAttribute('aria-hidden', 'true')
+  })
+
+  it('brings the build back and folds it away again', async () => {
+    const user = userEvent.setup()
+    renderPanel({ workspaces: [anna], activeWorkspaceId: anna.id, scriptPaths: SCRIPTS })
+
+    await user.click(scriptsTab())
     // Named for what pressing it does, which is the opposite in each state —
     // a label that stayed put would leave the control describing the wrong one.
+    expect(buildHeading()).toHaveAccessibleName('Show the build')
+
+    await user.click(buildHeading())
+
+    expect(buildHeading()).toHaveAttribute('aria-expanded', 'true')
     expect(buildHeading()).toHaveAccessibleName('Fold the build away')
+    expect(buildBody()).toHaveAttribute('aria-hidden', 'false')
 
     await user.click(buildHeading())
 
     expect(buildHeading()).toHaveAttribute('aria-expanded', 'false')
-    expect(buildHeading()).toHaveAccessibleName('Show the build')
-    // Hidden rather than gone — the class says nothing without a stylesheet,
-    // and jsdom has none, so this is what "folded" looks like from here.
     expect(buildBody()).toHaveAttribute('aria-hidden', 'true')
-
-    await user.click(buildHeading())
-
-    expect(buildHeading()).toHaveAttribute('aria-expanded', 'true')
-    expect(buildBody()).toHaveAttribute('aria-hidden', 'false')
   })
 
   /*

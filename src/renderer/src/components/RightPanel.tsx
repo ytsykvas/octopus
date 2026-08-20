@@ -180,14 +180,20 @@ export function RightPanel({
   const [windowWidth, setWindowWidth] = useState(() => window.innerWidth)
   const [minWidth, setMinWidth] = useState(MIN_WIDTH)
   /*
-   * Whether the build half is open.
+   * Whether the build half is open. Folded to start with, every time.
+   *
+   * What a build prints is the same hundred lines of install and compile on
+   * every run, and it is worth reading on exactly the run that fails — which
+   * the header already says in a colour, without the log being open. Unfolded
+   * by default it took half the tab from the server log, which is the half
+   * anybody actually watches.
    *
    * Not stored, unlike the tab beside it. Which tab is showing is a standing
    * preference — somebody who works with the server log open wants it back on
-   * every launch — and this is a mood about the workspace in front of you: the
-   * build was read, so it is out of the way until the next one.
+   * every launch — and this is a mood about the run in front of you: opened to
+   * read a failure, and gone again with the workspace.
    */
-  const [buildOpen, setBuildOpen] = useState(true)
+  const [buildOpen, setBuildOpen] = useState(false)
   const [showingEnv, setShowingEnv] = useState(false)
   /*
    * Where each workspace's server actually ended up.

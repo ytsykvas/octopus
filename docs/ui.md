@@ -693,11 +693,21 @@ does. Folding the finished one is what gives the one still going the whole pane,
 and a control that folded away the thing being watched would be one nobody
 asked for.
 
+**And it starts folded, every time.** What a build prints is the same hundred
+lines of install and compile on every run, and it is worth reading on exactly
+the run that fails — which the header above already says, in a colour, without
+the log being open. Unfolded by default it took half the tab from the server
+log, which is the half anybody actually watches.
+
+The way to the script editor survives that: a workspace with no scripts is
+offered one from **both** halves, and the server half is open. Otherwise a fresh
+project would land on a tab that says nothing and leads nowhere.
+
 It folds by a class and an `aria-hidden`, never by unmounting — unmounting the
 terminal is how Stop ends a run, so a fold that removed it would kill a
 `setup.sh` half way through without saying so. Whether it is folded is not
 stored, unlike the tab beside it: which tab is showing is a standing preference,
-and this is a mood about the workspace in front of you.
+and this is a mood about the run in front of you.
 
 **The pull request tab is the one place that reaches GitHub for something other
 than cloning.** It names the branch, and then either reports the request there

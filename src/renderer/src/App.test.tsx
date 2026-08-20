@@ -1284,11 +1284,9 @@ describe('App', () => {
     await user.click(screen.getByRole('button', { name: 'Scripts' }))
     await user.click(await screen.findByText('anna'))
 
-    await user.click(
-      await within(screen.getByRole('region', { name: 'Build' })).findByRole('button', {
-        name: 'Write the script'
-      })
-    )
+    // The build half starts folded, so the hint that is on screen is the
+    // server half's — both offer it, and both open the same dialog.
+    await user.click(await screen.findByRole('button', { name: 'Write the script' }))
 
     expect(await screen.findByRole('dialog', { name: 'Project settings' })).toBeInTheDocument()
   })
@@ -1380,9 +1378,7 @@ describe('App', () => {
     await user.click(await screen.findByRole('button', { name: 'PL' }))
     await user.click(screen.getByRole('button', { name: 'Scripts' }))
     await user.click(await screen.findByText('anna'))
-    await within(screen.getByRole('region', { name: 'Build' })).findByRole('button', {
-      name: 'Write the script'
-    })
+    await screen.findByRole('button', { name: 'Write the script' })
 
     // The next read of the projects has lost planner, while the workspace lists
     // stay out and the pane keeps the ones it already has.
@@ -1414,11 +1410,8 @@ describe('App', () => {
     await user.click(screen.getByRole('button', { name: 'Scripts' }))
     await user.click(await screen.findByText('anna'))
 
-    expect(
-      await within(screen.getByRole('region', { name: 'Build' })).findByRole('button', {
-        name: 'Write the script'
-      })
-    ).toBeInTheDocument()
+    // The server half's, since the build half starts folded — both offer it.
+    expect(await screen.findByRole('button', { name: 'Write the script' })).toBeInTheDocument()
   })
 
   // Switching project starts a second read while the first is still out. The
@@ -1445,11 +1438,7 @@ describe('App', () => {
     })
 
     expect(screen.queryByText('/tmp/planner/setup.sh')).not.toBeInTheDocument()
-    expect(
-      within(screen.getByRole('region', { name: 'Build' })).getByRole('button', {
-        name: 'Write the script'
-      })
-    ).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Write the script' })).toBeInTheDocument()
   })
 
   it('opens another conversation with ⌘T', async () => {
