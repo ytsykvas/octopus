@@ -94,6 +94,7 @@ function renderPanel(overrides: Partial<Props> = {}): {
     comments: commentController(),
     quotes: quoteController(),
     envFile: '.env',
+    onRequestChanged: vi.fn(),
     onError: vi.fn(),
     ...overrides
   }

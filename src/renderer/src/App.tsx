@@ -2,6 +2,7 @@ import {
   CloudDownload,
   FolderOpen,
   GitBranch,
+  GitPullRequest,
   PanelRightClose,
   PanelRightOpen,
   Plus,
@@ -28,6 +29,7 @@ import { useErrorMessage } from './hooks/useErrorMessage.js'
 import { DEFAULT_ENV_FILE } from '@core/envBlock.js'
 
 import { useDiffComments } from './hooks/useDiffComments.js'
+import { useBranchRequests } from './hooks/useBranchRequests.js'
 import { usePullRequestQuotes } from './hooks/usePullRequestQuotes.js'
 import { type ChatTab, useChatTabs } from './hooks/useChatTabs.js'
 import { useProjects } from './hooks/useProjects.js'
@@ -258,6 +260,18 @@ export function App(): React.JSX.Element {
    * The selection and the workspace list are this component's business, so
    * they are settled here rather than inside the hook.
    */
+  /**
+   * Unfolds the right pane and puts the pull request tab in front of it.
+   *
+   * Lifted out of the shortcut handler because a button in the header now does
+   * the same thing, and two copies of "open that tab" drift the first time one
+   * of them is touched.
+   */
+  const showPullRequests = useCallback(() => {
+    setRightPanelOpen(true)
+    void updateConfig({ rightPanelTab: 'pullRequest' })
+  }, [updateConfig])
+
   const removeProject = useCallback(
     async (projectId: string) => {
       const count = (workspaces.byProject.get(projectId) ?? []).length
@@ -365,8 +379,7 @@ export function App(): React.JSX.Element {
       // is read once, tried once, and takes the rest of the table with it.
       if (event.metaKey && event.shiftKey && event.key.toLowerCase() === 'p') {
         event.preventDefault()
-        setRightPanelOpen(true)
-        void updateConfig({ rightPanelTab: 'pullRequest' })
+        showPullRequests()
         return
       }
 
@@ -396,7 +409,7 @@ export function App(): React.JSX.Element {
     return () => {
       window.removeEventListener('keydown', onKey)
     }
-  }, [selectedProjectId, workspaces, projects, updateConfig, chatTabs])
+  }, [selectedProjectId, workspaces, projects, updateConfig, showPullRequests, chatTabs])
 
   const selectedProject = projects.all.find((project) => project.id === selectedProjectId) ?? null
   const projectWorkspaces = selectedProject
@@ -415,6 +428,28 @@ export function App(): React.JSX.Element {
   // Read twice: the right pane hands it to the scripts, and the hint they
   // draw when there is none sends the user to edit that same project.
   const openProjectId = selectedProject?.id ?? null
+
+  /* One read for the whole project, which is what lets the list mark every row
+     without a network call per row. Below `openProjectId` rather than beside
+     the other stores, because that is where the project it is about is worked
+     out — and there is no early return between here and them. */
+  const branchRequests = useBranchRequests(openProjectId)
+
+  /*
+   * Whether the header offers to open a request.
+   *
+   * Two facts, and both are needed: uncommitted work, and commits the base
+   * does not have. A workspace that has committed everything has no changed
+   * files and is the state most ready for a request, so the first on its own
+   * hid the button exactly when it was most wanted.
+   *
+   * An open request already there is what takes it away again — read for the
+   * whole project in one call, so this costs nothing per workspace.
+   */
+  const readyForRequest =
+    selectedWorkspace !== null &&
+    (selectedWorkspace.changedFiles > 0 || selectedWorkspace.ahead > 0) &&
+    branchRequests.byBranch.get(selectedWorkspace.branch)?.state !== 'open'
 
   // What a conversation with no record of its own starts with. Read here
   // rather than in the chat: this is where the config lives, and the composer's
@@ -454,25 +489,43 @@ export function App(): React.JSX.Element {
           </span>
         )}
 
-        {/* One control in one place, rather than a collapse inside the pane and
+        <span className="ml-auto flex shrink-0 items-center gap-2">
+          {/*
+           * Finished work, one press from a request.
+           *
+           * Beside the branch, because that is what a request would be made of.
+           * It appears when the workspace has something to carry and no request
+           * open yet — and it deliberately does not ask GitHub itself: that is a
+           * network call per workspace, and the tab it opens is the one authority
+           * on what the branch has.
+           */}
+          {readyForRequest && (
+            <Button size="sm" onClick={showPullRequests}>
+              <GitPullRequest aria-hidden size={12} />
+              {t('pullRequest.createShortcut')}
+            </Button>
+          )}
+
+          {/* One control in one place, rather than a collapse inside the pane and
             an expand out here: the button that folds something away should be
             the button that brings it back, or the second one has to be hunted
             for in a pane that is no longer on screen. */}
-        <button
-          type="button"
-          onClick={() => {
-            setRightPanelOpen((open) => !open)
-          }}
-          className="text-ink-faint hover:text-ink focus-ring ml-auto rounded p-1 transition-colors"
-          title={rightPanelOpen ? t('panel.collapse') : t('panel.expand')}
-          aria-label={rightPanelOpen ? t('panel.collapse') : t('panel.expand')}
-        >
-          {rightPanelOpen ? (
-            <PanelRightClose aria-hidden size={14} />
-          ) : (
-            <PanelRightOpen aria-hidden size={14} />
-          )}
-        </button>
+          <button
+            type="button"
+            onClick={() => {
+              setRightPanelOpen((open) => !open)
+            }}
+            className="text-ink-faint hover:text-ink focus-ring rounded p-1 transition-colors"
+            title={rightPanelOpen ? t('panel.collapse') : t('panel.expand')}
+            aria-label={rightPanelOpen ? t('panel.collapse') : t('panel.expand')}
+          >
+            {rightPanelOpen ? (
+              <PanelRightClose aria-hidden size={14} />
+            ) : (
+              <PanelRightOpen aria-hidden size={14} />
+            )}
+          </button>
+        </span>
       </header>
 
       <div className="flex min-h-0 flex-1">
@@ -506,6 +559,7 @@ export function App(): React.JSX.Element {
               <Sidebar
                 project={selectedProject}
                 workspaces={projectWorkspaces}
+                requests={branchRequests.byBranch}
                 selectedWorkspaceId={selectedWorkspaceId}
                 onSelectWorkspace={setSelectedWorkspaceId}
                 onCreateWorkspace={() => {
@@ -639,6 +693,7 @@ export function App(): React.JSX.Element {
             comments={diffComments}
             quotes={reviewQuotes}
             envFile={selectedProject?.envFile ?? DEFAULT_ENV_FILE}
+            onRequestChanged={branchRequests.refresh}
             onError={setError}
             // The room the pane must leave alone. Folded away, the list takes
             // none of it — and the pane may have that room too.

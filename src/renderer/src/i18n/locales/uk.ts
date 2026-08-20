@@ -57,6 +57,12 @@ export const uk: Translation = {
   },
 
   workspaces: {
+    requestRunning: 'Pull request #{{number}} — перевірки виконуються',
+    requestPassed: 'Pull request #{{number}} — перевірки пройшли',
+    requestFailed: 'Pull request #{{number}} — перевірка впала',
+    requestWaiting: 'Pull request #{{number}} — перевірок немає',
+    requestMerged: 'Pull request #{{number}} — влитий',
+    requestClosed: 'Pull request #{{number}} — закритий без злиття',
     create: 'Новий воркспейс',
     emptyForProject: 'Поки жодного воркспейсу. Створіть його кнопкою + вище.',
     rename: 'Перейменувати',
@@ -248,6 +254,7 @@ export const uk: Translation = {
     stateMerged: 'Pull request #{{number}} влитий.',
     stateClosed: 'Pull request #{{number}} закрито без злиття.',
 
+    createShortcut: 'Створити PR',
     commitMessage: 'Повідомлення коміту',
     commitMessagePlaceholder: 'Перейменувати те саме',
     commitHint: 'Закомітить усі зміни в цьому воркспейсі, а тоді відкриє request.',

@@ -32,6 +32,7 @@ function workspace(overrides: Partial<WorkspaceView> = {}): WorkspaceView {
     chats: [],
     missing: false,
     changedFiles: 0,
+    ahead: 0,
     ...overrides
   }
 }

@@ -2,14 +2,18 @@ import { AlertTriangle, MoreHorizontal, Pencil, Trash2 } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 
 import { AGENT_NAMES } from '@core/chats.js'
+import type { BranchRequest } from '@core/pullRequestShapes.js'
 import type { WorkspaceView } from '@core/workspaces.js'
 
 import { AGENT_LABELS, AGENT_TONES, chatStatusLabel, chatStatusTone } from './agentStatus.js'
 import { DropdownMenu } from './DropdownMenu.js'
+import { RequestMark } from './RequestMark.js'
 import { NameEditor } from './NameEditor.js'
 
 interface WorkspaceRowProps {
   readonly workspace: WorkspaceView
+  /** Its branch's pull request, or null where the branch has none. */
+  readonly request: BranchRequest | null
   readonly selected: boolean
   readonly editing: boolean
   readonly onSelect: () => void
@@ -27,6 +31,7 @@ interface WorkspaceRowProps {
  */
 export function WorkspaceRow({
   workspace,
+  request,
   selected,
   editing,
   onSelect,
@@ -72,6 +77,10 @@ export function WorkspaceRow({
         <span className={`truncate ${workspace.missing ? 'text-ink-faint line-through' : ''}`}>
           {workspace.name}
         </span>
+
+        {/* After the name, before the count: the name is what the row is, this
+            is what has become of it, and the count is how much is in flight. */}
+        <RequestMark request={request} />
 
         {workspace.missing ? (
           <span className="text-warning ml-auto shrink-0 text-[11px]">

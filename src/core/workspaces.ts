@@ -13,7 +13,7 @@ import { access, realpath } from 'node:fs/promises'
 import { isAbsolute, relative, resolve } from 'node:path'
 
 import type { AgentKind, Chat, ChatStatus } from './chats.js'
-import { anyBranchExists, type GitExec, toSlug } from './git.js'
+import { anyBranchExists, countAhead, type GitExec, toSlug } from './git.js'
 import { nextWorkspaceName, type Random } from './names.js'
 import { workspacePath } from './paths.js'
 import { firstFreeBlock, POOL_START } from './ports.js'
@@ -63,6 +63,16 @@ export class WorkspaceError extends Error {
 export interface WorkspaceView extends Workspace {
   /** Files with uncommitted changes, including untracked ones. */
   readonly changedFiles: number
+  /**
+   * Commits this branch has that its project's base does not.
+   *
+   * Beside the count of uncommitted files rather than folded into it, because
+   * the two answer different halves of one question — is there anything here a
+   * pull request could carry. A workspace that has committed everything is the
+   * state most ready for one and has no changed files at all, so the count
+   * above on its own hid the button exactly when it was most wanted.
+   */
+  readonly ahead: number
   /** The directory is gone — removed outside the app. */
   readonly missing: boolean
   /**
@@ -411,7 +421,7 @@ export async function rollbackWorkspace(workspace: Workspace, exec: GitExec): Pr
 export function reconcile(
   workspaces: readonly Workspace[],
   worktrees: readonly Worktree[] | null,
-  changes: ReadonlyMap<string, number> = new Map(),
+  counts: ReadonlyMap<string, WorkspaceCounts> = new Map(),
   /**
    * Every chat in the state, not one workspace's.
    *
@@ -441,7 +451,7 @@ export function reconcile(
     return workspaces.map((workspace) => ({
       ...workspace,
       missing: false,
-      changedFiles: changes.get(workspace.id) ?? 0,
+      ...(counts.get(workspace.id) ?? NOTHING),
       chats: conversations(workspace)
     }))
   }
@@ -455,13 +465,27 @@ export function reconcile(
   return workspaces.map((workspace) => ({
     ...workspace,
     missing: !present.has(workspace.path),
-    changedFiles: changes.get(workspace.id) ?? 0,
+    ...(counts.get(workspace.id) ?? NOTHING),
     chats: conversations(workspace)
   }))
 }
 
 /**
- * Counts uncommitted files in one workspace.
+ * What git says about a workspace's work, in the two numbers the list draws.
+ *
+ * One record rather than two maps threaded side by side: they are read in the
+ * same pass, about the same worktree, and answer two halves of one question.
+ */
+export interface WorkspaceCounts {
+  readonly changedFiles: number
+  readonly ahead: number
+}
+
+/** What a workspace nothing could be read from reports. */
+const NOTHING: WorkspaceCounts = { changedFiles: 0, ahead: 0 }
+
+/**
+ * Uncommitted files in one workspace.
  *
  * A worktree that cannot be read reports zero rather than failing: the count
  * is an indicator, and a broken one must not take the surrounding view with it.
@@ -478,20 +502,29 @@ export async function changeCount(
 }
 
 /**
- * Counts uncommitted files per workspace.
+ * Both counts per workspace.
  *
  * Failures are handled per workspace on purpose: one broken worktree should
- * not blank out the counts for every other one.
+ * not blank out the counts for every other one. Both reads are local — one
+ * `status --porcelain` and one `rev-list --count` — and they run together
+ * across every workspace, so a project of eight costs one round of git rather
+ * than sixteen in a row.
  */
 export async function countChanges(
   workspaces: readonly Workspace[],
+  baseBranch: string,
   makeExec: (cwd: string) => GitExec
-): Promise<Map<string, number>> {
-  const counts = new Map<string, number>()
+): Promise<Map<string, WorkspaceCounts>> {
+  const counts = new Map<string, WorkspaceCounts>()
 
   await Promise.all(
     workspaces.map(async (workspace) => {
-      counts.set(workspace.id, await changeCount(workspace, makeExec))
+      const [changedFiles, ahead] = await Promise.all([
+        changeCount(workspace, makeExec),
+        countAhead(makeExec(workspace.path), baseBranch, workspace.branch)
+      ])
+
+      counts.set(workspace.id, { changedFiles, ahead })
     })
   )
 

@@ -1631,9 +1631,9 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
       // worktrees" marked every workspace missing — which the UI acts on by
       // closing their terminals.
       const worktrees = await listWorktrees(makeExec(project.repoPath)).catch(() => null)
-      const changes = await countChanges(stored, makeExec)
+      const counts = await countChanges(stored, project.baseBranch, makeExec)
 
-      return reconcile(stored, worktrees, changes, state.chats)
+      return reconcile(stored, worktrees, counts, state.chats)
     },
 
     async createWorkspaceIn(projectId) {

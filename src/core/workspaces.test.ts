@@ -596,7 +596,11 @@ describe('reconcile', () => {
   it('reports nothing as missing when git could not be asked', () => {
     const workspace = { id: 'planner/anna', path: '/tmp/anna' } as Workspace
 
-    const views = reconcile([workspace], null, new Map([['planner/anna', 3]]))
+    const views = reconcile(
+      [workspace],
+      null,
+      new Map([['planner/anna', { changedFiles: 3, ahead: 0 }]])
+    )
 
     expect(views[0]?.missing).toBe(false)
     expect(views[0]?.changedFiles).toBe(3)
@@ -617,16 +621,22 @@ describe('reconcile', () => {
     expect(reconcile([workspace], [])).toHaveLength(1)
   })
 
-  it('reports zero changes when no counts are supplied', () => {
+  it('reports nothing at all when no counts are supplied', () => {
     const workspace = { id: 'anna', path: '/x' } as Workspace
-    expect(reconcile([workspace], [])[0]?.changedFiles).toBe(0)
+
+    expect(reconcile([workspace], [])[0]).toMatchObject({ changedFiles: 0, ahead: 0 })
   })
 
-  it('carries change counts through', () => {
+  /*
+   * Both numbers, because they answer two halves of one question — is there
+   * anything here a pull request could carry. A workspace that has committed
+   * everything has no changed files and is the state most ready for one.
+   */
+  it('carries both counts through', () => {
     const workspace = { id: 'anna', path: '/x' } as Workspace
-    const counts = new Map([['anna', 3]])
+    const counts = new Map([['anna', { changedFiles: 3, ahead: 2 }]])
 
-    expect(reconcile([workspace], [], counts)[0]?.changedFiles).toBe(3)
+    expect(reconcile([workspace], [], counts)[0]).toMatchObject({ changedFiles: 3, ahead: 2 })
   })
 
   /*
@@ -734,19 +744,36 @@ describe('countChanges', () => {
     await writeFile(join(first.path, 'a.txt'), 'x\n', 'utf8')
     await writeFile(join(first.path, 'b.txt'), 'x\n', 'utf8')
 
-    const counts = await countChanges([first, second], gitIn)
+    const counts = await countChanges([first, second], 'main', gitIn)
 
-    expect(counts.get(first.id)).toBe(2)
-    expect(counts.get(second.id)).toBe(0)
+    expect(counts.get(first.id)).toMatchObject({ changedFiles: 2 })
+    expect(counts.get(second.id)).toMatchObject({ changedFiles: 0 })
+  })
+
+  /*
+   * The half the change count cannot see. A workspace that has committed
+   * everything reads as empty by the first number and is the one most ready for
+   * a pull request.
+   */
+  it('counts what a branch has that its base does not', async () => {
+    const workspace = await create()
+    await writeFile(join(workspace.path, 'a.txt'), 'x\n', 'utf8')
+    await run('git', ['add', '.'], { cwd: workspace.path })
+    await run('git', ['commit', '-q', '-m', 'work'], { cwd: workspace.path })
+
+    const counts = await countChanges([workspace], 'main', gitIn)
+
+    expect(counts.get(workspace.id)).toEqual({ changedFiles: 0, ahead: 1 })
   })
 
   // One broken worktree must not blank out the counts for the others.
-  it('reports zero for a workspace it cannot read', async () => {
+  it('reports nothing for a workspace it cannot read', async () => {
     const workspace = await create()
     await rm(workspace.path, { recursive: true, force: true })
 
-    const counts = await countChanges([workspace], gitIn)
-    expect(counts.get(workspace.id)).toBe(0)
+    const counts = await countChanges([workspace], 'main', gitIn)
+
+    expect(counts.get(workspace.id)).toEqual({ changedFiles: 0, ahead: 0 })
   })
 })
 

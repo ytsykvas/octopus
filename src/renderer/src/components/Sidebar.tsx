@@ -4,6 +4,7 @@ import { useTranslation } from 'react-i18next'
 
 import { shortBranchName } from '@core/branches.js'
 import type { Project } from '@core/store.js'
+import type { BranchRequest } from '@core/pullRequestShapes.js'
 import type { WorkspaceView } from '@core/workspaces.js'
 
 import { ResizeHandle } from './ResizeHandle.js'
@@ -17,6 +18,13 @@ interface SidebarProps {
   /** The project whose workspaces are listed; null when none is selected. */
   readonly project: Project | null
   readonly workspaces: readonly WorkspaceView[]
+  /**
+   * What each branch's pull request is, by branch name.
+   *
+   * Read for the whole project at once rather than per row: the mark is wanted
+   * on every row, and a read per row would be a network call per row.
+   */
+  readonly requests: ReadonlyMap<string, BranchRequest>
   readonly selectedWorkspaceId: string | null
   readonly onSelectWorkspace: (workspaceId: string) => void
   readonly onCreateWorkspace: () => void
@@ -41,6 +49,7 @@ interface SidebarProps {
 export function Sidebar({
   project,
   workspaces,
+  requests,
   selectedWorkspaceId,
   onSelectWorkspace,
   onCreateWorkspace,
@@ -95,6 +104,7 @@ export function Sidebar({
                   <li key={workspace.id}>
                     <WorkspaceRow
                       workspace={workspace}
+                      request={requests.get(workspace.branch) ?? null}
                       selected={workspace.id === selectedWorkspaceId}
                       editing={workspace.id === editingWorkspaceId}
                       onSelect={() => {

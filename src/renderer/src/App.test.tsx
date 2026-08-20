@@ -1629,6 +1629,73 @@ describe('App', () => {
     expect(screen.getByLabelText('Pull request descriptions')).toBeInTheDocument()
   })
 
+  /*
+   * Three clicks away otherwise: unfold the pane, find the tab, read it. The
+   * button is beside the branch because that is what a request is made of.
+   */
+  it('offers to open a pull request once a workspace has something to carry', async () => {
+    vi.mocked(window.octopus.projects.list).mockResolvedValue({ ok: true, value: [PLANNER] })
+    vi.mocked(window.octopus.workspaces.list).mockResolvedValue({
+      ok: true,
+      value: [workspaceView('anna', { changedFiles: 0, ahead: 2 })]
+    })
+    const user = await openApp()
+    await user.click(await screen.findByRole('button', { name: 'PL' }))
+    await user.click(await screen.findByText('anna'))
+
+    await user.click(await screen.findByRole('button', { name: 'Create PR' }))
+
+    expect(window.octopus.config.update).toHaveBeenLastCalledWith({
+      rightPanelTab: 'pullRequest'
+    })
+  })
+
+  /*
+   * A workspace that has committed everything has no changed files at all and
+   * is the state most ready for a request, so the count of uncommitted work on
+   * its own hid the button exactly when it was most wanted.
+   */
+  it('offers nothing for a workspace with no work in it', async () => {
+    vi.mocked(window.octopus.projects.list).mockResolvedValue({ ok: true, value: [PLANNER] })
+    vi.mocked(window.octopus.workspaces.list).mockResolvedValue({
+      ok: true,
+      value: [workspaceView('anna', { changedFiles: 0, ahead: 0 })]
+    })
+    const user = await openApp()
+    await user.click(await screen.findByRole('button', { name: 'PL' }))
+    await user.click(await screen.findByText('anna'))
+
+    expect(screen.queryByRole('button', { name: 'Create PR' })).not.toBeInTheDocument()
+  })
+
+  // A branch that already has one open is not a branch to open one for.
+  it('offers nothing where the branch already has a request open', async () => {
+    vi.mocked(window.octopus.projects.list).mockResolvedValue({ ok: true, value: [PLANNER] })
+    vi.mocked(window.octopus.workspaces.list).mockResolvedValue({
+      ok: true,
+      value: [workspaceView('anna', { ahead: 2 })]
+    })
+    vi.mocked(window.octopus.projects.pullRequests).mockResolvedValue({
+      ok: true,
+      value: [
+        {
+          branch: 'ytsykvas/anna',
+          number: 812,
+          state: 'open',
+          checks: 'passed',
+          url: 'https://github.com/o/p/pull/812'
+        }
+      ]
+    })
+    const user = await openApp()
+    await user.click(await screen.findByRole('button', { name: 'PL' }))
+    await user.click(await screen.findByText('anna'))
+
+    // The mark says the same thing the missing button does.
+    expect(await screen.findByLabelText('Pull request #812 — checks passed')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Create PR' })).not.toBeInTheDocument()
+  })
+
   it('opens the pull request with ⌘⇧P', async () => {
     givenTwoProjects()
     const user = await openApp()

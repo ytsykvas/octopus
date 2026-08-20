@@ -16,7 +16,7 @@ import { promisify } from 'node:util'
 import { z } from 'zod'
 
 import { GitHubError } from './github.js'
-import type { GitExec } from './git.js'
+import { countAhead, type GitExec } from './git.js'
 import {
   type BranchRequest,
   BranchListSchema,
@@ -108,7 +108,7 @@ export async function readPullRequest(
     listPullRequests(branch, gh),
     hasUncommittedChanges(git),
     isPushed(branch, git),
-    countAhead(branch, base, git)
+    countAhead(git, base, branch)
   ])
 
   // The newest, when a branch has been opened and closed and opened again:
@@ -186,20 +186,6 @@ async function isPushed(branch: string, git: GitExec): Promise<boolean> {
   }
 }
 
-/** How far the branch is ahead of its base; zero means there is nothing to open. */
-async function countAhead(branch: string, base: string, git: GitExec): Promise<number> {
-  try {
-    const raw = await git(['rev-list', '--count', `${base}..${branch}`])
-    const count = Number(raw.trim())
-    return Number.isInteger(count) ? count : 0
-  } catch {
-    // An unknown base — a branch deleted upstream, a project pointed at a name
-    // that no longer exists — is not something the reader can act on here, and
-    // `gh` gives the real message if they go ahead and try.
-    return 0
-  }
-}
-
 /**
  * What the renderer may ask for, validated at the boundary.
  *
@@ -250,7 +236,7 @@ export async function createPullRequest(
   // would refuse exactly the request this field exists to open.
   if (request.commitMessage !== null) await commit(request.commitMessage, git)
 
-  if ((await countAhead(request.branch, request.base, git)) === 0) {
+  if ((await countAhead(git, request.base, request.branch)) === 0) {
     throw new GitHubError(
       'noCommits',
       { base: request.base },

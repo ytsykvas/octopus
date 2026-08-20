@@ -36,6 +36,14 @@ interface PullRequestPanelProps {
   readonly quotes: PullRequestQuoteController
   /** The project's env file, for the warning beside the commit field. */
   readonly envFile: string
+  /**
+   * Tells the window the branch's request has changed.
+   *
+   * The list marks every branch of the project from one read, and that read has
+   * a minute on its clock — long enough that merging here would leave the row
+   * beside the pane still saying the request was open.
+   */
+  readonly onRequestChanged: () => void
   /** Opens the project's own instructions, which are what would be sent. */
   readonly onEditInstructions: () => void
   /** Says what went wrong where the window already says such things. */
@@ -56,6 +64,7 @@ export function PullRequestPanel({
   chatId,
   quotes,
   envFile,
+  onRequestChanged,
   onEditInstructions,
   onError
 }: PullRequestPanelProps): React.JSX.Element {
@@ -155,6 +164,7 @@ export function PullRequestPanel({
       // and a refusal it could not name is explained by the fresh state.
       refresh()
       detail.refresh()
+      onRequestChanged()
     })()
   }
 

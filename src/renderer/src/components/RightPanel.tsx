@@ -143,6 +143,8 @@ interface RightPanelProps {
   readonly quotes: PullRequestQuoteController
   /** The project's env file, for the warning beside the commit field. */
   readonly envFile: string
+  /** Tells the window a branch's pull request has changed, so the list re-marks. */
+  readonly onRequestChanged: () => void
   readonly onError: (message: string) => void
 }
 
@@ -168,6 +170,7 @@ export function RightPanel({
   comments,
   quotes,
   envFile,
+  onRequestChanged,
   onError
 }: RightPanelProps): React.JSX.Element {
   const { t, i18n } = useTranslation()
@@ -723,6 +726,7 @@ export function RightPanel({
           chatId={chatId}
           quotes={quotes}
           envFile={envFile}
+          onRequestChanged={onRequestChanged}
           onEditInstructions={onEditInstructions}
           onError={onError}
         />

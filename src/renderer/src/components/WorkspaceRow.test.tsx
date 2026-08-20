@@ -19,6 +19,7 @@ function workspace(overrides: Partial<WorkspaceView> = {}): WorkspaceView {
     ownerId: null,
     chats: [],
     changedFiles: 0,
+    ahead: 0,
     missing: false,
     ...overrides
   }
@@ -29,6 +30,7 @@ type WorkspaceRowProps = React.ComponentProps<typeof WorkspaceRow>
 function renderRow(overrides: Partial<WorkspaceRowProps> = {}): WorkspaceRowProps {
   const props: WorkspaceRowProps = {
     workspace: workspace(),
+    request: null,
     selected: false,
     editing: false,
     onSelect: vi.fn(),

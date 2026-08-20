@@ -34,6 +34,7 @@ function workspace(overrides: Partial<WorkspaceView> = {}): WorkspaceView {
     ownerId: null,
     chats: [],
     changedFiles: 0,
+    ahead: 0,
     missing: false,
     ...overrides
   }
@@ -45,6 +46,7 @@ function renderSidebar(overrides: Partial<SidebarProps> = {}): SidebarProps {
   const props: SidebarProps = {
     project: project(),
     workspaces: [],
+    requests: new Map(),
     selectedWorkspaceId: null,
     onSelectWorkspace: vi.fn(),
     onCreateWorkspace: vi.fn(),

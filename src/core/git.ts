@@ -206,6 +206,24 @@ export async function detectBaseBranch(exec: GitExec): Promise<string | null> {
 }
 
 /** Repository name — the last segment of its root path. */
+/**
+ * How far a branch is ahead of another, in commits.
+ *
+ * Zero for an unknown base, which is what a branch deleted upstream or a
+ * project pointed at a name that no longer exists both look like. Neither is
+ * something the reader can act on where this is drawn — the pull request pane
+ * asks `gh`, which gives the real message, and the workspace list only wants to
+ * know whether there is anything here at all.
+ */
+export async function countAhead(exec: GitExec, base: string, branch: string): Promise<number> {
+  try {
+    const count = Number((await exec(['rev-list', '--count', `${base}..${branch}`])).trim())
+    return Number.isInteger(count) ? count : 0
+  } catch {
+    return 0
+  }
+}
+
 export function repositoryName(repoRoot: string): string {
   return basename(repoRoot)
 }

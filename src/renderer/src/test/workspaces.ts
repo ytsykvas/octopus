@@ -19,6 +19,7 @@ export function workspaceView(name: string, overrides: Partial<WorkspaceView> = 
     ownerId: null,
     chats: [],
     changedFiles: 0,
+    ahead: 0,
     missing: false,
     ...overrides
   }

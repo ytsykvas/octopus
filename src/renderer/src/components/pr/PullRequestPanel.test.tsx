@@ -81,10 +81,12 @@ function renderPanel(
 ): {
   onEditInstructions: ReturnType<typeof vi.fn>
   onError: ReturnType<typeof vi.fn>
+  onRequestChanged: ReturnType<typeof vi.fn>
   quotes: ReturnType<typeof quoteController>
 } {
   const onEditInstructions = vi.fn()
   const onError = vi.fn()
+  const onRequestChanged = vi.fn()
   const quotes = overrides.quotes ?? quoteController()
 
   render(
@@ -94,12 +96,13 @@ function renderPanel(
       chatId={overrides.chatId === undefined ? 'chat-1' : overrides.chatId}
       quotes={quotes}
       envFile={overrides.envFile ?? '.env'}
+      onRequestChanged={onRequestChanged}
       onEditInstructions={onEditInstructions}
       onError={onError}
     />
   )
 
-  return { onEditInstructions, onError, quotes }
+  return { onEditInstructions, onError, onRequestChanged, quotes }
 }
 
 describe('the pull request tab', () => {
@@ -156,6 +159,7 @@ describe('the pull request tab', () => {
         chatId="chat-1"
         quotes={quoteController()}
         envFile=".env"
+        onRequestChanged={vi.fn()}
         onEditInstructions={vi.fn()}
         onError={vi.fn()}
       />

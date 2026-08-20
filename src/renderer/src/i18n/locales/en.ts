@@ -55,6 +55,14 @@ export const en = {
   },
 
   workspaces: {
+    /* Where a branch has got to, said in words as well as in the colour of the
+       mark beside its name — a colour reaches nobody using a screen reader. */
+    requestRunning: 'Pull request #{{number}} — checks running',
+    requestPassed: 'Pull request #{{number}} — checks passed',
+    requestFailed: 'Pull request #{{number}} — a check failed',
+    requestWaiting: 'Pull request #{{number}} — no checks',
+    requestMerged: 'Pull request #{{number}} — merged',
+    requestClosed: 'Pull request #{{number}} — closed without merging',
     create: 'New workspace',
     emptyForProject: 'No workspaces yet. Add one with the + above.',
     rename: 'Rename',
@@ -285,6 +293,9 @@ export const en = {
 
     /* Committing from here, which is what lets a workspace go from finished
        work to an open request without a detour through the terminal. */
+    /* On the window header, beside the branch. Short because it sits in a row
+       already carrying a project, a path and a branch name. */
+    createShortcut: 'Create PR',
     commitMessage: 'Commit message',
     commitMessagePlaceholder: 'Rename the thing',
     commitHint: 'Commits every change in this workspace, then opens the request.',
