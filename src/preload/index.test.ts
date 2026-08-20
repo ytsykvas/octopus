@@ -95,6 +95,11 @@ describe('channel names', () => {
     ],
     ['projects.remove', () => method('projects', 'remove')('p' as never), 'projects:remove'],
     ['projects.branches', () => method('projects', 'branches')('p' as never), 'projects:branches'],
+    [
+      'projects.pullRequests',
+      () => method('projects', 'pullRequests')('p' as never),
+      'projects:pullRequests'
+    ],
     ['projects.listRemote', () => method('projects', 'listRemote')(), 'projects:listRemote'],
     [
       'projects.readScript',
@@ -183,6 +188,16 @@ describe('channel names', () => {
       'workspaces.createPullRequest',
       () => method('workspaces', 'createPullRequest')('w' as never, {} as never),
       'workspaces:createPullRequest'
+    ],
+    [
+      'workspaces.pullRequestDetail',
+      () => method('workspaces', 'pullRequestDetail')('w' as never, 7 as never),
+      'workspaces:pullRequestDetail'
+    ],
+    [
+      'workspaces.mergePullRequest',
+      () => method('workspaces', 'mergePullRequest')('w' as never, 7 as never, 'squash' as never),
+      'workspaces:mergePullRequest'
     ],
     [
       'workspaces.instruction',

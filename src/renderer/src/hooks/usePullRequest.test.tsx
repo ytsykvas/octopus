@@ -7,9 +7,15 @@ import { held } from '../test/held.js'
 import { octopus } from '../test/octopus.js'
 import { usePullRequest } from './usePullRequest.js'
 
-const VIEW: PullRequestView = { request: null, pushed: true, dirty: false, ahead: 1 }
+const VIEW: PullRequestView = {
+  request: null,
+  pushed: true,
+  dirty: false,
+  ahead: 1,
+  base: 'main'
+}
 
-const DRAFT = { title: 'Rename', body: '', draft: false }
+const DRAFT = { title: 'Rename', body: '', draft: false, commitMessage: null }
 
 describe('the pull request of a workspace', () => {
   // Nothing to ask about, so nothing is asked — and `create` has nowhere to

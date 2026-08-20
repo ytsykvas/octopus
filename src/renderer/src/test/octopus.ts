@@ -4,6 +4,7 @@ import type { AccountsStatus } from '@core/accounts.js'
 import type { Chat } from '@core/chats.js'
 import type { Config } from '@core/config.js'
 import type { WorkspaceDiff } from '@core/diff.js'
+import type { PullRequestDetail } from '@core/pullRequestShapes.js'
 import type { Workspace } from '@core/store.js'
 
 import type { OctopusApi } from '../../../preload/index.js'
@@ -88,8 +89,14 @@ export function installOctopusStub(): Api {
       diff: vi.fn(() => ok(emptyDiff())),
       // A branch with commits and no pull request — the state the pane offers
       // to act on, and the one most tests are about.
-      pullRequest: vi.fn(() => ok({ request: null, pushed: false, dirty: false, ahead: 1 })),
+      pullRequest: vi.fn(() =>
+        ok({ request: null, pushed: false, dirty: false, ahead: 1, base: 'main' })
+      ),
       createPullRequest: vi.fn(() => ok('https://github.com/ytsykvas/octopus/pull/1')),
+      // A request nobody has reviewed and nothing has checked, which is what
+      // one looks like for the first minute of its life.
+      pullRequestDetail: vi.fn(() => ok(detailFixture())),
+      mergePullRequest: vi.fn(() => ok(undefined)),
       instruction: vi.fn(() => ok('Describe what changed and why.')),
       prepare: vi.fn(() => ok([])),
       env: vi.fn(() => ok('')),
@@ -117,6 +124,7 @@ export function installOctopusStub(): Api {
       listRemote: vi.fn(() => ok([])),
       addFromGitHub: vi.fn(() => ok(null)),
       branches: vi.fn(() => ok(['origin/main'])),
+      pullRequests: vi.fn(() => ok([])),
       readScript: vi.fn(() => ok('#!/bin/sh\n')),
       saveScript: vi.fn(() => ok(undefined)),
       scriptPaths: vi.fn(() => ok({ setup: null, run: null, archive: null })),
@@ -211,6 +219,26 @@ function emptyDiff(): WorkspaceDiff {
     added: 0,
     removed: 0,
     omittedFiles: 0
+  }
+}
+
+/**
+ * A request nobody has reviewed and nothing has checked.
+ *
+ * What one looks like for the first minute of its life, and the state a test
+ * about anything else should not have to spell out.
+ */
+function detailFixture(): PullRequestDetail {
+  return {
+    state: 'open',
+    title: 'Rename the thing',
+    url: 'https://github.com/ytsykvas/octopus/pull/1',
+    draft: false,
+    checks: [],
+    comments: [],
+    decision: null,
+    mergeable: 'mergeable',
+    mergeState: 'clean'
   }
 }
 

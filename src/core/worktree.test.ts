@@ -18,6 +18,7 @@ import { type GitExec, gitIn } from './git.js'
 import {
   addWorktree,
   changedFiles,
+  commitAll,
   deleteBranch,
   hasUncommittedChanges,
   listBranches,
@@ -311,6 +312,66 @@ describe('changedFiles', () => {
     await writeFile(join(dir, 'new.txt'), 'work\n', 'utf8')
     await exec(['add', '.'])
     await expect(changedFiles(exec)).resolves.toHaveLength(1)
+  })
+})
+
+describe('commitAll', () => {
+  /** The subject of the last commit, which is what each of these asserts on. */
+  const lastSubject = async (): Promise<string> => (await exec(['log', '-1', '--format=%s'])).trim()
+
+  it('takes modified, staged and untracked work in one commit', async () => {
+    await writeFile(join(dir, 'README.md'), 'changed\n', 'utf8')
+    await writeFile(join(dir, 'staged.txt'), 'work\n', 'utf8')
+    await exec(['add', 'staged.txt'])
+    await writeFile(join(dir, 'untracked.txt'), 'work\n', 'utf8')
+
+    await commitAll(exec, 'Everything at once')
+
+    await expect(hasUncommittedChanges(exec)).resolves.toBe(false)
+    expect(await lastSubject()).toBe('Everything at once')
+  })
+
+  /* `add -A` and not `add .`, which older git read as "the current directory"
+     and which still leaves a deletion unstaged in some configurations. */
+  it('takes a deletion as well as an addition', async () => {
+    await rm(join(dir, 'README.md'))
+
+    await commitAll(exec, 'Remove the readme')
+
+    await expect(changedFiles(exec)).resolves.toEqual([])
+    await expect(exec(['show', '--stat', 'HEAD'])).resolves.toContain('README.md')
+  })
+
+  /*
+   * The message is typed by a person, and a person may well begin one with a
+   * dash. It goes as its own argument, so git reads it as a message rather than
+   * as a flag it does not have.
+   */
+  it('commits under a message that looks like a flag', async () => {
+    await writeFile(join(dir, 'new.txt'), 'work\n', 'utf8')
+
+    await commitAll(exec, '--amend the wording')
+
+    expect(await lastSubject()).toBe('--amend the wording')
+    // One commit on top of the first, rather than the first rewritten.
+    await expect(exec(['rev-list', '--count', 'HEAD'])).resolves.toContain('2')
+  })
+
+  it('keeps a message that is a subject and a body', async () => {
+    await writeFile(join(dir, 'new.txt'), 'work\n', 'utf8')
+
+    await commitAll(exec, 'Add the file\n\nBecause the other one needed it.')
+
+    await expect(exec(['log', '-1', '--format=%B'])).resolves.toContain(
+      'Because the other one needed it.'
+    )
+  })
+
+  /* No policy of its own: asked to commit nothing, it lets git refuse and the
+     caller says what that means. `pullRequests.ts` is where the message about
+     an empty commit becomes something a reader can act on. */
+  it('lets git refuse an empty commit rather than deciding for it', async () => {
+    await expect(commitAll(exec, 'Nothing at all')).rejects.toBeDefined()
   })
 })
 

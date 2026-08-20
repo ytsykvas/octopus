@@ -16,7 +16,8 @@ import type { ChatEntry } from '@core/transcript.js'
 import type { TerminalExit, TerminalOutput, TerminalSpec } from '@core/terminal.js'
 import type { Config } from '@core/config.js'
 import type { WorkspaceDiff } from '@core/diff.js'
-import type { PullRequestDraft, PullRequestView } from '@core/pullRequests.js'
+import type { MergeMethod, PullRequestDraft, PullRequestView } from '@core/pullRequests.js'
+import type { BranchRequest, PullRequestDetail } from '@core/pullRequestShapes.js'
 import type { RemoteRepository } from '@core/github.js'
 import type { Workspace } from '@core/store.js'
 import type { RemoveOptions, WorkspaceView } from '@core/workspaces.js'
@@ -313,6 +314,22 @@ const api = {
         Result<string>
       >,
 
+    /** The checks, the review and the mergeability of a request that exists. */
+    pullRequestDetail: (workspaceId: string, number: number): Promise<Result<PullRequestDetail>> =>
+      ipcRenderer.invoke('workspaces:pullRequestDetail', workspaceId, number) as Promise<
+        Result<PullRequestDetail>
+      >,
+
+    /** Merges it. Answers with nothing: the caller reads the request again. */
+    mergePullRequest: (
+      workspaceId: string,
+      number: number,
+      method: MergeMethod
+    ): Promise<Result<void>> =>
+      ipcRenderer.invoke('workspaces:mergePullRequest', workspaceId, number, method) as Promise<
+        Result<void>
+      >,
+
     /** The instruction this workspace would send: its project's, or the global one. */
     instruction: (workspaceId: string, kind: InstructionKind): Promise<Result<string>> =>
       ipcRenderer.invoke('instructions:effective', workspaceId, kind) as Promise<Result<string>>,
@@ -398,6 +415,15 @@ const api = {
     /** Branches the repository offers as a base, remotes included. */
     branches: (projectId: string): Promise<Result<string[]>> =>
       ipcRenderer.invoke('projects:branches', projectId) as Promise<Result<string[]>>,
+
+    /**
+     * Every branch of the repository that has a pull request.
+     *
+     * One call for the whole project, which is what lets the workspace list
+     * mark every row without a network call per row.
+     */
+    pullRequests: (projectId: string): Promise<Result<BranchRequest[]>> =>
+      ipcRenderer.invoke('projects:pullRequests', projectId) as Promise<Result<BranchRequest[]>>,
 
     /** Reads a project script; a missing one comes back as a template. */
     readScript: (projectId: string, kind: ScriptKind): Promise<Result<string>> =>

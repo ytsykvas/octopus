@@ -190,3 +190,25 @@ export async function changedFiles(exec: GitExec): Promise<string[]> {
 export async function hasUncommittedChanges(exec: GitExec): Promise<boolean> {
   return (await changedFiles(exec)).length > 0
 }
+
+/**
+ * Stages everything in the worktree and commits it.
+ *
+ * `add -A` rather than a list of paths: what the caller means is "this
+ * workspace's work", and a list assembled from `status --porcelain` would have
+ * to reproduce git's own quoting of unusual filenames to say the same thing.
+ *
+ * Deliberately holds no policy — not whether there is anything to commit, not
+ * whether the message is worth having, not what to do when git refuses. Those
+ * are questions about a pull request, and `pullRequests.ts` answers them where
+ * it can throw the error the renderer knows how to say out loud. A `worktree.ts`
+ * reaching for `GitHubError` would be a git module depending on a GitHub one,
+ * which is an edge `src/core` does not otherwise have.
+ *
+ * The message goes as an argument and is never interpolated: it is typed by the
+ * user, and one beginning with a dash is a message rather than a flag.
+ */
+export async function commitAll(exec: GitExec, message: string): Promise<void> {
+  await exec(['add', '-A'])
+  await exec(['commit', '-m', message])
+}

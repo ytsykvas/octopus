@@ -32,7 +32,10 @@ const CODES: readonly {
   { code: 'tooManyChats', parameter: ['limit', '3'] },
   { code: 'lastChat' },
   { code: 'nothingToFork' },
-  { code: 'forkFailed' }
+  { code: 'forkFailed' },
+  { code: 'nothingToCommit' },
+  { code: 'commitFailed' },
+  { code: 'mergeFailed', parameter: ['number', '812'] }
 ]
 
 const WITH_PARAMETER = CODES.filter((entry) => entry.parameter !== undefined)
@@ -73,6 +76,23 @@ describe('useErrorMessage', () => {
       })
     ).toContain('octopus/anna')
     expect(result.current({ ok: false, error: 'raw', code: 'createFailed' })).not.toContain('raw')
+  })
+
+  /*
+   * The three either side of opening one: committing what the request would
+   * carry, and merging it afterwards. `mergeFailed` names the request, because
+   * `gh` discards the reason and the number is the one thing worth saying.
+   */
+  it('localises what went wrong committing and merging', () => {
+    const { result } = renderHook(() => useErrorMessage())
+
+    expect(result.current({ ok: false, error: 'raw', code: 'nothingToCommit' })).not.toContain(
+      'raw'
+    )
+    expect(result.current({ ok: false, error: 'raw', code: 'commitFailed' })).not.toContain('raw')
+    expect(
+      result.current({ ok: false, error: 'raw', code: 'mergeFailed', params: { number: '812' } })
+    ).toContain('812')
   })
 
   // A failure that names a code and forgets the value it was about. The message

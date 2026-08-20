@@ -18,11 +18,18 @@ import { z } from 'zod'
 import { GitHubError } from './github.js'
 import type { GitExec } from './git.js'
 import {
+  type BranchRequest,
+  BranchListSchema,
+  DetailPayloadSchema,
+  type PullRequestDetail,
   type PullRequestState,
   RemoteStateSchema,
+  ThreadsPayloadSchema,
+  toBranchRequests,
+  toPullRequestDetail,
   toPullRequestState
 } from './pullRequestShapes.js'
-import { hasUncommittedChanges } from './worktree.js'
+import { commitAll, hasUncommittedChanges } from './worktree.js'
 
 const run = promisify(execFile)
 
@@ -59,6 +66,14 @@ export interface PullRequestView {
   readonly dirty: boolean
   /** Commits this branch has that the base does not; zero means nothing to open. */
   readonly ahead: number
+  /**
+   * What the request would be opened against.
+   *
+   * Carried because the pane names it — "no commits that `main` does not" — and
+   * the branch is the only half of that sentence it had. The name went into the
+   * message as an empty string for as long as the message existed.
+   */
+  readonly base: string
 }
 
 /**
@@ -112,7 +127,8 @@ export async function readPullRequest(
           },
     pushed,
     dirty,
-    ahead
+    ahead,
+    base
   }
 }
 
@@ -194,7 +210,17 @@ async function countAhead(branch: string, base: string, git: GitExec): Promise<n
 export const NewPullRequestSchema = z.object({
   title: z.string().min(1).max(200),
   body: z.string().max(20_000),
-  draft: z.boolean()
+  draft: z.boolean(),
+  /**
+   * Commit everything first, under this message — or null to open the request
+   * from what is already committed.
+   *
+   * Null rather than an empty string, because an empty commit message is a
+   * thing somebody could mean to type and git refuses it. A subject line and a
+   * body is what the bound allows for; past that it is a description, and there
+   * is a field for one directly below.
+   */
+  commitMessage: z.string().min(1).max(2_000).nullable()
 })
 
 export type PullRequestDraft = z.infer<typeof NewPullRequestSchema>
@@ -206,10 +232,11 @@ export interface NewPullRequest extends PullRequestDraft {
 }
 
 /**
- * Pushes the branch if it needs it, then opens the pull request.
+ * Commits what is uncommitted where asked, pushes the branch, opens the request.
  *
  * Every value goes as an argument and none is interpolated: a title beginning
- * with a dash is a title, not a flag, and both of these are typed by the user.
+ * with a dash is a title, not a flag, and all three of these are typed by the
+ * user.
  *
  * Returns the URL `gh` printed, which is what the pane offers to open.
  */
@@ -218,6 +245,11 @@ export async function createPullRequest(
   gh: GhExec,
   git: GitExec
 ): Promise<string> {
+  // Before the count below, not after it: a workspace whose only work is
+  // uncommitted is zero commits ahead until this lands, and checking first
+  // would refuse exactly the request this field exists to open.
+  if (request.commitMessage !== null) await commit(request.commitMessage, git)
+
   if ((await countAhead(request.branch, request.base, git)) === 0) {
     throw new GitHubError(
       'noCommits',
@@ -256,4 +288,200 @@ export async function createPullRequest(
   // `gh` prints the URL and nothing else worth keeping. Trimmed rather than
   // parsed: there is no `--json` on `pr create`.
   return raw.trim()
+}
+
+/**
+ * Everything in the worktree, as one commit.
+ *
+ * The policy `commitAll` deliberately does not hold. Asked to commit nothing,
+ * git fails with a message about the index that says nothing to whoever typed a
+ * message into a field — so the state is checked first and answered for itself.
+ */
+async function commit(message: string, git: GitExec): Promise<void> {
+  if (!(await hasUncommittedChanges(git))) {
+    throw new GitHubError('nothingToCommit', {}, 'There is nothing here to commit.')
+  }
+
+  try {
+    await commitAll(git, message)
+  } catch {
+    throw new GitHubError('commitFailed', {}, 'Could not commit the changes.')
+  }
+}
+
+/**
+ * A pull request's number, as the renderer may send it back.
+ *
+ * The renderer read it from us, which is not a reason to believe it: it becomes
+ * an argument to `gh`, and types are gone by the time it crosses the boundary.
+ */
+export const PullRequestNumberSchema = z.number().int().positive()
+
+/** How the commits land on the base branch. */
+export const MergeMethodSchema = z.enum(['merge', 'squash', 'rebase'])
+export type MergeMethod = z.infer<typeof MergeMethodSchema>
+
+const MERGE_FLAGS: Record<MergeMethod, string> = {
+  merge: '--merge',
+  squash: '--squash',
+  rebase: '--rebase'
+}
+
+/**
+ * Merges the request.
+ *
+ * No `--delete-branch`, though `gh` offers it: a worktree is checked out on
+ * that branch, so git refuses to delete it and the merge reports a failure the
+ * app caused itself. Removing the workspace is how the branch goes.
+ *
+ * Answers with nothing, and that is deliberate rather than lazy: `gh` enables
+ * auto-merge instead of merging when required checks have not passed, so a
+ * zero exit is not proof of a merge. The caller reads the request again, which
+ * is also what turns a refusal we cannot name into a visible reason.
+ */
+export async function mergePullRequest(
+  number: number,
+  method: MergeMethod,
+  gh: GhExec
+): Promise<void> {
+  try {
+    await gh(['pr', 'merge', String(number), MERGE_FLAGS[method]])
+  } catch {
+    throw new GitHubError(
+      'mergeFailed',
+      { number: String(number) },
+      'GitHub would not merge the pull request.'
+    )
+  }
+}
+
+/** The fields `gh pr view` is asked for; named once because the list is long. */
+const DETAIL_FIELDS = [
+  'id',
+  'state',
+  'title',
+  'url',
+  'isDraft',
+  'mergeable',
+  'mergeStateStatus',
+  'reviewDecision',
+  'statusCheckRollup',
+  'comments',
+  'reviews'
+].join(',')
+
+/**
+ * The review threads, by the request's own node id.
+ *
+ * By node id rather than by owner and repository, which GraphQL would otherwise
+ * need and nothing here knows: `gh` substitutes `{owner}` and `{repo}` for REST
+ * paths but not inside a query, and working them out from the URL would be one
+ * more thing to get wrong for an enterprise host.
+ *
+ * REST would give the same comments in one fewer step and without the id, but
+ * not `isResolved` — and a thread somebody has already settled, shown as an
+ * open remark, is how a reviewer's finished work gets handed to the agent again.
+ */
+const THREADS_QUERY = `query($id: ID!) {
+  node(id: $id) {
+    ... on PullRequest {
+      reviewThreads(first: 50) {
+        nodes {
+          isResolved
+          isOutdated
+          path
+          line
+          comments(first: 20) {
+            nodes { id body url createdAt author { login } diffHunk path line }
+          }
+        }
+      }
+    }
+  }
+}`
+
+/**
+ * Everything about one request that the branch's own state does not say.
+ *
+ * Two calls rather than one, and not `gh pr checks` for the first of them: that
+ * command exits `8` while a check is pending and non-zero when one has failed,
+ * and `ghIn` rejects on a non-zero exit — so the state the pane most needs to
+ * draw would arrive as a thrown error rather than as an answer.
+ */
+export async function readPullRequestDetail(
+  number: number,
+  gh: GhExec
+): Promise<PullRequestDetail> {
+  const view = DetailPayloadSchema.parse(
+    parsed(await asked(() => gh(['pr', 'view', String(number), '--json', DETAIL_FIELDS])))
+  )
+
+  const threads = ThreadsPayloadSchema.parse(
+    parsed(
+      await asked(() =>
+        gh(['api', 'graphql', '-f', `query=${THREADS_QUERY}`, '-F', `id=${view.id}`])
+      )
+    )
+  )
+
+  return toPullRequestDetail(view, threads)
+}
+
+/**
+ * How many requests to read for a project at once.
+ *
+ * A cap rather than pagination, for the same reason `REPOSITORY_LIMIT` is one:
+ * past this the answer needs a search box rather than a longer page. What it
+ * costs is a mark beside a workspace whose request is older than the hundred
+ * most recent in the repository.
+ */
+export const BRANCH_REQUEST_LIMIT = 100
+
+/**
+ * Every branch of the repository that has a request, in one call.
+ *
+ * One call for the whole project rather than one per workspace. The mark is
+ * wanted on every row of the list at once, and a read per row would be a
+ * network call per row every time the list refreshed.
+ */
+export async function readBranchRequests(
+  gh: GhExec,
+  limit: number = BRANCH_REQUEST_LIMIT
+): Promise<BranchRequest[]> {
+  const payload = BranchListSchema.parse(
+    parsed(
+      await asked(() =>
+        gh([
+          'pr',
+          'list',
+          '--state',
+          'all',
+          '--limit',
+          String(limit),
+          '--json',
+          'headRefName,number,state,url,statusCheckRollup'
+        ])
+      )
+    )
+  )
+
+  return toBranchRequests(payload)
+}
+
+/** `gh` refusing to answer, which is a different failure from an odd answer. */
+async function asked(run: () => Promise<string>): Promise<string> {
+  try {
+    return await run()
+  } catch {
+    throw new GitHubError('notConnected', {}, 'Could not ask GitHub about this pull request.')
+  }
+}
+
+/** An answer that is not JSON, which no schema can be blamed for. */
+function parsed(raw: string): unknown {
+  try {
+    return JSON.parse(raw)
+  } catch {
+    throw new GitHubError('listFailed', {}, 'GitHub returned an unreadable response.')
+  }
 }

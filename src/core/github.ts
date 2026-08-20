@@ -60,11 +60,20 @@ export type GitHubErrorCode =
   | 'listFailed'
   | 'cloneFailed'
   | 'alreadyExists'
-  // Opening a pull request, which `pullRequests.ts` does through the same `gh`
-  // and reports through this same error so the renderer has one place to map.
+  // Opening a pull request and everything either side of it, which
+  // `pullRequests.ts` does through the same `gh` and reports through this same
+  // error so the renderer has one place to map.
+  //
+  // Half of these are git failures rather than GitHub ones, and that is not an
+  // accident of where they landed: what the union answers is "something went
+  // wrong on the way to or from a pull request", and a push refused and a
+  // commit refused are the same kind of thing to whoever pressed the button.
   | 'noCommits'
+  | 'nothingToCommit'
+  | 'commitFailed'
   | 'pushFailed'
   | 'createFailed'
+  | 'mergeFailed'
 
 export class GitHubError extends Error {
   constructor(

@@ -40,6 +40,12 @@ export function useErrorMessage(): (failure: Failure) => string {
           return t('errors.pushFailed', { branch: failure.params?.branch ?? '' })
         case 'createFailed':
           return t('errors.createFailed')
+        case 'nothingToCommit':
+          return t('errors.nothingToCommit')
+        case 'commitFailed':
+          return t('errors.commitFailed')
+        case 'mergeFailed':
+          return t('errors.mergeFailed', { number: failure.params?.number ?? '' })
         case 'branchUnmerged':
           return t('errors.branchUnmerged', { branch: failure.params?.branch ?? '' })
         case 'branchExists':

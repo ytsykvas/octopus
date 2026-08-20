@@ -629,6 +629,10 @@ export const en = {
     noCommits: 'This branch has nothing that {{base}} does not.',
     pushFailed: 'Could not push {{branch}} to GitHub.',
     createFailed: 'Could not open the pull request. GitHub refused it.',
+    nothingToCommit: 'There is nothing here to commit.',
+    commitFailed: 'Could not commit the changes. Check the terminal for what git said.',
+    mergeFailed:
+      'GitHub would not merge #{{number}}. Its checks, its reviews or a conflict are in the way — the panel says which once it has read it again.',
     alreadyExists: '{{path}} already exists. Add it from disk instead.',
     branchUnmerged:
       '{{branch}} has commits that are not in the base branch. Remove it with the branch checkbox cleared, or merge it first.',

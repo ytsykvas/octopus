@@ -31,7 +31,11 @@ import { CarryListSchema } from '../core/carry.js'
 import { EnvBodySchema } from '../core/env.js'
 import type { RemoteRepository } from '../core/github.js'
 import { InstructionBodySchema, InstructionKindSchema } from '../core/instructions.js'
-import { NewPullRequestSchema } from '../core/pullRequests.js'
+import {
+  MergeMethodSchema,
+  NewPullRequestSchema,
+  PullRequestNumberSchema
+} from '../core/pullRequests.js'
 import { QuestionAnswerSchema } from '../core/questions.js'
 import { ScriptBodySchema, ScriptKindSchema } from '../core/scripts.js'
 import type {
@@ -341,6 +345,28 @@ export function registerIpc(
   // body the size of a file is a mistake, not a description.
   host.handle('workspaces:createPullRequest', (_event, workspaceId: string, request: unknown) =>
     attempt(() => service.createPullRequest(workspaceId, NewPullRequestSchema.parse(request)))
+  )
+
+  // The number becomes an argument to `gh`, so it is proved to be one before it
+  // gets there rather than trusted because the renderer read it from us.
+  host.handle('workspaces:pullRequestDetail', (_event, workspaceId: string, number: unknown) =>
+    attempt(() => service.readPullRequestDetail(workspaceId, PullRequestNumberSchema.parse(number)))
+  )
+
+  host.handle(
+    'workspaces:mergePullRequest',
+    (_event, workspaceId: string, number: unknown, method: unknown) =>
+      attempt(() =>
+        service.mergePullRequest(
+          workspaceId,
+          PullRequestNumberSchema.parse(number),
+          MergeMethodSchema.parse(method)
+        )
+      )
+  )
+
+  host.handle('projects:pullRequests', (_event, projectId: string) =>
+    attempt(() => service.readBranchRequests(projectId))
   )
 
   // The one channel here that takes a path. It is validated, and the service

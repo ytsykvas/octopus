@@ -267,6 +267,7 @@ describe('channel table', () => {
     'projects:update',
     'projects:remove',
     'projects:branches',
+    'projects:pullRequests',
     'projects:listRemote',
     'projects:addFromGitHub',
     'scripts:read',
@@ -295,6 +296,8 @@ describe('channel table', () => {
     'workspaces:diff',
     'workspaces:pullRequest',
     'workspaces:createPullRequest',
+    'workspaces:pullRequestDetail',
+    'workspaces:mergePullRequest',
     'files:open',
     'chats:list',
     'chats:open',
@@ -953,7 +956,8 @@ describe('workspaces of a real project', () => {
       invoke('workspaces:createPullRequest', workspace.id, {
         title: 'Add a thing',
         body: '',
-        draft: false
+        draft: false,
+        commitMessage: null
       })
     ).resolves.toEqual({ ok: true, value: 'https://github.com/o/p/pull/1' })
 
@@ -980,6 +984,96 @@ describe('workspaces of a real project', () => {
         draft: false
       })
     ).resolves.toMatchObject({ ok: false })
+  })
+
+  it('carries the checks and the review of one request across', async () => {
+    const projectId = await addProject('detail')
+    service = await useService({
+      makeGh: () => (args) =>
+        Promise.resolve(
+          args[1] === 'view'
+            ? JSON.stringify({
+                id: 'PR_1',
+                state: 'OPEN',
+                title: 'Rename the thing',
+                url: 'https://github.com/o/p/pull/7',
+                isDraft: false,
+                mergeable: 'CONFLICTING',
+                mergeStateStatus: 'DIRTY',
+                reviewDecision: 'CHANGES_REQUESTED',
+                statusCheckRollup: [],
+                comments: [],
+                reviews: []
+              })
+            : JSON.stringify({ data: { node: { reviewThreads: { nodes: [] } } } })
+        )
+    })
+    const workspace = await createWorkspace(projectId)
+
+    await expect(invoke('workspaces:pullRequestDetail', workspace.id, 7)).resolves.toMatchObject({
+      ok: true,
+      value: { state: 'open', mergeable: 'conflicting', decision: 'changesRequested' }
+    })
+  })
+
+  /*
+   * The number becomes an argument to `gh`. The renderer read it from us, which
+   * is not a reason to believe it coming back: types are gone at this boundary.
+   */
+  it('refuses a pull request number that is not one', async () => {
+    const projectId = await addProject('bad-number')
+    const workspace = await createWorkspace(projectId)
+
+    await expect(
+      invoke('workspaces:pullRequestDetail', workspace.id, 'seven')
+    ).resolves.toMatchObject({ ok: false })
+    await expect(
+      invoke('workspaces:mergePullRequest', workspace.id, -1, 'merge')
+    ).resolves.toMatchObject({ ok: false })
+  })
+
+  it('merges by the method it is given, and refuses one it is not', async () => {
+    const projectId = await addProject('merging')
+    const asked: string[][] = []
+    service = await useService({
+      makeGh: () => (args) => {
+        asked.push([...args])
+        return Promise.resolve('')
+      }
+    })
+    const workspace = await createWorkspace(projectId)
+
+    await expect(
+      invoke('workspaces:mergePullRequest', workspace.id, 7, 'squash')
+    ).resolves.toMatchObject({ ok: true })
+    expect(asked[0]).toEqual(['pr', 'merge', '7', '--squash'])
+
+    await expect(
+      invoke('workspaces:mergePullRequest', workspace.id, 7, 'fast-forward')
+    ).resolves.toMatchObject({ ok: false })
+  })
+
+  it('answers with every branch of a project that has a request', async () => {
+    const projectId = await addProject('marks')
+    service = await useService({
+      makeGh: () => () =>
+        Promise.resolve(
+          JSON.stringify([
+            {
+              headRefName: 'ytsykvas/anna',
+              number: 7,
+              state: 'OPEN',
+              url: 'https://github.com/o/p/pull/7',
+              statusCheckRollup: []
+            }
+          ])
+        )
+    })
+
+    await expect(invoke('projects:pullRequests', projectId)).resolves.toMatchObject({
+      ok: true,
+      value: [{ branch: 'ytsykvas/anna', number: 7, state: 'open', checks: 'none' }]
+    })
   })
 
   // The code is what the renderer localises; without it the pane could only

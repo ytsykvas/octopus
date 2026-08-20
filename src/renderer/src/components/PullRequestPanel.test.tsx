@@ -12,7 +12,7 @@ const anna = workspaceView('anna')
 
 /** A branch with commits and no pull request — the state that offers the form. */
 function view(overrides: Partial<PullRequestView> = {}): PullRequestView {
-  return { request: null, pushed: true, dirty: false, ahead: 2, ...overrides }
+  return { request: null, pushed: true, dirty: false, ahead: 2, base: 'main', ...overrides }
 }
 
 /** A pull request as `gh` reports one — all four fields, never some of them. */
@@ -250,7 +250,8 @@ describe('the pull request tab', () => {
     expect(octopus().workspaces.createPullRequest).toHaveBeenCalledWith(anna.id, {
       title: 'Rename the thing',
       body: 'Because it was wrong.',
-      draft: true
+      draft: true,
+      commitMessage: null
     })
   })
 

@@ -70,10 +70,15 @@ import {
   createPullRequest,
   type GhExec,
   ghIn,
+  type MergeMethod,
+  mergePullRequest,
   type NewPullRequest,
   type PullRequestView,
-  readPullRequest
+  readBranchRequests,
+  readPullRequest,
+  readPullRequestDetail
 } from './pullRequests.js'
+import type { BranchRequest, PullRequestDetail } from './pullRequestShapes.js'
 import { gitIn, isIgnored } from './git.js'
 import { type InstructionSource, instructionSources } from './instructionSources.js'
 import { type CapabilityFile, capabilityFiles, trustDigest, withApproval } from './repoTrust.js'
@@ -414,6 +419,26 @@ export interface OctopusService {
     workspaceId: string,
     request: Omit<NewPullRequest, 'branch' | 'base'>
   ): Promise<string>
+
+  /**
+   * The checks, the review and the mergeability of a request that exists.
+   *
+   * Apart from `readPullRequest` rather than folded into it, because the two
+   * fail differently: that one failing means the branch cannot be described at
+   * all, while this one failing leaves the number, the title and the link worth
+   * drawing.
+   */
+  readPullRequestDetail(workspaceId: string, number: number): Promise<PullRequestDetail>
+
+  /** Merges it. Answers with nothing — see `mergePullRequest` for why. */
+  mergePullRequest(workspaceId: string, number: number, method: MergeMethod): Promise<void>
+
+  /**
+   * Every branch of a project that has a request, in one call.
+   *
+   * Per project rather than per workspace: the list marks every row at once.
+   */
+  readBranchRequests(projectId: string): Promise<BranchRequest[]>
   /**
    * An absolute path inside a workspace, for a caller that will open it.
    *
@@ -1713,6 +1738,24 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
         makeGh(workspace.path),
         makeExec(workspace.path)
       )
+    },
+
+    readPullRequestDetail(workspaceId, number) {
+      const workspace = requireWorkspace(workspaceId)
+      return readPullRequestDetail(number, makeGh(workspace.path))
+    },
+
+    mergePullRequest(workspaceId, number, method) {
+      const workspace = requireWorkspace(workspaceId)
+      return mergePullRequest(number, method, makeGh(workspace.path))
+    },
+
+    readBranchRequests(projectId) {
+      const project = requireProject(projectId)
+
+      // From the checkout rather than from a worktree: this is a question about
+      // the repository, and a project can be open with no workspace in it.
+      return readBranchRequests(makeGh(project.repoPath))
     },
 
     async resolveWorkspaceFile(workspaceId, path) {

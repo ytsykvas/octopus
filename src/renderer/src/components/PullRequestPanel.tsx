@@ -171,12 +171,12 @@ export function PullRequestPanel({
           </a>
         </div>
       ) : view.ahead === 0 ? (
-        <Notice>{t('pullRequest.nothingToOpen', { base: '' })}</Notice>
+        <Notice>{t('pullRequest.nothingToOpen', { base: view.base })}</Notice>
       ) : (
         <form
           onSubmit={(event) => {
             event.preventDefault()
-            void create({ title: title.trim(), body, draft })
+            void create({ title: title.trim(), body, draft, commitMessage: null })
           }}
           className="flex flex-col gap-2"
         >
