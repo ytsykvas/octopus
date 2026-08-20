@@ -1518,6 +1518,62 @@ describe('App', () => {
     expect(window.octopus.chats.create).not.toHaveBeenCalled()
   })
 
+  /*
+   * ⌘ and ⌃ are not typing gestures, so a shortcut on them is unambiguous
+   * wherever it is pressed. ⌥ is how a great many characters are typed on
+   * macOS — ⌥1 is `¡` — and this was switching conversation from inside the
+   * composer while swallowing the character somebody meant to write.
+   */
+  it('leaves ⌥ to whatever is being typed into', async () => {
+    vi.mocked(window.octopus.chats.list).mockResolvedValue({
+      ok: true,
+      value: [
+        chat({ workspaceId: 'planner/anna' }),
+        chat({ id: 'chat-2', workspaceId: 'planner/anna' })
+      ]
+    })
+    givenTwoProjects()
+    const user = await openApp()
+    await user.click(tab('PL'))
+    await user.click(screen.getByRole('button', { name: /anna/ }))
+    const strip = await screen.findByRole('navigation', { name: 'Conversations' })
+
+    // One composer per conversation, both mounted; either will do.
+    const [composer] = screen.getAllByPlaceholderText(/Ask the agent/)
+    fireEvent.keyDown(composer ?? window, { key: '™', code: 'Digit2', altKey: true })
+
+    expect(within(strip).getByRole('button', { name: /^Claude 1: / })).toHaveAttribute(
+      'aria-current',
+      'page'
+    )
+  })
+
+  // The guard is about text surfaces, not about everything: a keystroke from
+  // outside one still reaches the window.
+  it('still answers ⌥ from outside anything editable', async () => {
+    vi.mocked(window.octopus.chats.list).mockResolvedValue({
+      ok: true,
+      value: [
+        chat({ workspaceId: 'planner/anna' }),
+        chat({ id: 'chat-2', workspaceId: 'planner/anna' })
+      ]
+    })
+    givenTwoProjects()
+    const user = await openApp()
+    await user.click(tab('PL'))
+    await user.click(screen.getByRole('button', { name: /anna/ }))
+    const strip = await screen.findByRole('navigation', { name: 'Conversations' })
+
+    fireEvent.keyDown(document.body, { key: '™', code: 'Digit2', altKey: true })
+
+    await waitFor(() => {
+      expect(within(strip).getByRole('button', { name: /^Claude 2: / })).toHaveAttribute(
+        'aria-current',
+        'page'
+      )
+    })
+  })
+
   // ⌥ with anything else on it: the window has no business claiming a
   // combination it does not answer.
   it('leaves other ⌥ combinations alone', async () => {

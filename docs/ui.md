@@ -804,6 +804,13 @@ back where it was, without anything having to remember the journey. The window's
 own size is not stored either (`src/main/index.ts`), so every launch starts at a
 width where the saved number applies as it stands.
 
+**Only the ⌥ shortcuts ask where the focus is.** ⌘ and ⌃ are not typing
+gestures, so a shortcut on them is unambiguous wherever it is pressed — but on
+macOS ⌥ is how a great many characters are typed, and ⌥1 in the composer was
+switching conversation while swallowing the `¡` somebody meant to write. The
+terminal is one of the surfaces that counts: xterm.js takes its input through a
+hidden `textarea`, so a key pressed at a shell belongs to the shell.
+
 ## The diff
 
 One scrolling column, not a list beside a viewer. The pane is 360px by default,

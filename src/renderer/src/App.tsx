@@ -43,6 +43,21 @@ const TAB_STRIP_WIDTH = 56
 const DEFAULT_SIDEBAR_WIDTH = 240
 
 /**
+ * Whether a keystroke landed somewhere that takes text.
+ *
+ * The terminal counts, and that is the part worth stating: xterm.js takes its
+ * input through a hidden `textarea`, so a key pressed at a shell reaches this
+ * as a textarea and belongs to the shell rather than to the window.
+ *
+ * No `isContentEditable`: nothing in the interface is one, and jsdom does not
+ * implement the property — so the branch would be both speculative and
+ * impossible to cover. Add it here the day a rich text surface appears.
+ */
+function takesText(target: EventTarget | null): boolean {
+  return target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement
+}
+
+/**
  * Window layout (§10.8 docs/PROJECT.md): a project tab strip, then the active
  * project's workspaces, the agent chat, and diff and terminal on the right.
  */
@@ -305,6 +320,13 @@ export function App(): React.JSX.Element {
        * the digits are somewhere else.
        */
       if (event.altKey && !event.metaKey && !event.ctrlKey) {
+        // Only this branch asks where the focus is. ⌘ and ⌃ are not typing
+        // gestures, so a shortcut on them is unambiguous wherever it is
+        // pressed — but ⌥ is how a great many characters are typed on macOS,
+        // and this was switching conversation from inside the composer while
+        // swallowing the `¡` somebody meant to write.
+        if (takesText(event.target)) return
+
         const position = ['Digit1', 'Digit2', 'Digit3'].indexOf(event.code)
         const tab = position === -1 ? undefined : chatTabs.tabs[position]
         if (tab) {
