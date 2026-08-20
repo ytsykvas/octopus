@@ -13,6 +13,8 @@ export interface PullRequestController {
   readonly creating: boolean
   /** Opens one, and answers with its URL — or null when it did not. */
   readonly create: (draft: PullRequestDraft) => Promise<string | null>
+  /** Asks again: after a merge, after a commit, or on the refresh control. */
+  readonly refresh: () => void
 }
 
 /**
@@ -52,6 +54,9 @@ export function usePullRequest(
     setError(null)
   }
 
+  /** Bumped to ask again, which is the whole of what `refresh` does. */
+  const [nonce, setNonce] = useState(0)
+
   /** Rejects a reply that arrived after the workspace changed under it. */
   const generation = useRef(0)
 
@@ -90,7 +95,8 @@ export function usePullRequest(
     return () => {
       controller.abort()
     }
-  }, [workspaceId, enabled, apply])
+    // `nonce` is not read in here; it is what makes a refresh re-run the effect.
+  }, [workspaceId, enabled, nonce, apply])
 
   const create = useCallback(
     async (draft: PullRequestDraft): Promise<string | null> => {
@@ -116,11 +122,16 @@ export function usePullRequest(
     [workspaceId, apply, describeFailure]
   )
 
+  const refresh = useCallback(() => {
+    setNonce((count) => count + 1)
+  }, [])
+
   return {
     view,
     loading: view === null && error === null && workspaceId !== null,
     error,
     creating,
-    create
+    create,
+    refresh
   }
 }

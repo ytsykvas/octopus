@@ -25,7 +25,10 @@ import { type SectionId, Settings } from './components/Settings.js'
 import { Sidebar } from './components/Sidebar.js'
 import { useConfirm } from './hooks/useConfirm.js'
 import { useErrorMessage } from './hooks/useErrorMessage.js'
+import { DEFAULT_ENV_FILE } from '@core/envBlock.js'
+
 import { useDiffComments } from './hooks/useDiffComments.js'
+import { usePullRequestQuotes } from './hooks/usePullRequestQuotes.js'
 import { type ChatTab, useChatTabs } from './hooks/useChatTabs.js'
 import { useProjects } from './hooks/useProjects.js'
 import { useWorkspaces } from './hooks/useWorkspaces.js'
@@ -97,6 +100,10 @@ export function App(): React.JSX.Element {
   // Held here because the diff writes the notes and the composer sends them,
   // and the two panes are siblings that know nothing of each other.
   const diffComments = useDiffComments(selectedWorkspaceId)
+  /* Remarks pulled in from the review on this branch's request. A second store
+     beside the diff's rather than one union, so the diff pane keeps narrowing a
+     shape whose every member it can hold. */
+  const reviewQuotes = usePullRequestQuotes(selectedWorkspaceId)
 
   /*
    * The selected workspace's conversations.
@@ -584,6 +591,7 @@ export function App(): React.JSX.Element {
               }}
               color={selectedProject.color}
               comments={diffComments}
+              quotes={reviewQuotes}
               defaultWorkingMode={defaultWorkingMode}
               defaultEffort={defaultEffort}
               defaultModel={defaultModel}
@@ -629,6 +637,8 @@ export function App(): React.JSX.Element {
             tab={config?.rightPanelTab ?? 'diff'}
             onTab={(rightPanelTab) => void updateConfig({ rightPanelTab })}
             comments={diffComments}
+            quotes={reviewQuotes}
+            envFile={selectedProject?.envFile ?? DEFAULT_ENV_FILE}
             onError={setError}
             // The room the pane must leave alone. Folded away, the list takes
             // none of it — and the pane may have that room too.

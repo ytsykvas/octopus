@@ -6,7 +6,7 @@ import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vite
 import { stubDialogElement } from '../test/dialog.js'
 import { octopus } from '../test/octopus.js'
 import { openedDirectories, sessionId, sessionsOpened, stubTerminalHost } from '../test/terminal.js'
-import { commentController } from '../test/comments.js'
+import { commentController, quoteController } from '../test/comments.js'
 import { workspaceView } from '../test/workspaces.js'
 import { RightPanel } from './RightPanel.js'
 
@@ -92,6 +92,8 @@ function renderPanel(overrides: Partial<Props> = {}): {
     tab: 'diff',
     onTab: vi.fn(),
     comments: commentController(),
+    quotes: quoteController(),
+    envFile: '.env',
     onError: vi.fn(),
     ...overrides
   }

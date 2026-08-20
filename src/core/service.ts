@@ -67,6 +67,7 @@ import { type AgentEvent, isEphemeral } from './events.js'
 import { cloneRepository, listRepositories, type RemoteRepository } from './github.js'
 import type { GitExec } from './git.js'
 import {
+  commitAndPush,
   createPullRequest,
   type GhExec,
   ghIn,
@@ -429,6 +430,14 @@ export interface OctopusService {
    * drawing.
    */
   readPullRequestDetail(workspaceId: string, number: number): Promise<PullRequestDetail>
+
+  /**
+   * Commits everything in a workspace and pushes the branch.
+   *
+   * What gets an answer to a review onto a request that already exists; opening
+   * one does the same two steps on its way.
+   */
+  commitAndPushWorkspace(workspaceId: string, message: string): Promise<void>
 
   /** Merges it. Answers with nothing — see `mergePullRequest` for why. */
   mergePullRequest(workspaceId: string, number: number, method: MergeMethod): Promise<void>
@@ -1738,6 +1747,11 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
         makeGh(workspace.path),
         makeExec(workspace.path)
       )
+    },
+
+    commitAndPushWorkspace(workspaceId, message) {
+      const workspace = requireWorkspace(workspaceId)
+      return commitAndPush(message, workspace.branch, makeExec(workspace.path))
     },
 
     readPullRequestDetail(workspaceId, number) {

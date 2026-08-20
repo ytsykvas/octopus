@@ -232,7 +232,6 @@ export const uk: Translation = {
     ask: 'Попросити агента описати',
     noConversation: 'Спершу відкрийте розмову в цьому воркспейсі.',
     noInstruction: 'Цей проєкт нічого не додає до опису. Спершу напишіть інструкцію.',
-    branch: 'Гілка',
     nothingToOpen:
       'Поки нічого відкривати. У цій гілці немає комітів, яких немає в {{base}}, — зробіть спершу коміт.',
     willPush: 'Цієї гілки ще немає на GitHub. Відкриття запушить її.',
@@ -247,7 +246,58 @@ export const uk: Translation = {
     open: 'Відкрити на GitHub',
     stateOpen: 'Pull request #{{number}} відкритий.',
     stateMerged: 'Pull request #{{number}} влитий.',
-    stateClosed: 'Pull request #{{number}} закрито без злиття.'
+    stateClosed: 'Pull request #{{number}} закрито без злиття.',
+
+    commitMessage: 'Повідомлення коміту',
+    commitMessagePlaceholder: 'Перейменувати те саме',
+    commitHint: 'Закомітить усі зміни в цьому воркспейсі, а тоді відкриє request.',
+    envNotIgnored:
+      'git не ігнорує {{file}}, а octopus пише туди змінні цього воркспейса. Закомітивши все, ви відправите їх у pull request.',
+
+    refresh: 'Перечитати з GitHub',
+    isDraft: 'Чернетка',
+
+    checks: 'Перевірки',
+    checksNone: 'Цей репозиторій нічого не запускає на pull request.',
+    checkPending: 'виконується',
+    checkPassed: 'пройшла',
+    checkFailed: 'впала',
+    checkSkipped: 'пропущено',
+
+    review: 'Ревю',
+    unknownAuthor: 'видалений акаунт',
+    reviewNone: 'Поки ніхто нічого не сказав.',
+    addToChat: 'Додати в чат',
+    resolved: 'розвʼязано',
+    verdictApproved: 'схвалив',
+    verdictChangesRequested: 'просить змін',
+    verdictCommented: 'прокоментував',
+    verdictDismissed: 'відхилено',
+    decisionApproved: 'Схвалено',
+    decisionChangesRequested: 'Просять змін',
+    decisionReviewRequired: 'Потрібне ревю',
+
+    merge: 'Влити',
+    merging: 'Вливаю…',
+    methodMerge: 'Merge-коміт',
+    methodSquash: 'Squash і влити',
+    methodRebase: 'Rebase і влити',
+    conflicting: 'Ця гілка конфліктує з {{base}}.',
+    mergeBlocked: 'GitHub поки не вливає — бракує обовʼязкового ревю або перевірки.',
+    mergeBehind: '{{base}} пішла вперед, відколи ця гілка від неї відділилася.',
+    mergeUnstable: 'Перевірка не пройшла, але вливати все одно дозволено.',
+    mergeDraft: 'Чернетку не влити. Спершу позначте її готовою на GitHub.',
+
+    addressReview: 'Опрацювати ревю',
+    doReview: 'Зробити ревю',
+    multiAgentReview: 'Мультиагентне ревю',
+    resolveConflicts: 'Розвʼязати конфлікти',
+    commitAndPush: 'Закомітити і запушити',
+    answerCommit: 'Відповідь на ревю',
+    sending: 'Надсилаю…',
+
+    context: 'Pull request #{{number}} — гілка {{branch}} у {{base}}\n{{url}}',
+    quoteIntro: 'З ревю на цьому pull request:'
   },
 
   diff: {

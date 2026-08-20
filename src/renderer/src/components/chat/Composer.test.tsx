@@ -53,9 +53,9 @@ function renderComposer(overrides: Partial<ComposerProps> = {}): {
       commands={[]}
       usage={{ context: null, subscription: null }}
       limit={null}
-      comments={[]}
-      onRemoveComment={vi.fn()}
-      onCommentsSent={vi.fn()}
+      notes={[]}
+      onRemoveNote={vi.fn()}
+      onNotesSent={vi.fn()}
       onSend={onSend}
       onStop={onStop}
       {...props}
@@ -234,6 +234,7 @@ describe('sending', () => {
 
 describe('review notes riding with the message', () => {
   const NOTE = {
+    kind: 'diff' as const,
     path: 'src/core/diff.ts',
     side: 'new' as const,
     line: 42,
@@ -242,8 +243,19 @@ describe('review notes riding with the message', () => {
     text: 'this should be 3'
   }
 
+  /** A remark carried in from a review on GitHub, which rides the same strip. */
+  const QUOTE = {
+    kind: 'pullRequest' as const,
+    key: 'inline:PRRC_1',
+    reference: '#812',
+    author: 'olena',
+    place: 'src/core/git.ts:42',
+    quote: '@@ -1 +1 @@\n-const a = 1',
+    body: 'Why the second case?'
+  }
+
   it('names the file and line of each note above the field', () => {
-    renderComposer({ comments: [NOTE] })
+    renderComposer({ notes: [NOTE] })
 
     expect(screen.getByText('diff.ts:42')).toBeInTheDocument()
     expect(screen.getByText('this should be 3')).toBeInTheDocument()
@@ -252,9 +264,25 @@ describe('review notes riding with the message', () => {
   // A note over a passage says how far it reaches, or the chip claims a remark
   // about one line that the message will turn out to be about nine.
   it('names both ends of a note that covers a passage', () => {
-    renderComposer({ comments: [{ ...NOTE, line: 42, endLine: 50 }] })
+    renderComposer({ notes: [{ ...NOTE, line: 42, endLine: 50 }] })
 
     expect(screen.getByText('diff.ts:42-50')).toBeInTheDocument()
+  })
+
+  /* A remark on the request as a whole has no file, so its chip is the request
+     and the author and nothing more. */
+  it('names a remark that is not about any file', () => {
+    renderComposer({ notes: [{ ...QUOTE, place: null }] })
+
+    expect(screen.getByText('#812 @olena')).toBeInTheDocument()
+  })
+
+  // GitHub models a deleted account as no author at all, and the remark is
+  // still worth carrying.
+  it('names a remark whose author has deleted their account', () => {
+    renderComposer({ notes: [{ ...QUOTE, author: null }] })
+
+    expect(screen.getByText('#812 git.ts:42')).toBeInTheDocument()
   })
 
   it('says nothing when there are no notes', () => {
@@ -267,7 +295,7 @@ describe('review notes riding with the message', () => {
   // message, where the user can read back exactly what was sent.
   it('writes the notes into the message it sends', async () => {
     const user = userEvent.setup()
-    const { onSend } = renderComposer({ comments: [NOTE] })
+    const { onSend } = renderComposer({ notes: [NOTE] })
 
     await user.type(screen.getByRole('textbox'), 'fix these')
     await user.click(screen.getByRole('button', { name: 'Send' }))
@@ -279,7 +307,7 @@ describe('review notes riding with the message', () => {
   // The review can be the whole message.
   it('sends the notes even when nothing was typed', async () => {
     const user = userEvent.setup()
-    const { onSend } = renderComposer({ comments: [NOTE] })
+    const { onSend } = renderComposer({ notes: [NOTE] })
 
     await user.click(screen.getByRole('button', { name: 'Send' }))
 
@@ -288,12 +316,12 @@ describe('review notes riding with the message', () => {
 
   it('clears them once they have gone out', async () => {
     const user = userEvent.setup()
-    const onCommentsSent = vi.fn()
-    renderComposer({ comments: [NOTE], onCommentsSent })
+    const onNotesSent = vi.fn()
+    renderComposer({ notes: [NOTE], onNotesSent })
 
     await user.click(screen.getByRole('button', { name: 'Send' }))
 
-    expect(onCommentsSent).toHaveBeenCalled()
+    expect(onNotesSent).toHaveBeenCalled()
   })
 
   /*
@@ -305,27 +333,60 @@ describe('review notes riding with the message', () => {
    */
   it('keeps them when the message did not go', async () => {
     const user = userEvent.setup()
-    const onCommentsSent = vi.fn()
-    const { onSend } = renderComposer({ comments: [NOTE], onCommentsSent })
+    const onNotesSent = vi.fn()
+    const { onSend } = renderComposer({ notes: [NOTE], onNotesSent })
     onSend.mockResolvedValue(false)
 
     await user.type(screen.getByRole('textbox'), 'fix these')
     await user.click(screen.getByRole('button', { name: 'Send' }))
 
     expect(onSend).toHaveBeenCalled()
-    expect(onCommentsSent).not.toHaveBeenCalled()
+    expect(onNotesSent).not.toHaveBeenCalled()
     // The typed message is the same bargain and is kept for the same reason.
     expect(screen.getByRole('textbox')).toHaveValue('fix these')
   })
 
   it('gives a note back before it is sent', async () => {
     const user = userEvent.setup()
-    const onRemoveComment = vi.fn()
-    renderComposer({ comments: [NOTE], onRemoveComment })
+    const onRemoveNote = vi.fn()
+    renderComposer({ notes: [NOTE], onRemoveNote })
 
     await user.click(screen.getByRole('button', { name: 'Remove this note' }))
 
-    expect(onRemoveComment).toHaveBeenCalledWith(NOTE)
+    expect(onRemoveNote).toHaveBeenCalledWith(NOTE)
+  })
+
+  /*
+   * A remark from GitHub rides the same strip as a note on the diff, and both
+   * end up in one message. They are two stores in `App` for the diff pane's
+   * sake, not two things to the person typing.
+   */
+  it('carries a remark from the review beside a note on the diff', async () => {
+    const user = userEvent.setup()
+    const { onSend } = renderComposer({ notes: [NOTE, QUOTE] })
+
+    expect(screen.getByText('#812 @olena git.ts:42')).toBeInTheDocument()
+    expect(screen.getByText('Why the second case?')).toBeInTheDocument()
+
+    await user.type(screen.getByRole('textbox'), 'both please')
+    await user.click(screen.getByRole('button', { name: 'Send' }))
+
+    const sent = onSend.mock.calls[0]?.[0] as string
+    expect(sent).toContain('src/core/diff.ts:42')
+    expect(sent).toContain('#812 — @olena — src/core/git.ts:42')
+    expect(sent).toContain('Why the second case?')
+    expect(sent).toContain('both please')
+  })
+
+  it('removes the remark it was asked to remove, not the note beside it', async () => {
+    const user = userEvent.setup()
+    const onRemoveNote = vi.fn()
+    renderComposer({ notes: [NOTE, QUOTE], onRemoveNote })
+
+    const [, second] = screen.getAllByRole('button', { name: 'Remove this note' })
+    await user.click(second!)
+
+    expect(onRemoveNote).toHaveBeenCalledExactlyOnceWith(QUOTE)
   })
 
   // A slash command goes out through the strip's own `onSend`, which composes
@@ -333,7 +394,7 @@ describe('review notes riding with the message', () => {
   it('leaves a command from the strip above the field alone', async () => {
     const user = userEvent.setup()
     const { onSend } = renderComposer({
-      comments: [NOTE],
+      notes: [NOTE],
       usage: {
         context: { percentage: 48, usedTokens: 9, maxTokens: 20, model: null },
         subscription: null

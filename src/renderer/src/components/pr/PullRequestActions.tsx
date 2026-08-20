@@ -1,0 +1,239 @@
+import { GitMerge, Upload } from 'lucide-react'
+import { useTranslation } from 'react-i18next'
+
+import type { InstructionKind } from '@core/instructions.js'
+import type { MergeMethod } from '@core/pullRequests.js'
+import type { MergeState, PullRequestDetail } from '@core/pullRequestShapes.js'
+
+import { Button } from '../Button.js'
+import { DropdownMenu } from '../DropdownMenu.js'
+
+/**
+ * The prompts the pane can send, in the order the work happens.
+ *
+ * `resolveConflicts` is not here: it appears only against a conflict, beside
+ * the sentence saying there is one, where it reads as the answer to that rather
+ * than as a fifth thing one might do.
+ */
+const PROMPTS: readonly {
+  readonly kind: InstructionKind
+  readonly labelKey:
+    'pullRequest.addressReview' | 'pullRequest.doReview' | 'pullRequest.multiAgentReview'
+  /** Whether this one only makes sense once somebody has said something. */
+  readonly needsReview: boolean
+}[] = [
+  { kind: 'addressReview', labelKey: 'pullRequest.addressReview', needsReview: true },
+  { kind: 'review', labelKey: 'pullRequest.doReview', needsReview: false },
+  { kind: 'multiAgentReview', labelKey: 'pullRequest.multiAgentReview', needsReview: false }
+]
+
+const METHODS: readonly {
+  readonly method: MergeMethod
+  readonly labelKey:
+    'pullRequest.methodMerge' | 'pullRequest.methodSquash' | 'pullRequest.methodRebase'
+}[] = [
+  { method: 'merge', labelKey: 'pullRequest.methodMerge' },
+  { method: 'squash', labelKey: 'pullRequest.methodSquash' },
+  { method: 'rebase', labelKey: 'pullRequest.methodRebase' }
+]
+
+/**
+ * Why GitHub would not merge, where it is worth saying.
+ *
+ * `clean`, `hasHooks` and `unknown` say nothing: the first two are fine and the
+ * third is a state GitHub is still working out, which a sentence about would
+ * turn into a problem the reader cannot act on.
+ */
+const MERGE_NOTES: Partial<
+  Record<
+    MergeState,
+    'pullRequest.mergeBlocked' | 'pullRequest.mergeBehind' | 'pullRequest.mergeUnstable'
+  >
+> = {
+  blocked: 'pullRequest.mergeBlocked',
+  behind: 'pullRequest.mergeBehind',
+  unstable: 'pullRequest.mergeUnstable'
+}
+
+interface PullRequestActionsProps {
+  readonly detail: PullRequestDetail
+  readonly base: string
+  /** Uncommitted work here, which is what makes committing worth offering. */
+  readonly dirty: boolean
+  /**
+   * Sends the project's instruction for a kind as a message in the chat, or
+   * null where there is no conversation to send it to.
+   *
+   * Null rather than a flag beside a handler that could not run: the guard
+   * inside would be one nothing can reach, and a check nothing reaches is a
+   * claim nothing tests.
+   */
+  readonly onPrompt: ((kind: InstructionKind) => void) | null
+  /** Which prompt is in flight, so its button says so rather than the row. */
+  readonly sending: InstructionKind | null
+  readonly onMerge: (method: MergeMethod) => void
+  readonly merging: boolean
+  readonly onCommitAndPush: () => void
+  readonly committing: boolean
+}
+
+/**
+ * Everything the pane can do about a request that exists.
+ *
+ * Each of the four prompts sends the project's own instruction as an ordinary
+ * message in the conversation — visible in the log, editable before it is ever
+ * pressed, and nothing the app has written itself (§4).
+ */
+export function PullRequestActions({
+  detail,
+  base,
+  dirty,
+  onPrompt,
+  sending,
+  onMerge,
+  merging,
+  onCommitAndPush,
+  committing
+}: PullRequestActionsProps): React.JSX.Element {
+  const { t } = useTranslation()
+
+  const conflicting = detail.mergeable === 'conflicting'
+  const reviewed = detail.decision === 'changesRequested' || hasRemarks(detail)
+  const note = MERGE_NOTES[detail.mergeState]
+
+  /* A request that is merged or closed has nothing left to do to it. The
+     prompts would still run, but "review it" on a merged branch is a reading of
+     history rather than of a change, and the button implies otherwise. */
+  const open = detail.state === 'open'
+
+  return (
+    <div className="flex flex-col gap-2">
+      {conflicting && (
+        <p className="text-warning leading-relaxed">{t('pullRequest.conflicting', { base })}</p>
+      )}
+      {!conflicting && note !== undefined && (
+        <p className="text-ink-faint leading-relaxed">{t(note, { base })}</p>
+      )}
+      {detail.draft && (
+        <p className="text-ink-faint leading-relaxed">{t('pullRequest.mergeDraft')}</p>
+      )}
+
+      <div className="flex flex-wrap gap-1">
+        {dirty && open && (
+          <Button size="sm" onClick={onCommitAndPush} disabled={committing}>
+            <Upload aria-hidden size={12} />
+            {t(committing ? 'pullRequest.creating' : 'pullRequest.commitAndPush')}
+          </Button>
+        )}
+
+        {open &&
+          PROMPTS.filter((prompt) => !prompt.needsReview || reviewed).map((prompt) => (
+            <PromptButton
+              key={prompt.kind}
+              kind={prompt.kind}
+              label={t(prompt.labelKey)}
+              onPrompt={onPrompt}
+              sending={sending}
+            />
+          ))}
+
+        {conflicting && open && (
+          <PromptButton
+            kind="resolveConflicts"
+            label={t('pullRequest.resolveConflicts')}
+            onPrompt={onPrompt}
+            sending={sending}
+            variant="accent"
+          />
+        )}
+      </div>
+
+      {open && (
+        <DropdownMenu
+          align="left"
+          actions={METHODS.map(({ method, labelKey }) => ({
+            id: method,
+            label: t(labelKey),
+            onSelect: () => {
+              onMerge(method)
+            }
+          }))}
+          trigger={({ onClick, open: shown }) => (
+            <Button
+              size="sm"
+              variant="accent"
+              onClick={onClick}
+              aria-expanded={shown}
+              // A conflict and a draft are both refusals GitHub would make
+              // anyway; saying so here saves a round trip that ends in an error
+              // the pane would then have to explain.
+              disabled={merging || conflicting || detail.draft}
+            >
+              <GitMerge aria-hidden size={12} />
+              {t(merging ? 'pullRequest.merging' : 'pullRequest.merge')}
+            </Button>
+          )}
+        />
+      )}
+    </div>
+  )
+}
+
+/**
+ * One prepared message, as a button.
+ *
+ * Drawn twice rather than once with a guard inside the handler: without a
+ * conversation there is nothing to send into, so the press cannot do anything —
+ * and a branch nothing can reach is a claim nothing tests.
+ */
+function PromptButton({
+  kind,
+  label,
+  onPrompt,
+  sending,
+  variant = 'quiet'
+}: {
+  readonly kind: InstructionKind
+  readonly label: string
+  readonly onPrompt: ((kind: InstructionKind) => void) | null
+  readonly sending: InstructionKind | null
+  readonly variant?: 'quiet' | 'accent'
+}): React.JSX.Element {
+  const { t } = useTranslation()
+
+  if (onPrompt === null) {
+    return (
+      <Button size="sm" disabled title={t('pullRequest.noConversation')}>
+        {label}
+      </Button>
+    )
+  }
+
+  return (
+    <Button
+      size="sm"
+      variant={variant}
+      onClick={() => {
+        onPrompt(kind)
+      }}
+      disabled={sending !== null}
+    >
+      {sending === kind ? t('pullRequest.sending') : label}
+    </Button>
+  )
+}
+
+/**
+ * Whether anybody has reviewed this.
+ *
+ * Not `decision === 'changesRequested'` alone, which is what the button was
+ * nearly gated on: on a repository with no required reviewers GitHub sends an
+ * empty decision essentially always, so that alone would hide the button on
+ * exactly the projects this app is for. A resolved thread does not count —
+ * somebody has already dealt with it.
+ */
+function hasRemarks(detail: PullRequestDetail): boolean {
+  return detail.comments.some(
+    (comment) => comment.kind === 'review' || (comment.kind === 'inline' && !comment.resolved)
+  )
+}

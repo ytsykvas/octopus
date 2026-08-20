@@ -10,6 +10,7 @@ import { gitIn } from './git.js'
 import { GitHubError } from './github.js'
 import {
   BRANCH_REQUEST_LIMIT,
+  commitAndPush,
   createPullRequest,
   type GhExec,
   ghIn,
@@ -438,6 +439,45 @@ describe('committing on the way to opening one', () => {
         workExec()
       )
     ).rejects.toMatchObject({ code: 'commitFailed' })
+  })
+})
+
+describe('committing an answer onto a request that exists', () => {
+  /*
+   * What closes the loop: the agent answers a review, and without this the only
+   * way to get that answer onto the request is the terminal.
+   */
+  it('commits everything here and pushes the branch', async () => {
+    const branch = await branchWithCommit()
+    const work = join(dir, 'work')
+    await writeFile(join(work, 'b.txt'), 'two\n', 'utf8')
+
+    await commitAndPush('Answer the review', branch, workExec())
+
+    const log = await run('git', ['log', '-1', '--format=%s'], { cwd: work })
+    expect(log.stdout.trim()).toBe('Answer the review')
+    const remote = await run('git', ['ls-remote', '--heads', 'origin', branch], { cwd: work })
+    expect(remote.stdout).toContain(branch)
+  })
+
+  it('says there is nothing to commit rather than letting git say it', async () => {
+    const branch = await branchWithCommit()
+
+    await expect(commitAndPush('Nothing', branch, workExec())).rejects.toMatchObject({
+      code: 'nothingToCommit'
+    })
+  })
+
+  it('names the branch that could not be pushed', async () => {
+    const branch = await branchWithCommit()
+    const work = join(dir, 'work')
+    await writeFile(join(work, 'b.txt'), 'two\n', 'utf8')
+    await run('git', ['remote', 'set-url', 'origin', join(dir, 'nowhere.git')], { cwd: work })
+
+    await expect(commitAndPush('Answer the review', branch, workExec())).rejects.toMatchObject({
+      code: 'pushFailed',
+      params: { branch }
+    })
   })
 })
 

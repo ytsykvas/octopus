@@ -8,8 +8,9 @@ import type { WorkspaceView } from '@core/workspaces.js'
 
 import { useChatTabs } from '../../hooks/useChatTabs.js'
 import type { DiffCommentController } from '../../hooks/useDiffComments.js'
+import type { PullRequestQuoteController } from '../../hooks/usePullRequestQuotes.js'
 import { CHAT_ID, emitAgentEvent, emitChatStatus, givenChat } from '../../test/chat.js'
-import { commentController } from '../../test/comments.js'
+import { commentController, quoteController } from '../../test/comments.js'
 import { stubDialogElement } from '../../test/dialog.js'
 import { octopus } from '../../test/octopus.js'
 import { Chat } from './Chat.js'
@@ -40,6 +41,7 @@ interface PaneProps {
   readonly draft?: string
   readonly onDraftLeave?: (tabKey: string, text: string) => void
   readonly comments?: DiffCommentController
+  readonly quotes?: PullRequestQuoteController
   readonly color?: ProjectColor
   readonly defaultWorkingMode?: WorkingMode
   readonly defaultEffort?: Effort
@@ -62,6 +64,7 @@ function ChatPane({
   draft = '',
   onDraftLeave = vi.fn(),
   comments = commentController(),
+  quotes = quoteController(),
   color = 'blue',
   defaultWorkingMode = 'default',
   defaultEffort = 'medium',
@@ -86,6 +89,7 @@ function ChatPane({
       draftOf={() => draft}
       onDraftLeave={onDraftLeave}
       comments={comments}
+      quotes={quotes}
       color={color}
       defaultWorkingMode={defaultWorkingMode}
       defaultEffort={defaultEffort}
@@ -1165,5 +1169,59 @@ describe('a turn that was left running', () => {
     await openLoadedChat()
 
     expect(screen.getByRole('button', { name: 'Send' })).toBeInTheDocument()
+  })
+})
+
+describe('notes from two places riding one message', () => {
+  const NOTE = {
+    path: 'src/core/diff.ts',
+    side: 'new' as const,
+    line: 42,
+    endLine: 42,
+    code: 'const b = 2',
+    text: 'This should be 3.'
+  }
+
+  const QUOTE = {
+    key: 'inline:PRRC_1',
+    reference: '#7',
+    author: 'olena',
+    place: 'src/core/git.ts:42',
+    quote: '@@ -1 +1 @@',
+    body: 'Why the second case?'
+  }
+
+  /*
+   * The diff's notes and the review's remarks are two stores in `App`, kept
+   * apart so the diff pane never has to narrow a shape it cannot hold. This is
+   * the layer that puts them back together, and the one place that has to know
+   * which store a note came from when it is given back.
+   */
+  it('gives a remark back to the store it came from', async () => {
+    const user = userEvent.setup()
+    const comments = commentController({ pending: [NOTE] })
+    const quotes = quoteController({ pending: [QUOTE] })
+    givenChat()
+    render(<ChatPane workspace={workspace()} comments={comments} quotes={quotes} />)
+
+    const buttons = await screen.findAllByRole('button', { name: 'Remove this note' })
+    await user.click(buttons[1]!)
+
+    expect(quotes.remove).toHaveBeenCalledWith(expect.objectContaining({ key: QUOTE.key }))
+    expect(comments.remove).not.toHaveBeenCalled()
+  })
+
+  it('gives a note on the diff back to the diff', async () => {
+    const user = userEvent.setup()
+    const comments = commentController({ pending: [NOTE] })
+    const quotes = quoteController({ pending: [QUOTE] })
+    givenChat()
+    render(<ChatPane workspace={workspace()} comments={comments} quotes={quotes} />)
+
+    const buttons = await screen.findAllByRole('button', { name: 'Remove this note' })
+    await user.click(buttons[0]!)
+
+    expect(comments.remove).toHaveBeenCalledWith(expect.objectContaining({ path: NOTE.path }))
+    expect(quotes.remove).not.toHaveBeenCalled()
   })
 })

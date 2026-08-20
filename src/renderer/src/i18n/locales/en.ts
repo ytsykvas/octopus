@@ -262,7 +262,6 @@ export const en = {
     /* Emptying the instruction is how a project says it adds nothing, so this
        is a state somebody chose rather than one that went wrong. */
     noInstruction: 'This project adds nothing to a description. Write an instruction first.',
-    branch: 'Branch',
     nothingToOpen:
       'Nothing to open yet. This branch has no commits that {{base}} does not — make one first.',
     /* Said before the button rather than after it fails. Pushing is a thing
@@ -282,7 +281,77 @@ export const en = {
        word — the number is what identifies it to anyone who goes looking. */
     stateOpen: 'Pull request #{{number}} is open.',
     stateMerged: 'Pull request #{{number}} was merged.',
-    stateClosed: 'Pull request #{{number}} was closed without merging.'
+    stateClosed: 'Pull request #{{number}} was closed without merging.',
+
+    /* Committing from here, which is what lets a workspace go from finished
+       work to an open request without a detour through the terminal. */
+    commitMessage: 'Commit message',
+    commitMessagePlaceholder: 'Rename the thing',
+    commitHint: 'Commits every change in this workspace, then opens the request.',
+    /* Said beside the field rather than found out afterwards: octopus writes
+       this file into every worktree, and committing everything would send it. */
+    envNotIgnored:
+      'git does not ignore {{file}}, and octopus writes this workspace’s variables into it. Committing everything would put them in the pull request.',
+
+    refresh: 'Read GitHub again',
+    isDraft: 'Draft',
+
+    checks: 'Checks',
+    checksNone: 'This repository runs nothing on a pull request.',
+    /* The state as a word beside the mark, because a colour reaches nobody
+       using a screen reader and no test can hold one. */
+    checkPending: 'running',
+    checkPassed: 'passed',
+    checkFailed: 'failed',
+    checkSkipped: 'skipped',
+
+    review: 'Review',
+    /* GitHub models a deleted account as no author at all. */
+    unknownAuthor: 'a deleted account',
+    reviewNone: 'Nobody has said anything yet.',
+    /* Attaches the remark to the composer rather than sending it: the reader
+       has a question about it, and the question is the point. */
+    addToChat: 'Add to chat',
+    resolved: 'resolved',
+    verdictApproved: 'approved',
+    verdictChangesRequested: 'requested changes',
+    verdictCommented: 'commented',
+    verdictDismissed: 'dismissed',
+    decisionApproved: 'Approved',
+    decisionChangesRequested: 'Changes requested',
+    decisionReviewRequired: 'Review required',
+
+    merge: 'Merge',
+    merging: 'Merging…',
+    methodMerge: 'Merge commit',
+    methodSquash: 'Squash and merge',
+    methodRebase: 'Rebase and merge',
+    /* Why merging is not offered, each naming the thing to do about it. */
+    conflicting: 'This branch conflicts with {{base}}.',
+    mergeBlocked: 'GitHub will not merge this yet — a required review or check is missing.',
+    mergeBehind: '{{base}} has moved on since this branch left it.',
+    mergeUnstable: 'A check has not passed, but merging is still allowed.',
+    mergeDraft: 'A draft cannot be merged. Mark it ready on GitHub first.',
+
+    /* The four prepared messages, named for what pressing them does. Each sends
+       the project's instruction as a visible message in the conversation. */
+    addressReview: 'Address the review',
+    doReview: 'Review it',
+    multiAgentReview: 'Multi-agent review',
+    resolveConflicts: 'Resolve the conflicts',
+    commitAndPush: 'Commit and push',
+    /* The message the button commits under. Named for what the commit is
+       rather than for what changed, which is the agent's to describe — and this
+       button exists to get its answer onto the request, not to write history. */
+    answerCommit: 'Answer the review',
+    sending: 'Sending…',
+
+    /* Appended to whichever instruction is sent, so the agent does not have to
+       go looking for which request is meant. Visible in the log, like the
+       instruction itself (§4). */
+    context: 'Pull request #{{number}} — branch {{branch}} into {{base}}\n{{url}}',
+    /* The line above a remark carried into the composer from the review. */
+    quoteIntro: 'From the review on this pull request:'
   },
 
   diff: {

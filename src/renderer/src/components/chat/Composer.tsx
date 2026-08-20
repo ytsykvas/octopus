@@ -13,11 +13,10 @@ import {
 
 import type { RateLimit, SessionUsage } from '@core/service.js'
 
-import type { DiffComment } from '../../hooks/useDiffComments.js'
 import { useDismiss } from '../../hooks/useDismiss.js'
 import { CommandMenu } from './CommandMenu.js'
 import { completeCommand, matchCommands, readCommandQuery } from './commandMatch.js'
-import { withComments } from './attachments.js'
+import { type ChatNote, withNotes } from './attachments.js'
 import { ComposerAttachments } from './ComposerAttachments.js'
 import { ComposerAttic } from './ComposerAttic.js'
 import { EffortPicker } from './EffortPicker.js'
@@ -77,15 +76,16 @@ interface ComposerProps {
   readonly onSend: (text: string) => Promise<boolean>
   readonly onStop: () => void
   /**
-   * Review notes waiting to go out with this message.
+   * Notes waiting to go out with this message — from the diff, from a review,
+   * or both.
    *
    * Composed into the text here rather than in `Chat`, so the attic's own
    * `onSend` — which puts `/clear` and `/compact` on the same wire — never
    * carries them.
    */
-  readonly comments: readonly DiffComment[]
-  readonly onRemoveComment: (comment: DiffComment) => void
-  readonly onCommentsSent: () => void
+  readonly notes: readonly ChatNote[]
+  readonly onRemoveNote: (note: ChatNote) => void
+  readonly onNotesSent: () => void
 }
 
 const MODE_LABELS: Record<WorkingMode, 'chat.modeDefault' | 'chat.modeAcceptEdits'> = {
@@ -151,9 +151,9 @@ export function Composer({
   limit,
   onSend,
   onStop,
-  comments,
-  onRemoveComment,
-  onCommentsSent,
+  notes,
+  onRemoveNote,
+  onNotesSent,
   initialDraft,
   onDraftLeave
 }: ComposerProps): React.JSX.Element {
@@ -264,7 +264,7 @@ export function Composer({
   const submit = (): void => {
     // A message that is only notes is still a message: the field may be empty
     // and the review is the thing being sent.
-    if (trimmed === '' && comments.length === 0) return
+    if (trimmed === '' && notes.length === 0) return
 
     // The suggestion list closes at once: it is about the keystroke, not about
     // the message, and leaving it open over a send in flight reads as stuck.
@@ -280,9 +280,14 @@ export function Composer({
      * disk, which left nowhere at all to get it back from.
      */
     void (async () => {
-      if (!(await onSend(withComments(trimmed, comments, t('diff.commentIntro'))))) return
+      const message = withNotes(trimmed, notes, {
+        diff: t('diff.commentIntro'),
+        pullRequest: t('pullRequest.quoteIntro')
+      })
 
-      onCommentsSent()
+      if (!(await onSend(message))) return
+
+      onNotesSent()
       write('')
     })()
   }
@@ -321,7 +326,7 @@ export function Composer({
             ordinary message, so there is one channel and not two. */}
         <ComposerAttic usage={usage} limit={limit} onSend={onSend} />
 
-        <ComposerAttachments comments={comments} onRemove={onRemoveComment} />
+        <ComposerAttachments notes={notes} onRemove={onRemoveNote} />
 
         <textarea
           value={draft}
@@ -477,7 +482,7 @@ export function Composer({
                 type="button"
                 onClick={submit}
                 // A review with nothing typed is still something to send.
-                disabled={trimmed === '' && comments.length === 0}
+                disabled={trimmed === '' && notes.length === 0}
                 title={t('chat.send')}
                 aria-label={t('chat.send')}
                 className="focus-ring bg-accent text-on-accent hover:bg-accent-hover grid size-6 shrink-0 place-items-center rounded-full transition-colors disabled:pointer-events-none disabled:opacity-40"

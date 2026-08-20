@@ -4,7 +4,7 @@ import { beforeAll, describe, expect, it, vi } from 'vitest'
 
 import { useChatTabs } from '../../hooks/useChatTabs.js'
 import { chat, emitAgentEvent, givenChats } from '../../test/chat.js'
-import { commentController } from '../../test/comments.js'
+import { commentController, quoteController } from '../../test/comments.js'
 import { stubDialogElement } from '../../test/dialog.js'
 import { octopus } from '../../test/octopus.js'
 import type { WorkspaceView } from '@core/workspaces.js'
@@ -33,6 +33,7 @@ function Pane({ workspace = WORKSPACE }: { workspace?: WorkspaceView }): React.J
       draftOf={() => ''}
       onDraftLeave={vi.fn()}
       comments={commentController()}
+      quotes={quoteController()}
       color="blue"
       defaultWorkingMode="default"
       defaultEffort="medium"

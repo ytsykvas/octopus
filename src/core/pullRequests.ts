@@ -258,13 +258,7 @@ export async function createPullRequest(
     )
   }
 
-  try {
-    // `-u` as well as pushing: `gh` reads the upstream to know what to open the
-    // request from, and a branch pushed without one is a branch it cannot find.
-    await git(['push', '-u', 'origin', request.branch])
-  } catch {
-    throw new GitHubError('pushFailed', { branch: request.branch }, 'Could not push the branch.')
-  }
+  await push(request.branch, git)
 
   let raw: string
   try {
@@ -288,6 +282,35 @@ export async function createPullRequest(
   // `gh` prints the URL and nothing else worth keeping. Trimmed rather than
   // parsed: there is no `--json` on `pr create`.
   return raw.trim()
+}
+
+/**
+ * Sends the branch to the remote.
+ *
+ * `-u` as well as pushing: `gh` reads the upstream to know what to open a
+ * request from, and a branch pushed without one is a branch it cannot find.
+ */
+async function push(branch: string, git: GitExec): Promise<void> {
+  try {
+    await git(['push', '-u', 'origin', branch])
+  } catch {
+    throw new GitHubError('pushFailed', { branch }, 'Could not push the branch.')
+  }
+}
+
+/**
+ * Commits everything here and sends it to the remote.
+ *
+ * What closes the loop for a request that already exists: the agent answers a
+ * review, and without this the only way to get that answer onto the request is
+ * the terminal.
+ *
+ * The same two steps `createPullRequest` takes, in the same order and reporting
+ * the same codes — which is why they are functions rather than inline there.
+ */
+export async function commitAndPush(message: string, branch: string, git: GitExec): Promise<void> {
+  await commit(message, git)
+  await push(branch, git)
 }
 
 /**
@@ -316,6 +339,9 @@ async function commit(message: string, git: GitExec): Promise<void> {
  * an argument to `gh`, and types are gone by the time it crosses the boundary.
  */
 export const PullRequestNumberSchema = z.number().int().positive()
+
+/** A commit message on its own, bounded like the one inside a request draft. */
+export const CommitMessageSchema = z.string().min(1).max(2_000)
 
 /** How the commits land on the base branch. */
 export const MergeMethodSchema = z.enum(['merge', 'squash', 'rebase'])

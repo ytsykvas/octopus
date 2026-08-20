@@ -9,6 +9,7 @@ import type { ChatTabsController } from '../../hooks/useChatTabs.js'
 import { Button } from '../Button.js'
 import { RepoTrustReview } from '../RepoTrustReview.js'
 import type { DiffCommentController } from '../../hooks/useDiffComments.js'
+import type { PullRequestQuoteController } from '../../hooks/usePullRequestQuotes.js'
 import { ChatSession } from './ChatSession.js'
 import { ChatTabs } from './ChatTabs.js'
 
@@ -33,6 +34,7 @@ interface ChatProps {
   readonly onDraftLeave: (tabKey: string, text: string) => void
   /** Review notes from the diff pane, riding out with the next message. */
   readonly comments: DiffCommentController
+  readonly quotes: PullRequestQuoteController
   /**
    * The project's colour, for the messages you sent and the active tab's rule.
    *
@@ -73,6 +75,7 @@ export function Chat({
   draftOf,
   onDraftLeave,
   comments,
+  quotes,
   color,
   defaultWorkingMode,
   defaultEffort,
@@ -189,6 +192,7 @@ export function Chat({
             onDraftLeave(tab.key, text)
           }}
           comments={comments}
+          quotes={quotes}
           defaultWorkingMode={defaultWorkingMode}
           defaultEffort={defaultEffort}
           defaultModel={defaultModel}

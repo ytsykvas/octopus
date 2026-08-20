@@ -8,6 +8,8 @@ import { Placeholder } from '../Placeholder.js'
 import { useChat } from '../../hooks/useChat.js'
 import type { ChatTab } from '../../hooks/useChatTabs.js'
 import type { DiffCommentController } from '../../hooks/useDiffComments.js'
+import type { PullRequestQuoteController } from '../../hooks/usePullRequestQuotes.js'
+import { type ChatNote, mergeNotes } from './attachments.js'
 import { useErrorMessage } from '../../hooks/useErrorMessage.js'
 import { useCommands } from '../../hooks/useCommands.js'
 import { useModels } from '../../hooks/useModels.js'
@@ -47,6 +49,8 @@ interface ChatSessionProps {
   readonly onDraftLeave: (text: string) => void
   /** Review notes from the diff pane, riding out with the next message. */
   readonly comments: DiffCommentController
+  /** Remarks carried in from the review on this branch's pull request. */
+  readonly quotes: PullRequestQuoteController
   /**
    * What the settings say a new conversation starts with.
    *
@@ -78,6 +82,7 @@ export function ChatSession({
   draft,
   onDraftLeave,
   comments,
+  quotes,
   defaultWorkingMode,
   defaultEffort,
   defaultModel,
@@ -234,9 +239,19 @@ export function ChatSession({
         limit={rateLimit}
         onSend={chat.send}
         onStop={() => void chat.interrupt()}
-        comments={comments.pending}
-        onRemoveComment={comments.remove}
-        onCommentsSent={comments.clear}
+        /* The two queues become one list here rather than in the composer:
+           this is already the layer that adapts a controller to a prop, and the
+           composer has no business knowing there are two places a note can come
+           from. */
+        notes={mergeNotes(comments.pending, quotes.pending)}
+        onRemoveNote={(note: ChatNote) => {
+          if (note.kind === 'diff') comments.remove(note)
+          else quotes.remove(note)
+        }}
+        onNotesSent={() => {
+          comments.clear()
+          quotes.clear()
+        }}
       />
     </div>
   )

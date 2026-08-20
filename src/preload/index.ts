@@ -314,6 +314,10 @@ const api = {
         Result<string>
       >,
 
+    /** Commits everything here and pushes the branch, to update a request. */
+    commitAndPush: (workspaceId: string, message: string): Promise<Result<void>> =>
+      ipcRenderer.invoke('workspaces:commitAndPush', workspaceId, message) as Promise<Result<void>>,
+
     /** The checks, the review and the mergeability of a request that exists. */
     pullRequestDetail: (workspaceId: string, number: number): Promise<Result<PullRequestDetail>> =>
       ipcRenderer.invoke('workspaces:pullRequestDetail', workspaceId, number) as Promise<

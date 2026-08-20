@@ -32,6 +32,7 @@ import { EnvBodySchema } from '../core/env.js'
 import type { RemoteRepository } from '../core/github.js'
 import { InstructionBodySchema, InstructionKindSchema } from '../core/instructions.js'
 import {
+  CommitMessageSchema,
   MergeMethodSchema,
   NewPullRequestSchema,
   PullRequestNumberSchema
@@ -345,6 +346,10 @@ export function registerIpc(
   // body the size of a file is a mistake, not a description.
   host.handle('workspaces:createPullRequest', (_event, workspaceId: string, request: unknown) =>
     attempt(() => service.createPullRequest(workspaceId, NewPullRequestSchema.parse(request)))
+  )
+
+  host.handle('workspaces:commitAndPush', (_event, workspaceId: string, message: unknown) =>
+    attempt(() => service.commitAndPushWorkspace(workspaceId, CommitMessageSchema.parse(message)))
   )
 
   // The number becomes an argument to `gh`, so it is proved to be one before it

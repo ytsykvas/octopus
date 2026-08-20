@@ -5,6 +5,7 @@ import { useTranslation } from 'react-i18next'
 import type { ProjectColor } from '@core/colors.js'
 import type { RightPanelTab } from '@core/config.js'
 import type { DiffCommentController } from '../hooks/useDiffComments.js'
+import type { PullRequestQuoteController } from '../hooks/usePullRequestQuotes.js'
 import { useRunSequence } from '../hooks/useRunSequence.js'
 import { useServingPort } from '../hooks/useServingPort.js'
 import type { WorkspaceView } from '@core/workspaces.js'
@@ -14,7 +15,7 @@ import { DiffPanel } from './diff/DiffPanel.js'
 import { DropdownMenu } from './DropdownMenu.js'
 import type { DiffView } from './diff/DiffHunk.js'
 import { ResizeHandle } from './ResizeHandle.js'
-import { PullRequestPanel } from './PullRequestPanel.js'
+import { PullRequestPanel } from './pr/PullRequestPanel.js'
 import { WorkspaceEnv } from './WorkspaceEnv.js'
 import { WorkspaceScripts } from './WorkspaceScripts.js'
 import { WorkspaceTerminals } from './WorkspaceTerminals.js'
@@ -138,6 +139,10 @@ interface RightPanelProps {
   readonly onTab: (tab: RightPanelTab) => void
   /** Review notes the diff writes and the composer sends. */
   readonly comments: DiffCommentController
+  /** Remarks the pull request tab pulls in from GitHub, for the same composer. */
+  readonly quotes: PullRequestQuoteController
+  /** The project's env file, for the warning beside the commit field. */
+  readonly envFile: string
   readonly onError: (message: string) => void
 }
 
@@ -161,6 +166,8 @@ export function RightPanel({
   tab,
   onTab,
   comments,
+  quotes,
+  envFile,
   onError
 }: RightPanelProps): React.JSX.Element {
   const { t, i18n } = useTranslation()
@@ -714,6 +721,8 @@ export function RightPanel({
           workspace={active}
           visible={tab === 'pullRequest'}
           chatId={chatId}
+          quotes={quotes}
+          envFile={envFile}
           onEditInstructions={onEditInstructions}
           onError={onError}
         />

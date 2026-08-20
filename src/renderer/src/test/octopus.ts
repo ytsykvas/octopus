@@ -93,6 +93,7 @@ export function installOctopusStub(): Api {
         ok({ request: null, pushed: false, dirty: false, ahead: 1, base: 'main' })
       ),
       createPullRequest: vi.fn(() => ok('https://github.com/ytsykvas/octopus/pull/1')),
+      commitAndPush: vi.fn(() => ok(undefined)),
       // A request nobody has reviewed and nothing has checked, which is what
       // one looks like for the first minute of its life.
       pullRequestDetail: vi.fn(() => ok(detailFixture())),

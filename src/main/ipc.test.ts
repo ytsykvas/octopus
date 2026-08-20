@@ -296,6 +296,7 @@ describe('channel table', () => {
     'workspaces:diff',
     'workspaces:pullRequest',
     'workspaces:createPullRequest',
+    'workspaces:commitAndPush',
     'workspaces:pullRequestDetail',
     'workspaces:mergePullRequest',
     'files:open',
@@ -984,6 +985,36 @@ describe('workspaces of a real project', () => {
         draft: false
       })
     ).resolves.toMatchObject({ ok: false })
+  })
+
+  it('commits everything in a workspace and pushes the branch', async () => {
+    const projectId = await addProject('answering')
+    const origin = join(dir, 'answering-origin.git')
+    await run('git', ['init', '-q', '--bare', origin])
+    await run('git', ['remote', 'add', 'origin', origin], { cwd: join(dir, 'answering') })
+
+    const workspace = await createWorkspace(projectId)
+    await writeFile(join(workspace.path, 'answer.txt'), 'done\n', 'utf8')
+
+    await expect(
+      invoke('workspaces:commitAndPush', workspace.id, 'Answer the review')
+    ).resolves.toMatchObject({ ok: true })
+
+    const pushed = await run('git', ['ls-remote', '--heads', 'origin', workspace.branch], {
+      cwd: workspace.path
+    })
+    expect(pushed.stdout).toContain(workspace.branch)
+  })
+
+  // The message becomes an argument to git, so an empty one is refused here
+  // rather than left to fail somewhere less able to explain itself.
+  it('refuses a commit with no message', async () => {
+    const projectId = await addProject('unmessaged')
+    const workspace = await createWorkspace(projectId)
+
+    await expect(invoke('workspaces:commitAndPush', workspace.id, '')).resolves.toMatchObject({
+      ok: false
+    })
   })
 
   it('carries the checks and the review of one request across', async () => {
