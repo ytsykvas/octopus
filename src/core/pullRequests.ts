@@ -17,6 +17,11 @@ import { z } from 'zod'
 
 import { GitHubError } from './github.js'
 import type { GitExec } from './git.js'
+import {
+  type PullRequestState,
+  RemoteStateSchema,
+  toPullRequestState
+} from './pullRequestShapes.js'
 import { hasUncommittedChanges } from './worktree.js'
 
 const run = promisify(execFile)
@@ -30,14 +35,6 @@ export function ghIn(cwd: string): GhExec {
     return stdout
   }
 }
-
-/**
- * What has become of the branch.
- *
- * `none` is not a failure: most branches have no pull request most of the time,
- * and the tab's ordinary state is the one that offers to make one.
- */
-export type PullRequestState = 'open' | 'merged' | 'closed'
 
 /** One that exists, and therefore has all four of these rather than some. */
 export interface PullRequest {
@@ -72,16 +69,10 @@ export interface PullRequestView {
  */
 const RemotePullRequestSchema = z.object({
   number: z.number().int(),
-  state: z.enum(['OPEN', 'MERGED', 'CLOSED']),
+  state: RemoteStateSchema,
   title: z.string(),
   url: z.string()
 })
-
-const STATES: Record<'OPEN' | 'MERGED' | 'CLOSED', PullRequestState> = {
-  OPEN: 'open',
-  MERGED: 'merged',
-  CLOSED: 'closed'
-}
 
 /**
  * The pull request for a branch, or the absence of one.
@@ -115,7 +106,7 @@ export async function readPullRequest(
         ? null
         : {
             number: current.number,
-            state: STATES[current.state],
+            state: toPullRequestState(current.state),
             title: current.title,
             url: current.url
           },

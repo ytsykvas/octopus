@@ -3,7 +3,7 @@ import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import { shortBranchName } from '@core/branches.js'
-import type { PullRequestState } from '@core/pullRequests.js'
+import type { PullRequestState } from '@core/pullRequestShapes.js'
 import type { WorkspaceView } from '@core/workspaces.js'
 
 import type { Failure } from '../../../preload/index.js'
