@@ -144,7 +144,7 @@ describe('channel names', () => {
     ],
     [
       'projects.instructionSources',
-      () => method('projects', 'instructionSources')('p' as never),
+      () => method('projects', 'instructionSources')('p' as never, null as never),
       'instructions:sources'
     ],
     ['workspaces.env', () => method('workspaces', 'env')('w' as never), 'workspace:env'],

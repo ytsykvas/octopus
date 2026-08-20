@@ -810,7 +810,7 @@ describe('scripts and instructions of a real project', () => {
     const projectId = await addProject()
     await writeFile(join(dir, 'planner', 'CLAUDE.md'), '# rules\n', 'utf8')
 
-    const answer = await invoke('instructions:sources', projectId)
+    const answer = await invoke('instructions:sources', projectId, null)
 
     expect(answer).toMatchObject({ ok: true })
     expect((answer as { value: { id: string; present: boolean }[] }).value).toContainEqual(

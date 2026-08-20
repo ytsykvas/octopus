@@ -631,6 +631,7 @@ export function App(): React.JSX.Element {
         <ProjectSettings
           project={editingProject}
           initialSection={editingProjectSection}
+          workspaceId={selectedWorkspaceId}
           onUpdate={(patch) => projects.update(editingProject.id, patch)}
           onRemove={() => {
             void (async () => {

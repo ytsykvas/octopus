@@ -475,6 +475,12 @@ on every switch. A worktree that grants nothing digests to the empty string,
 which is how "nothing to approve" is told apart from "approved" without a second
 field.
 
+The Instructions panel narrows by the same rule, over the same directory — one
+function, so the two cannot drift into disagreeing. They did once: the panel
+narrowed by the setting alone while the session narrowed by the setting and the
+gate, and an unapproved repository was reported as read while the agent read none
+of it.
+
 Read from the worktree a session runs in, not the checkout — the SDK is pointed
 at the worktree, and a branch may carry different settings from the one beside
 it.

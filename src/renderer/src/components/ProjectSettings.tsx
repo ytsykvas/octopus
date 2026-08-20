@@ -40,6 +40,14 @@ interface ProjectSettingsProps {
    * dialog conditionally — the same arrangement `Settings` relies on.
    */
   readonly initialSection?: SectionId
+  /**
+   * The workspace the answer is about.
+   *
+   * Whether a source is read depends on the worktree a session would run in —
+   * that is where the trust gate looks. With none open the checkout is the best
+   * answer available.
+   */
+  readonly workspaceId?: string | null
 }
 
 /**
@@ -111,7 +119,8 @@ export function ProjectSettings({
   onUpdate,
   onRemove,
   onClose,
-  initialSection
+  initialSection,
+  workspaceId = null
 }: ProjectSettingsProps): React.JSX.Element {
   const { t } = useTranslation()
   const describeFailure = useErrorMessage()
@@ -182,14 +191,14 @@ export function ProjectSettings({
     const controller = new AbortController()
 
     void (async () => {
-      const answer = await window.octopus.projects.instructionSources(project.id)
+      const answer = await window.octopus.projects.instructionSources(project.id, workspaceId)
       if (!controller.signal.aborted && answer.ok) setSources(answer.value)
     })()
 
     return () => {
       controller.abort()
     }
-  }, [section, project.id])
+  }, [section, project.id, workspaceId])
 
   const commitEnvFile = (): void => {
     const trimmed = envFile.trim()

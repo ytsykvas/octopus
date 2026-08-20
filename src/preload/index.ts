@@ -421,8 +421,13 @@ const api = {
       ipcRenderer.invoke('env:save', projectId, contents) as Promise<Result<void>>,
 
     /** What this project offers the agent, and what this machine adds. */
-    instructionSources: (projectId: string): Promise<Result<InstructionSource[]>> =>
-      ipcRenderer.invoke('instructions:sources', projectId) as Promise<Result<InstructionSource[]>>,
+    instructionSources: (
+      projectId: string,
+      workspaceId: string | null
+    ): Promise<Result<InstructionSource[]>> =>
+      ipcRenderer.invoke('instructions:sources', projectId, workspaceId) as Promise<
+        Result<InstructionSource[]>
+      >,
 
     /** Whether git would keep the env file out of a commit. */
     isEnvIgnored: (projectId: string): Promise<Result<boolean>> =>

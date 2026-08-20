@@ -704,6 +704,19 @@ describe('ProjectSettings', () => {
     expect(screen.getByText('8 loaded')).toBeInTheDocument()
   })
 
+  // Whether a source is read depends on the worktree a session would run in,
+  // which is where the trust gate looks.
+  it('asks about the workspace that is open', async () => {
+    const user = userEvent.setup()
+    await renderDialog({ workspaceId: 'anna' })
+
+    await openSection(user, 'Instructions')
+
+    await waitFor(() => {
+      expect(window.octopus.projects.instructionSources).toHaveBeenCalledWith('planner', 'anna')
+    })
+  })
+
   // A list that could not be read is not an empty project; it says nothing
   // rather than claiming the agent picks up nothing.
   it('lists nothing when the sources could not be read', async () => {

@@ -313,7 +313,11 @@ export interface OctopusService {
    * octopus loads every settings source, so the agent arrives carrying whatever
    * has been written for it; this is how the app can say what that was.
    */
-  projectInstructionSources(projectId: string): Promise<InstructionSource[]>
+  projectInstructionSources(
+    projectId: string,
+    /** The workspace to answer for; the checkout where none is open. */
+    workspaceId: string | null
+  ): Promise<InstructionSource[]>
   /**
    * What this workspace's repository can grant itself, and whether it has been
    * approved.
@@ -1207,17 +1211,20 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
    * A worktree that grants nothing digests to the empty string and needs no
    * approval, which is most repositories.
    */
-  async function sourcesFor(workspace: Workspace): Promise<SettingSourceName[]> {
+  async function sourcesIn(cwd: string, project: Project): Promise<SettingSourceName[]> {
     const configured = toSdkSettingSources(config.settingSources)
-    // `requireProject`, not a lookup with a fallback: a workspace whose project
-    // is gone is a broken state, and quietly handing it the full set of sources
-    // is the one answer it must not get.
-    const project = requireProject(workspace.projectId)
 
-    const digest = trustDigest(await capabilityFiles(workspace.path))
+    const digest = trustDigest(await capabilityFiles(cwd))
     if (digest === '' || project.approvedSettings.includes(digest)) return configured
 
     return configured.filter((source) => source === 'user')
+  }
+
+  async function sourcesFor(workspace: Workspace): Promise<SettingSourceName[]> {
+    // `requireProject`, not a lookup with a fallback: a workspace whose project
+    // is gone is a broken state, and quietly handing it the full set of sources
+    // is the one answer it must not get.
+    return sourcesIn(workspace.path, requireProject(workspace.projectId))
   }
 
   function startFor(
@@ -1409,15 +1416,29 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
       await writeProjectEnv(projectId, contents, dataRoot)
     },
 
-    async projectInstructionSources(projectId) {
+    async projectInstructionSources(projectId, workspaceId) {
       const project = requireProject(projectId)
+      /*
+       * The same function the session start uses, over the same directory.
+       *
+       * Two of them was the defect: the panel narrowed by the setting alone,
+       * while the session narrows by the setting **and** the trust gate — so an
+       * unapproved repository was reported as read while the agent was reading
+       * none of it. Wrong about a security state, in the direction that
+       * reassures.
+       *
+       * A workspace when there is one, because trust is a fact about the
+       * worktree a session runs in; the checkout otherwise, which is the best
+       * answer available before one is open.
+       */
+      const workspace = workspaceId === null ? null : requireWorkspace(workspaceId)
+      const cwd = workspace?.path ?? project.repoPath
 
-      // The mode, because "loaded" is a claim about the SDK and not about the
-      // disk; the carry list, because it is what puts a gitignored file into a
-      // worktree.
       return instructionSources(
-        project.repoPath,
-        toSdkSettingSources(config.settingSources),
+        cwd,
+        await sourcesIn(cwd, project),
+        // The carry list, because it is what puts a gitignored file into a
+        // worktree.
         carriedPaths(await readCarryList(project.id, dataRoot))
       )
     },

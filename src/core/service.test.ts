@@ -1050,6 +1050,56 @@ describe('env overrides a project adds', () => {
   })
 
   /*
+   * The panel and the session start have to answer alike. Two rules was the
+   * defect: the panel narrowed by the setting alone while the session narrows by
+   * the setting **and** the trust gate, so an unapproved repository was reported
+   * as read while the agent read none of it.
+   */
+  it('reports nothing of the project as read while it is unapproved', async () => {
+    const { id } = await withProject()
+    const workspace = await service.createWorkspaceIn(id)
+    await mkdir(join(workspace.path, '.claude'), { recursive: true })
+    await writeFile(join(workspace.path, '.claude', 'settings.json'), '{"a":1}', 'utf8')
+    await writeFile(join(workspace.path, 'CLAUDE.md'), '# rules\n', 'utf8')
+
+    const before = await service.projectInstructionSources(id, workspace.id)
+    const memory = before.find((entry) => entry.id === 'projectMemory')
+    expect(memory).toMatchObject({ present: true, loaded: false })
+
+    await service.approveWorkspaceSettings(workspace.id)
+
+    const after = await service.projectInstructionSources(id, workspace.id)
+    expect(after.find((entry) => entry.id === 'projectMemory')).toMatchObject({ loaded: true })
+  })
+
+  // A repository that grants nothing has nothing to approve, so the gate must
+  // not withhold anything from it.
+  it('reports a repository that grants nothing as read', async () => {
+    const { id } = await withProject()
+    const workspace = await service.createWorkspaceIn(id)
+    // Written into the worktree, because that is the directory a session runs
+    // in — an uncommitted file in the checkout is not there for the agent
+    // either, and the panel now says so.
+    await writeFile(join(workspace.path, 'CLAUDE.md'), '# rules\n', 'utf8')
+
+    const sources = await service.projectInstructionSources(id, workspace.id)
+
+    expect(sources.find((entry) => entry.id === 'projectMemory')).toMatchObject({ loaded: true })
+  })
+
+  it('falls back to the checkout when no workspace is open', async () => {
+    const { id, repo } = await withProject()
+    await writeFile(join(repo, 'CLAUDE.md'), '# rules\n', 'utf8')
+
+    const sources = await service.projectInstructionSources(id, null)
+
+    expect(sources.find((entry) => entry.id === 'projectMemory')).toMatchObject({
+      present: true,
+      loaded: true
+    })
+  })
+
+  /*
    * octopus loads every settings source as the CLI does, so a repository's
    * `.claude/settings.json` would pre-approve tools and declare shell hooks the
    * moment somebody opened a clone.

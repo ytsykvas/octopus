@@ -240,8 +240,12 @@ export function registerIpc(
     attempt(() => service.approveWorkspaceSettings(workspaceId))
   )
 
-  host.handle('instructions:sources', (_event, projectId: string) =>
-    attempt(() => service.projectInstructionSources(projectId))
+  // The workspace as well, because whether a source is read depends on the
+  // worktree a session would run in — that is where the trust gate looks.
+  host.handle('instructions:sources', (_event, projectId: string, workspaceId: unknown) =>
+    attempt(() =>
+      service.projectInstructionSources(projectId, z.string().nullable().parse(workspaceId))
+    )
   )
 
   // Asked of the checkout, which shares its `.gitignore` with every worktree
