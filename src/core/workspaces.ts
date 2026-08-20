@@ -6,7 +6,7 @@
  *
  * The layout follows Conductor's: one directory per workspace, one branch per
  * workspace, both named after the workspace. Unlike Conductor, everything
- * lives under a single root (§12.4).
+ * lives under a single root (§12.5).
  */
 
 import { access, realpath } from 'node:fs/promises'

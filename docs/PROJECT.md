@@ -73,7 +73,7 @@ task → workspace → agent works → diff → PR → merge → archive
 
 ## 4. Guiding principles
 
-**We add nothing, and we withhold nothing.** octopus puts no text of its own into the agent's context — no additions to the system prompt, no bundled skill, and the one piece of prose it sends goes as a visible user message. It equally does not stand between the agent and what the user has written for it: `CLAUDE.md`, settings, commands, skills and subagents all load, exactly as they do in a terminal. An agent that knows less here than there is a defect, not a feature.
+**We add nothing, and we withhold nothing.** octopus puts no text of its own into the agent's context — no additions to the system prompt, no bundled skill, and the prose it does send goes as a visible user message the reader wrote and can edit. It equally does not stand between the agent and what the user has written for it: `CLAUDE.md`, settings, commands, skills and subagents all load, exactly as they do in a terminal. An agent that knows less here than there is a defect, not a feature.
 
 **A thin layer.** The application manages worktrees, processes and the UI. It does not try to outsmart the agent, rewrite prompts or decide on the user's behalf.
 
@@ -324,7 +324,7 @@ A workspace holds up to **three conversations at once**, switched by a strip of 
 
 They run in the same worktree with no locking between them, deliberately (§17). Every tab stays mounted while its workspace is open, so a conversation keeps its place in the log and the answer being streamed into it while another is on screen — but only the one showing may raise a dialog, since a modal about work the reader cannot see is the worst kind of interruption.
 
-**Right pane — changes and terminal** in tabs. Shows what the agent did and gives manual access to the workspace. Draggable, and both its width and which tab is showing persist. Whether it is folded away does not — that is a mood about the current window. Its active tab carries the open project's colour, falling back to the accent while no project is open.
+**Right pane — changes, terminal, scripts and the pull request** in tabs. Shows what the agent did and gives manual access to the workspace. Draggable, and both its width and which tab is showing persist. Whether it is folded away does not — that is a mood about the current window. Its active tab carries the open project's colour, falling back to the accent while no project is open.
 
 #### Shortcuts
 
@@ -505,14 +505,55 @@ but reads nothing of the repository's, `CLAUDE.md` included, and the chat says
 so. Prose is deliberately outside the digest — it changes constantly, and a
 dialog that fires on every edit is one people learn to click through.
 
-What octopus does **not** do is add: no text is appended to the system prompt, no skill of ours is bundled, and the one piece of prose the app sends — the pull request instruction — is sent as a visible user message the reader can see in the log. The project settings dialog lists what the agent picked up on its own, so "what is it working from" is a question the app can answer.
+What octopus does **not** do is add: no text is appended to the system prompt and no skill of ours is bundled. The prose the app sends is five instruction files — describing a change for a pull request, answering a review, reviewing one, reviewing it with several subagents, resolving a conflict — and each goes as a visible user message in the log. They are files rather than strings in the app precisely because of this section: a prompt nobody can read is a prompt nobody can correct, so each ships with a written template, is edited in Settings, and is overridden per project. Emptying one is how a project says it adds nothing.
+
+The project settings dialog lists what the agent picked up on its own, so "what is it working from" is a question the app can answer.
 
 Session control: `interrupt()`, `setModel()`, `setPermissionMode()`, `streamInput()`, `close()`.
 The `sessionId` from `SDKSystemMessage` is persisted — that is what enables resuming after a restart. It is stored on the **chat**, not the workspace: one session per workspace would make a second agent in the same worktree a migration, while one per chat makes it another record. That is exactly how it played out — three conversations per workspace shipped as a widened interface over the shape that was already there (§10.8).
 
 Forking a conversation goes through the SDK's own `forkSession(sessionId, { dir })`, never by copying the id: a plain `resume` continues a session **in place and keeps its id**, so two records holding one would be two agent processes appending to a single session file, each reading the other's turns as part of its own. The SDK's fork returns a new id, and copies what the model remembers; our own transcript is copied beside it, because that is what the screen draws.
 
-### 12.4 On-disk layout
+### 12.4 The pull request
+
+The tab is the whole of a branch's life after the work is done, and everything
+it does goes through `gh` — which already holds the account in the keychain, so
+the app never sees a token (§10.9).
+
+- **Opening one.** Title, description, a draft flag, and — while the workspace
+  is dirty — a commit message. Left empty, the uncommitted work stays behind;
+  filled in, everything here is committed first, because a workspace whose only
+  work is uncommitted is zero commits ahead of its base until that lands. The
+  field warns when git does not ignore the env file octopus writes this
+  workspace's variables into: `add -A` would otherwise commit credentials and
+  the push would publish them.
+- **The checks.** Read from `statusCheckRollup`, which is a union of GitHub
+  Actions runs and the older Commit Status API — external services still report
+  through the second, so a repository commonly has both. Re-read every 15 s
+  while a check is running **or** while GitHub has not worked out whether the
+  branch is mergeable, since it computes that asynchronously and a repository
+  with no CI has no pending check to wait on.
+- **The review.** Issue comments, review submissions and inline notes in one
+  reading order. The inline ones come from a GraphQL query by the request's node
+  id, for the one field REST does not carry: whether the thread is resolved.
+  **Add to chat** puts a remark into the composer beside the diff's own notes,
+  so a question can be typed under it rather than the app asking one.
+- **The four prepared messages** — answer the review, review it, review it with
+  several subagents, resolve the conflicts — each the project's own instruction
+  plus a line naming the request, sent as one visible user message (§4).
+- **Merging**, with the three methods, and never `--delete-branch`: a worktree
+  is checked out on that branch. A zero exit is not proof of a merge — `gh`
+  enables auto-merge instead when a required check has not passed — so the pane
+  reads the request again afterwards, which is also what turns a refusal it
+  cannot name into a visible reason.
+- **Committing and pushing** an answer to a review, without which the loop ends
+  in the terminal.
+
+**Every branch of a project is read in one call**, not one per workspace: the
+workspace list marks each row with what has become of its branch, and a read
+per row would be a network call per row on every refresh.
+
+### 12.5 On-disk layout
 
 Everything under one directory (Conductor spreads across `~/conductor` and `~/.conductor`):
 
@@ -646,9 +687,11 @@ This is not an argument against the hooks — they are free. It is an argument a
 
 ## 16. Out of scope for stage 1
 
-Monaco diff, GitHub **checks** through `gh`, notifications, workspace archiving, Linux builds, signing and notarisation, the auth service and licensing (§15).
+Monaco diff, notifications, workspace archiving, Linux builds, signing and notarisation, the auth service and licensing (§15).
 
-Opening a pull request came in ahead of this list: §3 calls a branch and a pull request the unit of integration, and a workspace whose branch had no way out of the app was only half of that. What waits here is what surrounds one — the checks on it and the review threads. The description template is read: §10.8's pull request tab sends the project's instruction, or the installation's where a project has written none.
+The whole of the pull request came in ahead of this list, and it is worth saying why rather than quietly deleting the line: §3 calls a branch and a pull request the unit of integration, and a workspace whose branch had no way out of the app was only half of that. Opening one arrived first; the checks, the review threads and merging followed, because a request the app can open and then cannot read is a loop that still ends in a browser.
+
+What is not here and is not planned: replying to a review thread from octopus, and anything about a request other people's branches have.
 
 The terminal moved into scope early: account sign-in needs an interactive session, and sending the user to Terminal.app for it broke the sense that this window is where the work happens. The same component will fill the right pane's Terminal tab.
 
@@ -660,10 +703,12 @@ The terminal moved into scope early: account sign-in needs an interactive sessio
 - **Tool permissions** — settled for now: the read-only tools are automatic, everything else prompts in the chat, and an answer of "always" is stored per tool in the config where it can be taken back. The mode a new chat starts in is a global setting, so the question is not asked again on each new branch. Open: whether per-project profiles are needed, and whether "always" should narrow to an argument (`Bash(npm test:*)`) rather than a whole tool.
 - **Cross-platform** — whether Linux stays in the plans (affects CI only, not architecture).
 - **Task sources** — creating a workspace from a GitHub issue or a Linear ticket, as Conductor does.
-- **Code review** — answered: a note against a line rides out inside the next
-  message, as readable text rather than as anything hidden (§4). Open is whether
-  GitHub's review threads should appear on the same surface, which waits on
-  pull requests (§16).
+- **Code review** — answered twice over. A note against a line rides out inside
+  the next message, as readable text rather than as anything hidden (§4); and
+  GitHub's review threads now appear on the same surface, with **Add to chat**
+  putting a remark into the same composer strip the diff's own notes use. Still
+  open is the other direction: a thread can be read here and not replied to, so
+  the answer goes back as a commit or in a browser.
 - **Several agents per workspace** — half answered. The interface offers it: up to three conversations per workspace, no locking between them (§10.8). Still open is what two agents editing the same files at once actually does — the changes pane shows one diff for the workspace, with no way to tell whose work is whose, and a review note against a line may be about a line another conversation has since moved. Conductor allows it and warns about exactly that. `agent` is still an enum with one member, so a second _kind_ of agent remains a widened enum rather than a migration.
 - **What the list shows** — agent status, change count, CI state. Not session cost: the SDK's `total_cost_usd` is what the same tokens would have cost through the API, which a subscription never pays, and its own documentation calls it "an estimate, not a billing statement". Shown in an interface it is a made-up number in a currency. If usage is worth surfacing at all it belongs as tokens or as distance to a rate limit, not as dollars.
 - **Monetisation model** — whether $20 stays as full access (see the note in §15.5), and whether a separate auth service is warranted at all given the risks in §15.6.

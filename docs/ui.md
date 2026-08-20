@@ -724,7 +724,59 @@ something else is a surprise.
 It asks `gh` nothing while another tab is showing. The diff follows the same
 rule, and it matters more here: this leaves the machine, so a hidden tab would be
 a network call for every workspace opened. `⌘⇧P` selects it — the shortcut §10.8
-had listed since before there was a tab to name.
+had listed since before there was a tab to name — and so does **Create PR** in
+the window header, through the same callback, because two copies of "open that
+tab" drift the first time one of them is touched.
+
+**The pane is one component per question**, under `components/pr/`, beside the
+diff's own folder: the summary, the checks, the review, the actions and the form
+for a request that does not exist yet.
+
+Two reads feed it, and they are apart on purpose. `workspaces:pullRequest` says
+whether the branch has one; `workspaces:pullRequestDetail` says what has become
+of it. When the first fails the pane blanks, because nothing on it is true any
+more; when the second fails the number, the title and the link stay and the
+error sits under them. One `Result` could not say both.
+
+**The detail re-reads itself every 15 s** while a check is running _or_ while
+GitHub has not decided whether the branch is mergeable — a self-rescheduling
+`setTimeout` rather than an interval, so a slow reply never has a second read
+stacked on it. The second half of that condition is load-bearing: mergeability
+is computed asynchronously, so the first read after every push says it is
+unknown, and a request whose repository runs no CI has no pending check to wait
+on at all.
+
+**A check's state is a word as well as a mark**, and so is the review's verdict.
+A colour reaches nobody using a screen reader, and it is also the only handle a
+test has on which state a row is in — the lesson the tab row above already
+carries.
+
+**Add to chat** puts a remark from the review into the composer rather than
+sending it. The reader has a question about it, and the question is the point.
+It rides the same strip as a note written on the diff, though the two are
+separate stores: the diff pane narrows a `DiffComment` on every row it draws,
+and a union with a member it can never hold would put an unreachable guard in
+each of those places. `attachments.ts` is where they become one list, in
+`ChatSession`, which is already the layer that turns a controller into a prop.
+
+**The four prepared messages** — answer the review, review it, review it with
+several subagents, resolve the conflicts — each send the project's instruction
+plus a line naming the request. Drawn twice rather than once around a guard:
+without a conversation the press could not do anything, and a branch nothing can
+reach is a claim nothing tests.
+
+**A branch says where its pull request stands**, in a glyph beside the workspace
+name: green once the checks pass, a spinning green ring while they run, orange
+when one has failed, accent while the repository has run nothing, red once it is
+merged, faint once it is closed unmerged. Nothing at all where there is no
+request, which is most branches most of the time — a mark for that would put an
+icon on every row and say nothing by being there. Every state goes out as a word
+in the label too.
+
+It costs one `gh` call per project rather than one per workspace, on a minute's
+timer while the project is open, and a failure is silent: there is no room on a
+row to explain one, the tab says it properly when opened, and a repository with
+no GitHub remote is an ordinary thing rather than a fault.
 
 **The workspace list says what each one is doing.** One mark carries it: the
 agent's state takes the dot while there is something to report — the accent

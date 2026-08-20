@@ -9,14 +9,14 @@ else joins a home directory by hand.
   config.json                        settings
   state.json                         projects, workspaces and chats
   chats/<chatId>.jsonl               one conversation each, append-only
-  instructions/pull-request.md       guidance every project falls back to
+  instructions/*.md                  five prompts every project falls back to
   projects/<projectId>/
     carry                            paths carried from the checkout into a workspace
     env                              variables written last into every workspace's .env
     scripts/setup.sh                 prepares a new workspace, on Run
     scripts/run.sh                   starts the dev server
     scripts/archive.sh               takes back what setup gave out, on removal
-    instructions/pull-request.md     this project's own, which wins
+    instructions/*.md                this project's own, which win
   workspaces/<projectId>/<name>/     the git worktrees
 ```
 
@@ -396,10 +396,18 @@ went wrong is worse than refusing to start.
 
 ## Scripts and instructions
 
-**Instructions come at two levels.** `instructions/pull-request.md` under the
-data root is the installation's own; the same file under a project's directory
-is that project's, and it wins where it exists. `effectiveInstruction` in
-`instructions.ts` is the one place that order is written down.
+**Instructions come at two levels.** The files under the data root's
+`instructions/` are the installation's own; the same names under a project's
+directory are that project's, and they win where they exist.
+`effectiveInstruction` in `instructions.ts` is the one place that order is
+written down.
+
+There are five, one per button on the pull request tab: `pull-request.md`,
+`address-review.md`, `review.md`, `multi-agent-review.md` and
+`resolve-conflicts.md`. Which kind lives in which file is a
+`Record<InstructionKind, string>` in `instructions.ts`, so a sixth without a
+home is a compile error — and a test iterates the enum to catch the thing the
+compiler cannot see, two kinds pointing at one file.
 
 An **empty** project file counts as an answer. Emptying it says this project
 adds nothing, and falling through to the global one there would make that

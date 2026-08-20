@@ -200,10 +200,10 @@ node node_modules/electron/install.js
 
 Monaco diff, notifications, Linux builds, auth service.
 
-Pull requests are no longer out of scope: the right pane opens one through `gh`.
-What is still ahead is everything **around** one — checks and review threads.
-The description template is read now: a global one in Settings, a per-project one
-that overrides it, and a button on the tab that sends whichever applies.
+Pull requests are not: the right pane runs the whole loop through `gh` —
+committing, opening, the checks, the review, five prepared prompts and merging
+(§12.4 of docs/PROJECT.md). What is still ahead is replying to a review thread
+from here, which `docs/tasks/` holds.
 
 ## Native modules
 

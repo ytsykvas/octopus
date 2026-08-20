@@ -1,7 +1,7 @@
 # IPC
 
 Every call from the interface to the rest of the application goes through one
-of 64 channels. The table lives in [`src/main/ipc.ts`](../src/main/ipc.ts); the
+of 70 channels. The table lives in [`src/main/ipc.ts`](../src/main/ipc.ts); the
 renderer never names a channel itself, it calls
 [`src/preload/index.ts`](../src/preload/index.ts).
 
@@ -36,15 +36,16 @@ The only channel outside this shape is `theme:get`, which cannot fail.
 
 ### Projects
 
-| Channel                  | Arguments     | Notes                                                                                   |
-| ------------------------ | ------------- | --------------------------------------------------------------------------------------- |
-| `projects:list`          | —             |                                                                                         |
-| `projects:add`           | —             | opens a directory picker; `null` means cancelled                                        |
-| `projects:addFromGitHub` | `repository`  | asks for a destination the first time, then remembers it                                |
-| `projects:update`        | `id`, `patch` | patch validated with `ProjectPatchSchema`                                               |
-| `projects:remove`        | `id`          | deletes the workspaces and their branches too                                           |
-| `projects:branches`      | `id`          | remote branches, ordered with main/master/develop first                                 |
-| `projects:listRemote`    | —             | what the account can push to, personal and organisation alike, through `gh api graphql` |
+| Channel                  | Arguments     | Notes                                                                                                                                                  |
+| ------------------------ | ------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `projects:list`          | —             |                                                                                                                                                        |
+| `projects:add`           | —             | opens a directory picker; `null` means cancelled                                                                                                       |
+| `projects:addFromGitHub` | `repository`  | asks for a destination the first time, then remembers it                                                                                               |
+| `projects:update`        | `id`, `patch` | patch validated with `ProjectPatchSchema`                                                                                                              |
+| `projects:remove`        | `id`          | deletes the workspaces and their branches too                                                                                                          |
+| `projects:branches`      | `id`          | remote branches, ordered with main/master/develop first                                                                                                |
+| `projects:pullRequests`  | `id`          | every branch of the repository that has a request, in one call — the workspace list marks each row, and a read per row would be a network call per row |
+| `projects:listRemote`    | —             | what the account can push to, personal and organisation alike, through `gh api graphql`                                                                |
 
 ### Scripts, carried files and instructions
 
@@ -68,16 +69,19 @@ The only channel outside this shape is `theme:get`, which cannot fail.
 
 ### Workspaces
 
-| Channel                        | Arguments                | Notes                                                                                                                                                                                                                                               |
-| ------------------------------ | ------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `workspaces:list`              | `projectId`              | reconciled against `git worktree list`                                                                                                                                                                                                              |
-| `workspaces:create`            | `projectId`              |                                                                                                                                                                                                                                                     |
-| `workspaces:rename`            | `id`, `name`             | moves the branch, never the directory                                                                                                                                                                                                               |
-| `workspaces:remove`            | `id`, `options`          | `force` discards uncommitted work                                                                                                                                                                                                                   |
-| `workspaces:hasChanges`        | `id`                     | asked before offering to remove                                                                                                                                                                                                                     |
-| `workspaces:diff`              | `id`                     | everything changed since the base branch                                                                                                                                                                                                            |
-| `workspaces:pullRequest`       | `workspaceId`            | what has become of the branch on GitHub, if anything — `gh pr list --head` plus what git knows about the remote. Read on opening the tab, never behind one: this one leaves the machine                                                             |
-| `workspaces:createPullRequest` | `workspaceId`, `request` | pushes the branch if it needs it, then opens the request; answers with its URL. The title and body are the user's and are bounded here, because both become arguments to `gh`. The base branch comes from the project rather than from the renderer |
+| Channel                        | Arguments                         | Notes                                                                                                                                                                                                                                                                                                            |
+| ------------------------------ | --------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `workspaces:list`              | `projectId`                       | reconciled against `git worktree list`                                                                                                                                                                                                                                                                           |
+| `workspaces:create`            | `projectId`                       |                                                                                                                                                                                                                                                                                                                  |
+| `workspaces:rename`            | `id`, `name`                      | moves the branch, never the directory                                                                                                                                                                                                                                                                            |
+| `workspaces:remove`            | `id`, `options`                   | `force` discards uncommitted work                                                                                                                                                                                                                                                                                |
+| `workspaces:hasChanges`        | `id`                              | asked before offering to remove                                                                                                                                                                                                                                                                                  |
+| `workspaces:diff`              | `id`                              | everything changed since the base branch                                                                                                                                                                                                                                                                         |
+| `workspaces:pullRequest`       | `workspaceId`                     | what has become of the branch on GitHub, if anything — `gh pr list --head` plus what git knows about the remote. Read on opening the tab, never behind one: this one leaves the machine                                                                                                                          |
+| `workspaces:createPullRequest` | `workspaceId`, `request`          | commits everything under the message given, if one is, then pushes and opens the request; answers with its URL. The title, body and commit message are the user's and are bounded here, because all three become arguments. The base branch comes from the project rather than from the renderer                 |
+| `workspaces:pullRequestDetail` | `workspaceId`, `number`           | the checks, the review and the mergeability of a request that exists — `gh pr view` plus a GraphQL query for the review threads. Apart from the read above because the two fail differently: that one failing means the branch cannot be described at all, this one leaves the number and the link worth drawing |
+| `workspaces:commitAndPush`     | `workspaceId`, `message`          | commits everything here and pushes, to get an answer to a review onto a request that already exists                                                                                                                                                                                                              |
+| `workspaces:mergePullRequest`  | `workspaceId`, `number`, `method` | `merge`, `squash` or `rebase`. Never deletes the branch: a worktree is checked out on it. Answers with nothing — `gh` enables auto-merge rather than merging when a required check has not passed, so the caller reads the request again                                                                         |
 
 ### Files
 
