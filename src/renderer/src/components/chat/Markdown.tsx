@@ -1,4 +1,5 @@
 import ReactMarkdown, { type Components } from 'react-markdown'
+import remarkBreaks from 'remark-breaks'
 import remarkGfm from 'remark-gfm'
 
 import { CodeBlock } from './CodeBlock.js'
@@ -79,11 +80,23 @@ const COMPONENTS: Components = {
  *
  * Raw HTML is deliberately not enabled. This is model output, and the one thing
  * that must never be possible is markup from it reaching the document.
+ *
+ * `remarkBreaks` keeps a single newline as a line break. Markdown's own rule is
+ * that only a blank line ends a paragraph, and that rule is written for prose
+ * being typeset — it is wrong for everything that arrives here. A CLI command's
+ * answer is lines: `/usage` reports each window on its own, and joined into a
+ * paragraph the numbers run into the sentence that follows them and the reading
+ * order stops being obvious. The agent writes to the same expectation, since
+ * every other surface its output is read on breaks on a newline.
+ *
+ * A plugin rather than two trailing spaces inserted into the text: this one
+ * works on the parsed document, so a newline inside a fenced block stays a
+ * newline in code rather than becoming markup.
  */
 export function Markdown({ text }: { text: string }): React.JSX.Element {
   return (
     <div className="min-w-0">
-      <ReactMarkdown remarkPlugins={[remarkGfm]} components={COMPONENTS}>
+      <ReactMarkdown remarkPlugins={[remarkGfm, remarkBreaks]} components={COMPONENTS}>
         {text}
       </ReactMarkdown>
     </div>

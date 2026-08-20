@@ -85,6 +85,28 @@ describe('markdown as the agent wrote it', () => {
     expect(container.textContent).toContain('<b>bold</b>')
   })
 
+  // What `/usage` sends: one window per line, no blank lines between them.
+  // Under markdown's own rule those are one paragraph, and the answer read as a
+  // wall with the numbers running into the words after them.
+  it('keeps a line on its own line without a blank line above it', () => {
+    const { container } = render(
+      <Markdown text={'Current session: 29% used\nCurrent week: 8% used'} />
+    )
+
+    expect(container.querySelectorAll('p')).toHaveLength(1)
+    expect(container.querySelectorAll('br')).toHaveLength(1)
+  })
+
+  // The reason this is a plugin and not two spaces appended to every line: a
+  // fenced block's newlines are content, and marking them up would put `<br>`
+  // through the middle of the code.
+  it('leaves the newlines inside a fenced block as newlines', () => {
+    const { container } = render(<Markdown text={'```ts\nconst a = 1\nconst b = 2\n```'} />)
+
+    expect(container.querySelector('pre br')).toBeNull()
+    expect(container.querySelector('pre')?.textContent).toContain('const a = 1\nconst b = 2')
+  })
+
   // A link that navigated would replace the whole window: this is a renderer,
   // not a browser tab, and there is no way back from it.
   it('shows a link without offering to follow it', () => {
