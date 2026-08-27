@@ -357,6 +357,14 @@ the next one rebuilds a context we never observed. **The subscription windows ar
 cached beside the rate limit** — they belong to the account, so a workspace with
 no session of its own can still show what another workspace's turn learned.
 
+The `usage` event in a transcript is not an exception to any of that, though it
+looks like one. It is not a reading kept in case it is wanted later; it is the
+answer to a command somebody typed, dated to the moment they typed it. The
+figures in it are stale by design, the same way every other line of a transcript
+is — and a log that kept the question and dropped the answer would be worse read
+back than one that kept neither. It is a record of the conversation, and the
+readings above are not.
+
 ### Ports
 
 `assignPort` derives a port from the workspace id — the same id always gives the

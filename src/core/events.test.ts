@@ -40,6 +40,7 @@ describe('what gets stored', () => {
       // line explaining why the agent forgot has to survive a restart.
       { type: 'conversation_reset', cleared: false },
       { type: 'question_answered', requestId: 'r-1', answers: [] },
+      { type: 'usage', report: null },
       {
         type: 'result',
         ok: true,
@@ -52,6 +53,23 @@ describe('what gets stored', () => {
     ]
 
     expect(kept.every((event) => !isEphemeral(event))).toBe(true)
+  })
+
+  /*
+   * The pair most easily got the wrong way round, and the only reason they
+   * differ is who asked. Both are readings of the same account at the same
+   * moment; a rate limit arrives on its own and describes something other than
+   * the conversation, while a usage report is the answer to a command somebody
+   * typed. A transcript that kept the question and dropped the answer would be
+   * worse read back than one that kept neither.
+   */
+  it('keeps a usage report while dropping the rate limit it reads like', () => {
+    const window = { utilization: 62, resetsAt: null }
+
+    expect(
+      isEphemeral({ type: 'rate_limit', status: 'allowed', window: 'five_hour', ...window })
+    ).toBe(true)
+    expect(isEphemeral({ type: 'usage', report: null })).toBe(false)
   })
 })
 
@@ -72,6 +90,103 @@ describe('the event schema', () => {
         terminalReason: null
       }).success
     ).toBe(true)
+  })
+
+  /*
+   * The one variant carrying a whole document, and the one where a rejection
+   * would be silent: `transcript.ts` skips a line that does not parse, so a
+   * report the schema turned down would take its entry with it and the card
+   * would come back blank on the next launch, with nothing said anywhere.
+   *
+   * Which is also why the stored shape is ours rather than the SDK's — that API
+   * says of itself that it may change without notice, and this file outlives it.
+   */
+  it('stores and reads back a whole usage report', () => {
+    const report = {
+      type: 'usage',
+      report: {
+        session: {
+          costUsd: 1.84,
+          apiDurationMs: 252_000,
+          wallDurationMs: 931_000,
+          linesAdded: 180,
+          linesRemoved: 21,
+          inputTokens: 2_000,
+          outputTokens: 35_000,
+          cacheReadTokens: 8_412_000,
+          cacheWriteTokens: 100_000
+        },
+        subscriptionType: 'max',
+        limitsApply: true,
+        limits: [
+          { key: 'five_hour', label: null, utilization: 50, resetsAt: '2026-08-27T19:09:59Z' },
+          { key: 'model_scoped', label: 'Fable', utilization: 5, resetsAt: null }
+        ],
+        extraUsage: { monthlyLimit: 50, usedCredits: 12.5, utilization: 25 },
+        contributing: {
+          day: {
+            requests: 206,
+            sessions: 1,
+            behaviors: [{ key: 'long_context', pct: 73, count: 122 }],
+            skills: [{ name: 'core-module', pct: 68 }],
+            agents: [],
+            plugins: [],
+            mcpServers: []
+          },
+          week: {
+            requests: 393,
+            sessions: 6,
+            behaviors: [],
+            skills: [],
+            agents: [],
+            plugins: [],
+            mcpServers: []
+          }
+        }
+      }
+    }
+
+    const parsed = AgentEventSchema.safeParse(JSON.parse(JSON.stringify(report)))
+
+    expect(parsed.success).toBe(true)
+    expect(parsed.data).toEqual(report)
+  })
+
+  // A reading that failed is still an answer, and it is written down like one.
+  it('stores and reads back a reading that failed', () => {
+    const parsed = AgentEventSchema.safeParse(
+      JSON.parse(JSON.stringify({ type: 'usage', report: null }))
+    )
+
+    expect(parsed.success).toBe(true)
+  })
+
+  // A window key outside the allowlist cannot be stored, which is what keeps a
+  // codename like `iguana_necktie` out of a file we read back and draw.
+  it('refuses a window it has no name for', () => {
+    expect(
+      AgentEventSchema.safeParse({
+        type: 'usage',
+        report: {
+          session: {
+            costUsd: 0,
+            apiDurationMs: 0,
+            wallDurationMs: 0,
+            linesAdded: 0,
+            linesRemoved: 0,
+            inputTokens: 0,
+            outputTokens: 0,
+            cacheReadTokens: 0,
+            cacheWriteTokens: 0
+          },
+          subscriptionType: null,
+          limitsApply: true,
+          limits: [{ key: 'iguana_necktie', label: null, utilization: 3, resetsAt: null }],
+          extraUsage: null,
+          contributing: null
+        }
+      }).success
+    ).toBe(false)
   })
 
   /*

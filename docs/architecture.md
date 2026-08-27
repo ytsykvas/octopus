@@ -42,9 +42,12 @@ type checking, linting and every test, then failed at runtime with _"Module
 node:os has been externalized for browser compatibility"_ — because Vite
 externalises Node built-ins and the window had no `homedir`.
 
-Safe to import as values: `colors.ts`, `initials.ts`, `branches.ts` — they
-depend on nothing but zod. Anything reaching `paths.ts`, `persist.ts` or
-`node:*` is not.
+Safe to import as values are the modules that depend on nothing but zod —
+`colors.ts` and `initials.ts` among them, and the renderer already imports
+`turnOutcome` from `events.ts` this way. The list is the first table in
+[`core.md`](core.md), named there rather than repeated here so that a module
+joining it is written down once. Anything reaching `paths.ts`, `persist.ts` or
+`node:*` is not safe, whatever the table says about the module importing it.
 
 ### The Agent SDK stops at `events.ts`
 

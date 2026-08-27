@@ -35,8 +35,10 @@ truth.
 A single project with `environmentMatchGlobs` fails differently — `setupFiles`
 applies to every test, and the DOM setup breaks the core suite.
 
-Only bootstrap is excluded, each a line that mounts something: `main/index.ts`,
-`renderer/src/main.tsx`, the type-only `core/types.ts`, and the test helpers.
+Only bootstrap is excluded: `main/index.ts` and `renderer/src/main.tsx`, each a
+line that mounts something; the type-only `core/types.ts` and `env.d.ts`, which
+compile to nothing to cover; and the test helpers. The list is `bootstrapOnly`
+in `vitest.shared.ts`, shared by both configs so the two cannot disagree.
 
 ## The suite runs in one zone
 

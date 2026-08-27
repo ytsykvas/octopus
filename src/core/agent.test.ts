@@ -17,6 +17,7 @@ import {
   promptTokens,
   readContextUsage,
   readSubscriptionUsage,
+  readUsageReport,
   startSession,
   toAgentCommands,
   toAgentModels,
@@ -1183,6 +1184,17 @@ const CONTEXT_RESPONSE = {
 } as unknown as Awaited<ReturnType<Query['getContextUsage']>>
 
 const USAGE_RESPONSE = {
+  // A session that has not run a turn reports an empty map rather than zeros,
+  // which is what a `/usage` typed as a conversation's first message hits.
+  // What the mapping does with the rest of this is `usage.test.ts`'s subject.
+  session: {
+    total_cost_usd: 0,
+    total_api_duration_ms: 0,
+    total_duration_ms: 695,
+    total_lines_added: 0,
+    total_lines_removed: 0,
+    model_usage: {}
+  },
   subscription_type: 'max',
   rate_limits_available: true,
   rate_limits: {
@@ -1325,14 +1337,50 @@ describe('reading how much of the subscription is gone', () => {
   })
 })
 
+describe('reading everything /usage answers', () => {
+  const asking = (response: unknown): Query =>
+    queryAnswering({
+      usage_EXPERIMENTAL_MAY_CHANGE_DO_NOT_RELY_ON_THIS_API_YET: () => Promise.resolve(response)
+    })
+
+  it('takes the whole report, not just the two windows the strip wants', async () => {
+    const report = await readUsageReport(asking(USAGE_RESPONSE))
+
+    expect(report?.subscriptionType).toBe('max')
+    expect(report?.session.wallDurationMs).toBe(695)
+    expect(report?.limits.map((limit) => limit.key)).toEqual(['five_hour', 'seven_day'])
+  })
+
+  it('says nothing when the CLI has no such control request', async () => {
+    await expect(readUsageReport(queryAnswering({}))).resolves.toBeNull()
+  })
+
+  it('says nothing when the request is refused', async () => {
+    const refusing = queryAnswering({
+      usage_EXPERIMENTAL_MAY_CHANGE_DO_NOT_RELY_ON_THIS_API_YET: () =>
+        Promise.reject(new Error('unknown control request'))
+    })
+
+    await expect(readUsageReport(refusing)).resolves.toBeNull()
+  })
+
+  // The one failure this reading has that the others do not. The SDK says of
+  // this API that its shape "may change or be removed in any release without
+  // notice", so a response it no longer recognises is a case to expect.
+  it('says nothing when the response is in a shape it does not know', async () => {
+    await expect(readUsageReport(asking({ session: 'moved elsewhere' }))).resolves.toBeNull()
+  })
+})
+
 describe('the session, asked about usage', () => {
-  it('answers both questions from the conversation it holds', async () => {
+  it('answers every question from the conversation it holds', async () => {
     const { agent } = fakeAgent()
 
     await expect(agent.session.contextUsage()).resolves.toMatchObject({ percentage: 2 })
     await expect(agent.session.subscriptionUsage()).resolves.toMatchObject({
       sevenDay: { utilization: 84 }
     })
+    await expect(agent.session.usageReport()).resolves.toMatchObject({ subscriptionType: 'max' })
   })
 })
 

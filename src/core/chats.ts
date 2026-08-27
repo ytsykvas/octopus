@@ -416,6 +416,34 @@ function bareName(word: string): string {
 const CLEAR_COMMAND = 'clear'
 
 /**
+ * The command that reports how much of the subscription is left.
+ *
+ * Named as a literal for the same reason as `clear`, and answered here rather
+ * than by the CLI for a different one: the CLI answers it in prose, while the
+ * same figures are available structured. See `toUsageReport` in `usage.ts`.
+ */
+const USAGE_COMMAND = 'usage'
+
+/**
+ * Whether a message opens with a particular command, under any of its names.
+ *
+ * The alias half is why this consults the chat's own list instead of comparing
+ * the text to one word: `/reset` and `/new` reach `/clear`, `/cost` and
+ * `/stats` reach `/usage`, and the mapping belongs to whichever CLI is on the
+ * other end rather than to us.
+ */
+function isCommand(text: string, command: string, commands: readonly AgentCommand[]): boolean {
+  const [word] = text.trim().split(/\s+/)
+  if (!word?.startsWith('/')) return false
+
+  const name = bareName(word)
+  if (name === command) return true
+
+  const known = commands.find((candidate) => candidate.name === command)
+  return known?.aliases.some((alias) => bareName(alias) === name) ?? false
+}
+
+/**
  * Whether this message is the user asking for the conversation to be forgotten.
  *
  * Asked before the message is sent, and remembered, because the event that
@@ -424,14 +452,18 @@ const CLEAR_COMMAND = 'clear'
  * the event alone would erase the conversation every time a plan was approved.
  */
 export function isClearCommand(text: string, commands: readonly AgentCommand[]): boolean {
-  const [word] = text.trim().split(/\s+/)
-  if (!word?.startsWith('/')) return false
+  return isCommand(text, CLEAR_COMMAND, commands)
+}
 
-  const name = bareName(word)
-  if (name === CLEAR_COMMAND) return true
-
-  const clear = commands.find((command) => command.name === CLEAR_COMMAND)
-  return clear?.aliases.some((alias) => bareName(alias) === name) ?? false
+/**
+ * Whether this message is the user asking what the subscription has left.
+ *
+ * Asked before the message is sent, and unlike `/clear` the message then never
+ * goes: this one is answered here, from the structured reading, and forwarding
+ * it as well would print the prose version underneath the card.
+ */
+export function isUsageCommand(text: string, commands: readonly AgentCommand[]): boolean {
+  return isCommand(text, USAGE_COMMAND, commands)
 }
 
 export const ChatSchema = z.object({

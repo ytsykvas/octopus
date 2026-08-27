@@ -1,6 +1,14 @@
 import { describe, expect, it } from 'vitest'
 
-import { formatCountdown, formatResetAt, formatTokens, usageTone } from './format.js'
+import {
+  formatCountdown,
+  formatDuration,
+  formatResetAt,
+  formatTokens,
+  usageFill,
+  usageLevel,
+  usageTone
+} from './format.js'
 
 describe('token counts', () => {
   it('shows small counts exactly', () => {
@@ -75,6 +83,43 @@ describe('how full is worth noticing', () => {
   it('is plain about the last tenth', () => {
     expect(usageTone(90)).toBe('text-danger')
     expect(usageTone(100)).toBe('text-danger')
+  })
+
+  // The bar and the number written beside it read the same thresholds, so a
+  // gauge cannot end up drawn in one colour and labelled in another.
+  it('fills a bar at the same points it colours the number', () => {
+    expect(usageFill(74)).toBe('bg-ink-faint')
+    expect(usageFill(75)).toBe('bg-warning')
+    expect(usageFill(90)).toBe('bg-danger')
+  })
+
+  it('names the level the two of them come from', () => {
+    expect(usageLevel(0)).toBe('calm')
+    expect(usageLevel(75)).toBe('noticeable')
+    expect(usageLevel(90)).toBe('pressing')
+  })
+})
+
+describe('a span of time', () => {
+  const labels = { minutes: 'm', seconds: 's' }
+
+  it('says seconds alone under a minute', () => {
+    expect(formatDuration(0, labels)).toBe('0s')
+    expect(formatDuration(38_400, labels)).toBe('38s')
+  })
+
+  it('says minutes and seconds above one', () => {
+    expect(formatDuration(252_000, labels)).toBe('4m 12s')
+  })
+
+  // Two units and no further: this sits beside the wall clock for comparing,
+  // and a third unit would wrap where the other figure does not.
+  it('keeps counting in minutes past an hour', () => {
+    expect(formatDuration(4_440_000, labels)).toBe('74m 0s')
+  })
+
+  it('reads a negative span as none', () => {
+    expect(formatDuration(-5_000, labels)).toBe('0s')
   })
 })
 

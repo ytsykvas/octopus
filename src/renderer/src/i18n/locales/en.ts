@@ -588,6 +588,78 @@ export const en = {
     soon: 'now'
   },
 
+  /* The card `/usage` draws. Its own section rather than more of `chat`,
+     because it is the one surface with thirty strings about one subject. */
+  usage: {
+    title: 'Usage',
+    unavailable: 'This session cannot say how much has been used.',
+
+    session: 'Session',
+    /* Shown here and nowhere else in the app. It is what the same tokens would
+       have cost through the API, which a subscription never pays — a poor thing
+       to put beside a workspace name, and the exact question `/usage` is. */
+    cost: 'Total cost',
+    costValue: '${{amount}}',
+    tokens: 'Tokens',
+    tokensValue: '{{input}} in · {{output}} out',
+    cache: 'Cache',
+    cacheValue: '{{read}} read · {{write}} written',
+    apiTime: 'API time',
+    wallTime: 'Wall time',
+    changes: 'Code changes',
+    changesValue: '+{{added}} / −{{removed}} lines',
+
+    limits: 'Limits',
+    /* An API-key, Bedrock or Vertex session. Not a failed reading — there is
+       no plan for it to be near the end of. */
+    noPlan: 'Plan limits do not apply to this session.',
+    windowFiveHour: 'Current session',
+    windowSevenDay: 'Current week (all models)',
+    windowSevenDayOpus: 'Current week (Opus)',
+    windowSevenDaySonnet: 'Current week (Sonnet)',
+    windowSevenDayOauthApps: 'Current week (connected apps)',
+    /* The server names these itself — `Fable`, and whatever follows it. */
+    windowModel: 'Current week ({{name}})',
+    windowModelScoped: 'Current week (per model)',
+    reading: '{{name}} — {{percentage}}% used',
+    resets: 'resets {{at}}',
+
+    extra: 'Extra usage',
+    extraSpent: '{{used}} of {{limit}}',
+
+    contributing: 'What is contributing',
+    day: 'Last 24h',
+    week: 'Last 7d',
+    requests_one: '{{count}} request',
+    requests_few: '{{count}} requests',
+    requests_many: '{{count}} requests',
+    requests_other: '{{count}} requests',
+    sessions_one: '{{count}} session',
+    sessions_few: '{{count}} sessions',
+    sessions_many: '{{count}} sessions',
+    sessions_other: '{{count}} sessions',
+
+    behaviourCacheMiss: 'Cache misses',
+    behaviourLongContext: 'Long context',
+    behaviourSubagentHeavy: 'Subagents',
+    behaviourHighParallel: 'Work in parallel',
+    behaviourCron: 'Scheduled runs',
+
+    skills: 'Skills',
+    agents: 'Agents',
+    plugins: 'Plugins',
+    mcpServers: 'MCP servers',
+    share: '{{name}} — {{percentage}}%',
+    /* The SDK's own caveat, kept rather than dropped: the figures come from
+       reading this machine's transcripts, and the characteristics are counted
+       separately from one another, so they do not add up to a hundred. */
+    approximate:
+      'Approximate, from sessions on this machine — other devices and claude.ai are not counted. The characteristics overlap rather than divide the total.',
+
+    minutes: 'm',
+    seconds: 's'
+  },
+
   center: {
     noProjectsTitle: 'Start with a repository',
     noProjectsBody:

@@ -17,6 +17,7 @@ import {
   ChatMessageSchema,
   ChatSchema,
   isClearCommand,
+  isUsageCommand,
   MAX_CHATS_PER_WORKSPACE,
   newChat,
   PERMISSION_MODES,
@@ -335,6 +336,43 @@ describe('recognising the command that clears', () => {
     expect(isClearCommand('clear the build directory', [clear])).toBe(false)
     expect(isClearCommand('', [clear])).toBe(false)
     expect(isClearCommand('   ', [clear])).toBe(false)
+  })
+})
+
+describe('recognising the command that reports usage', () => {
+  const usage: AgentCommand = {
+    name: 'usage',
+    description: 'Show plan usage limits',
+    argumentHint: '',
+    aliases: ['cost', 'stats']
+  }
+
+  it('knows the command by name', () => {
+    expect(isUsageCommand('/usage', [])).toBe(true)
+    expect(isUsageCommand('  /usage  ', [])).toBe(true)
+  })
+
+  // The CLI declares no arguments for it, which is not the same as nobody
+  // typing any. Whatever follows the word, the word is still the command, and
+  // forwarding it on that account would print the prose under the card.
+  it('knows it however it was typed', () => {
+    expect(isUsageCommand('/usage today', [usage])).toBe(true)
+  })
+
+  // `/cost` and `/stats` reach the same command. Missed, one of them would
+  // reach the CLI and print the prose the card exists to replace.
+  it('knows it by the aliases the agent reported', () => {
+    expect(isUsageCommand('/cost', [usage])).toBe(true)
+    expect(isUsageCommand('/stats', [usage])).toBe(true)
+  })
+
+  it('does not mistake an alias of some other command for it', () => {
+    expect(isUsageCommand('/cost', [{ ...usage, name: 'clear' }])).toBe(false)
+  })
+
+  it('leaves ordinary messages alone', () => {
+    expect(isUsageCommand('/usages', [usage])).toBe(false)
+    expect(isUsageCommand('what is my usage', [usage])).toBe(false)
   })
 })
 

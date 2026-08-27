@@ -26,20 +26,70 @@ const NOTICEABLE = 75
 const PRESSING = 90
 
 /**
- * The colour a share is drawn in as it fills.
+ * How much of something being gone should be made of.
  *
- * One function for every reading in the strip, so the context window and the
- * subscription cannot disagree about what counts as high — two gauges side by
- * side turning colour at different points reads as one of them being broken.
+ * The one place the thresholds are read, so every gauge in the app agrees about
+ * what counts as high — two of them side by side turning colour at different
+ * points reads as one being broken. Colour is chosen from this rather than
+ * beside it, which is what keeps a bar and the number written on it in step.
  *
  * Not tied to the agent's own auto-compaction threshold, which sounds like the
  * natural boundary and is not: measured against a live session it sits at
  * 96.7% of the window, which is long past the point where knowing helps.
  */
-export function usageTone(percentage: number): 'text-ink-faint' | 'text-warning' | 'text-danger' {
-  if (percentage >= PRESSING) return 'text-danger'
-  if (percentage >= NOTICEABLE) return 'text-warning'
-  return 'text-ink-faint'
+export function usageLevel(percentage: number): 'calm' | 'noticeable' | 'pressing' {
+  if (percentage >= PRESSING) return 'pressing'
+  if (percentage >= NOTICEABLE) return 'noticeable'
+  return 'calm'
+}
+
+const TONES = {
+  calm: 'text-ink-faint',
+  noticeable: 'text-warning',
+  pressing: 'text-danger'
+} as const
+
+const FILLS = {
+  calm: 'bg-ink-faint',
+  noticeable: 'bg-warning',
+  pressing: 'bg-danger'
+} as const
+
+/** The colour a share is written in as it fills. */
+export function usageTone(percentage: number): (typeof TONES)[keyof typeof TONES] {
+  return TONES[usageLevel(percentage)]
+}
+
+/**
+ * The colour a share is drawn in as it fills.
+ *
+ * The one place a status colour is a block rather than text or an icon. The
+ * rule against that exists so a list does not turn into confetti; here the
+ * block *is* the reading, and a bar drawn in the ink colour beside a number
+ * drawn in red would be the two disagreeing.
+ */
+export function usageFill(percentage: number): (typeof FILLS)[keyof typeof FILLS] {
+  return FILLS[usageLevel(percentage)]
+}
+
+/**
+ * A span of time, coarsely: `4хв 12с`, `38с`, `0с`.
+ *
+ * Minutes and seconds and no further. What this measures is how long a session
+ * spent waiting on the API, and an hour of it reads as `74хв` rather than
+ * growing a third unit — the figure is there to be compared with the wall clock
+ * beside it, and two units line up where three wrap.
+ */
+export function formatDuration(
+  ms: number,
+  labels: { readonly minutes: string; readonly seconds: string }
+): string {
+  const total = Math.max(0, Math.round(ms / 1000))
+  const minutes = Math.floor(total / 60)
+  const seconds = total % 60
+
+  if (minutes === 0) return `${String(seconds)}${labels.seconds}`
+  return `${String(minutes)}${labels.minutes} ${String(seconds)}${labels.seconds}`
 }
 
 /**

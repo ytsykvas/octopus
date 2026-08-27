@@ -27,6 +27,8 @@ import type { AgentCommand, AgentModel, EffortChoice, PermissionMode } from './c
 import { sessionEffort } from './chats.js'
 import type { AgentEvent } from './events.js'
 import { describeError } from './persist.js'
+import type { UsageReport } from './usage.js'
+import { toUsageReport } from './usage.js'
 
 /** The one function this module needs from the SDK. */
 export type QueryFn = (params: {
@@ -139,6 +141,8 @@ export interface AgentSession {
   contextUsage: () => Promise<ContextUsage | null>
   /** How much of the subscription's windows is gone, or null if it cannot say. */
   subscriptionUsage: () => Promise<SubscriptionUsage | null>
+  /** Everything `/usage` answers, or null if the session cannot say. */
+  usageReport: () => Promise<UsageReport | null>
   /** Ends the session, killing the process the SDK spawned. */
   close: () => Promise<void>
 }
@@ -259,6 +263,33 @@ export async function readSubscriptionUsage(
     const sevenDay = toUsageWindow(usage.rate_limits.seven_day)
 
     return fiveHour === null && sevenDay === null ? null : { fiveHour, sevenDay }
+  } catch {
+    return null
+  }
+}
+
+/**
+ * Everything `/usage` answers, or null when the session will not say.
+ *
+ * The same call as `readSubscriptionUsage` above, kept apart rather than folded
+ * into it because the two want different halves of it at different moments: the
+ * strip asks for two numbers at the end of every turn, this asks for all of it
+ * once, when someone types the command. Merging them would either widen what
+ * the strip carries around or narrow what the card can draw.
+ *
+ * Null covers every ordinary failure the way the readings above do — an older
+ * CLI without the method, a refused control request — and one more: a response
+ * whose shape `toUsageReport` does not recognise. The API is marked experimental
+ * and says its own shape may change without notice, so that is a case to expect
+ * rather than one to be surprised by.
+ */
+export async function readUsageReport(conversation: Query): Promise<UsageReport | null> {
+  const ask = (conversation as UsageCapable)
+    .usage_EXPERIMENTAL_MAY_CHANGE_DO_NOT_RELY_ON_THIS_API_YET
+  if (typeof ask !== 'function') return null
+
+  try {
+    return toUsageReport(await ask.call(conversation))
   } catch {
     return null
   }
@@ -445,6 +476,10 @@ export function startSession(options: SessionOptions, hooks: SessionHooks): Agen
 
     subscriptionUsage() {
       return readSubscriptionUsage(conversation)
+    },
+
+    usageReport() {
+      return readUsageReport(conversation)
     },
 
     async setEffort(choice) {

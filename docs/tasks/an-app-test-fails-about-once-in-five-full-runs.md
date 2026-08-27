@@ -26,6 +26,14 @@ emitted outside `act`, a click, then a read of what the event was supposed to
 produce. Whatever the cause, it is not specific to ⌘T, and either test will do
 to reproduce it.
 
+**They can fail together, which the "something inside the one file" reading does
+not explain.** On 2026-08-27 a single `npm run check` failed both at once — ⌘T
+in `App.test.tsx` and the plan in `Chat.test.tsx` — and each passed alone
+immediately after, with the next full run green. Two files failing in the same
+run and neither failing on its own points at the state of the machine at that
+moment rather than at anything either file does. That makes the timing lead
+below the one worth trying first, and `--sequence.shuffle` the weaker bet.
+
 ## Why it matters
 
 `npm run check` is what every commit goes through, and a gate that goes red

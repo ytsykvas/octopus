@@ -1560,6 +1560,14 @@ describe('the agent chat', () => {
   }
 
   const USAGE_RESPONSE = {
+    session: {
+      total_cost_usd: 0,
+      total_api_duration_ms: 0,
+      total_duration_ms: 695,
+      total_lines_added: 0,
+      total_lines_removed: 0,
+      model_usage: {}
+    },
     subscription_type: 'max',
     rate_limits_available: true,
     rate_limits: {
@@ -1871,6 +1879,120 @@ describe('the agent chat', () => {
       await service.sessionUsage(chat.id)
 
       await expect(readFile(join(dir, 'state.json'), 'utf8')).resolves.toBe(before)
+    })
+  })
+
+  describe('the /usage command', () => {
+    it('answers with a report instead of passing the message on', async () => {
+      const { service, workspaceId, events } = await withWorkspace()
+      const chat = await service.openChat(workspaceId)
+
+      await service.sendToChat(chat.id, '/usage')
+
+      // Not forwarded: the CLI would answer the same question in prose, and
+      // the paragraph would land underneath the card.
+      expect(agents[0]?.sent).toEqual([])
+      expect(events.at(-1)?.event).toMatchObject({
+        type: 'usage',
+        report: { subscriptionType: 'max', limitsApply: true }
+      })
+    })
+
+    it('recognises the command under an alias the agent reported', async () => {
+      const { service, workspaceId, events } = await withWorkspace()
+      offeredCommands = () =>
+        Promise.resolve([
+          { name: 'usage', description: '', aliases: ['cost'] } as unknown as SlashCommand
+        ])
+      const chat = await service.openChat(workspaceId)
+
+      // The list is only learned once a session has run, so the first message
+      // teaches it and the second is the one under test.
+      await service.sendToChat(chat.id, 'work')
+      await vi.waitFor(() => {
+        expect(service.listChats(workspaceId)[0]?.knownCommands).toHaveLength(1)
+      })
+
+      await service.sendToChat(chat.id, '/cost')
+
+      expect(agents[0]?.sent).toEqual(['work'])
+      expect(events.at(-1)?.event).toMatchObject({ type: 'usage' })
+    })
+
+    it('keeps the question and the answer in the transcript', async () => {
+      const { service, workspaceId } = await withWorkspace()
+      const chat = await service.openChat(workspaceId)
+
+      await service.sendToChat(chat.id, '/usage')
+
+      // Both halves. A log that kept the command and dropped what it returned
+      // would be worse read back than one that kept neither.
+      await vi.waitFor(async () => {
+        const history = await service.chatHistory(chat.id)
+        expect(history.map((entry) => entry.role)).toEqual(['user', 'agent'])
+        // Read back through `AgentEventSchema`, so this is also the round trip:
+        // a report the stored schema could not parse would take the whole entry
+        // with it, and the card would come back empty on the next launch.
+        expect(history[1]).toMatchObject({
+          event: { type: 'usage', report: { subscriptionType: 'max', limitsApply: true } }
+        })
+      })
+    })
+
+    // Nothing went to the agent, so no `result` is coming to put the status
+    // back. Left on `running`, the conversation would claim to be working for
+    // the rest of its life.
+    it('leaves the conversation idle', async () => {
+      const { service, workspaceId } = await withWorkspace()
+      const chat = await service.openChat(workspaceId)
+
+      await service.sendToChat(chat.id, '/usage')
+
+      expect(service.listChats(workspaceId)[0]?.status).toBe('idle')
+    })
+
+    it('still answers when the reading fails', async () => {
+      const { service, workspaceId, events } = await withWorkspace()
+      usageAnswer = () => Promise.reject(new Error('unknown control request'))
+      const chat = await service.openChat(workspaceId)
+
+      await service.sendToChat(chat.id, '/usage')
+
+      // Silence under a `/usage` bubble reads as a hang. The card says the
+      // reading is unavailable instead.
+      expect(events.at(-1)?.event).toEqual({ type: 'usage', report: null })
+    })
+
+    /*
+     * A reachable state, and not a corner: the composer is deliberately not
+     * disabled while the agent works (`docs/ui.md`), so this is one stray
+     * `/usage` away at any moment. The turn must survive it — nothing is sent,
+     * so there is nothing to interrupt, and the status belongs to the turn
+     * rather than to the command.
+     */
+    it('answers mid-turn without disturbing the turn', async () => {
+      const { service, workspaceId, events } = await withWorkspace()
+      const chat = await service.openChat(workspaceId)
+      await service.sendToChat(chat.id, 'work')
+
+      await service.sendToChat(chat.id, '/usage')
+
+      expect(agents[0]?.sent).toEqual(['work'])
+      expect(agents[0]?.interrupted()).toBe(0)
+      expect(service.listChats(workspaceId)[0]?.status).toBe('running')
+      expect(events.at(-1)?.event).toMatchObject({ type: 'usage' })
+    })
+
+    // `sessionUsage` refuses to start a session to fill a gauge, and rightly.
+    // This is the other case: somebody typed a command and is owed an answer.
+    it('starts a session when the conversation has never run one', async () => {
+      const { service, workspaceId } = await withWorkspace()
+      const chat = await service.openChat(workspaceId)
+      expect(agents).toHaveLength(0)
+
+      await service.sendToChat(chat.id, '/usage')
+
+      expect(agents).toHaveLength(1)
     })
   })
 

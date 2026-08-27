@@ -36,6 +36,7 @@ import {
   EXIT_PLAN_MODE,
   forkChat as forkChatRecord,
   isClearCommand,
+  isUsageCommand,
   MAX_CHATS_PER_WORKSPACE,
   newChat,
   sessionMode,
@@ -2018,6 +2019,29 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
       }
 
       const session = running ?? startFor(chat, workspace, await sourcesFor(workspace))
+
+      /*
+       * `/usage` is answered here, and the message is not sent on.
+       *
+       * The one command octopus takes off the agent rather than merely noticing
+       * — `/clear` still goes, because only the CLI can do what it asks. This
+       * one the CLI would answer in prose, while the same figures are available
+       * structured from the session's own control channel, so forwarding it as
+       * well would print the paragraph underneath the card.
+       *
+       * A session is started for it if none was running, unlike `sessionUsage`,
+       * which refuses to. The difference is who asked: that fills a gauge
+       * nobody requested, this answers a command somebody typed.
+       *
+       * The status deliberately stays as it was. Nothing went to the agent, so
+       * no `result` is coming to put it back, and a conversation left saying
+       * "running" for the rest of its life is a worse answer than the prose.
+       */
+      if (isUsageCommand(text, chat.knownCommands)) {
+        handleEvent(chat, { type: 'usage', report: await session.usageReport() })
+        return
+      }
+
       session.send(text)
 
       await setChatStatus(chatId, 'running')

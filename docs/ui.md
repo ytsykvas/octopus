@@ -231,9 +231,15 @@ clock nobody here controls — and what acts on a full context window is
 `/compact`, which keeps a summary and carries on, or `/clear`, which throws the
 conversation away. Neither is dispatched: they go out as the text of an ordinary
 message, which is what a slash command is in this app, so the menu hands them to
-the same `onSend` the field uses. `isClearCommand` in `core/chats.ts` is the only
-thing octopus notices about one, so the service can drop the transcript when the
-reset comes back.
+the same `onSend` the field uses.
+
+Two commands are noticed on the way past, both in `core/chats.ts`.
+`isClearCommand` only watches — the message still goes, and knowing it went lets
+the service drop the transcript when the reset comes back. `isUsageCommand`
+takes the message instead: `/usage` is answered from the session's structured
+reading and never reaches the CLI, because the CLI's own answer is a paragraph
+of prose about percentages. It is drawn by `UsageCard`, the only place in the
+app that shows the session's cost.
 
 Three things about that menu:
 
@@ -988,6 +994,20 @@ one piece of chrome ignoring the palette.
 Surfaces: `canvas` → `surface` → `muted`, separated by `line` and `line-strong`.
 Text: `ink` → `ink-soft` → `ink-faint`. Status colours apply to text and icons;
 only the paired `*-bg` is used as a background.
+
+Two places put one on a surface anyway, and the test for both is the same: the
+colour is the thing rather than a mark on it. `Button`'s `destructive` variant
+fills with `danger`, because a button that deletes something is the warning. The
+filled part of a `UsageBar` drawn as a `limit` is the other — a bar in the ink
+colour beside a number in `danger` would be one gauge contradicting itself, and
+both readings come from `usageLevel` in `chat/format.ts`, the only place the
+thresholds live. Anywhere the colour would merely _label_ a row, it goes on the
+text or the icon and the `*-bg` goes behind it; the status dot beside a
+conversation is the icon case, not a third exception.
+
+A `share` bar — which skill used the most of a week — stays neutral however high
+it goes. It is a proportion of something that is not running out, and drawing it
+in red would be the interface raising an alarm about a fact.
 
 ### Project colours
 

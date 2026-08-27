@@ -990,3 +990,50 @@ describe('a question the agent asked', () => {
     expect(screen.getByText('Left unanswered.')).toBeVisible()
   })
 })
+
+describe('the answer to /usage', () => {
+  const report = {
+    session: {
+      costUsd: 0,
+      apiDurationMs: 0,
+      wallDurationMs: 0,
+      linesAdded: 0,
+      linesRemoved: 0,
+      inputTokens: 0,
+      outputTokens: 0,
+      cacheReadTokens: 0,
+      cacheWriteTokens: 0
+    },
+    subscriptionType: 'max',
+    limitsApply: true,
+    limits: [{ key: 'five_hour' as const, label: null, utilization: 32, resetsAt: null }],
+    extraUsage: null,
+    contributing: null
+  }
+
+  it('draws a card rather than a paragraph', () => {
+    renderLog({ entries: [fromAgent({ type: 'usage', report })] })
+
+    expect(screen.getByRole('progressbar', { name: 'Current session — 32% used' })).toBeVisible()
+  })
+
+  // A card is a block of its own, not a step inside a run of tool calls. Folded
+  // in, the answer to a command would disappear behind a "3 steps" summary.
+  it('stands on its own between the tool calls around it', () => {
+    renderLog({
+      entries: [
+        fromAgent({
+          type: 'tool_use',
+          toolUseId: 't-1',
+          name: 'Grep',
+          input: { pattern: 'usage' }
+        }),
+        fromAgent({ type: 'usage', report }),
+        fromAgent({ type: 'tool_use', toolUseId: 't-2', name: 'Grep', input: { pattern: 'limit' } })
+      ]
+    })
+
+    expect(screen.getByRole('progressbar')).toBeVisible()
+    expect(screen.getAllByText('Grep')).toHaveLength(2)
+  })
+})

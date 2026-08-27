@@ -17,6 +17,7 @@ import { z } from 'zod'
 
 import { AgentCommandSchema } from './chats.js'
 import { QuestionAnswerSchema } from './questions.js'
+import { UsageReportSchema } from './usage.js'
 
 /**
  * Arguments a tool was called with.
@@ -97,11 +98,16 @@ export const AgentEventSchema = z.discriminatedUnion('type', [
   /**
    * A turn ended.
    *
-   * `costUsd` is **not money**, and nothing shows it as such. The SDK's own
-   * documentation calls it "an estimate, not a billing statement": it is what
-   * the same tokens would have cost through the API, which on a subscription
-   * is never charged to anyone. It is also cumulative across the session, so
-   * it is a usage signal at best — kept in the record, out of the interface.
+   * `costUsd` is **not money**. The SDK's own documentation calls it "an
+   * estimate, not a billing statement": it is what the same tokens would have
+   * cost through the API, which on a subscription is never charged to anyone.
+   * It is also cumulative across the session, so it is a usage signal at best.
+   *
+   * Nothing draws it from here. The one place a figure like it appears is the
+   * card `/usage` draws, from that command's own reading — where the cost is
+   * the question being asked rather than a number volunteered beside a turn.
+   * A footer saying `1.4s · 3.2k tokens · $2.11` would be claiming the turn
+   * cost two dollars, and the turn cost nothing.
    */
   z.object({
     type: z.literal('result'),
@@ -180,6 +186,23 @@ export const AgentEventSchema = z.discriminatedUnion('type', [
    * command list changed" back a week later says nothing.
    */
   z.object({ type: z.literal('commands_changed'), commands: z.array(AgentCommandSchema) }),
+
+  /**
+   * What `/usage` was asked and answered.
+   *
+   * Kept in the transcript, unlike the rate limit two variants up, and the
+   * difference is not the data — it is who asked. A rate limit arrives on its
+   * own and describes the account rather than the conversation, so a row for it
+   * is a row nobody wanted. This one is the answer to a command someone typed,
+   * and a transcript that keeps the question and drops the answer is worse than
+   * one that keeps neither. That it is a snapshot is the point: it says what was
+   * left at the moment it was asked, which is what a dated record is for.
+   *
+   * Null when the reading failed — an older CLI, a refused control request, a
+   * response in a shape we do not know. The card says so. Sending nothing back
+   * would leave a `/usage` bubble with silence under it, which reads as a hang.
+   */
+  z.object({ type: z.literal('usage'), report: UsageReportSchema.nullable() }),
 
   z.object({ type: z.literal('error'), message: z.string() })
 ])

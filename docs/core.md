@@ -13,17 +13,18 @@ Coverage here is 100%, enforced. That is the floor, not the goal: see
 
 Nothing but zod behind them, so a **value** can cross into the window.
 
-| Module                                     | What it decides                                            |
-| ------------------------------------------ | ---------------------------------------------------------- |
-| [`branches.ts`](../src/core/branches.ts)   | how a branch name is shown — `origin/` is noise            |
-| [`colors.ts`](../src/core/colors.ts)       | the project palette, and which colour a new project gets   |
-| [`initials.ts`](../src/core/initials.ts)   | the two characters on a project tab                        |
-| [`icons.ts`](../src/core/icons.ts)         | the icons a project may be marked with instead             |
-| [`chats.ts`](../src/core/chats.ts)         | what a chat is, and how much it may do without asking      |
-| [`events.ts`](../src/core/events.ts)       | `AgentEvent` — the only shape the UI sees of the SDK       |
-| [`questions.ts`](../src/core/questions.ts) | the questions the agent asks, and how an answer reaches it |
-| [`names.ts`](../src/core/names.ts)         | workspace names, drawn at random from 256                  |
-| [`types.ts`](../src/core/types.ts)         | shared identifiers                                         |
+| Module                                     | What it decides                                                         |
+| ------------------------------------------ | ----------------------------------------------------------------------- |
+| [`branches.ts`](../src/core/branches.ts)   | how a branch name is shown — `origin/` is noise                         |
+| [`colors.ts`](../src/core/colors.ts)       | the project palette, and which colour a new project gets                |
+| [`initials.ts`](../src/core/initials.ts)   | the two characters on a project tab                                     |
+| [`icons.ts`](../src/core/icons.ts)         | the icons a project may be marked with instead                          |
+| [`chats.ts`](../src/core/chats.ts)         | what a chat is, and how much it may do without asking                   |
+| [`events.ts`](../src/core/events.ts)       | `AgentEvent` — the only shape the UI sees of the SDK                    |
+| [`questions.ts`](../src/core/questions.ts) | the questions the agent asks, and how an answer reaches it              |
+| [`usage.ts`](../src/core/usage.ts)         | what `/usage` answers, narrowed from a response wider than its own type |
+| [`names.ts`](../src/core/names.ts)         | workspace names, drawn at random from 256                               |
+| [`types.ts`](../src/core/types.ts)         | shared identifiers                                                      |
 
 ### Storage
 
@@ -64,6 +65,7 @@ Nothing but zod behind them, so a **value** can cross into the window.
 | [`ports.ts`](../src/core/ports.ts)                           | which block of ten a workspace gets, and whether anything is already answering there                                                                                                                                      |
 | [`instructions.ts`](../src/core/instructions.ts)             | prose handed to the agent, per project and for the installation; `effectiveInstruction` is the order between them                                                                                                         |
 | [`instructionSources.ts`](../src/core/instructionSources.ts) | what a checkout offers the agent, and which of it the current `settingSources` actually loads                                                                                                                             |
+| [`repoTrust.ts`](../src/core/repoTrust.ts)                   | what a checkout can make the agent do before anybody has looked at it, as a digest of the settings and the hook scripts they name                                                                                         |
 | [`agent.ts`](../src/core/agent.ts)                           | the Agent SDK: session lifecycle and event mapping                                                                                                                                                                        |
 
 ### The façade
@@ -159,9 +161,18 @@ why the header is built to say nothing rather than to hold space for it.
 Slash commands were measured the same way, and three of the four answers were
 not what the types suggested:
 
-- a **local command answers as ordinary assistant text**. `/usage` prints its
-  table, an unknown command replies "Unknown command: …", and both arrive as
-  `assistant` messages. There is no separate event to map, and none is mapped.
+- a **local command answers as ordinary assistant text**. An unknown command
+  replies "Unknown command: …", and it arrives as an `assistant` message. There
+  is no separate event to map, and none is mapped.
+
+  `/usage` was the same until it stopped being sent at all. Its prose table has
+  a structured original — `usage_EXPERIMENTAL_…`, "the structured data behind
+  the `/usage` command" — so `sendToChat` recognises the command (aliases and
+  all, through `isUsageCommand`), reads the report and emits a `usage` event
+  instead of forwarding the message. `readUsageReport` narrows the response;
+  `toUsageReport` in `usage.ts` is the pure half of that and holds the reasons
+  for the allowlist of windows. It is the one command the CLI never sees.
+
 - a local command **does produce a `result`**, with `terminal_reason` unset. The
   chat therefore stops looking busy on its own, and no special case decides that
   a turn has ended.

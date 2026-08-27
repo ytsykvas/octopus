@@ -481,6 +481,67 @@ export const uk: Translation = {
     soon: 'ось-ось'
   },
 
+  usage: {
+    title: 'Використання',
+    unavailable: 'Ця сесія не може сказати, скільки вже використано.',
+
+    session: 'Сесія',
+    cost: 'Загальна вартість',
+    costValue: '${{amount}}',
+    tokens: 'Токени',
+    tokensValue: '{{input}} вхідних · {{output}} вихідних',
+    cache: 'Кеш',
+    cacheValue: '{{read}} прочитано · {{write}} записано',
+    apiTime: 'Час API',
+    wallTime: 'Загальний час',
+    changes: 'Зміни в коді',
+    changesValue: '+{{added}} / −{{removed}} рядків',
+
+    limits: 'Ліміти',
+    noPlan: 'До цієї сесії ліміти плану не застосовуються.',
+    windowFiveHour: 'Поточна сесія',
+    windowSevenDay: 'Поточний тиждень (усі моделі)',
+    windowSevenDayOpus: 'Поточний тиждень (Opus)',
+    windowSevenDaySonnet: 'Поточний тиждень (Sonnet)',
+    windowSevenDayOauthApps: 'Поточний тиждень (підключені застосунки)',
+    windowModel: 'Поточний тиждень ({{name}})',
+    windowModelScoped: 'Поточний тиждень (за моделлю)',
+    reading: '{{name}} — використано {{percentage}}%',
+    resets: 'скидання {{at}}',
+
+    extra: 'Додаткове використання',
+    extraSpent: '{{used}} із {{limit}}',
+
+    contributing: 'Що впливає',
+    day: 'Останні 24 год',
+    week: 'Останні 7 днів',
+    requests_one: '{{count}} запит',
+    requests_few: '{{count}} запити',
+    requests_many: '{{count}} запитів',
+    requests_other: '{{count}} запитів',
+    sessions_one: '{{count}} сесія',
+    sessions_few: '{{count}} сесії',
+    sessions_many: '{{count}} сесій',
+    sessions_other: '{{count}} сесій',
+
+    behaviourCacheMiss: 'Промахи кешу',
+    behaviourLongContext: 'Довгий контекст',
+    behaviourSubagentHeavy: 'Субагенти',
+    behaviourHighParallel: 'Паралельна робота',
+    behaviourCron: 'Заплановані запуски',
+
+    skills: 'Навички',
+    agents: 'Агенти',
+    plugins: 'Плагіни',
+    mcpServers: 'Сервери MCP',
+    share: '{{name}} — {{percentage}}%',
+    approximate:
+      'Приблизно, за сесіями на цій машині — інші пристрої та claude.ai не враховано. Характеристики перетинаються, а не ділять загальну суму.',
+
+    minutes: 'хв',
+    seconds: 'с'
+  },
+
   center: {
     noProjectsTitle: 'Почніть з репозиторію',
     noProjectsBody:

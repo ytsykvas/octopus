@@ -27,6 +27,7 @@ import { QuestionCard } from './QuestionCard.js'
 import { answersByRequest, groupToolRuns, toolCount } from './toolRuns.js'
 import { readFailure } from './toolFailure.js'
 import { describeToolInput, readPlan } from './toolSummary.js'
+import { UsageCard } from './UsageCard.js'
 
 /**
  * What each ending is called on screen.
@@ -257,6 +258,11 @@ function AgentRow({
           terminalReason={event.terminalReason}
         />
       )
+
+    // The answer to `/usage`, which the service takes off the agent and fills
+    // in from the structured reading rather than letting the CLI answer it.
+    case 'usage':
+      return <UsageCard report={event.report} />
 
     case 'error':
       return <ErrorRow message={event.message} />
