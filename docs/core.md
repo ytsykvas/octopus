@@ -158,6 +158,20 @@ against a real session rather than assumed:
 The same session showed `utilization` absent from the event entirely, which is
 why the header is built to say nothing rather than to hold space for it.
 
+**What the two readings cost was guessed wrong, and then measured.** The suspect
+was `get_usage`: its response carries a scan of every transcript on the machine,
+and the composer's strip asks for it at the end of every turn. Against a live
+session with 845 transcript files and 608MB behind them, the first call takes
+about 250ms and every call after it **under 40ms** — the CLI works the scan out
+once and keeps it. `readSubscriptionUsage` was never the expensive half.
+
+`getContextUsage` is, at **600–700ms**, every time, with nothing cached — and it
+is the one that looked cheap because it never leaves the machine. `sessionUsage`
+asks for both at once, so a turn's end costs the slower of the two rather than
+their sum. Loading a project's own settings does not move either figure: the
+same numbers come back from an empty directory and from this repository, with
+its `CLAUDE.md`, skills, hooks and MCP servers.
+
 Slash commands were measured the same way, and three of the four answers were
 not what the types suggested:
 

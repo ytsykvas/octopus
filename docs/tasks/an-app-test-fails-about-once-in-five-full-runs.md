@@ -34,6 +34,21 @@ run and neither failing on its own points at the state of the machine at that
 moment rather than at anything either file does. That makes the timing lead
 below the one worth trying first, and `--sequence.shuffle` the weaker bet.
 
+**And it is not the renderer's problem.** On 2026-08-28 the failure landed in
+the **core** suite instead — `service.test.ts` › "falls back to the real gh when
+no executor is supplied" — during a run made while the dev app and a second node
+process were both busy. It passed alone, and the next full run was green. Core
+tests share no jsdom, no `document`, and no `Element.prototype`, so every
+candidate under "Where to start" below is ruled out for that one; whatever this
+is reaches both suites.
+
+Recorded with a caveat, because it is worth less than it looks: the run's output
+was read from a tail and **the assertion message was not captured**. What the
+`gh` test could plausibly fail on is not obvious either — it writes a fake `gh`
+to a temp directory, puts it on `PATH` and restores it in a `finally`, and
+`defaultExec` allows 15 seconds, which a shell script running `cat` will not
+reach however loaded the machine is. Next time it appears, keep the message.
+
 ## Why it matters
 
 `npm run check` is what every commit goes through, and a gate that goes red
@@ -42,9 +57,11 @@ session spends its time bisecting a diff that was never the problem. That is
 exactly what it cost here — the failure arrived in the middle of unrelated work
 and had to be ruled out before anything else could proceed.
 
-The same argument as `a-test-calls-the-live-github-api.md`, from the other
-direction: that one is red because the network is, this one for a reason nobody
-has yet named.
+The same argument as the test that used to call the live GitHub API, from the
+other direction: that one was red because the network was, and it was fixed by
+putting a fake `gh` on `PATH` — see the comment on `falls back to the real gh
+when no executor is supplied` in `service.test.ts`. This one is red for a reason
+nobody has yet named.
 
 ## Where to start
 

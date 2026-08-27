@@ -13,9 +13,14 @@ const NOTHING: SessionUsage = { context: null, subscription: null }
  * they can have changed: when the pane opens on a conversation that may already
  * have a session, when one starts, and when a turn ends.
  *
- * Deliberately no timer. If the numbers ever look stale the answer is another
- * event, not an interval: each read is a round trip to the agent, and one of
- * the two goes on to the network.
+ * Deliberately no timer, and now with a figure behind the rule: the pair costs
+ * about **700ms**, measured against a live session. Almost all of it is the
+ * context reading — `get_usage` settles at under 40ms once the CLI has its
+ * answer, while `getContextUsage` takes 600–700ms every single time. They are
+ * asked for together, so the pane pays the slower one.
+ *
+ * That is fine three times a turn and would not be on an interval. If the
+ * numbers ever look stale the answer is another event, not a shorter one.
  */
 export function useSessionUsage(chatId: string | null): SessionUsage {
   const [usage, setUsage] = useState<SessionUsage>(NOTHING)
