@@ -175,10 +175,10 @@ export const en = {
   scripts: {
     build: 'Build',
     server: 'Server',
-    /* Three controls for the whole tab, on its own header. There used to be
-       four across the two halves, two of which were called the same thing —
-       and `Run` and `Start` beside each other say nothing about which one a
-       reader wants. */
+    /* The controls for the whole tab, on its own header. There used to be four
+       across the two halves, two of which were called the same thing — and
+       `Run` and `Start` beside each other say nothing about which one a reader
+       wants. */
     serverRestart: 'Restart',
     stop: 'Stop',
     /* Names the port rather than saying "open the app": every workspace serves
@@ -190,6 +190,11 @@ export const en = {
     foldBuild: 'Fold the build away',
     unfoldBuild: 'Show the build',
     edit: 'Write the script',
+    /* The header's own way to the editors, and icon-only — so this string is
+       the whole of what it says, and it names the act rather than the place.
+       `Write` above is the offer made where a script is missing; this is the
+       one that is there once it exists, which is when the other disappears. */
+    editScripts: "Edit this project's scripts",
     /* Beside the build rather than in the project dialog alone: these are what
        a build reads, and the moment you notice one is missing is the moment the
        build in front of you did not find it. */

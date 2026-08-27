@@ -542,21 +542,31 @@ so `Run` is disabled — the server half already carries that invitation.
 The sequence is **keyed by workspace**, exactly as the runs are: leaving one
 mid-build to look at another must not report the second as building.
 
-**Every control is on that header, and the halves carry none.** There were four
-across the two of them — `Build`/`Rebuild` in one, `Start`/`Restart`/`Stop` in
-the other — and beside a `Run` that does both, two of them said the same word
-twice. A half's job is to show what is happening; the pressing belongs where the
-whole sequence is decided.
+**Running is decided on that header, never in the halves.** There were four
+controls across the two of them — `Build`/`Rebuild` in one, `Start`/`Restart`/
+`Stop` in the other — and beside a `Run` that does both, two of them said the
+same word twice. A half's job is to show what is happening; the pressing belongs
+where the whole sequence is decided.
 
-Three controls, and only ever the ones that can mean something:
+One exception, and it is not about running: `Env` sits with the build, because
+its variables are what a build reads and the moment you notice one is missing is
+the moment the build in front of you did not find it.
+
+One control that is always there, and three that change with the run:
 
 | Showing         | Controls                           |
 | --------------- | ---------------------------------- |
+| always          | edit the project's scripts         |
 | nothing running | `Run`                              |
 | building        | `Building…`, disabled              |
 | serving         | open in browser, `Restart`, `Stop` |
 
-The first of the three is a **link**, not a button: `setWindowOpenHandler` in
+The constant one is drawn first, ahead of everything that moves. It is the way
+to the scripts themselves — see the fold section below for why the header needs
+one at all — and a control that lands somewhere else because a server came up is
+one people stop aiming at.
+
+The browser control is a **link**, not a button: `setWindowOpenHandler` in
 main already hands a `_blank` target to the system browser, so it needs no
 channel of its own, and a link is what a reader expects to be able to copy. It
 names the port — every workspace serves on one of its own, and which one is the
@@ -708,6 +718,23 @@ log, which is the half anybody actually watches.
 The way to the script editor survives that: a workspace with no scripts is
 offered one from **both** halves, and the server half is open. Otherwise a fresh
 project would land on a tab that says nothing and leads nowhere.
+
+**And a second way, in the header, that does not come and go.** That offer is an
+empty state, so it disappears at the moment the file it offers to write starts
+existing — after which a tab whose whole subject is `setup.sh` showed the path to
+it, ran it, printed what it said, and led nowhere. The pencil beside the run
+controls opens the same Scripts section whatever state the scripts are in.
+
+The two are not duplicates and neither should be folded into the other: one says
+**Write** and stands where the missing script would be, in one half; the other
+says **Edit** and belongs to the tab. Removing the first puts a fresh project
+back in front of a tab that leads nowhere, which is the paragraph above.
+
+The header's is also the only way in before there is a workspace at all: the
+halves say so and draw nothing else, while the scripts belong to the project and
+are editable regardless. It is disabled only with no project open, where there
+is nothing for it to edit — a control that answers a press with silence is worse
+than one that says it cannot.
 
 It folds by a class and an `aria-hidden`, never by unmounting — unmounting the
 terminal is how Stop ends a run, so a fold that removed it would kill a

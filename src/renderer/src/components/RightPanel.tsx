@@ -1,4 +1,12 @@
-import { ChevronDown, ChevronRight, ExternalLink, Play, RotateCw, Square } from 'lucide-react'
+import {
+  ChevronDown,
+  ChevronRight,
+  ExternalLink,
+  Pencil,
+  Play,
+  RotateCw,
+  Square
+} from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
@@ -528,6 +536,27 @@ export function RightPanel({
               t(STAGE_HINTS[activeRun.stage])
             )}
           </span>
+
+          {/* The way to the scripts themselves, and the only control here that
+              does not change with the run.
+
+              It sits before the rest deliberately. Everything after it swaps as
+              a server comes up, and a button that moves under the pointer when
+              something unrelated happens is one people stop aiming at.
+
+              It exists at all because the other way in disappears exactly when
+              it starts being wanted: `ScriptRunner` offers **Write the script**
+              while there is no script, so a tab whose whole subject is
+              `setup.sh` led nowhere the moment `setup.sh` was written. */}
+          <Button
+            size="sm"
+            disabled={projectId === null}
+            onClick={onEditScripts}
+            title={t('scripts.editScripts')}
+            aria-label={t('scripts.editScripts')}
+          >
+            <Pencil aria-hidden size={12} />
+          </Button>
 
           {/* Every control for the tab, and none in the halves — and only ever
               the ones that can mean something. Run goes once the server is up:

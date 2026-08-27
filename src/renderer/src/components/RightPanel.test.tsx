@@ -336,6 +336,103 @@ describe('RightPanel', () => {
   })
 
   /*
+   * The case the test above cannot reach, and the reason the header carries its
+   * own way in: **Write the script** is the empty state, so it disappears at the
+   * moment the file it offers to write starts existing. The tab then showed the
+   * path to `setup.sh`, ran it, printed what it said — and led nowhere.
+   */
+  it('sends the user to the script editor when the project already has one', async () => {
+    const onEditScripts = vi.fn()
+    renderPanel({
+      workspaces: [anna],
+      activeWorkspaceId: anna.id,
+      // Both halves, because the offer belongs to each: with only `setup.sh`
+      // written, the server half still shows its own **Write the script**.
+      scriptPaths: SCRIPTS,
+      onEditScripts
+    })
+
+    await userEvent.click(scriptsTab())
+    expect(screen.queryByRole('button', { name: 'Write the script' })).not.toBeInTheDocument()
+
+    await userEvent.click(screen.getByRole('button', { name: "Edit this project's scripts" }))
+
+    expect(onEditScripts).toHaveBeenCalled()
+  })
+
+  /*
+   * The state where the header is the only route there is. With no workspace
+   * both halves say so and draw nothing else — no path, no **Write the
+   * script** — while the scripts themselves belong to the project and are
+   * perfectly editable.
+   */
+  it('reaches the editor from a project that has no workspace yet', async () => {
+    const onEditScripts = vi.fn()
+    renderPanel({ workspaces: [], activeWorkspaceId: null, onEditScripts })
+
+    await userEvent.click(scriptsTab())
+    expect(screen.queryByRole('button', { name: 'Write the script' })).not.toBeInTheDocument()
+
+    await userEvent.click(screen.getByRole('button', { name: "Edit this project's scripts" }))
+
+    expect(onEditScripts).toHaveBeenCalled()
+  })
+
+  /*
+   * A state the application reaches on its own: `openProjectId` is
+   * `selectedProject?.id ?? null` (`App.tsx:430`) and the pane is open by
+   * default, so a first launch with nothing selected renders exactly this.
+   *
+   * The callback resolves that same project, so with none there is nothing for
+   * it to open. A control that answers a press with silence is worse than one
+   * that says it cannot.
+   */
+  it('offers no way to the editor when no project is open', async () => {
+    renderPanel({ projectId: null, workspaces: [anna], activeWorkspaceId: anna.id })
+
+    await userEvent.click(scriptsTab())
+
+    expect(screen.getByRole('button', { name: "Edit this project's scripts" })).toBeDisabled()
+  })
+
+  /*
+   * Everything else in that row swaps as a server comes up — Run gives way to
+   * Open localhost, Restart and Stop. This one must not move with them: a
+   * button that lands somewhere else because something unrelated happened is
+   * one people stop aiming at.
+   *
+   * So the run is actually driven here rather than asserted about at rest. A
+   * version of this test that only looked at the idle row proved the editor was
+   * first once, which is not the claim — the claim is that it stays first.
+   */
+  it('keeps the editor first among the controls as the run replaces them', async () => {
+    renderPanel({ workspaces: [anna], activeWorkspaceId: anna.id, scriptPaths: SCRIPTS })
+    await userEvent.click(scriptsTab())
+
+    const row = screen.getByRole('button', { name: "Edit this project's scripts" }).parentElement
+    if (!row) throw new Error('the header drew no row')
+
+    const first = (): HTMLElement => {
+      const [control] = within(row).getAllByRole('button')
+      if (!control) throw new Error('the header drew no controls')
+      return control
+    }
+
+    expect(first()).toHaveAccessibleName("Edit this project's scripts")
+    expect(within(row).getByRole('button', { name: 'Run' })).toBeInTheDocument()
+
+    await userEvent.click(screen.getByRole('button', { name: 'Run' }))
+    await sessionsOpened(1)
+    processExits(1)
+    await sessionsOpened(2)
+
+    // The row has genuinely turned over — Run is gone and Stop is in its place.
+    expect(within(row).queryByRole('button', { name: 'Run' })).not.toBeInTheDocument()
+    expect(within(row).getByRole('button', { name: 'Stop' })).toBeInTheDocument()
+    expect(first()).toHaveAccessibleName("Edit this project's scripts")
+  })
+
+  /*
    * The whole point of the tab in one control.
    *
    * The first thing anybody does with a new workspace is these two steps in

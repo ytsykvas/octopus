@@ -178,6 +178,7 @@ export const uk: Translation = {
     foldBuild: 'Згорнути білд',
     unfoldBuild: 'Показати білд',
     edit: 'Написати скрипт',
+    editScripts: 'Редагувати скрипти цього проєкту',
     env: 'Env',
     editEnv: 'Змінні…',
     showEnv: 'Env цього воркспейсу',
