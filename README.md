@@ -12,6 +12,12 @@ dedicated port.
 [![licence: MIT](https://img.shields.io/badge/licence-MIT-blue.svg)](LICENSE)
 ![macOS, Apple Silicon](https://img.shields.io/badge/macOS-Apple%20Silicon-111111)
 
+Built by **Yurii Tsykvas** — say hello:
+
+[![Telegram](https://img.shields.io/badge/Telegram-@tsykvas-26A5E4?logo=telegram&logoColor=white)](https://t.me/tsykvas)
+[![WhatsApp](https://img.shields.io/badge/WhatsApp-message-25D366?logo=whatsapp&logoColor=white)](https://wa.me/qr/BIZ5LIYDL3THA1)
+[![LinkedIn](https://img.shields.io/badge/LinkedIn-tsykvas-0A66C2?logo=linkedin&logoColor=white)](https://www.linkedin.com/in/tsykvas)
+
 </div>
 
 Instead of waiting for one task to finish, you start several at once. They never
@@ -187,6 +193,18 @@ identified but not done is written down one file at a time in
 
 Pull requests are welcome. [CONTRIBUTING.md](CONTRIBUTING.md) covers the gate
 every change has to pass and the conventions the repository keeps.
+
+## Author
+
+**Yurii Tsykvas** — happy to hear from you about this or anything near it.
+
+- Telegram — [@tsykvas](https://t.me/tsykvas)
+- WhatsApp — [message](https://wa.me/qr/BIZ5LIYDL3THA1)
+- LinkedIn — [in/tsykvas](https://www.linkedin.com/in/tsykvas)
+
+Bugs and feature requests are better as
+[issues](https://github.com/ytsykvas/octopus/issues) than as messages: they stay
+searchable for whoever hits the same thing next.
 
 ## Licence
 

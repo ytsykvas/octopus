@@ -71,7 +71,10 @@
     "vite": "^8.2.1",
     "vitest": "^4.1.10"
   },
-  "author": "Yurii Tsykvas",
+  "author": {
+    "name": "Yurii Tsykvas",
+    "url": "https://www.linkedin.com/in/tsykvas"
+  },
   "license": "MIT",
   "repository": {
     "type": "git",
