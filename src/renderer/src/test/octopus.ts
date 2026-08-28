@@ -105,6 +105,7 @@ export function installOctopusStub(): Api {
       // one looks like for the first minute of its life.
       pullRequestDetail: vi.fn(() => ok(detailFixture())),
       mergePullRequest: vi.fn(() => ok(undefined)),
+      closePullRequest: vi.fn(() => ok(undefined)),
       instruction: vi.fn(() => ok('Describe what changed and why.')),
       prepare: vi.fn(() => ok([])),
       env: vi.fn(() => ok('')),

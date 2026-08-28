@@ -74,6 +74,7 @@ import {
   type GhExec,
   ghIn,
   type MergeMethod,
+  closePullRequest,
   mergePullRequest,
   type NewPullRequest,
   type PullRequestView,
@@ -451,6 +452,9 @@ export interface OctopusService {
 
   /** Merges it. Answers with nothing — see `mergePullRequest` for why. */
   mergePullRequest(workspaceId: string, number: number, method: MergeMethod): Promise<void>
+
+  /** Closes it without merging. The branch is left alone. */
+  closePullRequest(workspaceId: string, number: number): Promise<void>
 
   /**
    * Every branch of a project that has a request, in one call.
@@ -1833,6 +1837,11 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
     mergePullRequest(workspaceId, number, method) {
       const workspace = requireWorkspace(workspaceId)
       return mergePullRequest(number, method, makeGh(workspace.path))
+    },
+
+    closePullRequest(workspaceId, number) {
+      const workspace = requireWorkspace(workspaceId)
+      return closePullRequest(number, makeGh(workspace.path))
     },
 
     readBranchRequests(projectId) {

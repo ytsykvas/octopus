@@ -376,6 +376,10 @@ export function registerIpc(
       )
   )
 
+  host.handle('workspaces:closePullRequest', (_event, workspaceId: string, number: unknown) =>
+    attempt(() => service.closePullRequest(workspaceId, PullRequestNumberSchema.parse(number)))
+  )
+
   host.handle('projects:pullRequests', (_event, projectId: string) =>
     attempt(() => service.readBranchRequests(projectId))
   )

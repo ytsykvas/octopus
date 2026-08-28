@@ -14,6 +14,7 @@ import {
   createPullRequest,
   type GhExec,
   ghIn,
+  closePullRequest,
   mergePullRequest,
   NewPullRequestSchema,
   readBranchRequests,
@@ -602,6 +603,40 @@ describe('merging one', () => {
     await expect(mergePullRequest(7, 'merge', gh)).rejects.toMatchObject({
       code: 'mergeFailed',
       params: { number: '7' }
+    })
+  })
+})
+
+describe('closing one', () => {
+  it('closes by number', async () => {
+    const { gh, calls } = fakeGh({ close: '' })
+
+    await closePullRequest(7, gh)
+
+    expect(calls[0]).toEqual(['pr', 'close', '7'])
+  })
+
+  /*
+   * Never `--delete-branch`, for the reason merging does not: a worktree is
+   * checked out on it. What happens to a workspace's branch is decided when
+   * the workspace is removed, by somebody who was shown what it costs.
+   */
+  it('leaves the branch alone', async () => {
+    const { gh, calls } = fakeGh({ close: '' })
+
+    await closePullRequest(7, gh)
+
+    expect(calls[0]).not.toContain('--delete-branch')
+  })
+
+  it('carries what gh said about refusing', async () => {
+    const { gh } = fakeGh({
+      close: Object.assign(new Error('failed'), { stderr: 'could not close: already merged' })
+    })
+
+    await expect(closePullRequest(7, gh)).rejects.toMatchObject({
+      code: 'closeFailed',
+      params: { number: '7', reason: 'could not close: already merged' }
     })
   })
 })

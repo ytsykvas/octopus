@@ -345,6 +345,12 @@ const api = {
         Result<void>
       >,
 
+    /** Closes it without merging, and leaves the branch where it is. */
+    closePullRequest: (workspaceId: string, number: number): Promise<Result<void>> =>
+      ipcRenderer.invoke('workspaces:closePullRequest', workspaceId, number) as Promise<
+        Result<void>
+      >,
+
     /** The instruction this workspace would send: its project's, or the global one. */
     instruction: (workspaceId: string, kind: InstructionKind): Promise<Result<string>> =>
       ipcRenderer.invoke('instructions:effective', workspaceId, kind) as Promise<Result<string>>,

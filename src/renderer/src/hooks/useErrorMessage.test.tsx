@@ -35,7 +35,8 @@ const CODES: readonly {
   { code: 'forkFailed' },
   { code: 'nothingToCommit' },
   { code: 'commitFailed' },
-  { code: 'mergeFailed', parameter: ['number', '812'] }
+  { code: 'mergeFailed', parameter: ['number', '812'] },
+  { code: 'closeFailed', parameter: ['number', '812'] }
 ]
 
 const WITH_PARAMETER = CODES.filter((entry) => entry.parameter !== undefined)

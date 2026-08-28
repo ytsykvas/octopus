@@ -205,6 +205,11 @@ describe('channel names', () => {
       'workspaces:pullRequestDetail'
     ],
     [
+      'workspaces.closePullRequest',
+      () => method('workspaces', 'closePullRequest')('w' as never, 7 as never),
+      'workspaces:closePullRequest'
+    ],
+    [
       'workspaces.mergePullRequest',
       () => method('workspaces', 'mergePullRequest')('w' as never, 7 as never, 'squash' as never),
       'workspaces:mergePullRequest'
