@@ -17,14 +17,15 @@ export interface PullRequestController {
   /** True while the agent is writing a title and a description. */
   readonly drafting: boolean
   /**
-   * Why the agent could not be asked, if it could not.
+   * Why the last thing asked for did not happen — drafting or opening.
    *
    * Separate from `error` on purpose. That one blanks the pane, which is right
-   * when the branch itself could not be read — nothing left on it is true. A
-   * draft failing changes nothing about the branch, and blanking the form would
-   * throw away whatever the user had already typed into it.
+   * only when the branch itself could not be read: nothing left on it is true.
+   * Everything else leaves the form standing. Opening once used `error`, and a
+   * request refused for having no commits took the agent's title and
+   * description down with the form that held them.
    */
-  readonly draftError: string | null
+  readonly actionError: string | null
   /**
    * Asks the agent for a title and a description. Opens nothing.
    *
@@ -58,7 +59,7 @@ export function usePullRequest(
   const [error, setError] = useState<string | null>(null)
   const [creating, setCreating] = useState(false)
   const [drafting, setDrafting] = useState(false)
-  const [draftError, setDraftError] = useState<string | null>(null)
+  const [actionError, setActionError] = useState<string | null>(null)
 
   /*
    * The workspace the two above describe.
@@ -124,11 +125,12 @@ export function usePullRequest(
       if (workspaceId === null) return null
 
       setCreating(true)
+      setActionError(null)
       const result = await window.octopus.workspaces.createPullRequest(workspaceId, draft)
       setCreating(false)
 
       if (!result.ok) {
-        setError(describeFailure(result))
+        setActionError(describeFailure(result))
         return null
       }
 
@@ -147,12 +149,12 @@ export function usePullRequest(
     if (workspaceId === null) return null
 
     setDrafting(true)
-    setDraftError(null)
+    setActionError(null)
     const result = await window.octopus.workspaces.draftPullRequest(workspaceId)
     setDrafting(false)
 
     if (!result.ok) {
-      setDraftError(describeFailure(result))
+      setActionError(describeFailure(result))
       return null
     }
 
@@ -172,7 +174,7 @@ export function usePullRequest(
     creating,
     create,
     drafting,
-    draftError,
+    actionError,
     draft,
     refresh
   }

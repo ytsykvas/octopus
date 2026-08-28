@@ -14,8 +14,8 @@ interface NewPullRequestFormProps {
   readonly drafting: boolean
   /** Asks the agent for a title and a description. Null when it could not. */
   readonly onDraft: () => Promise<DraftedPullRequest | null>
-  /** Why the agent could not be asked. Shown here so the form survives it. */
-  readonly draftError: string | null
+  /** Why drafting or opening failed. Shown here, so the form survives it. */
+  readonly actionError: string | null
   /** Opens the project's instructions, which is where the wording is decided. */
   readonly onEditInstructions: () => void
   /**
@@ -41,7 +41,7 @@ export function NewPullRequestForm({
   onCreate,
   drafting,
   onDraft,
-  draftError,
+  actionError,
   onEditInstructions,
   exposedEnvFile
 }: NewPullRequestFormProps): React.JSX.Element {
@@ -154,7 +154,7 @@ export function NewPullRequestForm({
 
       {/* Said where the empty fields are, not in a tooltip: this is the one
           behaviour of the form that is not visible from looking at it. */}
-      {draftError !== null && <p className="text-danger leading-relaxed">{draftError}</p>}
+      {actionError !== null && <p className="text-danger leading-relaxed">{actionError}</p>}
 
       <div className="flex flex-col items-start gap-1">
         <p className="text-ink-faint leading-relaxed">
