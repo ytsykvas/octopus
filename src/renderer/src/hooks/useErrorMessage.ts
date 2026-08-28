@@ -47,6 +47,11 @@ export function useErrorMessage(): (failure: Failure) => string {
           return t('errors.nothingToCommit')
         case 'commitFailed':
           return t('errors.commitFailed', { reason: failure.params?.reason ?? '' })
+        case 'closeFailed':
+          return t('errors.closeFailed', {
+            number: failure.params?.number ?? '',
+            reason: failure.params?.reason ?? ''
+          })
         case 'mergeFailed':
           return t('errors.mergeFailed', {
             number: failure.params?.number ?? '',

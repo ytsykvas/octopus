@@ -410,6 +410,27 @@ export async function mergePullRequest(
   }
 }
 
+/**
+ * Closes a request without merging it.
+ *
+ * Deliberately not `--delete-branch`: the branch belongs to a workspace, and
+ * what happens to a workspace's branch is decided when the workspace is
+ * removed — by somebody who was shown what it would cost.
+ *
+ * Reversible on GitHub, which is why nothing here asks twice.
+ */
+export async function closePullRequest(number: number, gh: GhExec): Promise<void> {
+  try {
+    await gh(['pr', 'close', String(number)])
+  } catch (error) {
+    throw new GitHubError(
+      'closeFailed',
+      { number: String(number), reason: reasonFrom(error) },
+      'GitHub would not close the pull request.'
+    )
+  }
+}
+
 /** The fields `gh pr view` is asked for; named once because the list is long. */
 const DETAIL_FIELDS = [
   'id',

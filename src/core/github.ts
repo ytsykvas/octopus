@@ -74,6 +74,7 @@ export type GitHubErrorCode =
   | 'pushFailed'
   | 'createFailed'
   | 'mergeFailed'
+  | 'closeFailed'
   // Asking the agent to write the title and body is on the way to a pull
   // request too, and fails in the same place as far as the reader is concerned.
   | 'draftFailed'

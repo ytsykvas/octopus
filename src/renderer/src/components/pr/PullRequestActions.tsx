@@ -7,6 +7,7 @@ import type { MergeState, PullRequestDetail } from '@core/pullRequestShapes.js'
 
 import { Button } from '../Button.js'
 import { DropdownMenu } from '../DropdownMenu.js'
+import { MERGE_METHODS } from './mergeMethods.js'
 
 /**
  * The prompts the pane can send, in the order the work happens.
@@ -25,16 +26,6 @@ const PROMPTS: readonly {
   { kind: 'addressReview', labelKey: 'pullRequest.addressReview', needsReview: true },
   { kind: 'review', labelKey: 'pullRequest.doReview', needsReview: false },
   { kind: 'multiAgentReview', labelKey: 'pullRequest.multiAgentReview', needsReview: false }
-]
-
-const METHODS: readonly {
-  readonly method: MergeMethod
-  readonly labelKey:
-    'pullRequest.methodMerge' | 'pullRequest.methodSquash' | 'pullRequest.methodRebase'
-}[] = [
-  { method: 'merge', labelKey: 'pullRequest.methodMerge' },
-  { method: 'squash', labelKey: 'pullRequest.methodSquash' },
-  { method: 'rebase', labelKey: 'pullRequest.methodRebase' }
 ]
 
 /**
@@ -73,6 +64,9 @@ interface PullRequestActionsProps {
   readonly sending: InstructionKind | null
   readonly onMerge: (method: MergeMethod) => void
   readonly merging: boolean
+  /** Closes the request without merging it. */
+  readonly onClose: () => void
+  readonly closing: boolean
   readonly onCommitAndPush: () => void
   readonly committing: boolean
 }
@@ -92,6 +86,8 @@ export function PullRequestActions({
   sending,
   onMerge,
   merging,
+  onClose,
+  closing,
   onCommitAndPush,
   committing
 }: PullRequestActionsProps): React.JSX.Element {
@@ -149,31 +145,42 @@ export function PullRequestActions({
       </div>
 
       {open && (
-        <DropdownMenu
-          align="left"
-          actions={METHODS.map(({ method, labelKey }) => ({
-            id: method,
-            label: t(labelKey),
-            onSelect: () => {
-              onMerge(method)
-            }
-          }))}
-          trigger={({ onClick, open: shown }) => (
-            <Button
-              size="sm"
-              variant="accent"
-              onClick={onClick}
-              aria-expanded={shown}
-              // A conflict and a draft are both refusals GitHub would make
-              // anyway; saying so here saves a round trip that ends in an error
-              // the pane would then have to explain.
-              disabled={merging || conflicting || detail.draft}
-            >
-              <GitMerge aria-hidden size={12} />
-              {t(merging ? 'pullRequest.merging' : 'pullRequest.merge')}
-            </Button>
-          )}
-        />
+        <div className="flex items-center gap-2">
+          <DropdownMenu
+            align="left"
+            actions={MERGE_METHODS.map(({ method, labelKey }) => ({
+              id: method,
+              label: t(labelKey),
+              onSelect: () => {
+                onMerge(method)
+              }
+            }))}
+            trigger={({ onClick, open: shown }) => (
+              <Button
+                size="sm"
+                variant="accent"
+                onClick={onClick}
+                aria-expanded={shown}
+                className="flex-1"
+                // A conflict and a draft are both refusals GitHub would make
+                // anyway; saying so here saves a round trip that ends in an
+                // error the pane would then have to explain.
+                disabled={merging || conflicting || detail.draft}
+              >
+                <GitMerge aria-hidden size={12} />
+                {t(merging ? 'pullRequest.merging' : 'pullRequest.merge')}
+              </Button>
+            )}
+          />
+
+          {/* `danger` rather than `destructive`: two filled buttons side by side
+              compete for the eye, and merging is the one that should win it.
+              Nothing asks twice — merging does not either, and closing is the
+              more reversible of the two, since GitHub reopens. */}
+          <Button size="sm" variant="danger" onClick={onClose} disabled={closing || merging}>
+            {t(closing ? 'pullRequest.closing' : 'pullRequest.close')}
+          </Button>
+        </div>
       )}
     </div>
   )

@@ -80,6 +80,7 @@ export function PullRequestPanel({
   /** Which prepared message is in flight, so its own button says so. */
   const [sending, setSending] = useState<InstructionKind | null>(null)
   const [merging, setMerging] = useState(false)
+  const [closing, setClosing] = useState(false)
   const [committing, setCommitting] = useState(false)
 
   /*
@@ -163,6 +164,25 @@ export function PullRequestPanel({
       // Read again either way. `gh` enables auto-merge instead of merging when
       // required checks have not passed, so success is not proof of a merge —
       // and a refusal it could not name is explained by the fresh state.
+      refresh()
+      detail.refresh()
+      onRequestChanged()
+    })()
+  }
+
+  /*
+   * Closing, which is the other way a request ends.
+   *
+   * The same shape as merging above, and for the same reason: reading again is
+   * what the pane believes, not what the call answered.
+   */
+  const close = (number: number): void => {
+    setClosing(true)
+    void (async () => {
+      const result = await window.octopus.workspaces.closePullRequest(workspace.id, number)
+      setClosing(false)
+      if (!result.ok) report(result)
+
       refresh()
       detail.refresh()
       onRequestChanged()
@@ -269,6 +289,10 @@ export function PullRequestPanel({
                   merge(request.number, method)
                 }}
                 merging={merging}
+                onClose={() => {
+                  close(request.number)
+                }}
+                closing={closing}
                 onCommitAndPush={() => {
                   commitAndPush(t('pullRequest.answerCommit'))
                 }}

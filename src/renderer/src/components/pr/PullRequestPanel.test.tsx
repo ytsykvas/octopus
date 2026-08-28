@@ -610,6 +610,56 @@ describe('a pull request that exists', () => {
     expect(screen.getByRole('button', { name: 'Merge' })).toBeEnabled()
   })
 
+  /*
+   * The other way a request ends. Beside merging rather than behind a menu:
+   * both are one press from the pane a person is already looking at.
+   */
+  it('closes a request without merging it', async () => {
+    const user = userEvent.setup()
+    answer(view({ request: request() }))
+    answerDetail(detail())
+    renderPanel()
+
+    await user.click(await screen.findByRole('button', { name: 'Close' }))
+
+    expect(octopus().workspaces.closePullRequest).toHaveBeenCalledWith(anna.id, 7)
+    // Nothing was merged on the way past.
+    expect(octopus().workspaces.mergePullRequest).not.toHaveBeenCalled()
+  })
+
+  // A request already settled has nothing left to do to it, closing included.
+  it('offers no way to close one that is already merged', async () => {
+    answer(view({ request: request({ state: 'merged' }) }))
+    answerDetail(detail({ state: 'merged' }))
+    renderPanel()
+
+    // The pane drew the request, and offered nothing to do to it.
+    expect(await screen.findByText('Rename the thing')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Close' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Merge' })).not.toBeInTheDocument()
+  })
+
+  it('says why GitHub would not close one', async () => {
+    const user = userEvent.setup()
+    vi.mocked(octopus().workspaces.closePullRequest).mockResolvedValue({
+      ok: false,
+      error: 'refused',
+      code: 'closeFailed',
+      params: { number: '7', reason: 'already merged' }
+    })
+    answer(view({ request: request() }))
+    answerDetail(detail())
+    // Reported upward, where the window shows failures — the same route
+    // merging takes, rather than a second place for one to appear.
+    const { onError } = renderPanel()
+
+    await user.click(await screen.findByRole('button', { name: 'Close' }))
+
+    await waitFor(() => {
+      expect(onError).toHaveBeenCalledWith(expect.stringContaining('already merged'))
+    })
+  })
+
   it('keeps a settled thread apart from an open one', async () => {
     answer(view({ request: request() }))
     answerDetail(detail({ comments: [inline({ resolved: true })] }))

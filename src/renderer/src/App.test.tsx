@@ -1683,7 +1683,98 @@ describe('App', () => {
     // The mark says the same thing the missing button does.
     expect(await screen.findByLabelText('Pull request #812 — checks passed')).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Create PR' })).not.toBeInTheDocument()
+
+    // What it offers instead: the two things a request that exists can have
+    // done to it, rather than an invitation to open a second one.
+    expect(screen.getByRole('button', { name: 'Merge' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Close' })).toBeInTheDocument()
   })
+
+  /*
+   * Finishing from the header rather than from the pane.
+   *
+   * It costs no read of its own: the number comes from the map the project
+   * already fetched for the marks on the list.
+   */
+  it('closes the open request from the header', async () => {
+    givenOpenRequest()
+    const user = await openApp()
+    await user.click(await screen.findByRole('button', { name: 'PL' }))
+    await user.click(await screen.findByText('anna'))
+
+    await user.click(await screen.findByRole('button', { name: 'Close' }))
+
+    expect(window.octopus.workspaces.closePullRequest).toHaveBeenCalledWith('planner/anna', 812)
+  })
+
+  it('merges the open request from the header, by the method chosen', async () => {
+    givenOpenRequest()
+    const user = await openApp()
+    await user.click(await screen.findByRole('button', { name: 'PL' }))
+    await user.click(await screen.findByText('anna'))
+
+    await user.click(await screen.findByRole('button', { name: 'Merge' }))
+    await user.click(await screen.findByRole('menuitem', { name: 'Squash and merge' }))
+
+    expect(window.octopus.workspaces.mergePullRequest).toHaveBeenCalledWith(
+      'planner/anna',
+      812,
+      'squash'
+    )
+  })
+
+  // A refusal from the header goes where every other failure does: the window
+  // says it, rather than the header quietly doing nothing.
+  it('says why GitHub would not close it from the header', async () => {
+    givenOpenRequest()
+    vi.mocked(window.octopus.workspaces.closePullRequest).mockResolvedValue({
+      ok: false,
+      error: 'refused',
+      code: 'closeFailed',
+      params: { number: '812', reason: 'already merged' }
+    })
+    const user = await openApp()
+    await user.click(await screen.findByRole('button', { name: 'PL' }))
+    await user.click(await screen.findByText('anna'))
+
+    await user.click(await screen.findByRole('button', { name: 'Close' }))
+
+    expect(await screen.findByText(/already merged/)).toBeInTheDocument()
+  })
+
+  // The one guard the header can make on its own: everything else is a fact
+  // the pane reads per workspace, and GitHub refuses the rest itself.
+  it('will not merge from the header while a check has failed', async () => {
+    givenOpenRequest('failed')
+    const user = await openApp()
+    await user.click(await screen.findByRole('button', { name: 'PL' }))
+    await user.click(await screen.findByText('anna'))
+
+    expect(await screen.findByRole('button', { name: 'Merge' })).toBeDisabled()
+    // Closing is still offered: a failed check is a reason to abandon it.
+    expect(screen.getByRole('button', { name: 'Close' })).toBeEnabled()
+  })
+
+  /** A project whose one workspace has a request open on GitHub. */
+  function givenOpenRequest(checks: 'passed' | 'failed' = 'passed'): void {
+    vi.mocked(window.octopus.projects.list).mockResolvedValue({ ok: true, value: [PLANNER] })
+    vi.mocked(window.octopus.workspaces.list).mockResolvedValue({
+      ok: true,
+      value: [workspaceView('anna', { ahead: 2 })]
+    })
+    vi.mocked(window.octopus.projects.pullRequests).mockResolvedValue({
+      ok: true,
+      value: [
+        {
+          branch: 'ytsykvas/anna',
+          number: 812,
+          state: 'open',
+          checks,
+          url: 'https://github.com/o/p/pull/812'
+        }
+      ]
+    })
+  }
 
   it('opens the pull request with ⌘⇧P', async () => {
     givenTwoProjects()

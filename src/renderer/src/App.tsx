@@ -2,6 +2,7 @@ import {
   CloudDownload,
   FolderOpen,
   GitBranch,
+  GitMerge,
   GitPullRequest,
   PanelRightClose,
   PanelRightOpen,
@@ -15,7 +16,11 @@ import { DEFAULT_EFFORT } from '@core/chats.js'
 import type { Config } from '@core/config.js'
 import type { ThemeName } from '@core/types.js'
 
+import type { Failure } from '../../preload/index.js'
+
 import { Button } from './components/Button.js'
+import { DropdownMenu } from './components/DropdownMenu.js'
+import { MERGE_METHODS } from './components/pr/mergeMethods.js'
 import { Chat } from './components/chat/Chat.js'
 import { RepositoryPicker } from './components/RepositoryPicker.js'
 import { Placeholder } from './components/Placeholder.js'
@@ -446,10 +451,42 @@ export function App(): React.JSX.Element {
    * An open request already there is what takes it away again — read for the
    * whole project in one call, so this costs nothing per workspace.
    */
+  /**
+   * The open request on this branch, if there is one.
+   *
+   * From the map the project read in one call, so knowing this costs nothing
+   * per workspace — which is the reason the header can act on a request at all
+   * without asking GitHub itself.
+   */
+  const openRequest =
+    selectedWorkspace === null ? undefined : branchRequests.byBranch.get(selectedWorkspace.branch)
+
   const readyForRequest =
     selectedWorkspace !== null &&
     (selectedWorkspace.changedFiles > 0 || selectedWorkspace.ahead > 0) &&
-    branchRequests.byBranch.get(selectedWorkspace.branch)?.state !== 'open'
+    openRequest?.state !== 'open'
+
+  /*
+   * Merging and closing from the header.
+   *
+   * The pane is where a request is read; this is where one is finished. Both
+   * read again afterwards, since what the pane and the marks on the list show
+   * is the next read rather than what the call answered.
+   */
+  const [finishing, setFinishing] = useState(false)
+
+  const finishRequest = (
+    run: (number: number) => Promise<{ ok: boolean }>,
+    number: number
+  ): void => {
+    setFinishing(true)
+    void (async () => {
+      const result = await run(number)
+      setFinishing(false)
+      if (!result.ok) setError(describeFailure(result as Failure))
+      branchRequests.refresh()
+    })()
+  }
 
   // What a conversation with no record of its own starts with. Read here
   // rather than in the chat: this is where the config lives, and the composer's
@@ -504,6 +541,64 @@ export function App(): React.JSX.Element {
               <GitPullRequest aria-hidden size={12} />
               {t('pullRequest.createShortcut')}
             </Button>
+          )}
+
+          {/*
+           * A request that exists is finished here rather than opened.
+           *
+           * The header cannot see conflicts or draft status — the pane reads
+           * those for the workspace showing. It can see the checks, so a failed
+           * run stops the merge here as it would there; everything else GitHub
+           * refuses on its own, and a refusal now says why.
+           */}
+          {openRequest?.state === 'open' && selectedWorkspace !== null && (
+            <>
+              <DropdownMenu
+                align="right"
+                actions={MERGE_METHODS.map(({ method, labelKey }) => ({
+                  id: method,
+                  label: t(labelKey),
+                  onSelect: () => {
+                    finishRequest(
+                      (number) =>
+                        window.octopus.workspaces.mergePullRequest(
+                          selectedWorkspace.id,
+                          number,
+                          method
+                        ),
+                      openRequest.number
+                    )
+                  }
+                }))}
+                trigger={({ onClick, open: shown }) => (
+                  <Button
+                    size="sm"
+                    variant="accent"
+                    onClick={onClick}
+                    aria-expanded={shown}
+                    disabled={finishing || openRequest.checks === 'failed'}
+                  >
+                    <GitMerge aria-hidden size={12} />
+                    {t('pullRequest.merge')}
+                  </Button>
+                )}
+              />
+
+              <Button
+                size="sm"
+                variant="danger"
+                disabled={finishing}
+                onClick={() => {
+                  finishRequest(
+                    (number) =>
+                      window.octopus.workspaces.closePullRequest(selectedWorkspace.id, number),
+                    openRequest.number
+                  )
+                }}
+              >
+                {t('pullRequest.close')}
+              </Button>
+            </>
           )}
 
           {/* One control in one place, rather than a collapse inside the pane and

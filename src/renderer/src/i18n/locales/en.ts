@@ -350,6 +350,8 @@ export const en = {
     decisionReviewRequired: 'Review required',
 
     merge: 'Merge',
+    close: 'Close',
+    closing: 'Closing…',
     merging: 'Merging…',
     methodMerge: 'Merge commit',
     methodSquash: 'Squash and merge',
@@ -820,6 +822,7 @@ export const en = {
     nothingToCommit: 'There is nothing here to commit.',
     commitFailed: 'Could not commit the changes. Git said: {{reason}}',
     mergeFailed: 'GitHub would not merge #{{number}}. It said: {{reason}}',
+    closeFailed: 'GitHub would not close #{{number}}. It said: {{reason}}',
     alreadyExists: '{{path}} already exists. Add it from disk instead.',
     branchUnmerged:
       '{{branch}} has commits that are not in the base branch. Remove it with the branch checkbox cleared, or merge it first.',

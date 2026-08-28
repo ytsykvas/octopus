@@ -300,6 +300,7 @@ describe('channel table', () => {
     'workspaces:commitAndPush',
     'workspaces:pullRequestDetail',
     'workspaces:mergePullRequest',
+    'workspaces:closePullRequest',
     'files:open',
     'chats:list',
     'chats:open',
@@ -1080,6 +1081,28 @@ describe('workspaces of a real project', () => {
     ).resolves.toMatchObject({ ok: false })
     await expect(
       invoke('workspaces:mergePullRequest', workspace.id, -1, 'merge')
+    ).resolves.toMatchObject({ ok: false })
+  })
+
+  it('closes one by number, and refuses a number that is not one', async () => {
+    const projectId = await addProject('closing')
+    const asked: string[][] = []
+    service = await useService({
+      makeGh: () => (args) => {
+        asked.push([...args])
+        return Promise.resolve('')
+      }
+    })
+    const workspace = await createWorkspace(projectId)
+
+    await expect(invoke('workspaces:closePullRequest', workspace.id, 7)).resolves.toMatchObject({
+      ok: true
+    })
+    expect(asked[0]).toEqual(['pr', 'close', '7'])
+
+    // The number becomes an argument to gh, so it is proved to be one here.
+    await expect(
+      invoke('workspaces:closePullRequest', workspace.id, 'seven')
     ).resolves.toMatchObject({ ok: false })
   })
 

@@ -295,6 +295,8 @@ export const uk: Translation = {
     decisionReviewRequired: 'Потрібне ревю',
 
     merge: 'Влити',
+    close: 'Закрити',
+    closing: 'Закриваю…',
     merging: 'Вливаю…',
     methodMerge: 'Merge-коміт',
     methodSquash: 'Squash і влити',
@@ -690,6 +692,7 @@ export const uk: Translation = {
     nothingToCommit: 'Тут немає чого комітити.',
     commitFailed: 'Не вдалося зробити коміт. Git каже: {{reason}}',
     mergeFailed: 'GitHub не влив #{{number}}. Каже: {{reason}}',
+    closeFailed: 'GitHub не закрив #{{number}}. Каже: {{reason}}',
     alreadyExists: '{{path}} уже існує. Додайте його з диска.',
     branchUnmerged:
       '{{branch}} має коміти, яких немає в базовій гілці. Зніміть прапорець видалення гілки або спершу злийте її.',
