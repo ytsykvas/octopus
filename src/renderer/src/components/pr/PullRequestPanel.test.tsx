@@ -350,6 +350,48 @@ describe('the pull request tab', () => {
     expect(onEditInstructions).toHaveBeenCalledOnce()
   })
 
+  /*
+   * The sequence that lost somebody's work, as reported.
+   *
+   * Uncommitted changes, no commit message, press Open: nothing is committed,
+   * the branch is zero commits ahead, and gh refuses it. That refusal used to
+   * blank the pane — taking with it the title and description the agent had
+   * just spent a round trip writing.
+   */
+  it('keeps the form, and what is in it, when opening fails', async () => {
+    const user = userEvent.setup()
+    vi.mocked(octopus().workspaces.createPullRequest).mockResolvedValue({
+      ok: false,
+      error: 'This branch has nothing the base branch does not.',
+      code: 'noCommits',
+      params: { base: 'main' }
+    })
+    answer(view({ dirty: true }))
+    renderPanel()
+
+    await user.click(await screen.findByRole('button', { name: 'Ask the agent to describe it' }))
+    await user.click(await screen.findByRole('button', { name: 'Open pull request' }))
+
+    expect(await screen.findByText(/nothing that main does not/)).toBeInTheDocument()
+    // The point of the test: still on screen, still filled in.
+    expect(screen.getByLabelText('Title')).toHaveValue('Written by the agent')
+    expect(screen.getByLabelText('Description')).toHaveValue('Because of this.')
+  })
+
+  // The read is the one failure that does blank it: after that, nothing left on
+  // the pane is true.
+  it('still blanks the pane when the branch itself could not be read', async () => {
+    vi.mocked(octopus().workspaces.pullRequest).mockResolvedValue({
+      ok: false,
+      error: 'gh: not logged in',
+      code: 'notConnected'
+    })
+    renderPanel()
+
+    expect(await screen.findByText(/Could not reach GitHub/)).toBeInTheDocument()
+    expect(screen.queryByLabelText('Title')).not.toBeInTheDocument()
+  })
+
   it('paints the checkbox on the input, where the class is defined', async () => {
     answer(view())
     renderPanel()
