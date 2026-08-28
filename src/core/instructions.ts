@@ -23,15 +23,16 @@ import type { ProjectId } from './types.js'
 /**
  * The prose the pull request tab can send, one kind per button.
  *
- * All five go out as ordinary user messages the reader can see in the log and
- * edit before they are ever sent (§4). That is the whole reason they are files
- * rather than strings in the app: a prompt nobody can read is a prompt nobody
- * can correct, and octopus adds nothing to the agent's context that the user
- * has not written.
+ * Every one of them goes out as an ordinary user message the reader can see in
+ * the log and edit before it is ever sent (§4). That is the whole reason they
+ * are files rather than strings in the app: a prompt nobody can read is a
+ * prompt nobody can correct, and octopus adds nothing to the agent's context
+ * that the user has not written.
  */
 export const InstructionKindSchema = z.enum([
   'pullRequest',
   'commitMessage',
+  'fixChecks',
   'addressReview',
   'review',
   'multiAgentReview',
@@ -86,6 +87,24 @@ the pull request pane commits it.
 - Follow whatever this repository already does. If the history is Conventional
   Commits, match it; if it is plain prose, write plain prose.
 - The subject is not a file list. What was touched is in the diff already.
+`,
+
+  fixChecks: `# Fixing a failing check
+
+A check on this pull request has failed. Find out why before changing anything.
+
+- Read the log first. Each failing check is named below with a link to its job,
+  and the number at the end of that link is what
+  \`gh run view --job <id> --log-failed\` takes.
+- Find the failing test or step in this repository and read it, along with the
+  code it exercises. A log line names a symptom; the test says what was
+  expected.
+- Fix the cause. A test weakened, skipped or deleted to make a run green is a
+  failure hidden rather than fixed — if the test itself is wrong, say so rather
+  than quietly changing it.
+- Run the same thing locally before pushing. The command the workflow runs is in
+  the workflow file, and a round trip through CI costs minutes.
+- Commit and push, so the checks run again on the fix.
 `,
 
   addressReview: `# Answering a review
@@ -145,7 +164,7 @@ This branch conflicts with its base. Merge the base in and settle it.
 /**
  * Where each kind is written, at both scopes.
  *
- * A `Record` keyed by the kind rather than a function per file, so a sixth kind
+ * A `Record` keyed by the kind rather than a function per file, so a new kind
  * arriving without a home is a compile error here — which is also what makes
  * the uniqueness test worth having: totality is checked by the compiler, and
  * two kinds pointing at one file is not.
@@ -153,6 +172,7 @@ This branch conflicts with its base. Merge the base in and settle it.
 const FILES: Record<InstructionKind, string> = {
   pullRequest: 'pull-request.md',
   commitMessage: 'commit-message.md',
+  fixChecks: 'fix-checks.md',
   addressReview: 'address-review.md',
   review: 'review.md',
   multiAgentReview: 'multi-agent-review.md',

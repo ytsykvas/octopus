@@ -410,11 +410,11 @@ directory are that project's, and they win where they exist.
 `effectiveInstruction` in `instructions.ts` is the one place that order is
 written down.
 
-There are five, one per button on the pull request tab: `pull-request.md`,
-`address-review.md`, `review.md`, `multi-agent-review.md` and
-`resolve-conflicts.md`. Which kind lives in which file is a
-`Record<InstructionKind, string>` in `instructions.ts`, so a sixth without a
-home is a compile error — and a test iterates the enum to catch the thing the
+There is one per button on the pull request tab — `pull-request.md`,
+`commit-message.md`, `fix-checks.md`, `address-review.md`, `review.md`,
+`multi-agent-review.md` and `resolve-conflicts.md`. Which kind lives in which
+file is a `Record<InstructionKind, string>` in `instructions.ts`, so a new one
+without a home is a compile error — and a test iterates the enum to catch the thing the
 compiler cannot see, two kinds pointing at one file.
 
 An **empty** project file counts as an answer. Emptying it says this project

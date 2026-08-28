@@ -240,7 +240,7 @@ export const en = {
   },
 
   /*
-   * The five pieces of prose the pull request tab can send.
+   * Every piece of prose the pull request tab can send.
    *
    * Named for what the button does rather than for the file, because the button
    * is where they are met. The scope sentence is appended to each hint by
@@ -255,6 +255,9 @@ export const en = {
     commitMessage: 'Commit messages',
     commitMessageHint:
       'Sent with the one above, when the pull request pane commits this workspace and nobody wrote a message for it.',
+    fixChecks: 'Fixing a failing check',
+    fixChecksHint:
+      'Sent when a check on the pull request has failed and you ask the agent to put it right.',
     addressReview: 'Answering a review',
     addressReviewHint: 'Sent when you hand the review on a pull request to the agent to deal with.',
     review: 'Reviewing a change',
@@ -363,8 +366,9 @@ export const en = {
     mergeUnstable: 'A check has not passed, but merging is still allowed.',
     mergeDraft: 'A draft cannot be merged. Mark it ready on GitHub first.',
 
-    /* The four prepared messages, named for what pressing them does. Each sends
-       the project's instruction as a visible message in the conversation. */
+    /* The prepared messages, named for what pressing them does. Each sends the
+       project's instruction as a visible message in the conversation. */
+    fixChecks: 'Fix the checks',
     addressReview: 'Address the review',
     doReview: 'Review it',
     multiAgentReview: 'Multi-agent review',
@@ -380,6 +384,14 @@ export const en = {
        go looking for which request is meant. Visible in the log, like the
        instruction itself (§4). */
     context: 'Pull request #{{number}} — branch {{branch}} into {{base}}\n{{url}}',
+    /* Sent with the instruction above when the checks are what is being fixed.
+       The link is the whole point of the line: the job id at the end of it is
+       what reads the log, and without it the agent is guessing at which run
+       failed. A check reported through the older status API can arrive without
+       one, so there is a spelling for that too. */
+    failedChecks: 'Checks that failed:\n{{list}}',
+    failedCheck: '- {{name}} — {{url}}',
+    failedCheckNoLink: '- {{name}}',
     /* The line above a remark carried into the composer from the review. */
     quoteIntro: 'From the review on this pull request:'
   },

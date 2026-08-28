@@ -8,8 +8,8 @@ import { FileEditor } from './FileEditor.js'
  * Every instruction the pull request tab can send, in the order its buttons
  * offer them.
  *
- * A table rather than five editors written out, because there are two dialogs
- * showing the same five and a sixth kind would otherwise be two more editors to
+ * A table rather than the editors written out, because there are two dialogs
+ * showing the same set and a new kind would otherwise be two more editors to
  * remember. The keys are literals so `t()` still checks them.
  */
 const KINDS: readonly {
@@ -17,6 +17,7 @@ const KINDS: readonly {
   readonly labelKey:
     | 'instructions.pullRequest'
     | 'instructions.commitMessage'
+    | 'instructions.fixChecks'
     | 'instructions.addressReview'
     | 'instructions.review'
     | 'instructions.multiAgentReview'
@@ -24,6 +25,7 @@ const KINDS: readonly {
   readonly hintKey:
     | 'instructions.pullRequestHint'
     | 'instructions.commitMessageHint'
+    | 'instructions.fixChecksHint'
     | 'instructions.addressReviewHint'
     | 'instructions.reviewHint'
     | 'instructions.multiAgentReviewHint'
@@ -39,6 +41,7 @@ const KINDS: readonly {
     labelKey: 'instructions.commitMessage',
     hintKey: 'instructions.commitMessageHint'
   },
+  { kind: 'fixChecks', labelKey: 'instructions.fixChecks', hintKey: 'instructions.fixChecksHint' },
   {
     kind: 'addressReview',
     labelKey: 'instructions.addressReview',
@@ -58,7 +61,7 @@ const KINDS: readonly {
 ]
 
 /**
- * Shorter than one editor's default, because there are six of them.
+ * Shorter than one editor's default, because there are several of them.
  *
  * Sixteen rows each is a page nobody scrolls to the end of, and an instruction
  * is read to be corrected rather than written from scratch here.
@@ -66,7 +69,7 @@ const KINDS: readonly {
 const ROWS = 10
 
 /**
- * The five instructions, at whichever scope this dialog is about.
+ * Every instruction, at whichever scope this dialog is about.
  *
  * `null` is the installation's own; a project id is that project's override.
  * One component for both, so the two dialogs cannot drift into disagreeing

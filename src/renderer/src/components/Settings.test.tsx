@@ -103,7 +103,7 @@ describe('the instruction every project falls back to', () => {
   })
 
   /*
-   * Six pieces of prose the app can send on the user's behalf,
+   * Every piece of prose the app can send on the user's behalf,
    * and §4 is that none of them reaches the agent without the reader being able
    * to see and change it first. One editor per kind is what makes that true.
    */
@@ -116,6 +116,7 @@ describe('the instruction every project falls back to', () => {
     for (const label of [
       'Pull request descriptions',
       'Commit messages',
+      'Fixing a failing check',
       'Answering a review',
       'Reviewing a change',
       'A review from several angles',
@@ -129,6 +130,7 @@ describe('the instruction every project falls back to', () => {
     ).toEqual([
       'pullRequest',
       'commitMessage',
+      'fixChecks',
       'addressReview',
       'review',
       'multiAgentReview',

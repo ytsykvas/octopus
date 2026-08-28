@@ -223,7 +223,7 @@ node node_modules/electron/install.js
 Monaco diff, notifications, Linux builds, auth service.
 
 Pull requests are not: the right pane runs the whole loop through `gh` —
-committing, opening, the checks, the review, five prepared prompts and merging
+committing, opening, the checks, the review, six prepared prompts and merging
 (§12.4 of docs/PROJECT.md). What is still ahead is replying to a review thread
 from here, which `docs/tasks/` holds.
 

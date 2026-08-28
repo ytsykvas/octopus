@@ -10,22 +10,30 @@ import { DropdownMenu } from '../DropdownMenu.js'
 import { MERGE_METHODS } from './mergeMethods.js'
 
 /**
- * The prompts the pane can send, in the order the work happens.
+ * The prompts the pane can send, the conditional ones first.
+ *
+ * A word per row rather than a flag per condition: two booleans would allow a
+ * row that is both, which is a state nothing here means, and a third condition
+ * would make it three flags and eight states for four rows.
  *
  * `resolveConflicts` is not here: it appears only against a conflict, beside
  * the sentence saying there is one, where it reads as the answer to that rather
- * than as a fifth thing one might do.
+ * than as one more thing one might do.
  */
 const PROMPTS: readonly {
   readonly kind: InstructionKind
   readonly labelKey:
-    'pullRequest.addressReview' | 'pullRequest.doReview' | 'pullRequest.multiAgentReview'
-  /** Whether this one only makes sense once somebody has said something. */
-  readonly needsReview: boolean
+    | 'pullRequest.fixChecks'
+    | 'pullRequest.addressReview'
+    | 'pullRequest.doReview'
+    | 'pullRequest.multiAgentReview'
+  /** What has to be true of the request before this one is worth offering. */
+  readonly when: 'always' | 'failed' | 'reviewed'
 }[] = [
-  { kind: 'addressReview', labelKey: 'pullRequest.addressReview', needsReview: true },
-  { kind: 'review', labelKey: 'pullRequest.doReview', needsReview: false },
-  { kind: 'multiAgentReview', labelKey: 'pullRequest.multiAgentReview', needsReview: false }
+  { kind: 'fixChecks', labelKey: 'pullRequest.fixChecks', when: 'failed' },
+  { kind: 'addressReview', labelKey: 'pullRequest.addressReview', when: 'reviewed' },
+  { kind: 'review', labelKey: 'pullRequest.doReview', when: 'always' },
+  { kind: 'multiAgentReview', labelKey: 'pullRequest.multiAgentReview', when: 'always' }
 ]
 
 /**
@@ -74,7 +82,7 @@ interface PullRequestActionsProps {
 /**
  * Everything the pane can do about a request that exists.
  *
- * Each of the four prompts sends the project's own instruction as an ordinary
+ * Each prompt sends the project's own instruction as an ordinary
  * message in the conversation — visible in the log, editable before it is ever
  * pressed, and nothing the app has written itself (§4).
  */
@@ -94,8 +102,16 @@ export function PullRequestActions({
   const { t } = useTranslation()
 
   const conflicting = detail.mergeable === 'conflicting'
-  const reviewed = detail.decision === 'changesRequested' || hasRemarks(detail)
   const note = MERGE_NOTES[detail.mergeState]
+
+  /* Looked up rather than tested at each row: a table keyed by the same word the
+     row carries cannot disagree with it, and there is no chain of conditions for
+     a fourth case to be left out of. */
+  const offered: Record<'always' | 'failed' | 'reviewed', boolean> = {
+    always: true,
+    failed: detail.checks.some((check) => check.state === 'failed'),
+    reviewed: detail.decision === 'changesRequested' || hasRemarks(detail)
+  }
 
   /* A request that is merged or closed has nothing left to do to it. The
      prompts would still run, but "review it" on a merged branch is a reading of
@@ -123,7 +139,7 @@ export function PullRequestActions({
         )}
 
         {open &&
-          PROMPTS.filter((prompt) => !prompt.needsReview || reviewed).map((prompt) => (
+          PROMPTS.filter((prompt) => offered[prompt.when]).map((prompt) => (
             <PromptButton
               key={prompt.kind}
               kind={prompt.kind}
