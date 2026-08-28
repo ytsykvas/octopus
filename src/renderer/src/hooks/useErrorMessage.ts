@@ -37,15 +37,21 @@ export function useErrorMessage(): (failure: Failure) => string {
         case 'noCommits':
           return t('errors.noCommits', { base: failure.params?.base ?? '' })
         case 'pushFailed':
-          return t('errors.pushFailed', { branch: failure.params?.branch ?? '' })
+          return t('errors.pushFailed', {
+            branch: failure.params?.branch ?? '',
+            reason: failure.params?.reason ?? ''
+          })
         case 'createFailed':
-          return t('errors.createFailed')
+          return t('errors.createFailed', { reason: failure.params?.reason ?? '' })
         case 'nothingToCommit':
           return t('errors.nothingToCommit')
         case 'commitFailed':
-          return t('errors.commitFailed')
+          return t('errors.commitFailed', { reason: failure.params?.reason ?? '' })
         case 'mergeFailed':
-          return t('errors.mergeFailed', { number: failure.params?.number ?? '' })
+          return t('errors.mergeFailed', {
+            number: failure.params?.number ?? '',
+            reason: failure.params?.reason ?? ''
+          })
         case 'branchUnmerged':
           return t('errors.branchUnmerged', { branch: failure.params?.branch ?? '' })
         case 'branchExists':

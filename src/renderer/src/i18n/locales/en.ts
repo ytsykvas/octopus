@@ -815,12 +815,11 @@ export const en = {
     listFailed: 'GitHub returned something unexpected.',
     cloneFailed: 'Could not clone {{repository}}.',
     noCommits: 'This branch has nothing that {{base}} does not.',
-    pushFailed: 'Could not push {{branch}} to GitHub.',
-    createFailed: 'Could not open the pull request. GitHub refused it.',
+    pushFailed: 'Could not push {{branch}}. Git said: {{reason}}',
+    createFailed: 'Could not open the pull request. GitHub said: {{reason}}',
     nothingToCommit: 'There is nothing here to commit.',
-    commitFailed: 'Could not commit the changes. Check the terminal for what git said.',
-    mergeFailed:
-      'GitHub would not merge #{{number}}. Its checks, its reviews or a conflict are in the way — the panel says which once it has read it again.',
+    commitFailed: 'Could not commit the changes. Git said: {{reason}}',
+    mergeFailed: 'GitHub would not merge #{{number}}. It said: {{reason}}',
     alreadyExists: '{{path}} already exists. Add it from disk instead.',
     branchUnmerged:
       '{{branch}} has commits that are not in the base branch. Remove it with the branch checkbox cleared, or merge it first.',
