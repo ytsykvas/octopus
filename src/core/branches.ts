@@ -10,13 +10,20 @@
 const DEFAULT_REMOTE_PREFIX = 'origin/'
 
 /**
- * Drops the remote prefix for display.
+ * Drops the remote prefix.
  *
- * Every entry in a branch list carries the same `origin/`, so it says nothing
- * while pushing the part that differs off the end of a narrow pane.
+ * For display: every entry in a branch list carries the same `origin/`, so it
+ * says nothing while pushing the part that differs off the end of a narrow
+ * pane.
+ *
+ * And for `gh`, which is the same transformation for a different reason.
+ * `origin/develop` is a local name for a remote-tracking ref; the branch on
+ * GitHub is `develop`, and a request opened against the longer name is
+ * refused with "Base ref must be a branch".
  *
  * Only `origin/` goes, not any first segment: a repository with no remote
- * falls back to local branches, and `feature/x` must not be shown as `x`.
+ * falls back to local branches, and `feature/x` must not be shown — or sent —
+ * as `x`.
  */
 export function shortBranchName(branch: string): string {
   return branch.startsWith(DEFAULT_REMOTE_PREFIX)
