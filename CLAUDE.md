@@ -158,9 +158,12 @@ gh pr create --fill
 A pull request merges once CI is green. Force pushes to `main` and deleting it
 are blocked outright.
 
-The protection does not cover administrators, which is the escape hatch for a
-`main` that is broken and cannot be fixed through a pipeline that is also
-broken. Reaching for it in any other situation defeats the point of having it.
+**Administrators are not exempt.** They were at first, and the very next push
+went through carrying `Bypassed rule violations` — a protection the only person
+who commits here can step over is decoration. If `main` is ever broken so badly
+that it cannot be fixed through a pipeline that is also broken, turn the
+protection off deliberately in Settings and back on afterwards. That is visible;
+a silent bypass on every push is not.
 
 ## Design
 
