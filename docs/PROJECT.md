@@ -196,7 +196,7 @@ for shared state reads the line, adds a store, and the application has two ways
 of doing one thing. If the prop threading ever stops being shallow, that is the
 moment to reconsider — not before.
 
-**Native modules.** Stage 1 started without them to avoid `electron-rebuild`, and that held until the embedded terminal arrived: `node-pty` is native and has to be rebuilt against Electron's ABI. A `postinstall` script does it automatically, so `npm install` remains a single step.
+**Native modules.** Stage 1 started without them to avoid a build step, and that held until the embedded terminal arrived: `node-pty` is native. A `postinstall` script runs `electron-builder install-app-deps` — the same tool that packages the app, so the two cannot disagree — and `npm install` remains a single step. The binding is built through Node-API rather than against V8 directly, so it is not tied to Electron's ABI: the same binary loads under plain Node and under Electron.
 
 State is JSON; `node:sqlite` is available (verified on Node 26) and will be added when chat history needs searching.
 

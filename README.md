@@ -72,11 +72,11 @@ not downloaded during install:
 node node_modules/electron/install.js
 ```
 
-If a terminal will not open and the error mentions `NODE_MODULE_VERSION`, the
-native rebuild of `node-pty` did not run:
+If a terminal will not open, the native build of `node-pty` is the first thing
+to suspect:
 
 ```bash
-npx electron-rebuild -f -w node-pty
+npx electron-builder install-app-deps
 ```
 
 ## Where things are kept

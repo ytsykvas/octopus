@@ -23,6 +23,11 @@ Apple Silicon only, by decision — an Intel build would need the `darwin-x64`
 Claude Code binary fetched as well, since npm installs only the one matching
 the machine doing the building.
 
+The log shows `node-pty` being rebuilt on the way past. That is deliberate:
+packaging targets the output architecture, which is not necessarily the one
+`postinstall` built for. Both go through electron-builder — `postinstall` is
+`electron-builder install-app-deps` — so the two cannot disagree about the ABI.
+
 ## What ships inside
 
 Two things in the bundle are executables rather than JavaScript, and both are

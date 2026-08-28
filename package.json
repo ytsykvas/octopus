@@ -25,7 +25,7 @@
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage && vitest run --config vitest.renderer.config.ts --coverage",
     "check": "npm run format:check && npm run lint && npm run typecheck && npm run test:coverage",
-    "postinstall": "electron-rebuild -f -w node-pty"
+    "postinstall": "electron-builder install-app-deps"
   },
   "dependencies": {
     "@anthropic-ai/claude-agent-sdk": "^0.3.224",
@@ -47,7 +47,6 @@
     "zod": "^4.4.3"
   },
   "devDependencies": {
-    "@electron/rebuild": "^4.2.0",
     "@eslint/js": "^10.0.1",
     "@tailwindcss/vite": "^4.3.3",
     "@testing-library/jest-dom": "^7.0.0",

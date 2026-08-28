@@ -207,11 +207,17 @@ from here, which `docs/tasks/` holds.
 
 ## Native modules
 
-`node-pty` is native and must match Electron's ABI. `postinstall` runs
-`electron-rebuild` automatically, so `npm install` is still one step — but if
-the terminal fails to open with a `NODE_MODULE_VERSION` error, that rebuild is
-what did not run:
+`node-pty` is native, and `postinstall` builds it with
+`electron-builder install-app-deps` — the same tool that packages the app, so
+installing and packaging cannot disagree about the binding. `npm install` stays
+one step. If the terminal will not open, that build is the first thing to
+suspect:
 
 ```bash
-npx electron-rebuild -f -w node-pty
+npx electron-builder install-app-deps
 ```
+
+It is built through Node-API, so the binary is **not** tied to Electron's ABI —
+the same file loads in plain Node and in Electron, verified in both. Do not
+reach for the ABI explanation when the terminal misbehaves; it is almost
+certainly something else.
