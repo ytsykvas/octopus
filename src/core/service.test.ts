@@ -298,6 +298,74 @@ describe('workspaces', () => {
     })
   })
 
+  /*
+   * Reported: a workspace whose request had been merged could not be removed
+   * with its branch. A squash merge replaces the commits, so git sees none of
+   * them in the base — and squash is one of the three the merge button offers,
+   * so the app was refusing to clean up after itself.
+   */
+  it("removes a squash-merged workspace with its branch, on GitHub's word", async () => {
+    const repo = join(dir, 'planner')
+    await initRepo(repo)
+
+    const service = await createService({
+      ...paths(dir),
+      makeGh: () => (args) =>
+        Promise.resolve(
+          args[1] === 'list'
+            ? JSON.stringify([
+                { number: 7, state: 'MERGED', title: 'Done', url: 'https://x/pull/7' }
+              ])
+            : '[]'
+        )
+    })
+    const project = await service.addProjectFromPath(repo)
+    const workspace = await service.createWorkspaceIn(project.id)
+
+    const run = promisify(execFile)
+    const inside = (args: string[]): Promise<string> =>
+      run('git', args, { cwd: workspace.path }).then(({ stdout }) => stdout)
+    const outside = (args: string[]): Promise<string> =>
+      run('git', args, { cwd: repo }).then(({ stdout }) => stdout)
+
+    await writeFile(join(workspace.path, 'work.txt'), 'work\n', 'utf8')
+    await inside(['add', '.'])
+    await inside(['commit', '-q', '-m', 'work'])
+    // What a squash merge leaves behind: the content in main, the commit not.
+    await outside(['merge', '--squash', workspace.branch])
+    await outside(['commit', '-q', '-m', 'squashed'])
+
+    await service.removeWorkspaceById(workspace.id, { deleteBranch: true })
+
+    await expect(outside(['branch', '--list', workspace.branch])).resolves.toBe('')
+  })
+
+  // gh missing or signed out leaves the git answer as the only one there is,
+  // and it still protects the branch.
+  it('keeps refusing when GitHub cannot be asked', async () => {
+    const repo = join(dir, 'planner')
+    await initRepo(repo)
+
+    const service = await createService({
+      ...paths(dir),
+      makeGh: () => () => Promise.reject(new Error('gh: not logged in'))
+    })
+    const project = await service.addProjectFromPath(repo)
+    const workspace = await service.createWorkspaceIn(project.id)
+
+    const run = promisify(execFile)
+    const inside = (args: string[]): Promise<string> =>
+      run('git', args, { cwd: workspace.path }).then(({ stdout }) => stdout)
+
+    await writeFile(join(workspace.path, 'work.txt'), 'work\n', 'utf8')
+    await inside(['add', '.'])
+    await inside(['commit', '-q', '-m', 'never merged'])
+
+    await expect(
+      service.removeWorkspaceById(workspace.id, { deleteBranch: true })
+    ).rejects.toMatchObject({ code: 'branchUnmerged' })
+  })
+
   // Nothing to commit means nothing to ask about: a commit message for a clean
   // worktree is an answer with nowhere to go.
   it('asks for no commit message when the worktree is clean', async () => {

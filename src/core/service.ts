@@ -1710,7 +1710,35 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
         { repository: makeExec(project.repoPath), workspace: makeExec(workspace.path) },
         // The base branch travels with the request so "is this merged" can be
         // answered before the worktree is destroyed rather than after.
-        { ...options, baseBranch: project.baseBranch }
+        {
+          ...options,
+          baseBranch: project.baseBranch,
+          /*
+           * What git cannot see.
+           *
+           * A squash or a rebase merge rewrites the commits, so none of them is
+           * an ancestor of the base afterwards and git reports the branch as
+           * unmerged — including when it was this app's own merge button that
+           * landed it. GitHub knows better, and is asked only after git has
+           * said no.
+           *
+           * A failure here is not a failure to remove: gh may be missing or
+           * signed out, and then the git answer is the only one there is.
+           */
+          mergedRemotely: async () => {
+            try {
+              const view = await readPullRequest(
+                workspace.branch,
+                project.baseBranch,
+                makeGh(workspace.path),
+                makeExec(workspace.path)
+              )
+              return view.request?.state === 'merged'
+            } catch {
+              return false
+            }
+          }
+        }
       )
 
       await commit((current) => removeWorkspaceRecord(current, workspaceId))

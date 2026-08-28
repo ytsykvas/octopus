@@ -288,6 +288,18 @@ export interface RemoveOptions {
    * does — there, the user has already agreed to lose the lot.
    */
   readonly baseBranch?: string
+  /**
+   * A second opinion on "merged", asked only when git says no.
+   *
+   * git answers whether these commits are literally ancestors of the base,
+   * which is false after a squash or a rebase — and those are two of the three
+   * ways this app's own merge button offers to land a branch. So a request
+   * merged through octopus would leave a branch octopus then refused to delete.
+   *
+   * Optional: without it the git answer stands, which is what removing a
+   * project does and what a repository with no remote gets.
+   */
+  readonly mergedRemotely?: () => Promise<boolean>
 }
 
 /**
@@ -329,7 +341,11 @@ export async function removeWorkspace(
   // with half an operation: the directory deleted, the branch still there, and
   // an error about the branch.
   if (options.deleteBranch === true && !force && options.baseBranch !== undefined) {
-    const merged = await isBranchMerged(exec.repository, workspace.branch, options.baseBranch)
+    // Local first: it costs nothing and answers for an ordinary merge. The
+    // remote is asked only when that says no, so the common path stays offline.
+    const merged =
+      (await isBranchMerged(exec.repository, workspace.branch, options.baseBranch)) ||
+      (await (options.mergedRemotely?.() ?? Promise.resolve(false)))
 
     if (!merged) {
       throw new WorkspaceError(
