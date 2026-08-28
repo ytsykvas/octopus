@@ -10,6 +10,12 @@ concurrency:
   group: check-${{ github.ref }}
   cancel-in-progress: true
 
+# Stated here rather than left to the repository default, which is read today
+# but is a setting somebody can change without ever opening this file. This job
+# only needs to read the code: it publishes nothing and comments nowhere.
+permissions:
+  contents: read
+
 jobs:
   check:
     # macOS rather than Linux on purpose: this is a macOS-only app, and a green
