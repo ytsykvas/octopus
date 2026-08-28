@@ -1,10 +1,9 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 /**
- * `node-pty` is a native module: it spawns a real shell and is rebuilt against
- * Electron's ABI. Loading it here would test the operating system rather than
- * this class, so a stand-in records what it was asked to do and lets a test
- * drive the callbacks a real pty would fire.
+ * `node-pty` is a native module that spawns a real shell. Loading it here would
+ * test the operating system rather than this class, so a stand-in records what
+ * it was asked to do and lets a test drive the callbacks a real pty would fire.
  */
 const { FakePty, spawned } = vi.hoisted(() => {
   interface Exit {

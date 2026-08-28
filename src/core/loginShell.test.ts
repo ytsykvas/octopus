@@ -111,8 +111,16 @@ describe('resolveLoginShellPath', () => {
   })
 
   it('reads the real environment by default', async () => {
-    const exec: LoginShellExec = () => Promise.resolve(reply('/opt/homebrew/bin'))
+    const original = process.env.PATH
+    process.env.PATH = '/inherited/only'
 
-    await expect(resolveLoginShellPath(exec)).resolves.toContain('/opt/homebrew/bin')
+    try {
+      const exec: LoginShellExec = () => Promise.resolve(reply('/from/shell'))
+      // Asserting the shell's own entry would pass with no environment read at
+      // all; the inherited half is the only part that proves the default.
+      await expect(resolveLoginShellPath(exec)).resolves.toBe('/from/shell:/inherited/only')
+    } finally {
+      process.env.PATH = original
+    }
   })
 })
