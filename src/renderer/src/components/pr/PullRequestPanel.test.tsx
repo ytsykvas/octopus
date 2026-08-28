@@ -249,6 +249,29 @@ describe('the pull request tab', () => {
     })
   })
 
+  /*
+   * A class assertion, which is normally the wrong thing to write — it tests a
+   * look rather than what a person can do.
+   *
+   * It earns its place here because the class is what makes this control exist:
+   * `.choice` is `appearance: none` plus the box and the tick painted by hand,
+   * and it was written for the input. Put on the label instead, it sized the
+   * label at 0.875rem and the words wrapped inside a square the size of a tick,
+   * overlapping the button below.
+   *
+   * Nothing else catches that. jsdom computes no layout, so the checkbox stayed
+   * reachable by its accessible name throughout — the test above passed against
+   * the broken form.
+   */
+  it('paints the checkbox on the input, where the class is defined', async () => {
+    answer(view())
+    renderPanel()
+
+    const checkbox = await screen.findByLabelText('Open as a draft')
+    expect(checkbox).toHaveClass('choice')
+    expect(checkbox.closest('label')).not.toHaveClass('choice')
+  })
+
   // Said before the button rather than after it fails: pushing happens to
   // somebody else's machine and should not be a surprise.
   it('says it will push a branch that is not on GitHub yet', async () => {

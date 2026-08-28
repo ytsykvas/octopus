@@ -117,15 +117,19 @@ export function NewPullRequestForm({
         />
       </label>
 
-      <label className="choice flex items-center gap-2">
+      {/* `choice` paints the box and sizes it, so it belongs on the input. On
+          the label it made the label 0.875rem wide, and the words wrapped
+          inside a square the size of a tick and spilled over the button. */}
+      <label className="flex items-center gap-2">
         <input
           type="checkbox"
           checked={draft}
           onChange={(event) => {
             setDraft(event.target.checked)
           }}
+          className="choice focus-ring"
         />
-        {t('pullRequest.draft')}
+        <span>{t('pullRequest.draft')}</span>
       </label>
 
       <Button
