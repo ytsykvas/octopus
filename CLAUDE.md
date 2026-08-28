@@ -144,9 +144,23 @@ mirrored and indexed within minutes, so a secret removed in the next commit has
 still been published. Before writing a path, a token, a hostname or a real
 name into a file, assume it stays readable forever.
 
-Work goes straight to `main` while this is a single-author project: a branch
-per change would be friction without review. That changes the moment somebody
-else opens a pull request.
+**`main` is protected. Every change goes through a branch and a pull request** —
+including one-line fixes, and including the author's own. Direct pushes are
+refused by the remote, so this is not a convention to remember but a rule the
+server keeps.
+
+```bash
+git checkout -b fix/short-description
+# work, then
+gh pr create --fill
+```
+
+A pull request merges once CI is green. Force pushes to `main` and deleting it
+are blocked outright.
+
+The protection does not cover administrators, which is the escape hatch for a
+`main` that is broken and cannot be fixed through a pipeline that is also
+broken. Reaching for it in any other situation defeats the point of having it.
 
 ## Design
 

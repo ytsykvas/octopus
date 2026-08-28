@@ -17,9 +17,15 @@ allowed-tools: Bash(npm run:*), Bash(git status:*), Bash(git diff:*), Bash(git l
    slipped in: temporary files, debug `console.log`, commented-out code,
    secrets.
 
-3. **Branch.** `main` is where work goes while this is a single-author
-   project — see the Git section of `CLAUDE.md`. Branch only when the user asks
-   or when the change is genuinely speculative.
+3. **Branch.** `main` is protected: it refuses a direct push, so the work
+   needs a branch before it can be committed anywhere useful.
+
+   ```bash
+   git checkout -b fix/short-description
+   ```
+
+   Name it for the change, not for the session. See the Git section of
+   `CLAUDE.md`.
 
 4. **Commit.** Conventional Commits, **in English** like the rest of the
    repository:
@@ -38,14 +44,16 @@ allowed-tools: Bash(npm run:*), Bash(git status:*), Bash(git diff:*), Bash(git l
    One commit, one logical change. If the diff holds two unrelated things,
    split it.
 
-5. **Report.** Tell the user in plain Ukrainian what was recorded. Do not
-   recite the diff.
+5. **Report.** Tell the user in plain Ukrainian what was recorded, and say the
+   branch is waiting to be pushed and opened. Do not recite the diff.
 
 ## Do not
 
-- Push unless the user asked. `origin` is a private repository on GitHub, and
-  pushing puts the change somewhere it can be seen and copied.
-- Open a PR without an explicit request.
+- Push or open a pull request unless the user asked. `origin` is public, so a
+  push is published: mirrored and indexed within minutes, and not retractable
+  by a later commit.
+- Merge your own pull request unless the user asked. Green CI means it is
+  ready, not that it was wanted.
 - Pass `--no-verify`.
 - Commit `.env`, keys or tokens. If you spot one in the diff, stop and warn.
 

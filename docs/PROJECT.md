@@ -442,7 +442,7 @@ Further rules:
 
 - Conventional Commits (`feat:`, `fix:`, `refactor:`, `test:`, `chore:`) — a readable history and a basis for changelog automation later.
 - Atomic commits: one logical change each.
-- Work goes straight to `main` while this is a single-author project: with no review, a branch per change is friction without benefit. Revisit once octopus opens pull requests itself.
+- Every change reaches `main` through a branch and a pull request, which CI gates. `main` is protected on the remote, so this holds whether or not anyone remembers it.
 
 ---
 

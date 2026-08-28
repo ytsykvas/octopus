@@ -4,6 +4,18 @@ Pull requests are welcome. The repository keeps a few conventions that are
 stricter than usual, and they are not negotiable in review — better to know them
 before writing rather than after.
 
+## How a change lands
+
+`main` is protected and refuses direct pushes, the maintainer's included.
+Everything arrives as a pull request from a branch, and merges once CI is
+green.
+
+```bash
+git checkout -b fix/short-description
+# work
+gh pr create --fill
+```
+
 ## The gate
 
 ```bash
@@ -11,7 +23,8 @@ npm run check
 ```
 
 Format, lint, types, and both test runs. It must pass before a commit, and CI
-runs the same command on every pull request.
+runs the same command on every pull request — so a red run is a change that
+cannot merge, not a note to consider.
 
 **Coverage is 100% across `src`,** enforced by a threshold that fails the build.
 This is not aspirational: a change arrives with its tests. Never lower the
