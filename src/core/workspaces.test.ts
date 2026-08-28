@@ -11,7 +11,7 @@ import { GitError, type GitExec, gitIn } from './git.js'
 import { NAME_POOL_SIZE, type Random, WORKSPACE_NAMES } from './names.js'
 import { addProject, EMPTY_STATE, type Project, type State, type Workspace } from './store.js'
 import { POOL_START } from './ports.js'
-import { listWorktrees } from './worktree.js'
+import { listWorktrees, isBranchMerged } from './worktree.js'
 import {
   branchFor,
   countChanges,
@@ -345,6 +345,85 @@ describe('removeWorkspace', () => {
     // Nothing was destroyed: the worktree and the branch are both still there.
     await expect(listWorktrees(exec)).resolves.toHaveLength(2)
     await expect(exec(['branch', '--list', workspace.branch])).resolves.toContain(workspace.name)
+  })
+
+  /*
+   * The reported failure, and the reason git alone is not enough.
+   *
+   * A squash or a rebase merge replaces the commits, so none of them is an
+   * ancestor of the base afterwards — and both are offered by this app's own
+   * merge button. Squashed here by hand, which is what GitHub does to the
+   * branch: the work is in main, and no commit of the branch is.
+   */
+  it('removes a branch git calls unmerged when the request was squashed', async () => {
+    const workspace = await create()
+    const inside = gitIn(workspace.path)
+
+    await writeFile(join(workspace.path, 'work.txt'), 'work\n', 'utf8')
+    await inside(['add', '.'])
+    await inside(['commit', '-q', '-m', 'committed, then squashed away'])
+
+    // main gains the work as one commit of its own, exactly as a squash merge
+    // leaves it: same content, a commit the branch has never seen.
+    await exec(['merge', '--squash', workspace.branch])
+    await exec(['commit', '-q', '-m', 'squashed'])
+
+    await expect(isBranchMerged(exec, workspace.branch, 'main')).resolves.toBe(false)
+
+    await removeWorkspace(
+      workspace,
+      { repository: exec, workspace: inside },
+      { deleteBranch: true, baseBranch: 'main', mergedRemotely: () => Promise.resolve(true) }
+    )
+
+    await expect(listWorktrees(exec)).resolves.toHaveLength(1)
+    await expect(exec(['branch', '--list', workspace.branch])).resolves.toBe('')
+  })
+
+  // Asked only when git has already said no: an ordinary merge needs no network.
+  it('does not ask the remote when git can already see the merge', async () => {
+    const workspace = await create()
+    const inside = gitIn(workspace.path)
+
+    await writeFile(join(workspace.path, 'work.txt'), 'work\n', 'utf8')
+    await inside(['add', '.'])
+    await inside(['commit', '-q', '-m', 'committed'])
+    await exec(['merge', '--no-ff', '-q', '-m', 'merged', workspace.branch])
+
+    let asked = 0
+    await removeWorkspace(
+      workspace,
+      { repository: exec, workspace: inside },
+      {
+        deleteBranch: true,
+        baseBranch: 'main',
+        mergedRemotely: () => {
+          asked += 1
+          return Promise.resolve(false)
+        }
+      }
+    )
+
+    expect(asked).toBe(0)
+  })
+
+  // Neither answer says merged, so nothing is destroyed — the original rule.
+  it('still refuses when the remote does not know it either', async () => {
+    const workspace = await create()
+    const inside = gitIn(workspace.path)
+
+    await writeFile(join(workspace.path, 'work.txt'), 'work\n', 'utf8')
+    await inside(['add', '.'])
+    await inside(['commit', '-q', '-m', 'never merged anywhere'])
+
+    const error = await removeWorkspace(
+      workspace,
+      { repository: exec, workspace: inside },
+      { deleteBranch: true, baseBranch: 'main', mergedRemotely: () => Promise.resolve(false) }
+    ).catch((cause: unknown) => cause)
+
+    expect((error as WorkspaceError).code).toBe('branchUnmerged')
+    await expect(listWorktrees(exec)).resolves.toHaveLength(2)
   })
 
   /*
