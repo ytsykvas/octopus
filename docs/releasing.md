@@ -42,28 +42,38 @@ packaging targets the output architecture, which is not necessarily the one
 
 ## The icon
 
-`build/icon.icns` is generated, not drawn. Its source is the mascot the app
-already uses, `src/renderer/src/assets/octopus.png` — 256×256 pixel art, so it
-is scaled by a **whole number** with nearest-neighbour sampling; any other
-filter turns pixel art to mush.
+`build/icon.icns` is generated, not drawn. Two sources:
+
+- **`src/renderer/src/assets/octopus.png`** — the mascot the app itself shows.
+  256×256 pixel art, and it carries a wide transparent margin: the drawing is
+  only 185×162 of that. Trim before scaling, or the octopus comes out small and
+  the icon reads as mostly background.
+- **`build/squircle.svg`** — the rounded square behind it, and it is a
+  **superellipse** (`|x|^5 + |y|^5 = 1`) rather than a rounded rectangle. Apple's
+  corner has continuous curvature; a `roundrectangle` has circular arcs, and next
+  to native icons it looks like a blob with white bites taken out of its corners
+  on a light background. That is not a subtle difference — it was the first
+  thing noticed about the previous version.
+
+Scale the art by a **whole number** with nearest-neighbour sampling. Any other
+filter, or a fractional factor, turns pixel art to mush.
 
 ```bash
-magick -size 1024x1024 gradient:'#12306b-#081b3f' \
-  \( -size 1024x1024 xc:none -fill white -draw "roundrectangle 0,0 1023,1023 230,230" \) \
-  -compose CopyOpacity -composite /tmp/bg.png
-magick src/renderer/src/assets/octopus.png -filter point -resize 300% /tmp/mascot.png
-magick /tmp/bg.png /tmp/mascot.png -gravity center -geometry +0+20 -composite build/icon.png
+rsvg-convert -w 1024 -h 1024 build/squircle.svg -o /tmp/bg.png
+magick src/renderer/src/assets/octopus.png -trim +repage -filter point -resize 400% /tmp/mascot.png
+magick /tmp/bg.png /tmp/mascot.png -gravity center -geometry +0+10 -composite build/icon.png
 
 rm -rf /tmp/iconset && mkdir /tmp/iconset
 for s in 16 32 128 256 512; do
-  magick build/icon.png -resize ${s}x${s}   /tmp/iconset/icon_${s}x${s}.png
-  magick build/icon.png -resize $((s*2))x   /tmp/iconset/icon_${s}x${s}@2x.png
+  magick build/icon.png -resize ${s}x${s}     /tmp/iconset/icon_${s}x${s}.png
+  magick build/icon.png -resize $((s*2))x     /tmp/iconset/icon_${s}x${s}@2x.png
 done
 iconutil -c icns /tmp/iconset -o build/icon.icns
 ```
 
-Check the 32px member before committing a new one — that is the menu bar and
-the small Finder view, and it is where a detailed icon falls apart.
+Look at the 32px member before committing a new one — that is the menu bar and
+the small Finder view, and it is where a detailed icon falls apart. 16px is
+mush for any icon this detailed and is not worth optimising for.
 
 ## What ships inside
 
