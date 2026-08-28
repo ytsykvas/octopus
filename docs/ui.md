@@ -802,11 +802,25 @@ and a union with a member it can never hold would put an unreachable guard in
 each of those places. `attachments.ts` is where they become one list, in
 `ChatSession`, which is already the layer that turns a controller into a prop.
 
-**The four prepared messages** — answer the review, review it, review it with
-several subagents, resolve the conflicts — each send the project's instruction
-plus a line naming the request. Drawn twice rather than once around a guard:
-without a conversation the press could not do anything, and a branch nothing can
-reach is a claim nothing tests.
+**The prepared messages** — fix the checks, answer the review, review it, review
+it with several subagents, resolve the conflicts — each send the project's
+instruction plus a line naming the request. Drawn twice rather than once around a
+guard: without a conversation the press could not do anything, and a branch
+nothing can reach is a claim nothing tests.
+
+Three of the five appear only when they would mean something: answering a review
+once somebody has left one, resolving a conflict against one, fixing the checks
+while one of them is red. Which condition a prompt waits on is a word on its row
+rather than a flag per condition — two booleans would allow a row that is both,
+which is a state nothing means.
+
+**Fixing the checks names them.** The message carries the red checks and their
+job links under the instruction, because the id at the end of such a link is what
+`gh run view --job <id> --log-failed` takes, and without it the agent is guessing
+which run went red. The log itself is not pasted in: a message is capped at
+100 000 characters and a CI log routinely runs past that, so octopus would have
+to truncate it — possibly past the error. The agent reads it where it lives, and
+can read it again after it pushes.
 
 **A branch says where its pull request stands**, in a glyph beside the workspace
 name: green once the checks pass, a spinning green ring while they run, orange

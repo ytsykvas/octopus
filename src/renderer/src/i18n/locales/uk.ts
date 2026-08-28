@@ -223,6 +223,9 @@ export const uk: Translation = {
     commitMessage: 'Повідомлення комітів',
     commitMessageHint:
       'Надсилається разом із попередньою, коли панель pull request комітить цей воркспейс, а повідомлення ніхто не написав.',
+    fixChecks: 'Полагодити перевірку, що впала',
+    fixChecksHint:
+      'Надсилається, коли перевірка на pull request впала і ви просите агента це полагодити.',
     addressReview: 'Опрацювати ревю',
     addressReviewHint: 'Надсилається, коли ви віддаєте агентові ревю на pull request.',
     review: 'Зробити ревю',
@@ -307,6 +310,7 @@ export const uk: Translation = {
     mergeUnstable: 'Перевірка не пройшла, але вливати все одно дозволено.',
     mergeDraft: 'Чернетку не влити. Спершу позначте її готовою на GitHub.',
 
+    fixChecks: 'Полагодити перевірки',
     addressReview: 'Опрацювати ревю',
     doReview: 'Зробити ревю',
     multiAgentReview: 'Мультиагентне ревю',
@@ -316,6 +320,9 @@ export const uk: Translation = {
     sending: 'Надсилаю…',
 
     context: 'Pull request #{{number}} — гілка {{branch}} у {{base}}\n{{url}}',
+    failedChecks: 'Перевірки, що впали:\n{{list}}',
+    failedCheck: '- {{name}} — {{url}}',
+    failedCheckNoLink: '- {{name}}',
     quoteIntro: 'З ревю на цьому pull request:'
   },
 

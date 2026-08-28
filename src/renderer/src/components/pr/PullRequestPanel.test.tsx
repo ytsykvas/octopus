@@ -3,7 +3,11 @@ import userEvent from '@testing-library/user-event'
 import { describe, expect, it, vi } from 'vitest'
 
 import type { PullRequest, PullRequestView } from '@core/pullRequests.js'
-import type { PullRequestComment, PullRequestDetail } from '@core/pullRequestShapes.js'
+import type {
+  PullRequestCheck,
+  PullRequestComment,
+  PullRequestDetail
+} from '@core/pullRequestShapes.js'
 
 import { quoteController } from '../../test/comments.js'
 import { held } from '../../test/held.js'
@@ -40,6 +44,24 @@ function detail(overrides: Partial<PullRequestDetail> = {}): PullRequestDetail {
     decision: null,
     mergeable: 'mergeable',
     mergeState: 'clean',
+    ...overrides
+  }
+}
+
+/**
+ * A check that went red, which is what the fix prompt is made of.
+ *
+ * Failed by default rather than passed: every test that reaches for this one
+ * wants the state the button appears in, and a green one is the override.
+ */
+function failing(overrides: Partial<PullRequestCheck> = {}): PullRequestCheck {
+  return {
+    name: 'test',
+    workflow: 'CI',
+    state: 'failed',
+    url: 'https://github.com/o/p/actions/runs/123/job/456',
+    startedAt: '2026-08-20T11:00:00Z',
+    completedAt: '2026-08-20T11:02:00Z',
     ...overrides
   }
 }
@@ -797,6 +819,75 @@ describe('what the tab can do about a request', () => {
 
     await screen.findByRole('button', { name: 'Review it' })
     expect(screen.queryByRole('button', { name: 'Address the review' })).not.toBeInTheDocument()
+  })
+
+  it('offers to fix the checks once one of them has failed', async () => {
+    answer(view({ request: request() }))
+    answerDetail(detail({ checks: [failing()] }))
+    renderPanel()
+
+    expect(await screen.findByRole('button', { name: 'Fix the checks' })).toBeInTheDocument()
+  })
+
+  it('does not offer to fix checks that all passed', async () => {
+    answer(view({ request: request() }))
+    answerDetail(detail({ checks: [failing({ state: 'passed' })] }))
+    renderPanel()
+
+    await screen.findByRole('button', { name: 'Review it' })
+    expect(screen.queryByRole('button', { name: 'Fix the checks' })).not.toBeInTheDocument()
+  })
+
+  /*
+   * The link is the point of the line: the job id at the end of it is what
+   * reads the log, and without it the agent has to guess which run went red.
+   * The ones that passed stay out — naming them would be work to rule out.
+   */
+  it('names the checks that failed and where their logs are', async () => {
+    const user = userEvent.setup()
+    answer(view({ request: request() }))
+    answerDetail(detail({ checks: [failing(), failing({ name: 'lint', state: 'passed' })] }))
+    renderPanel()
+
+    await user.click(await screen.findByRole('button', { name: 'Fix the checks' }))
+
+    expect(octopus().workspaces.instruction).toHaveBeenCalledWith(anna.id, 'fixChecks')
+    const sent = vi.mocked(octopus().chats.send).mock.calls[0]?.[1] ?? ''
+    expect(sent).toContain('Describe what changed and why.')
+    expect(sent).toContain('#7')
+    expect(sent).toContain(
+      'Checks that failed:\n- test — https://github.com/o/p/actions/runs/123/job/456'
+    )
+    expect(sent).not.toContain('lint')
+  })
+
+  /* The older status API sends no link at all, and a dash with nothing after it
+     reads as a link that failed to load rather than as one that never was. */
+  it('names a check that came without a link, without the dash', async () => {
+    const user = userEvent.setup()
+    answer(view({ request: request() }))
+    answerDetail(detail({ checks: [failing({ url: null })] }))
+    renderPanel()
+
+    await user.click(await screen.findByRole('button', { name: 'Fix the checks' }))
+
+    const sent = vi.mocked(octopus().chats.send).mock.calls[0]?.[1] ?? ''
+    expect(sent).toContain('Checks that failed:\n- test')
+    expect(sent).not.toContain('- test —')
+  })
+
+  /* The list reads as a list of things to put right only under the prose that
+     says so. Under a review it would be a paragraph nobody asked for. */
+  it('leaves the failed checks out of the prompts that are not about them', async () => {
+    const user = userEvent.setup()
+    answer(view({ request: request() }))
+    answerDetail(detail({ checks: [failing()] }))
+    renderPanel()
+
+    await user.click(await screen.findByRole('button', { name: 'Review it' }))
+
+    const sent = vi.mocked(octopus().chats.send).mock.calls[0]?.[1] ?? ''
+    expect(sent).not.toContain('Checks that failed')
   })
 
   it('will not send a prepared message without a conversation to send it to', async () => {

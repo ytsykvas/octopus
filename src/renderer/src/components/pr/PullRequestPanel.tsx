@@ -117,6 +117,11 @@ export function PullRequestPanel({
     onError(describeFailure(failure))
   }
 
+  /* The checks that went red, which is what the fix prompt is about. Empty
+     where the detail could not be read — which is also where the button that
+     sends it is not drawn. */
+  const failed = (detail.detail?.checks ?? []).filter((check) => check.state === 'failed')
+
   /**
    * Sends the instruction that applies here, with a line naming the request.
    *
@@ -145,9 +150,26 @@ export function PullRequestPanel({
         url: open.url
       })
 
+      /* Which checks failed, named for the one prompt that is about them. Not
+         appended to the others: the list reads as a list of things to put right
+         only under the prose that says so, and under "review it" it would be a
+         paragraph nothing had asked for. */
+      const failures =
+        kind === 'fixChecks'
+          ? t('pullRequest.failedChecks', {
+              list: failed
+                .map((check) =>
+                  check.url === null
+                    ? t('pullRequest.failedCheckNoLink', { name: check.name })
+                    : t('pullRequest.failedCheck', { name: check.name, url: check.url })
+                )
+                .join('\n')
+            })
+          : ''
+
       const sent = await window.octopus.chats.send(
         conversation,
-        [instruction.value.trim(), context].filter((part) => part !== '').join('\n\n')
+        [instruction.value.trim(), context, failures].filter((part) => part !== '').join('\n\n')
       )
       setSending(null)
       if (!sent.ok) report(sent)
