@@ -330,6 +330,39 @@ describe('opening one', () => {
     expect((error as GitHubError).params.reason).toHaveLength(200)
   })
 
+  /*
+   * Reported, and only findable once failures started carrying gh's own words:
+   *
+   *   Base ref must be a branch ... No commits between origin/develop and
+   *   octopus/alison
+   *
+   * The base is stored as git refers to it. `origin/develop` is a local name
+   * for a remote-tracking ref, and GitHub has no branch by that name.
+   */
+  it('names the base branch the way GitHub does, not the way git does', async () => {
+    const branch = await branchWithCommit()
+    const { gh, calls } = fakeGh({ create: 'url' })
+
+    await createPullRequest({ ...draft, branch, base: 'origin/main' }, gh, workExec())
+
+    expect(calls[0]).toContain('--base')
+    expect(calls[0]?.[calls[0].indexOf('--base') + 1]).toBe('main')
+  })
+
+  // Only `origin/` is a remote name. A branch really called `feature/x` keeps
+  // both halves, or the request would be opened against something else.
+  it('leaves a base that only looks prefixed alone', async () => {
+    // A real branch whose name merely has a slash in it, so the request is
+    // measured against something that exists.
+    await run('git', ['branch', 'feature/x', 'main'], { cwd: join(dir, 'work') })
+    const branch = await branchWithCommit()
+    const { gh, calls } = fakeGh({ create: 'url' })
+
+    await createPullRequest({ ...draft, branch, base: 'feature/x' }, gh, workExec())
+
+    expect(calls[0]?.[calls[0].indexOf('--base') + 1]).toBe('feature/x')
+  })
+
   it('opens a draft when asked for one', async () => {
     const branch = await branchWithCommit()
     const { gh, calls } = fakeGh({ create: 'url' })

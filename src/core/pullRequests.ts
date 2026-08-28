@@ -15,6 +15,7 @@ import { promisify } from 'node:util'
 
 import { z } from 'zod'
 
+import { shortBranchName } from './branches.js'
 import { GitHubError } from './github.js'
 import { countAhead, type GitExec } from './git.js'
 import {
@@ -273,8 +274,16 @@ export async function createPullRequest(
     raw = await gh([
       'pr',
       'create',
+      // As GitHub names it. The base is stored the way git refers to it —
+      // `origin/develop` — which is a local name for a remote-tracking ref and
+      // not a branch that exists on the other end. Sent unchanged, GitHub
+      // answers "Base ref must be a branch" and refuses the request.
+      //
+      // Only here: every local comparison above wants the tracking ref, and
+      // handing git a bare `develop` would ask about a branch the clone may
+      // not have checked out at all.
       '--base',
-      request.base,
+      shortBranchName(request.base),
       '--head',
       request.branch,
       '--title',
