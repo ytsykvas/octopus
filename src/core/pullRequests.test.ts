@@ -279,6 +279,57 @@ describe('opening one', () => {
     expect(remote.stdout).toContain(branch)
   })
 
+  /*
+   * The reported failure said only "GitHub refused it", which is the one thing
+   * the user already knew. `gh` writes the reason to stderr — a request already
+   * open, a base that is not there, no permission — and it used to be thrown
+   * away with the error carrying it.
+   */
+  it('carries what gh said about refusing to open one', async () => {
+    const branch = await branchWithCommit()
+    const gh = (): Promise<string> =>
+      Promise.reject(
+        Object.assign(new Error('Command failed'), {
+          stderr:
+            'a pull request for branch "x" into branch "main" already exists\nUsage: gh pr create'
+        })
+      )
+
+    const error = await createPullRequest({ ...draft, branch, base: 'main' }, gh, workExec()).catch(
+      (cause: unknown) => cause
+    )
+
+    expect((error as GitHubError).code).toBe('createFailed')
+    // The first line only: gh leads with the reason and follows with usage.
+    expect((error as GitHubError).params.reason).toBe(
+      'a pull request for branch "x" into branch "main" already exists'
+    )
+  })
+
+  it('falls back to the error itself when there is no stderr to read', async () => {
+    const branch = await branchWithCommit()
+    const gh = (): Promise<string> => Promise.reject(new Error('gh: command not found'))
+
+    const error = await createPullRequest({ ...draft, branch, base: 'main' }, gh, workExec()).catch(
+      (cause: unknown) => cause
+    )
+
+    expect((error as GitHubError).params.reason).toContain('gh: command not found')
+  })
+
+  // Long enough to fill the pane and push everything else off it.
+  it('cuts a reason that runs on', async () => {
+    const branch = await branchWithCommit()
+    const gh = (): Promise<string> =>
+      Promise.reject(Object.assign(new Error('failed'), { stderr: 'x'.repeat(500) }))
+
+    const error = await createPullRequest({ ...draft, branch, base: 'main' }, gh, workExec()).catch(
+      (cause: unknown) => cause
+    )
+
+    expect((error as GitHubError).params.reason).toHaveLength(200)
+  })
+
   it('opens a draft when asked for one', async () => {
     const branch = await branchWithCommit()
     const { gh, calls } = fakeGh({ create: 'url' })

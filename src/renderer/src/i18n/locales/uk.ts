@@ -685,12 +685,11 @@ export const uk: Translation = {
     listFailed: 'GitHub повернув щось неочікуване.',
     cloneFailed: 'Не вдалося клонувати {{repository}}.',
     noCommits: 'У цій гілці немає нічого, чого немає в {{base}}.',
-    pushFailed: 'Не вдалося запушити {{branch}} на GitHub.',
-    createFailed: 'Не вдалося відкрити pull request. GitHub його відхилив.',
+    pushFailed: 'Не вдалося запушити {{branch}}. Git каже: {{reason}}',
+    createFailed: 'Не вдалося відкрити pull request. GitHub каже: {{reason}}',
     nothingToCommit: 'Тут немає чого комітити.',
-    commitFailed: 'Не вдалося зробити коміт. У терміналі видно, що сказав git.',
-    mergeFailed:
-      'GitHub не влив #{{number}}. Заважають перевірки, ревю або конфлікт — панель скаже що саме, щойно перечитає стан.',
+    commitFailed: 'Не вдалося зробити коміт. Git каже: {{reason}}',
+    mergeFailed: 'GitHub не влив #{{number}}. Каже: {{reason}}',
     alreadyExists: '{{path}} уже існує. Додайте його з диска.',
     branchUnmerged:
       '{{branch}} має коміти, яких немає в базовій гілці. Зніміть прапорець видалення гілки або спершу злийте її.',

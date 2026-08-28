@@ -43,6 +43,28 @@ export function ghIn(cwd: string): GhExec {
   }
 }
 
+/**
+ * What the tool said, short enough to put in a sentence.
+ *
+ * These failures used to be reported as "GitHub refused it" and nothing else:
+ * `gh` writes a precise reason to stderr — a request already open for this
+ * branch, a base that does not exist there, no permission to push — and every
+ * one of them was thrown away with the error carrying it. The user was left
+ * with a refusal and no way to act on it, and so was anybody they asked.
+ *
+ * The first line only. `gh` leads with the reason and follows with usage.
+ */
+function reasonFrom(error: unknown): string {
+  const stderr =
+    typeof error === 'object' && error !== null && 'stderr' in error ? String(error.stderr) : ''
+
+  // Trimmed before the cut, so a leading blank line cannot become the answer.
+  const said = (stderr.trim() === '' ? String(error) : stderr).trim()
+  const breaks = said.indexOf('\n')
+
+  return (breaks === -1 ? said : said.slice(0, breaks)).trim().slice(0, 200)
+}
+
 /** One that exists, and therefore has all four of these rather than some. */
 export interface PullRequest {
   readonly number: number
@@ -261,8 +283,12 @@ export async function createPullRequest(
       request.body,
       ...(request.draft ? ['--draft'] : [])
     ])
-  } catch {
-    throw new GitHubError('createFailed', {}, 'Could not open the pull request.')
+  } catch (error) {
+    throw new GitHubError(
+      'createFailed',
+      { reason: reasonFrom(error) },
+      'Could not open the pull request.'
+    )
   }
 
   // `gh` prints the URL and nothing else worth keeping. Trimmed rather than
@@ -279,8 +305,12 @@ export async function createPullRequest(
 async function push(branch: string, git: GitExec): Promise<void> {
   try {
     await git(['push', '-u', 'origin', branch])
-  } catch {
-    throw new GitHubError('pushFailed', { branch }, 'Could not push the branch.')
+  } catch (error) {
+    throw new GitHubError(
+      'pushFailed',
+      { branch, reason: reasonFrom(error) },
+      'Could not push the branch.'
+    )
   }
 }
 
@@ -313,8 +343,12 @@ async function commit(message: string, git: GitExec): Promise<void> {
 
   try {
     await commitAll(git, message)
-  } catch {
-    throw new GitHubError('commitFailed', {}, 'Could not commit the changes.')
+  } catch (error) {
+    throw new GitHubError(
+      'commitFailed',
+      { reason: reasonFrom(error) },
+      'Could not commit the changes.'
+    )
   }
 }
 
@@ -358,10 +392,10 @@ export async function mergePullRequest(
 ): Promise<void> {
   try {
     await gh(['pr', 'merge', String(number), MERGE_FLAGS[method]])
-  } catch {
+  } catch (error) {
     throw new GitHubError(
       'mergeFailed',
-      { number: String(number) },
+      { number: String(number), reason: reasonFrom(error) },
       'GitHub would not merge the pull request.'
     )
   }
