@@ -1,0 +1,29 @@
+name: Feature or change
+description: Something that should exist, or should work differently
+labels: [enhancement]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Worth checking [docs/tasks/](../../tree/main/docs/tasks) first — known
+        work is written down there one file at a time, and it may already be
+        listed. The non-goals in `docs/PROJECT.md` §5 say what this will not
+        become.
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: The problem
+      description: >
+        What you are trying to do and where the app gets in the way. The
+        problem is more useful than a proposed solution — it leaves room for a
+        better one.
+    validations:
+      required: true
+
+  - type: textarea
+    id: idea
+    attributes:
+      label: What you had in mind
+    validations:
+      required: false

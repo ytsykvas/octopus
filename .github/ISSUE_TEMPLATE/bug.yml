@@ -1,0 +1,56 @@
+name: Bug report
+description: Something behaves differently from what it promises
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        There are no published builds. If you did not build this yourself,
+        whatever you are running is not this project.
+
+  - type: textarea
+    id: what
+    attributes:
+      label: What happens
+      description: What you did, what you expected, and what happened instead.
+    validations:
+      required: true
+
+  - type: dropdown
+    id: how
+    attributes:
+      label: How are you running it
+      options:
+        - Built with npm run dist, opened from Applications
+        - npm run dev
+    validations:
+      required: true
+
+  - type: input
+    id: macos
+    attributes:
+      label: macOS version
+      placeholder: '15.2'
+    validations:
+      required: true
+
+  - type: textarea
+    id: gate
+    attributes:
+      label: Does npm run check pass
+      description: >
+        Paste the tail of the output if it does not. A failing gate usually
+        explains the bug on its own.
+    validations:
+      required: false
+
+  - type: textarea
+    id: extra
+    attributes:
+      label: Anything else
+      description: >
+        Console output, a screenshot, the repository this happened against.
+        If the terminal or a chat is involved, `which git gh claude` is often
+        the answer.
+    validations:
+      required: false

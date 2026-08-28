@@ -1,29 +1,69 @@
+<div align="center">
+
+<img src="src/renderer/src/assets/octopus.png" width="120" alt="">
+
 # octopus
 
-A local macOS app for running Claude Code sessions in parallel: every task lives
-in its own git worktree — with its own branch, agent conversations and dev server
-on a dedicated port.
+**Run Claude Code sessions in parallel.** Every task lives in its own git
+worktree — with its own branch, agent conversations and dev server on a
+dedicated port.
+
+[![check](https://github.com/ytsykvas/octopus/actions/workflows/check.yml/badge.svg)](https://github.com/ytsykvas/octopus/actions/workflows/check.yml)
+[![licence: MIT](https://img.shields.io/badge/licence-MIT-blue.svg)](LICENSE)
+![macOS, Apple Silicon](https://img.shields.io/badge/macOS-Apple%20Silicon-111111)
+
+</div>
 
 Instead of waiting for one task to finish, you start several at once. They never
 see each other and never conflict.
+
+<!--
+  SCREENSHOTS GO HERE — the one thing this README is still missing.
+
+  Take three, put them in docs/screenshots/, and replace this comment:
+
+    ![The three panes](docs/screenshots/window.png)
+    ![Reviewing a diff](docs/screenshots/diff.png)
+    ![Several workspaces at once](docs/screenshots/workspaces.png)
+
+  Worth capturing: the full window with a real repository open; the right pane
+  showing a diff with a comment on it; the workspace list with two or three
+  running at the same time. Light or dark, but the same theme in all three.
+-->
+
+## Why, when Claude Code already has worktrees
+
+Claude Code can make a worktree by itself, and for one task at a time that is
+enough. This is for the case where it is not: **several tasks running at once,
+each needing more than a directory.**
+
+A task here is not just a worktree. It is a branch, up to three agent
+conversations with their own transcripts, a dev server on a port that will not
+collide with the other tasks', the gitignored files a fresh worktree does not
+have, and a diff you can read and comment on. Starting that by hand is a
+sequence you would not repeat willingly five times a day; the point of the app
+is that it is one click, five times a day.
+
+The other honest half: [Conductor](https://www.conductor.build/) does the same
+thing well, and its layout is where this one's comes from. octopus differs by
+adding nothing of its own to the agent's context, by being open source and
+local-only, and by being built to one person's taste. If Conductor suits you,
+use Conductor.
 
 ## What it does
 
 **A workspace per task.** Adding one cuts a git worktree and a branch, and gives
 it a block of ten ports. Up to three agent conversations can run in it at once;
-each keeps its own transcript, model and mode, and survives a restart of the app.
+each keeps its own transcript, model and mode, and survives a restart.
 
 **Build and run, on one button.** A project holds three scripts — `setup.sh`,
 `run.sh`, `archive.sh` — and Run does the first two in order. Several workspaces
-can serve at the same time: `$OCTOPUS_PORT` and `$OCTOPUS_PORT_1`…`_9` come from
-a pool at 3100–3299, checked on the way into every run in case something else has
-taken one since.
+can serve at the same time, each on its own port.
 
 **The files a fresh worktree does not have.** A worktree holds what git tracks,
 so a gitignored `.env` or `config/master.key` is missing from every new one. A
 project names the files to copy in, and can add a block of `KEY=value` overrides
-written at the end of the workspace's env file — where last wins. `$OCTOPUS_PORT`
-in that block becomes that workspace's own port.
+on top.
 
 **Review and open a pull request.** The right pane shows the diff against the
 base branch, takes comments on it, and opens a PR through `gh` — with a
@@ -34,6 +74,9 @@ Claude Code loads in a terminal: the project's `CLAUDE.md`, its `.claude/`
 commands, skills and subagents. It adds nothing of its own to the context. A
 repository that ships settings which pre-approve tools or run hooks is shown to
 you once, before any of it is believed.
+
+The details behind each of these — the port pool, the env block, what a diff
+counts — are in [docs/](docs/README.md).
 
 ## Installing
 
@@ -98,9 +141,9 @@ npx electron-builder install-app-deps
 
 Everything lives under `~/.octopus`: `config.json`, `state.json`, one JSONL
 transcript per conversation, the per-project scripts and env, and the worktrees
-themselves. Nothing is written inside your repository except the worktree and its branch —
-see [docs/data.md](docs/data.md). Removing a workspace offers to delete that
-branch with it, ticked by default.
+themselves. Nothing is written inside your repository except the worktree and its
+branch — see [docs/data.md](docs/data.md). Removing a workspace offers to delete
+that branch with it, ticked by default.
 
 ## Development
 

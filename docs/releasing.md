@@ -40,6 +40,31 @@ packaging targets the output architecture, which is not necessarily the one
 `postinstall` built for. Both go through electron-builder — `postinstall` is
 `electron-builder install-app-deps` — so the two cannot disagree about the ABI.
 
+## The icon
+
+`build/icon.icns` is generated, not drawn. Its source is the mascot the app
+already uses, `src/renderer/src/assets/octopus.png` — 256×256 pixel art, so it
+is scaled by a **whole number** with nearest-neighbour sampling; any other
+filter turns pixel art to mush.
+
+```bash
+magick -size 1024x1024 gradient:'#12306b-#081b3f' \
+  \( -size 1024x1024 xc:none -fill white -draw "roundrectangle 0,0 1023,1023 230,230" \) \
+  -compose CopyOpacity -composite /tmp/bg.png
+magick src/renderer/src/assets/octopus.png -filter point -resize 300% /tmp/mascot.png
+magick /tmp/bg.png /tmp/mascot.png -gravity center -geometry +0+20 -composite build/icon.png
+
+rm -rf /tmp/iconset && mkdir /tmp/iconset
+for s in 16 32 128 256 512; do
+  magick build/icon.png -resize ${s}x${s}   /tmp/iconset/icon_${s}x${s}.png
+  magick build/icon.png -resize $((s*2))x   /tmp/iconset/icon_${s}x${s}@2x.png
+done
+iconutil -c icns /tmp/iconset -o build/icon.icns
+```
+
+Check the 32px member before committing a new one — that is the menu bar and
+the small Finder view, and it is where a detailed icon falls apart.
+
 ## What ships inside
 
 Two things in the bundle are executables rather than JavaScript, and both are
