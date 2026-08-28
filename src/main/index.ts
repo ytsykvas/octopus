@@ -1,7 +1,10 @@
+import { execFile } from 'node:child_process'
 import { join } from 'node:path'
+import { promisify } from 'node:util'
 
 import { app, BrowserWindow, dialog, ipcMain, Menu, nativeTheme, shell } from 'electron'
 
+import { resolveLoginShellPath } from '../core/loginShell.js'
 import { describeError } from '../core/persist.js'
 import {
   type ChatEvent,
@@ -147,7 +150,29 @@ function watchSystemTheme(service: OctopusService): void {
  * an unhandled rejection and an empty window. Showing the reason lets the user
  * act on it.
  */
+const run = promisify(execFile)
+
+/**
+ * Gives the process the PATH the user actually has.
+ *
+ * Launched from Finder the app inherits launchd's environment, where nothing
+ * installed by Homebrew, mise or nvm appears — so `git`, `gh` and `claude` are
+ * all missing, while the embedded terminal finds them perfectly well because it
+ * goes through the login shell. Done before the service exists, so the first
+ * git call already sees the repaired value.
+ */
+async function repairPath(): Promise<void> {
+  const merged = await resolveLoginShellPath(async (file, args) => {
+    const { stdout } = await run(file, [...args], { timeout: 5_000 })
+    return stdout
+  })
+
+  if (merged !== undefined) process.env.PATH = merged
+}
+
 async function start(): Promise<void> {
+  await repairPath()
+
   let service: OctopusService
 
   try {
