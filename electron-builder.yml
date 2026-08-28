@@ -1,0 +1,54 @@
+# Packaging for distribution outside the App Store (PROJECT.md §6).
+#
+# Signing is wired but off by default: `npm run dist` produces an unsigned
+# build, `npm run dist:signed` a signed and notarised one. The difference is
+# credentials, not configuration — see docs/releasing.md.
+appId: com.ytsykvas.octopus
+productName: Octopus
+copyright: Copyright © 2026 octopus
+
+directories:
+  output: dist
+  buildResources: build
+
+files:
+  - out/**
+  - package.json
+  - '!**/*.map'
+
+# Two dependencies are executables rather than JavaScript and cannot be run
+# from inside an asar archive: the terminal's native binding, and the Claude
+# Code binary the Agent SDK resolves out of node_modules at runtime.
+asar: true
+asarUnpack:
+  - node_modules/node-pty/**
+  - node_modules/@anthropic-ai/claude-agent-sdk-*/**
+
+mac:
+  category: public.app-category.developer-tools
+  icon: build/icon.icns
+  target:
+    - target: dmg
+      arch: [arm64]
+    - target: zip
+      arch: [arm64]
+  # Required for notarisation. Harmless on unsigned builds — the flag only
+  # takes effect once a signing identity is present.
+  hardenedRuntime: true
+  gatekeeperAssess: false
+  entitlements: build/entitlements.mac.plist
+  entitlementsInherit: build/entitlements.mac.plist
+  # macOS 15 refuses an unsigned download outright rather than warning, so an
+  # unsigned build needs the instructions in docs/releasing.md.
+  minimumSystemVersion: '11.0'
+
+dmg:
+  title: ${productName} ${version}
+  contents:
+    - x: 140
+      y: 200
+      type: file
+    - x: 400
+      y: 200
+      type: link
+      path: /Applications

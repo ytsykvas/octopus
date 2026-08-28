@@ -35,16 +35,28 @@ commands, skills and subagents. It adds nothing of its own to the context. A
 repository that ships settings which pre-approve tools or run hooks is shown to
 you once, before any of it is believed.
 
-## Requirements
+## Installing
 
-- macOS
-- Node.js 22+
-- git
-- [Claude Code](https://claude.com/claude-code) — the app drives it
-- [`gh`](https://cli.github.com), signed in, for cloning from GitHub and for
+Download the `.dmg`, drag Octopus to Applications, open it. Apple Silicon only.
+
+The agent itself ships inside the app — there is no separate download for it,
+and no `npm install`. What the app does expect to find already on the machine:
+
+- **macOS 11 or later**
+- **git**
+- a **[Claude Code](https://claude.com/claude-code) login** — the agent runs on
+  your authentication, and the app never handles credentials itself. The `claude`
+  CLI is what the Settings account panel signs in and out through.
+- **[`gh`](https://cli.github.com)**, signed in, for cloning from GitHub and for
   pull requests. Everything else works without it.
 
-## Running
+Builds are not signed yet, so the first launch is refused: macOS says it cannot
+check the developer. Open System Settings → Privacy & Security, find the notice
+and press **Open Anyway**. Once cleared it never asks again.
+
+## Running from source
+
+Additionally needs **Node.js 22+**.
 
 ```bash
 npm install

@@ -13,6 +13,7 @@ as they are; the code says what they do, and stays the authority on that.
 | [data.md](data.md)                 | you are changing what lives in `~/.octopus`, or adding a stored field                                    |
 | [ui.md](ui.md)                     | you are building a component, picking a colour, or laying something out                                  |
 | [testing.md](testing.md)           | you are writing tests, or a test is failing and you doubt the test                                       |
+| [releasing.md](releasing.md)       | you are cutting a build someone will download, or weighing what signing costs and buys                   |
 | [tasks/](tasks/)                   | you have finished something and want the next thing, or you just found work and need somewhere to put it |
 
 ## The shortest possible summary
