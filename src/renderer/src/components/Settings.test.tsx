@@ -103,7 +103,7 @@ describe('the instruction every project falls back to', () => {
   })
 
   /*
-   * Five buttons on the pull request tab send five different pieces of prose,
+   * Six pieces of prose the app can send on the user's behalf,
    * and §4 is that none of them reaches the agent without the reader being able
    * to see and change it first. One editor per kind is what makes that true.
    */
@@ -115,6 +115,7 @@ describe('the instruction every project falls back to', () => {
 
     for (const label of [
       'Pull request descriptions',
+      'Commit messages',
       'Answering a review',
       'Reviewing a change',
       'A review from several angles',
@@ -125,7 +126,14 @@ describe('the instruction every project falls back to', () => {
 
     expect(
       vi.mocked(octopus().projects.readInstruction).mock.calls.map(([, kind]) => kind)
-    ).toEqual(['pullRequest', 'addressReview', 'review', 'multiAgentReview', 'resolveConflicts'])
+    ).toEqual([
+      'pullRequest',
+      'commitMessage',
+      'addressReview',
+      'review',
+      'multiAgentReview',
+      'resolveConflicts'
+    ])
   })
 
   it('saves it when the editor loses focus', async () => {

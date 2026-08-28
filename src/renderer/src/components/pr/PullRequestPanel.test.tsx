@@ -215,11 +215,44 @@ describe('the pull request tab', () => {
     })
   })
 
-  // Null rather than an empty string: the difference between "open it from what
-  // is committed" and a message nobody typed, which git refuses.
-  it('opens from what is already committed when the field is left alone', async () => {
+  /*
+   * Uncommitted work goes in, and the title names the commit when nobody wrote
+   * a message for it. Leaving it behind is what turned a full workspace into a
+   * branch with nothing on it, and a request gh refused.
+   */
+  it('commits under the title when the message field is left alone', async () => {
     const user = userEvent.setup()
     answer(view({ dirty: true }))
+    renderPanel()
+
+    await user.type(await screen.findByLabelText('Title'), 'Rename the thing')
+    await user.click(screen.getByRole('button', { name: 'Open pull request' }))
+
+    expect(octopus().workspaces.createPullRequest).toHaveBeenCalledWith(
+      anna.id,
+      expect.objectContaining({ commitMessage: 'Rename the thing' })
+    )
+  })
+
+  // What the agent wrote beats the title, which is only the last resort.
+  it('commits under the message the agent wrote for it', async () => {
+    const user = userEvent.setup()
+    answer(view({ dirty: true }))
+    renderPanel()
+
+    await user.click(await screen.findByRole('button', { name: 'Ask the agent to describe it' }))
+    await user.click(await screen.findByRole('button', { name: 'Open pull request' }))
+
+    expect(octopus().workspaces.createPullRequest).toHaveBeenCalledWith(
+      anna.id,
+      expect.objectContaining({ commitMessage: 'Written by the agent' })
+    )
+  })
+
+  // Null only when git would refuse a commit anyway.
+  it('commits nothing when there is nothing uncommitted', async () => {
+    const user = userEvent.setup()
+    answer(view({ dirty: false }))
     renderPanel()
 
     await user.type(await screen.findByLabelText('Title'), 'Rename the thing')

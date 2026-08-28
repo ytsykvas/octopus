@@ -1763,18 +1763,24 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
       const workspace = requireWorkspace(workspaceId)
       const project = requireProject(workspace.projectId)
 
-      const [diff, instruction] = await Promise.all([
+      const [diff, changed, instruction, commitInstruction] = await Promise.all([
         readWorkspaceDiff(makeExec(workspace.path), {
           baseBranch: project.baseBranch,
           root: workspace.path
         }),
-        effectiveInstruction('pullRequest', workspace.projectId, dataRoot)
+        changeCount(workspace, makeExec),
+        effectiveInstruction('pullRequest', workspace.projectId, dataRoot),
+        effectiveInstruction('commitMessage', workspace.projectId, dataRoot)
       ])
 
       return draftPullRequest(
         {
           cwd: workspace.path,
           instruction,
+          // Null is what tells the draft not to ask for a commit message: with
+          // a clean worktree the request carries what is already committed, and
+          // there is nothing for one to describe.
+          commitInstruction: changed > 0 ? commitInstruction : null,
           diff,
           branch: workspace.branch,
           // The model a chat would start on. A description is the agent's

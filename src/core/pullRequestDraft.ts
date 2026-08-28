@@ -26,6 +26,7 @@ import { GitHubError } from './github.js'
  */
 const TITLE_MARKER = '<<<OCTOPUS_TITLE>>>'
 const BODY_MARKER = '<<<OCTOPUS_BODY>>>'
+const COMMIT_MARKER = '<<<OCTOPUS_COMMIT>>>'
 
 /**
  * Bounds match `NewPullRequestSchema`: what cannot be opened is not worth
@@ -34,7 +35,13 @@ const BODY_MARKER = '<<<OCTOPUS_BODY>>>'
  */
 export const DraftedPullRequestSchema = z.object({
   title: z.string().min(1).max(200),
-  body: z.string().max(20_000)
+  body: z.string().max(20_000),
+  /**
+   * Null when the worktree is clean: there is nothing to commit, so there was
+   * nothing to ask for. Bounded like `commitMessage` in `NewPullRequestSchema`,
+   * since it is the same value going to the same place.
+   */
+  commitMessage: z.string().min(1).max(2_000).nullable()
 })
 
 export type DraftedPullRequest = z.infer<typeof DraftedPullRequestSchema>
@@ -87,12 +94,27 @@ export function renderDiff(diff: WorkspaceDiff, maxLines: number = MAX_DIFF_LINE
   return out.join('\n')
 }
 
+export interface PromptParts {
+  readonly instruction: string
+  /** The project's commit instruction, or null when there is nothing to commit. */
+  readonly commitInstruction: string | null
+  readonly diffText: string
+  readonly branch: string
+}
+
 /** What the agent is asked, and the shape the answer has to come back in. */
-export function buildPrompt(instruction: string, diffText: string, branch: string): string {
+export function buildPrompt(parts: PromptParts): string {
+  const wantsCommit = parts.commitInstruction !== null
+
   return [
     'Write the title and description for a pull request opening the branch',
-    `\`${branch}\`. The diff follows. You may read files in the working`,
-    'directory for context; do not change anything.',
+    `\`${parts.branch}\`.` +
+      (wantsCommit
+        ? ' Some of the work is not committed yet, so write the message for the' +
+          ' commit that will carry it as well.'
+        : ''),
+    'The diff follows. You may read files in the working directory for context;',
+    'do not change anything.',
     '',
     'Reply in exactly this form, with nothing before or after it and no code',
     'fence around it:',
@@ -101,14 +123,18 @@ export function buildPrompt(instruction: string, diffText: string, branch: strin
     'a single line',
     BODY_MARKER,
     'markdown, as long as it needs to be',
+    ...(wantsCommit ? [COMMIT_MARKER, 'a subject line, then a blank line, then why'] : []),
     '',
     '# How this project wants pull requests written',
     '',
-    instruction.trim(),
+    parts.instruction.trim(),
+    ...(wantsCommit
+      ? ['', '# How this project wants commit messages written', '', parts.commitInstruction.trim()]
+      : []),
     '',
     '# The change',
     '',
-    diffText
+    parts.diffText
   ].join('\n')
 }
 
@@ -119,10 +145,14 @@ export function buildPrompt(instruction: string, diffText: string, branch: strin
  * happens, and the caller turns it into a message about drafting rather than a
  * crash.
  */
-export function parseDraft(reply: string): DraftedPullRequest | null {
+export function parseDraft(reply: string, wantsCommit: boolean): DraftedPullRequest | null {
   const titleAt = reply.indexOf(TITLE_MARKER)
   const bodyAt = reply.indexOf(BODY_MARKER)
   if (titleAt === -1 || bodyAt === -1 || bodyAt < titleAt) return null
+
+  // The commit marker ends the body when it is there, and is simply absent
+  // when nothing needed committing.
+  const commitAt = reply.indexOf(COMMIT_MARKER, bodyAt)
 
   // A title is one line by definition; anything after the first is the model
   // ignoring that, and taking the first line is closer to the intent than
@@ -135,15 +165,28 @@ export function parseDraft(reply: string): DraftedPullRequest | null {
   const breaks = block.indexOf('\n')
   const title = (breaks === -1 ? block : block.slice(0, breaks)).trim()
 
-  const body = reply.slice(bodyAt + BODY_MARKER.length).trim()
+  const bodyEnds = commitAt === -1 ? reply.length : commitAt
+  const body = reply.slice(bodyAt + BODY_MARKER.length, bodyEnds).trim()
 
-  const parsed = DraftedPullRequestSchema.safeParse({ title, body })
+  // A missing commit message when one was asked for is a malformed answer, not
+  // a licence to commit under no message at all.
+  const commitMessage = commitAt === -1 ? null : reply.slice(commitAt + COMMIT_MARKER.length).trim()
+  if (wantsCommit && commitMessage === null) return null
+
+  const parsed = DraftedPullRequestSchema.safeParse({ title, body, commitMessage })
   return parsed.success ? parsed.data : null
 }
 
 export interface DraftOptions {
   readonly cwd: string
   readonly instruction: string
+  /**
+   * The commit instruction, or null when the worktree is clean.
+   *
+   * Null is what says "do not ask for a commit message": there is nothing to
+   * commit, and a question with no answer to use is tokens spent for nothing.
+   */
+  readonly commitInstruction: string | null
   readonly diff: WorkspaceDiff
   readonly branch: string
   readonly model: string | null
@@ -160,7 +203,12 @@ export async function draftPullRequest(
   options: DraftOptions,
   query: QueryFn
 ): Promise<DraftedPullRequest> {
-  const prompt = buildPrompt(options.instruction, renderDiff(options.diff), options.branch)
+  const prompt = buildPrompt({
+    instruction: options.instruction,
+    commitInstruction: options.commitInstruction,
+    diffText: renderDiff(options.diff),
+    branch: options.branch
+  })
 
   let reply = ''
   try {
@@ -196,7 +244,7 @@ export async function draftPullRequest(
     )
   }
 
-  const draft = parseDraft(reply)
+  const draft = parseDraft(reply, options.commitInstruction !== null)
   if (draft === null) {
     throw new GitHubError('draftFailed', {}, 'The agent did not answer with a title and a body.')
   }

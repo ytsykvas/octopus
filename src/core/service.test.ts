@@ -283,17 +283,56 @@ describe('workspaces', () => {
     const service = await createService({
       ...paths(dir),
       query: describing(
-        '<<<OCTOPUS_TITLE>>>\nAdd a draft\n<<<OCTOPUS_BODY>>>\nBecause it was missing.'
+        '<<<OCTOPUS_TITLE>>>\nAdd a draft\n<<<OCTOPUS_BODY>>>\nBecause it was missing.\n<<<OCTOPUS_COMMIT>>>\nAdd a draft'
       )
     })
     const project = await service.addProjectFromPath(repo)
     const workspace = await service.createWorkspaceIn(project.id)
     await writeFile(join(workspace.path, 'draft.txt'), 'work\n', 'utf8')
 
+    // The worktree is dirty, so the commit that will carry it is described too.
     await expect(service.draftPullRequest(workspace.id)).resolves.toEqual({
       title: 'Add a draft',
-      body: 'Because it was missing.'
+      body: 'Because it was missing.',
+      commitMessage: 'Add a draft'
     })
+  })
+
+  // Nothing to commit means nothing to ask about: a commit message for a clean
+  // worktree is an answer with nowhere to go.
+  it('asks for no commit message when the worktree is clean', async () => {
+    const repo = join(dir, 'planner')
+    await initRepo(repo)
+
+    let asked = ''
+    const service = await createService({
+      ...paths(dir),
+      query: ((params: { prompt: AsyncIterable<{ message: { content: unknown } }> }) => {
+        void (async () => {
+          for await (const message of params.prompt) {
+            if (typeof message.message.content === 'string') asked += message.message.content
+          }
+        })()
+        return {
+          // eslint-disable-next-line @typescript-eslint/require-await
+          async *[Symbol.asyncIterator]() {
+            yield {
+              type: 'assistant',
+              message: {
+                content: [{ type: 'text', text: '<<<OCTOPUS_TITLE>>>\nT\n<<<OCTOPUS_BODY>>>\nB' }]
+              }
+            }
+          }
+        }
+      }) as unknown as QueryFn
+    })
+    const project = await service.addProjectFromPath(repo)
+    const workspace = await service.createWorkspaceIn(project.id)
+
+    await expect(service.draftPullRequest(workspace.id)).resolves.toMatchObject({
+      commitMessage: null
+    })
+    expect(asked).not.toContain('OCTOPUS_COMMIT')
   })
 
   // The agent cannot run git, so what it is told about the change is all it
@@ -317,7 +356,12 @@ describe('workspaces', () => {
             yield {
               type: 'assistant',
               message: {
-                content: [{ type: 'text', text: '<<<OCTOPUS_TITLE>>>\nT\n<<<OCTOPUS_BODY>>>\nB' }]
+                content: [
+                  {
+                    type: 'text',
+                    text: '<<<OCTOPUS_TITLE>>>\nT\n<<<OCTOPUS_BODY>>>\nB\n<<<OCTOPUS_COMMIT>>>\nC'
+                  }
+                ]
               }
             }
           }

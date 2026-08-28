@@ -7,8 +7,11 @@ import { buildPrompt, draftPullRequest, parseDraft, renderDiff } from './pullReq
 const TITLE_MARKER = '<<<OCTOPUS_TITLE>>>'
 const BODY_MARKER = '<<<OCTOPUS_BODY>>>'
 
-function reply(title: string, body: string): string {
-  return `${TITLE_MARKER}\n${title}\n${BODY_MARKER}\n${body}`
+const COMMIT_MARKER = '<<<OCTOPUS_COMMIT>>>'
+
+function reply(title: string, body: string, commit?: string): string {
+  const head = `${TITLE_MARKER}\n${title}\n${BODY_MARKER}\n${body}`
+  return commit === undefined ? head : `${head}\n${COMMIT_MARKER}\n${commit}`
 }
 
 function hunk(lines: readonly ['context' | 'added' | 'removed', string][]): Hunk {
@@ -80,6 +83,7 @@ function failing(message: string): QueryFn {
 const options = {
   cwd: '/ws/anna',
   instruction: 'Lead with why.',
+  commitInstruction: null,
   diff: diff(),
   branch: 'feature/thing',
   model: null
@@ -154,7 +158,12 @@ describe('renderDiff', () => {
 
 describe('buildPrompt', () => {
   it("carries the project's instruction, the branch and the diff", () => {
-    const prompt = buildPrompt('Lead with why.', 'the diff', 'feature/thing')
+    const prompt = buildPrompt({
+      instruction: 'Lead with why.',
+      commitInstruction: null,
+      diffText: 'the diff',
+      branch: 'feature/thing'
+    })
 
     expect(prompt).toContain('Lead with why.')
     expect(prompt).toContain('feature/thing')
@@ -162,7 +171,12 @@ describe('buildPrompt', () => {
   })
 
   it('names the markers it expects back', () => {
-    const prompt = buildPrompt('x', 'y', 'z')
+    const prompt = buildPrompt({
+      instruction: 'x',
+      commitInstruction: null,
+      diffText: 'y',
+      branch: 'z'
+    })
 
     expect(prompt).toContain(TITLE_MARKER)
     expect(prompt).toContain(BODY_MARKER)
@@ -171,46 +185,70 @@ describe('buildPrompt', () => {
 
 describe('parseDraft', () => {
   it('reads the two values out', () => {
-    expect(parseDraft(reply('Rename the thing', 'Because it was wrong.'))).toEqual({
+    expect(parseDraft(reply('Rename the thing', 'Because it was wrong.'), false)).toEqual({
       title: 'Rename the thing',
-      body: 'Because it was wrong.'
+      body: 'Because it was wrong.',
+      commitMessage: null
     })
   })
 
   it('ignores a preamble, which arrives however plainly the prompt asks for none', () => {
     const noisy = `Sure, here it is:\n\n${reply('Rename it', 'A reason.')}`
 
-    expect(parseDraft(noisy)?.title).toBe('Rename it')
+    expect(parseDraft(noisy, false)?.title).toBe('Rename it')
   })
 
   it('keeps a multi-line body whole', () => {
-    expect(parseDraft(reply('T', 'One.\n\nTwo.'))?.body).toBe('One.\n\nTwo.')
+    expect(parseDraft(reply('T', 'One.\n\nTwo.'), false)?.body).toBe('One.\n\nTwo.')
   })
 
   // The title is one line by definition, and taking the first is closer to the
   // intent than refusing an answer that is otherwise usable.
   it('takes the first line when the title runs on', () => {
-    expect(parseDraft(reply('The title\nand more', 'b'))?.title).toBe('The title')
+    expect(parseDraft(reply('The title\nand more', 'b'), false)?.title).toBe('The title')
   })
 
   it('refuses an answer with no markers in it', () => {
-    expect(parseDraft('I could not do that.')).toBeNull()
+    expect(parseDraft('I could not do that.', false)).toBeNull()
   })
 
   it('refuses an answer cut off before the body', () => {
-    expect(parseDraft(`${TITLE_MARKER}\nA title`)).toBeNull()
+    expect(parseDraft(`${TITLE_MARKER}\nA title`, false)).toBeNull()
   })
 
   it('refuses the markers in the wrong order', () => {
-    expect(parseDraft(`${BODY_MARKER}\nbody\n${TITLE_MARKER}\ntitle`)).toBeNull()
+    expect(parseDraft(`${BODY_MARKER}\nbody\n${TITLE_MARKER}\ntitle`, false)).toBeNull()
   })
 
   it('refuses an empty title, which gh would refuse too', () => {
-    expect(parseDraft(reply('   ', 'a body'))).toBeNull()
+    expect(parseDraft(reply('   ', 'a body'), false)).toBeNull()
+  })
+
+  it('reads the commit message when one was asked for', () => {
+    expect(parseDraft(reply('T', 'B', 'Add a thing\n\nBecause.'), true)).toEqual({
+      title: 'T',
+      body: 'B',
+      commitMessage: 'Add a thing\n\nBecause.'
+    })
+  })
+
+  // The commit marker ends the body; without this the description would carry
+  // the commit message on the end of it.
+  it('keeps the commit message out of the description', () => {
+    expect(parseDraft(reply('T', 'The body.', 'The commit.'), true)?.body).toBe('The body.')
+  })
+
+  /*
+   * Asked for and not given is a malformed answer, not a licence to commit
+   * under nothing. Committing under a message nobody wrote would put it in the
+   * history for good.
+   */
+  it('refuses an answer with no commit message when one was needed', () => {
+    expect(parseDraft(reply('T', 'B'), true)).toBeNull()
   })
 
   it('refuses a title past what a pull request accepts', () => {
-    expect(parseDraft(reply('x'.repeat(201), 'a body'))).toBeNull()
+    expect(parseDraft(reply('x'.repeat(201), 'a body'), false)).toBeNull()
   })
 })
 
@@ -218,7 +256,7 @@ describe('draftPullRequest', () => {
   it('answers with what the agent wrote', async () => {
     await expect(
       draftPullRequest(options, answering(reply('Rename the thing', 'Because.')))
-    ).resolves.toEqual({ title: 'Rename the thing', body: 'Because.' })
+    ).resolves.toEqual({ title: 'Rename the thing', body: 'Because.', commitMessage: null })
   })
 
   it('asks in the workspace, and for reading only', async () => {
@@ -301,7 +339,36 @@ describe('draftPullRequest', () => {
       }
     })) as unknown as QueryFn
 
-    await expect(draftPullRequest(options, query)).resolves.toEqual({ title: 'T', body: 'B' })
+    await expect(draftPullRequest(options, query)).resolves.toEqual({
+      title: 'T',
+      body: 'B',
+      commitMessage: null
+    })
+  })
+
+  it('asks for a commit message when there is something to commit', async () => {
+    let asked = ''
+    const query = ((params: { prompt: AsyncIterable<{ message: { content: unknown } }> }) => {
+      void (async () => {
+        for await (const message of params.prompt) {
+          if (typeof message.message.content === 'string') asked += message.message.content
+        }
+      })()
+      return {
+        // eslint-disable-next-line @typescript-eslint/require-await
+        async *[Symbol.asyncIterator]() {
+          yield {
+            type: 'assistant',
+            message: { content: [{ type: 'text', text: reply('T', 'B', 'C') }] }
+          }
+        }
+      }
+    }) as unknown as QueryFn
+
+    await expect(
+      draftPullRequest({ ...options, commitInstruction: 'Subject, then why.' }, query)
+    ).resolves.toEqual({ title: 'T', body: 'B', commitMessage: 'C' })
+    expect(asked).toContain('Subject, then why.')
   })
 
   it('reports a failure to reach the agent as one', async () => {
