@@ -27,7 +27,8 @@ import {
   parseWorktrees,
   pruneWorktrees,
   removeWorktree,
-  renameBranch
+  renameBranch,
+  isReachableElsewhere
 } from './worktree.js'
 
 const run = promisify(execFile)
@@ -220,6 +221,35 @@ describe('removeWorktree', () => {
     await removeWorktree(exec, path)
 
     await expect(exec(['branch', '--list', 'ytsykvas/task'])).resolves.toContain('ytsykvas/task')
+  })
+})
+
+describe('isReachableElsewhere', () => {
+  it('sees a branch whose commits another branch already holds', async () => {
+    const path = join(dir, 'wt')
+    await addWorktree(exec, path, 'ytsykvas/task', 'main')
+    await removeWorktree(exec, path)
+
+    // Cut from main and never moved on, so main holds everything it has.
+    await expect(isReachableElsewhere(exec, 'ytsykvas/task')).resolves.toBe(true)
+  })
+
+  it('says no for a branch holding the only copy of its work', async () => {
+    const path = join(dir, 'wt')
+    await addWorktree(exec, path, 'ytsykvas/task', 'main')
+
+    const inside = gitIn(path)
+    await writeFile(join(path, 'new.txt'), 'work\n', 'utf8')
+    await inside(['add', '.'])
+    await inside(['commit', '-q', '-m', 'nowhere else'])
+
+    await expect(isReachableElsewhere(exec, 'ytsykvas/task')).resolves.toBe(false)
+  })
+
+  // The refusing answer, because a branch nobody can find is not one whose
+  // commits have been shown to be safe.
+  it('says no about a branch that does not exist', async () => {
+    await expect(isReachableElsewhere(exec, 'ytsykvas/never-was')).resolves.toBe(false)
   })
 })
 

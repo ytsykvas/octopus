@@ -380,6 +380,58 @@ describe('removeWorkspace', () => {
     await expect(exec(['branch', '--list', workspace.branch])).resolves.toBe('')
   })
 
+  /*
+   * Reported: three workspaces that could not be removed with their branches,
+   * over commits that were never at risk.
+   *
+   * The project measured against `develop` while the workspaces had been cut
+   * from `main`, which was three commits ahead. Those three read as unmerged
+   * work — they were on `main` the whole time, and none of the branches held
+   * anything of its own.
+   */
+  it('removes a branch whose commits live on another branch', async () => {
+    // main moves ahead of the base the project measures against.
+    await exec(['checkout', '-q', '-b', 'develop'])
+    await exec(['checkout', '-q', 'main'])
+    await writeFile(join(dir, 'repo', 'ahead.txt'), 'ahead\n', 'utf8')
+    await exec(['add', '.'])
+    await exec(['commit', '-q', '-m', 'main pulls ahead'])
+
+    // The workspace is cut from main, and adds nothing of its own.
+    const workspace = await create()
+    const inside = gitIn(workspace.path)
+
+    await expect(isBranchMerged(exec, workspace.branch, 'develop')).resolves.toBe(false)
+
+    await removeWorkspace(
+      workspace,
+      { repository: exec, workspace: inside },
+      { deleteBranch: true, baseBranch: 'develop' }
+    )
+
+    await expect(exec(['branch', '--list', workspace.branch])).resolves.toBe('')
+    // What made it safe is still there.
+    await expect(exec(['branch', '--list', 'main'])).resolves.toContain('main')
+  })
+
+  // The guard still holds where it should: work that exists nowhere else.
+  it('refuses a branch holding the only copy of its commits', async () => {
+    const workspace = await create()
+    const inside = gitIn(workspace.path)
+
+    await writeFile(join(workspace.path, 'only.txt'), 'only copy\n', 'utf8')
+    await inside(['add', '.'])
+    await inside(['commit', '-q', '-m', 'nowhere else'])
+
+    const error = await removeWorkspace(
+      workspace,
+      { repository: exec, workspace: inside },
+      { deleteBranch: true, baseBranch: 'main' }
+    ).catch((cause: unknown) => cause)
+
+    expect((error as WorkspaceError).code).toBe('branchUnmerged')
+  })
+
   // Asked only when git has already said no: an ordinary merge needs no network.
   it('does not ask the remote when git can already see the merge', async () => {
     const workspace = await create()

@@ -29,7 +29,8 @@ import {
   pruneWorktrees,
   removeWorktree,
   renameBranch,
-  type Worktree
+  type Worktree,
+  isReachableElsewhere
 } from './worktree.js'
 
 /** Machine-readable reason an operation was refused; the UI localises these. */
@@ -341,13 +342,25 @@ export async function removeWorkspace(
   // with half an operation: the directory deleted, the branch still there, and
   // an error about the branch.
   if (options.deleteBranch === true && !force && options.baseBranch !== undefined) {
-    // Local first: it costs nothing and answers for an ordinary merge. The
-    // remote is asked only when that says no, so the common path stays offline.
-    const merged =
+    /*
+     * Three questions, cheapest first, and none of them is "is it merged".
+     *
+     * What deleting a branch risks is losing a commit for good, so that is
+     * what is asked. An ordinary merge answers the first. Work that lives on
+     * another branch — a workspace cut from `main` while the project measures
+     * against `develop`, say — answers the second, and used to be refused over
+     * commits that were never in danger. A squash or rebase merge, which
+     * rewrites the commits and so satisfies neither, answers the third.
+     *
+     * The first two are local. Only the last one reaches the network, and only
+     * when the other two have already said no.
+     */
+    const safe =
       (await isBranchMerged(exec.repository, workspace.branch, options.baseBranch)) ||
+      (await isReachableElsewhere(exec.repository, workspace.branch)) ||
       (await (options.mergedRemotely?.() ?? Promise.resolve(false)))
 
-    if (!merged) {
+    if (!safe) {
       throw new WorkspaceError(
         'branchUnmerged',
         { name: workspace.name, branch: workspace.branch },
