@@ -266,6 +266,74 @@ describe('workspaces', () => {
     expect(diff.added).toBe(1)
   })
 
+  /** An agent that answers once, in the shape the parser expects, and ends. */
+  function describing(text: string): QueryFn {
+    return (() => ({
+      // eslint-disable-next-line @typescript-eslint/require-await
+      async *[Symbol.asyncIterator]() {
+        yield { type: 'assistant', message: { content: [{ type: 'text', text }] } }
+      }
+    })) as unknown as QueryFn
+  }
+
+  it('has the agent describe a workspace, and hands back what it wrote', async () => {
+    const repo = join(dir, 'planner')
+    await initRepo(repo)
+
+    const service = await createService({
+      ...paths(dir),
+      query: describing(
+        '<<<OCTOPUS_TITLE>>>\nAdd a draft\n<<<OCTOPUS_BODY>>>\nBecause it was missing.'
+      )
+    })
+    const project = await service.addProjectFromPath(repo)
+    const workspace = await service.createWorkspaceIn(project.id)
+    await writeFile(join(workspace.path, 'draft.txt'), 'work\n', 'utf8')
+
+    await expect(service.draftPullRequest(workspace.id)).resolves.toEqual({
+      title: 'Add a draft',
+      body: 'Because it was missing.'
+    })
+  })
+
+  // The agent cannot run git, so what it is told about the change is all it
+  // has. A prompt without the diff in it would describe nothing.
+  it("gives the agent this workspace's own diff to describe", async () => {
+    const repo = join(dir, 'planner')
+    await initRepo(repo)
+
+    let asked = ''
+    const service = await createService({
+      ...paths(dir),
+      query: ((params: { prompt: AsyncIterable<{ message: { content: unknown } }> }) => {
+        void (async () => {
+          for await (const message of params.prompt) {
+            if (typeof message.message.content === 'string') asked += message.message.content
+          }
+        })()
+        return {
+          // eslint-disable-next-line @typescript-eslint/require-await
+          async *[Symbol.asyncIterator]() {
+            yield {
+              type: 'assistant',
+              message: {
+                content: [{ type: 'text', text: '<<<OCTOPUS_TITLE>>>\nT\n<<<OCTOPUS_BODY>>>\nB' }]
+              }
+            }
+          }
+        }
+      }) as unknown as QueryFn
+    })
+    const project = await service.addProjectFromPath(repo)
+    const workspace = await service.createWorkspaceIn(project.id)
+    await writeFile(join(workspace.path, 'draft.txt'), 'work\n', 'utf8')
+
+    await service.draftPullRequest(workspace.id)
+
+    expect(asked).toContain('draft.txt')
+    expect(asked).toContain(workspace.branch)
+  })
+
   it('says a workspace that changed nothing changed nothing', async () => {
     const { service, projectId } = await withProject()
     const workspace = await service.createWorkspaceIn(projectId)

@@ -45,6 +45,7 @@ import {
 } from './chats.js'
 import { type EditTarget, readChangeContext, readEditTarget } from './changeContext.js'
 import { readWorkspaceDiff, type WorkspaceDiff } from './diff.js'
+import { draftPullRequest, type DraftedPullRequest } from './pullRequestDraft.js'
 import { isListening, settlePort } from './ports.js'
 import { carriedPaths, carryInto, readCarryList, writeCarryList } from './carry.js'
 import {
@@ -421,6 +422,14 @@ export interface OctopusService {
     workspaceId: string,
     request: Omit<NewPullRequest, 'branch' | 'base'>
   ): Promise<string>
+
+  /**
+   * Asks the agent for a title and a description for this branch.
+   *
+   * Opens nothing and pushes nothing: the answer goes back to the form, where
+   * whoever asked can read it, change it, or throw it away.
+   */
+  draftPullRequest(workspaceId: string): Promise<DraftedPullRequest>
 
   /**
    * The checks, the review and the mergeability of a request that exists.
@@ -1747,6 +1756,33 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
         { ...request, branch: workspace.branch, base: project.baseBranch },
         makeGh(workspace.path),
         makeExec(workspace.path)
+      )
+    },
+
+    async draftPullRequest(workspaceId) {
+      const workspace = requireWorkspace(workspaceId)
+      const project = requireProject(workspace.projectId)
+
+      const [diff, instruction] = await Promise.all([
+        readWorkspaceDiff(makeExec(workspace.path), {
+          baseBranch: project.baseBranch,
+          root: workspace.path
+        }),
+        effectiveInstruction('pullRequest', workspace.projectId, dataRoot)
+      ])
+
+      return draftPullRequest(
+        {
+          cwd: workspace.path,
+          instruction,
+          diff,
+          branch: workspace.branch,
+          // The model a chat would start on. A description is the agent's
+          // ordinary work, and there is no reason it should be answered by a
+          // different model than the one that did the work being described.
+          model: config.model
+        },
+        runQuery
       )
     },
 

@@ -25,8 +25,12 @@ describe('the pull request of a workspace', () => {
     const { result } = renderHook(() => usePullRequest(null, true))
 
     await expect(result.current.create(DRAFT)).resolves.toBeNull()
+    // The agent is not asked either: describing a branch there is no workspace
+    // for would be a question with no subject.
+    await expect(result.current.draft()).resolves.toBeNull()
     expect(octopus().workspaces.pullRequest).not.toHaveBeenCalled()
     expect(octopus().workspaces.createPullRequest).not.toHaveBeenCalled()
+    expect(octopus().workspaces.draftPullRequest).not.toHaveBeenCalled()
   })
 
   /*

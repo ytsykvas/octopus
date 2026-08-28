@@ -348,6 +348,12 @@ export function registerIpc(
     attempt(() => service.createPullRequest(workspaceId, NewPullRequestSchema.parse(request)))
   )
 
+  // Nothing to validate past the id: this one takes no user values, and what
+  // comes back is checked where it is parsed rather than trusted from here.
+  host.handle('workspaces:draftPullRequest', (_event, workspaceId: string) =>
+    attempt(() => service.draftPullRequest(workspaceId))
+  )
+
   host.handle('workspaces:commitAndPush', (_event, workspaceId: string, message: unknown) =>
     attempt(() => service.commitAndPushWorkspace(workspaceId, CommitMessageSchema.parse(message)))
   )

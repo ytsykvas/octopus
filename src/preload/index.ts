@@ -17,6 +17,7 @@ import type { TerminalExit, TerminalOutput, TerminalSpec } from '@core/terminal.
 import type { Config } from '@core/config.js'
 import type { WorkspaceDiff } from '@core/diff.js'
 import type { MergeMethod, PullRequestDraft, PullRequestView } from '@core/pullRequests.js'
+import type { DraftedPullRequest } from '@core/pullRequestDraft.js'
 import type { BranchRequest, PullRequestDetail } from '@core/pullRequestShapes.js'
 import type { RemoteRepository } from '@core/github.js'
 import type { Workspace } from '@core/store.js'
@@ -312,6 +313,16 @@ const api = {
     createPullRequest: (workspaceId: string, request: PullRequestDraft): Promise<Result<string>> =>
       ipcRenderer.invoke('workspaces:createPullRequest', workspaceId, request) as Promise<
         Result<string>
+      >,
+
+    /**
+     * Asks the agent to write a title and a description for this branch.
+     *
+     * Opens nothing — the answer goes into the form, to be read and edited.
+     */
+    draftPullRequest: (workspaceId: string): Promise<Result<DraftedPullRequest>> =>
+      ipcRenderer.invoke('workspaces:draftPullRequest', workspaceId) as Promise<
+        Result<DraftedPullRequest>
       >,
 
     /** Commits everything here and pushes the branch, to update a request. */

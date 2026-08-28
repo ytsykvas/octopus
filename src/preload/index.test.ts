@@ -190,6 +190,11 @@ describe('channel names', () => {
       'workspaces:createPullRequest'
     ],
     [
+      'workspaces.draftPullRequest',
+      () => method('workspaces', 'draftPullRequest')('w' as never),
+      'workspaces:draftPullRequest'
+    ],
+    [
       'workspaces.commitAndPush',
       () => method('workspaces', 'commitAndPush')('w' as never, 'Add a thing' as never),
       'workspaces:commitAndPush'

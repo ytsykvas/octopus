@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
+import type { DraftedPullRequest } from '@core/pullRequestDraft.js'
 import type { PullRequestDraft, PullRequestView } from '@core/pullRequests.js'
 
 import { Button } from '../Button.js'
@@ -9,6 +10,14 @@ interface NewPullRequestFormProps {
   readonly view: PullRequestView
   readonly creating: boolean
   readonly onCreate: (draft: PullRequestDraft) => void
+  /** True while the agent is writing, which the button says instead of guessing. */
+  readonly drafting: boolean
+  /** Asks the agent for a title and a description. Null when it could not. */
+  readonly onDraft: () => Promise<DraftedPullRequest | null>
+  /** Why the agent could not be asked. Shown here so the form survives it. */
+  readonly draftError: string | null
+  /** Opens the project's instructions, which is where the wording is decided. */
+  readonly onEditInstructions: () => void
   /**
    * The env file, named only when git does not ignore it.
    *
@@ -30,6 +39,10 @@ export function NewPullRequestForm({
   view,
   creating,
   onCreate,
+  drafting,
+  onDraft,
+  draftError,
+  onEditInstructions,
   exposedEnvFile
 }: NewPullRequestFormProps): React.JSX.Element {
   const { t } = useTranslation()
@@ -38,13 +51,35 @@ export function NewPullRequestForm({
   const [title, setTitle] = useState('')
   const [body, setBody] = useState('')
   const [draft, setDraft] = useState(false)
+  /** Whether what is in the fields was written by the agent rather than typed. */
+  const [written, setWritten] = useState(false)
 
   const committing = commitMessage.trim() !== ''
+  const untitled = title.trim() === ''
 
   return (
     <form
       onSubmit={(event) => {
         event.preventDefault()
+
+        /*
+         * An empty title is a request, not a mistake.
+         *
+         * It fills the fields and stops there rather than opening: a pull
+         * request is outside this window and hard to take back, and text
+         * nobody has read is not something to publish under their name. The
+         * second press is the one that opens it.
+         */
+        if (untitled) {
+          void onDraft().then((written_) => {
+            if (written_ === null) return
+            setTitle(written_.title)
+            setBody(written_.body)
+            setWritten(true)
+          })
+          return
+        }
+
         onCreate({
           title: title.trim(),
           body,
@@ -117,6 +152,19 @@ export function NewPullRequestForm({
         />
       </label>
 
+      {/* Said where the empty fields are, not in a tooltip: this is the one
+          behaviour of the form that is not visible from looking at it. */}
+      {draftError !== null && <p className="text-danger leading-relaxed">{draftError}</p>}
+
+      <div className="flex flex-col items-start gap-1">
+        <p className="text-ink-faint leading-relaxed">
+          {written ? t('pullRequest.written') : t('pullRequest.emptyHint')}
+        </p>
+        <Button size="sm" onClick={onEditInstructions}>
+          {t('pullRequest.emptyHintSettings')}
+        </Button>
+      </div>
+
       {/* `choice` paints the box and sizes it, so it belongs on the input. On
           the label it made the label 0.875rem wide, and the words wrapped
           inside a square the size of a tick and spilled over the button. */}
@@ -132,14 +180,19 @@ export function NewPullRequestForm({
         <span>{t('pullRequest.draft')}</span>
       </label>
 
-      <Button
-        type="submit"
-        variant="accent"
-        // An empty title is a pull request nobody can find later, and `gh`
-        // refuses it anyway — better said here than by a failed command.
-        disabled={title.trim() === '' || creating}
-      >
-        {t(creating ? 'pullRequest.creating' : 'pullRequest.create')}
+      {/* Never disabled for an empty title any more: empty means "you write
+          it", and a disabled button would be the app refusing the thing it is
+          offering. Still disabled while either half is in flight. */}
+      <Button type="submit" variant="accent" disabled={creating || drafting}>
+        {t(
+          drafting
+            ? 'pullRequest.drafting'
+            : creating
+              ? 'pullRequest.creating'
+              : untitled
+                ? 'pullRequest.ask'
+                : 'pullRequest.create'
+        )}
       </Button>
     </form>
   )

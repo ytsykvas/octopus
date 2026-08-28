@@ -127,10 +127,6 @@ describe('the pull request tab', () => {
     expect(octopus().workspaces.pullRequestDetail).not.toHaveBeenCalled()
   })
 
-  /*
-   * The instruction is the project's, and it is edited where it lives. A second
-   * editor here would be a second place for the two to disagree.
-   */
   /* A branch that cannot be described at all is a different failure from one
      whose checks are missing: this one blanks the pane, because there is
      nothing left on it that is true. */
@@ -176,6 +172,10 @@ describe('the pull request tab', () => {
     })
   })
 
+  /*
+   * The instruction is the project's, and it is edited where it lives. A second
+   * editor here would be a second place for the two to disagree.
+   */
   it('sends the reader to the project instructions rather than editing them here', async () => {
     const user = userEvent.setup()
     answer(view())
@@ -263,6 +263,93 @@ describe('the pull request tab', () => {
    * reachable by its accessible name throughout — the test above passed against
    * the broken form.
    */
+  /*
+   * The whole point of the empty state: pressing the button asks rather than
+   * opens. A pull request is outside this window and awkward to take back, so
+   * text nobody has read does not go out under their name.
+   */
+  it('asks the agent when the title is empty, and opens nothing', async () => {
+    const user = userEvent.setup()
+    answer(view())
+    renderPanel()
+
+    await user.click(await screen.findByRole('button', { name: 'Ask the agent to describe it' }))
+
+    expect(octopus().workspaces.draftPullRequest).toHaveBeenCalledWith(anna.id)
+    expect(octopus().workspaces.createPullRequest).not.toHaveBeenCalled()
+  })
+
+  it('puts what the agent wrote into the fields, to be read and edited', async () => {
+    const user = userEvent.setup()
+    answer(view())
+    renderPanel()
+
+    await user.click(await screen.findByRole('button', { name: 'Ask the agent to describe it' }))
+
+    expect(await screen.findByLabelText('Title')).toHaveValue('Written by the agent')
+    expect(screen.getByLabelText('Description')).toHaveValue('Because of this.')
+    expect(screen.getByText(/Written by the agent\. Edit it/)).toBeInTheDocument()
+  })
+
+  // The second press is the one that opens it, and by then the title is the
+  // agent's rather than empty.
+  it('opens the request the agent described once it has been read', async () => {
+    const user = userEvent.setup()
+    answer(view())
+    renderPanel()
+
+    await user.click(await screen.findByRole('button', { name: 'Ask the agent to describe it' }))
+    await user.click(await screen.findByRole('button', { name: 'Open pull request' }))
+
+    expect(octopus().workspaces.createPullRequest).toHaveBeenCalledWith(anna.id, {
+      title: 'Written by the agent',
+      body: 'Because of this.',
+      draft: false,
+      commitMessage: null
+    })
+  })
+
+  // A failure must not cost the user anything: nothing was typed here, but the
+  // form has to stay usable rather than wedge on an empty title.
+  it('leaves the fields alone when the agent could not be asked', async () => {
+    const user = userEvent.setup()
+    vi.mocked(octopus().workspaces.draftPullRequest).mockResolvedValue({
+      ok: false,
+      error: 'no subscription',
+      code: 'draftFailed'
+    })
+    answer(view())
+    renderPanel()
+
+    await user.click(await screen.findByRole('button', { name: 'Ask the agent to describe it' }))
+
+    expect(await screen.findByLabelText('Title')).toHaveValue('')
+    expect(octopus().workspaces.createPullRequest).not.toHaveBeenCalled()
+  })
+
+  // Typing a title is the other half of the promise: it goes straight out, and
+  // the agent is not consulted at all.
+  it('never asks the agent when a title was typed', async () => {
+    const user = userEvent.setup()
+    answer(view())
+    renderPanel()
+
+    await user.type(await screen.findByLabelText('Title'), 'Mine')
+    await user.click(screen.getByRole('button', { name: 'Open pull request' }))
+
+    expect(octopus().workspaces.draftPullRequest).not.toHaveBeenCalled()
+  })
+
+  it('sends the reader to the instructions from the hint about empty fields', async () => {
+    const user = userEvent.setup()
+    answer(view())
+    const { onEditInstructions } = renderPanel()
+
+    await user.click(await screen.findByRole('button', { name: 'Change how it writes them' }))
+
+    expect(onEditInstructions).toHaveBeenCalledOnce()
+  })
+
   it('paints the checkbox on the input, where the class is defined', async () => {
     answer(view())
     renderPanel()
