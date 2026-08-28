@@ -49,6 +49,18 @@ to a temp directory, puts it on `PATH` and restores it in a `finally`, and
 `defaultExec` allows 15 seconds, which a shell script running `cat` will not
 reach however loaded the machine is. Next time it appears, keep the message.
 
+**It happens on GitHub's machines too, and it now blocks merging.** On
+2026-08-28 the `check` workflow failed on a pull request that touched only the
+pull request pane — `Chat.test.tsx` › "goes on drawing what a background
+conversation says", the same shape as the two above. It passed on a re-run of
+the same commit, and the file passed alone locally, fourteen for fourteen.
+
+Two things follow. The runner is a clean machine with nothing else on it, so
+"the developer's laptop was busy" is not the whole story. And since `main`
+became protected, a green `check` is a merge requirement — so a one-in-five
+flake is now a one-in-five pull request that cannot land without somebody
+noticing it is not their fault and pressing re-run.
+
 ## Why it matters
 
 `npm run check` is what every commit goes through, and a gate that goes red
