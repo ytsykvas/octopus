@@ -131,6 +131,47 @@ export async function isBranchMerged(
   }
 }
 
+/**
+ * Whether the branch's commits survive somewhere other than this branch.
+ *
+ * The question worth asking before deleting one. "Is it merged into the base"
+ * answers something narrower, and answers it wrongly for a workspace cut from
+ * one branch while the project measures against another: three commits that
+ * sit on `main` read as unmerged work about to be lost, and the removal is
+ * refused over commits nothing could lose.
+ *
+ * The branch's own refs do not count — neither `refs/heads/<branch>` nor the
+ * remote copy of the same name. What is being asked is whether some other line
+ * of development already holds this, not whether the branch is itself.
+ *
+ * A ref that merely ends in the same name is treated as the branch's own,
+ * which can only make this answer "no" where a longer name happened to
+ * collide — refusing a removal that was safe, rather than allowing one that
+ * was not.
+ */
+export async function isReachableElsewhere(exec: GitExec, branch: string): Promise<boolean> {
+  let raw: string
+  try {
+    raw = await exec([
+      'for-each-ref',
+      `--contains=${branch}`,
+      '--format=%(refname)',
+      'refs/heads',
+      'refs/remotes'
+    ])
+  } catch {
+    // An unknown branch, or a git too old for `--contains` here. Either way
+    // this cannot show the commits are safe, which is the answer that refuses.
+    return false
+  }
+
+  return raw
+    .split('\n')
+    .map((line) => line.trim())
+    .filter((line) => line !== '')
+    .some((ref) => !ref.endsWith(`/${branch}`))
+}
+
 /** Deletes a branch; `force` allows dropping one that was never merged. */
 export async function deleteBranch(exec: GitExec, branch: string, force = false): Promise<void> {
   await exec(['branch', force ? '-D' : '-d', branch])
