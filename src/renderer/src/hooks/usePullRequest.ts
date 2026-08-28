@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 
+import type { DraftedPullRequest } from '@core/pullRequestDraft.js'
 import type { PullRequestDraft, PullRequestView } from '@core/pullRequests.js'
 
 import { useErrorMessage } from './useErrorMessage.js'
@@ -13,6 +14,24 @@ export interface PullRequestController {
   readonly creating: boolean
   /** Opens one, and answers with its URL — or null when it did not. */
   readonly create: (draft: PullRequestDraft) => Promise<string | null>
+  /** True while the agent is writing a title and a description. */
+  readonly drafting: boolean
+  /**
+   * Why the agent could not be asked, if it could not.
+   *
+   * Separate from `error` on purpose. That one blanks the pane, which is right
+   * when the branch itself could not be read — nothing left on it is true. A
+   * draft failing changes nothing about the branch, and blanking the form would
+   * throw away whatever the user had already typed into it.
+   */
+  readonly draftError: string | null
+  /**
+   * Asks the agent for a title and a description. Opens nothing.
+   *
+   * Null when it failed, and the reason is in `error` — the form stays as the
+   * user left it, so a failure costs them nothing they had typed.
+   */
+  readonly draft: () => Promise<DraftedPullRequest | null>
   /** Asks again: after a merge, after a commit, or on the refresh control. */
   readonly refresh: () => void
 }
@@ -38,6 +57,8 @@ export function usePullRequest(
   const [view, setView] = useState<PullRequestView | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [creating, setCreating] = useState(false)
+  const [drafting, setDrafting] = useState(false)
+  const [draftError, setDraftError] = useState<string | null>(null)
 
   /*
    * The workspace the two above describe.
@@ -122,6 +143,24 @@ export function usePullRequest(
     [workspaceId, apply, describeFailure]
   )
 
+  const draft = useCallback(async (): Promise<DraftedPullRequest | null> => {
+    if (workspaceId === null) return null
+
+    setDrafting(true)
+    setDraftError(null)
+    const result = await window.octopus.workspaces.draftPullRequest(workspaceId)
+    setDrafting(false)
+
+    if (!result.ok) {
+      setDraftError(describeFailure(result))
+      return null
+    }
+
+    // Nothing is read again afterwards: this changed nothing on GitHub, and
+    // nothing about the branch is different for having been described.
+    return result.value
+  }, [workspaceId, describeFailure])
+
   const refresh = useCallback(() => {
     setNonce((count) => count + 1)
   }, [])
@@ -132,6 +171,9 @@ export function usePullRequest(
     error,
     creating,
     create,
+    drafting,
+    draftError,
+    draft,
     refresh
   }
 }

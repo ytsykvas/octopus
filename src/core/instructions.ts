@@ -54,9 +54,19 @@ export const InstructionBodySchema = z.string().max(16_000)
  * template doubles as documentation of what the instruction is for.
  */
 const TEMPLATES: Record<InstructionKind, string> = {
-  pullRequest: `# Pull request descriptions
+  pullRequest: `# Pull requests
 
-How the agent should describe the work in a pull request for this project.
+How the agent should title and describe the work in a pull request for this
+project. Used both for the prompt this pane sends, and when the form is left
+empty and the agent writes the title and description itself.
+
+## The title
+
+- One line, and specific: what changed, not which area it was in.
+- Follow whatever this repository already does — a Conventional Commits prefix
+  if the history has them, plain prose if it does not.
+
+## The description
 
 - Lead with what changed and why, not with a list of files.
 - Mention anything a reviewer would otherwise have to discover: migrations,

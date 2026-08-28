@@ -714,7 +714,7 @@ function fromStreamEvent(message: SDKPartialAssistantMessage): AgentEvent[] {
   return []
 }
 
-function userMessage(text: string): SDKUserMessage {
+export function userMessage(text: string): SDKUserMessage {
   return {
     type: 'user',
     message: { role: 'user', content: text },
@@ -729,8 +729,12 @@ function userMessage(text: string): SDKUserMessage {
  * A queue rather than a plain generator because the two ends run on different
  * clocks: the UI pushes whenever someone presses enter, and the SDK pulls when
  * it is ready for the next turn. Whichever arrives first waits for the other.
+ *
+ * Exported for the one-shot in `pullRequestDraft.ts`, which pushes a single
+ * message and closes: `stream` then ends by itself, which is the whole of what
+ * a question with no conversation after it needs.
  */
-class InputQueue {
+export class InputQueue {
   private readonly queued: SDKUserMessage[] = []
   private waiting: ((result: IteratorResult<SDKUserMessage>) => void) | null = null
   private closed = false

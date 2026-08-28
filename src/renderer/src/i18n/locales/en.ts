@@ -270,11 +270,19 @@ export const en = {
     /* The branch is the whole subject: it is what a pull request is made of,
        and what its name will be on GitHub. */
     editInstructions: 'Instructions for a new PR',
+    /* The label of the open button while the title is empty: pressing it asks
+       rather than opens, and the button has to say which of the two it is. */
     ask: 'Ask the agent to describe it',
+    drafting: 'Writing…',
+    /* Said where the empty fields are. The behaviour is the one thing about
+       this form that cannot be guessed from looking at it. */
+    emptyHint:
+      'Leave these empty and the agent writes them: the title from what the task did, the description the way this project asks for one.',
+    emptyHintSettings: 'Change how it writes them',
+    /* After it has written: the fields are editable like any others, and this
+       says so rather than leaving the reader wondering whether they may. */
+    written: 'Written by the agent. Edit it, then open the request.',
     noConversation: 'Open a conversation in this workspace first.',
-    /* Emptying the instruction is how a project says it adds nothing, so this
-       is a state somebody chose rather than one that went wrong. */
-    noInstruction: 'This project adds nothing to a description. Write an instruction first.',
     nothingToOpen:
       'Nothing to open yet. This branch has no commits that {{base}} does not — make one first.',
     /* Said before the button rather than after it fails. Pushing is a thing

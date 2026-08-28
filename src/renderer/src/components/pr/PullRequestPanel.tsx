@@ -72,7 +72,8 @@ export function PullRequestPanel({
   const describeFailure = useErrorMessage()
 
   const workspaceId = workspace?.id ?? null
-  const { view, loading, error, creating, create, refresh } = usePullRequest(workspaceId, visible)
+  const { view, loading, error, creating, create, drafting, draftError, draft, refresh } =
+    usePullRequest(workspaceId, visible)
   const request = view?.request ?? null
   const detail = usePullRequestDetail(workspaceId, request?.number ?? null, visible)
 
@@ -209,7 +210,11 @@ export function PullRequestPanel({
           <NewPullRequestForm
             view={view}
             creating={creating}
-            onCreate={(draft: PullRequestDraft) => void create(draft)}
+            onCreate={(request: PullRequestDraft) => void create(request)}
+            drafting={drafting}
+            onDraft={draft}
+            draftError={draftError}
+            onEditInstructions={onEditInstructions}
             exposedEnvFile={envIgnored ? null : envFile}
           />
         )

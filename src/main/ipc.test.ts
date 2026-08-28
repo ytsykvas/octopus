@@ -296,6 +296,7 @@ describe('channel table', () => {
     'workspaces:diff',
     'workspaces:pullRequest',
     'workspaces:createPullRequest',
+    'workspaces:draftPullRequest',
     'workspaces:commitAndPush',
     'workspaces:pullRequestDetail',
     'workspaces:mergePullRequest',
@@ -985,6 +986,23 @@ describe('workspaces of a real project', () => {
         draft: false
       })
     ).resolves.toMatchObject({ ok: false })
+  })
+
+  it('asks the service to describe a branch, and passes the answer back', async () => {
+    const projectId = await addProject('describing')
+    const workspace = await createWorkspace(projectId)
+    await writeFile(join(workspace.path, 'draft.txt'), 'work\n', 'utf8')
+
+    // Built after the workspace exists, so the replacement reads it back from
+    // the state file the first service wrote.
+    await useService({
+      query: answeringQuery('<<<OCTOPUS_TITLE>>>\nAdd a draft\n<<<OCTOPUS_BODY>>>\nBecause.')
+    })
+
+    await expect(invoke('workspaces:draftPullRequest', workspace.id)).resolves.toEqual({
+      ok: true,
+      value: { title: 'Add a draft', body: 'Because.' }
+    })
   })
 
   it('commits everything in a workspace and pushes the branch', async () => {
