@@ -50,9 +50,15 @@ and no `npm install`. What the app does expect to find already on the machine:
 - **[`gh`](https://cli.github.com)**, signed in, for cloning from GitHub and for
   pull requests. Everything else works without it.
 
-Builds are not signed yet, so the first launch is refused: macOS says it cannot
-check the developer. Open System Settings → Privacy & Security, find the notice
-and press **Open Anyway**. Once cleared it never asks again.
+Builds are not signed yet, so macOS refuses the first launch and reports the app
+as **damaged** — which it is not; that is what an unsigned download looks like.
+There is no "Open Anyway" to press for this. Clear it once, from a terminal:
+
+```bash
+xattr -dr com.apple.quarantine /Applications/Octopus.app
+```
+
+It never asks again. This step disappears entirely once builds are signed.
 
 ## Running from source
 

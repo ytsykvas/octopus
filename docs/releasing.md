@@ -45,10 +45,32 @@ terminal fails to open, or chat fails on the first message. Neither shows up in
 
 ## Enabling the signature
 
-An **unsigned build is refused by macOS, not merely questioned.** Since macOS
-15 the old right-click → Open bypass is gone; the user has to go to System
-Settings → Privacy & Security and press "Open Anyway" after the first refusal.
-Plan on saying so wherever the download lives.
+An **unsigned build cannot be installed by a non-technical user at all.** This
+was checked on a second machine, with the dmg carrying the quarantine flag a
+browser download sets, and it is worse than the usual "unidentified developer"
+friction:
+
+> "Octopus" is damaged and can't be opened. You should move it to the Trash.
+
+There is no "Open Anyway" for this. That button belongs to apps signed with a
+real certificate but not notarised; ours is **ad-hoc** signed, which macOS
+treats as a broken signature rather than an untrusted one. Nothing appears in
+System Settings → Privacy & Security, and right-click → Open does not help
+either. The only way through is a terminal command on the installed app:
+
+```bash
+xattr -dr com.apple.quarantine /Applications/Octopus.app
+```
+
+Ad-hoc is not a choice that can be reversed by shipping "properly unsigned"
+instead: Apple Silicon refuses to execute a binary with no signature at all, so
+every arm64 build carries at least an ad-hoc one.
+
+The practical consequence is worth stating plainly, because it decides whether
+a download link is worth publishing: **until the app is signed and notarised,
+it can be given to people who will run a terminal command and to nobody else.**
+"Damaged" reads as a broken download, not as a security prompt, and most people
+will not get past it.
 
 Signing removes that entirely. It needs an Apple Developer Program membership
 ($99/year, unlimited apps — one membership covers everything you ever ship),
@@ -105,6 +127,32 @@ environment, where PATH is roughly `/usr/bin:/bin:/usr/sbin:/sbin` — Homebrew
 and `~/.local/bin` are both absent, so `gh` and `claude` disappear while the
 app's own terminal keeps finding them, because that path goes through the login
 shell on purpose. `core/loginShell.ts` repairs it at startup.
+
+### On a second machine, and how it gets there
+
+The build machine has `git`, `gh`, `claude` and a Claude login already, so it
+cannot show what a stranger sees. A second Mac can — Apple Silicon, since there
+is no Intel build.
+
+**How the file travels decides whether the test is real.** macOS marks
+downloads with a quarantine flag, and only some transfers set it:
+
+| Transfer                              | Quarantine | Worth doing                                   |
+| ------------------------------------- | ---------- | --------------------------------------------- |
+| USB drive, `scp`, `rsync`             | no         | no — the app opens cleanly and proves nothing |
+| AirDrop, browser download, cloud sync | yes        | yes                                           |
+
+Copying the artefact by hand is the easy mistake: everything works, and the
+conclusion drawn is the wrong one. Set the flag deliberately if unsure:
+
+```bash
+xattr -w com.apple.quarantine "0083;00000000;Safari;$(uuidgen)" Octopus-<version>-arm64.dmg
+xattr -p com.apple.quarantine Octopus-<version>-arm64.dmg   # confirm it survived the trip
+```
+
+The account panel is the item to watch there: on a machine without `gh` and
+`claude` it should read "not connected" and the app should carry on. That is the
+first-run experience, and it cannot be observed anywhere else.
 
 ## Version
 
