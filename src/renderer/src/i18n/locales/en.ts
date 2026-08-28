@@ -252,6 +252,9 @@ export const en = {
 
     pullRequest: 'Pull request descriptions',
     pullRequestHint: 'Sent when you ask the agent to describe a change for a pull request.',
+    commitMessage: 'Commit messages',
+    commitMessageHint:
+      'Sent with the one above, when the pull request pane commits this workspace and nobody wrote a message for it.',
     addressReview: 'Answering a review',
     addressReviewHint: 'Sent when you hand the review on a pull request to the agent to deal with.',
     review: 'Reviewing a change',
@@ -289,7 +292,7 @@ export const en = {
        that happens to somebody else's machine, and it should not be a surprise. */
     willPush: 'This branch is not on GitHub yet. Opening will push it.',
     dirty:
-      'There are uncommitted changes here. A pull request carries commits, so they stay behind.',
+      'There are uncommitted changes here. They are committed with the request, under the message above or one the agent writes.',
     title: 'Title',
     titlePlaceholder: 'What this change does',
     body: 'Description',
@@ -311,7 +314,8 @@ export const en = {
     createShortcut: 'Create PR',
     commitMessage: 'Commit message',
     commitMessagePlaceholder: 'Rename the thing',
-    commitHint: 'Commits every change in this workspace, then opens the request.',
+    commitHint:
+      'Commits every change in this workspace under this message, then opens the request.',
     /* Said beside the field rather than found out afterwards: octopus writes
        this file into every worktree, and committing everything would send it. */
     envNotIgnored:

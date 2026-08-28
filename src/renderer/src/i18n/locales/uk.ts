@@ -220,6 +220,9 @@ export const uk: Translation = {
 
     pullRequest: 'Описи pull request',
     pullRequestHint: 'Надсилається, коли ви просите агента описати зміну для pull request.',
+    commitMessage: 'Повідомлення комітів',
+    commitMessageHint:
+      'Надсилається разом із попередньою, коли панель pull request комітить цей воркспейс, а повідомлення ніхто не написав.',
     addressReview: 'Опрацювати ревю',
     addressReviewHint: 'Надсилається, коли ви віддаєте агентові ревю на pull request.',
     review: 'Зробити ревю',
@@ -246,7 +249,8 @@ export const uk: Translation = {
     nothingToOpen:
       'Поки нічого відкривати. У цій гілці немає комітів, яких немає в {{base}}, — зробіть спершу коміт.',
     willPush: 'Цієї гілки ще немає на GitHub. Відкриття запушить її.',
-    dirty: 'Тут є незакомічені зміни. Pull request несе коміти, тож вони лишаться поза ним.',
+    dirty:
+      'Тут є незакомічені зміни. Вони підуть у request разом із рештою — під повідомленням вище або тим, яке напише агент.',
     title: 'Заголовок',
     titlePlaceholder: 'Що робить ця зміна',
     body: 'Опис',
@@ -262,7 +266,8 @@ export const uk: Translation = {
     createShortcut: 'Створити PR',
     commitMessage: 'Повідомлення коміту',
     commitMessagePlaceholder: 'Перейменувати те саме',
-    commitHint: 'Закомітить усі зміни в цьому воркспейсі, а тоді відкриє request.',
+    commitHint:
+      'Закомітить усі зміни в цьому воркспейсі під цим повідомленням, а тоді відкриє request.',
     envNotIgnored:
       'git не ігнорує {{file}}, а octopus пише туди змінні цього воркспейса. Закомітивши все, ви відправите їх у pull request.',
 

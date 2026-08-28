@@ -31,6 +31,7 @@ import type { ProjectId } from './types.js'
  */
 export const InstructionKindSchema = z.enum([
   'pullRequest',
+  'commitMessage',
   'addressReview',
   'review',
   'multiAgentReview',
@@ -73,6 +74,18 @@ empty and the agent writes the title and description itself.
   configuration, a follow-up that was deliberately left out.
 - Keep the project's own conventions — issue references, a changelog entry,
   whatever this repository already does.
+`,
+
+  commitMessage: `# Commit messages
+
+How the agent should write the commit that carries this workspace's work, when
+the pull request pane commits it.
+
+- One subject line saying what changed, then a blank line, then why — the shape
+  git expects and every tool renders.
+- Follow whatever this repository already does. If the history is Conventional
+  Commits, match it; if it is plain prose, write plain prose.
+- The subject is not a file list. What was touched is in the diff already.
 `,
 
   addressReview: `# Answering a review
@@ -139,6 +152,7 @@ This branch conflicts with its base. Merge the base in and settle it.
  */
 const FILES: Record<InstructionKind, string> = {
   pullRequest: 'pull-request.md',
+  commitMessage: 'commit-message.md',
   addressReview: 'address-review.md',
   review: 'review.md',
   multiAgentReview: 'multi-agent-review.md',

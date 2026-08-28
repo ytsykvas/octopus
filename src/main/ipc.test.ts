@@ -996,12 +996,14 @@ describe('workspaces of a real project', () => {
     // Built after the workspace exists, so the replacement reads it back from
     // the state file the first service wrote.
     await useService({
-      query: answeringQuery('<<<OCTOPUS_TITLE>>>\nAdd a draft\n<<<OCTOPUS_BODY>>>\nBecause.')
+      query: answeringQuery(
+        '<<<OCTOPUS_TITLE>>>\nAdd a draft\n<<<OCTOPUS_BODY>>>\nBecause.\n<<<OCTOPUS_COMMIT>>>\nAdd a draft'
+      )
     })
 
     await expect(invoke('workspaces:draftPullRequest', workspace.id)).resolves.toEqual({
       ok: true,
-      value: { title: 'Add a draft', body: 'Because.' }
+      value: { title: 'Add a draft', body: 'Because.', commitMessage: 'Add a draft' }
     })
   })
 

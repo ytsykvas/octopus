@@ -53,6 +53,8 @@ export function NewPullRequestForm({
   const [draft, setDraft] = useState(false)
   /** Whether what is in the fields was written by the agent rather than typed. */
   const [written, setWritten] = useState(false)
+  /** The commit message the agent wrote, kept apart from the one typed here. */
+  const [draftedCommit, setDraftedCommit] = useState<string | null>(null)
 
   const committing = commitMessage.trim() !== ''
   const untitled = title.trim() === ''
@@ -75,6 +77,7 @@ export function NewPullRequestForm({
             if (written_ === null) return
             setTitle(written_.title)
             setBody(written_.body)
+            setDraftedCommit(written_.commitMessage)
             setWritten(true)
           })
           return
@@ -84,9 +87,24 @@ export function NewPullRequestForm({
           title: title.trim(),
           body,
           draft,
-          // Null rather than an empty string: it is the difference between
-          // "open it from what is committed" and a message nobody typed.
-          commitMessage: committing ? commitMessage.trim() : null
+          /*
+           * Uncommitted work is committed, not left behind.
+           *
+           * It used to be left behind whenever this field was empty, which
+           * made an empty field the difference between a pull request and a
+           * refusal — the branch had nothing on it, and gh said so after the
+           * agent had already written the description.
+           *
+           * Typed first, then what the agent wrote, then the title. The title
+           * is a last resort and never empty by here: an empty one drafts
+           * rather than opens. Null only when there is nothing to commit,
+           * which git would refuse anyway.
+           */
+          commitMessage: view.dirty
+            ? committing
+              ? commitMessage.trim()
+              : (draftedCommit ?? title.trim())
+            : null
         })
       }}
       className="flex flex-col gap-2"

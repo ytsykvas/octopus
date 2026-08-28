@@ -16,12 +16,14 @@ const KINDS: readonly {
   readonly kind: InstructionKind
   readonly labelKey:
     | 'instructions.pullRequest'
+    | 'instructions.commitMessage'
     | 'instructions.addressReview'
     | 'instructions.review'
     | 'instructions.multiAgentReview'
     | 'instructions.resolveConflicts'
   readonly hintKey:
     | 'instructions.pullRequestHint'
+    | 'instructions.commitMessageHint'
     | 'instructions.addressReviewHint'
     | 'instructions.reviewHint'
     | 'instructions.multiAgentReviewHint'
@@ -31,6 +33,11 @@ const KINDS: readonly {
     kind: 'pullRequest',
     labelKey: 'instructions.pullRequest',
     hintKey: 'instructions.pullRequestHint'
+  },
+  {
+    kind: 'commitMessage',
+    labelKey: 'instructions.commitMessage',
+    hintKey: 'instructions.commitMessageHint'
   },
   {
     kind: 'addressReview',
@@ -51,7 +58,7 @@ const KINDS: readonly {
 ]
 
 /**
- * Shorter than one editor's default, because there are five of them.
+ * Shorter than one editor's default, because there are six of them.
  *
  * Sixteen rows each is a page nobody scrolls to the end of, and an instruction
  * is read to be corrected rather than written from scratch here.

@@ -94,7 +94,11 @@ export function installOctopusStub(): Api {
       ),
       createPullRequest: vi.fn(() => ok('https://github.com/ytsykvas/octopus/pull/1')),
       draftPullRequest: vi.fn(() =>
-        ok({ title: 'Written by the agent', body: 'Because of this.' })
+        ok({
+          title: 'Written by the agent',
+          body: 'Because of this.',
+          commitMessage: 'Written by the agent'
+        })
       ),
       commitAndPush: vi.fn(() => ok(undefined)),
       // A request nobody has reviewed and nothing has checked, which is what
