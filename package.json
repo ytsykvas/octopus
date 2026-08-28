@@ -71,6 +71,14 @@
     "vite": "^8.2.1",
     "vitest": "^4.1.10"
   },
-  "author": "ytsykvas",
-  "license": "UNLICENSED"
+  "author": "Yurii Tsykvas",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/ytsykvas/octopus.git"
+  },
+  "homepage": "https://github.com/ytsykvas/octopus#readme",
+  "bugs": {
+    "url": "https://github.com/ytsykvas/octopus/issues"
+  }
 }

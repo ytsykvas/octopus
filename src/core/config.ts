@@ -239,12 +239,16 @@ export const ConfigSchema = z.object({
   sidebarWidth: z.number().int().min(180).max(560).default(240),
 
   /**
-   * Stable device identifier (§15.3).
-   * Unused for now — reserved for future licensing.
+   * Stable device identifier, shown in Settings.
+   *
+   * Introduced as an anchor for licence binding, which is not happening — the
+   * app is open source. It stays because it is the only stable name this
+   * installation has, and a support conversation about a broken state file has
+   * nothing else to quote.
    */
   deviceId: z.uuid(),
 
-  /** First-run timestamp (§15.3). */
+  /** First-run timestamp, shown in Settings. */
   installedAt: z.iso.datetime()
 })
 

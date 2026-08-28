@@ -33,7 +33,7 @@ From §5 and §12.3. These are decisions, not gaps:
 - **Other agents.** Claude Code only. No Codex, Cursor, OpenCode, Gemini, Amp.
 - **Cloud execution.** Everything is local, there is no backend.
 - **Teams, multiplayer, sharing, presence, an API, a mobile app.**
-- **Accounts and authentication** (§15 is a distant-future hook, not scope).
+- **Accounts and authentication** — not scope, and no longer a reserved hook either.
 - Not an IDE or terminal replacement; not for the App Store.
 
 Roughly half of Conductor's surface area lives here. Saying "non-goal" is a complete
@@ -56,24 +56,24 @@ answer.
 | Files to copy / `.worktreeinclude` for gitignored files    | **Missing** — new worktrees have no `.env`                                                                                                                                      | —                                      |
 | Checkpoints via private git refs, per agent turn           | **Missing** — but the Agent SDK already ships `enableFileCheckpointing`, `rewindFiles`, `forkSession`, `resumeSessionAt`; copying their git plumbing is probably the wrong move | `sdk.d.ts`; `agent.ts` drops `uuid`    |
 | Spotlight testing (sync workspace → repo root)             | **Missing**                                                                                                                                                                     | —                                      |
-| Diff viewer with inline comments → composer attachments    | Changed-files list only; Monaco diff is out of scope (§16); inline review comments are an open question (§17)                                                                   | `worktree.ts:changedFiles`             |
+| Diff viewer with inline comments → composer attachments    | Changed-files list only; Monaco diff is out of scope (§15); inline review comments are an open question (§16)                                                                   | `worktree.ts:changedFiles`             |
 | Checks tab: git status, CI, deployments, PR comments       | **Missing**                                                                                                                                                                     | —                                      |
 | Todos, merge-blocking                                      | **Missing**                                                                                                                                                                     | —                                      |
-| PR creation, description drafting, merge                   | **Missing** — `github.ts` only lists and clones repos. §16 defers it                                                                                                            | `github.ts`                            |
+| PR creation, description drafting, merge                   | **Missing** — `github.ts` only lists and clones repos. §15 defers it                                                                                                            | `github.ts`                            |
 | Bundles its own `gh`, `watchexec`, Claude Code, Codex      | Uses what is on the machine                                                                                                                                                     | —                                      |
-| Embedded terminal                                          | **Present** — `node-pty` + xterm, arrived early (§16)                                                                                                                           | `terminal.ts`, `Terminal.tsx`          |
+| Embedded terminal                                          | **Present** — `node-pty` + xterm, arrived early (§15)                                                                                                                           | `terminal.ts`, `Terminal.tsx`          |
 | Several chats per workspace, session per chat              | **Same design** — session id lives on the chat (§12.3)                                                                                                                          | `chats.ts`, `agent.ts`                 |
 | Session resume across restarts                             | **Same**                                                                                                                                                                        | `agent.ts`                             |
 | Plan / Fast mode, reasoning level                          | Permission modes exist; the mode set is not Conductor's                                                                                                                         | `chats.ts`                             |
 | Per-repo instruction slots (review, PR, conflicts, rename) | One kind: `pullRequest`                                                                                                                                                         | `instructions.ts`                      |
-| Archive with restorable history                            | **Missing** (§16)                                                                                                                                                               | —                                      |
+| Archive with restorable history                            | **Missing** (§15)                                                                                                                                                               | —                                      |
 | Repo icon probed from 17 paths in the repo                 | Chosen explicitly in project settings, plus a colour and initials                                                                                                               | `icons.ts`, `colors.ts`, `initials.ts` |
 | Monorepo working-directory selection via sparse-checkout   | **Missing**                                                                                                                                                                     | —                                      |
 | MCP status surfaced in the composer                        | **Missing**                                                                                                                                                                     | —                                      |
 | Deep links (`conductor://`)                                | **Missing**                                                                                                                                                                     | —                                      |
 | Slash commands from `.claude/commands`                     | **Missing**                                                                                                                                                                     | —                                      |
 | Big Terminal Mode                                          | Terminal is a pane, not a centre-panel mode                                                                                                                                     | `WorkspaceTerminals.tsx`               |
-| Workspace creation from GitHub / Linear issue              | **Open question** (§17)                                                                                                                                                         | —                                      |
+| Workspace creation from GitHub / Linear issue              | **Open question** (§16)                                                                                                                                                         | —                                      |
 | Sidebar tree: repos + workspaces together                  | **Deliberately different** — project tab strip + workspace pane (§10.8)                                                                                                         | `ProjectTabs.tsx`, `Sidebar.tsx`       |
 | Cloud, Multiplayer, API, iOS                               | **Non-goal**                                                                                                                                                                    | —                                      |
 
@@ -92,13 +92,14 @@ Do not "fix" these toward Conductor:
 - **Localised UI** with English as the source of truth (§10.9). Conductor is
   English-only.
 - **100% coverage in `core/`**, enforced (§11.3).
-- **No session cost in dollars** (§17) — a deliberate rejection, and a good example of
+- **No session cost in dollars** (§16) — a deliberate rejection, and a good example of
   octopus declining a feature on principle rather than for lack of time.
 
 ## The uncomfortable one
 
-§15.6 is worth remembering whenever a comparison drifts toward "should we sell this":
+This is worth remembering whenever a comparison drifts toward "should we sell this":
 Conductor gives the local app away free and charges for cloud and teams. And Claude Code
-now does worktrees natively (`EnterWorktree` / `ExitWorktree`). octopus's case is that
-it is a personal tool built the way its author wants — which is a complete answer, but
-only while nobody pretends it is a market position.
+now does worktrees natively (`EnterWorktree` / `ExitWorktree`). That comparison is what
+ended the question — octopus is MIT-licensed and built from source, and PROJECT.md §5
+records why. Its case is that it is a personal tool built the way its author wants, which
+is a complete answer, but only while nobody pretends it is a market position.

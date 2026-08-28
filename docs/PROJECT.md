@@ -91,23 +91,25 @@ task → workspace → agent works → diff → PR → merge → archive
 - Not an IDE replacement, not a terminal replacement.
 - Not for the App Store.
 
-**Not now, but room is reserved (see §15):**
+- Not sold. Monetisation was designed in detail — tiers, a licence token, trial accounting — and then dropped, along with the section describing it. Two things killed it. A client-side licence check in an Electron app is bypassed by patching one file, so it can only ever be a convenience for honest people rather than protection; and Conductor, the direct comparison, gives its local application away and charges for cloud work this project does not do. Selling a local wrapper against a free one was a hard position for a benefit that was never real. The app is MIT-licensed and built from source.
+
+**Not now:**
 
 - Cloud execution of workspaces — everything is local, no backend.
-- Accounts, authentication, licensing.
+- Accounts and authentication.
 - Team work and synchronisation.
 
 ---
 
 ## 6. Settled decisions
 
-| Decision                                      | Rationale                                                                                                                                                                                                    |
-| --------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| Agent — Claude Code only                      | direct integration through the Agent SDK instead of an abstraction over several agents                                                                                                                       |
-| Distribution outside the App Store            | the sandbox (Guideline 2.4.5) forbids executing third-party binaries and writing outside the container (2.5.2); child processes do not inherit security-scoped access. Unsigned at first                     |
-| Layout — a project tab strip plus three panes | Conductor's UI is proven by daily use; the structure of the space is copied, the visual style is our own. Projects moved to a strip because one tree for projects and workspaces outgrows the window (§10.8) |
-| Stack — Electron + TS + React                 | see sections 7–9                                                                                                                                                                                             |
-| Repository language — English                 | code, comments, tests, documentation; user-facing strings are localised, English being the default (§10.9)                                                                                                   |
+| Decision                                      | Rationale                                                                                                                                                                                                                                                                       |
+| --------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Agent — Claude Code only                      | direct integration through the Agent SDK instead of an abstraction over several agents                                                                                                                                                                                          |
+| Distribution outside the App Store            | the sandbox (Guideline 2.4.5) forbids executing third-party binaries and writing outside the container (2.5.2); child processes do not inherit security-scoped access. Built from source and unsigned — a self-built app carries no quarantine flag, so it needs no certificate |
+| Layout — a project tab strip plus three panes | Conductor's UI is proven by daily use; the structure of the space is copied, the visual style is our own. Projects moved to a strip because one tree for projects and workspaces outgrows the window (§10.8)                                                                    |
+| Stack — Electron + TS + React                 | see sections 7–9                                                                                                                                                                                                                                                                |
+| Repository language — English                 | code, comments, tests, documentation; user-facing strings are localised, English being the default (§10.9)                                                                                                                                                                      |
 
 ---
 
@@ -322,7 +324,7 @@ Conductor's layout is the model — proven by daily use and free of complaints. 
 
 A workspace holds up to **three conversations at once**, switched by a strip of underlined tabs across the pane's header row. Each is called after the agent that runs it and its place in the strip — `Claude 1`, `Claude 2` — which is a name that needs no inventing and stops being a guess the moment there is a second kind of agent. A conversation can be given a name of its own by double-clicking its tab, and clearing that name gives the automatic one back. Each tab carries the same status dot the workspace list uses, so which agent is working, which is waiting on an answer and which has stopped is readable without opening any of them. A conversation is created empty; a tab's menu also offers to continue an existing one in a new tab, which forks the agent's session so the two diverge from a shared past.
 
-They run in the same worktree with no locking between them, deliberately (§17). Every tab stays mounted while its workspace is open, so a conversation keeps its place in the log and the answer being streamed into it while another is on screen — but only the one showing may raise a dialog, since a modal about work the reader cannot see is the worst kind of interruption.
+They run in the same worktree with no locking between them, deliberately (§16). Every tab stays mounted while its workspace is open, so a conversation keeps its place in the log and the answer being streamed into it while another is on screen — but only the one showing may raise a dialog, since a modal about work the reader cannot see is the worst kind of interruption.
 
 **Right pane — changes, terminal, scripts and the pull request** in tabs. Shows what the agent did and gives manual access to the workspace. Draggable, and both its width and which tab is showing persist. Whether it is folded away does not — that is a mood about the current window. Its active tab carries the open project's colour, falling back to the accent while no project is open.
 
@@ -510,7 +512,7 @@ What octopus does **not** do is add: no text is appended to the system prompt an
 
 The project settings dialog lists what the agent picked up on its own, so "what is it working from" is a question the app can answer.
 
-**One slash command is answered here rather than by the CLI.** A harness does not filter what reaches the agent, and this is not that: `/usage` asks the local process to print figures it already holds structured, and the CLI prints them as prose. `usage_EXPERIMENTAL_MAY_CHANGE_DO_NOT_RELY_ON_THIS_API_YET` is documented as "the structured data behind the `/usage` command", so the service recognises the command, reads the report and draws a card of bars — plan windows and when they reset, what the session spent, and the local scan of what has been eating the limit. Everything else, `/clear` included, goes to the agent as ordinary message text. The card is the only surface in the app that shows a session's cost in dollars, for the reason given in §17.
+**One slash command is answered here rather than by the CLI.** A harness does not filter what reaches the agent, and this is not that: `/usage` asks the local process to print figures it already holds structured, and the CLI prints them as prose. `usage_EXPERIMENTAL_MAY_CHANGE_DO_NOT_RELY_ON_THIS_API_YET` is documented as "the structured data behind the `/usage` command", so the service recognises the command, reads the report and draws a card of bars — plan windows and when they reset, what the session spent, and the local scan of what has been eating the limit. Everything else, `/clear` included, goes to the agent as ordinary message text. The card is the only surface in the app that shows a session's cost in dollars, for the reason given in §16.
 
 Session control: `interrupt()`, `setModel()`, `setPermissionMode()`, `streamInput()`, `close()`.
 The `sessionId` from `SDKSystemMessage` is persisted — that is what enables resuming after a restart. It is stored on the **chat**, not the workspace: one session per workspace would make a second agent in the same worktree a migration, while one per chat makes it another record. That is exactly how it played out — three conversations per workspace shipped as a widened interface over the shape that was already there (§10.8).
@@ -588,7 +590,7 @@ Everything under one directory (Conductor spreads across `~/conductor` and `~/.c
 ## 14. Project layout
 
 ```
-/Users/tsykvas/projects/octopus/
+octopus/
   src/
     core/
       paths.ts       every path
@@ -617,80 +619,9 @@ Everything under one directory (Conductor spreads across `~/conductor` and `~/.c
 
 ---
 
-## 15. Hooks for authentication and monetisation
+## 15. Out of scope for stage 1
 
-> **Priority: distant future.** The tool is built purely for personal use. This section affects nothing in stage 1 and blocks nothing.
->
-> Only **§15.3** is actually implemented right now — three fields in the config and one stub. The rest is written down so the architecture does not need rework if it ever comes to selling.
-
-### 15.1 Anticipated model
-
-A separate auth service (written later) plus licensing in the client:
-
-| Tier         | Terms            |
-| ------------ | ---------------- |
-| Trial        | first month free |
-| Subscription | $5 / month       |
-| Full access  | $20 one-off      |
-
-### 15.2 Authentication scheme
-
-Authentication through our own service at launch. The service checks the account status and decides whether to let the user in — but issues a **signed token** rather than a one-off yes/no.
-
-```
-first launch
-  └─→ sign in via the service ──→ token (Ed25519, TTL ~14 days) ──→ cached locally
-
-later launches
-  └─→ signature verified locally, no network
-        ├─ token valid          → straight in
-        ├─ expired, online      → silent background refresh
-        └─ expired, offline     → grace period, then blocked
-```
-
-Why not an online check on every start:
-
-- **Offline.** This is a developer tool whose work is entirely local. An app that refuses to open on a train or bad Wi-Fi is more irritating than any surplus UI element — precisely the problem we are escaping.
-- **Single point of failure.** If the service is down, everyone is locked out. At a $20 price point the required uptime does not pay for itself.
-- **It adds no protection** (see §15.4), so the cost is paid for nothing.
-
-A short-lived token keeps control: a cancelled subscription or a refund revokes access within the token's lifetime at worst. This is the standard scheme (JetBrains, Sublime, Tailscale).
-
-### 15.3 What is reserved now (zero cost)
-
-- **`src/core/entitlements.ts`** — a single point answering "is this allowed". Not written yet: the file was described here as an existing stub for a while, which is the sort of claim that sends a reader looking for something that was never there. What it is for still holds — when the first gate appears, it goes **through one place from day one** rather than being scattered later.
-- **`deviceId`** in `config.json` — a stable UUID generated on first run. Unused today; later the anchor for licence binding and trial accounting.
-- **`installedAt`** — first-run timestamp, needed to count the trial.
-- **Room for `ownerId`** in the state types — no structure hardcodes the assumption of exactly one user.
-- **The core/UI split (§11) is the main hook.** It is what would later allow lifting the core into a headless daemon, the foundation for cloud execution if that ever becomes relevant.
-
-There is no networking layer at all right now — it arrives with the auth service.
-
-### 15.4 Honest note on protection
-
-An Electron application is JavaScript in an `asar` archive that unpacks with one command. **Any client-side licence check is bypassed by patching one file**; obfuscation buys hours, not more.
-
-The practical conclusion: a check makes sense as a barrier for honest people and as a convenient way to pay — not as protection. At $5–20 that works out fine: the time to break it costs more than the licence. Real protection comes only from a server component the product is incomplete without.
-
-A consequence for the trial: a local first-run date resets when `~/.octopus` is deleted. If that matters, the trial has to be registered server-side against `deviceId`, which means the network is required on first start. Once issued, the licence should be cached signed (Ed25519 / JWT) with a grace period so the app works offline.
-
-### 15.5 Note on pricing
-
-$5/month against $20 one-off is four months to break even. At that ratio essentially nobody picks the subscription, so in practice there would be a single $20 tier. If the subscription is meant to be a real option, the usual ratio for a lifetime licence is 20–30 monthly payments (here $100–150), or at least two years.
-
-### 15.6 A risk worth keeping in mind
-
-Conductor gives its local application away **free** and monetises only the cloud ($50/month), multiplayer and team features. Selling a local wrapper while a direct competitor gives one away is a hard position.
-
-Additional pressure from the platform: Claude Code already works with git worktrees on its own (`EnterWorktree` / `ExitWorktree` are built into the agent). The niche for standalone worktree wrappers narrows as the platform absorbs these functions.
-
-This is not an argument against the hooks — they are free. It is an argument against spending time on the auth service now.
-
----
-
-## 16. Out of scope for stage 1
-
-Monaco diff, notifications, workspace archiving, Linux builds, signing and notarisation, the auth service and licensing (§15).
+Monaco diff, notifications, workspace archiving, Linux builds, and signing and notarisation.
 
 The whole of the pull request came in ahead of this list, and it is worth saying why rather than quietly deleting the line: §3 calls a branch and a pull request the unit of integration, and a workspace whose branch had no way out of the app was only half of that. Opening one arrived first; the checks, the review threads and merging followed, because a request the app can open and then cannot read is a loop that still ends in a browser.
 
@@ -700,7 +631,7 @@ The terminal moved into scope early: account sign-in needs an interactive sessio
 
 ---
 
-## 17. Open questions
+## 16. Open questions
 
 - **Workspace naming** — given names drawn at random from a pool of 256, task-derived names, or generated from the prompt text.
 - **Tool permissions** — settled for now: the read-only tools are automatic, everything else prompts in the chat, and an answer of "always" is stored per tool in the config where it can be taken back. The mode a new chat starts in is a global setting, so the question is not asked again on each new branch. Open: whether per-project profiles are needed, and whether "always" should narrow to an argument (`Bash(npm test:*)`) rather than a whole tool.
@@ -716,5 +647,3 @@ The terminal moved into scope early: account sign-in needs an interactive sessio
 - **What the list shows** — agent status, change count, CI state. Not session cost: the SDK's `total_cost_usd` is what the same tokens would have cost through the API, which a subscription never pays, and its own documentation calls it "an estimate, not a billing statement". Shown beside a workspace name it is a made-up number in a currency, and the second half of this stands — usage belongs on the list as tokens or as distance to a rate limit, if at all.
 
   Narrowed once, and the boundary is worth stating: the figure appears in exactly one place, the card `/usage` draws (§12.3). There it is not a number volunteered beside something else but the answer to the question that was asked — the command's own subject is what the session cost, and a card answering everything except that would be hiding it rather than declining to guess. Nowhere else: not the list, not the turn footer, not the composer's strip.
-
-- **Monetisation model** — whether $20 stays as full access (see the note in §15.5), and whether a separate auth service is warranted at all given the risks in §15.6.

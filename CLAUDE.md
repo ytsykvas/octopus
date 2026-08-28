@@ -136,12 +136,17 @@ Never lower the coverage threshold or disable a lint rule to make the gate pass.
 
 ## Git
 
-`origin` is a **private** repository, `ytsykvas/octopus`. Push only when asked —
-pushing puts the change somewhere it can be seen and copied.
+`origin` is a **public** repository, `ytsykvas/octopus`, MIT-licensed. Push only
+when asked.
+
+Public changes what care means. Nothing is retractable — a pushed commit is
+mirrored and indexed within minutes, so a secret removed in the next commit has
+still been published. Before writing a path, a token, a hostname or a real
+name into a file, assume it stays readable forever.
 
 Work goes straight to `main` while this is a single-author project: a branch
-per change would be friction without review. Revisit once octopus opens pull
-requests itself.
+per change would be friction without review. That changes the moment somebody
+else opens a pull request.
 
 ## Design
 

@@ -54,7 +54,7 @@ Validated by `ConfigSchema` in [`config.ts`](../src/core/config.ts).
 | `rightPanelWidth`, `sidebarWidth` | pane widths in pixels, as last dragged — resizing the **window** moves the right pane without rewriting this                                                       |
 | `diffView`                        | whether a diff is drawn in one column or two — a preference about how code is read, not a per-session mood                                                         |
 | `rightPanelTab`                   | which of the right pane's tabs is showing; whether the pane is folded away is **not** stored — `build` and `server` are still read and become `scripts`, see below |
-| `deviceId`, `installedAt`         | reserved for licensing (§15.3), unused                                                                                                                             |
+| `deviceId`, `installedAt`         | shown in Settings; no other reader                                                                                                                                 |
 
 `alwaysAllowedTools` is filtered on the way in **and on the way out**, and never
 holds `ExitPlanMode`. An entry there is not merely a pre-answered question — it

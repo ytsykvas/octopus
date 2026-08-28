@@ -38,7 +38,7 @@ context, not a specification.
 **One-line fixes in a file you already have open.** Writing the note costs more
 than the fix. Just fix it.
 
-**Open questions about direction.** Those live in §17 of
+**Open questions about direction.** Those live in §16 of
 [PROJECT.md](../PROJECT.md) — that section is for decisions not yet made, this
 folder is for work not yet done. If a task turns out to need a decision first,
 say so in the file and stop.

@@ -15,7 +15,7 @@ has no home here: the reader reads the thread in octopus, decides, and then
 opens a browser to write one sentence. The tab is otherwise the only place the
 work needs.
 
-It is also the last thing §17's code-review question is waiting on — the rest of
+It is also the last thing §16's code-review question is waiting on — the rest of
 it is answered.
 
 ## Evidence

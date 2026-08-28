@@ -43,7 +43,7 @@ export interface Workspace {
   readonly port: number
   readonly createdAt: string
   /**
-   * Reserved for future multi-user support (§15.3).
+   * Reserved for future multi-user support; nothing writes it today.
    * Always null for now — the shape simply does not assume a single user.
    */
   readonly ownerId: string | null

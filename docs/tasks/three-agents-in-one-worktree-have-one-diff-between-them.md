@@ -21,7 +21,7 @@ what. "The agent changed this" was an unambiguous sentence while there was one
 agent per worktree; it no longer is. Two agents editing the same file also
 produce a diff neither of them would recognise as its own work.
 
-§17 names exactly this as the open half of the question — this file records the
+§16 names exactly this as the open half of the question — this file records the
 surface it actually lands on.
 
 ## Evidence

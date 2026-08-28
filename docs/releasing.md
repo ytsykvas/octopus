@@ -1,23 +1,35 @@
-# Releasing
+# Building an app bundle
 
-How a downloadable build is made, and what has to be true before it is handed
-to anyone.
+How `Octopus.app` is made, what is inside it, and what to check before trusting
+one.
 
-## The two commands
+This is how everybody gets Octopus: there are no downloads, and the reason is
+at the bottom of this document rather than the top, because it is a constraint
+to understand rather than a step to perform.
+
+## The command
 
 ```bash
-npm run dist          # unsigned — what you get without an Apple account
-npm run dist:signed   # signed and notarised — needs the credentials below
+npm run dist
 ```
 
-Both run `npm run build` first, so the typecheck gates the release. Output
-lands in `dist/`:
+It runs `npm run build` first, so the typecheck gates the build. Output lands in
+`dist/`:
 
-| File                              | For                            |
-| --------------------------------- | ------------------------------ |
-| `Octopus-<version>-arm64.dmg`     | the download link              |
-| `Octopus-<version>-arm64-mac.zip` | auto-update, when that exists  |
-| `*.blockmap`                      | differential updates, likewise |
+| File                              | For                                        |
+| --------------------------------- | ------------------------------------------ |
+| `mac-arm64/Octopus.app`           | **this is the one** — drag to Applications |
+| `Octopus-<version>-arm64.dmg`     | the same app, wrapped for handing over     |
+| `Octopus-<version>-arm64-mac.zip` | auto-update, if that ever exists           |
+| `*.blockmap`                      | differential updates, likewise             |
+
+Take the `.app` directly. The dmg exists because electron-builder makes one, and
+it is useful for moving a build between your own machines — but a dmg that
+travels over the internet acquires the quarantine flag, and then the signing
+constraint below applies to it.
+
+`npm run dist:signed` also exists, for the day somebody has an Apple certificate.
+Nothing depends on it.
 
 Apple Silicon only, by decision — an Intel build would need the `darwin-x64`
 Claude Code binary fetched as well, since npm installs only the one matching
@@ -37,17 +49,27 @@ from inside an asar archive:
 - `node_modules/node-pty` — the terminal's native binding;
 - `node_modules/@anthropic-ai/claude-agent-sdk-darwin-arm64/claude` — the agent
   itself, which the SDK resolves out of `node_modules` at runtime. It is
-  ~277 MB on its own and accounts for most of the download.
+  ~277 MB on its own and accounts for most of the bundle's size.
 
 If either stops being unpacked, the app still starts and still looks fine. The
 terminal fails to open, or chat fails on the first message. Neither shows up in
 `npm run dev`, which is why the checklist below exists.
 
-## Enabling the signature
+## Why nobody downloads this
 
-An **unsigned build cannot be installed by a non-technical user at all.** This
-was checked on a second machine, with the dmg carrying the quarantine flag a
-browser download sets, and it is worse than the usual "unidentified developer"
+A build you made yourself opens with no prompt of any kind — verified, and easy
+to re-verify:
+
+```bash
+xattr -l dist/mac-arm64/Octopus.app     # no com.apple.quarantine
+```
+
+Nothing downloaded it, so nothing marked it. That is the entire reason building
+from source is the distribution model rather than a fallback for developers.
+
+Send the same file over the internet and it stops being true. This was checked
+on a second machine, with the dmg carrying the quarantine flag a browser
+download sets, and it is worse than the usual "unidentified developer"
 friction:
 
 > "Octopus" is damaged and can't be opened. You should move it to the Trash.
@@ -66,15 +88,19 @@ Ad-hoc is not a choice that can be reversed by shipping "properly unsigned"
 instead: Apple Silicon refuses to execute a binary with no signature at all, so
 every arm64 build carries at least an ad-hoc one.
 
-The practical consequence is worth stating plainly, because it decides whether
-a download link is worth publishing: **until the app is signed and notarised,
-it can be given to people who will run a terminal command and to nobody else.**
-"Damaged" reads as a broken download, not as a security prompt, and most people
-will not get past it.
+So: **a distributed build can be given to people who will run a terminal command
+and to nobody else.** "Damaged" reads as a failed download, not as a security
+prompt, and most people will not get past it. That is why there are no Releases
+here, and why adding some later would create more support than convenience.
 
-Signing removes that entirely. It needs an Apple Developer Program membership
-($99/year, unlimited apps — one membership covers everything you ever ship),
-and then:
+### What signing would buy, if anyone wants it
+
+Nothing below is needed to build or use Octopus. It is recorded so the decision
+does not have to be researched again.
+
+Signing removes the problem entirely. It needs an Apple Developer Program
+membership ($99/year, unlimited apps — one membership covers everything you ever
+ship), and then:
 
 1. Set `notarize: true` under `mac:` in `electron-builder.yml`.
 2. Export three variables — **never into the repository**:
@@ -96,7 +122,7 @@ Signatures carry a trusted timestamp, so builds already shipped keep working
 after the certificate expires or the membership lapses. Only new builds need a
 live membership.
 
-Verify the result before publishing:
+Verify the result:
 
 ```bash
 spctl -a -vvv dist/mac-arm64/Octopus.app   # must say: accepted, Notarized Developer ID
@@ -106,10 +132,10 @@ codesign -dv dist/mac-arm64/Octopus.app
 On an unsigned build the same command reports an ad-hoc signature and a
 rejection. That is the expected output, not a fault.
 
-## Before publishing
+## Before trusting a build
 
 `npm run check` is necessary and nowhere near sufficient — every failure below
-passes it. Install the artefact and **launch it from Finder**, never from a
+passes it. Install the bundle and **launch it from Finder**, never from a
 terminal: a terminal hands the app its own PATH and hides the one bug this
 whole section exists for.
 

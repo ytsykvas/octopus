@@ -1,0 +1,32 @@
+name: check
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+# A second push to a pull request makes the first run pointless.
+concurrency:
+  group: check-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    # macOS rather than Linux on purpose: this is a macOS-only app, and a green
+    # Linux run would say nothing about the platform it has to work on.
+    runs-on: macos-latest
+
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+
+      # postinstall runs `electron-builder install-app-deps`, which fetches
+      # Electron and builds node-pty. That is most of the time this job takes.
+      - run: npm ci
+
+      # Format, lint, types, and both test runs with the 100% threshold.
+      - run: npm run check

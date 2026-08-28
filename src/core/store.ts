@@ -101,7 +101,7 @@ export const WorkspaceSchema = z.object({
   status: WorkspaceStatusSchema,
   port: z.number().int().min(PORT_RANGE_START).max(PORT_RANGE_END),
   createdAt: z.iso.datetime(),
-  /** Reserved for future multi-user support (§15.3); always null for now. */
+  /** Reserved for future multi-user support; always null for now. */
   ownerId: z.string().nullable()
 })
 

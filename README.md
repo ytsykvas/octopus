@@ -37,49 +37,58 @@ you once, before any of it is believed.
 
 ## Installing
 
-Download the `.dmg`, drag Octopus to Applications, open it. Apple Silicon only.
+You build it yourself. There are no downloads, and that is deliberate — see
+[why](#why-there-are-no-downloads) below.
 
-The agent itself ships inside the app — there is no separate download for it,
-and no `npm install`. What the app does expect to find already on the machine:
+**What you need first:**
 
-- **macOS 11 or later**
-- **git**
+- **macOS 11 or later, Apple Silicon**
+- **Node.js 22+** and **git**
 - a **[Claude Code](https://claude.com/claude-code) login** — the agent runs on
   your authentication, and the app never handles credentials itself. The `claude`
   CLI is what the Settings account panel signs in and out through.
 - **[`gh`](https://cli.github.com)**, signed in, for cloning from GitHub and for
   pull requests. Everything else works without it.
 
-Builds are not signed yet, so macOS refuses the first launch and reports the app
-as **damaged** — which it is not; that is what an unsigned download looks like.
-There is no "Open Anyway" to press for this. Clear it once, from a terminal:
+The agent itself is not one of these: the Claude Code binary comes down with
+`npm install` and lives inside the app.
+
+**Then:**
 
 ```bash
-xattr -dr com.apple.quarantine /Applications/Octopus.app
-```
-
-It never asks again. This step disappears entirely once builds are signed.
-
-## Running from source
-
-Additionally needs **Node.js 22+**.
-
-```bash
+git clone https://github.com/ytsykvas/octopus.git
+cd octopus
 npm install
-npm run dev
+npm run dist
 ```
 
-Only one copy runs at a time — it takes Electron's single-instance lock.
+That leaves `Octopus.app` in `dist/mac-arm64/`. Drag it to Applications and open
+it — no warning, no security prompt, nothing to click through.
 
-If `npm run dev` fails with `Error: Electron uninstall`, the Electron binary was
-not downloaded during install:
+To run it in development instead, `npm run dev`. Only one copy runs at a time:
+it takes Electron's single-instance lock.
+
+### Why there are no downloads
+
+macOS refuses to open a downloaded app unless it is signed with an Apple
+certificate ($99/year) and notarised. Refuses, not warns — it reports the app as
+**damaged** and offers only the Trash, and there is no "Open Anyway" for it.
+
+An app you build on your own machine was never downloaded, so none of that
+applies. It just opens. Publishing an unsigned build would give every single
+person that dialog, so this is not a placeholder for a download link that is
+coming later.
+
+### If something goes wrong
+
+`npm run dev` failing with `Error: Electron uninstall` means the Electron binary
+did not download during install:
 
 ```bash
 node node_modules/electron/install.js
 ```
 
-If a terminal will not open, the native build of `node-pty` is the first thing
-to suspect:
+A terminal that will not open points at the native build of `node-pty`:
 
 ```bash
 npx electron-builder install-app-deps
@@ -131,6 +140,11 @@ around a pull request past opening it — checks and review threads. Work alread
 identified but not done is written down one file at a time in
 [docs/tasks/](docs/tasks/).
 
+## Contributing
+
+Pull requests are welcome. [CONTRIBUTING.md](CONTRIBUTING.md) covers the gate
+every change has to pass and the conventions the repository keeps.
+
 ## Licence
 
-Private project for personal use.
+[MIT](LICENSE).

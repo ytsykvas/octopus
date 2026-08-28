@@ -322,7 +322,7 @@ describe('detectBaseBranch', () => {
 
 describe('repositoryName', () => {
   it('takes the last path segment', () => {
-    expect(repositoryName('/Users/tsykvas/projects/planner')).toBe('planner')
+    expect(repositoryName('/Users/test/projects/planner')).toBe('planner')
   })
 
   it('is not confused by a nested path', () => {
