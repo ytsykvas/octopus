@@ -30,8 +30,13 @@ service of its own — so most of the usual surface does not exist. What does:
   `execFile`, never a shell, and values crossing IPC are parsed with zod at the
   boundary. A path that reaches an argument unvalidated — branch names and
   project ids come from repository directory names — is worth reporting.
-- **Files written outside `~/.octopus` and the worktree.** Those two are the
-  whole of what the app is allowed to touch.
+- **Files written outside `~/.octopus`, the worktree, and `.octopus/` inside a
+  project's checkout.** Those three are the whole of what the app is allowed to
+  touch. The third is the narrowest and the newest: exporting a project's
+  settings writes there and nowhere else, through fixed path constants a test
+  checks, and refuses a symbolic link that could redirect the write out of the
+  directory. A write that escapes it is worth reporting —
+  see [docs/repo-config.md](docs/repo-config.md).
 
 ## What is not a vulnerability
 

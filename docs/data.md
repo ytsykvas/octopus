@@ -426,8 +426,11 @@ Both are files rather than strings in the config: they outgrow a text field,
 they are worth reading in a diff, and they can be run or edited outside the app —
 which is the point of not owning the workflow (§4).
 
-They live under the data root, **not in the repository**: a workspace is a
-checkout of someone's project, not a place to leave ours.
+They live under the data root, and that is where they are read from and run.
+A repository may carry a **copy** in `.octopus/`, so a wiped installation can be
+rebuilt from it — but it is a snapshot moved by two explicit actions, never a
+source the app consults while it works. [repo-config.md](repo-config.md) is the
+whole of it, and the reasoning for why nothing there is live.
 
 There are three of them now, and the third runs on the way out. `archive.sh`
 is given the same environment as the others and the workspace as its working

@@ -28,14 +28,15 @@ Nothing but zod behind them, so a **value** can cross into the window.
 
 ### Storage
 
-| Module                                             | What it decides                                                     |
-| -------------------------------------------------- | ------------------------------------------------------------------- |
-| [`paths.ts`](../src/core/paths.ts)                 | every path under `~/.octopus`, in one place                         |
-| [`persist.ts`](../src/core/persist.ts)             | atomic writes of JSON and of text, validated reads, honest failures |
-| [`config.ts`](../src/core/config.ts)               | settings and their bounds                                           |
-| [`store.ts`](../src/core/store.ts)                 | projects, workspaces and chats, and the migrations                  |
-| [`transcript.ts`](../src/core/transcript.ts)       | chat history as append-only JSONL                                   |
-| [`changeContext.ts`](../src/core/changeContext.ts) | the lines an edit landed among, read while they are still true      |
+| Module                                             | What it decides                                                       |
+| -------------------------------------------------- | --------------------------------------------------------------------- |
+| [`paths.ts`](../src/core/paths.ts)                 | every path under `~/.octopus`, in one place                           |
+| [`persist.ts`](../src/core/persist.ts)             | atomic writes of JSON and of text, validated reads, honest failures   |
+| [`config.ts`](../src/core/config.ts)               | settings and their bounds                                             |
+| [`store.ts`](../src/core/store.ts)                 | projects, workspaces and chats, and the migrations                    |
+| [`transcript.ts`](../src/core/transcript.ts)       | chat history as append-only JSONL                                     |
+| [`changeContext.ts`](../src/core/changeContext.ts) | the lines an edit landed among, read while they are still true        |
+| [`repoConfig.ts`](../src/core/repoConfig.ts)       | a project's settings as its repository can carry them, in `.octopus/` |
 
 ### git
 
@@ -525,6 +526,28 @@ closed the chats of the workspace it removed and `removeProjectById` did not, so
 every agent in a removed project stayed alive with its working directory deleted
 underneath it, reachable from nothing but a quit. A test asserting that the
 records are gone will not notice: the records were the part that worked.
+
+### The one place the app writes inside a checkout
+
+`SECURITY.md` named two places octopus may touch — the data root and the
+worktree — and for a long time that was simply true: every use of a project's
+`repoPath` in the service is a git call or a read. It now names three.
+
+Exporting a project's settings into `.octopus/` is the exception, and it is
+confined rather than trusted. Every path is a fixed constant assembled in
+`repoConfig.ts`; `repoConfig.test.ts` walks the whole record and fails if one of
+them is ever absolute or climbs out with `..`; the id that selects a path is
+parsed by zod before it crosses IPC; and a symbolic link inside the directory is
+refused in both directions, since a link is what turns every one of those
+guarantees into decoration.
+
+The confinement check is a **test over the constants** rather than a branch in
+the code, deliberately. The paths cannot vary, so a runtime `if` guarding them
+is a branch no input reaches — a line nobody can exercise and therefore nobody
+should trust. What varies is the id, and that is checked where it arrives.
+
+Nothing from `.octopus/` is read while the app works, which is the other half of
+the same decision: [repo-config.md](repo-config.md) has the reasoning.
 
 ### Errors are not swallowed
 
