@@ -25,6 +25,7 @@ import type { RemoveOptions, WorkspaceView } from '@core/workspaces.js'
 import type { InstructionKind } from '@core/instructions.js'
 import type { ScriptKind } from '@core/scripts.js'
 import type { InstructionSource } from '@core/instructionSources.js'
+import type { RepoConfigView, RepoItemId } from '@core/repoConfig.js'
 import type { CapabilityFile } from '@core/repoTrust.js'
 import type { Project, ProjectPatch } from '@core/store.js'
 import type { ThemeName } from '@core/types.js'
@@ -475,6 +476,29 @@ const api = {
       ipcRenderer.invoke('instructions:sources', projectId, workspaceId) as Promise<
         Result<InstructionSource[]>
       >,
+
+    /**
+     * The settings this project's repository carries, beside the app's own.
+     *
+     * A snapshot in `.octopus/`, so a wiped installation can be rebuilt from
+     * the repository. Read on demand; nothing in it runs on its own.
+     */
+    repoConfig: (projectId: string): Promise<Result<RepoConfigView>> =>
+      ipcRenderer.invoke('repoConfig:read', projectId) as Promise<Result<RepoConfigView>>,
+
+    /** Takes the named items out of the repository and into the installation. */
+    importRepoConfig: (
+      projectId: string,
+      ids: readonly RepoItemId[]
+    ): Promise<Result<RepoItemId[]>> =>
+      ipcRenderer.invoke('repoConfig:import', projectId, ids) as Promise<Result<RepoItemId[]>>,
+
+    /** Writes the named items from the installation into the repository. */
+    exportRepoConfig: (
+      projectId: string,
+      ids: readonly RepoItemId[]
+    ): Promise<Result<RepoItemId[]>> =>
+      ipcRenderer.invoke('repoConfig:export', projectId, ids) as Promise<Result<RepoItemId[]>>,
 
     /** Whether git would keep the env file out of a commit. */
     isEnvIgnored: (projectId: string): Promise<Result<boolean>> =>

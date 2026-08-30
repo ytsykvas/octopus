@@ -42,13 +42,25 @@ export function carryPath(projectId: ProjectId, root?: string): string {
   return projectCarry(projectId, root)
 }
 
-/** The list a project has written, or the starting one where it has not. */
-export async function readCarryList(projectId: ProjectId, root?: string): Promise<string> {
+/**
+ * What is written, or null where nothing is.
+ *
+ * The distinction `readCarryList` cannot make: it answers with the starting
+ * list for a file that is absent, which is the right answer for an editor and
+ * the wrong one for exporting into a repository — a list nobody has touched is
+ * not a setting worth committing.
+ */
+export async function storedCarryList(projectId: ProjectId, root?: string): Promise<string | null> {
   try {
     return await readFile(carryPath(projectId, root), 'utf8')
   } catch {
-    return DEFAULT_LIST
+    return null
   }
+}
+
+/** The list a project has written, or the starting one where it has not. */
+export async function readCarryList(projectId: ProjectId, root?: string): Promise<string> {
+  return (await storedCarryList(projectId, root)) ?? DEFAULT_LIST
 }
 
 export async function writeCarryList(

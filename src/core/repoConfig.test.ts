@@ -5,7 +5,9 @@ import { isAbsolute, join, normalize } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 
 import {
+  compareRepoItem,
   formatRepoProject,
+  instructionKindOf,
   parseRepoProject,
   REPO_DIR,
   REPO_ITEM_IDS,
@@ -15,8 +17,11 @@ import {
   type RepoItem,
   RepoConfigError,
   RepoItemIdSchema,
+  RepoItemIdsSchema,
   RepoProjectSchema,
+  repoItemFile,
   repoItemPath,
+  scriptKindOf,
   writeRepoConfig
 } from './repoConfig.js'
 
@@ -90,6 +95,68 @@ describe('RepoItemIdSchema', () => {
 describe('repoItemPath', () => {
   it('places an item under the repository .octopus directory', () => {
     expect(repoItemPath('/repo', 'carry')).toBe(join('/repo', REPO_DIR, 'carry'))
+  })
+})
+
+describe('RepoItemIdsSchema', () => {
+  it('accepts a selection', () => {
+    expect(RepoItemIdsSchema.safeParse(['carry', 'script.run']).success).toBe(true)
+  })
+
+  it('refuses one longer than there are items to select', () => {
+    expect(RepoItemIdsSchema.safeParse(Array(50).fill('carry')).success).toBe(false)
+  })
+})
+
+describe('scriptKindOf and instructionKindOf', () => {
+  it('name the kind an id carries', () => {
+    expect(scriptKindOf('script.archive')).toBe('archive')
+    expect(instructionKindOf('instruction.fixChecks')).toBe('fixChecks')
+  })
+
+  it('answer with nothing for an id of the other sort', () => {
+    expect(scriptKindOf('instruction.review')).toBeUndefined()
+    expect(instructionKindOf('script.run')).toBeUndefined()
+    expect(scriptKindOf('carry')).toBeUndefined()
+    expect(instructionKindOf('project')).toBeUndefined()
+  })
+})
+
+describe('repoItemFile', () => {
+  it('names the file relative to the repository root', () => {
+    expect(repoItemFile('script.run')).toBe(join(REPO_DIR, 'scripts', 'run.sh'))
+  })
+})
+
+describe('compareRepoItem', () => {
+  it('says nothing about an item neither side has', () => {
+    expect(compareRepoItem('carry', null, null)).toBeNull()
+  })
+
+  it('reports what only the repository carries', () => {
+    expect(compareRepoItem('carry', '.env\n', null)).toMatchObject({
+      state: 'onlyInRepository',
+      repository: '.env\n',
+      app: null
+    })
+  })
+
+  it('reports what only the app holds', () => {
+    expect(compareRepoItem('carry', null, '.env\n')).toMatchObject({ state: 'onlyInApp' })
+  })
+
+  it('tells identical copies from differing ones', () => {
+    expect(compareRepoItem('carry', '.env\n', '.env\n')).toMatchObject({ state: 'same' })
+    expect(compareRepoItem('carry', '.env\n', 'other\n')).toMatchObject({ state: 'differs' })
+  })
+
+  // Which side is newer is deliberately not answered: contents are all there
+  // is to go on, and a guess would decide for the user in the one place they
+  // have to decide for themselves.
+  it('names the file so the answer can be shown against something', () => {
+    expect(compareRepoItem('instruction.review', 'a', 'b')?.path).toBe(
+      join(REPO_DIR, 'instructions', 'review.md')
+    )
   })
 })
 

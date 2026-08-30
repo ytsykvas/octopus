@@ -38,6 +38,7 @@ import {
   PullRequestNumberSchema
 } from '../core/pullRequests.js'
 import { QuestionAnswerSchema } from '../core/questions.js'
+import { RepoItemIdsSchema } from '../core/repoConfig.js'
 import { ScriptBodySchema, ScriptKindSchema } from '../core/scripts.js'
 import type {
   ChatEvent,
@@ -257,6 +258,22 @@ export function registerIpc(
   // made from it.
   host.handle('env:ignored', (_event, projectId: string) =>
     attempt(() => service.isProjectEnvIgnored(projectId))
+  )
+
+  // A snapshot of the project's settings that its repository may carry, so a
+  // wiped installation can be rebuilt from the repository rather than memory.
+  host.handle('repoConfig:read', (_event, projectId: string) =>
+    attempt(() => service.projectRepoConfig(projectId))
+  )
+
+  // The ids name files the app reads and writes, so they are parsed rather than
+  // trusted to be ours.
+  host.handle('repoConfig:import', (_event, projectId: string, ids: unknown) =>
+    attempt(() => service.importRepoConfig(projectId, RepoItemIdsSchema.parse(ids)))
+  )
+
+  host.handle('repoConfig:export', (_event, projectId: string, ids: unknown) =>
+    attempt(() => service.exportRepoConfig(projectId, RepoItemIdsSchema.parse(ids)))
   )
 
   // Keyed by workspace rather than project: the files land in a worktree, and

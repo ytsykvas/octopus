@@ -207,8 +207,12 @@ export function instructionPath(
  * The distinction the fallback below is built on, and the one `readInstruction`
  * cannot make: it answers with the template for a file that is absent, which is
  * the right answer for an editor and the wrong one for a chain of defaults.
+ *
+ * Exported for the same distinction elsewhere: exporting a project's settings
+ * into its repository should carry what somebody wrote, not a template nobody
+ * has touched.
  */
-async function storedInstruction(
+export async function storedInstruction(
   kind: InstructionKind,
   scope: InstructionScope,
   root?: string

@@ -40,8 +40,13 @@ import { z } from 'zod'
 import { CarryListSchema } from './carry.js'
 import { ProjectColorSchema } from './colors.js'
 import { ProjectIconSchema } from './icons.js'
-import { INSTRUCTION_FILES, InstructionBodySchema, InstructionKindSchema } from './instructions.js'
-import { SCRIPT_FILES, ScriptBodySchema, ScriptKindSchema } from './scripts.js'
+import {
+  INSTRUCTION_FILES,
+  InstructionBodySchema,
+  type InstructionKind,
+  InstructionKindSchema
+} from './instructions.js'
+import { SCRIPT_FILES, ScriptBodySchema, type ScriptKind, ScriptKindSchema } from './scripts.js'
 
 /** The directory a repository carries its octopus settings in. */
 export const REPO_DIR = '.octopus'
@@ -111,6 +116,15 @@ const KNOWN: ReadonlySet<string> = new Set<string>(REPO_ITEM_IDS)
 export const RepoItemIdSchema = z.custom<RepoItemId>(
   (value) => typeof value === 'string' && KNOWN.has(value)
 )
+
+/**
+ * A selection as accepted from the renderer.
+ *
+ * Bounded by the number of items there are: a list longer than that is not a
+ * selection, and a bound is cheaper than finding out what a million ids do to a
+ * loop that touches the filesystem.
+ */
+export const RepoItemIdsSchema = z.array(RepoItemIdSchema).max(REPO_ITEM_IDS.length)
 
 /** Machine-readable reason a repository's settings could not be used. */
 export type RepoConfigCode = 'repoConfigSymlink' | 'repoConfigTooLarge' | 'repoConfigMalformed'
@@ -182,6 +196,86 @@ export interface RepoItem {
  */
 export const REPO_ITEM_PATHS: Readonly<Record<RepoItemId, string>> = ITEM_PATHS
 
+/**
+ * Which script or instruction an id names, or nothing where it names neither.
+ *
+ * Reverse maps rather than a prefix and a parse: the ids are built from these
+ * two enums, so a lookup either finds the kind or the id was not one — there is
+ * no third outcome to write a branch for that no input could reach.
+ */
+const SCRIPT_OF: ReadonlyMap<string, ScriptKind> = new Map(
+  ScriptKindSchema.options.map((kind) => [`script.${kind}`, kind])
+)
+
+const INSTRUCTION_OF: ReadonlyMap<string, InstructionKind> = new Map(
+  InstructionKindSchema.options.map((kind) => [`instruction.${kind}`, kind])
+)
+
+export function scriptKindOf(id: RepoItemId): ScriptKind | undefined {
+  return SCRIPT_OF.get(id)
+}
+
+export function instructionKindOf(id: RepoItemId): InstructionKind | undefined {
+  return INSTRUCTION_OF.get(id)
+}
+
+/** Where an item sits relative to the repository root — what a message names. */
+export function repoItemFile(id: RepoItemId): string {
+  return join(REPO_DIR, ITEM_PATHS[id])
+}
+
+/** How the copy in a repository stands against the copy in the app. */
+export type RepoItemState = 'onlyInRepository' | 'onlyInApp' | 'same' | 'differs'
+
+/** One item, as both sides hold it. */
+export interface RepoConfigItem {
+  readonly id: RepoItemId
+  /** Relative to the repository root. */
+  readonly path: string
+  readonly state: RepoItemState
+  /** What the repository carries, so it can be read before it is imported. */
+  readonly repository: string | null
+  /** What the app holds, or null where nobody has written it. */
+  readonly app: string | null
+}
+
+/**
+ * How one item's two copies compare, or null where neither side has it.
+ *
+ * Which side is **newer** is deliberately not answered. Contents are all there
+ * is to go on, a modification time says nothing after a clone, and a guess here
+ * would decide for the user in the one place they have to decide for
+ * themselves. "Differs", with both directions a click away, is the honest
+ * answer.
+ */
+export function compareRepoItem(
+  id: RepoItemId,
+  repository: string | null,
+  app: string | null
+): RepoConfigItem | null {
+  if (repository === null && app === null) return null
+
+  const state: RepoItemState =
+    repository === null
+      ? 'onlyInApp'
+      : app === null
+        ? 'onlyInRepository'
+        : repository === app
+          ? 'same'
+          : 'differs'
+
+  return { id, path: repoItemFile(id), state, repository, app }
+}
+
+/** What a repository offers a project, and whether git would keep it. */
+export interface RepoConfigView {
+  /** The repository carries at least one item. */
+  readonly present: boolean
+  /** git ignores `.octopus/`, which makes exporting into it pointless. */
+  readonly ignored: boolean
+  readonly items: readonly RepoConfigItem[]
+}
+
 /** Where an item lives inside a repository. */
 export function repoItemPath(repoPath: string, id: RepoItemId): string {
   return join(repoPath, REPO_DIR, ITEM_PATHS[id])
@@ -208,7 +302,7 @@ async function assertNotLink(path: string, name: string): Promise<void> {
 /** Reads one item, or null where the repository does not carry it. */
 async function readItem(repoPath: string, id: RepoItemId): Promise<RepoItem | null> {
   const path = repoItemPath(repoPath, id)
-  const name = join(REPO_DIR, ITEM_PATHS[id])
+  const name = repoItemFile(id)
 
   await assertNotLink(path, name)
 
@@ -254,7 +348,7 @@ export function parseRepoProject(contents: string): RepoProject {
   } catch {
     throw new RepoConfigError(
       'repoConfigMalformed',
-      { path: join(REPO_DIR, ITEM_PATHS.project) },
+      { path: repoItemFile('project') },
       'project.json is not valid JSON.'
     )
   }
@@ -263,7 +357,7 @@ export function parseRepoProject(contents: string): RepoProject {
   if (!result.success) {
     throw new RepoConfigError(
       'repoConfigMalformed',
-      { path: join(REPO_DIR, ITEM_PATHS.project) },
+      { path: repoItemFile('project') },
       'project.json does not describe a project.'
     )
   }
@@ -313,6 +407,17 @@ because a secret committed to a repository has been published whatever the next
 commit does.
 `
 
+/**
+ * The note, relative to the repository root.
+ *
+ * Named because two places need it: the export writes it, and the gitignore
+ * check asks about it. A directory pattern like `.octopus/` matches nothing
+ * until the directory exists, so asking git about the folder answered "not
+ * ignored" for a repository that ignores it — a file inside is the question
+ * that can actually be answered, and this is the file every export writes.
+ */
+export const REPO_README_FILE = join(REPO_DIR, 'README.md')
+
 /** Scripts are written executable, which is a mode git records and preserves. */
 const SCRIPT_MODE = 0o755
 
@@ -328,8 +433,8 @@ export async function writeRepoConfig(repoPath: string, items: readonly RepoItem
   await assertNotLink(root, REPO_DIR)
   await mkdir(root, { recursive: true })
 
-  const readme = join(root, 'README.md')
-  await assertNotLink(readme, join(REPO_DIR, 'README.md'))
+  const readme = join(repoPath, REPO_README_FILE)
+  await assertNotLink(readme, REPO_README_FILE)
   await writeFile(readme, REPO_README, 'utf8')
 
   for (const item of items) {

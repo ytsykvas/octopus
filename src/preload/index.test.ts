@@ -127,6 +127,21 @@ describe('channel names', () => {
       'carry:save'
     ],
     [
+      'projects.repoConfig',
+      () => method('projects', 'repoConfig')('p' as never),
+      'repoConfig:read'
+    ],
+    [
+      'projects.importRepoConfig',
+      () => method('projects', 'importRepoConfig')('p' as never, ['carry'] as never),
+      'repoConfig:import'
+    ],
+    [
+      'projects.exportRepoConfig',
+      () => method('projects', 'exportRepoConfig')('p' as never, ['carry'] as never),
+      'repoConfig:export'
+    ],
+    [
       'projects.readInstruction',
       () => method('projects', 'readInstruction')('p' as never, 'pullRequest' as never),
       'instructions:read'
