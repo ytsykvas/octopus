@@ -33,6 +33,7 @@ async function renderDialog(
     project: project(),
     onUpdate: vi.fn(() => Promise.resolve(true)),
     onRemove: vi.fn(),
+    onImported: vi.fn(),
     onClose: vi.fn(),
     ...overrides
   }
@@ -735,6 +736,18 @@ describe('ProjectSettings', () => {
     expect(screen.queryByText('loaded')).toBeNull()
   })
 
+  // Its own section, after everything it moves: what a repository carries is
+  // about the six sections above rather than a setting of its own.
+  it('reaches the repository copy from its own section', async () => {
+    const user = userEvent.setup()
+    await renderDialog()
+
+    await openSection(user, 'Repository')
+
+    expect(await screen.findByRole('button', { name: 'Export' })).toBeInTheDocument()
+    expect(window.octopus.projects.repoConfig).toHaveBeenCalledWith('planner')
+  })
+
   it('shows the pull request instructions under Instructions', async () => {
     vi.mocked(window.octopus.projects.readInstruction).mockResolvedValue({
       ok: true,
@@ -796,6 +809,7 @@ describe('ProjectSettings', () => {
       project: project(),
       onUpdate: vi.fn(() => Promise.resolve(true)),
       onRemove: vi.fn(),
+      onImported: vi.fn(),
       onClose: vi.fn()
     }
     const user = userEvent.setup()

@@ -97,7 +97,23 @@ export const en = {
     sectionFiles: 'Files',
     sectionEnv: 'Env',
     sectionInstructions: 'Instructions',
+    sectionRepository: 'Repository',
     sectionDanger: 'Danger zone',
+    repoLoading: 'Reading the repository…',
+    repoHint:
+      'A project keeps its settings in ~/.octopus, which lives on this machine and goes with it. Its repository can carry a copy in .octopus/, so a fresh installation is rebuilt from the repository rather than from memory. Nothing here is read while the app works, and nothing in it runs on its own.',
+    repoIgnored:
+      'git ignores .octopus/, so anything written there stays on this machine. Take it out of .gitignore for the copy to reach anybody else.',
+    repoIn: 'From the repository',
+    repoOut: 'Into the repository',
+    repoImport: 'Import',
+    repoExport: 'Export',
+    repoNothingOffered: 'This repository carries nothing yet.',
+    repoShow: 'Show what {{path}} contains',
+    repoStateOnlyInRepository: 'not here yet',
+    repoStateOnlyInApp: 'not in the repository',
+    repoStateSame: 'the same',
+    repoStateDiffers: 'differs',
     done: 'Done',
     name: 'Name',
     nameHint: 'Shown in the sidebar. The repository and its folder are untouched.',
@@ -852,6 +868,10 @@ export const en = {
     lastChat: 'The last conversation cannot be closed. Use /clear to start it again.',
     nothingToFork: 'This conversation has not started yet, so there is nothing to continue.',
     forkFailed: 'The agent could not copy this conversation.',
+    repoConfigSymlink:
+      '{{path}} is a symbolic link. octopus will not read or write through one, because it can point anywhere outside the repository.',
+    repoConfigTooLarge: '{{path}} is larger than this kind of file is allowed to be.',
+    repoConfigMalformed: '{{path}} does not describe a project.',
     unknown: 'Something went wrong: {{message}}'
   }
 }

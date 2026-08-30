@@ -94,7 +94,23 @@ export const uk: Translation = {
     sectionFiles: 'Файли',
     sectionEnv: 'Env',
     sectionInstructions: 'Інструкції',
+    sectionRepository: 'Репозиторій',
     sectionDanger: 'Небезпечна зона',
+    repoLoading: 'Читаю репозиторій…',
+    repoHint:
+      'Налаштування проєкту лежать у ~/.octopus — на цій машині й разом із нею зникають. Репозиторій може нести копію в .octopus/, і тоді свіжа інсталяція відновлюється з репозиторію, а не з памʼяті. Під час роботи застосунок звідти нічого не читає, і ніщо там не запускається саме собою.',
+    repoIgnored:
+      'git ігнорує .octopus/, тож усе записане туди лишиться на цій машині. Прибери теку з .gitignore, щоб копія дійшла до інших.',
+    repoIn: 'З репозиторію',
+    repoOut: 'До репозиторію',
+    repoImport: 'Імпортувати',
+    repoExport: 'Експортувати',
+    repoNothingOffered: 'Цей репозиторій поки нічого не несе.',
+    repoShow: 'Показати вміст {{path}}',
+    repoStateOnlyInRepository: 'ще немає тут',
+    repoStateOnlyInApp: 'немає в репозиторії',
+    repoStateSame: 'однакове',
+    repoStateDiffers: 'відрізняється',
     done: 'Готово',
     name: 'Назва',
     nameHint: 'Показується в сайдбарі. Репозиторій і його теку не змінює.',
@@ -715,6 +731,10 @@ export const uk: Translation = {
     lastChat: 'Останню розмову закрити не можна. Щоб почати її спочатку, скористайтеся /clear.',
     nothingToFork: 'Ця розмова ще не почалася, тож продовжувати нема чого.',
     forkFailed: 'Агент не зміг скопіювати цю розмову.',
+    repoConfigSymlink:
+      '{{path}} — символічне посилання. octopus не читає й не пише через нього, бо воно може вести куди завгодно поза репозиторієм.',
+    repoConfigTooLarge: '{{path}} більший, ніж дозволено файлу такого роду.',
+    repoConfigMalformed: '{{path}} не описує проєкт.',
     unknown: 'Щось пішло не так: {{message}}'
   }
 }
