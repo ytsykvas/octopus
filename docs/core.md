@@ -54,6 +54,7 @@ Nothing but zod behind them, so a **value** can cross into the window.
 | ------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | [`github.ts`](../src/core/github.ts)                         | which repositories the account can push to, and cloning one, through the `gh` CLI                                                                                                                                         |
 | [`pullRequests.ts`](../src/core/pullRequests.ts)             | every `gh` command a pull request needs: reading a branch, committing, pushing, opening one, reading it in full, merging, and reading every branch of a project at once                                                   |
+| [`pullRequestDraft.ts`](../src/core/pullRequestDraft.ts)     | asking the agent for a title and a description, and stopping at the text                                                                                                                                                  |
 | [`pullRequestShapes.ts`](../src/core/pullRequestShapes.ts)   | what GitHub sends about one, and what to make of it — schemas, lowering tables and normalisation, with no executor and no Node imports, so the renderer may import its values                                             |
 | [`accounts.ts`](../src/core/accounts.ts)                     | whether `claude` and `gh` are signed in                                                                                                                                                                                   |
 | [`terminal.ts`](../src/core/terminal.ts)                     | what a pty should run, where, with which environment                                                                                                                                                                      |
@@ -540,6 +541,12 @@ them is ever absolute or climbs out with `..`; the id that selects a path is
 parsed by zod before it crosses IPC; and a symbolic link inside the directory is
 refused in both directions, since a link is what turns every one of those
 guarantees into decoration.
+
+The link check walks **every segment** of the path, and the first version did
+not. `lstat` leaves the last component unresolved but follows the ones above it,
+so checking the file alone answered "absent" for a symlinked `.octopus/scripts`
+and the write then followed the link outside the repository. A guard that looks
+at the leaf of a path it does not control is not a guard.
 
 The confinement check is a **test over the constants** rather than a branch in
 the code, deliberately. The paths cannot vary, so a runtime `if` guarding them
