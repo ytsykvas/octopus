@@ -33,7 +33,7 @@
  */
 
 import { chmod, lstat, mkdir, readFile, writeFile } from 'node:fs/promises'
-import { dirname, join } from 'node:path'
+import { dirname, join, sep } from 'node:path'
 
 import { z } from 'zod'
 
@@ -282,11 +282,9 @@ export function repoItemPath(repoPath: string, id: RepoItemId): string {
 }
 
 /**
- * Refuses a path that is a symbolic link.
+ * Refuses one path that is a symbolic link.
  *
- * A link inside `.octopus/` would make every guarantee above cosmetic: reading
- * would follow it out of the repository, and writing would land wherever it
- * points. `lstat` rather than `stat` precisely because it does not follow.
+ * `lstat` rather than `stat`, precisely because it does not follow.
  */
 async function assertNotLink(path: string, name: string): Promise<void> {
   try {
@@ -299,12 +297,34 @@ async function assertNotLink(path: string, name: string): Promise<void> {
   throw new RepoConfigError('repoConfigSymlink', { path: name }, `${name} is a symbolic link.`)
 }
 
+/**
+ * Refuses a path with a link anywhere along it, segment by segment.
+ *
+ * Every segment, not only the last, and that distinction is the whole of the
+ * guarantee. `lstat` does not follow the final component but does follow the
+ * ones before it, so checking the file alone left a symlinked
+ * `.octopus/scripts` free to redirect both directions: the leaf did not exist
+ * yet, the check passed as "absent", and the write then followed the link to
+ * wherever it pointed. Reading did the same in reverse, presenting a file from
+ * outside the repository under a path inside it.
+ */
+async function assertUnlinkedPath(repoPath: string, relative: string): Promise<void> {
+  let walked = repoPath
+  let named = ''
+
+  for (const segment of relative.split(sep)) {
+    walked = join(walked, segment)
+    named = named === '' ? segment : join(named, segment)
+    await assertNotLink(walked, named)
+  }
+}
+
 /** Reads one item, or null where the repository does not carry it. */
 async function readItem(repoPath: string, id: RepoItemId): Promise<RepoItem | null> {
   const path = repoItemPath(repoPath, id)
   const name = repoItemFile(id)
 
-  await assertNotLink(path, name)
+  await assertUnlinkedPath(repoPath, name)
 
   let contents: string
   try {
@@ -434,12 +454,12 @@ export async function writeRepoConfig(repoPath: string, items: readonly RepoItem
   await mkdir(root, { recursive: true })
 
   const readme = join(repoPath, REPO_README_FILE)
-  await assertNotLink(readme, REPO_README_FILE)
+  await assertUnlinkedPath(repoPath, REPO_README_FILE)
   await writeFile(readme, REPO_README, 'utf8')
 
   for (const item of items) {
     const path = repoItemPath(repoPath, item.id)
-    await assertNotLink(path, item.path)
+    await assertUnlinkedPath(repoPath, repoItemFile(item.id))
     await mkdir(dirname(path), { recursive: true })
     await writeFile(path, item.contents, 'utf8')
 

