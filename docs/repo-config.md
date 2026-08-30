@@ -139,6 +139,12 @@ and a symbolic link anywhere in the directory is refused on both directions —
 otherwise a link could redirect a read out of the repository or a write onto a
 file somewhere else entirely.
 
+**Every segment of the path, not only the last**, and that distinction shipped
+broken once. `lstat` does not follow the final component but does follow the
+ones before it, so a check on the file alone read a symlinked `.octopus/scripts`
+as "the file is absent" and let the write follow the link out of the repository.
+`assertUnlinkedPath` walks `.octopus`, then `.octopus/scripts`, then the file.
+
 ### When git ignores the folder
 
 The panel says so. A `.octopus/` inside `.gitignore` means everything exported
