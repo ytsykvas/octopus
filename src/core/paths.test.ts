@@ -8,10 +8,9 @@ import {
   chatTranscript,
   configFile,
   projectDir,
+  projectScript,
   projectScriptsDir,
   rootDir,
-  runScript,
-  setupScript,
   stateFile,
   stateTempFile,
   workspacePath,
@@ -62,18 +61,19 @@ describe('project paths', () => {
     expect(projectScriptsDir(PROJECT, ROOT)).toBe(join(ROOT, 'projects', PROJECT, 'scripts'))
   })
 
-  it('places setup.sh and run.sh side by side', () => {
+  it('places every named script side by side inside that directory', () => {
     const scripts = projectScriptsDir(PROJECT, ROOT)
-    expect(setupScript(PROJECT, ROOT)).toBe(join(scripts, 'setup.sh'))
-    expect(runScript(PROJECT, ROOT)).toBe(join(scripts, 'run.sh'))
+    expect(projectScript(PROJECT, 'setup.sh', ROOT)).toBe(join(scripts, 'setup.sh'))
+    expect(projectScript(PROJECT, 'run.sh', ROOT)).toBe(join(scripts, 'run.sh'))
   })
 
   it('falls back to rootDir when no root is given', () => {
     const root = rootDir()
     expect(projectDir(PROJECT)).toBe(join(root, 'projects', PROJECT))
     expect(projectScriptsDir(PROJECT)).toBe(join(root, 'projects', PROJECT, 'scripts'))
-    expect(setupScript(PROJECT)).toBe(join(root, 'projects', PROJECT, 'scripts', 'setup.sh'))
-    expect(runScript(PROJECT)).toBe(join(root, 'projects', PROJECT, 'scripts', 'run.sh'))
+    expect(projectScript(PROJECT, 'setup.sh')).toBe(
+      join(root, 'projects', PROJECT, 'scripts', 'setup.sh')
+    )
   })
 })
 

@@ -168,8 +168,12 @@ This branch conflicts with its base. Merge the base in and settle it.
  * arriving without a home is a compile error here — which is also what makes
  * the uniqueness test worth having: totality is checked by the compiler, and
  * two kinds pointing at one file is not.
+ *
+ * Exported for the same reason as `SCRIPT_FILES`: a project may carry these
+ * in its repository under `.octopus/instructions/`, and that copy is the same
+ * file under the same name.
  */
-const FILES: Record<InstructionKind, string> = {
+export const INSTRUCTION_FILES: Record<InstructionKind, string> = {
   pullRequest: 'pull-request.md',
   commitMessage: 'commit-message.md',
   fixChecks: 'fix-checks.md',
@@ -193,7 +197,7 @@ export function instructionPath(
   scope: InstructionScope,
   root?: string
 ): string {
-  const file = FILES[kind]
+  const file = INSTRUCTION_FILES[kind]
   return scope === null ? globalInstruction(file, root) : projectInstruction(scope, file, root)
 }
 

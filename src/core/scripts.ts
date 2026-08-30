@@ -20,7 +20,7 @@ import { dirname } from 'node:path'
 
 import { z } from 'zod'
 
-import { archiveScript, projectScriptsDir, runScript, setupScript } from './paths.js'
+import { projectScript, projectScriptsDir } from './paths.js'
 import { PORT_VARIABLE, ROOT_VARIABLE, WORKSPACE_VARIABLE } from './scriptEnv.js'
 import type { ProjectId } from './types.js'
 
@@ -74,14 +74,21 @@ const TEMPLATES: Record<ScriptKind, string> = {
 `
 }
 
-const FILES: Record<ScriptKind, (projectId: ProjectId, root?: string) => string> = {
-  setup: setupScript,
-  run: runScript,
-  archive: archiveScript
+/**
+ * What each script is called on disk.
+ *
+ * Exported because a project may also carry these three in its repository,
+ * under `.octopus/scripts/`, and the copy there has to be the same file. One
+ * list, so the two places cannot drift into disagreeing about a name.
+ */
+export const SCRIPT_FILES: Record<ScriptKind, string> = {
+  setup: 'setup.sh',
+  run: 'run.sh',
+  archive: 'archive.sh'
 }
 
 export function scriptPath(kind: ScriptKind, projectId: ProjectId, root?: string): string {
-  return FILES[kind](projectId, root)
+  return projectScript(projectId, SCRIPT_FILES[kind], root)
 }
 
 /**
