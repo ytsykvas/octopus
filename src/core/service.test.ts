@@ -1494,6 +1494,194 @@ describe('files carried into a workspace', () => {
   })
 })
 
+describe('settings a repository carries', () => {
+  async function withProject(): Promise<{ id: string; repo: string }> {
+    const repo = join(dir, 'planner')
+    await initRepo(repo)
+    return { id: (await service.addProjectFromPath(repo)).id, repo }
+  }
+
+  /** Puts a file inside the repository's `.octopus/`, making its parents. */
+  async function carry(repo: string, relative: string, contents: string): Promise<void> {
+    const path = join(repo, '.octopus', relative)
+    await mkdir(join(path, '..'), { recursive: true })
+    await writeFile(path, contents, 'utf8')
+  }
+
+  it('reports a repository that carries nothing', async () => {
+    const { id } = await withProject()
+
+    const view = await service.projectRepoConfig(id)
+
+    expect(view.present).toBe(false)
+    expect(view.ignored).toBe(false)
+  })
+
+  // The project's own fields are the one item that always exists on this side,
+  // so a repository carrying nothing still has something to offer outward.
+  it('always has the project fields to export, and nothing else untouched', async () => {
+    const { id } = await withProject()
+
+    const view = await service.projectRepoConfig(id)
+
+    expect(view.items.map((item) => item.id)).toEqual(['project'])
+    expect(view.items[0]?.state).toBe('onlyInApp')
+    expect(view.items[0]?.app).toContain('"baseBranch": "main"')
+  })
+
+  it('tells what only the repository carries from what the two disagree about', async () => {
+    const { id, repo } = await withProject()
+    await carry(repo, 'carry', '.env\n')
+    await carry(repo, join('scripts', 'setup.sh'), 'npm ci\n')
+    await service.saveProjectScript(id, 'setup', 'npm install\n')
+
+    const view = await service.projectRepoConfig(id)
+    const byId = new Map(view.items.map((item) => [item.id, item]))
+
+    expect(view.present).toBe(true)
+    expect(byId.get('carry')?.state).toBe('onlyInRepository')
+    expect(byId.get('script.setup')?.state).toBe('differs')
+  })
+
+  it('reports copies that agree', async () => {
+    const { id, repo } = await withProject()
+    await service.saveProjectScript(id, 'run', 'npm run dev\n')
+    await carry(repo, join('scripts', 'run.sh'), 'npm run dev\n')
+
+    const view = await service.projectRepoConfig(id)
+
+    expect(view.items.find((item) => item.id === 'script.run')?.state).toBe('same')
+  })
+
+  // An ignored folder makes exporting into it a change nobody will ever
+  // receive, which is worth saying before somebody exports twice.
+  it('says when git would keep the folder out of a commit', async () => {
+    const { id, repo } = await withProject()
+    await writeFile(join(repo, '.gitignore'), '.octopus/\n', 'utf8')
+
+    await expect(service.projectRepoConfig(id)).resolves.toMatchObject({ ignored: true })
+  })
+
+  it('writes only the items asked for, and skips what nobody wrote', async () => {
+    const { id, repo } = await withProject()
+    await service.saveProjectScript(id, 'setup', 'npm ci\n')
+
+    const written = await service.exportRepoConfig(id, ['script.setup', 'script.run', 'carry'])
+
+    expect(written).toEqual(['script.setup'])
+    await expect(readFile(join(repo, '.octopus', 'scripts', 'setup.sh'), 'utf8')).resolves.toBe(
+      'npm ci\n'
+    )
+    await expect(access(join(repo, '.octopus', 'carry'))).rejects.toThrow()
+  })
+
+  it('leaves a note in the folder explaining what reads it', async () => {
+    const { id, repo } = await withProject()
+
+    await service.exportRepoConfig(id, ['project'])
+
+    await expect(readFile(join(repo, '.octopus', 'README.md'), 'utf8')).resolves.toContain(
+      'No credentials'
+    )
+  })
+
+  it('takes a script back in, executable, and leaves the rest alone', async () => {
+    const { id, repo } = await withProject()
+    await carry(repo, join('scripts', 'setup.sh'), 'npm ci\n')
+    await carry(repo, 'carry', '.env\nconfig/master.key\n')
+
+    const applied = await service.importRepoConfig(id, ['script.setup'])
+
+    expect(applied).toEqual(['script.setup'])
+    await expect(service.readProjectScript(id, 'setup')).resolves.toBe('npm ci\n')
+    const paths = await service.projectScriptPaths(id)
+    expect(paths.setup).not.toBeNull()
+    await expect(service.readProjectCarryList(id)).resolves.not.toContain('master.key')
+  })
+
+  it('takes in a carry list and an instruction', async () => {
+    const { id, repo } = await withProject()
+    await carry(repo, 'carry', '.env\nconfig/master.key\n')
+    await carry(repo, join('instructions', 'review.md'), '# Read it twice\n')
+
+    await service.importRepoConfig(id, ['carry', 'instruction.review'])
+
+    await expect(service.readProjectCarryList(id)).resolves.toContain('master.key')
+    await expect(service.readProjectInstruction(id, 'review')).resolves.toContain('twice')
+  })
+
+  it('applies the fields a repository states about the project', async () => {
+    const { id, repo } = await withProject()
+    await carry(repo, 'project.json', '{"name":"Planner","envFile":".env.local"}')
+
+    await service.importRepoConfig(id, ['project'])
+
+    const project = service.listProjects().find((entry) => entry.id === id)
+    expect(project).toMatchObject({ name: 'Planner', envFile: '.env.local' })
+  })
+
+  // The value did not come from the branch picker, so it is checked here rather
+  // than stored and surfaced much later as a `worktree add` failure that says
+  // nothing about settings.
+  it('refuses a base branch this clone does not have', async () => {
+    const { id, repo } = await withProject()
+    await carry(repo, 'project.json', '{"baseBranch":"develop"}')
+
+    await expect(service.importRepoConfig(id, ['project'])).rejects.toThrow(ProjectValidationError)
+    expect(service.listProjects().find((entry) => entry.id === id)?.baseBranch).toBe('main')
+  })
+
+  it('refuses an env file that would leave the workspace', async () => {
+    const { id, repo } = await withProject()
+    await carry(repo, 'project.json', '{"envFile":"../../.env"}')
+
+    await expect(service.importRepoConfig(id, ['project'])).rejects.toThrow()
+  })
+
+  it('refuses a project.json that is not a project at all', async () => {
+    const { id, repo } = await withProject()
+    await carry(repo, 'project.json', 'baseBranch: develop')
+
+    await expect(service.importRepoConfig(id, ['project'])).rejects.toMatchObject({
+      code: 'repoConfigMalformed'
+    })
+  })
+
+  it('goes out and back in, which is what a wiped installation does', async () => {
+    const { id, repo } = await withProject()
+    await service.saveProjectScript(id, 'setup', 'npm ci\n')
+    await service.saveProjectCarryList(id, '.env\nconfig/master.key\n')
+    await service.saveProjectInstruction(id, 'review', '# Read it twice\n')
+
+    await service.exportRepoConfig(id, ['script.setup', 'carry', 'instruction.review', 'project'])
+
+    // A second installation, with nothing of its own.
+    const fresh = await createService(paths(join(dir, 'second')))
+    const other = await fresh.addProjectFromPath(repo)
+    const taken = await fresh.importRepoConfig(other.id, [
+      'script.setup',
+      'carry',
+      'instruction.review',
+      'project'
+    ])
+
+    expect(taken).toHaveLength(4)
+    await expect(fresh.readProjectScript(other.id, 'setup')).resolves.toBe('npm ci\n')
+    await expect(fresh.readProjectCarryList(other.id)).resolves.toContain('master.key')
+    await expect(fresh.readProjectInstruction(other.id, 'review')).resolves.toContain('twice')
+  })
+
+  it('refuses to read a repository whose folder is a symbolic link', async () => {
+    const { id, repo } = await withProject()
+    await mkdir(join(dir, 'elsewhere'), { recursive: true })
+    await symlink(join(dir, 'elsewhere'), join(repo, '.octopus'))
+
+    await expect(service.projectRepoConfig(id)).rejects.toMatchObject({
+      code: 'repoConfigSymlink'
+    })
+  })
+})
+
 describe('the port a workspace serves on', () => {
   async function withWorkspace(): Promise<{ id: string; port: number }> {
     const repo = join(dir, 'planner')

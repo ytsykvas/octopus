@@ -275,6 +275,9 @@ describe('channel table', () => {
     'scripts:paths',
     'carry:read',
     'carry:save',
+    'repoConfig:read',
+    'repoConfig:import',
+    'repoConfig:export',
     'workspace:prepare',
     'env:read',
     'env:save',
@@ -409,6 +412,43 @@ describe('validation at the boundary', () => {
   it('rejects a carry list longer than a list has any business being', async () => {
     const result = await invoke('carry:save', 'nothing', '.env\n'.repeat(20_000))
     expect(result).toMatchObject({ ok: false })
+  })
+
+  // The ids name files the app reads and writes, so one the app does not know
+  // is refused at the boundary rather than reaching a path.
+  it('rejects a repository item it does not know', async () => {
+    const result = await invoke('repoConfig:import', 'nothing', ['script.evil'])
+    expect(result).toMatchObject({ ok: false })
+  })
+
+  it('rejects a selection longer than there are items to select', async () => {
+    const result = await invoke('repoConfig:export', 'nothing', Array(50).fill('carry'))
+    expect(result).toMatchObject({ ok: false })
+  })
+
+  it('carries a project settings out to its repository and back in', async () => {
+    const projectId = await addProject('carried')
+
+    await invoke('scripts:save', projectId, 'setup', '#!/bin/sh\nnpm ci\n')
+    expect(await invoke('repoConfig:export', projectId, ['script.setup'])).toMatchObject({
+      ok: true,
+      value: ['script.setup']
+    })
+
+    await invoke('scripts:save', projectId, 'setup', '#!/bin/sh\nsomething else\n')
+
+    await expect(invoke('repoConfig:read', projectId)).resolves.toMatchObject({
+      ok: true,
+      value: { present: true }
+    })
+
+    expect(await invoke('repoConfig:import', projectId, ['script.setup'])).toMatchObject({
+      ok: true,
+      value: ['script.setup']
+    })
+    await expect(invoke('scripts:read', projectId, 'setup')).resolves.toMatchObject({
+      value: expect.stringContaining('npm ci')
+    })
   })
 
   it('rejects an env block longer than a block has any business being', async () => {

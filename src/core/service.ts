@@ -47,7 +47,7 @@ import { type EditTarget, readChangeContext, readEditTarget } from './changeCont
 import { readWorkspaceDiff, type WorkspaceDiff } from './diff.js'
 import { draftPullRequest, type DraftedPullRequest } from './pullRequestDraft.js'
 import { isListening, settlePort } from './ports.js'
-import { carriedPaths, carryInto, readCarryList, writeCarryList } from './carry.js'
+import { carriedPaths, carryInto, readCarryList, storedCarryList, writeCarryList } from './carry.js'
 import {
   applyEnvOverrides,
   discardIfOnlyBlock,
@@ -90,6 +90,7 @@ import {
   effectiveInstruction,
   type InstructionKind,
   readInstruction,
+  storedInstruction,
   writeInstruction
 } from './instructions.js'
 import { configFile, rootDir, stateFile, stateTempFile } from './paths.js'
@@ -104,6 +105,23 @@ import {
 } from './transcript.js'
 import { assertBranchExists, createProject, orderBaseBranches } from './projects.js'
 import { readScript, type ScriptKind, scriptExists, scriptPath, writeScript } from './scripts.js'
+import {
+  compareRepoItem,
+  formatRepoProject,
+  instructionKindOf,
+  parseRepoProject,
+  REPO_ITEM_IDS,
+  REPO_README_FILE,
+  readRepoConfig,
+  type RepoConfigItem,
+  type RepoConfigView,
+  type RepoItem,
+  type RepoItemId,
+  type RepoProject,
+  repoItemFile,
+  scriptKindOf,
+  writeRepoConfig
+} from './repoConfig.js'
 import {
   addChat,
   addProject,
@@ -316,6 +334,20 @@ export interface OctopusService {
    * that file, in a directory an agent commits from freely.
    */
   isProjectEnvIgnored(projectId: string): Promise<boolean>
+
+  /**
+   * The settings this project's repository carries, beside the app's own.
+   *
+   * `~/.octopus` lives on one machine and disappears with it, so a repository
+   * may keep a copy under `.octopus/` — a snapshot, never read while the app
+   * works. This is what the Repository section shows, and what the import
+   * dialog reads before writing anything.
+   */
+  projectRepoConfig(projectId: string): Promise<RepoConfigView>
+  /** Writes the named items into the installation; answers with what it took. */
+  importRepoConfig(projectId: string, ids: readonly RepoItemId[]): Promise<RepoItemId[]>
+  /** Writes the named items into the repository; answers with what it wrote. */
+  exportRepoConfig(projectId: string, ids: readonly RepoItemId[]): Promise<RepoItemId[]>
   /**
    * What this project offers the agent, and what this machine adds.
    *
@@ -742,6 +774,67 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
       throw new WorkspaceError('worktreeMissing', { projectId }, `Project ${projectId} not found.`)
     }
     return project
+  }
+
+  /**
+   * The fields a project exports, which is not every field it has.
+   *
+   * `branchPrefix` is a person's username rather than a fact about the project,
+   * and `approvedSettings` is the trust record — a repository that could
+   * declare itself approved would defeat the gate it has to pass.
+   */
+  function exportedFields(project: Project): RepoProject {
+    return {
+      baseBranch: project.baseBranch,
+      envFile: project.envFile,
+      name: project.name,
+      color: project.color,
+      // `null` is "back to the initials", and JSON should say nothing rather
+      // than impose that on whoever imports it.
+      icon: project.icon ?? undefined
+    }
+  }
+
+  /**
+   * What this installation holds for one item, or null where nobody wrote it.
+   *
+   * The distinction matters in both directions: an untouched script should not
+   * be exported as a template, and an item the app lacks is one the repository
+   * can offer rather than merely differ from.
+   */
+  async function localItem(project: Project, id: RepoItemId): Promise<string | null> {
+    const script = scriptKindOf(id)
+    if (script !== undefined) {
+      return (await scriptExists(script, project.id, dataRoot))
+        ? readScript(script, project.id, dataRoot)
+        : null
+    }
+
+    const instruction = instructionKindOf(id)
+    if (instruction !== undefined) return storedInstruction(instruction, project.id, dataRoot)
+
+    if (id === 'carry') return storedCarryList(project.id, dataRoot)
+
+    // The project's own fields, which it always has.
+    return formatRepoProject(exportedFields(project))
+  }
+
+  /**
+   * Applies the fields a repository states, once git agrees they are usable.
+   *
+   * The base branch is checked here rather than trusted, because this value did
+   * not come from the branch picker: a clone stating `develop` while this one
+   * has only `main` would otherwise be stored and surface much later as a
+   * `worktree add` failure that says nothing about settings. The env file is
+   * checked by `updateProject`, which already refuses one that leaves the
+   * worktree.
+   */
+  async function applyRepoProject(project: Project, fields: RepoProject): Promise<void> {
+    if (fields.baseBranch !== undefined) {
+      await assertBranchExists(makeExec(project.repoPath), fields.baseBranch)
+    }
+
+    await commit((current) => updateProject(current, project.id, fields))
   }
 
   function requireWorkspace(workspaceId: string): Workspace {
@@ -1462,6 +1555,100 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
     async saveProjectEnv(projectId, contents) {
       requireProject(projectId)
       await writeProjectEnv(projectId, contents, dataRoot)
+    },
+
+    /**
+     * What this project's repository carries, beside what the app holds.
+     *
+     * Read on demand rather than watched: `.octopus/` is a snapshot, and
+     * nothing here is consulted while the app works.
+     */
+    async projectRepoConfig(projectId) {
+      const project = requireProject(projectId)
+      const carried = await readRepoConfig(project.repoPath)
+      const byId = new Map(carried.map((item) => [item.id, item.contents]))
+
+      const items: RepoConfigItem[] = []
+      for (const id of REPO_ITEM_IDS) {
+        const compared = compareRepoItem(id, byId.get(id) ?? null, await localItem(project, id))
+        if (compared) items.push(compared)
+      }
+
+      return {
+        present: carried.length > 0,
+        // Asked of the checkout, which shares its `.gitignore` with every
+        // worktree made from it — and asked at all because an ignored folder
+        // makes exporting into it a change nobody will ever receive.
+        ignored: await isIgnored(makeExec(project.repoPath), REPO_README_FILE),
+        items
+      }
+    },
+
+    /**
+     * Takes named items out of the repository and into this installation.
+     *
+     * Everything lands through the same writers a hand-edit uses, so an
+     * imported script is executable and an imported instruction sits where the
+     * editor reads it. Nothing is executed: the repository's copy is data until
+     * somebody presses Run on the copy that has just been written.
+     */
+    async importRepoConfig(projectId, ids) {
+      const project = requireProject(projectId)
+      const wanted = new Set(ids)
+      const applied: RepoItemId[] = []
+
+      for (const item of await readRepoConfig(project.repoPath)) {
+        if (!wanted.has(item.id)) continue
+
+        const script = scriptKindOf(item.id)
+        if (script !== undefined) {
+          await writeScript(script, projectId, item.contents, dataRoot)
+          applied.push(item.id)
+          continue
+        }
+
+        const instruction = instructionKindOf(item.id)
+        if (instruction !== undefined) {
+          await writeInstruction(instruction, projectId, item.contents, dataRoot)
+          applied.push(item.id)
+          continue
+        }
+
+        if (item.id === 'carry') {
+          await writeCarryList(projectId, item.contents, dataRoot)
+          applied.push(item.id)
+          continue
+        }
+
+        await applyRepoProject(project, parseRepoProject(item.contents))
+        applied.push(item.id)
+      }
+
+      return applied
+    },
+
+    /**
+     * Writes named items from this installation into the repository.
+     *
+     * The one place the app writes inside a checkout, which is why it goes
+     * through `repoConfig.ts` rather than building paths here. An item nobody
+     * has written is skipped rather than exported as its template: a file
+     * committed to say nothing is a file somebody has to read.
+     */
+    async exportRepoConfig(projectId, ids) {
+      const project = requireProject(projectId)
+      const wanted = new Set(ids)
+
+      const items: RepoItem[] = []
+      for (const id of REPO_ITEM_IDS) {
+        if (!wanted.has(id)) continue
+
+        const contents = await localItem(project, id)
+        if (contents !== null) items.push({ id, path: repoItemFile(id), contents })
+      }
+
+      await writeRepoConfig(project.repoPath, items)
+      return items.map((item) => item.id)
     },
 
     async projectInstructionSources(projectId, workspaceId) {
