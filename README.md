@@ -71,6 +71,12 @@ so a gitignored `.env` or `config/master.key` is missing from every new one. A
 project names the files to copy in, and can add a block of `KEY=value` overrides
 on top.
 
+**Settings that survive the machine.** A project's scripts, carried files and
+instructions live in `~/.octopus`, which goes when the disk does. Its repository
+can carry a copy in `.octopus/`, so a fresh installation is rebuilt from the
+repository — a snapshot moved by two buttons, never read while the app runs, and
+never holding a credential.
+
 **Review and open a pull request.** The right pane shows the diff against the
 base branch, takes comments on it, and opens a PR through `gh` — with a
 description the agent writes to whatever instructions the project keeps.

@@ -11,6 +11,7 @@ as they are; the code says what they do, and stays the authority on that.
 | [core.md](core.md)                 | you are touching `src/core` — the modules, their contracts, the invariants                               |
 | [ipc.md](ipc.md)                   | you are adding a channel or wondering where a call ends up                                               |
 | [data.md](data.md)                 | you are changing what lives in `~/.octopus`, or adding a stored field                                    |
+| [repo-config.md](repo-config.md)   | you are looking at `.octopus/` in a repository, or wondering how settings survive a wiped installation   |
 | [ui.md](ui.md)                     | you are building a component, picking a colour, or laying something out                                  |
 | [testing.md](testing.md)           | you are writing tests, or a test is failing and you doubt the test                                       |
 | [releasing.md](releasing.md)       | you are building an app bundle, or wondering why there is nothing to download                            |

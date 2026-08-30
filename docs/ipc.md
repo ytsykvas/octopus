@@ -1,7 +1,7 @@
 # IPC
 
 Every call from the interface to the rest of the application goes through one
-of 70 channels. The table lives in [`src/main/ipc.ts`](../src/main/ipc.ts); the
+of 75 channels. The table lives in [`src/main/ipc.ts`](../src/main/ipc.ts); the
 renderer never names a channel itself, it calls
 [`src/preload/index.ts`](../src/preload/index.ts).
 
@@ -56,6 +56,9 @@ The only channel outside this shape is `theme:get`, which cannot fail.
 | `scripts:paths`          | `id`                  | `null` where nothing has been written                                                                                                        |
 | `carry:read`             | `id`                  | one path per line; a project that has said nothing gets a list naming `.env`                                                                 |
 | `carry:save`             | `id`, `body`          | the list, not the files                                                                                                                      |
+| `repoConfig:read`        | `id`                  | what `.octopus/` in the repository carries, beside what the app holds; and whether git ignores the folder                                    |
+| `repoConfig:import`      | `id`, `ids`           | writes the named items into the installation; ids parsed against the known list before any of them reaches a path                            |
+| `repoConfig:export`      | `id`, `ids`           | writes the named items into `.octopus/`; the only channel that writes inside a checkout                                                      |
 | `env:read`               | `id`                  | the project's env overrides; empty where it has none, since a variable nobody wrote has no value worth guessing at                           |
 | `env:save`               | `id`, `body`          | validated for length, written `0o600`                                                                                                        |
 | `workspace:prepare`      | `workspaceId`         | carries the listed files in, never over a file already there, then writes the env block below them; answers with what it copied              |
