@@ -105,19 +105,21 @@ export function globalInstruction(file: string, root: string = rootDir()): strin
   return join(globalInstructionsDir(root), file)
 }
 
-/** Script run right after `git worktree add`. */
-export function setupScript(projectId: ProjectId, root: string = rootDir()): string {
-  return join(projectScriptsDir(projectId, root), 'setup.sh')
-}
-
-/** Script run when a workspace is removed, to take back what setup gave out. */
-export function archiveScript(projectId: ProjectId, root: string = rootDir()): string {
-  return join(projectScriptsDir(projectId, root), 'archive.sh')
-}
-
-/** Script that starts the dev server; receives `$OCTOPUS_PORT`. */
-export function runScript(projectId: ProjectId, root: string = rootDir()): string {
-  return join(projectScriptsDir(projectId, root), 'run.sh')
+/**
+ * One of a project's scripts, named by the caller.
+ *
+ * A function per kind used to live here, each holding its own filename. The
+ * names then had to be repeated wherever else a script is written — the
+ * repository copy needs the same three — and a name is a fact about the kind,
+ * which `scripts.ts` owns. So this takes the filename, exactly as
+ * `projectInstruction` above does, and `SCRIPT_FILES` is the single list.
+ */
+export function projectScript(
+  projectId: ProjectId,
+  file: string,
+  root: string = rootDir()
+): string {
+  return join(projectScriptsDir(projectId, root), file)
 }
 
 /** Directory holding every chat transcript. */
