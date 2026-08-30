@@ -62,9 +62,12 @@ describe('REPO_ITEM_PATHS', () => {
     }
   })
 
-  it('gives every item a home, and no two the same file', () => {
+  // The compiler already refuses a missing or an extra key, since the record is
+  // typed by the id union. What it cannot see is two ids pointing at one file,
+  // which is the only thing worth asserting here.
+  it('gives no two items the same file', () => {
     const paths = REPO_ITEM_IDS.map((id) => REPO_ITEM_PATHS[id])
-    expect(paths).toHaveLength(REPO_ITEM_IDS.length)
+
     expect(new Set(paths).size).toBe(paths.length)
   })
 

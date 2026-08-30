@@ -1610,6 +1610,34 @@ describe('settings a repository carries', () => {
     await expect(service.readProjectInstruction(id, 'review')).resolves.toContain('twice')
   })
 
+  // The ids arrive from a renderer, which may be out of date with the folder
+  // by a `git pull`. Asking for what is not there is ordinary, not an error —
+  // but the answer must say what was actually taken.
+  it('answers with what it took, not with what was asked for', async () => {
+    const { id, repo } = await withProject()
+    await carry(repo, 'carry', '.env\n')
+
+    const applied = await service.importRepoConfig(id, ['carry', 'script.archive', 'project'])
+
+    expect(applied).toEqual(['carry'])
+  })
+
+  it('replaces what the installation already held rather than merging', async () => {
+    const { id, repo } = await withProject()
+    await service.saveProjectCarryList(id, '.env\nlocal-only.txt\n')
+    await carry(repo, 'carry', '.env\n')
+
+    await service.importRepoConfig(id, ['carry'])
+
+    await expect(service.readProjectCarryList(id)).resolves.toBe('.env\n')
+  })
+
+  it('refuses all three calls for a project that is not there', async () => {
+    await expect(service.projectRepoConfig('gone')).rejects.toThrow(WorkspaceError)
+    await expect(service.importRepoConfig('gone', ['carry'])).rejects.toThrow(WorkspaceError)
+    await expect(service.exportRepoConfig('gone', ['carry'])).rejects.toThrow(WorkspaceError)
+  })
+
   it('applies the fields a repository states about the project', async () => {
     const { id, repo } = await withProject()
     await carry(repo, 'project.json', '{"name":"Planner","envFile":".env.local"}')
