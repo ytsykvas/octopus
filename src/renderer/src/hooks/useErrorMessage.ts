@@ -77,6 +77,12 @@ export function useErrorMessage(): (failure: Failure) => string {
           return t('errors.lastChat')
         case 'nothingToFork':
           return t('errors.nothingToFork')
+        case 'repoConfigSymlink':
+          return t('errors.repoConfigSymlink', { path: failure.params?.path ?? '' })
+        case 'repoConfigTooLarge':
+          return t('errors.repoConfigTooLarge', { path: failure.params?.path ?? '' })
+        case 'repoConfigMalformed':
+          return t('errors.repoConfigMalformed', { path: failure.params?.path ?? '' })
         case 'forkFailed':
           return t('errors.forkFailed')
         default:

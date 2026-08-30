@@ -815,6 +815,9 @@ export function App(): React.JSX.Element {
           initialSection={editingProjectSection}
           workspaceId={selectedWorkspaceId}
           onUpdate={(patch) => projects.update(editingProject.id, patch)}
+          onImported={() => {
+            void projects.refresh()
+          }}
           onRemove={() => {
             void (async () => {
               // Closing first keeps the confirmation from appearing behind the

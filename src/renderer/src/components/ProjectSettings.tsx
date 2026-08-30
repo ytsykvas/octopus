@@ -1,5 +1,6 @@
 import {
   BookText,
+  FolderGit2,
   GitBranch,
   Info,
   KeyRound,
@@ -27,12 +28,21 @@ import { ProjectGlyph } from './ProjectGlyph.js'
 import { SectionRail } from './SectionRail.js'
 import { FileEditor } from './FileEditor.js'
 import { InstructionEditors } from './InstructionEditors.js'
+import { RepoConfig } from './RepoConfig.js'
 
 interface ProjectSettingsProps {
   readonly project: Project
   /** Applies a change; omitted keys are left alone. */
   readonly onUpdate: (patch: ProjectPatch) => Promise<boolean>
   readonly onRemove: () => void
+  /**
+   * Something was imported from the repository.
+   *
+   * The project's own fields are among what can arrive, and this dialog holds
+   * a copy of the project — so a name or a base branch taken in has to reach
+   * the list, or the form goes on showing what was there before.
+   */
+  readonly onImported: () => void
   readonly onClose: () => void
   /**
    * Which section to open on, for a caller that already knows what it is about.
@@ -80,7 +90,8 @@ const SOURCE_LABELS = {
   userAgents: 'project.sourceUserAgents'
 } as const
 
-export type SectionId = 'general' | 'git' | 'scripts' | 'files' | 'env' | 'instructions' | 'danger'
+export type SectionId =
+  'general' | 'git' | 'scripts' | 'files' | 'env' | 'instructions' | 'repository' | 'danger'
 
 const SECTIONS: readonly {
   readonly id: SectionId
@@ -91,6 +102,7 @@ const SECTIONS: readonly {
     | 'project.sectionFiles'
     | 'project.sectionEnv'
     | 'project.sectionInstructions'
+    | 'project.sectionRepository'
     | 'project.sectionDanger'
   readonly Icon: typeof Info
   readonly destructive?: boolean
@@ -105,6 +117,9 @@ const SECTIONS: readonly {
   // files travel, the other says what to write once they have.
   { id: 'env', labelKey: 'project.sectionEnv', Icon: Variable },
   { id: 'instructions', labelKey: 'project.sectionInstructions', Icon: BookText },
+  // Last before the danger zone, and after everything it moves: the section is
+  // about the six above rather than a setting of its own.
+  { id: 'repository', labelKey: 'project.sectionRepository', Icon: FolderGit2 },
   { id: 'danger', labelKey: 'project.sectionDanger', Icon: TriangleAlert, destructive: true }
 ]
 
@@ -119,6 +134,7 @@ export function ProjectSettings({
   project,
   onUpdate,
   onRemove,
+  onImported,
   onClose,
   initialSection,
   workspaceId = null
@@ -509,6 +525,10 @@ export function ProjectSettings({
 
           {/* Reaching removal now takes choosing the section it lives in, which
               is a further step away from a mis-click than a scroll was. */}
+          {section === 'repository' && (
+            <RepoConfig projectId={project.id} onImported={onImported} />
+          )}
+
           {section === 'danger' && (
             <div className="border-danger/25 bg-danger-bg/40 space-y-2.5 rounded-[var(--radius-control)] border p-3.5">
               <p className="text-danger font-medium">{t('project.dangerZone')}</p>

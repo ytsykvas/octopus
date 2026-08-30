@@ -1200,6 +1200,39 @@ describe('App', () => {
     expect(within(dialog).getByDisplayValue('ledger')).toBeInTheDocument()
   })
 
+  // The project's own fields are among what an import can bring, so the list
+  // has to be read again — otherwise the tab goes on showing the old name.
+  it('reads the projects again after settings arrive from a repository', async () => {
+    givenTwoProjects()
+    vi.mocked(window.octopus.projects.repoConfig).mockResolvedValue({
+      ok: true,
+      value: {
+        present: true,
+        ignored: false,
+        items: [
+          {
+            id: 'project',
+            path: '.octopus/project.json',
+            state: 'differs',
+            repository: '{"name":"Ledger"}',
+            app: '{"name":"ledger"}'
+          }
+        ]
+      }
+    })
+    const user = await openApp()
+    await screen.findByRole('button', { name: 'LE' })
+    const dialog = await openProjectSettings(user, 'LE')
+    await user.click(within(dialog).getByRole('button', { name: 'Repository' }))
+    vi.mocked(window.octopus.projects.list).mockClear()
+
+    await user.click(await within(dialog).findByRole('button', { name: 'Import' }))
+
+    await waitFor(() => {
+      expect(window.octopus.projects.list).toHaveBeenCalled()
+    })
+  })
+
   it('closes the project settings again', async () => {
     givenTwoProjects()
     const user = await openApp()
