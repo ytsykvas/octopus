@@ -872,6 +872,13 @@ export const en = {
     review: 'Review'
   },
   errors: {
+    branchMissing:
+      'That repository has no branch called \u201c{{branch}}\u201d. Choose a base branch it does have before pointing the project at it.',
+    draftFailed: 'The description could not be drafted: {{reason}}',
+    envProfileExists: 'This project already has a set of variables called \u201c{{name}}\u201d.',
+    envProfileMissing: 'There is no set of variables called \u201c{{name}}\u201d any more.',
+    envProfileName:
+      '\u201c{{name}}\u201d cannot be the name of a set: use lowercase letters, digits and dashes, starting with a letter or a digit. The name becomes a filename, and on this filesystem \u201cProd\u201d and \u201cprod\u201d would be the same one.',
     repoPathHasWorkspaces:
       'This project still has workspaces, and each is a git worktree registered in its current repository. Remove them before pointing it somewhere else.',
     repoPathTaken: '\u201c{{name}}\u201d already uses that repository.',

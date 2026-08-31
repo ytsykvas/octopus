@@ -11,6 +11,7 @@ import { DiffError } from '../core/diff.js'
 import { GitHubError } from '../core/github.js'
 import { describeError } from '../core/persist.js'
 import { ProjectValidationError } from '../core/projects.js'
+import { EnvProfileError } from '../core/envProfiles.js'
 import { StateConflictError } from '../core/store.js'
 import { RepoConfigError } from '../core/repoConfig.js'
 import { WorkspaceError } from '../core/workspaces.js'
@@ -43,6 +44,7 @@ export async function attempt<T>(operation: () => Promise<T> | T): Promise<Resul
       error instanceof DiffError ||
       error instanceof ChatError ||
       error instanceof RepoConfigError ||
+      error instanceof EnvProfileError ||
       error instanceof StateConflictError
     ) {
       return {

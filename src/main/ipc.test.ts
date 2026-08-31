@@ -912,6 +912,23 @@ describe('scripts and instructions of a real project', () => {
     })
   })
 
+  it('carries the reason a set could not be added across the boundary', async () => {
+    /*
+     * The code is what lets the window say this in the reader's own language.
+     * Without it the refusal arrived as the developer English thrown in core —
+     * which is how it shipped, because `EnvProfileError` was missing from the
+     * list `attempt` translates and nothing tested the crossing.
+     */
+    const projectId = await addProject()
+    await invoke('env:create', projectId, 'prod', null)
+
+    await expect(invoke('env:create', projectId, 'prod', null)).resolves.toMatchObject({
+      ok: false,
+      code: 'envProfileExists',
+      params: { name: 'prod' }
+    })
+  })
+
   it('refuses a set name that could not be a file', async () => {
     // Types vanish at this boundary, and the name becomes a filename.
     const projectId = await addProject()

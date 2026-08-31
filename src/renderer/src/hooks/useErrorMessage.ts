@@ -16,6 +16,16 @@ export function useErrorMessage(): (failure: Failure) => string {
   return useCallback(
     (failure: Failure) => {
       switch (failure.code) {
+        case 'branchMissing':
+          return t('errors.branchMissing', { branch: failure.params?.branch ?? '' })
+        case 'draftFailed':
+          return t('errors.draftFailed', { reason: failure.params?.reason ?? '' })
+        case 'envProfileExists':
+          return t('errors.envProfileExists', { name: failure.params?.name ?? '' })
+        case 'envProfileMissing':
+          return t('errors.envProfileMissing', { name: failure.params?.name ?? '' })
+        case 'envProfileName':
+          return t('errors.envProfileName', { name: failure.params?.name ?? '' })
         case 'repoPathHasWorkspaces':
           return t('errors.repoPathHasWorkspaces')
         case 'repoPathTaken':

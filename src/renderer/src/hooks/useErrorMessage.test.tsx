@@ -1,52 +1,113 @@
 import { renderHook } from '@testing-library/react'
 import { describe, expect, it } from 'vitest'
 
+import type { ChatErrorCode } from '@core/chats.js'
+import type { DiffErrorCode } from '@core/diff.js'
+import type { EnvProfileCode } from '@core/envProfiles.js'
+import type { GitHubErrorCode } from '@core/github.js'
+import type { ProjectValidationCode } from '@core/projects.js'
+import type { RepoConfigCode } from '@core/repoConfig.js'
+import type { StateConflictCode } from '@core/store.js'
+import type { WorkspaceErrorCode } from '@core/workspaces.js'
+
 import { useErrorMessage } from './useErrorMessage.js'
 
 /**
- * Every code core sends, with the parameter its message interpolates.
+ * Every code core can send.
  *
- * Each code is a branch of its own in the hook, and a branch nobody exercises
- * is a message nobody has ever read — the kind that ships as a bare key or with
- * an unfilled placeholder in it.
+ * A `Record` over the union rather than a list, and that is the whole point: a
+ * code added to any of these modules and not handled by the hook is a **compile
+ * error** here. Written as a list, this table could only ever contain what
+ * somebody remembered to add — and since it was assembled by reading the hook's
+ * own switch, it could never notice a code the hook did not handle. It did not:
+ * `EnvProfileError` reached the user as developer English for as long as it
+ * existed.
+ *
+ * The assertion below then carries the other half. The `Record` proves the code
+ * is listed; the test proves the hook says something other than the fallback.
  */
-const CODES: readonly {
-  readonly code: string
-  readonly parameter?: readonly [name: string, value: string]
-}[] = [
-  { code: 'repoPathHasWorkspaces' },
-  { code: 'repoPathTaken', parameter: ['name', 'ledger'] },
-  { code: 'repoPathRelative', parameter: ['path', 'repos/moved'] },
-  { code: 'repoPathEmpty' },
-  { code: 'notARepository', parameter: ['path', '/Users/someone/code/planner'] },
-  { code: 'emptyRepository', parameter: ['path', '/Users/someone/code/fresh'] },
-  { code: 'noBaseBranch', parameter: ['path', '/Users/someone/code/detached'] },
-  { code: 'duplicateProject', parameter: ['name', 'planner'] },
-  { code: 'notConnected' },
-  { code: 'listFailed' },
-  { code: 'cloneFailed', parameter: ['repository', 'ytsykvas/planner'] },
-  { code: 'alreadyExists', parameter: ['path', '/Users/someone/code/planner'] },
-  { code: 'branchUnmerged', parameter: ['branch', 'ytsykvas/anna'] },
-  { code: 'branchExists', parameter: ['branch', 'ytsykvas/anna'] },
-  { code: 'pathExists', parameter: ['path', '/tmp/planner/anna'] },
-  { code: 'uncommittedChanges', parameter: ['name', 'anna'] },
-  { code: 'nameEmpty' },
-  { code: 'worktreeMissing' },
-  { code: 'baseUnknown', parameter: ['branch', 'main'] },
-  { code: 'tooManyChats', parameter: ['limit', '3'] },
-  { code: 'lastChat' },
-  { code: 'nothingToFork' },
-  { code: 'repoConfigSymlink', parameter: ['path', '.octopus/scripts/setup.sh'] },
-  { code: 'repoConfigTooLarge', parameter: ['path', '.octopus/carry'] },
-  { code: 'repoConfigMalformed', parameter: ['path', '.octopus/project.json'] },
-  { code: 'forkFailed' },
-  { code: 'nothingToCommit' },
-  { code: 'commitFailed' },
-  { code: 'mergeFailed', parameter: ['number', '812'] },
-  { code: 'closeFailed', parameter: ['number', '812'] }
-]
+type CoreErrorCode =
+  | ChatErrorCode
+  | DiffErrorCode
+  | EnvProfileCode
+  | GitHubErrorCode
+  | ProjectValidationCode
+  | RepoConfigCode
+  | StateConflictCode
+  | WorkspaceErrorCode
 
-const WITH_PARAMETER = CODES.filter((entry) => entry.parameter !== undefined)
+/**
+ * Everything a message interpolates, or null where it takes nothing.
+ *
+ * `'internal'` is the third answer, and it has to be spelled out rather than
+ * left off the table: a code the interface can never receive still belongs here,
+ * so that adding one forces the choice between writing a message and saying why
+ * there is none.
+ */
+type Interpolated = Readonly<Record<string, string>> | null | 'internal'
+
+const CODE_PARAMETERS: Record<CoreErrorCode, Interpolated> = {
+  envProfileExists: { name: 'prod' },
+  envProfileMissing: { name: 'prod' },
+  envProfileName: { name: 'Prod' },
+  repoPathHasWorkspaces: null,
+  repoPathTaken: { name: 'ledger' },
+  repoPathRelative: { path: 'repos/moved' },
+  repoPathEmpty: null,
+  // Thrown while deleting a project's data, inside a `.catch` that swallows it:
+  // the removal has already been committed by then, so this never reaches a
+  // renderer and a message for it would be prose nobody can ever read.
+  projectPathEscapes: 'internal',
+  notARepository: { path: '/Users/someone/code/planner' },
+  emptyRepository: { path: '/Users/someone/code/fresh' },
+  noBaseBranch: { path: '/Users/someone/code/detached' },
+  duplicateProject: { name: 'planner' },
+  branchMissing: { branch: 'develop' },
+  notConnected: null,
+  listFailed: null,
+  cloneFailed: { repository: 'ytsykvas/planner' },
+  alreadyExists: { path: '/Users/someone/code/planner' },
+  branchUnmerged: { branch: 'ytsykvas/anna' },
+  branchExists: { branch: 'ytsykvas/anna' },
+  pathExists: { path: '/tmp/planner/anna' },
+  uncommittedChanges: { name: 'anna' },
+  nameEmpty: null,
+  worktreeMissing: null,
+  fetchFailed: { remote: 'origin', reason: 'no such host' },
+  baseUnknown: { branch: 'main' },
+  tooManyChats: { limit: '3' },
+  lastChat: null,
+  nothingToFork: null,
+  forkFailed: null,
+  noCommits: { base: 'main' },
+  nothingToCommit: null,
+  commitFailed: { reason: 'hook refused' },
+  createFailed: { reason: 'no upstream' },
+  draftFailed: { reason: 'the agent gave up' },
+  pushFailed: { branch: 'octopus/anna', reason: 'rejected' },
+  closeFailed: { number: '42', reason: 'already closed' },
+  mergeFailed: { number: '42', reason: 'checks failing' },
+  repoConfigSymlink: { path: '.octopus/scripts/setup.sh' },
+  repoConfigTooLarge: { path: '.octopus/carry' },
+  repoConfigMalformed: { path: '.octopus/project.json' }
+}
+
+const CODES = Object.entries(CODE_PARAMETERS)
+  .filter(([, params]) => params !== 'internal')
+  .map(([code, params]) => ({ code, params: params as Readonly<Record<string, string>> | null }))
+
+const WITH_PARAMETER = CODES.filter((entry) => entry.params !== null)
+
+/**
+ * What the hook says when it does not recognise a code.
+ *
+ * The assertion that matters, and the one that was missing. `errors.unknown`
+ * quotes the raw English inside a localised frame, so a message for a code the
+ * hook has never heard of contains neither `errors.` nor an unfilled
+ * placeholder, and is not the raw string either — it passed every check the
+ * older test made. Three codes had no case at all and nothing noticed.
+ */
+const RAW = 'a sentence that appears in no translation'
 
 describe('useErrorMessage', () => {
   it('turns a known code into a localised message', () => {
@@ -154,36 +215,34 @@ describe('useErrorMessage', () => {
     }
   })
 
-  it.each(CODES)('reads $code as a sentence rather than a key', ({ code, parameter }) => {
+  it.each(CODES)('reads $code as a sentence rather than a key', ({ code, params }) => {
     const { result } = renderHook(() => useErrorMessage())
 
     const message = result.current({
       ok: false,
-      error: 'raw english fallback',
+      error: RAW,
       code,
-      ...(parameter ? { params: { [parameter[0]]: parameter[1] } } : {})
+      ...(params === null ? {} : { params })
     })
 
     expect(message).not.toContain('errors.')
     // An unfilled placeholder means the hook passed the wrong parameter name.
     expect(message).not.toContain('{{')
-    expect(message).not.toBe('raw english fallback')
+    // And the fallback quotes the raw English, so a message that contains it is
+    // one the hook did not recognise.
+    expect(message).not.toContain(RAW)
     expect(message.length).toBeGreaterThan(0)
   })
 
-  it.each(WITH_PARAMETER)('puts the $code parameter into the message', ({ code, parameter }) => {
+  it.each(WITH_PARAMETER)('puts every $code parameter into the message', ({ code, params }) => {
     const { result } = renderHook(() => useErrorMessage())
-    if (parameter === undefined) throw new Error('this list only holds codes with a parameter')
-    const [name, value] = parameter
+    if (params === null) throw new Error('this list only holds codes with parameters')
 
-    const message = result.current({
-      ok: false,
-      error: 'raw english fallback',
-      code,
-      params: { [name]: value }
-    })
+    const message = result.current({ ok: false, error: RAW, code, params })
 
-    expect(message).toContain(value)
+    // Every one of them, not just the first. Four messages interpolate two, and
+    // a table that could hold only one was checking half of each.
+    for (const value of Object.values(params)) expect(message).toContain(value)
   })
 
   // Core owns the parameters, and an older build of it may send a code without
@@ -192,10 +251,10 @@ describe('useErrorMessage', () => {
   it.each(WITH_PARAMETER)('still reads as a sentence when $code arrives bare', ({ code }) => {
     const { result } = renderHook(() => useErrorMessage())
 
-    const message = result.current({ ok: false, error: 'raw english fallback', code })
+    const message = result.current({ ok: false, error: RAW, code })
 
     expect(message).not.toContain('errors.')
     expect(message).not.toContain('{{')
-    expect(message).not.toBe('raw english fallback')
+    expect(message).not.toContain(RAW)
   })
 })
