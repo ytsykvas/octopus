@@ -203,6 +203,24 @@ component behaves as though the window had no size:
 - there is no `selectionchange` event of jsdom's own, so a test that selects
   text dispatches it after building the range.
 
+**A test that measures whether props hold still has to hold still exactly what
+`App` holds still — or it measures itself.** `DiffFile` is memoised, and the
+pane's contract is that every prop it hands down is steady; a test of that
+contract built a fresh `vi.fn()` for `onError` and a fresh controller on each
+render, and three props duly looked unstable. Two of the three were the test.
+
+The finding underneath was real, which is what makes this worth writing down:
+the measurement was two thirds noise and still correct about the third. Take the
+props the window builds once and hand the same objects over on every render,
+then measure.
+
+**Two memo tests are needed and neither is sufficient.** `DiffFileMemo.test`
+builds steady props by hand and asks whether a memoised file ignores its
+parent's render — so it holds whatever the pane actually passes, and cannot see
+a pane that passes something new. `DiffPanelMemo.test` drives the pane and
+counts what it redraws, which is the only half that can. The first alone was
+green throughout the week the pane was rebuilding a handler on every render.
+
 A selection's ends belong in **text** nodes, not in the elements around them,
 and once the highlighter has run a line's text sits inside however many token
 spans shiki produced. A range anchored to the element instead models a selection
@@ -211,7 +229,7 @@ no browser makes, and stops exercising the nesting the running app always has.
 ## Main and preload
 
 `registerIpc` takes its Electron surface as a parameter, so `ipc.test.ts`
-supplies nine small functions and drives all 49 channels without a window.
+supplies nine small functions and drives all 76 channels without a window.
 
 Two lists are load-bearing: `EXPECTED` in `ipc.test.ts` and `CALLS` in
 `preload/index.test.ts`. A channel name that drifts between the two sides fails
