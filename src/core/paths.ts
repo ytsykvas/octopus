@@ -39,9 +39,14 @@ export function stateTempFile(root: string = rootDir()): string {
   return join(root, 'state.json.tmp')
 }
 
+/** Where every project's own directory sits: `~/.octopus/projects`. */
+export function projectsDir(root: string = rootDir()): string {
+  return join(root, 'projects')
+}
+
 /** Project metadata directory: `~/.octopus/projects/<projectId>`. */
 export function projectDir(projectId: ProjectId, root: string = rootDir()): string {
-  return join(root, 'projects', projectId)
+  return join(projectsDir(root), projectId)
 }
 
 /** Directory holding a project's scripts. */

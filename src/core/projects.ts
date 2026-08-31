@@ -15,9 +15,14 @@ import {
   repositoryName,
   toSlug
 } from './git.js'
+import { rm } from 'node:fs/promises'
+import { basename, dirname, normalize } from 'node:path'
+
 import { DEFAULT_ENV_FILE } from './envBlock.js'
+import { projectDir, projectsDir } from './paths.js'
 import { nextProjectColor } from './colors.js'
 import type { Project, State } from './store.js'
+import type { ProjectId } from './types.js'
 
 /**
  * Machine-readable reason a directory was rejected.
@@ -32,6 +37,8 @@ export type ProjectValidationCode =
   | 'duplicateProject'
   /** The chosen base branch is not in the repository. */
   | 'branchMissing'
+  /** An id that would name a directory outside `~/.octopus/projects`. */
+  | 'projectPathEscapes'
 
 /** A directory cannot be used as a project, with a reason the user can act on. */
 export class ProjectValidationError extends Error {
@@ -186,4 +193,36 @@ export function orderBaseBranches(branches: readonly string[]): string[] {
   }
 
   return [...branches].sort((a, b) => rank(a) - rank(b) || a.localeCompare(b))
+}
+
+/**
+ * Deletes everything a project kept on this machine.
+ *
+ * Its scripts, its carry list, its instructions and its env overrides — the
+ * last of which are credentials. Left behind, they are invisible to the app and
+ * silently inherited by the next project that happens to take the same id.
+ *
+ * The id reaches this from `state.json`, which is a file somebody can edit, and
+ * this is a recursive delete. So the path it builds is checked against the one
+ * it is allowed to build: anything that normalises elsewhere is refused rather
+ * than followed. `paths.ts` cannot hold this — it is pure, synchronous and
+ * asserted as strings, and an `rm -rf` is none of those.
+ */
+export async function removeProjectData(projectId: ProjectId, root?: string): Promise<void> {
+  const directory = normalize(projectDir(projectId, root))
+
+  /*
+   * Compared against the **shape** the path must have, not against the same
+   * expression built twice — which is what this was at first, and a check that
+   * compares a value with itself passes for `../..` as happily as for a name.
+   */
+  if (dirname(directory) !== normalize(projectsDir(root)) || basename(directory) !== projectId) {
+    throw new ProjectValidationError(
+      'projectPathEscapes',
+      { id: projectId },
+      `${projectId} is not a project id.`
+    )
+  }
+
+  await rm(directory, { recursive: true, force: true })
 }

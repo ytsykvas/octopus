@@ -1,5 +1,5 @@
 import { execFile } from 'node:child_process'
-import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
+import { mkdir, mkdtemp, rm, stat, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { promisify } from 'node:util'
@@ -10,6 +10,7 @@ import {
   createProject,
   orderBaseBranches,
   inspectRepository,
+  removeProjectData,
   ProjectValidationError,
   uniqueProjectId
 } from './projects.js'
@@ -206,5 +207,44 @@ describe('orderBaseBranches', () => {
     const input = ['origin/zeta', 'origin/main']
     orderBaseBranches(input)
     expect(input).toEqual(['origin/zeta', 'origin/main'])
+  })
+})
+
+describe('removeProjectData', () => {
+  let root: string
+
+  beforeEach(async () => {
+    root = await mkdtemp(join(tmpdir(), 'octopus-projects-'))
+  })
+  afterEach(async () => {
+    await rm(root, { recursive: true, force: true })
+  })
+
+  it('deletes everything the project kept on this machine', async () => {
+    const scripts = join(root, 'projects', 'planner', 'scripts')
+    await mkdir(scripts, { recursive: true })
+    await writeFile(join(scripts, 'setup.sh'), '#!/bin/sh\n', 'utf8')
+    await writeFile(join(root, 'projects', 'planner', 'env'), 'SECRET=1\n', 'utf8')
+
+    await removeProjectData('planner', root)
+
+    await expect(stat(join(root, 'projects', 'planner'))).rejects.toThrow()
+  })
+
+  it('is content with a project that kept nothing', async () => {
+    await expect(removeProjectData('planner', root)).resolves.toBeUndefined()
+  })
+
+  it('refuses an id that would name a directory somewhere else', async () => {
+    /*
+     * The id arrives from `state.json`, which is a file somebody can edit, and
+     * this is a recursive delete. Refused rather than followed.
+     */
+    await expect(removeProjectData('../..', root)).rejects.toMatchObject({
+      code: 'projectPathEscapes'
+    })
+    await expect(removeProjectData('a/b', root)).rejects.toMatchObject({
+      code: 'projectPathEscapes'
+    })
   })
 })

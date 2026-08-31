@@ -873,8 +873,11 @@ describe('App', () => {
     await user.click(screen.getByRole('menuitem', { name: 'Remove project' }))
 
     expect(
-      await screen.findByText('The repository stays on disk exactly where it is.')
+      await screen.findByText(/The repository stays on disk exactly where it is\./)
     ).toBeInTheDocument()
+    // No workspace is named, because none is known yet — but what the app keeps
+    // for the project goes either way, and the question says so.
+    expect(screen.getByText(/deleted from ~\/\.octopus/)).toBeInTheDocument()
   })
 
   it('shows an empty workspace list while it is still loading', async () => {

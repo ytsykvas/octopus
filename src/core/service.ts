@@ -108,7 +108,12 @@ import {
   readTranscript,
   removeTranscript
 } from './transcript.js'
-import { assertBranchExists, createProject, orderBaseBranches } from './projects.js'
+import {
+  assertBranchExists,
+  createProject,
+  orderBaseBranches,
+  removeProjectData
+} from './projects.js'
 import { type ScriptsInWorkspace, resolveScripts, scriptsDigest } from './repoSource.js'
 import { readScript, type ScriptKind, scriptExists, scriptPath, writeScript } from './scripts.js'
 import {
@@ -1965,6 +1970,27 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
           // it. Left out here, removing a project leaked every agent in it.
           await closeChatsOf(workspace.id)
 
+          /*
+           * And the cleanup script, in the same order and for the same reason
+           * `removeWorkspaceById` runs it: in the worktree while it still
+           * exists. Left out here, removing a project abandoned every database
+           * its workspaces had been given — the accumulation the script exists
+           * to prevent, at the one moment there is most of it to clean up.
+           */
+          const scripts = await resolveScripts(workspace.path, project.id, dataRoot)
+          const cleanup = scripts.archive ?? null
+          const gated =
+            cleanup?.source !== 'project' &&
+            !project.approvedScripts.includes(scriptsDigest(scripts))
+
+          await runArchiveScript(gated ? null : cleanup, {
+            rootPath: project.repoPath,
+            workspaceName: workspace.name,
+            path: workspace.path,
+            port: workspace.port,
+            defaultBranch: shortBranchName(project.baseBranch)
+          })
+
           // Best-effort, one by one: a worktree already deleted from outside
           // must not stop the rest — or the project — from being removed. The
           // user has confirmed, so uncommitted work goes too.
@@ -1977,6 +2003,16 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
       }
 
       await commit((current) => removeProject(current, projectId))
+
+      /*
+       * After the commit, and swallowing its own failure.
+       *
+       * The other order leaves a live project whose scripts have been deleted,
+       * which is worse than a directory nothing points at. Run unconditionally,
+       * outside the guard above: a record already gone while its directory
+       * survives is exactly the case worth cleaning.
+       */
+      await removeProjectData(projectId, dataRoot).catch(() => undefined)
     },
 
     async listWorkspaces(projectId) {

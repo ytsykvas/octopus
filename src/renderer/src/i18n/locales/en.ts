@@ -23,15 +23,16 @@ export const en = {
     renameHint: 'Enter to save, Escape to cancel',
     removeTitle: 'Remove project?',
     removeMessage: 'Remove “{{name}}” from the list?',
-    removeDetail: 'The repository stays on disk exactly where it is.',
+    removeDetail:
+      'Its scripts, carried-file list and variables are deleted from ~/.octopus, credentials included. The repository stays on disk exactly where it is.',
     removeDetailWorkspaces_one:
-      'Its workspace is deleted along with its branch. The repository itself stays on disk.',
+      'Its workspace is deleted along with its branch, and the cleanup script runs for it first. Its scripts, carried-file list and variables are deleted from ~/.octopus, credentials included. The repository itself stays on disk.',
     removeDetailWorkspaces_few:
-      'Its {{count}} workspaces are deleted along with their branches. The repository itself stays on disk.',
+      'Its {{count}} workspaces are deleted along with their branches, and the cleanup script runs for each first. Its scripts, carried-file list and variables are deleted from ~/.octopus, credentials included. The repository itself stays on disk.',
     removeDetailWorkspaces_many:
-      'Its {{count}} workspaces are deleted along with their branches. The repository itself stays on disk.',
+      'Its {{count}} workspaces are deleted along with their branches, and the cleanup script runs for each first. Its scripts, carried-file list and variables are deleted from ~/.octopus, credentials included. The repository itself stays on disk.',
     removeDetailWorkspaces_other:
-      'Its {{count}} workspaces are deleted along with their branches. The repository itself stays on disk.',
+      'Its {{count}} workspaces are deleted along with their branches, and the cleanup script runs for each first. Its scripts, carried-file list and variables are deleted from ~/.octopus, credentials included. The repository itself stays on disk.',
     removeConfirm: 'Remove',
     removeCancel: 'Cancel',
     collapse: 'Hide workspaces',
@@ -194,7 +195,8 @@ export const en = {
     sourceCount: '{{count}} loaded',
     repository: 'Repository',
     dangerZone: 'Danger zone',
-    removeHint: 'Removes the project from octopus. The repository stays on disk.'
+    removeHint:
+      'Removes the project from octopus. Every workspace goes, its cleanup script running first, and the scripts, files and variables kept for this project are deleted from ~/.octopus \u2014 credentials included. The repository stays on disk.'
   },
 
   combobox: {

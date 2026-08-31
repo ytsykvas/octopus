@@ -9,6 +9,7 @@ import {
   realpath,
   rename,
   rm,
+  stat,
   symlink,
   writeFile
 } from 'node:fs/promises'
@@ -1628,6 +1629,64 @@ describe('the cleanup script', () => {
     // Conductor's own name for the workspace, and the slug rather than the
     // label — which is what makes their setup and archive agree.
     await expect(readFile(marker, 'utf8')).resolves.toBe(workspace.name)
+  })
+})
+
+describe('removing a project', () => {
+  it("runs each workspace's cleanup and deletes what the project kept here", async () => {
+    /*
+     * The moment there is most to clean up, and the one that used to clean up
+     * nothing: the databases every workspace had been given were abandoned.
+     */
+    const repo = join(dir, 'planner')
+    await initRepo(repo)
+    const project = await service.addProjectFromPath(repo)
+    const first = await service.createWorkspaceIn(project.id)
+    const second = await service.createWorkspaceIn(project.id)
+
+    const marker = join(dir, 'cleaned.txt')
+    await service.saveProjectScript(
+      project.id,
+      'archive',
+      `#!/bin/sh\nprintf '%s\\n' "$OCTOPUS_WORKSPACE_SLUG" >> '${marker}'\n`
+    )
+
+    await service.removeProjectById(project.id)
+
+    const ran = (await readFile(marker, 'utf8')).trim().split('\n').sort()
+    expect(ran).toEqual([first.name, second.name].sort())
+
+    // And the credentials with it: an env block left behind is inherited by
+    // whatever project next takes the same id.
+    await expect(stat(join(dir, 'data', 'projects', project.id))).rejects.toThrow()
+    expect(service.listProjects()).toHaveLength(0)
+  })
+
+  it('removes the project even when the cleanup script fails', async () => {
+    const repo = join(dir, 'planner')
+    await initRepo(repo)
+    const project = await service.addProjectFromPath(repo)
+    await service.createWorkspaceIn(project.id)
+    await service.saveProjectScript(project.id, 'archive', '#!/bin/sh\nexit 3\n')
+
+    await expect(service.removeProjectById(project.id)).resolves.toBeUndefined()
+    expect(service.listProjects()).toHaveLength(0)
+  })
+
+  it('cleans up after a project whose record has already gone', async () => {
+    // A directory nothing points at is exactly the case worth removing, so the
+    // delete runs whether or not the project is still in state.
+    await expect(service.removeProjectById('never-existed')).resolves.toBeUndefined()
+  })
+
+  it('does not raise when the stored settings cannot be deleted', async () => {
+    /*
+     * The delete swallows its own failure because it runs after the commit: the
+     * project is already gone from the app, and a leftover directory is debris
+     * rather than a reason to fail. An id that could never name one is the
+     * cheapest way to make it fail on purpose.
+     */
+    await expect(service.removeProjectById('../elsewhere')).resolves.toBeUndefined()
   })
 })
 
