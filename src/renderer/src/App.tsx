@@ -12,6 +12,7 @@ import {
 import { useCallback, useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
+import { shortBranchName } from '@core/branches.js'
 import { DEFAULT_EFFORT } from '@core/chats.js'
 import type { Config } from '@core/config.js'
 import type { ThemeName } from '@core/types.js'
@@ -39,6 +40,7 @@ import { useBranchRequests } from './hooks/useBranchRequests.js'
 import { usePullRequestQuotes } from './hooks/usePullRequestQuotes.js'
 import { type ChatTab, useChatTabs } from './hooks/useChatTabs.js'
 import { useProjects } from './hooks/useProjects.js'
+import { useWorkspaceScripts } from './hooks/useWorkspaceScripts.js'
 import { useWorkspaces } from './hooks/useWorkspaces.js'
 
 /**
@@ -98,10 +100,6 @@ export function App(): React.JSX.Element {
   const [editingProjectId, setEditingProjectId] = useState<string | null>(null)
   /** Which section that dialog opens on, for the callers that know. */
   const [editingProjectSection, setEditingProjectSection] = useState<ProjectSection>('general')
-  const [scriptPaths, setScriptPaths] = useState<{ setup: string | null; run: string | null }>({
-    setup: null,
-    run: null
-  })
 
   const projects = useProjects(confirm, setError)
   const workspaces = useWorkspaces(projects.all, confirm, setError)
@@ -227,27 +225,6 @@ export function App(): React.JSX.Element {
       void i18n.changeLanguage(config.language)
     }
   }, [config, i18n])
-
-  // Re-read whenever the project changes or its settings close, since that is
-  // where a script gets written for the first time.
-  useEffect(() => {
-    const controller = new AbortController()
-
-    void (async () => {
-      if (selectedProjectId === null) {
-        setScriptPaths({ setup: null, run: null })
-        return
-      }
-
-      const result = await window.octopus.projects.scriptPaths(selectedProjectId)
-      if (controller.signal.aborted) return
-      if (result.ok) setScriptPaths(result.value)
-    })()
-
-    return () => {
-      controller.abort()
-    }
-  }, [selectedProjectId, editingProjectId])
 
   const updateConfig = useCallback(
     async (patch: Partial<Config>) => {
@@ -435,6 +412,18 @@ export function App(): React.JSX.Element {
   // Read twice: the right pane hands it to the scripts, and the hint they
   // draw when there is none sends the user to edit that same project.
   const openProjectId = selectedProject?.id ?? null
+
+  /*
+   * Every workspace, not only the open project's: a runner outlives the switch
+   * away from its project, and it needs its own script to keep running rather
+   * than the one belonging to whatever is on screen.
+   */
+  const workspaceScripts = useWorkspaceScripts(
+    workspaces.flat.map((workspace) => workspace.id),
+    // A settings dialog closing is where a script is first written, so the
+    // answer can change without the list changing.
+    editingProjectId
+  )
 
   /* One read for the whole project, which is what lets the list mark every row
      without a network call per row. Below `openProjectId` rather than beside
@@ -759,7 +748,9 @@ export function App(): React.JSX.Element {
             activeWorkspaceId={selectedWorkspaceId}
             color={selectedProject?.color ?? null}
             projectId={openProjectId}
-            scriptPaths={scriptPaths}
+            scripts={workspaceScripts.scripts}
+            onScriptsChanged={workspaceScripts.refresh}
+            defaultBranch={shortBranchName(selectedProject?.baseBranch ?? '')}
             // No guard: the scripts belong to the open project, so the hint
             // that calls this exists only while there is one. With none, this
             // is asked to edit nothing, which is what closing means.

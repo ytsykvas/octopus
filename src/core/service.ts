@@ -109,7 +109,7 @@ import {
   removeTranscript
 } from './transcript.js'
 import { assertBranchExists, createProject, orderBaseBranches } from './projects.js'
-import { type ResolvedScript, resolveScripts, scriptsDigest } from './repoSource.js'
+import { type ScriptsInWorkspace, resolveScripts, scriptsDigest } from './repoSource.js'
 import { readScript, type ScriptKind, scriptExists, scriptPath, writeScript } from './scripts.js'
 import {
   compareRepoItem,
@@ -368,10 +368,7 @@ export interface OctopusService {
    * user wrote them, and a dialog asking somebody to approve their own text is
    * one they learn to click through.
    */
-  workspaceScripts(workspaceId: string): Promise<{
-    readonly approved: boolean
-    readonly scripts: Readonly<Partial<Record<ScriptKind, ResolvedScript>>>
-  }>
+  workspaceScripts(workspaceId: string): Promise<ScriptsInWorkspace>
   /** Records that these scripts were read, so they may run. */
   approveWorkspaceScripts(workspaceId: string): Promise<void>
 

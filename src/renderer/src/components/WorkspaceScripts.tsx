@@ -1,5 +1,6 @@
 import { useState } from 'react'
 
+import type { ResolvedScript } from '@core/repoSource.js'
 import type { ScriptKind } from '@core/scripts.js'
 import type { WorkspaceView } from '@core/workspaces.js'
 
@@ -10,8 +11,17 @@ interface WorkspaceScriptsProps {
   /** Workspace whose run is on screen; null when none is selected. */
   readonly activeId: string | null
   readonly kind: ScriptKind
-  /** Absolute path of the project's script; null when it has not been written. */
-  readonly scriptPath: string | null
+  /**
+   * Which script this kind runs in a given workspace, or null for none.
+   *
+   * A function of the workspace rather than one script for the pane, because
+   * the answer is a fact about a **worktree**: the repository supplying it is
+   * the one checked out there, and a branch may carry a different script from
+   * the branch beside it. A runner left standing for another workspace also
+   * keeps its own — handing it null would unmount it, and unmounting is how a
+   * run ends.
+   */
+  readonly scriptFor: (workspaceId: string) => ResolvedScript | null
   /**
    * Whether this script's tab is the one being shown.
    *
@@ -23,6 +33,8 @@ interface WorkspaceScriptsProps {
   readonly visible: boolean
   /** The project's checkout, handed to every script as `$OCTOPUS_ROOT_PATH`. */
   readonly rootPath: string
+  /** The base branch, for a script that reads it under Conductor's name. */
+  readonly defaultBranch: string
   readonly onOpenSettings: () => void
   /**
    * This half's start token for a given workspace, from the Run sequence.
@@ -58,9 +70,10 @@ export function WorkspaceScripts({
   workspaces,
   activeId,
   kind,
-  scriptPath,
+  scriptFor,
   visible,
   rootPath,
+  defaultBranch,
   onOpenSettings,
   tokenFor,
   stopTokenFor,
@@ -101,9 +114,10 @@ export function WorkspaceScripts({
           <ScriptRunner
             workspace={null}
             kind={kind}
-            scriptPath={scriptPath}
+            script={null}
             port={0}
             rootPath={rootPath}
+            defaultBranch={defaultBranch}
             onOpenSettings={onOpenSettings}
           />
         </div>
@@ -121,9 +135,10 @@ export function WorkspaceScripts({
           <ScriptRunner
             workspace={workspace}
             kind={kind}
-            scriptPath={scriptPath}
+            script={scriptFor(workspace.id)}
             port={workspace.port}
             rootPath={rootPath}
+            defaultBranch={defaultBranch}
             onOpenSettings={onOpenSettings}
             onPort={(settled) => {
               onPort?.(workspace.id, settled)

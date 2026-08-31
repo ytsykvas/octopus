@@ -146,6 +146,12 @@ export async function resolveScript(
 /** Every kind, resolved. `null` where nothing supplies one. */
 export const SCRIPT_KINDS: readonly ScriptKind[] = ['setup', 'run', 'archive']
 
+/** What runs in one workspace, and whether the repository's part is approved. */
+export interface ScriptsInWorkspace {
+  readonly approved: boolean
+  readonly scripts: Readonly<Partial<Record<ScriptKind, ResolvedScript>>>
+}
+
 export async function resolveScripts(
   cwd: string,
   projectId: ProjectId,

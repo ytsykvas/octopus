@@ -113,6 +113,8 @@ export function installOctopusStub(): Api {
       prepare: vi.fn(() => ok([])),
       env: vi.fn(() => ok('')),
       trust: vi.fn(() => ok({ approved: true, files: [] })),
+      scripts: vi.fn(() => ok({ approved: true, scripts: {} })),
+      approveScripts: vi.fn(() => ok(undefined)),
       approveSettings: vi.fn(() => ok(undefined)),
       // The port answers by default: a test about a script that ignores
       // `$OCTOPUS_PORT` says so, and the rest are not about ports at all.

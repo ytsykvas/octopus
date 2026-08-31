@@ -11,6 +11,7 @@ import type {
   SessionUsage,
   WorkspaceStatusEvent
 } from '@core/service.js'
+import type { ScriptsInWorkspace } from '@core/repoSource.js'
 import type { QuestionAnswer } from '@core/questions.js'
 import type { ChatEntry } from '@core/transcript.js'
 import type { TerminalExit, TerminalOutput, TerminalSpec } from '@core/terminal.js'
@@ -386,6 +387,17 @@ const api = {
       ipcRenderer.invoke('workspaces:closePullRequest', workspaceId, number) as Promise<
         Result<void>
       >,
+
+    /**
+     * Which script runs for each kind here, from where, and whether the ones
+     * the repository supplies have been read.
+     */
+    scripts: (workspaceId: string): Promise<Result<ScriptsInWorkspace>> =>
+      ipcRenderer.invoke('scripts:resolved', workspaceId) as Promise<Result<ScriptsInWorkspace>>,
+
+    /** Records that the repository's scripts were read, so they may run. */
+    approveScripts: (workspaceId: string): Promise<Result<void>> =>
+      ipcRenderer.invoke('scripts:approve', workspaceId) as Promise<Result<void>>,
 
     /** The instruction this workspace would send: its project's, or the global one. */
     instruction: (workspaceId: string, kind: InstructionKind): Promise<Result<string>> =>

@@ -247,6 +247,18 @@ export function registerIpc(
     attempt(() => service.approveWorkspaceSettings(workspaceId))
   )
 
+  // Keyed by workspace for the same reason: which script runs is a fact about
+  // the worktree, and a branch may carry a different one from the branch beside
+  // it. The pair mirrors `trust:read` / `trust:approve` exactly, because it is
+  // the same shape of question about a different thing.
+  host.handle('scripts:resolved', (_event, workspaceId: string) =>
+    attempt(() => service.workspaceScripts(workspaceId))
+  )
+
+  host.handle('scripts:approve', (_event, workspaceId: string) =>
+    attempt(() => service.approveWorkspaceScripts(workspaceId))
+  )
+
   // The workspace as well, because whether a source is read depends on the
   // worktree a session would run in — that is where the trust gate looks.
   host.handle('instructions:sources', (_event, projectId: string, workspaceId: unknown) =>

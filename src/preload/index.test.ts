@@ -174,6 +174,12 @@ describe('channel names', () => {
       () => method('workspaces', 'approveSettings')('w' as never),
       'trust:approve'
     ],
+    ['workspaces.scripts', () => method('workspaces', 'scripts')('w' as never), 'scripts:resolved'],
+    [
+      'workspaces.approveScripts',
+      () => method('workspaces', 'approveScripts')('w' as never),
+      'scripts:approve'
+    ],
     ['workspaces.port', () => method('workspaces', 'port')('w' as never), 'workspaces:port'],
     [
       'workspaces.serving',

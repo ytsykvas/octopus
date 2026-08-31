@@ -285,6 +285,8 @@ describe('channel table', () => {
     'instructions:sources',
     'trust:read',
     'trust:approve',
+    'scripts:resolved',
+    'scripts:approve',
     'workspace:env',
     'workspaces:serving',
     'workspaces:port',
@@ -866,6 +868,30 @@ describe('scripts and instructions of a real project', () => {
 
     await expect(invoke('trust:approve', workspace.id)).resolves.toMatchObject({ ok: true })
     await expect(invoke('trust:read', workspace.id)).resolves.toMatchObject({
+      ok: true,
+      value: { approved: true }
+    })
+  })
+
+  // The same shape of question about a different thing: what the Run button may
+  // execute, rather than what the agent may load.
+  it('says which scripts a repository supplies, and takes the approval', async () => {
+    const projectId = await addProject()
+    const workspace = await createWorkspace(projectId)
+    await mkdir(join(workspace.path, '.conductor'), { recursive: true })
+    await writeFile(
+      join(workspace.path, '.conductor', 'settings.toml'),
+      '[scripts]\nsetup = "make dev"\n',
+      'utf8'
+    )
+
+    await expect(invoke('scripts:resolved', workspace.id)).resolves.toMatchObject({
+      ok: true,
+      value: { approved: false, scripts: { setup: { source: 'repoConductor' } } }
+    })
+
+    await expect(invoke('scripts:approve', workspace.id)).resolves.toMatchObject({ ok: true })
+    await expect(invoke('scripts:resolved', workspace.id)).resolves.toMatchObject({
       ok: true,
       value: { approved: true }
     })

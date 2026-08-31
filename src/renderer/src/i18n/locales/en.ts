@@ -234,6 +234,9 @@ export const en = {
        build in front of you did not find it. */
     env: 'Env',
     editEnv: 'Variables…',
+    repoNotice:
+      'This repository supplies the scripts below. Read them before they run \u2014 they arrive with a git pull, so what runs here is whatever the branch says.',
+    repoApprove: 'Allow these',
     showEnv: "This workspace's env",
     noEnv:
       'This workspace has no env file yet. One appears when the project carries a file in or adds variables of its own.',

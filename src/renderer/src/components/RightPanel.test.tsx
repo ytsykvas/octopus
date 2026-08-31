@@ -7,6 +7,8 @@ import { stubDialogElement } from '../test/dialog.js'
 import { octopus } from '../test/octopus.js'
 import { openedDirectories, sessionId, sessionsOpened, stubTerminalHost } from '../test/terminal.js'
 import { commentController, quoteController, revertController } from '../test/comments.js'
+import type { ResolvedScript, ScriptsInWorkspace } from '@core/repoSource.js'
+import type { ScriptKind } from '@core/scripts.js'
 import { workspaceView } from '../test/workspaces.js'
 import { RightPanel } from './RightPanel.js'
 
@@ -15,7 +17,27 @@ type Props = ComponentProps<typeof RightPanel>
 const anna = workspaceView('anna')
 const bob = workspaceView('bob', { port: 3222 })
 
-const SCRIPTS = { setup: '/tmp/scripts/planner/setup.sh', run: '/tmp/scripts/planner/run.sh' }
+/** One of the project's own scripts, which is the ungated case. */
+function ownScript(kind: ScriptKind): ResolvedScript {
+  const path = `/tmp/scripts/planner/${kind}.sh`
+  return {
+    kind,
+    source: 'project',
+    from: path,
+    run: { type: 'file', path },
+    contents: '#!/bin/sh\n'
+  }
+}
+
+/** The same answer for every workspace, which is what a project's own scripts are. */
+function scriptsFor(answer: ScriptsInWorkspace): ReadonlyMap<string, ScriptsInWorkspace> {
+  return new Map([anna.id, bob.id].map((id) => [id, answer]))
+}
+
+const SCRIPTS = scriptsFor({
+  approved: true,
+  scripts: { setup: ownScript('setup'), run: ownScript('run') }
+})
 
 /** Every listener hears every exit; a terminal keeps only its own. */
 const exits: ((exit: { id: string; exitCode: number | null }) => void)[] = []
@@ -78,7 +100,9 @@ function renderPanel(overrides: Partial<Props> = {}): {
     color: null,
     projectId: 'planner',
     rootPath: '/Users/test/planner',
-    scriptPaths: { setup: null, run: null },
+    scripts: new Map(),
+    onScriptsChanged: vi.fn(),
+    defaultBranch: 'main',
     onEditScripts: vi.fn(),
     onEditFiles: vi.fn(),
     onEditEnv: vi.fn(),
@@ -303,17 +327,17 @@ describe('RightPanel', () => {
   })
 
   it('shows the project build script on the build tab', async () => {
-    renderPanel({ workspaces: [anna], activeWorkspaceId: anna.id, scriptPaths: SCRIPTS })
+    renderPanel({ workspaces: [anna], activeWorkspaceId: anna.id, scripts: SCRIPTS })
 
     await userEvent.click(scriptsTab())
 
-    expect(screen.getByText(SCRIPTS.setup)).toBeInTheDocument()
+    expect(screen.getByText(ownScript('setup').from)).toBeInTheDocument()
     // The half names the file it runs; the control that runs it is on the tab.
     expect(within(buildSection()).queryByRole('button', { name: 'Run' })).not.toBeInTheDocument()
   })
 
   it("shows the active workspace's port on the server tab", async () => {
-    renderPanel({ workspaces: [anna, bob], activeWorkspaceId: bob.id, scriptPaths: SCRIPTS })
+    renderPanel({ workspaces: [anna, bob], activeWorkspaceId: bob.id, scripts: SCRIPTS })
 
     await userEvent.click(scriptsTab())
 
@@ -326,6 +350,90 @@ describe('RightPanel', () => {
    * open on a tab that says nothing and leads nowhere — the server half is open
    * and offers the same way in.
    */
+  describe('a script the repository supplies', () => {
+    /** The same script, but arriving with the checkout rather than written here. */
+    const fromRepo: ResolvedScript = {
+      kind: 'run',
+      source: 'repoConductor',
+      from: '.conductor/settings.toml',
+      run: { type: 'command', command: 'bin/rails server -p $CONDUCTOR_PORT' },
+      contents: 'bin/rails server -p $CONDUCTOR_PORT'
+    }
+
+    it('shows every byte of it and refuses to run until it is allowed', async () => {
+      renderPanel({
+        workspaces: [anna],
+        activeWorkspaceId: anna.id,
+        scripts: scriptsFor({ approved: false, scripts: { run: fromRepo } })
+      })
+      await userEvent.click(scriptsTab())
+
+      expect(screen.getByText('.conductor/settings.toml')).toBeInTheDocument()
+      expect(screen.getByText(fromRepo.contents)).toBeInTheDocument()
+      // Not a button that quietly does nothing: the notice above says why.
+      expect(screen.getByRole('button', { name: 'Run' })).toBeDisabled()
+    })
+
+    it('says nothing once it has been allowed', async () => {
+      renderPanel({
+        workspaces: [anna],
+        activeWorkspaceId: anna.id,
+        scripts: scriptsFor({ approved: true, scripts: { run: fromRepo } })
+      })
+      await userEvent.click(scriptsTab())
+
+      expect(screen.queryByRole('button', { name: 'Allow these' })).not.toBeInTheDocument()
+      expect(screen.getByRole('button', { name: 'Run' })).toBeEnabled()
+    })
+
+    it('never asks about a script the user wrote themselves', async () => {
+      // Approving your own text is a dialog people learn to click through.
+      renderPanel({ workspaces: [anna], activeWorkspaceId: anna.id, scripts: SCRIPTS })
+      await userEvent.click(scriptsTab())
+
+      expect(screen.queryByRole('button', { name: 'Allow these' })).not.toBeInTheDocument()
+    })
+
+    it('records the approval and re-reads the answer', async () => {
+      const onScriptsChanged = vi.fn()
+      renderPanel({
+        workspaces: [anna],
+        activeWorkspaceId: anna.id,
+        scripts: scriptsFor({ approved: false, scripts: { run: fromRepo } }),
+        onScriptsChanged
+      })
+      await userEvent.click(scriptsTab())
+
+      await userEvent.click(screen.getByRole('button', { name: 'Allow these' }))
+
+      expect(octopus().workspaces.approveScripts).toHaveBeenCalledWith(anna.id)
+      await waitFor(() => {
+        expect(onScriptsChanged).toHaveBeenCalled()
+      })
+    })
+
+    it('says why an approval could not be recorded', async () => {
+      vi.mocked(octopus().workspaces.approveScripts).mockResolvedValue({
+        ok: false,
+        error: 'nope'
+      })
+      const onError = vi.fn()
+      renderPanel({
+        workspaces: [anna],
+        activeWorkspaceId: anna.id,
+        scripts: scriptsFor({ approved: false, scripts: { run: fromRepo } }),
+        onError
+      })
+      await userEvent.click(scriptsTab())
+
+      await userEvent.click(screen.getByRole('button', { name: 'Allow these' }))
+
+      await waitFor(() => {
+        expect(onError).toHaveBeenCalled()
+      })
+    })
+  })
+
   it('sends the user to the script editor when the project has no script', async () => {
     const onEditScripts = vi.fn()
     renderPanel({ workspaces: [anna], activeWorkspaceId: anna.id, onEditScripts })
@@ -349,7 +457,7 @@ describe('RightPanel', () => {
       activeWorkspaceId: anna.id,
       // Both halves, because the offer belongs to each: with only `setup.sh`
       // written, the server half still shows its own **Write the script**.
-      scriptPaths: SCRIPTS,
+      scripts: SCRIPTS,
       onEditScripts
     })
 
@@ -407,7 +515,7 @@ describe('RightPanel', () => {
    * first once, which is not the claim — the claim is that it stays first.
    */
   it('keeps the editor first among the controls as the run replaces them', async () => {
-    renderPanel({ workspaces: [anna], activeWorkspaceId: anna.id, scriptPaths: SCRIPTS })
+    renderPanel({ workspaces: [anna], activeWorkspaceId: anna.id, scripts: SCRIPTS })
     await userEvent.click(scriptsTab())
 
     const row = screen.getByRole('button', { name: "Edit this project's scripts" }).parentElement
@@ -441,7 +549,7 @@ describe('RightPanel', () => {
    * follows the same order: build, exit zero, then a server.
    */
   it('builds and then serves on one press of Run', async () => {
-    renderPanel({ workspaces: [anna], activeWorkspaceId: anna.id, scriptPaths: SCRIPTS })
+    renderPanel({ workspaces: [anna], activeWorkspaceId: anna.id, scripts: SCRIPTS })
 
     await userEvent.click(scriptsTab())
     await userEvent.click(screen.getByRole('button', { name: 'Run' }))
@@ -453,7 +561,7 @@ describe('RightPanel', () => {
 
     await sessionsOpened(2)
     expect(octopus().terminal.create).toHaveBeenLastCalledWith(
-      expect.objectContaining({ command: [SCRIPTS.run] })
+      expect.objectContaining({ command: [ownScript('run').from] })
     )
   })
 
@@ -461,7 +569,7 @@ describe('RightPanel', () => {
   // describes far better than the row above it could. Either way the sequence
   // is over and the button goes back to offering the whole of it again.
   it('settles once the server ends', async () => {
-    renderPanel({ workspaces: [anna], activeWorkspaceId: anna.id, scriptPaths: SCRIPTS })
+    renderPanel({ workspaces: [anna], activeWorkspaceId: anna.id, scripts: SCRIPTS })
 
     await userEvent.click(scriptsTab())
     await userEvent.click(screen.getByRole('button', { name: 'Run' }))
@@ -479,7 +587,7 @@ describe('RightPanel', () => {
   // A server started on top of a broken build fails in a way that points at the
   // server rather than at the build that actually broke.
   it('does not serve when the build fails, and says why', async () => {
-    renderPanel({ workspaces: [anna], activeWorkspaceId: anna.id, scriptPaths: SCRIPTS })
+    renderPanel({ workspaces: [anna], activeWorkspaceId: anna.id, scripts: SCRIPTS })
 
     await userEvent.click(scriptsTab())
     await userEvent.click(screen.getByRole('button', { name: 'Run' }))
@@ -497,7 +605,7 @@ describe('RightPanel', () => {
     renderPanel({
       workspaces: [anna],
       activeWorkspaceId: anna.id,
-      scriptPaths: { setup: null, run: SCRIPTS.run }
+      scripts: scriptsFor({ approved: true, scripts: { run: ownScript('run') } })
     })
 
     await userEvent.click(scriptsTab())
@@ -505,7 +613,7 @@ describe('RightPanel', () => {
 
     await sessionsOpened(1)
     expect(octopus().terminal.create).toHaveBeenLastCalledWith(
-      expect.objectContaining({ command: [SCRIPTS.run] })
+      expect.objectContaining({ command: [ownScript('run').from] })
     )
   })
 
@@ -515,7 +623,7 @@ describe('RightPanel', () => {
     renderPanel({
       workspaces: [anna],
       activeWorkspaceId: anna.id,
-      scriptPaths: { setup: SCRIPTS.setup, run: null }
+      scripts: scriptsFor({ approved: true, scripts: { setup: ownScript('setup') } })
     })
 
     await userEvent.click(scriptsTab())
@@ -524,7 +632,7 @@ describe('RightPanel', () => {
   })
 
   it('offers no Run before a workspace is chosen', async () => {
-    renderPanel({ workspaces: [anna], activeWorkspaceId: null, scriptPaths: SCRIPTS })
+    renderPanel({ workspaces: [anna], activeWorkspaceId: null, scripts: SCRIPTS })
 
     await userEvent.click(scriptsTab())
 
@@ -537,7 +645,7 @@ describe('RightPanel', () => {
     const { rerender } = renderPanel({
       workspaces: [anna, bob],
       activeWorkspaceId: anna.id,
-      scriptPaths: SCRIPTS
+      scripts: SCRIPTS
     })
 
     await userEvent.click(scriptsTab())
@@ -554,7 +662,7 @@ describe('RightPanel', () => {
   // Neither half carries a control any more: four buttons in two places, two of
   // them called the same thing, is what this replaced.
   it('leaves the halves with nothing to press', async () => {
-    renderPanel({ workspaces: [anna], activeWorkspaceId: anna.id, scriptPaths: SCRIPTS })
+    renderPanel({ workspaces: [anna], activeWorkspaceId: anna.id, scripts: SCRIPTS })
 
     await userEvent.click(scriptsTab())
 
@@ -569,7 +677,7 @@ describe('RightPanel', () => {
   // What Run offers has already happened. Rebuilding from here is Stop and then
   // Run — which is also the order that frees the port before anything binds it.
   it('drops Run once the server is up', async () => {
-    renderPanel({ workspaces: [anna], activeWorkspaceId: anna.id, scriptPaths: SCRIPTS })
+    renderPanel({ workspaces: [anna], activeWorkspaceId: anna.id, scripts: SCRIPTS })
 
     await userEvent.click(scriptsTab())
     await userEvent.click(runButton())
@@ -583,7 +691,7 @@ describe('RightPanel', () => {
   })
 
   it('offers Run again once the server has been stopped', async () => {
-    renderPanel({ workspaces: [anna], activeWorkspaceId: anna.id, scriptPaths: SCRIPTS })
+    renderPanel({ workspaces: [anna], activeWorkspaceId: anna.id, scripts: SCRIPTS })
 
     await userEvent.click(scriptsTab())
     await userEvent.click(runButton())
@@ -606,7 +714,7 @@ describe('RightPanel', () => {
   it('offers the running server in the browser, on its own port', async () => {
     // Nothing had taken it, so the run stays where the workspace was recorded.
     vi.mocked(octopus().workspaces.port).mockResolvedValue({ ok: true, value: bob.port })
-    renderPanel({ workspaces: [bob], activeWorkspaceId: bob.id, scriptPaths: SCRIPTS })
+    renderPanel({ workspaces: [bob], activeWorkspaceId: bob.id, scripts: SCRIPTS })
 
     await userEvent.click(scriptsTab())
     await userEvent.click(runButton())
@@ -626,7 +734,7 @@ describe('RightPanel', () => {
    */
   it('follows the port a run had to move to', async () => {
     vi.mocked(octopus().workspaces.port).mockResolvedValue({ ok: true, value: 3190 })
-    renderPanel({ workspaces: [bob], activeWorkspaceId: bob.id, scriptPaths: SCRIPTS })
+    renderPanel({ workspaces: [bob], activeWorkspaceId: bob.id, scripts: SCRIPTS })
 
     await userEvent.click(scriptsTab())
     await userEvent.click(runButton())
@@ -641,7 +749,7 @@ describe('RightPanel', () => {
   })
 
   it('offers no link while nothing is serving', async () => {
-    renderPanel({ workspaces: [anna], activeWorkspaceId: anna.id, scriptPaths: SCRIPTS })
+    renderPanel({ workspaces: [anna], activeWorkspaceId: anna.id, scripts: SCRIPTS })
 
     await userEvent.click(scriptsTab())
 
@@ -658,7 +766,7 @@ describe('RightPanel', () => {
     const { rerender } = renderPanel({
       workspaces: [anna],
       activeWorkspaceId: anna.id,
-      scriptPaths: SCRIPTS
+      scripts: SCRIPTS
     })
 
     await userEvent.click(scriptsTab())
@@ -678,7 +786,7 @@ describe('RightPanel', () => {
     renderPanel({
       workspaces: [{ ...anna, missing: true }],
       activeWorkspaceId: anna.id,
-      scriptPaths: SCRIPTS
+      scripts: SCRIPTS
     })
 
     await userEvent.click(scriptsTab())
@@ -689,7 +797,7 @@ describe('RightPanel', () => {
   // The build is the step that takes the time; a second press while it runs
   // would start it over rather than do anything anyone meant.
   it('refuses a second Run while the build is going', async () => {
-    renderPanel({ workspaces: [anna], activeWorkspaceId: anna.id, scriptPaths: SCRIPTS })
+    renderPanel({ workspaces: [anna], activeWorkspaceId: anna.id, scripts: SCRIPTS })
 
     await userEvent.click(scriptsTab())
     await userEvent.click(runButton())
@@ -708,7 +816,7 @@ describe('RightPanel', () => {
    * keep output on screen past the process that produced it.
    */
   it('leaves the finished build on screen when the server is stopped', async () => {
-    renderPanel({ workspaces: [anna], activeWorkspaceId: anna.id, scriptPaths: SCRIPTS })
+    renderPanel({ workspaces: [anna], activeWorkspaceId: anna.id, scripts: SCRIPTS })
 
     await userEvent.click(scriptsTab())
     await userEvent.click(runButton())
@@ -743,7 +851,7 @@ describe('RightPanel', () => {
     vi.useFakeTimers({ shouldAdvanceTime: true })
 
     try {
-      renderPanel({ workspaces: [bob], activeWorkspaceId: bob.id, scriptPaths: SCRIPTS })
+      renderPanel({ workspaces: [bob], activeWorkspaceId: bob.id, scripts: SCRIPTS })
 
       await userEvent.click(scriptsTab())
       await userEvent.click(runButton())
@@ -765,7 +873,7 @@ describe('RightPanel', () => {
   })
 
   it('says nothing while the port answers', async () => {
-    renderPanel({ workspaces: [bob], activeWorkspaceId: bob.id, scriptPaths: SCRIPTS })
+    renderPanel({ workspaces: [bob], activeWorkspaceId: bob.id, scripts: SCRIPTS })
 
     await userEvent.click(scriptsTab())
     await userEvent.click(runButton())
@@ -779,7 +887,7 @@ describe('RightPanel', () => {
 
   // A port nothing was told to bind is not a port anybody is waiting on.
   it('does not ask about a port while nothing is serving', async () => {
-    renderPanel({ workspaces: [anna], activeWorkspaceId: anna.id, scriptPaths: SCRIPTS })
+    renderPanel({ workspaces: [anna], activeWorkspaceId: anna.id, scripts: SCRIPTS })
 
     await userEvent.click(scriptsTab())
 
@@ -789,7 +897,7 @@ describe('RightPanel', () => {
   // Nothing to restart and nothing to stop until something is serving. A
   // control for a server that is not up is a control that cannot mean anything.
   it('offers only Run while nothing is running', async () => {
-    renderPanel({ workspaces: [anna], activeWorkspaceId: anna.id, scriptPaths: SCRIPTS })
+    renderPanel({ workspaces: [anna], activeWorkspaceId: anna.id, scripts: SCRIPTS })
 
     await userEvent.click(scriptsTab())
 
@@ -801,7 +909,7 @@ describe('RightPanel', () => {
   // A build is not a server: it ends on its own, and until it does there is
   // nothing to restart either.
   it('offers neither while only the build is going', async () => {
-    renderPanel({ workspaces: [anna], activeWorkspaceId: anna.id, scriptPaths: SCRIPTS })
+    renderPanel({ workspaces: [anna], activeWorkspaceId: anna.id, scripts: SCRIPTS })
 
     await userEvent.click(scriptsTab())
     await userEvent.click(runButton())
@@ -814,7 +922,7 @@ describe('RightPanel', () => {
   // The server ended on its own — crashed, or was killed from outside. The
   // controls have to go with it, or they promise something that is not there.
   it('takes them away again when the server ends by itself', async () => {
-    renderPanel({ workspaces: [anna], activeWorkspaceId: anna.id, scriptPaths: SCRIPTS })
+    renderPanel({ workspaces: [anna], activeWorkspaceId: anna.id, scripts: SCRIPTS })
 
     await userEvent.click(scriptsTab())
     await userEvent.click(runButton())
@@ -833,7 +941,7 @@ describe('RightPanel', () => {
   // Stopping ends whatever is going, and the sequence settles back to offering
   // the whole of itself again.
   it('stops a running server from the header', async () => {
-    renderPanel({ workspaces: [anna], activeWorkspaceId: anna.id, scriptPaths: SCRIPTS })
+    renderPanel({ workspaces: [anna], activeWorkspaceId: anna.id, scripts: SCRIPTS })
 
     await userEvent.click(scriptsTab())
     await userEvent.click(runButton())
@@ -852,7 +960,7 @@ describe('RightPanel', () => {
   // The code changed under a running server and needs picking up, while the
   // checkout did not — no reason to build again for that.
   it('restarts the server without building again', async () => {
-    renderPanel({ workspaces: [anna], activeWorkspaceId: anna.id, scriptPaths: SCRIPTS })
+    renderPanel({ workspaces: [anna], activeWorkspaceId: anna.id, scripts: SCRIPTS })
 
     await userEvent.click(scriptsTab())
     await userEvent.click(runButton())
@@ -865,7 +973,7 @@ describe('RightPanel', () => {
     await sessionsOpened(3)
     // The third session is the server again, not another build.
     expect(octopus().terminal.create).toHaveBeenLastCalledWith(
-      expect.objectContaining({ command: [SCRIPTS.run] })
+      expect.objectContaining({ command: [ownScript('run').from] })
     )
   })
 
@@ -877,7 +985,7 @@ describe('RightPanel', () => {
     renderPanel({
       workspaces: [anna],
       activeWorkspaceId: anna.id,
-      scriptPaths: SCRIPTS,
+      scripts: SCRIPTS,
       onEditFiles
     })
 
@@ -899,7 +1007,7 @@ describe('RightPanel', () => {
     renderPanel({
       workspaces: [anna],
       activeWorkspaceId: anna.id,
-      scriptPaths: SCRIPTS,
+      scripts: SCRIPTS,
       onEditEnv
     })
 
@@ -917,7 +1025,7 @@ describe('RightPanel', () => {
       ok: true,
       value: 'MYSQL_HOST=dev.example\n'
     })
-    renderPanel({ workspaces: [anna], activeWorkspaceId: anna.id, scriptPaths: SCRIPTS })
+    renderPanel({ workspaces: [anna], activeWorkspaceId: anna.id, scripts: SCRIPTS })
 
     await userEvent.click(scriptsTab())
     await userEvent.click(within(buildSection()).getByRole('button', { name: 'Env' }))
@@ -929,7 +1037,7 @@ describe('RightPanel', () => {
 
   it('puts the env away again', async () => {
     vi.mocked(octopus().workspaces.env).mockResolvedValue({ ok: true, value: 'A=1\n' })
-    renderPanel({ workspaces: [anna], activeWorkspaceId: anna.id, scriptPaths: SCRIPTS })
+    renderPanel({ workspaces: [anna], activeWorkspaceId: anna.id, scripts: SCRIPTS })
 
     await userEvent.click(scriptsTab())
     await userEvent.click(within(buildSection()).getByRole('button', { name: 'Env' }))
@@ -948,7 +1056,7 @@ describe('RightPanel', () => {
     const { rerender } = renderPanel({
       workspaces: [anna, bob],
       activeWorkspaceId: anna.id,
-      scriptPaths: SCRIPTS
+      scripts: SCRIPTS
     })
 
     await userEvent.click(scriptsTab())
@@ -964,7 +1072,7 @@ describe('RightPanel', () => {
   // Nothing to show, so the item cannot be chosen — setting the flag anyway
   // armed a dialog that sprang open by itself on the next workspace picked.
   it('offers no env to show with no workspace selected', async () => {
-    renderPanel({ workspaces: [], activeWorkspaceId: null, scriptPaths: SCRIPTS })
+    renderPanel({ workspaces: [], activeWorkspaceId: null, scripts: SCRIPTS })
 
     await userEvent.click(scriptsTab())
     await userEvent.click(within(buildSection()).getByRole('button', { name: 'Env' }))
@@ -974,7 +1082,7 @@ describe('RightPanel', () => {
 
   it('says so where the workspace has no env file at all', async () => {
     vi.mocked(octopus().workspaces.env).mockResolvedValue({ ok: true, value: null })
-    renderPanel({ workspaces: [anna], activeWorkspaceId: anna.id, scriptPaths: SCRIPTS })
+    renderPanel({ workspaces: [anna], activeWorkspaceId: anna.id, scripts: SCRIPTS })
 
     await userEvent.click(scriptsTab())
     await userEvent.click(within(buildSection()).getByRole('button', { name: 'Env' }))
@@ -987,7 +1095,7 @@ describe('RightPanel', () => {
   // say it was.
   it('says the same when the file could not be read', async () => {
     vi.mocked(octopus().workspaces.env).mockResolvedValue({ ok: false, error: 'EACCES' })
-    renderPanel({ workspaces: [anna], activeWorkspaceId: anna.id, scriptPaths: SCRIPTS })
+    renderPanel({ workspaces: [anna], activeWorkspaceId: anna.id, scripts: SCRIPTS })
 
     await userEvent.click(scriptsTab())
     await userEvent.click(within(buildSection()).getByRole('button', { name: 'Env' }))
@@ -1003,7 +1111,7 @@ describe('RightPanel', () => {
    * reaching for it cannot fold the build — or unfold it — by accident.
    */
   it('leaves the build as it was when the env button is used', async () => {
-    renderPanel({ workspaces: [anna], activeWorkspaceId: anna.id, scriptPaths: SCRIPTS })
+    renderPanel({ workspaces: [anna], activeWorkspaceId: anna.id, scripts: SCRIPTS })
 
     await userEvent.click(scriptsTab())
     await userEvent.click(within(buildSection()).getByRole('button', { name: 'Show the build' }))
@@ -1025,7 +1133,7 @@ describe('RightPanel', () => {
     const { rerender } = renderPanel({
       workspaces: [anna, bob],
       activeWorkspaceId: anna.id,
-      scriptPaths: SCRIPTS
+      scripts: SCRIPTS
     })
 
     await userEvent.click(scriptsTab())
@@ -1262,7 +1370,7 @@ describe('RightPanel', () => {
   })
 
   it('has nothing to run on the build tab while no workspace is active', async () => {
-    renderPanel({ workspaces: [anna], activeWorkspaceId: null, scriptPaths: SCRIPTS })
+    renderPanel({ workspaces: [anna], activeWorkspaceId: null, scripts: SCRIPTS })
 
     await userEvent.click(scriptsTab())
 
@@ -1303,7 +1411,7 @@ describe('RightPanel', () => {
    */
   it('leaves a running script alive while another tab is shown', async () => {
     const user = userEvent.setup()
-    renderPanel({ workspaces: [anna], activeWorkspaceId: anna.id, scriptPaths: SCRIPTS })
+    renderPanel({ workspaces: [anna], activeWorkspaceId: anna.id, scripts: SCRIPTS })
 
     await user.click(scriptsTab())
     await user.click(runButton())
@@ -1331,7 +1439,7 @@ describe('RightPanel', () => {
     const { rerender } = renderPanel({
       workspaces: [anna, bob],
       activeWorkspaceId: anna.id,
-      scriptPaths: SCRIPTS
+      scripts: SCRIPTS
     })
 
     await user.click(scriptsTab())
@@ -1350,7 +1458,7 @@ describe('RightPanel', () => {
     const { rerender } = renderPanel({
       workspaces: [anna, bob],
       activeWorkspaceId: anna.id,
-      scriptPaths: SCRIPTS
+      scripts: SCRIPTS
     })
 
     await user.click(scriptsTab())
@@ -1375,7 +1483,7 @@ describe('RightPanel', () => {
     const { rerender } = renderPanel({
       workspaces: [anna, bob],
       activeWorkspaceId: anna.id,
-      scriptPaths: SCRIPTS
+      scripts: SCRIPTS
     })
 
     await user.click(scriptsTab())
@@ -1394,7 +1502,7 @@ describe('RightPanel', () => {
     const { rerender } = renderPanel({
       workspaces: [anna, bob],
       activeWorkspaceId: anna.id,
-      scriptPaths: SCRIPTS
+      scripts: SCRIPTS
     })
 
     await user.click(scriptsTab())
@@ -1418,7 +1526,7 @@ describe('RightPanel', () => {
    */
   it('starts with the build folded away', async () => {
     const user = userEvent.setup()
-    renderPanel({ workspaces: [anna], activeWorkspaceId: anna.id, scriptPaths: SCRIPTS })
+    renderPanel({ workspaces: [anna], activeWorkspaceId: anna.id, scripts: SCRIPTS })
 
     await user.click(scriptsTab())
 
@@ -1430,7 +1538,7 @@ describe('RightPanel', () => {
 
   it('brings the build back and folds it away again', async () => {
     const user = userEvent.setup()
-    renderPanel({ workspaces: [anna], activeWorkspaceId: anna.id, scriptPaths: SCRIPTS })
+    renderPanel({ workspaces: [anna], activeWorkspaceId: anna.id, scripts: SCRIPTS })
 
     await user.click(scriptsTab())
     // Named for what pressing it does, which is the opposite in each state —
@@ -1457,7 +1565,7 @@ describe('RightPanel', () => {
    */
   it('leaves a running build alive while it is folded away', async () => {
     const user = userEvent.setup()
-    renderPanel({ workspaces: [anna], activeWorkspaceId: anna.id, scriptPaths: SCRIPTS })
+    renderPanel({ workspaces: [anna], activeWorkspaceId: anna.id, scripts: SCRIPTS })
 
     await user.click(scriptsTab())
     await user.click(runButton())
@@ -1480,7 +1588,7 @@ describe('RightPanel', () => {
   // is one nobody asked for.
   it('gives the server half nothing to fold', async () => {
     const user = userEvent.setup()
-    renderPanel({ workspaces: [anna], activeWorkspaceId: anna.id, scriptPaths: SCRIPTS })
+    renderPanel({ workspaces: [anna], activeWorkspaceId: anna.id, scripts: SCRIPTS })
 
     await user.click(scriptsTab())
 
@@ -1498,7 +1606,7 @@ describe('RightPanel', () => {
   // starting does not take the pane the build was read in.
   it('keeps the two scripts apart inside the one tab', async () => {
     const user = userEvent.setup()
-    renderPanel({ workspaces: [anna], activeWorkspaceId: anna.id, scriptPaths: SCRIPTS })
+    renderPanel({ workspaces: [anna], activeWorkspaceId: anna.id, scripts: SCRIPTS })
 
     await user.click(scriptsTab())
     await user.click(runButton())
@@ -1509,8 +1617,8 @@ describe('RightPanel', () => {
     // One session each, in the order the sequence asked for them.
     expect(openedDirectories()).toEqual([anna.path, anna.path])
     expect(vi.mocked(octopus().terminal.create).mock.calls.map(([spec]) => spec.command)).toEqual([
-      [SCRIPTS.setup],
-      [SCRIPTS.run]
+      [ownScript('setup').from],
+      [ownScript('run').from]
     ])
   })
 })

@@ -12,9 +12,11 @@ import { useTranslation } from 'react-i18next'
 
 import type { ProjectColor } from '@core/colors.js'
 import type { RightPanelTab } from '@core/config.js'
+import { SCRIPT_KINDS, type ScriptsInWorkspace } from '@core/repoSource.js'
 import type { DiffCommentController } from '../hooks/useDiffComments.js'
 import type { FileRevertController } from '../hooks/useFileRevert.js'
 import type { PullRequestQuoteController } from '../hooks/usePullRequestQuotes.js'
+import { useErrorMessage } from '../hooks/useErrorMessage.js'
 import { useRunSequence } from '../hooks/useRunSequence.js'
 import { useServingPort } from '../hooks/useServingPort.js'
 import type { WorkspaceView } from '@core/workspaces.js'
@@ -119,8 +121,17 @@ interface RightPanelProps {
   readonly projectId: string | null
   /** The open project's checkout, handed to every script it runs. */
   readonly rootPath: string
-  /** Absolute paths of the project's scripts; null when never written. */
-  readonly scriptPaths: { readonly setup: string | null; readonly run: string | null }
+  /**
+   * Which scripts run in each workspace, and whether the repository's are read.
+   *
+   * Keyed by workspace rather than one answer for the project, because the
+   * repository supplying a script is the one checked out in that worktree.
+   */
+  readonly scripts: ReadonlyMap<string, ScriptsInWorkspace>
+  /** Re-reads the map, after an approval has changed the answer. */
+  readonly onScriptsChanged: () => void
+  /** The open project's base branch, for a script that reads it as Conductor's. */
+  readonly defaultBranch: string
   readonly onEditScripts: () => void
   /** Opens the list of files every workspace is given a copy of. */
   readonly onEditFiles: () => void
@@ -165,7 +176,9 @@ export function RightPanel({
   color,
   projectId,
   rootPath,
-  scriptPaths,
+  scripts,
+  onScriptsChanged,
+  defaultBranch,
   onEditScripts,
   onEditFiles,
   onEditEnv,
@@ -186,6 +199,7 @@ export function RightPanel({
   onError
 }: RightPanelProps): React.JSX.Element {
   const { t, i18n } = useTranslation()
+  const describeFailure = useErrorMessage()
   // The pane follows the cursor from local state; the config only hears about
   // the width once the drag is over.
   const [dragWidth, setDragWidth] = useState<number | null>(null)
@@ -255,14 +269,22 @@ export function RightPanel({
    * guard could only ever be reached through a button that is disabled, and an
    * unreachable line is a claim about behaviour nobody can check.
    */
+  /** What this workspace would run, and whether it is allowed to yet. */
+  const activeScripts = activeWorkspaceId === null ? undefined : scripts.get(activeWorkspaceId)
+
   const runAll =
-    activeWorkspace === null || scriptPaths.run === null || building
+    activeWorkspace === null ||
+    activeScripts?.scripts.run === undefined ||
+    // A repository's scripts that nobody has read do not run, and the panel
+    // below says so rather than leaving a button that quietly does nothing.
+    !activeScripts.approved ||
+    building
       ? undefined
       : (): void => {
           // Skipping a build nobody wrote rather than waiting for it: §4 says
           // no step is mandatory, and the half is showing an invitation to
           // write one rather than a runner that could answer.
-          sequence.start(activeWorkspace.id, scriptPaths.setup !== null)
+          sequence.start(activeWorkspace.id, activeScripts.scripts.setup !== undefined)
         }
 
   const servingAt =
@@ -615,6 +637,42 @@ export function RightPanel({
           )}
         </div>
 
+        {/* Pinned above both halves rather than inside one, and never in a
+            modal: this is the answer to "why is Run doing nothing", and it has
+            to be readable at the moment somebody presses it. Every byte of what
+            would run is shown — an approval over a summary is an approval of
+            the summary. */}
+        {activeScripts !== undefined && !activeScripts.approved && activeWorkspaceId !== null && (
+          <div className="border-line bg-muted/40 shrink-0 space-y-2 border-b px-3 py-2.5">
+            <p className="text-ink-soft leading-relaxed">{t('scripts.repoNotice')}</p>
+
+            {SCRIPT_KINDS.map((kind) => {
+              const script = activeScripts.scripts[kind]
+              return script === undefined || script.source === 'project' ? null : (
+                <div key={kind}>
+                  <p className="text-ink-faint font-mono text-[11px]">{script.from}</p>
+                  <pre className="border-line bg-canvas mt-1 overflow-x-auto rounded-[var(--radius-control)] border px-2 py-1.5 font-mono text-[11px]">
+                    {script.contents}
+                  </pre>
+                </div>
+              )
+            })}
+
+            <Button
+              size="sm"
+              onClick={() => {
+                void (async () => {
+                  const done = await window.octopus.workspaces.approveScripts(activeWorkspaceId)
+                  if (done.ok) onScriptsChanged()
+                  else onError(describeFailure(done))
+                })()
+              }}
+            >
+              {t('scripts.repoApprove')}
+            </Button>
+          </div>
+        )}
+
         {/* A named region each, rather than two anonymous halves. Both are on
             screen at once now, so "the Run button" is ambiguous to anything
             reading the pane aloud — and to anything testing it. The heading is
@@ -710,9 +768,10 @@ export function RightPanel({
               workspaces={scriptable}
               activeId={activeWorkspaceId}
               kind="setup"
-              scriptPath={scriptPaths.setup}
+              scriptFor={(id) => scripts.get(id)?.scripts.setup ?? null}
               visible={tab === 'scripts'}
               rootPath={rootPath}
+              defaultBranch={defaultBranch}
               onOpenSettings={onEditScripts}
               tokenFor={(id) => sequence.runOf(id).build}
               stopTokenFor={(id) => sequence.runOf(id).stop}
@@ -740,9 +799,10 @@ export function RightPanel({
             workspaces={scriptable}
             activeId={activeWorkspaceId}
             kind="run"
-            scriptPath={scriptPaths.run}
+            scriptFor={(id) => scripts.get(id)?.scripts.run ?? null}
             visible={tab === 'scripts'}
             rootPath={rootPath}
+            defaultBranch={defaultBranch}
             onOpenSettings={onEditScripts}
             tokenFor={(id) => sequence.runOf(id).server}
             stopTokenFor={(id) => sequence.runOf(id).stop}

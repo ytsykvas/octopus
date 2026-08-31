@@ -16,6 +16,7 @@ import { fileDiff, workspaceDiff } from './test/diff.js'
 import { stubDialogElement } from './test/dialog.js'
 import { chat } from './test/chat.js'
 import { disconnectedAccounts } from './test/octopus.js'
+import type { ResolvedScript } from '@core/repoSource.js'
 import { workspaceView } from './test/workspaces.js'
 import { App } from './App.js'
 import i18n, { DEFAULT_LANGUAGE } from './i18n/index.js'
@@ -147,13 +148,30 @@ function givenWorkspacesStillLoading(): void {
 }
 
 /** Where each project keeps its scripts, for the ones a test names. */
-function givenScriptsOf(paths: Record<string, Record<ScriptKind, string | null>>): void {
-  vi.mocked(window.octopus.projects.scriptPaths).mockImplementation((projectId: string) =>
-    Promise.resolve({
-      ok: true,
-      value: paths[projectId] ?? { setup: null, run: null, archive: null }
-    })
-  )
+/**
+ * Which scripts each project's workspaces resolve to.
+ *
+ * Keyed by project here because the fixture is written that way, but asked of
+ * the app per **workspace** — which is the point of the change: the answer is a
+ * fact about a worktree, not about the project.
+ */
+function givenScriptsOf(paths: Record<string, Partial<Record<ScriptKind, string>>>): void {
+  vi.mocked(window.octopus.workspaces.scripts).mockImplementation((workspaceId: string) => {
+    const projectId = workspaceId.split('/')[0] ?? ''
+    const scripts: Partial<Record<ScriptKind, ResolvedScript>> = {}
+
+    for (const [kind, path] of Object.entries(paths[projectId] ?? {})) {
+      scripts[kind as ScriptKind] = {
+        kind: kind as ScriptKind,
+        source: 'project',
+        from: path,
+        run: { type: 'file', path },
+        contents: '#!/bin/sh\n'
+      }
+    }
+
+    return Promise.resolve({ ok: true, value: { approved: true, scripts } })
+  })
 }
 
 /** Renders the window and waits for the first list of projects to arrive. */
@@ -1318,7 +1336,7 @@ describe('App', () => {
 
   it('shows the scripts of the project that is open, and re-reads them on a switch', async () => {
     givenTwoProjects()
-    givenScriptsOf({ planner: { setup: '/tmp/planner/setup.sh', run: null, archive: null } })
+    givenScriptsOf({ planner: { setup: '/tmp/planner/setup.sh' } })
     const user = await openApp()
     await user.click(await screen.findByRole('button', { name: 'PL' }))
     await user.click(screen.getByRole('button', { name: 'Scripts' }))
@@ -1329,7 +1347,7 @@ describe('App', () => {
     await user.click(await screen.findByText('carol'))
 
     expect(await screen.findByText(/No build script yet/)).toBeInTheDocument()
-    expect(window.octopus.projects.scriptPaths).toHaveBeenCalledWith('ledger')
+    expect(window.octopus.workspaces.scripts).toHaveBeenCalledWith('ledger/carol')
   })
 
   // A script is written for the first time in the project settings, so the
@@ -1337,10 +1355,23 @@ describe('App', () => {
   it('reads the scripts again after the project settings close', async () => {
     givenTwoProjects()
     let written = false
-    vi.mocked(window.octopus.projects.scriptPaths).mockImplementation(() =>
+    vi.mocked(window.octopus.workspaces.scripts).mockImplementation(() =>
       Promise.resolve({
         ok: true,
-        value: { setup: written ? '/tmp/planner/setup.sh' : null, run: null, archive: null }
+        value: {
+          approved: true,
+          scripts: written
+            ? {
+                setup: {
+                  kind: 'setup' as const,
+                  source: 'project' as const,
+                  from: '/tmp/planner/setup.sh',
+                  run: { type: 'file' as const, path: '/tmp/planner/setup.sh' },
+                  contents: '#!/bin/sh\n'
+                }
+              }
+            : {}
+        }
       })
     )
     const user = await openApp()
