@@ -7,7 +7,9 @@ import type { Project } from '@core/store.js'
 import type { BranchRequest } from '@core/pullRequestShapes.js'
 import type { WorkspaceView } from '@core/workspaces.js'
 
+import { useSubscriptionUsage } from '../hooks/useSubscriptionUsage.js'
 import { ResizeHandle } from './ResizeHandle.js'
+import { SubscriptionLimits } from './SubscriptionLimits.js'
 import { WorkspaceRow } from './WorkspaceRow.js'
 
 /** Matches the bounds on `sidebarWidth` in the config schema. */
@@ -61,6 +63,7 @@ export function Sidebar({
   onEditingWorkspaceChange
 }: SidebarProps): React.JSX.Element {
   const { t } = useTranslation()
+  const subscription = useSubscriptionUsage()
   // The pane follows the cursor from local state; the config only hears about
   // the width once the drag is over.
   const [dragWidth, setDragWidth] = useState<number | null>(null)
@@ -129,6 +132,11 @@ export function Sidebar({
       ) : (
         <p className="text-ink-faint flex-1 px-4 py-3 leading-relaxed">{t('sidebar.empty')}</p>
       )}
+
+      {/* Outside the branch above: the windows belong to the account, and the
+          account is the same whether a project is open or not. At the foot
+          rather than the head because the list is what the pane is for. */}
+      <SubscriptionLimits usage={subscription} />
     </aside>
   )
 }

@@ -23,7 +23,8 @@ import {
   type QueryFn,
   READ_ONLY_TOOLS,
   startSession,
-  type SubscriptionUsage
+  type SubscriptionUsage,
+  type UsageWindow
 } from './agent.js'
 import {
   type AgentCommand,
@@ -259,6 +260,29 @@ export type PermissionAnswer = 'allow' | 'always' | 'deny'
 
 /** How much of the subscription's window is gone, as last reported. */
 export type RateLimit = Extract<AgentEvent, { type: 'rate_limit' }>
+
+/**
+ * Whether two readings say the same thing.
+ *
+ * Compared field by field rather than by identity: a fresh object arrives from
+ * the control channel on every read, so identity would call every one of them a
+ * change and write the state file three times a turn.
+ *
+ * Exported to be tested on values. What it has to get right is the four ways a
+ * window can be absent on one side and not the other, and reaching those
+ * through a session's fake would be arranging the agent to say something odd
+ * rather than asking the question directly.
+ */
+export function sameUsage(left: SubscriptionUsage, right: SubscriptionUsage | null): boolean {
+  const same = (a: UsageWindow | null, b: UsageWindow | null): boolean =>
+    a === null || b === null
+      ? a === b
+      : a.utilization === b.utilization && a.resetsAt === b.resetsAt
+
+  return (
+    right !== null && same(left.fiveHour, right.fiveHour) && same(left.sevenDay, right.sevenDay)
+  )
+}
 
 /**
  * The two readings a running session can be asked for.
@@ -627,6 +651,14 @@ export interface OctopusService {
    * expired overnight is worse than none at all.
    */
   getRateLimit(): RateLimit | null
+  /**
+   * The account's window shares, with no conversation in the question.
+   *
+   * Read by the sidebar, which has no chat to ask about — and answered from the
+   * last reading, kept in the state file, so it is there before the first
+   * message of a session rather than after it.
+   */
+  getSubscriptionUsage(): SubscriptionUsage | null
   /** Subscribes to agent events; the returned function unsubscribes. */
   onAgentEvent(handler: (event: ChatEvent) => void): () => void
   /** What a workspace is doing, as it changes. A broadcast, like the above. */
@@ -718,7 +750,13 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
   // The same reasoning, for the figures pulled rather than pushed. It is what
   // lets a workspace nobody has spoken to — and so has no session to ask —
   // still show what another workspace's turn learned a minute ago.
-  let subscriptionUsage: SubscriptionUsage | null = null
+  //
+  // Seeded from the state file, unlike the pushed one above. These are drawn in
+  // the sidebar from the moment the window opens, and a reading arrives only
+  // from a running session's control channel — so without the last one on disk
+  // the block would be empty until somebody sent a message, which is the whole
+  // thing this is here to avoid.
+  let subscriptionUsage: SubscriptionUsage | null = state.subscriptionUsage
 
   /**
    * State writes, run one after another.
@@ -2501,6 +2539,17 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
       return rateLimit
     },
 
+    /**
+     * What the account last reported, with no conversation in the question.
+     *
+     * The sidebar draws this and has no chat to ask about — the figures belong
+     * to the account, and `sessionUsage` only takes a chat id because it
+     * answers about a context window at the same time.
+     */
+    getSubscriptionUsage() {
+      return subscriptionUsage
+    },
+
     async sessionUsage(chatId) {
       requireChat(chatId)
 
@@ -2521,7 +2570,13 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
       // A reading that failed leaves the last good one standing. Blanking the
       // figure because one request was refused would report a change in the
       // account that never happened.
-      if (subscription) subscriptionUsage = subscription
+      if (subscription && !sameUsage(subscription, subscriptionUsage)) {
+        subscriptionUsage = subscription
+        // Only on a change. This is read up to three times a turn, and a state
+        // write per read would put the file under the busiest path in the app
+        // to record a number that had not moved.
+        await commit((current) => ({ ...current, subscriptionUsage: subscription }))
+      }
 
       return { context, subscription: subscriptionUsage }
     },

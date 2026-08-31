@@ -252,47 +252,8 @@ Three things about that menu:
   stricter than the control next to it would be two answers to one question.
 - **The reading keeps its measured tone through hover and while the menu is
   open.** `hover:text-ink` from the pickers below is the one line that must not
-  be copied up here: `usageTone` paints the figure at 75% and again at 90%, and
+  be copied up here: `usageTone` paints the figure at 60% and again at 80%, and
   a hover that repainted it would put the control's state over the measurement.
-
-The windows are named here (`5h`, `Week`) although the old header chip never
-named its one: two figures side by side are unreadable without labels, while one
-figure beside a countdown was not.
-
-**Each window says when it comes back, not how long it has left.** `5h 1% ·
-18:00` reads at a glance in a way a countdown cannot: the strip is redrawn only
-when the agent says something, so `2h 30m` written there would be that much
-wrong an hour later, while an hour of the day stays true however long it is
-looked at. The countdown is still what the tooltip carries — the glance says
-when, the hover says how long.
-
-The clock is 24-hour and the date is `DD.MM` in every language, following
-neither the app's language nor the system's locale. This is a figure on a strip
-read sideways: `6:00 PM` spends three characters saying what `18:00` says, and
-both locales the app has write the day first — a locale that does not is the
-reason to revisit it. The date appears only when the clock alone would not say
-which day it is the hour of, and the boundary is the **calendar day** rather
-than a rolling twenty-four hours, because "which day" is what a reader reasons
-about: a bare `01:00` seen at 22:00 reads as a time that has already gone. So
-the weekly window is dated almost always and the five-hour one only across
-midnight — one rule rather than one format per window, which would leave a
-weekly reset falling today saying "today" and withholding the hour.
-
-**Nothing is shown for a moment that has passed.** The reading is pulled when a
-turn ends and then sits there, so a window that has reset since is ordinary
-rather than broken, and an hour in the past under the word "resets" is a promise
-about the future that has already been broken.
-
-**The moment keeps the strip's own tone while the figure beside it may not.**
-`usageTone` paints what is measured; a reset time is not a measurement, and an
-hour of the day drawn in `danger` would read as the hour being the problem
-rather than the share. The space between the two windows grew with them for a
-related reason: each reading is now a group of a share, a separator and a
-moment, and at the strip's own 8px the gap between two groups was narrower than
-the gap inside one.
-
-The reading is account-wide while the header belongs to a workspace, which is
-deliberate — the decision it informs is made looking at the chat.
 
 **What the agent looked at folds; what it changed does not.** A run of tool
 calls becomes the count of them, closed, opening on a click — the same
@@ -842,6 +803,58 @@ failed turn, `success` once a session has run and stopped — and falls back to
 the filled dot for uncommitted work when there is not. Two marks side by side would make the list busier than the thing it
 describes, and `warning` is the one worth crossing the window for, because that
 turn has stopped and is waiting on you.
+
+### What is left of the account, at the foot of the list
+
+The two subscription windows — five-hour and weekly — sit under the workspace
+list rather than above the composer, where they used to be. They say nothing
+about the conversation they were sitting in: the same pair applies to every
+workspace, and the decision they inform is whether to start something at all,
+which is made looking at the list rather than at a chat.
+
+**They are there before the first message.** The figures arrive from a running
+session's control channel, so the app learns them only when a turn runs — and
+the service therefore keeps the last reading in `state.json`, beside the model
+catalogue and for the reason already written on that field: so a picker is
+usable before the first message. Without it the block would be empty on every
+launch until somebody sent something, which is the thing it exists to fix.
+
+**Nothing is polled, and no session is started for it.** `service.ts` says
+plainly that spawning an agent to fill a gauge would create a record for a
+workspace nobody has spoken to. The block shows what is known and the next turn
+refreshes it. The cost is honest and worth stating: on a brand-new installation,
+before anything has ever run, there is nothing to show.
+
+**The windows are named** (`5h`, `1w`) although the old header chip never named
+its one: two figures under each other are unreadable without labels, while one
+figure beside a countdown was not.
+
+**Each window says when it comes back, not how long it has left.** `32% · 14:30`
+reads at a glance in a way a countdown cannot: the reading is redrawn only when
+a turn ends, so `2h 30m` written there would be that much wrong an hour later,
+while an hour of the day stays true however long it is looked at.
+
+The clock is 24-hour and the date is `DD.MM` in every language, following
+neither the app's language nor the system's locale. `6:00 PM` spends three
+characters saying what `18:00` says, and both locales the app has write the day
+first — a locale that does not is the reason to revisit it. The date appears
+only when the clock alone would not say which day it is the hour of, and the
+boundary is the **calendar day** rather than a rolling twenty-four hours,
+because "which day" is what a reader reasons about: a bare `01:00` seen at 22:00
+reads as a time that has already gone. So the weekly window is dated almost
+always and the five-hour one only across midnight.
+
+**A reading whose window has already reset is faded rather than shown as
+fact.** `formatResetAt` answers nothing for a moment that has gone, which is the
+whole of how staleness is told here — there is no second clock. A stale 95%
+drawn in red would be the sidebar raising an alarm about something that is over.
+
+**The bar is green while there is room**, `warning` from 60% and `danger` from
+80%. It is the one place a calm reading is coloured at all: a bar is a block of
+colour by design and has room to say "fine", where a number in green would be a
+number wearing a colour — so the figure beside it stays `ink-faint`. The
+thresholds come from `usageLevel`, the single place they are read, so this and
+the `/usage` card cannot turn colour at different points.
 
 **A run belongs to its workspace**, the way a terminal does, so there is a
 runner per workspace and several can serve at once — which is what the unique

@@ -72,31 +72,37 @@ describe('the countdown to a reset', () => {
 describe('how full is worth noticing', () => {
   it('stays quiet while there is room', () => {
     expect(usageTone(0)).toBe('text-ink-faint')
-    expect(usageTone(74)).toBe('text-ink-faint')
+    expect(usageTone(59)).toBe('text-ink-faint')
   })
 
-  it('warns from three quarters', () => {
-    expect(usageTone(75)).toBe('text-warning')
-    expect(usageTone(89)).toBe('text-warning')
+  it('warns from three fifths', () => {
+    expect(usageTone(60)).toBe('text-warning')
+    expect(usageTone(79)).toBe('text-warning')
   })
 
-  it('is plain about the last tenth', () => {
-    expect(usageTone(90)).toBe('text-danger')
+  it('is plain about the last fifth', () => {
+    expect(usageTone(80)).toBe('text-danger')
     expect(usageTone(100)).toBe('text-danger')
   })
 
-  // The bar and the number written beside it read the same thresholds, so a
-  // gauge cannot end up drawn in one colour and labelled in another.
+  /*
+   * The bar and the number written beside it read the same thresholds, so a
+   * gauge cannot end up drawn in one colour and labelled in another.
+   *
+   * They part company at one point and only one: a calm bar is green while a
+   * calm number stays neutral. A bar is a block of colour by design and has
+   * room to say "fine"; a number in green would be a number wearing a colour.
+   */
   it('fills a bar at the same points it colours the number', () => {
-    expect(usageFill(74)).toBe('bg-ink-faint')
-    expect(usageFill(75)).toBe('bg-warning')
-    expect(usageFill(90)).toBe('bg-danger')
+    expect(usageFill(59)).toBe('bg-success')
+    expect(usageFill(60)).toBe('bg-warning')
+    expect(usageFill(80)).toBe('bg-danger')
   })
 
   it('names the level the two of them come from', () => {
     expect(usageLevel(0)).toBe('calm')
-    expect(usageLevel(75)).toBe('noticeable')
-    expect(usageLevel(90)).toBe('pressing')
+    expect(usageLevel(60)).toBe('noticeable')
+    expect(usageLevel(80)).toBe('pressing')
   })
 })
 

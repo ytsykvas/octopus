@@ -1,7 +1,7 @@
 import { render, screen } from '@testing-library/react'
 import { describe, expect, it } from 'vitest'
 
-import { usageFill } from './format.js'
+import { usageFill } from './chat/format.js'
 import { UsageBar } from './UsageBar.js'
 
 /**

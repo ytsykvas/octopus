@@ -20,6 +20,7 @@ import type { ModelInfo, Query, SDKMessage, SlashCommand } from '@anthropic-ai/c
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import type { CommandExec } from './accounts.js'
+import type { UsageWindow } from './agent.js'
 import { ABANDONED, DENIED, type QueryFn, READ_ONLY_TOOLS } from './agent.js'
 import type { RemoteRepository } from './github.js'
 import { gitIn } from './git.js'
@@ -29,6 +30,7 @@ import {
   type ChatEvent,
   type ChatStatusEvent,
   createService,
+  sameUsage,
   type OctopusService,
   type WorkspaceStatusEvent
 } from './service.js'
@@ -1939,6 +1941,57 @@ describe('project instructions', () => {
   })
 })
 
+describe('whether two account readings say the same thing', () => {
+  const window = (utilization: number, resetsAt: string | null = null): UsageWindow => ({
+    utilization,
+    resetsAt
+  })
+
+  it('is true for two readings of the same figures', () => {
+    expect(
+      sameUsage(
+        { fiveHour: window(31, 'a'), sevenDay: window(84) },
+        { fiveHour: window(31, 'a'), sevenDay: window(84) }
+      )
+    ).toBe(true)
+  })
+
+  it('is false when a share moved, and when only a reset moment did', () => {
+    expect(
+      sameUsage({ fiveHour: window(31), sevenDay: null }, { fiveHour: window(32), sevenDay: null })
+    ).toBe(false)
+    expect(
+      sameUsage(
+        { fiveHour: window(31, 'a'), sevenDay: null },
+        { fiveHour: window(31, 'b'), sevenDay: null }
+      )
+    ).toBe(false)
+  })
+
+  // The four ways a window can be on one side and not the other. An account
+  // that starts reporting a weekly window, or stops, is a change.
+  it('is false when one side has a window the other does not', () => {
+    expect(
+      sameUsage({ fiveHour: window(31), sevenDay: null }, { fiveHour: null, sevenDay: null })
+    ).toBe(false)
+    expect(
+      sameUsage({ fiveHour: null, sevenDay: null }, { fiveHour: window(31), sevenDay: null })
+    ).toBe(false)
+  })
+
+  it('is true when both sides report neither window', () => {
+    expect(sameUsage({ fiveHour: null, sevenDay: null }, { fiveHour: null, sevenDay: null })).toBe(
+      true
+    )
+  })
+
+  // Nothing read yet is not the same as a reading of nothing, or the first
+  // reading after a launch would never be written.
+  it('is false against a reading that has never been taken', () => {
+    expect(sameUsage({ fiveHour: null, sevenDay: null }, null)).toBe(false)
+  })
+})
+
 describe('the agent chat', () => {
   /**
    * A stand-in for the Agent SDK.
@@ -2288,16 +2341,55 @@ describe('the agent chat', () => {
       await expect(service.sessionUsage('nope')).rejects.toThrow()
     })
 
-    // A reading is a moment, not a record. Nothing about it belongs on disk.
-    it('writes nothing to the state file', async () => {
+    /*
+     * This used to assert the opposite — "a reading is a moment, not a record.
+     * Nothing about it belongs on disk" — and that was right while the figures
+     * were only ever drawn inside a conversation that had just had a turn.
+     *
+     * They are drawn at the foot of the sidebar now, from the moment the window
+     * opens, and they arrive only from a running session's control channel. So
+     * without the last one on disk the block is empty on every launch until
+     * somebody sends a message, which is the thing it exists to fix. It is the
+     * same bargain `knownModels` in the state file already makes, in the same
+     * words: remembered so something is usable before the first message.
+     */
+    it('keeps the account reading, so it survives a restart', async () => {
       const { service, workspaceId } = await withWorkspace()
       const chat = await service.openChat(workspaceId)
       await service.sendToChat(chat.id, 'work')
+
+      await service.sessionUsage(chat.id)
+
+      const stored = JSON.parse(await readFile(join(dir, 'state.json'), 'utf8')) as {
+        subscriptionUsage: { fiveHour: { utilization: number } | null } | null
+      }
+      expect(stored.subscriptionUsage?.fiveHour?.utilization).toBe(18)
+    })
+
+    // Read up to three times a turn, so a write per read would put the state
+    // file under the busiest path in the app to record a number that had not
+    // moved.
+    it('writes nothing when the reading has not changed', async () => {
+      const { service, workspaceId } = await withWorkspace()
+      const chat = await service.openChat(workspaceId)
+      await service.sendToChat(chat.id, 'work')
+      await service.sessionUsage(chat.id)
       const before = await readFile(join(dir, 'state.json'), 'utf8')
 
       await service.sessionUsage(chat.id)
 
       await expect(readFile(join(dir, 'state.json'), 'utf8')).resolves.toBe(before)
+    })
+
+    // Nothing is asked of the agent for this: the sidebar has no chat, and the
+    // figures belong to the account rather than to any conversation.
+    it('answers the account reading with no chat in the question', async () => {
+      const { service, workspaceId } = await withWorkspace()
+      const chat = await service.openChat(workspaceId)
+      await service.sendToChat(chat.id, 'work')
+      await service.sessionUsage(chat.id)
+
+      expect(service.getSubscriptionUsage()?.fiveHour?.utilization).toBe(18)
     })
   })
 

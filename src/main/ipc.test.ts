@@ -327,6 +327,7 @@ describe('channel table', () => {
     'chats:usage',
     'chats:permission',
     'chats:rateLimit',
+    'chats:subscription',
     'terminal:create',
     'terminal:write',
     'terminal:resize',
@@ -1652,6 +1653,8 @@ describe('the agent chat', () => {
   // session never reports one at all.
   it('answers with no rate limit before any turn has run', async () => {
     await expect(invoke('chats:rateLimit')).resolves.toEqual({ ok: true, value: null })
+    // The same before anything has run, and answerable without a chat at all.
+    await expect(invoke('chats:subscription')).resolves.toEqual({ ok: true, value: null })
   })
 
   // Events keep arriving long after the call that started them returned, and a

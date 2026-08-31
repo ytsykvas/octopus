@@ -1,12 +1,11 @@
 import { ChevronDown, Eraser, FoldVertical } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 
-import type { UsageWindow } from '@core/agent.js'
 import type { RateLimit, SessionUsage } from '@core/service.js'
 
 import { useConfirm } from '../../hooks/useConfirm.js'
 import { DropdownMenu } from '../DropdownMenu.js'
-import { formatCountdown, formatResetAt, formatTokens, usageTone } from './format.js'
+import { formatTokens, usageTone } from './format.js'
 
 interface ComposerAtticProps {
   readonly usage: SessionUsage
@@ -92,45 +91,6 @@ export function ComposerAttic({
     if (confirmed) void onSend(CLEAR)
   }
 
-  const countdownFor = (window: UsageWindow): string | null =>
-    window.resetsAt === null
-      ? null
-      : formatCountdown(window.resetsAt, {
-          hours: t('chat.hours'),
-          minutes: t('chat.minutes'),
-          now: t('chat.soon')
-        })
-
-  const share = (label: string, window: UsageWindow, title: string): React.JSX.Element => {
-    const countdown = countdownFor(window)
-    const moment = window.resetsAt === null ? null : formatResetAt(window.resetsAt)
-
-    return (
-      // The title stays on the element around both halves: a tooltip is taken
-      // from the nearest ancestor carrying one, so hovering the moment answers
-      // the same as hovering the figure.
-      <span
-        className={usageTone(window.utilization)}
-        title={
-          countdown === null ? title : `${title} — ${t('chat.usageResets', { time: countdown })}`
-        }
-      >
-        {label} {Math.round(window.utilization)}%
-        {/* An hour of the day is not a measurement, so it keeps the strip's own
-            tone while the figure beside it may be `warning` or `danger`.
-            `usageTone` paints what is measured, and a reset time in red would
-            read as the hour being the problem rather than the share.
-
-            On the strip rather than in the tooltip because a moment does not go
-            stale: this is redrawn only when the agent says something, so a
-            countdown written here would be an hour wrong an hour later, while
-            `18:00` stays true however long it is looked at. The countdown keeps
-            the tooltip — the glance says when, the hover says how long. */}
-        {moment !== null && <span className="text-ink-faint">{` · ${moment}`}</span>}
-      </span>
-    )
-  }
-
   // Only a refusal is worth a word, and it sits *beside* the figures rather
   // than in place of them.
   //
@@ -142,25 +102,18 @@ export function ComposerAttic({
   // will not run.
   const refused = limit?.status === 'rejected' ? t('chat.usageReached') : null
 
-  const { context, subscription } = usage
-  const windows: React.JSX.Element[] = []
+  /*
+   * The account's two windows used to be drawn here beside the context share.
+   * They moved to the foot of the sidebar: they say nothing about the
+   * conversation they were sitting in, the same pair applies to every
+   * workspace, and reading them should not require opening a chat first.
+   *
+   * The refusal stayed. That one *is* about this conversation — it says the
+   * next turn will not run — and it is the one thing a percentage cannot say.
+   */
+  const { context } = usage
 
-  if (subscription?.fiveHour) {
-    windows.push(
-      <span key="five">
-        {share(t('chat.windowFiveHour'), subscription.fiveHour, t('chat.windowFiveHourTitle'))}
-      </span>
-    )
-  }
-  if (subscription?.sevenDay) {
-    windows.push(
-      <span key="week">
-        {share(t('chat.windowWeek'), subscription.sevenDay, t('chat.windowWeekTitle'))}
-      </span>
-    )
-  }
-
-  if (context === null && refused === null && windows.length === 0) return null
+  if (context === null && refused === null) return null
 
   return (
     <>
@@ -222,7 +175,7 @@ export function ComposerAttic({
                 //
                 // No `hover:text-ink`, which is the one line the pickers below
                 // have that must not be copied up here: `usageTone` paints this
-                // `warning` at 75% and `danger` at 90%, and a hover that
+                // `warning` at 60% and `danger` at 80%, and a hover that
                 // repainted it would put the control's state over the
                 // measurement. The open state is a background alone for the
                 // same reason.
@@ -235,31 +188,10 @@ export function ComposerAttic({
           />
         )}
 
-        {/* `gap-4` rather than the strip's own `gap-2`. Each window is now a
-            group — a share, a separator and a moment — and the separator itself
-            takes about 11px, so at 8px the space between two groups was
-            narrower than the space inside one, and the two ran together as a
-            single line of figures.
-
-            24 rather than 16, which was the first try and read as still-tight:
-            beating the separator is the floor, not the target. At twice it the
-            grouping is not something the eye has to work out.
-
-            The strip's outer gap stays at 2: it wraps, so its gap is also the
-            row gap, and this much there would make the whole strip taller every
-            time it did. This group wraps for the reason the composer's footer does —
-            a refusal beside two dated windows no longer fits the narrowest
-            centre, and a reading pushed past the edge is worse than one on a
-            second row. `justify-end` keeps that row flush with the right edge,
-            and `gap-y-1` says it is a continuation rather than a second strip.
-
-            The refusal shares the gap and should: it is a third reading about
-            the same account, and `text-danger` separates it further than any
-            number of pixels. */}
-        <span className="ml-auto flex flex-wrap items-center justify-end gap-x-6 gap-y-1">
-          {refused !== null && <span className="text-danger">{refused}</span>}
-          {windows}
-        </span>
+        {/* Only a refusal is left on the right, and it is pushed there rather
+            than grouped: the account's two windows used to sit beside it and
+            moved to the sidebar, so there is no longer a group to hold apart. */}
+        {refused !== null && <span className="text-danger ml-auto">{refused}</span>}
       </div>
 
       {dialog}

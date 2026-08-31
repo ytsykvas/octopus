@@ -14,7 +14,7 @@ import { useTranslation } from 'react-i18next'
 import type { UsageContributing, UsageLimit, UsageReport } from '@core/usage.js'
 
 import { formatDuration, formatResetAt, formatTokens, usageTone } from './format.js'
-import { UsageBar } from './UsageBar.js'
+import { UsageBar } from '../UsageBar.js'
 
 /**
  * What each window is called on screen.

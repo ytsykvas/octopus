@@ -89,6 +89,21 @@ export const en = {
     removeCancel: 'Cancel'
   },
 
+  limits: {
+    /* The account whose windows these are, not the app drawing them. */
+    title: 'Claude',
+    fiveHour: '5h',
+    week: '1w',
+    reading: '{{name}} window, {{percentage}}% used',
+    /* The hover half of the pair: the row says when the window comes back, the
+       tooltip says how long that is from now. */
+    resets: 'resets in {{time}}',
+    hours: 'h',
+    minutes: 'm',
+    soon: 'now',
+    stale: 'Read before this window reset, so the share is out of date. The next turn refreshes it.'
+  },
+
   project: {
     title: 'Project settings',
     sectionGeneral: 'General',
@@ -543,10 +558,6 @@ export const en = {
     clearDetail: 'The log is deleted with it, and cannot be brought back.',
     clearConfirm: 'Clear',
     clearCancel: 'Cancel',
-    windowFiveHour: '5h',
-    windowFiveHourTitle: 'Five-hour window',
-    windowWeek: 'Week',
-    windowWeekTitle: 'Weekly window',
 
     model: 'Model',
     /* The default row's name, for a catalogue that has not arrived yet and so
@@ -636,11 +647,7 @@ export const en = {
     endedBlocked: 'stopped by a hook',
     endedFailed: 'ended with an error',
 
-    usageResets: 'resets in {{time}}',
-    usageReached: 'limit reached',
-    hours: 'h',
-    minutes: 'm',
-    soon: 'now'
+    usageReached: 'limit reached'
   },
 
   /* The card `/usage` draws. Its own section rather than more of `chat`,
