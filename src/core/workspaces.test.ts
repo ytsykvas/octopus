@@ -56,6 +56,7 @@ beforeEach(async () => {
     envFile: '.env',
     approvedSettings: [],
     approvedScripts: [],
+    envProfile: 'default',
     color: 'blue'
   }
   state = addProject(EMPTY_STATE, project)

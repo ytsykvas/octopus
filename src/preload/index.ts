@@ -399,6 +399,10 @@ const api = {
     approveScripts: (workspaceId: string): Promise<Result<void>> =>
       ipcRenderer.invoke('scripts:approve', workspaceId) as Promise<Result<void>>,
 
+    /** Puts this workspace on a set of variables of its own, or back to follow. */
+    setEnvProfile: (workspaceId: string, name: string | null): Promise<Result<void>> =>
+      ipcRenderer.invoke('workspaces:envProfile', workspaceId, name) as Promise<Result<void>>,
+
     /** The instruction this workspace would send: its project's, or the global one. */
     instruction: (workspaceId: string, kind: InstructionKind): Promise<Result<string>> =>
       ipcRenderer.invoke('instructions:effective', workspaceId, kind) as Promise<Result<string>>,
@@ -508,12 +512,29 @@ const api = {
     saveCarryList: (projectId: string, contents: string): Promise<Result<void>> =>
       ipcRenderer.invoke('carry:save', projectId, contents) as Promise<Result<void>>,
 
-    /** Variables written last into every workspace's `.env`, so they win. */
-    readEnv: (projectId: string): Promise<Result<string>> =>
-      ipcRenderer.invoke('env:read', projectId) as Promise<Result<string>>,
+    /** The named sets of variables this project holds, and its default. */
+    envProfiles: (
+      projectId: string
+    ): Promise<Result<{ profiles: readonly string[]; projectDefault: string }>> =>
+      ipcRenderer.invoke('env:profiles', projectId) as Promise<
+        Result<{ profiles: readonly string[]; projectDefault: string }>
+      >,
 
-    saveEnv: (projectId: string, contents: string): Promise<Result<void>> =>
-      ipcRenderer.invoke('env:save', projectId, contents) as Promise<Result<void>>,
+    /** One set, written last into every workspace's `.env` so it wins. */
+    readEnv: (projectId: string, name: string): Promise<Result<string>> =>
+      ipcRenderer.invoke('env:read', projectId, name) as Promise<Result<string>>,
+
+    saveEnv: (projectId: string, name: string, contents: string): Promise<Result<void>> =>
+      ipcRenderer.invoke('env:save', projectId, name, contents) as Promise<Result<void>>,
+
+    createEnv: (projectId: string, name: string, from: string | null): Promise<Result<void>> =>
+      ipcRenderer.invoke('env:create', projectId, name, from) as Promise<Result<void>>,
+
+    renameEnv: (projectId: string, from: string, to: string): Promise<Result<void>> =>
+      ipcRenderer.invoke('env:rename', projectId, from, to) as Promise<Result<void>>,
+
+    removeEnv: (projectId: string, name: string): Promise<Result<void>> =>
+      ipcRenderer.invoke('env:remove', projectId, name) as Promise<Result<void>>,
 
     /** What this project offers the agent, and what this machine adds. */
     instructionSources: (

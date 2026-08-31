@@ -50,14 +50,18 @@ import { revertFile } from './revert.js'
 import { draftPullRequest, type DraftedPullRequest } from './pullRequestDraft.js'
 import { isListening, settlePort } from './ports.js'
 import { carriedPaths, carryInto, readCarryList, storedCarryList, writeCarryList } from './carry.js'
+import { applyEnvOverrides, discardIfOnlyBlock, removeEnvBlock, readWorkspaceEnv } from './env.js'
 import {
-  applyEnvOverrides,
-  discardIfOnlyBlock,
-  removeEnvBlock,
-  readProjectEnv,
-  readWorkspaceEnv,
-  writeProjectEnv
-} from './env.js'
+  createProfile,
+  DEFAULT_PROFILE,
+  listProfiles,
+  migrateEnvProfiles,
+  readEffectiveEnv,
+  readProfile,
+  removeProfile,
+  renameProfile,
+  writeProfile
+} from './envProfiles.js'
 import { runArchiveScript } from './archive.js'
 import { shortBranchName } from './branches.js'
 import { subscriptionFrom } from './usage.js'
@@ -380,9 +384,31 @@ export interface OctopusService {
   /** Which of the checkout's files travel into a workspace, one path per line. */
   readProjectCarryList(projectId: string): Promise<string>
   saveProjectCarryList(projectId: string, contents: string): Promise<void>
-  /** Variables written last into every workspace's `.env`, so they win. */
-  readProjectEnv(projectId: string): Promise<string>
-  saveProjectEnv(projectId: string, contents: string): Promise<void>
+  /**
+   * The named sets of variables a project holds, and which it uses by default.
+   *
+   * The default is unioned in, so the picker always has something selected even
+   * for a project that has never written a variable.
+   */
+  listEnvProfiles(projectId: string): Promise<{
+    readonly profiles: readonly string[]
+    readonly projectDefault: string
+  }>
+  /** One set's body, written last into every workspace's `.env` so it wins. */
+  readEnvProfile(projectId: string, name: string): Promise<string>
+  saveEnvProfile(projectId: string, name: string, contents: string): Promise<void>
+  /** Adds one, empty or copied from another. */
+  createEnvProfile(projectId: string, name: string, from: string | null): Promise<void>
+  renameEnvProfile(projectId: string, from: string, to: string): Promise<void>
+  /**
+   * Removes one, and moves everything that pointed at it.
+   *
+   * In the same commit as the delete, so `state.json` never holds a reference
+   * to a set that is not there.
+   */
+  removeEnvProfile(projectId: string, name: string): Promise<void>
+  /** Puts one workspace on a set of its own, or `null` to follow the project. */
+  setWorkspaceEnvProfile(workspaceId: string, name: string | null): Promise<void>
   /**
    * Whether git would keep this project's env file out of a commit.
    *
@@ -734,6 +760,17 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
   const now = options.now ?? ((): string => new Date().toISOString())
 
   let state: State = await loadState(statePath)
+
+  /*
+   * A project's variables used to be one file. Giving each project its `envs/`
+   * directory happens here, before anything can read one — the directory's
+   * presence is the version marker, so it costs a `readdir` per project on
+   * start and nothing afterwards.
+   *
+   * Allowed to throw: a service that cannot read its own data root should fail
+   * loudly rather than quietly behave as though every project had no variables.
+   */
+  for (const project of state.projects) await migrateEnvProfiles(project.id, dataRoot)
   let config: Config = await loadConfig(configPath)
 
   /** Live agent sessions, keyed by chat. A missing entry means "not started". */
@@ -1470,6 +1507,39 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
     await removeTranscript(chat.id, dataRoot).catch(() => undefined)
   }
 
+  /**
+   * Gives a worktree the files and the variables it needs to run.
+   *
+   * One helper because there were two copies of this, identical down to the
+   * five-field literal — creation and every run — and the choice of *which*
+   * profile a workspace uses had to be made in both or in neither.
+   *
+   * The order is load-bearing. `discardIfOnlyBlock` first, because a file
+   * holding nothing but our own block would otherwise stand in the way of the
+   * real one for ever: `carryInto` never writes over what the worktree already
+   * has. The block last, because it has to end up below whatever was copied,
+   * which is the whole reason it wins.
+   *
+   * The port is read here rather than passed in, so it is whatever the
+   * workspace holds at this moment — which is why a run settles the port first
+   * and prepares second.
+   */
+  async function prepare(project: Project, workspace: Workspace): Promise<string[]> {
+    await discardIfOnlyBlock(workspace.path, project.envFile)
+
+    const carried = await carryInto(project.id, project.repoPath, workspace.path, dataRoot)
+
+    await applyEnvOverrides(await readEffectiveEnv(project, workspace, dataRoot), {
+      path: workspace.path,
+      envFile: project.envFile,
+      rootPath: project.repoPath,
+      workspaceName: workspace.name,
+      port: workspace.port
+    })
+
+    return carried
+  }
+
   async function closeChatsOf(workspaceId: string): Promise<void> {
     // One at a time rather than all at once, so a session that hangs on close
     // is one wait rather than a race between several.
@@ -1688,14 +1758,88 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
       await writeCarryList(projectId, contents, dataRoot)
     },
 
-    async readProjectEnv(projectId) {
-      requireProject(projectId)
-      return readProjectEnv(projectId, dataRoot)
+    async listEnvProfiles(projectId) {
+      const project = requireProject(projectId)
+      const profiles = await listProfiles(projectId, dataRoot)
+
+      // Unioned rather than listed raw: a project that has never written a
+      // variable still names the set it would write into.
+      return {
+        profiles: profiles.includes(project.envProfile)
+          ? profiles
+          : [...profiles, project.envProfile].sort(),
+        projectDefault: project.envProfile
+      }
     },
 
-    async saveProjectEnv(projectId, contents) {
+    async readEnvProfile(projectId, name) {
       requireProject(projectId)
-      await writeProjectEnv(projectId, contents, dataRoot)
+      return readProfile(projectId, name, dataRoot)
+    },
+
+    async saveEnvProfile(projectId, name, contents) {
+      requireProject(projectId)
+      await writeProfile(projectId, name, contents, dataRoot)
+    },
+
+    async createEnvProfile(projectId, name, from) {
+      requireProject(projectId)
+      await createProfile(projectId, name, from, dataRoot)
+    },
+
+    async renameEnvProfile(projectId, from, to) {
+      const project = requireProject(projectId)
+      await renameProfile(projectId, from, to, dataRoot)
+
+      // The references follow the file, in one commit: a rename that left the
+      // project pointing at the old name would silently give every workspace
+      // nothing at all.
+      await commit((current) => ({
+        ...current,
+        projects: current.projects.map((other) =>
+          other.id === project.id && other.envProfile === from
+            ? { ...other, envProfile: to }
+            : other
+        ),
+        workspaces: current.workspaces.map((workspace) =>
+          workspace.projectId === project.id && workspace.envProfile === from
+            ? { ...workspace, envProfile: to }
+            : workspace
+        )
+      }))
+    },
+
+    async removeEnvProfile(projectId, name) {
+      const project = requireProject(projectId)
+      await removeProfile(projectId, name, dataRoot)
+
+      /*
+       * Every reference moves in the same commit, so `state.json` never holds
+       * one to a set that is not there. A workspace goes back to following the
+       * project; the project falls back to whatever is left, or to the name a
+       * new project starts with when nothing is.
+       */
+      const remaining = await listProfiles(projectId, dataRoot)
+      const fallback = remaining[0] ?? DEFAULT_PROFILE
+
+      await commit((current) => ({
+        ...current,
+        projects: current.projects.map((other) =>
+          other.id === project.id && other.envProfile === name
+            ? { ...other, envProfile: fallback }
+            : other
+        ),
+        workspaces: current.workspaces.map((workspace) =>
+          workspace.projectId === project.id && workspace.envProfile === name
+            ? { ...workspace, envProfile: null }
+            : workspace
+        )
+      }))
+    },
+
+    async setWorkspaceEnvProfile(workspaceId, name) {
+      const workspace = requireWorkspace(workspaceId)
+      await commit((current) => updateWorkspace(current, workspace.id, { envProfile: name }))
     },
 
     /**
@@ -1880,33 +2024,7 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
 
     async prepareWorkspace(workspaceId) {
       const workspace = requireWorkspace(workspaceId)
-      const project = requireProject(workspace.projectId)
-
-      // Before the carry, because a file holding only our own block would
-      // otherwise stand in the way of the real one for ever: `carryInto` never
-      // writes over what the worktree already has.
-      await discardIfOnlyBlock(workspace.path, project.envFile)
-
-      const carried = await carryInto(project.id, project.repoPath, workspace.path, dataRoot)
-      // After the files, never before: the block has to end up below whatever
-      // was copied, which is the whole reason it wins.
-      //
-      // The port is read here rather than passed in, so it is whatever the
-      // workspace holds at this moment — which is why a run settles the port
-      // first and prepares second.
-      await applyEnvOverrides(
-        project.id,
-        {
-          path: workspace.path,
-          envFile: project.envFile,
-          rootPath: project.repoPath,
-          workspaceName: workspace.name,
-          port: workspace.port
-        },
-        dataRoot
-      )
-
-      return carried
+      return prepare(requireProject(workspace.projectId), workspace)
     },
 
     async isWorkspaceServing(workspaceId) {
@@ -2046,19 +2164,7 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
         // Inside the rollback, not after it: a worktree missing the files it
         // cannot run without is a workspace that will fail its first build, and
         // undoing it says so at the one moment somebody is watching.
-        await discardIfOnlyBlock(workspace.path, project.envFile)
-        await carryInto(project.id, project.repoPath, workspace.path, dataRoot)
-        await applyEnvOverrides(
-          project.id,
-          {
-            path: workspace.path,
-            envFile: project.envFile,
-            rootPath: project.repoPath,
-            workspaceName: workspace.name,
-            port: workspace.port
-          },
-          dataRoot
-        )
+        await prepare(project, workspace)
         await commit((current) => addWorkspace(current, workspace))
       } catch (error) {
         await rollbackWorkspace(workspace, exec)

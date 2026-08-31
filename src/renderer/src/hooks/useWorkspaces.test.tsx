@@ -22,6 +22,7 @@ const project = (id: string, name: string): Project => ({
   envFile: '.env',
   approvedSettings: [],
   approvedScripts: [],
+  envProfile: 'default',
   color: 'blue'
 })
 

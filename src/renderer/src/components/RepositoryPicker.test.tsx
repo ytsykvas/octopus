@@ -35,6 +35,7 @@ function cloned(): Project {
     envFile: '.env',
     approvedSettings: [],
     approvedScripts: [],
+    envProfile: 'default',
     color: 'blue'
   }
 }

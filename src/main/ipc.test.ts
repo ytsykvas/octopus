@@ -279,8 +279,13 @@ describe('channel table', () => {
     'repoConfig:import',
     'repoConfig:export',
     'workspace:prepare',
+    'env:profiles',
     'env:read',
     'env:save',
+    'env:create',
+    'env:rename',
+    'env:remove',
+    'workspaces:envProfile',
     'env:ignored',
     'instructions:sources',
     'trust:read',
@@ -475,7 +480,7 @@ describe('validation at the boundary', () => {
   })
 
   it('rejects an env block longer than a block has any business being', async () => {
-    const result = await invoke('env:save', 'nothing', 'A=1\n'.repeat(20_000))
+    const result = await invoke('env:save', 'nothing', 'default', 'A=1\n'.repeat(20_000))
     expect(result).toMatchObject({ ok: false })
   })
 
@@ -820,7 +825,7 @@ describe('scripts and instructions of a real project', () => {
     const projectId = await addProject()
     await writeFile(join(dir, 'planner', '.env'), 'MYSQL_HOST=production\n', 'utf8')
     await invoke('carry:save', projectId, '.env\n')
-    await invoke('env:save', projectId, 'MYSQL_HOST=dev.example\n')
+    await invoke('env:save', projectId, 'default', 'MYSQL_HOST=dev.example\n')
 
     const workspace = await createWorkspace(projectId)
 
@@ -830,7 +835,7 @@ describe('scripts and instructions of a real project', () => {
 
   it('reads a workspace\u2019s env file as it stands', async () => {
     const projectId = await addProject()
-    await invoke('env:save', projectId, 'A=1\n')
+    await invoke('env:save', projectId, 'default', 'A=1\n')
     const workspace = await createWorkspace(projectId)
 
     await expect(invoke('workspace:env', workspace.id)).resolves.toMatchObject({
@@ -870,6 +875,50 @@ describe('scripts and instructions of a real project', () => {
     await expect(invoke('trust:read', workspace.id)).resolves.toMatchObject({
       ok: true,
       value: { approved: true }
+    })
+  })
+
+  it("keeps a project's sets of variables apart, and moves what points at one", async () => {
+    const projectId = await addProject()
+    const workspace = await createWorkspace(projectId)
+
+    await invoke('env:save', projectId, 'default', 'A=dev\n')
+    await invoke('env:create', projectId, 'prod', 'default')
+    await invoke('env:save', projectId, 'prod', 'A=prod\n')
+
+    await expect(invoke('env:profiles', projectId)).resolves.toMatchObject({
+      ok: true,
+      value: { profiles: ['default', 'prod'], projectDefault: 'default' }
+    })
+
+    await invoke('workspaces:envProfile', workspace.id, 'prod')
+    await invoke('env:rename', projectId, 'prod', 'production')
+    await expect(invoke('env:read', projectId, 'production')).resolves.toEqual({
+      ok: true,
+      value: 'A=prod\n'
+    })
+
+    // Back to following the project, and a set made from nothing rather than
+    // copied — both arms of a `null` that crosses this boundary as a value.
+    await invoke('workspaces:envProfile', workspace.id, null)
+    await invoke('env:create', projectId, 'staging', null)
+    await expect(invoke('env:read', projectId, 'staging')).resolves.toEqual({ ok: true, value: '' })
+    await invoke('env:remove', projectId, 'staging')
+
+    await invoke('env:remove', projectId, 'production')
+    await expect(invoke('env:profiles', projectId)).resolves.toMatchObject({
+      ok: true,
+      value: { profiles: ['default'] }
+    })
+  })
+
+  it('refuses a set name that could not be a file', async () => {
+    // Types vanish at this boundary, and the name becomes a filename.
+    const projectId = await addProject()
+
+    await expect(invoke('env:read', projectId, '../escape')).resolves.toMatchObject({ ok: false })
+    await expect(invoke('env:create', projectId, 'Prod', null)).resolves.toMatchObject({
+      ok: false
     })
   })
 
@@ -913,9 +962,12 @@ describe('scripts and instructions of a real project', () => {
 
   it('reads back the env block a project saved', async () => {
     const projectId = await addProject()
-    await invoke('env:save', projectId, 'A=1\n')
+    await invoke('env:save', projectId, 'default', 'A=1\n')
 
-    await expect(invoke('env:read', projectId)).resolves.toEqual({ ok: true, value: 'A=1\n' })
+    await expect(invoke('env:read', projectId, 'default')).resolves.toEqual({
+      ok: true,
+      value: 'A=1\n'
+    })
   })
 
   it('starts from a list that names the env', async () => {

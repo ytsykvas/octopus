@@ -19,6 +19,7 @@ import {
 } from './chats.js'
 import { nextProjectColor, type ProjectColor, ProjectColorSchema } from './colors.js'
 import { DEFAULT_ENV_FILE } from './envBlock.js'
+import { DEFAULT_PROFILE, ProfileNameSchema } from './envProfiles.js'
 import { ProjectIconSchema } from './icons.js'
 
 export {
@@ -97,7 +98,15 @@ export const ProjectSchema = z.object({
    * build script as well. Same shape otherwise: a bounded set, so moving
    * between two branches whose scripts differ does not ask on every switch.
    */
-  approvedScripts: z.array(z.string()).default([])
+  approvedScripts: z.array(z.string()).default([]),
+  /**
+   * Which of the project's named sets of variables its workspaces use.
+   *
+   * Defaulted rather than optional, and to the name the migration gives the old
+   * single file — so a record written before profiles existed reads back
+   * pointing at exactly what is now on disk, and no record has to be migrated.
+   */
+  envProfile: ProfileNameSchema.default(DEFAULT_PROFILE)
 })
 
 export const WorkspaceStatusSchema = z.enum(['idle', 'running', 'waiting_permission', 'error'])
@@ -111,6 +120,14 @@ export const WorkspaceSchema = z.object({
   status: WorkspaceStatusSchema,
   port: z.number().int().min(PORT_RANGE_START).max(PORT_RANGE_END),
   createdAt: z.iso.datetime(),
+  /**
+   * A set of variables of this workspace's own, or null to follow the project.
+   *
+   * A third state rather than a copy of the project's value taken at creation:
+   * a copy would silently stop following a project that later moved, and there
+   * would be no way to say "follow" again.
+   */
+  envProfile: ProfileNameSchema.nullable().default(null),
   /** Reserved for future multi-user support; always null for now. */
   ownerId: z.string().nullable()
 })
@@ -339,7 +356,8 @@ export const ProjectPatchSchema = ProjectSchema.pick({
   icon: true,
   envFile: true,
   approvedSettings: true,
-  approvedScripts: true
+  approvedScripts: true,
+  envProfile: true
 }).partial()
 
 export type ProjectPatch = z.infer<typeof ProjectPatchSchema>
@@ -392,6 +410,7 @@ export function updateProject(state: State, projectId: string, patch: ProjectPat
             ...(patch.approvedScripts !== undefined && {
               approvedScripts: patch.approvedScripts
             }),
+            ...(patch.envProfile !== undefined && { envProfile: patch.envProfile }),
             ...(patch.approvedSettings !== undefined && {
               approvedSettings: patch.approvedSettings
             })

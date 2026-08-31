@@ -115,6 +115,7 @@ export function installOctopusStub(): Api {
       trust: vi.fn(() => ok({ approved: true, files: [] })),
       scripts: vi.fn(() => ok({ approved: true, scripts: {} })),
       approveScripts: vi.fn(() => ok(undefined)),
+      setEnvProfile: vi.fn(() => ok(undefined)),
       approveSettings: vi.fn(() => ok(undefined)),
       // The port answers by default: a test about a script that ignores
       // `$OCTOPUS_PORT` says so, and the rest are not about ports at all.
@@ -147,7 +148,11 @@ export function installOctopusStub(): Api {
       exportRepoConfig: vi.fn(() => ok([])),
       readCarryList: vi.fn(() => ok('.env\n')),
       saveCarryList: vi.fn(() => ok(undefined)),
+      envProfiles: vi.fn(() => ok({ profiles: ['default'], projectDefault: 'default' })),
       readEnv: vi.fn(() => ok('')),
+      createEnv: vi.fn(() => ok(undefined)),
+      renameEnv: vi.fn(() => ok(undefined)),
+      removeEnv: vi.fn(() => ok(undefined)),
       saveEnv: vi.fn(() => ok(undefined)),
       isEnvIgnored: vi.fn(() => ok(true)),
       instructionSources: vi.fn(() => ok([])),
@@ -269,6 +274,7 @@ function workspaceFixture(): Workspace {
     status: 'idle' as const,
     port: 3100,
     createdAt: '2026-08-08T00:00:00.000Z',
-    ownerId: null
+    ownerId: null,
+    envProfile: null
   }
 }

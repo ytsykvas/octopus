@@ -103,6 +103,7 @@ function renderPanel(overrides: Partial<Props> = {}): {
     scripts: new Map(),
     onScriptsChanged: vi.fn(),
     defaultBranch: 'main',
+    defaultEnvProfile: 'default',
     onEditScripts: vi.fn(),
     onEditFiles: vi.fn(),
     onEditEnv: vi.fn(),
@@ -350,6 +351,117 @@ describe('RightPanel', () => {
    * open on a tab that says nothing and leads nowhere — the server half is open
    * and offers the same way in.
    */
+  describe('the set of variables a workspace runs with', () => {
+    beforeEach(() => {
+      vi.mocked(octopus().projects.envProfiles).mockResolvedValue({
+        ok: true,
+        value: { profiles: ['dev', 'prod'], projectDefault: 'dev' }
+      })
+    })
+
+    it('says nothing while a project has only one set', async () => {
+      // A project that has never named a second one sees exactly the menu it
+      // always had.
+      vi.mocked(octopus().projects.envProfiles).mockResolvedValue({
+        ok: true,
+        value: { profiles: ['default'], projectDefault: 'default' }
+      })
+      renderPanel({ workspaces: [anna], activeWorkspaceId: anna.id, scripts: SCRIPTS })
+      await userEvent.click(scriptsTab())
+
+      expect(within(buildSection()).getByRole('button', { name: 'Env' })).toBeInTheDocument()
+    })
+
+    it('says nothing when the list could not be read', async () => {
+      // A name the app is not sure of is worse than no name: the suffix is a
+      // claim about what the next run will use.
+      vi.mocked(octopus().projects.envProfiles).mockResolvedValue({ ok: false, error: 'gone' })
+      renderPanel({ workspaces: [anna], activeWorkspaceId: anna.id, scripts: SCRIPTS })
+      await userEvent.click(scriptsTab())
+
+      expect(within(buildSection()).getByRole('button', { name: 'Env' })).toBeInTheDocument()
+    })
+
+    it('names the set in force, whether it is followed or chosen', async () => {
+      renderPanel({ workspaces: [anna], activeWorkspaceId: anna.id, scripts: SCRIPTS })
+      await userEvent.click(scriptsTab())
+
+      // The project's, because this workspace follows it — and the same word
+      // would be there if it had been chosen. "What am I about to run with" has
+      // one answer either way.
+      // Read off the element rather than matched as an accessible name: the
+      // separator is a middle dot, and name matching normalises around it.
+      const env = within(buildSection()).getByRole('button', { name: /^Env/ })
+      await waitFor(() => {
+        expect(env).toHaveTextContent('Env · dev')
+      })
+    })
+
+    it('shows the workspace on its own set', async () => {
+      const pinned = { ...anna, envProfile: 'prod' }
+      renderPanel({ workspaces: [pinned], activeWorkspaceId: pinned.id, scripts: SCRIPTS })
+      await userEvent.click(scriptsTab())
+
+      const env = within(buildSection()).getByRole('button', { name: /^Env/ })
+      await waitFor(() => {
+        expect(env).toHaveTextContent('Env · prod')
+      })
+    })
+
+    it('puts a workspace on one, and back to following', async () => {
+      const onScriptsChanged = vi.fn()
+      renderPanel({
+        workspaces: [anna],
+        activeWorkspaceId: anna.id,
+        scripts: SCRIPTS,
+        onScriptsChanged
+      })
+      await userEvent.click(scriptsTab())
+
+      // The list arrives from the service, and the menu has no profiles in it
+      // until it has: the suffix is the cheapest proof that it landed.
+      const env = within(buildSection()).getByRole('button', { name: /^Env/ })
+      await waitFor(() => {
+        expect(env).toHaveTextContent('Env · dev')
+      })
+
+      await userEvent.click(env)
+      await userEvent.click(screen.getByRole('menuitemradio', { name: 'prod' }))
+      expect(octopus().workspaces.setEnvProfile).toHaveBeenCalledWith(anna.id, 'prod')
+
+      await userEvent.click(env)
+      await userEvent.click(screen.getByRole('menuitemradio', { name: /Follow the project/ }))
+      expect(octopus().workspaces.setEnvProfile).toHaveBeenLastCalledWith(anna.id, null)
+
+      await waitFor(() => {
+        expect(onScriptsChanged).toHaveBeenCalled()
+      })
+    })
+
+    it('says why a workspace could not be moved', async () => {
+      vi.mocked(octopus().workspaces.setEnvProfile).mockResolvedValue({ ok: false, error: 'nope' })
+      const onError = vi.fn()
+      renderPanel({
+        workspaces: [anna],
+        activeWorkspaceId: anna.id,
+        scripts: SCRIPTS,
+        onError
+      })
+      await userEvent.click(scriptsTab())
+      const env = within(buildSection()).getByRole('button', { name: /^Env/ })
+      await waitFor(() => {
+        expect(env).toHaveTextContent('Env · dev')
+      })
+
+      await userEvent.click(env)
+      await userEvent.click(screen.getByRole('menuitemradio', { name: 'prod' }))
+
+      await waitFor(() => {
+        expect(onError).toHaveBeenCalled()
+      })
+    })
+  })
+
   describe('a script the repository supplies', () => {
     /** The same script, but arriving with the checkout rather than written here. */
     const fromRepo: ResolvedScript = {

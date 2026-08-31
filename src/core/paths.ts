@@ -65,13 +65,34 @@ export function projectCarry(projectId: ProjectId, root: string = rootDir()): st
 }
 
 /**
- * A project's env overrides, written last into every workspace's `.env`.
+ * A project's env overrides, before they were named.
  *
- * `env` rather than `.env`: inside our own directory there is nothing to hide
- * from a listing, and a dotfile only makes it harder to find by hand.
+ * One file, and the only one there could be. `envProfiles.ts` moves it to
+ * `envs/default` the first time it sees it; nothing else refers to this any
+ * more, and it stays only so that migration has something to name.
  */
 export function projectEnv(projectId: ProjectId, root: string = rootDir()): string {
   return join(projectDir(projectId, root), 'env')
+}
+
+/**
+ * Where a project keeps its named sets of variables.
+ *
+ * `env` rather than `.env` in the names inside it: within our own directory
+ * there is nothing to hide from a listing, and a dotfile only makes it harder
+ * to find by hand.
+ */
+export function projectEnvsDir(projectId: ProjectId, root: string = rootDir()): string {
+  return join(projectDir(projectId, root), 'envs')
+}
+
+/** One named set, the filename coming from the module that owns the naming. */
+export function projectEnvProfile(
+  projectId: ProjectId,
+  file: string,
+  root: string = rootDir()
+): string {
+  return join(projectEnvsDir(projectId, root), file)
 }
 
 /** Directory holding a project's instruction files for the agent. */

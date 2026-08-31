@@ -154,6 +154,9 @@ export function ProjectSettings({
    */
   const [envIgnored, setEnvIgnored] = useState(true)
   const [sources, setSources] = useState<readonly InstructionSource[]>([])
+  /** The named sets this project holds, and which of them is being edited. */
+  const [profiles, setProfiles] = useState<readonly string[]>([project.envProfile])
+  const [profile, setProfile] = useState(project.envProfile)
   const [branches, setBranches] = useState<readonly string[]>([])
   const [error, setError] = useState<string | null>(null)
 
@@ -216,6 +219,64 @@ export function ProjectSettings({
       controller.abort()
     }
   }, [section, project.id, workspaceId])
+
+  /**
+   * Bumped to read the list again, rather than a second copy of the read.
+   *
+   * Adding or deleting a set changes the answer without changing anything the
+   * effect already depends on, and a `loadProfiles` beside the effect would be
+   * the same eight lines in two places.
+   */
+  const [profilesRead, setProfilesRead] = useState(0)
+
+  useEffect(() => {
+    if (section !== 'env') return
+    const controller = new AbortController()
+
+    void (async () => {
+      const answer = await window.octopus.projects.envProfiles(project.id)
+      if (controller.signal.aborted || !answer.ok) return
+
+      setProfiles(answer.value.profiles)
+      // Keep what is open unless it has gone, in which case fall to the
+      // project's own.
+      setProfile((current) =>
+        answer.value.profiles.includes(current) ? current : answer.value.projectDefault
+      )
+    })()
+
+    return () => {
+      controller.abort()
+    }
+  }, [section, project.id, profilesRead])
+
+  /**
+   * Adds a set, empty or copied from the one on screen.
+   *
+   * The name is asked for with `prompt`, which is the one dialog this app does
+   * not draw itself — a modal inside a modal for a single word is more
+   * machinery than the question deserves.
+   */
+  const addProfile = async (from: string | null): Promise<void> => {
+    const name = window.prompt(t('project.envProfileName'))?.trim()
+    if (name === undefined || name === '') return
+
+    const done = await window.octopus.projects.createEnv(project.id, name, from)
+    if (!done.ok) {
+      setError(describeFailure(done))
+      return
+    }
+
+    // Opened on the one just made, which is what somebody who named it wants.
+    setProfile(name)
+    setProfilesRead((current) => current + 1)
+  }
+
+  const dropProfile = async (): Promise<void> => {
+    const done = await window.octopus.projects.removeEnv(project.id, profile)
+    if (done.ok) setProfilesRead((current) => current + 1)
+    else setError(describeFailure(done))
+  }
 
   const commitEnvFile = (): void => {
     const trimmed = envFile.trim()
@@ -462,16 +523,70 @@ export function ProjectSettings({
                 />
               </Field>
 
+              {/* Which set. A checkout with a dev section and a production one
+                  used to be handled by commenting a block in and out, and a
+                  copy taken while it was on production pointed every workspace
+                  at production. Naming them makes the choice a choice. */}
+              <Field label={t('project.envProfile')} hint={t('project.envProfileHint')}>
+                <div className="flex max-w-lg flex-wrap items-center gap-2">
+                  <select
+                    aria-label={t('project.envProfile')}
+                    value={profile}
+                    onChange={(event) => {
+                      setProfile(event.target.value)
+                    }}
+                    className="input focus-ring w-40 font-mono"
+                  >
+                    {profiles.map((name) => (
+                      <option key={name} value={name}>
+                        {name}
+                      </option>
+                    ))}
+                  </select>
+
+                  {profile !== project.envProfile && (
+                    <Button
+                      onClick={() => {
+                        void onUpdate({ envProfile: profile })
+                      }}
+                    >
+                      {t('project.envProfileMakeDefault')}
+                    </Button>
+                  )}
+
+                  <Button onClick={() => void addProfile(null)}>
+                    {t('project.envProfileNew')}
+                  </Button>
+                  <Button onClick={() => void addProfile(profile)}>
+                    {t('project.envProfileDuplicate')}
+                  </Button>
+                  {profiles.length > 1 && (
+                    <Button variant="destructive" onClick={() => void dropProfile()}>
+                      {t('project.envProfileRemove')}
+                    </Button>
+                  )}
+                </div>
+              </Field>
+
               <FileEditor
-                label={t('project.env')}
+                /*
+                 * Keyed **and** labelled by the profile, both on purpose.
+                 * `FileEditor` loads on its label and saves on blur, so without
+                 * the remount switching profile would show the old text and
+                 * then write it into the new one.
+                 */
+                key={profile}
+                label={t('project.envOf', { name: profile })}
                 hint={t('project.envHint', { file: project.envFile })}
                 placeholder={'MYSQL_HOST=dev.example\nAPP_URL=http://localhost:$OCTOPUS_PORT'}
                 rows={12}
                 read={async () => {
-                  const result = await window.octopus.projects.readEnv(project.id)
+                  const result = await window.octopus.projects.readEnv(project.id, profile)
                   return result.ok ? result.value : null
                 }}
-                save={(contents) => void window.octopus.projects.saveEnv(project.id, contents)}
+                save={(contents) =>
+                  void window.octopus.projects.saveEnv(project.id, profile, contents)
+                }
                 notes={(contents) => [
                   // Only once there is something to expose. An empty block in a
                   // file git does not ignore is a warning about nothing.

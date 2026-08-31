@@ -751,6 +751,7 @@ export function App(): React.JSX.Element {
             scripts={workspaceScripts.scripts}
             onScriptsChanged={workspaceScripts.refresh}
             defaultBranch={shortBranchName(selectedProject?.baseBranch ?? '')}
+            defaultEnvProfile={selectedProject?.envProfile ?? 'default'}
             // No guard: the scripts belong to the open project, so the hint
             // that calls this exists only while there is one. With none, this
             // is asked to edit nothing, which is what closing means.

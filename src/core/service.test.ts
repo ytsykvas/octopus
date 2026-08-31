@@ -1202,14 +1202,14 @@ describe('env overrides a project adds', () => {
 
   it('is empty before anything has been written', async () => {
     const { id } = await withProject()
-    await expect(service.readProjectEnv(id)).resolves.toBe('')
+    await expect(service.readEnvProfile(id, 'default')).resolves.toBe('')
   })
 
   it('reads back what was saved', async () => {
     const { id } = await withProject()
-    await service.saveProjectEnv(id, 'A=1\n')
+    await service.saveEnvProfile(id, 'default', 'A=1\n')
 
-    await expect(service.readProjectEnv(id)).resolves.toBe('A=1\n')
+    await expect(service.readEnvProfile(id, 'default')).resolves.toBe('A=1\n')
   })
 
   /*
@@ -1220,7 +1220,7 @@ describe('env overrides a project adds', () => {
   it('writes them below whatever the checkout carried in', async () => {
     const { id, repo } = await withProject()
     await writeFile(join(repo, '.env'), 'MYSQL_HOST=production\n', 'utf8')
-    await service.saveProjectEnv(id, 'MYSQL_HOST=dev.example\n')
+    await service.saveEnvProfile(id, 'default', 'MYSQL_HOST=dev.example\n')
 
     const workspace = await service.createWorkspaceIn(id)
 
@@ -1232,7 +1232,7 @@ describe('env overrides a project adds', () => {
   // block is the file.
   it('gives a workspace an env where the checkout had none', async () => {
     const { id } = await withProject()
-    await service.saveProjectEnv(id, 'API_KEY=secret\n')
+    await service.saveEnvProfile(id, 'default', 'API_KEY=secret\n')
 
     const workspace = await service.createWorkspaceIn(id)
 
@@ -1245,7 +1245,7 @@ describe('env overrides a project adds', () => {
     const { id } = await withProject()
     const workspace = await service.createWorkspaceIn(id)
 
-    await service.saveProjectEnv(id, 'A=2\n')
+    await service.saveEnvProfile(id, 'default', 'A=2\n')
     await service.prepareWorkspace(workspace.id)
 
     await expect(readFile(join(workspace.path, '.env'), 'utf8')).resolves.toContain('A=2')
@@ -1258,7 +1258,7 @@ describe('env overrides a project adds', () => {
    */
   it('writes each workspace\u2019s own port where the block asks for one', async () => {
     const { id } = await withProject()
-    await service.saveProjectEnv(id, 'URL=http://localhost:$OCTOPUS_PORT/auth\n')
+    await service.saveEnvProfile(id, 'default', 'URL=http://localhost:$OCTOPUS_PORT/auth\n')
 
     const first = await service.createWorkspaceIn(id)
     const second = await service.createWorkspaceIn(id)
@@ -1277,7 +1277,7 @@ describe('env overrides a project adds', () => {
   it('goes into the file the project names', async () => {
     const { id } = await withProject()
     await service.updateProjectById(id, { envFile: '.env.local' })
-    await service.saveProjectEnv(id, 'A=1\n')
+    await service.saveEnvProfile(id, 'default', 'A=1\n')
 
     const workspace = await service.createWorkspaceIn(id)
 
@@ -1295,7 +1295,7 @@ describe('env overrides a project adds', () => {
   it('lets the real env arrive after the block created the file', async () => {
     const { id, repo } = await withProject()
     await service.saveProjectCarryList(id, '.env\n')
-    await service.saveProjectEnv(id, 'OVERRIDE=1\n')
+    await service.saveEnvProfile(id, 'default', 'OVERRIDE=1\n')
 
     // No `.env` in the checkout yet, exactly as a fresh clone has none.
     const workspace = await service.createWorkspaceIn(id)
@@ -1313,7 +1313,7 @@ describe('env overrides a project adds', () => {
   // A file with anything of the user's in it is not ours to remove.
   it('leaves a workspace env holding more than the block alone', async () => {
     const { id } = await withProject()
-    await service.saveProjectEnv(id, 'OVERRIDE=1\n')
+    await service.saveEnvProfile(id, 'default', 'OVERRIDE=1\n')
     const workspace = await service.createWorkspaceIn(id)
 
     await writeFile(
@@ -1329,10 +1329,10 @@ describe('env overrides a project adds', () => {
   // Emptying the overrides has to take the file with it, or the state recurs.
   it('removes a file that is left holding nothing', async () => {
     const { id } = await withProject()
-    await service.saveProjectEnv(id, 'OVERRIDE=1\n')
+    await service.saveEnvProfile(id, 'default', 'OVERRIDE=1\n')
     const workspace = await service.createWorkspaceIn(id)
 
-    await service.saveProjectEnv(id, '')
+    await service.saveEnvProfile(id, 'default', '')
     await service.prepareWorkspace(workspace.id)
 
     await expect(readFile(join(workspace.path, '.env'), 'utf8')).rejects.toThrow()
@@ -1342,7 +1342,7 @@ describe('env overrides a project adds', () => {
   // the carried lines and any hand edit made inside the worktree.
   it('reads a workspace\u2019s env file as it stands', async () => {
     const { id } = await withProject()
-    await service.saveProjectEnv(id, 'A=1\n')
+    await service.saveEnvProfile(id, 'default', 'A=1\n')
     const workspace = await service.createWorkspaceIn(id)
 
     await expect(service.readWorkspaceEnv(workspace.id)).resolves.toContain('A=1')
@@ -1366,7 +1366,7 @@ describe('env overrides a project adds', () => {
    */
   it('takes the block out of the file the project stops naming', async () => {
     const { id } = await withProject()
-    await service.saveProjectEnv(id, 'API_KEY=secret\n')
+    await service.saveEnvProfile(id, 'default', 'API_KEY=secret\n')
     const workspace = await service.createWorkspaceIn(id)
     await expect(readFile(join(workspace.path, '.env'), 'utf8')).resolves.toContain('API_KEY')
 
@@ -1379,7 +1379,7 @@ describe('env overrides a project adds', () => {
     const { id, repo } = await withProject()
     await writeFile(join(repo, '.env'), 'FROM=checkout\n', 'utf8')
     await service.saveProjectCarryList(id, '.env\n')
-    await service.saveProjectEnv(id, 'API_KEY=secret\n')
+    await service.saveEnvProfile(id, 'default', 'API_KEY=secret\n')
     const workspace = await service.createWorkspaceIn(id)
 
     await service.updateProjectById(id, { envFile: '.env.local' })
@@ -1391,7 +1391,7 @@ describe('env overrides a project adds', () => {
 
   it('touches nothing when the file was not what changed', async () => {
     const { id } = await withProject()
-    await service.saveProjectEnv(id, 'API_KEY=secret\n')
+    await service.saveEnvProfile(id, 'default', 'API_KEY=secret\n')
     const workspace = await service.createWorkspaceIn(id)
 
     await service.updateProjectById(id, { name: 'Renamed' })
@@ -1535,8 +1535,8 @@ describe('env overrides a project adds', () => {
   })
 
   it('refuses to touch a project that does not exist', async () => {
-    await expect(service.readProjectEnv('missing')).rejects.toThrow()
-    await expect(service.saveProjectEnv('missing', 'A=1')).rejects.toThrow()
+    await expect(service.readEnvProfile('missing', 'default')).rejects.toThrow()
+    await expect(service.saveEnvProfile('missing', 'default', 'A=1')).rejects.toThrow()
     await expect(service.isProjectEnvIgnored('missing')).rejects.toThrow()
   })
 })
@@ -1629,6 +1629,168 @@ describe('the cleanup script', () => {
     // Conductor's own name for the workspace, and the slug rather than the
     // label — which is what makes their setup and archive agree.
     await expect(readFile(marker, 'utf8')).resolves.toBe(workspace.name)
+  })
+})
+
+describe('sets of variables', () => {
+  async function withWorkspace(): Promise<{ projectId: string; workspaceId: string }> {
+    const repo = join(dir, 'planner')
+    await initRepo(repo)
+    const project = await service.addProjectFromPath(repo)
+    const workspace = await service.createWorkspaceIn(project.id)
+    return { projectId: project.id, workspaceId: workspace.id }
+  }
+
+  it('names the set it would write into, even having written none', async () => {
+    const repo = join(dir, 'planner')
+    await initRepo(repo)
+    const project = await service.addProjectFromPath(repo)
+
+    // Unioned in, so the picker always has something selected.
+    await expect(service.listEnvProfiles(project.id)).resolves.toEqual({
+      profiles: ['default'],
+      projectDefault: 'default'
+    })
+  })
+
+  it('keeps each set apart', async () => {
+    const { projectId } = await withWorkspace()
+
+    await service.saveEnvProfile(projectId, 'default', 'A=dev\n')
+    await service.createEnvProfile(projectId, 'prod', null)
+    await service.saveEnvProfile(projectId, 'prod', 'A=prod\n')
+
+    await expect(service.readEnvProfile(projectId, 'default')).resolves.toBe('A=dev\n')
+    await expect(service.readEnvProfile(projectId, 'prod')).resolves.toBe('A=prod\n')
+    await expect(service.listEnvProfiles(projectId)).resolves.toMatchObject({
+      profiles: ['default', 'prod']
+    })
+  })
+
+  it("writes the set a workspace was put on, not the project's", async () => {
+    const { projectId, workspaceId } = await withWorkspace()
+    await service.saveEnvProfile(projectId, 'default', 'MYSQL_DATABASE=xibodb\n')
+    await service.createEnvProfile(projectId, 'prod', null)
+    await service.saveEnvProfile(projectId, 'prod', 'MYSQL_DATABASE=xibodb42\n')
+
+    await service.setWorkspaceEnvProfile(workspaceId, 'prod')
+    await service.prepareWorkspace(workspaceId)
+
+    const workspace = (await service.listWorkspaces(projectId)).find((w) => w.id === workspaceId)
+    const written = await readFile(join(workspace?.path ?? '', '.env'), 'utf8')
+    expect(written).toContain('xibodb42')
+    expect(written).not.toContain('MYSQL_DATABASE=xibodb\n')
+  })
+
+  it('goes back to following the project', async () => {
+    const { projectId, workspaceId } = await withWorkspace()
+    await service.createEnvProfile(projectId, 'prod', null)
+    await service.setWorkspaceEnvProfile(workspaceId, 'prod')
+
+    await service.setWorkspaceEnvProfile(workspaceId, null)
+
+    const workspace = (await service.listWorkspaces(projectId)).find((w) => w.id === workspaceId)
+    expect(workspace?.envProfile).toBeNull()
+  })
+
+  it('moves every reference when a set is renamed', async () => {
+    // A rename that left the project pointing at the old name would silently
+    // give every workspace nothing at all.
+    const { projectId, workspaceId } = await withWorkspace()
+    // A set with no file is not a set: `default` is only a name until something
+    // is written into it.
+    await service.saveEnvProfile(projectId, 'default', 'A=1\n')
+    await service.createEnvProfile(projectId, 'prod', null)
+    await service.setWorkspaceEnvProfile(workspaceId, 'prod')
+
+    await service.renameEnvProfile(projectId, 'default', 'dev')
+    await service.updateProjectById(projectId, { envProfile: 'dev' })
+    await service.renameEnvProfile(projectId, 'dev', 'staging')
+
+    expect(service.listProjects().find((p) => p.id === projectId)?.envProfile).toBe('staging')
+  })
+
+  it('follows a renamed set on the workspaces that were pinned to it', async () => {
+    const { projectId, workspaceId } = await withWorkspace()
+    await service.createEnvProfile(projectId, 'prod', null)
+    await service.setWorkspaceEnvProfile(workspaceId, 'prod')
+
+    await service.renameEnvProfile(projectId, 'prod', 'production')
+
+    const workspace = (await service.listWorkspaces(projectId)).find((w) => w.id === workspaceId)
+    expect(workspace?.envProfile).toBe('production')
+  })
+
+  it('rewrites every reference when a set is deleted', async () => {
+    /*
+     * In the same commit as the delete, so `state.json` never holds a reference
+     * to a set that is not there.
+     */
+    const { projectId, workspaceId } = await withWorkspace()
+    await service.createEnvProfile(projectId, 'prod', null)
+    await service.setWorkspaceEnvProfile(workspaceId, 'prod')
+
+    await service.removeEnvProfile(projectId, 'prod')
+
+    const workspace = (await service.listWorkspaces(projectId)).find((w) => w.id === workspaceId)
+    expect(workspace?.envProfile).toBeNull()
+  })
+
+  it('moves the project onto what is left when its own default goes', async () => {
+    const { projectId } = await withWorkspace()
+    await service.saveEnvProfile(projectId, 'default', 'A=1\n')
+    await service.createEnvProfile(projectId, 'prod', null)
+
+    await service.removeEnvProfile(projectId, 'default')
+
+    expect(service.listProjects().find((p) => p.id === projectId)?.envProfile).toBe('prod')
+  })
+
+  it('names the set a new project would start with when the last one goes', async () => {
+    const { projectId } = await withWorkspace()
+    await service.saveEnvProfile(projectId, 'default', 'A=1\n')
+
+    await service.removeEnvProfile(projectId, 'default')
+
+    expect(service.listProjects().find((p) => p.id === projectId)?.envProfile).toBe('default')
+  })
+
+  it('copies one when asked', async () => {
+    const { projectId } = await withWorkspace()
+    await service.saveEnvProfile(projectId, 'default', 'A=1\n')
+
+    await service.createEnvProfile(projectId, 'prod', 'default')
+
+    await expect(service.readEnvProfile(projectId, 'prod')).resolves.toBe('A=1\n')
+  })
+
+  it('refuses a project it does not know', async () => {
+    await expect(service.listEnvProfiles('missing')).rejects.toThrow()
+    await expect(service.readEnvProfile('missing', 'default')).rejects.toThrow()
+    await expect(service.saveEnvProfile('missing', 'default', '')).rejects.toThrow()
+    await expect(service.createEnvProfile('missing', 'x', null)).rejects.toThrow()
+    await expect(service.renameEnvProfile('missing', 'a', 'b')).rejects.toThrow()
+    await expect(service.removeEnvProfile('missing', 'a')).rejects.toThrow()
+    await expect(service.setWorkspaceEnvProfile('missing', null)).rejects.toThrow()
+  })
+
+  it("moves a project's single env file into the directory on start", async () => {
+    /*
+     * The migration, over a data root written by the version before this one.
+     * The directory's presence is the marker, so it runs once and then costs a
+     * `readdir` per project.
+     */
+    const repo = join(dir, 'planner')
+    await initRepo(repo)
+    const project = await service.addProjectFromPath(repo)
+    const directory = join(dir, 'data', 'projects', project.id)
+    await rm(join(directory, 'envs'), { recursive: true, force: true })
+    await mkdir(directory, { recursive: true })
+    await writeFile(join(directory, 'env'), 'API_KEY=secret\n', 'utf8')
+
+    const restarted = await createService(paths(dir))
+
+    await expect(restarted.readEnvProfile(project.id, 'default')).resolves.toBe('API_KEY=secret\n')
   })
 })
 

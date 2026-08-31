@@ -176,9 +176,30 @@ describe('channel names', () => {
     ],
     ['workspaces.scripts', () => method('workspaces', 'scripts')('w' as never), 'scripts:resolved'],
     [
+      'workspaces.setEnvProfile',
+      () => method('workspaces', 'setEnvProfile')('w' as never, null as never),
+      'workspaces:envProfile'
+    ],
+    [
       'workspaces.approveScripts',
       () => method('workspaces', 'approveScripts')('w' as never),
       'scripts:approve'
+    ],
+    ['projects.envProfiles', () => method('projects', 'envProfiles')('p' as never), 'env:profiles'],
+    [
+      'projects.createEnv',
+      () => method('projects', 'createEnv')('p' as never, 'n' as never, null as never),
+      'env:create'
+    ],
+    [
+      'projects.renameEnv',
+      () => method('projects', 'renameEnv')('p' as never, 'a' as never, 'b' as never),
+      'env:rename'
+    ],
+    [
+      'projects.removeEnv',
+      () => method('projects', 'removeEnv')('p' as never, 'n' as never),
+      'env:remove'
     ],
     ['workspaces.port', () => method('workspaces', 'port')('w' as never), 'workspaces:port'],
     [

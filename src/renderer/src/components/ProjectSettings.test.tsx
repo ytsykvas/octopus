@@ -22,6 +22,7 @@ function project(overrides: Partial<Project> = {}): Project {
     envFile: '.env',
     approvedSettings: [],
     approvedScripts: [],
+    envProfile: 'default',
     color: 'blue',
     ...overrides
   }
@@ -611,6 +612,164 @@ describe('ProjectSettings', () => {
     expect(await screen.findByDisplayValue('MYSQL_HOST=dev.example')).toBeInTheDocument()
   })
 
+  describe('sets of variables', () => {
+    beforeEach(() => {
+      vi.mocked(window.octopus.projects.envProfiles).mockResolvedValue({
+        ok: true,
+        value: { profiles: ['default', 'prod'], projectDefault: 'default' }
+      })
+    })
+
+    it('says nothing when the list could not be read', async () => {
+      vi.mocked(window.octopus.projects.envProfiles).mockResolvedValue({
+        ok: false,
+        error: 'gone'
+      })
+      const user = userEvent.setup()
+      await renderDialog()
+      await openSection(user, 'Env')
+
+      // The picker keeps naming the project's own set rather than emptying.
+      expect(await screen.findByLabelText('Set of variables')).toHaveValue('default')
+    })
+
+    it('falls back to the project\u2019s own when the one open has gone', async () => {
+      // Somebody deleted it in another window; the editor must not go on
+      // showing a set that is not there.
+      vi.mocked(window.octopus.projects.envProfiles).mockResolvedValue({
+        ok: true,
+        value: { profiles: ['prod'], projectDefault: 'prod' }
+      })
+      const user = userEvent.setup()
+      await renderDialog()
+      await openSection(user, 'Env')
+
+      expect(await screen.findByLabelText('Set of variables')).toHaveValue('prod')
+    })
+
+    it('lists them and edits the one chosen', async () => {
+      vi.mocked(window.octopus.projects.readEnv).mockImplementation((_id, name) =>
+        Promise.resolve({ ok: true, value: `FROM=${name}` })
+      )
+      const user = userEvent.setup()
+      await renderDialog()
+      await openSection(user, 'Env')
+
+      expect(await screen.findByDisplayValue('FROM=default')).toBeInTheDocument()
+
+      await user.selectOptions(screen.getByLabelText('Set of variables'), 'prod')
+
+      /*
+       * The editor remounts. Without that it loads on its label alone and saves
+       * on blur, so switching would show the old text and then write it into
+       * the set just chosen.
+       */
+      expect(await screen.findByDisplayValue('FROM=prod')).toBeInTheDocument()
+    })
+
+    it('makes the chosen one the default only when it is not already', async () => {
+      const user = userEvent.setup()
+      const props = await renderDialog()
+      await openSection(user, 'Env')
+
+      expect(screen.queryByRole('button', { name: 'Use by default' })).not.toBeInTheDocument()
+
+      await user.selectOptions(await screen.findByLabelText('Set of variables'), 'prod')
+      await user.click(screen.getByRole('button', { name: 'Use by default' }))
+
+      expect(props.onUpdate).toHaveBeenCalledWith({ envProfile: 'prod' })
+    })
+
+    it('adds an empty one', async () => {
+      const user = userEvent.setup()
+      const prompt = vi.spyOn(window, 'prompt').mockReturnValue('staging')
+      await renderDialog()
+      await openSection(user, 'Env')
+
+      await user.click(await screen.findByRole('button', { name: 'New' }))
+
+      expect(window.octopus.projects.createEnv).toHaveBeenCalledWith('planner', 'staging', null)
+      prompt.mockRestore()
+    })
+
+    it('copies the one on screen', async () => {
+      const user = userEvent.setup()
+      const prompt = vi.spyOn(window, 'prompt').mockReturnValue('staging')
+      await renderDialog()
+      await openSection(user, 'Env')
+
+      await user.click(await screen.findByRole('button', { name: 'Duplicate' }))
+
+      expect(window.octopus.projects.createEnv).toHaveBeenCalledWith(
+        'planner',
+        'staging',
+        'default'
+      )
+      prompt.mockRestore()
+    })
+
+    it('asks for a name and does nothing without one', async () => {
+      const user = userEvent.setup()
+      const prompt = vi.spyOn(window, 'prompt').mockReturnValue('   ')
+      await renderDialog()
+      await openSection(user, 'Env')
+
+      await user.click(await screen.findByRole('button', { name: 'New' }))
+
+      expect(window.octopus.projects.createEnv).not.toHaveBeenCalled()
+      prompt.mockRestore()
+    })
+
+    it('says why one could not be added', async () => {
+      vi.mocked(window.octopus.projects.createEnv).mockResolvedValue({ ok: false, error: 'taken' })
+      const user = userEvent.setup()
+      const prompt = vi.spyOn(window, 'prompt').mockReturnValue('default')
+      await renderDialog()
+      await openSection(user, 'Env')
+
+      await user.click(await screen.findByRole('button', { name: 'New' }))
+
+      expect(await screen.findByText(/taken/)).toBeInTheDocument()
+      prompt.mockRestore()
+    })
+
+    it('deletes the one on screen', async () => {
+      const user = userEvent.setup()
+      await renderDialog()
+      await openSection(user, 'Env')
+
+      await user.click(await screen.findByRole('button', { name: 'Delete' }))
+
+      expect(window.octopus.projects.removeEnv).toHaveBeenCalledWith('planner', 'default')
+    })
+
+    it('offers no way to delete the last one', async () => {
+      // A project with nowhere to put its variables is not a state to be one
+      // click away from.
+      vi.mocked(window.octopus.projects.envProfiles).mockResolvedValue({
+        ok: true,
+        value: { profiles: ['default'], projectDefault: 'default' }
+      })
+      const user = userEvent.setup()
+      await renderDialog()
+      await openSection(user, 'Env')
+
+      await screen.findByLabelText('Set of variables')
+      expect(screen.queryByRole('button', { name: 'Delete' })).not.toBeInTheDocument()
+    })
+
+    it('says why one could not be deleted', async () => {
+      vi.mocked(window.octopus.projects.removeEnv).mockResolvedValue({ ok: false, error: 'busy' })
+      const user = userEvent.setup()
+      await renderDialog()
+      await openSection(user, 'Env')
+
+      await user.click(await screen.findByRole('button', { name: 'Delete' }))
+
+      expect(await screen.findByText(/busy/)).toBeInTheDocument()
+    })
+  })
+
   it('saves edited env overrides against the project they belong to', async () => {
     vi.mocked(window.octopus.projects.readEnv).mockResolvedValue({
       ok: true,
@@ -627,6 +786,7 @@ describe('ProjectSettings', () => {
 
     expect(window.octopus.projects.saveEnv).toHaveBeenCalledExactlyOnceWith(
       'planner',
+      'default',
       'MYSQL_HOST=other.example'
     )
   })

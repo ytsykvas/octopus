@@ -1,4 +1,5 @@
-import { resolve } from 'node:path'
+import { tmpdir } from 'node:os'
+import { join, resolve } from 'node:path'
 
 export const alias = {
   '@core': resolve('src/core'),
@@ -30,7 +31,25 @@ export const bootstrapOnly = [
  * off in summer and two in winter, so local and UTC cannot agree by accident,
  * and a fixture written in August is not the same arithmetic as one in December.
  */
-export const testEnv = { TZ: 'Europe/Kyiv' }
+export const testEnv = {
+  TZ: 'Europe/Kyiv',
+  /*
+   * Nowhere near the real `~/.octopus`.
+   *
+   * Every path goes through `rootDir()`, which defaults to `homedir()` — so a
+   * test that forgets to pass its temporary root writes into the user's actual
+   * data directory instead of failing. That happened: one call in
+   * `envProfiles.ts` lost its `root` argument, so the test caught the wrong
+   * answer rather than the wrong place, and it had already created `envs/`
+   * beside a real project's credentials. Left there it would have convinced the
+   * migration it had already run, and that project's variables would never have
+   * moved.
+   *
+   * `homedir()` reads `HOME` on macOS and Linux, so pointing it at a scratch
+   * directory turns that class of mistake from damage into a missing file.
+   */
+  HOME: join(tmpdir(), 'octopus-tests-home')
+}
 
 export const thresholds = {
   statements: 100,

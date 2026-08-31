@@ -29,6 +29,7 @@ function workspace(overrides: Partial<WorkspaceView> = {}): WorkspaceView {
     port: 3100,
     createdAt: '2026-08-07T12:00:00.000Z',
     ownerId: null,
+    envProfile: null,
     chats: [],
     missing: false,
     changedFiles: 0,

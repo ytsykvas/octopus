@@ -35,41 +35,13 @@ import {
   withoutMarkers,
   type WorkspaceValues
 } from './envBlock.js'
-import { projectEnv } from './paths.js'
 import { writeTextFile } from './persist.js'
-import type { ProjectId } from './types.js'
 
 /** A block of overrides as accepted from the renderer. */
 export const EnvBodySchema = z.string().max(16_000)
 
 /** It carries credentials, so it is readable by its owner and nobody else. */
 const MODE = 0o600
-
-export function projectEnvPath(projectId: ProjectId, root?: string): string {
-  return projectEnv(projectId, root)
-}
-
-/**
- * A project's overrides, or an empty string where it has none.
- *
- * No template, unlike a script: a variable nobody wrote has no value worth
- * guessing at, and a placeholder would end up in a real `.env`.
- */
-export async function readProjectEnv(projectId: ProjectId, root?: string): Promise<string> {
-  try {
-    return await readFile(projectEnvPath(projectId, root), 'utf8')
-  } catch {
-    return ''
-  }
-}
-
-export async function writeProjectEnv(
-  projectId: ProjectId,
-  contents: string,
-  root?: string
-): Promise<void> {
-  await writeTextFile(projectEnvPath(projectId, root), contents, MODE)
-}
 
 /**
  * A workspace's env file as it stands, or null where it has none.
@@ -166,15 +138,10 @@ export async function discardIfOnlyBlock(workspacePath: string, envFile: string)
  *
  * Answers with whether anything was written.
  */
-export async function applyEnvOverrides(
-  projectId: ProjectId,
-  values: WorkspaceValues,
-  root?: string
-): Promise<boolean> {
-  const stored = (await readProjectEnv(projectId, root)).trim()
+export async function applyEnvOverrides(stored: string, values: WorkspaceValues): Promise<boolean> {
   // Markers out before anything else: one left in the body would make the next
   // read cut in the middle of our own block.
-  const body = substituteEnv(withoutMarkers(stored), values).trim()
+  const body = substituteEnv(withoutMarkers(stored.trim()), values).trim()
   const path = join(values.path, values.envFile)
 
   let existing = ''

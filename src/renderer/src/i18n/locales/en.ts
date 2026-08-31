@@ -160,6 +160,15 @@ export const en = {
     envFile: 'Env file',
     envFileHint:
       'Which file in the workspace the variables are written into, relative to its root. .env suits most stacks; Vite reads .env.local and would ignore anything written beside it.',
+    envProfile: 'Set of variables',
+    envProfileHint:
+      'A project may keep several \u2014 a dev set and a production one, say \u2014 and each workspace uses one. Which is a choice made here rather than by commenting a block in and out of a file, where the last edit wins silently. They never travel to the repository: the repository decides what runs, this machine decides what it runs against.',
+    envProfileName: 'Name for the new set (lowercase letters, digits and dashes)',
+    envProfileNew: 'New',
+    envProfileDuplicate: 'Duplicate',
+    envProfileRemove: 'Delete',
+    envProfileMakeDefault: 'Use by default',
+    envOf: 'Variables in \u201c{{name}}\u201d',
     env: 'Variables added to every workspace',
     envHint:
       'One KEY=value per line. Written at the end of {{file}} in the workspace, so they win over whatever was copied — and they are the whole file where a clone had none to copy. $OCTOPUS_PORT becomes the workspace\u2019s own port, and $OCTOPUS_WORKSPACE_SLUG its name in a form an identifier can hold \u2014 lowercased, everything else an underscore \u2014 which is what a database named after the workspace needs. Kept on this machine, never in the repository.',
@@ -235,6 +244,7 @@ export const en = {
        a build reads, and the moment you notice one is missing is the moment the
        build in front of you did not find it. */
     env: 'Env',
+    envFollow: 'Follow the project ({{name}})',
     editEnv: 'Variables…',
     repoNotice:
       'This repository supplies the scripts below. Read them before they run \u2014 they arrive with a git pull, so what runs here is whatever the branch says.',

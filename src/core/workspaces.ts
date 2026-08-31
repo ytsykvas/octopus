@@ -249,6 +249,8 @@ export async function createWorkspace(
         options.answers
       )) ?? POOL_START,
     createdAt: new Date().toISOString(),
+    // Following the project, which is what a workspace nobody has moved does.
+    envProfile: null,
     ownerId: null
   }
 }

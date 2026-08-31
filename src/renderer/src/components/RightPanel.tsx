@@ -133,6 +133,8 @@ interface RightPanelProps {
   readonly onScriptsChanged: () => void
   /** The open project's base branch, for a script that reads it as Conductor's. */
   readonly defaultBranch: string
+  /** Which set of variables the open project uses, before the list is read. */
+  readonly defaultEnvProfile: string
   readonly onEditScripts: () => void
   /** Opens the list of files every workspace is given a copy of. */
   readonly onEditFiles: () => void
@@ -180,6 +182,7 @@ export function RightPanel({
   scripts,
   onScriptsChanged,
   defaultBranch,
+  defaultEnvProfile,
   onEditScripts,
   onEditFiles,
   onEditEnv,
@@ -270,6 +273,38 @@ export function RightPanel({
    * guard could only ever be reached through a button that is disabled, and an
    * unreachable line is a claim about behaviour nobody can check.
    */
+  /**
+   * The sets of variables this project holds, so a workspace can be put on one.
+   *
+   * Read when the tab is looked at rather than kept in `App`: it changes in the
+   * settings dialog, which closes back onto this pane.
+   */
+  const [envProfiles, setEnvProfiles] = useState<readonly string[]>([])
+  const [projectEnvProfile, setProjectEnvProfile] = useState(defaultEnvProfile)
+
+  useEffect(() => {
+    if (projectId === null) return
+    const controller = new AbortController()
+
+    void (async () => {
+      const answer = await window.octopus.projects.envProfiles(projectId)
+      if (controller.signal.aborted || !answer.ok) return
+
+      setEnvProfiles(answer.value.profiles)
+      setProjectEnvProfile(answer.value.projectDefault)
+    })()
+
+    return () => {
+      controller.abort()
+    }
+  }, [projectId, defaultEnvProfile])
+
+  const setWorkspaceProfile = async (workspaceId: string, name: string | null): Promise<void> => {
+    const done = await window.octopus.workspaces.setEnvProfile(workspaceId, name)
+    if (done.ok) onScriptsChanged()
+    else onError(describeFailure(done))
+  }
+
   /** What this workspace would run, and whether it is allowed to yet. */
   const activeScripts = activeWorkspaceId === null ? undefined : scripts.get(activeWorkspaceId)
 
@@ -728,6 +763,31 @@ export function RightPanel({
                 gitignored was ever on GitHub to copy. */}
             <DropdownMenu
               actions={[
+                /*
+                 * The choice first, the three commands after it. Shown only
+                 * where there is a choice: a project with one set sees exactly
+                 * the menu it always had.
+                 */
+                ...(envProfiles.length > 1 && activeWorkspace !== null
+                  ? [
+                      {
+                        id: 'follow',
+                        label: t('scripts.envFollow', { name: projectEnvProfile }),
+                        selected: activeWorkspace.envProfile === null,
+                        onSelect: () => {
+                          void setWorkspaceProfile(activeWorkspace.id, null)
+                        }
+                      },
+                      ...envProfiles.map((name) => ({
+                        id: `profile-${name}`,
+                        label: name,
+                        selected: activeWorkspace.envProfile === name,
+                        onSelect: () => {
+                          void setWorkspaceProfile(activeWorkspace.id, name)
+                        }
+                      }))
+                    ]
+                  : []),
                 {
                   id: 'variables',
                   label: t('scripts.editEnv'),
@@ -753,6 +813,16 @@ export function RightPanel({
               trigger={({ onClick, open }) => (
                 <Button size="sm" onClick={onClick} aria-expanded={open}>
                   {t('scripts.env')}
+                  {/* The resolved name, whether it is followed or chosen: "what
+                      am I about to run with" has the same answer either way, and
+                      the difference lives in the menu. Faint and the same size —
+                      the app has no idea which of these means production, and
+                      colouring a word because it matches one would be a guess. */}
+                  {envProfiles.length > 1 && activeWorkspace !== null && (
+                    <span className="text-ink-faint">
+                      {` · ${activeWorkspace.envProfile ?? projectEnvProfile}`}
+                    </span>
+                  )}
                 </Button>
               )}
             />

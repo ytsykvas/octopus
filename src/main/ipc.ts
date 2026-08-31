@@ -29,6 +29,7 @@ import {
 } from '../core/chats.js'
 import { CarryListSchema } from '../core/carry.js'
 import { EnvBodySchema } from '../core/env.js'
+import { ProfileNameSchema } from '../core/envProfiles.js'
 import type { RemoteRepository } from '../core/github.js'
 import { InstructionBodySchema, InstructionKindSchema } from '../core/instructions.js'
 import {
@@ -295,12 +296,57 @@ export function registerIpc(
     attempt(() => service.prepareWorkspace(workspaceId))
   )
 
-  host.handle('env:read', (_event, projectId: string) =>
-    attempt(() => service.readProjectEnv(projectId))
+  host.handle('env:profiles', (_event, projectId: string) =>
+    attempt(() => service.listEnvProfiles(projectId))
   )
 
-  host.handle('env:save', (_event, projectId: string, contents: unknown) =>
-    attempt(() => service.saveProjectEnv(projectId, EnvBodySchema.parse(contents)))
+  // The name becomes a filename, so it is parsed here as well as in the core:
+  // types vanish at this boundary and a renderer can send any value.
+  host.handle('env:read', (_event, projectId: string, name: unknown) =>
+    attempt(() => service.readEnvProfile(projectId, ProfileNameSchema.parse(name)))
+  )
+
+  host.handle('env:save', (_event, projectId: string, name: unknown, contents: unknown) =>
+    attempt(() =>
+      service.saveEnvProfile(
+        projectId,
+        ProfileNameSchema.parse(name),
+        EnvBodySchema.parse(contents)
+      )
+    )
+  )
+
+  host.handle('env:create', (_event, projectId: string, name: unknown, from: unknown) =>
+    attempt(() =>
+      service.createEnvProfile(
+        projectId,
+        ProfileNameSchema.parse(name),
+        from === null ? null : ProfileNameSchema.parse(from)
+      )
+    )
+  )
+
+  host.handle('env:rename', (_event, projectId: string, from: unknown, to: unknown) =>
+    attempt(() =>
+      service.renameEnvProfile(
+        projectId,
+        ProfileNameSchema.parse(from),
+        ProfileNameSchema.parse(to)
+      )
+    )
+  )
+
+  host.handle('env:remove', (_event, projectId: string, name: unknown) =>
+    attempt(() => service.removeEnvProfile(projectId, ProfileNameSchema.parse(name)))
+  )
+
+  host.handle('workspaces:envProfile', (_event, workspaceId: string, name: unknown) =>
+    attempt(() =>
+      service.setWorkspaceEnvProfile(
+        workspaceId,
+        name === null ? null : ProfileNameSchema.parse(name)
+      )
+    )
   )
 
   // Keyed by workspace rather than taking a port: a port from the renderer is a

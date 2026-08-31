@@ -47,6 +47,7 @@ const project: Project = {
   envFile: '.env',
   approvedSettings: [],
   approvedScripts: [],
+  envProfile: 'default',
   color: 'blue'
 }
 
@@ -61,6 +62,7 @@ function makeWorkspace(overrides: Partial<Workspace> = {}): Workspace {
     status: 'idle',
     port: 3100,
     createdAt: '2026-08-07T12:00:00.000Z',
+    envProfile: null,
     ownerId: null,
     ...overrides
   }

@@ -19,6 +19,7 @@ import { rm } from 'node:fs/promises'
 import { basename, dirname, normalize } from 'node:path'
 
 import { DEFAULT_ENV_FILE } from './envBlock.js'
+import { DEFAULT_PROFILE } from './envProfiles.js'
 import { projectDir, projectsDir } from './paths.js'
 import { nextProjectColor } from './colors.js'
 import type { Project, State } from './store.js'
@@ -148,7 +149,10 @@ export async function createProject(
     // Nothing has been read yet, which is exactly what an empty list says —
     // for what the agent may load, and for what the Run button may execute.
     approvedSettings: [],
-    approvedScripts: []
+    approvedScripts: [],
+    // The set the migration gives the old single file, so a project that has
+    // never had one still names something it could write.
+    envProfile: DEFAULT_PROFILE
   }
 }
 

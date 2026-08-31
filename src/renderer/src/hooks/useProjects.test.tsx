@@ -19,6 +19,7 @@ const planner: Project = {
   envFile: '.env',
   approvedSettings: [],
   approvedScripts: [],
+  envProfile: 'default',
   color: 'blue'
 }
 
@@ -31,6 +32,7 @@ const website: Project = {
   envFile: '.env',
   approvedSettings: [],
   approvedScripts: [],
+  envProfile: 'default',
   color: 'green'
 }
 
