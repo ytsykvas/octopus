@@ -13,6 +13,7 @@ import { useTranslation } from 'react-i18next'
 import type { ProjectColor } from '@core/colors.js'
 import type { RightPanelTab } from '@core/config.js'
 import type { DiffCommentController } from '../hooks/useDiffComments.js'
+import type { FileRevertController } from '../hooks/useFileRevert.js'
 import type { PullRequestQuoteController } from '../hooks/usePullRequestQuotes.js'
 import { useRunSequence } from '../hooks/useRunSequence.js'
 import { useServingPort } from '../hooks/useServingPort.js'
@@ -147,6 +148,8 @@ interface RightPanelProps {
   readonly onTab: (tab: RightPanelTab) => void
   /** Review notes the diff writes and the composer sends. */
   readonly comments: DiffCommentController
+  /** Puts one file of the diff back to how the workspace found it. */
+  readonly revert: FileRevertController
   /** Remarks the pull request tab pulls in from GitHub, for the same composer. */
   readonly quotes: PullRequestQuoteController
   /** The project's env file, for the warning beside the commit field. */
@@ -176,6 +179,7 @@ export function RightPanel({
   tab,
   onTab,
   comments,
+  revert,
   quotes,
   envFile,
   onRequestChanged,
@@ -478,6 +482,7 @@ export function RightPanel({
           onView={onDiffView}
           width={applied}
           comments={comments}
+          revert={revert}
           onError={onError}
         />
       </div>

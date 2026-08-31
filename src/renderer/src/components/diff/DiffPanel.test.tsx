@@ -5,7 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { highlight } from './highlight.js'
 import { octopus } from '../../test/octopus.js'
 import { fileDiff, hunk, workspaceDiff } from '../../test/diff.js'
-import { commentController } from '../../test/comments.js'
+import { commentController, revertController } from '../../test/comments.js'
 import { workspaceView } from '../../test/workspaces.js'
 import { DiffPanel } from './DiffPanel.js'
 
@@ -91,6 +91,7 @@ function renderPanel(workspace = anna, visible = true): void {
       onView={vi.fn()}
       width={WIDE}
       comments={commentController()}
+      revert={revertController()}
       onError={vi.fn()}
     />
   )
@@ -106,6 +107,7 @@ describe('DiffPanel', () => {
         onView={vi.fn()}
         width={WIDE}
         comments={commentController()}
+        revert={revertController()}
         onError={vi.fn()}
       />
     )
@@ -373,6 +375,7 @@ describe('DiffPanel', () => {
         onView={onView}
         width={WIDE}
         comments={commentController()}
+        revert={revertController()}
         onError={vi.fn()}
       />
     )
@@ -393,6 +396,7 @@ describe('DiffPanel', () => {
         onView={vi.fn()}
         width={WIDE}
         comments={commentController()}
+        revert={revertController()}
         onError={vi.fn()}
       />
     )
@@ -416,6 +420,7 @@ describe('DiffPanel', () => {
         onView={onView}
         width={WIDE}
         comments={commentController()}
+        revert={revertController()}
         onError={vi.fn()}
       />
     )
@@ -456,6 +461,7 @@ describe('DiffPanel', () => {
         onView={vi.fn()}
         width={WIDE}
         comments={commentController()}
+        revert={revertController()}
         onError={vi.fn()}
       />
     )
@@ -502,6 +508,7 @@ describe('DiffPanel', () => {
         onView={vi.fn()}
         width={WIDE}
         comments={commentController()}
+        revert={revertController()}
         onError={vi.fn()}
       />
     )
@@ -525,6 +532,7 @@ describe('DiffPanel', () => {
         onView={vi.fn()}
         width={300}
         comments={commentController()}
+        revert={revertController()}
         onError={vi.fn()}
       />
     )
@@ -548,6 +556,7 @@ describe('DiffPanel', () => {
           onView={vi.fn()}
           width={WIDE}
           comments={comments}
+          revert={revertController()}
           onError={vi.fn()}
         />
       )
@@ -873,6 +882,7 @@ describe('DiffPanel', () => {
           onView={vi.fn()}
           width={WIDE}
           comments={comments}
+          revert={revertController()}
           onError={vi.fn()}
         />
       )
@@ -1214,6 +1224,7 @@ describe('DiffPanel', () => {
           onView={vi.fn()}
           width={WIDE}
           comments={comments}
+          revert={revertController()}
           onError={vi.fn()}
         />
       )
@@ -1260,6 +1271,7 @@ describe('DiffPanel', () => {
         onView={vi.fn()}
         width={WIDE}
         comments={commentController()}
+        revert={revertController()}
         onError={vi.fn()}
       />
     )
@@ -1271,6 +1283,7 @@ describe('DiffPanel', () => {
         onView={vi.fn()}
         width={WIDE}
         comments={commentController()}
+        revert={revertController()}
         onError={vi.fn()}
       />
     )
@@ -1290,6 +1303,7 @@ describe('DiffPanel', () => {
         onView={vi.fn()}
         width={WIDE}
         comments={commentController()}
+        revert={revertController()}
         onError={vi.fn()}
       />
     )
@@ -1303,6 +1317,7 @@ describe('DiffPanel', () => {
         onView={vi.fn()}
         width={WIDE}
         comments={commentController()}
+        revert={revertController()}
         onError={vi.fn()}
       />
     )
@@ -1341,6 +1356,7 @@ describe('DiffPanel', () => {
         onView={vi.fn()}
         width={WIDE}
         comments={commentController()}
+        revert={revertController()}
         onError={onError}
       />
     )
@@ -1423,5 +1439,73 @@ describe('DiffPanel', () => {
     })
 
     expect(screen.getByRole('menuitem', { name: 'Copy path' })).toBeInTheDocument()
+  })
+})
+
+describe('reverting one file', () => {
+  it('offers a button on each file, named after that file', async () => {
+    answer(workspaceDiff([fileDiff('src/a.ts'), fileDiff('src/b.ts')]))
+    renderPanel()
+
+    expect(await screen.findByRole('button', { name: /Revert src\/a\.ts/ })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /Revert src\/b\.ts/ })).toBeInTheDocument()
+  })
+
+  it('hands the file to the controller and reads the diff again', async () => {
+    answer(workspaceDiff([fileDiff('src/a.ts')]))
+    const revert = revertController({ revert: vi.fn(() => Promise.resolve(true)) })
+    render(
+      <DiffPanel
+        workspace={anna}
+        visible
+        view="unified"
+        onView={vi.fn()}
+        width={WIDE}
+        comments={commentController()}
+        revert={revert}
+        onError={vi.fn()}
+      />
+    )
+
+    await userEvent.click(await screen.findByRole('button', { name: /Revert src\/a\.ts/ }))
+
+    expect(revert.revert).toHaveBeenCalledWith('src/a.ts', null)
+    await waitFor(() => {
+      expect(octopus().workspaces.diff).toHaveBeenCalledTimes(2)
+    })
+  })
+
+  // A reader who said no has changed nothing, and a refusal has already been
+  // reported — re-reading either would be work for a diff that cannot differ.
+  it('leaves the diff alone when nothing moved', async () => {
+    answer(workspaceDiff([fileDiff('src/a.ts')]))
+    renderPanel()
+
+    await userEvent.click(await screen.findByRole('button', { name: /Revert src\/a\.ts/ }))
+
+    expect(octopus().workspaces.diff).toHaveBeenCalledTimes(1)
+  })
+
+  // One row, two paths: the far end has to travel with it or the file stays
+  // on disk under both names.
+  it('carries the old path of a rename', async () => {
+    answer(workspaceDiff([fileDiff('moved.ts', { status: 'renamed', oldPath: 'kept.ts' })]))
+    const revert = revertController()
+    render(
+      <DiffPanel
+        workspace={anna}
+        visible
+        view="unified"
+        onView={vi.fn()}
+        width={WIDE}
+        comments={commentController()}
+        revert={revert}
+        onError={vi.fn()}
+      />
+    )
+
+    await userEvent.click(await screen.findByRole('button', { name: /Revert moved\.ts/ }))
+
+    expect(revert.revert).toHaveBeenCalledWith('moved.ts', 'kept.ts')
   })
 })

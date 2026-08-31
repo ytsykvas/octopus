@@ -19,6 +19,7 @@ import {
   type DiffCommentController
 } from '../../hooks/useDiffComments.js'
 import { useErrorMessage } from '../../hooks/useErrorMessage.js'
+import type { FileRevertController } from '../../hooks/useFileRevert.js'
 import { useWorkspaceDiff } from '../../hooks/useWorkspaceDiff.js'
 import { DiffFile } from './DiffFile.js'
 import type { DiffView } from './DiffHunk.js'
@@ -46,6 +47,8 @@ interface DiffPanelProps {
   readonly width: number
   /** Review notes waiting to go out with the next message. */
   readonly comments: DiffCommentController
+  /** Puts one file back to the state the workspace branched from. */
+  readonly revert: FileRevertController
   /** Says what went wrong where the window already says such things. */
   readonly onError: (message: string) => void
 }
@@ -65,6 +68,7 @@ export function DiffPanel({
   onView,
   width,
   comments,
+  revert,
   onError
 }: DiffPanelProps): React.JSX.Element {
   const { t } = useTranslation()
@@ -342,6 +346,13 @@ export function DiffPanel({
             tokens={tokens.get(file.path) ?? NO_TOKENS}
             comments={surface}
             onOpen={openFile}
+            onRevert={(reverted) => {
+              void (async () => {
+                // Only re-read when something moved: a reader who said no has
+                // changed nothing, and a refusal has already been reported.
+                if (await revert.revert(reverted.path, reverted.oldPath)) await refresh()
+              })()
+            }}
           />
         ))}
       </div>

@@ -430,6 +430,14 @@ export const en = {
     renamedFrom: 'moved from {{path}}',
     binary: 'Binary file — nothing to show.',
     tooLarge: 'Too large to draw here. Open the file to read it.',
+    revert: 'Revert',
+    revertFile: 'Revert {{path}}',
+    revertTitle: 'Revert this file?',
+    revertMessage: '{{path}} goes back to the state it had when this workspace branched.',
+    revertDetail:
+      'Unsaved changes in it are lost for good — git keeps no copy of those. Anything already committed stays in the branch, undone by a change in the working tree.',
+    revertConfirm: 'Revert',
+    revertCancel: 'Keep',
     invisibleCharacters:
       'This file contains characters that do not draw as themselves — a line may read differently from how it runs.',
     omittedFiles_one: '{{count}} file is too large to draw',
