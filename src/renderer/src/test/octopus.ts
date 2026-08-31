@@ -87,6 +87,7 @@ export function installOctopusStub(): Api {
       remove: vi.fn(() => ok(undefined)),
       hasChanges: vi.fn(() => ok(false)),
       diff: vi.fn(() => ok(emptyDiff())),
+      revertFile: vi.fn(() => ok(undefined)),
       // A branch with commits and no pull request — the state the pane offers
       // to act on, and the one most tests are about.
       pullRequest: vi.fn(() =>

@@ -254,6 +254,29 @@ describe('workspaces', () => {
     expect(listed[0]?.changedFiles).toBe(1)
   })
 
+  it('puts one file back to the state the workspace branched from', async () => {
+    const { service, projectId } = await withProject()
+    const workspace = await service.createWorkspaceIn(projectId)
+    await writeFile(join(workspace.path, 'draft.txt'), 'work\n', 'utf8')
+    await writeFile(join(workspace.path, 'README.md'), '# changed\n', 'utf8')
+
+    await service.revertWorkspaceFile(workspace.id, 'draft.txt')
+
+    // Only the one asked for: the other change is still there to be reviewed.
+    const diff = await service.readWorkspaceChanges(workspace.id)
+    expect(diff.files.map((file) => file.path)).toEqual(['README.md'])
+    await expect(access(join(workspace.path, 'draft.txt'))).rejects.toThrow()
+  })
+
+  // The path becomes a git argument and, for a file nobody added, a file to
+  // delete — so it is refused before it reaches either.
+  it('refuses to revert a path that leaves the workspace', async () => {
+    const { service, projectId } = await withProject()
+    const workspace = await service.createWorkspaceIn(projectId)
+
+    await expect(service.revertWorkspaceFile(workspace.id, '../escape.txt')).rejects.toThrow()
+  })
+
   it('reads what a workspace changed against the project’s base branch', async () => {
     const { service, projectId } = await withProject()
     const workspace = await service.createWorkspaceIn(projectId)
