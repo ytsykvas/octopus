@@ -81,18 +81,57 @@ export function extractCode(error: unknown): string {
 }
 
 /**
- * Creates an executor bound to a repository directory.
+ * What a command said, short enough to put in a sentence.
+ *
+ * git leads with the reason — no permission, a host that does not resolve,
+ * prompts disabled — and follows with advice about what to try. The first line
+ * is the half a reader can act on, and the rest turns an error message into a
+ * paragraph.
+ */
+export function reasonFrom(error: unknown): string {
+  const said = extractStderr(error)
+  const breaks = said.indexOf('\n')
+
+  return (breaks === -1 ? said : said.slice(0, breaks)).trim().slice(0, 200)
+}
+
+/**
+ * How a git command runs, beyond the directory it runs in.
  *
  * `maxBuffer` is an option so a test can put a real command past the ceiling
  * instead of faking the failure — the interesting case is what a caller does
  * with an overflow, and a fake would only assert that the fake was believed.
+ *
+ * The other two exist for the one command that leaves the machine. A deadline
+ * on `git branch` would invent a failure mode for something that cannot hang,
+ * so neither is a constant here: the caller that needs them says so.
  */
-export function gitIn(cwd: string, options: { readonly maxBuffer?: number } = {}): GitExec {
-  const maxBuffer = options.maxBuffer ?? MAX_OUTPUT_BYTES
+export interface GitOptions {
+  readonly maxBuffer?: number
+  /** Milliseconds before the command is killed. Zero is Node's own "wait". */
+  readonly timeout?: number
+  /** Added to the process's environment, for this command only. */
+  readonly env?: Readonly<Record<string, string>>
+}
+
+/**
+ * Creates an executor bound to a repository directory.
+ *
+ * Defaults are destructured rather than spread conditionally: with
+ * `exactOptionalPropertyTypes` an explicit `undefined` is not the same as an
+ * absent property, and `0` is what Node already means by no deadline.
+ */
+export function gitIn(cwd: string, options: GitOptions = {}): GitExec {
+  const { maxBuffer = MAX_OUTPUT_BYTES, timeout = 0, env } = options
 
   return async (args) => {
     try {
-      const { stdout } = await run('git', [...args], { cwd, maxBuffer })
+      const { stdout } = await run('git', [...args], {
+        cwd,
+        maxBuffer,
+        timeout,
+        env: { ...process.env, ...env }
+      })
       return stdout
     } catch (error) {
       throw new GitError(args, extractStderr(error), extractCode(error))
@@ -154,14 +193,25 @@ export async function currentBranch(exec: GitExec): Promise<string | null> {
   return out || null
 }
 
-/** Whether a local branch with this name exists. */
-export async function branchExists(exec: GitExec, branch: string): Promise<boolean> {
+/**
+ * Whether a ref resolves at all.
+ *
+ * Takes the full name so a caller says which namespace it means. A bare name
+ * would let git resolve it, and git also resolves tags — which is how a tag
+ * named like a branch becomes a base branch nobody chose.
+ */
+export async function refExists(exec: GitExec, ref: string): Promise<boolean> {
   try {
-    await exec(['rev-parse', '--verify', `refs/heads/${branch}`])
+    await exec(['rev-parse', '--verify', ref])
     return true
   } catch {
     return false
   }
+}
+
+/** Whether a local branch with this name exists. */
+export async function branchExists(exec: GitExec, branch: string): Promise<boolean> {
+  return refExists(exec, `refs/heads/${branch}`)
 }
 
 /**
@@ -173,14 +223,7 @@ export async function branchExists(exec: GitExec, branch: string): Promise<boole
  * name, which would also match a tag.
  */
 export async function anyBranchExists(exec: GitExec, branch: string): Promise<boolean> {
-  if (await branchExists(exec, branch)) return true
-
-  try {
-    await exec(['rev-parse', '--verify', `refs/remotes/${branch}`])
-    return true
-  } catch {
-    return false
-  }
+  return (await branchExists(exec, branch)) || refExists(exec, `refs/remotes/${branch}`)
 }
 
 /**

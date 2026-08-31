@@ -50,6 +50,7 @@ function renderSidebar(overrides: Partial<SidebarProps> = {}): SidebarProps {
     selectedWorkspaceId: null,
     onSelectWorkspace: vi.fn(),
     onCreateWorkspace: vi.fn(),
+    creating: false,
     width: 240,
     onWidthChange: vi.fn(),
     onRenameWorkspace: vi.fn(),
@@ -130,6 +131,22 @@ describe('Sidebar', () => {
     await user.click(screen.getByTitle('New workspace'))
 
     expect(props.onCreateWorkspace).toHaveBeenCalledTimes(1)
+  })
+
+  /*
+   * Creation fetches before it branches, so the button is now live through a
+   * wait rather than over before a second press was possible. Refusing the
+   * press is the point; the turning mark is what stops the refusal reading as
+   * the app having hung.
+   */
+  it('refuses a second press while a workspace is being made', async () => {
+    const user = userEvent.setup()
+    const props = renderSidebar({ creating: true })
+
+    await user.click(screen.getByTitle('New workspace'))
+
+    expect(props.onCreateWorkspace).not.toHaveBeenCalled()
+    expect(screen.getByTitle('New workspace')).toBeDisabled()
   })
 
   it('lists every workspace of the project', () => {

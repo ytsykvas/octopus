@@ -666,6 +666,7 @@ export function App(): React.JSX.Element {
                   /* v8 ignore next */
                   if (selectedProject) void workspaces.create(selectedProject.id)
                 }}
+                creating={workspaces.creating}
                 onRenameWorkspace={(id, name) => void workspaces.rename(id, name)}
                 onRemoveWorkspace={(id) => void workspaces.remove(id)}
                 editingWorkspaceId={workspaces.editingId}
@@ -725,6 +726,7 @@ export function App(): React.JSX.Element {
                empty. */
             <WorkspacePane
               hasWorkspaces={projectWorkspaces.length > 0}
+              creating={workspaces.creating}
               onCreate={() => void workspaces.create(selectedProject.id)}
             />
           ) : (
@@ -879,6 +881,8 @@ interface WorkspacePaneProps {
   /** Whether there is anything to select, or only something to create. */
   readonly hasWorkspaces: boolean
   readonly onCreate: () => void
+  /** A workspace is already on its way; the offer waits rather than repeating. */
+  readonly creating: boolean
 }
 
 /**
@@ -890,7 +894,11 @@ interface WorkspacePaneProps {
  * make one — the button that does lives in the sidebar's project header, which
  * is exactly where someone who has just added a repository is not looking.
  */
-function WorkspacePane({ hasWorkspaces, onCreate }: WorkspacePaneProps): React.JSX.Element {
+function WorkspacePane({
+  hasWorkspaces,
+  creating,
+  onCreate
+}: WorkspacePaneProps): React.JSX.Element {
   const { t } = useTranslation()
 
   return (
@@ -900,7 +908,7 @@ function WorkspacePane({ hasWorkspaces, onCreate }: WorkspacePaneProps): React.J
         // Accent only when there is nothing to choose instead: with workspaces
         // in the sidebar, picking one is the likelier intent and a filled
         // button here would compete with the list.
-        <Button variant={hasWorkspaces ? 'quiet' : 'accent'} onClick={onCreate}>
+        <Button variant={hasWorkspaces ? 'quiet' : 'accent'} disabled={creating} onClick={onCreate}>
           <Plus aria-hidden size={13} />
           {t('workspaces.create')}
         </Button>

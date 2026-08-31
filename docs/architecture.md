@@ -152,3 +152,10 @@ No state management library: the state is four hooks and some `useState`. No
 component library: the components are in `src/renderer/src/components` and are
 read as often as they are used. No backend — everything is local, and §5 of
 [PROJECT.md](PROJECT.md) explains why that is a goal rather than a stage.
+
+"Local" means there is no server of ours, not that nothing leaves the machine.
+Three things do, all of them to somewhere the user already has an account:
+`gh` for pull requests, the agent SDK, and — since a workspace has to start from
+a base branch that is current — `git fetch` before a worktree is created. Each
+is given a deadline, because the alternative to a deadline is a button that
+waits for ever.

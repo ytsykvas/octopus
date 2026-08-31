@@ -41,6 +41,11 @@ export function useErrorMessage(): (failure: Failure) => string {
             branch: failure.params?.branch ?? '',
             reason: failure.params?.reason ?? ''
           })
+        case 'fetchFailed':
+          return t('errors.fetchFailed', {
+            remote: failure.params?.remote ?? '',
+            reason: failure.params?.reason ?? ''
+          })
         case 'createFailed':
           return t('errors.createFailed', { reason: failure.params?.reason ?? '' })
         case 'nothingToCommit':

@@ -942,6 +942,50 @@ describe('App', () => {
     expect(window.octopus.workspaces.create).toHaveBeenCalledWith('ledger')
   })
 
+  /*
+   * The offer in the centre waits with the one in the sidebar.
+   *
+   * Creating a workspace now fetches the base branch first, so the button is
+   * live through a real wait rather than over before a second press was
+   * possible — and two presses do worse than make two workspaces: both read the
+   * same list of taken names, and the second is refused over a path that the
+   * first has already claimed.
+   */
+  it('takes no second press while the first workspace is still being made', async () => {
+    givenTwoProjects()
+    vi.mocked(window.octopus.workspaces.list).mockImplementation((projectId: string) =>
+      Promise.resolve({ ok: true, value: projectId === 'ledger' ? [] : [workspaceView('anna')] })
+    )
+
+    // Held open on purpose: the interval between the press and the answer is
+    // the whole subject, and a resolved promise has none.
+    type Created = Awaited<ReturnType<typeof window.octopus.workspaces.create>>
+    let answer: (created: Created) => void = () => undefined
+    vi.mocked(window.octopus.workspaces.create).mockReturnValue(
+      new Promise<Created>((resolve) => {
+        answer = resolve
+      })
+    )
+
+    const user = await openApp()
+    await user.click(await screen.findByRole('button', { name: 'LE' }))
+
+    const centre = within(screen.getByRole('main'))
+    await user.click(await centre.findByRole('button', { name: 'New workspace' }))
+
+    await waitFor(() => {
+      expect(centre.getByRole('button', { name: 'New workspace' })).toBeDisabled()
+    })
+
+    await user.click(centre.getByRole('button', { name: 'New workspace' }))
+    expect(window.octopus.workspaces.create).toHaveBeenCalledTimes(1)
+
+    await act(async () => {
+      answer({ ok: true, value: workspaceView('bob') })
+      await Promise.resolve()
+    })
+  })
+
   it('renames a workspace from the list', async () => {
     givenTwoProjects()
     const user = await openApp()

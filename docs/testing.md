@@ -162,6 +162,13 @@ This has caught bugs no mock would have:
 
 A fake executor is for edge cases real git will not produce.
 
+**A remote is a bare repository in a temporary directory**, and it is a real
+one: fetches move refs, pushes land, and deleting it afterwards produces a
+remote that cannot be reached — which is how the refusal to create a workspace
+from a stale base is tested, deterministically and in milliseconds. **No test
+reaches the network**, and none can: a fetch only happens when a remote is
+configured, and every remote the suite configures is a path on this disk.
+
 **Never test against the user's real state or data root.** Point the service at
 a temporary directory. Writing to `~/.octopus` while the app runs leaves it
 acting on a stale in-memory copy — a repro that corrupts what it diagnoses is

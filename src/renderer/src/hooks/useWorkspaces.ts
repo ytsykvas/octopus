@@ -34,6 +34,13 @@ interface UseWorkspaces {
    */
   readonly setChats: (workspaceId: string, chats: readonly WorkspaceChat[]) => void
   readonly create: (projectId: string) => Promise<void>
+  /**
+   * Whether a workspace is being made right now.
+   *
+   * Named for the one operation it guards rather than `busy`: this hook offers
+   * three that change something, and only creation waits on the network.
+   */
+  readonly creating: boolean
   readonly rename: (workspaceId: string, name: string) => Promise<void>
   readonly remove: (workspaceId: string) => Promise<void>
 }
@@ -239,18 +246,41 @@ export function useWorkspaces(
     }
   }, [projects])
 
+  const creatingRef = useRef(false)
+  const [creating, setCreating] = useState(false)
+
   const create = useCallback(
     async (projectId: string) => {
-      const result = await window.octopus.workspaces.create(projectId)
-      if (!result.ok) {
-        onError(describeFailure(result))
-        return
-      }
+      /*
+       * A ref rather than the state, because the state is what a second press
+       * would not have seen yet.
+       *
+       * Creation used to be a few local git commands and over before a second
+       * press was possible. It now fetches first, which is a real interval —
+       * and two presses inside it do worse than make two workspaces: both read
+       * the same list of taken names, so the second is handed a name the first
+       * has already claimed and fails on a path that exists. A refusal the user
+       * did nothing to earn.
+       */
+      if (creatingRef.current) return
+      creatingRef.current = true
+      setCreating(true)
 
-      await refresh()
-      // Straight into rename: the generated name is a placeholder, and this is
-      // the moment the user knows what the task is.
-      setEditingId(result.value.id)
+      try {
+        const result = await window.octopus.workspaces.create(projectId)
+        if (!result.ok) {
+          onError(describeFailure(result))
+          return
+        }
+
+        await refresh()
+        // Straight into rename: the generated name is a placeholder, and this is
+        // the moment the user knows what the task is.
+        setEditingId(result.value.id)
+      } finally {
+        creatingRef.current = false
+        setCreating(false)
+      }
     },
     [refresh, describeFailure, onError]
   )
@@ -317,6 +347,7 @@ export function useWorkspaces(
     refresh,
     setChats,
     create,
+    creating,
     rename,
     remove
   }

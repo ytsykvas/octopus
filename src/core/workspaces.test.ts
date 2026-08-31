@@ -17,6 +17,7 @@ import {
   countChanges,
   fileInWorkspace,
   createWorkspace,
+  freshBase,
   reconcile,
   removeWorkspace,
   renameWorkspace,
@@ -58,6 +59,40 @@ beforeEach(async () => {
   }
   state = addProject(EMPTY_STATE, project)
 })
+
+/**
+ * Gives the repository a real remote, and pushes the base to it.
+ *
+ * A bare repository on disk rather than anything reachable over a network: the
+ * suite must never leave the machine, and for everything here a local path is a
+ * genuine remote — fetches move refs and a deleted one fails the way an
+ * unreachable one does.
+ */
+async function addRemote(name = 'origin'): Promise<string> {
+  const remote = join(dir, `remote-${name}`)
+
+  await run('git', ['init', '-q', '--bare', '--initial-branch=main', remote])
+  await run('git', ['remote', 'add', name, remote], { cwd: repo })
+  await run('git', ['push', '-q', name, 'main'], { cwd: repo })
+  await run('git', ['fetch', '-q', name], { cwd: repo })
+
+  return remote
+}
+
+/** Advances a branch on the remote from a clone the checkout knows nothing of. */
+async function commitOnRemote(remote: string, branch: string): Promise<string> {
+  const clone = join(dir, 'elsewhere')
+
+  await run('git', ['clone', '-q', '--branch', branch, remote, clone])
+  await run('git', ['config', 'user.email', 'other@example.com'], { cwd: clone })
+  await run('git', ['config', 'user.name', 'Other'], { cwd: clone })
+  await writeFile(join(clone, 'THEIRS.md'), '# theirs\n', 'utf8')
+  await run('git', ['add', '.'], { cwd: clone })
+  await run('git', ['commit', '-q', '-m', 'from elsewhere'], { cwd: clone })
+  await run('git', ['push', '-q', 'origin', branch], { cwd: clone })
+
+  return (await run('git', ['rev-parse', 'HEAD'], { cwd: clone })).stdout.trim()
+}
 
 afterEach(async () => {
   await rm(dir, { recursive: true, force: true })
@@ -104,6 +139,104 @@ describe('branchFor', () => {
 
   it('keeps non-Latin names readable, as git allows', () => {
     expect(branchFor(project, 'Виправити')).toBe('ytsykvas/виправити')
+  })
+})
+
+describe('freshBase', () => {
+  /*
+   * The whole reason this exists.
+   *
+   * The remote moves on while the checkout sits still — which is the normal
+   * state of a repository nobody has fetched into today — and the workspace has
+   * to be cut from where the branch actually is, not from where this machine
+   * last saw it.
+   */
+  it('branches from what the remote has, not from the local copy', async () => {
+    const remote = await addRemote()
+    const landed = await commitOnRemote(remote, 'main')
+
+    const workspace = await createWorkspace(project, state, exec, { root })
+    const head = (await run('git', ['rev-parse', 'HEAD'], { cwd: workspace.path })).stdout.trim()
+
+    expect(head).toBe(landed)
+  })
+
+  // The project added from a local folder that was never pushed. Nothing to
+  // fetch, nothing stale, and above all not an error.
+  it('creates a workspace normally when there is no remote at all', async () => {
+    const workspace = await createWorkspace(project, state, exec, { root })
+
+    expect(workspace.branch).toBe(branchFor(project, workspace.name))
+    expect(await listWorktrees(exec)).toHaveLength(2)
+  })
+
+  it('runs no fetch when there is nothing to fetch', async () => {
+    const asked: string[][] = []
+    const watching: GitExec = (args) => {
+      asked.push([...args])
+      return exec(args)
+    }
+
+    await createWorkspace(project, state, watching, { root })
+    expect(asked.some((args) => args[0] === 'fetch')).toBe(false)
+  })
+
+  /*
+   * A stale base is the failure this prevents, so a remote that cannot be
+   * reached stops the creation rather than quietly producing a workspace a
+   * fortnight behind. The remote here existed when the refs were written and is
+   * gone by the time git goes looking — an unreachable remote with no network
+   * involved.
+   */
+  it('refuses to create anything when the remote cannot be reached', async () => {
+    const remote = await addRemote()
+    await rm(remote, { recursive: true, force: true })
+
+    const failure = await createWorkspace(project, state, exec, { root }).catch(
+      (error: unknown) => error
+    )
+
+    expect(failure).toBeInstanceOf(WorkspaceError)
+    expect((failure as WorkspaceError).code).toBe('fetchFailed')
+    expect((failure as WorkspaceError).params.remote).toBe('origin')
+    expect((failure as WorkspaceError).params.reason?.length).toBeGreaterThan(0)
+  })
+
+  // Nothing has been made when the fetch fails, so there is nothing to roll
+  // back — and nothing left behind to block the next attempt either.
+  it('leaves no branch and no worktree behind after a failed fetch', async () => {
+    const remote = await addRemote()
+    await rm(remote, { recursive: true, force: true })
+
+    await expect(createWorkspace(project, state, exec, { root })).rejects.toThrow()
+
+    expect(await listWorktrees(exec)).toHaveLength(1)
+    const branches = (await run('git', ['branch', '--format=%(refname:short)'], { cwd: repo }))
+      .stdout
+    expect(branches).not.toContain(project.branchPrefix)
+  })
+
+  it('carries what git said, so the message can name the cause', async () => {
+    const broken: GitExec = () => Promise.reject(new Error('the network is a lie'))
+    await addRemote()
+
+    const failure = await freshBase('main', exec, broken).catch((error: unknown) => error)
+
+    expect((failure as WorkspaceError).params.reason).toContain('the network is a lie')
+  })
+
+  // The fetch is the only command wanting a deadline and an environment, so it
+  // is the only one handed a different executor.
+  it('fetches through the executor given for it, not the ordinary one', async () => {
+    await addRemote()
+    const asked: string[][] = []
+    const fetchExec: GitExec = (args) => {
+      asked.push([...args])
+      return exec(args)
+    }
+
+    await createWorkspace(project, state, exec, { root, fetchExec })
+    expect(asked).toEqual([['fetch', 'origin']])
   })
 })
 

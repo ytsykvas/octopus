@@ -119,6 +119,14 @@ Validated by `StateSchema` in [`store.ts`](../src/core/store.ts).
 A **project** is a repository that has been added: `id`, `name`, `repoPath`,
 `baseBranch`, `branchPrefix`, `color`, `icon`.
 
+`baseBranch` is the branch the **user chose**, stored the way they chose it —
+`main` or `origin/develop`, both are accepted. It is deliberately not the ref a
+workspace is cut from: that is worked out at the moment of creation, because a
+local name and its remote copy are the same point only until somebody else
+pushes. Storing the resolved ref would freeze an answer that goes out of date on
+the next fetch. `resolveBase` in [`remotes.ts`](../src/core/remotes.ts) is where
+the question is asked, every time it is asked.
+
 A **workspace** is a git worktree: `id`, `projectId`, `name`, `branch`, `path`,
 `status`, `port`, `createdAt`, `ownerId`.
 

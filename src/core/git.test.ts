@@ -28,7 +28,8 @@ import {
   isIgnored,
   OUTPUT_TOO_LARGE,
   repositoryName,
-  toSlug
+  toSlug,
+  reasonFrom
 } from './git.js'
 
 const run = promisify(execFile)
@@ -115,6 +116,58 @@ describe('gitIn', () => {
     const error = await tight(['diff']).catch((cause: unknown) => cause)
 
     expect((error as GitError).code).toBe(OUTPUT_TOO_LARGE)
+  })
+
+  // The deadline exists for the fetch, which is the one command that leaves the
+  // machine. Every other caller runs without one, so both arms are real.
+  it('runs a command normally when given a deadline it does not reach', async () => {
+    await initRepo(dir)
+    const deadlined = gitIn(dir, { timeout: 10_000 })
+
+    await expect(deadlined(['rev-parse', '--abbrev-ref', 'HEAD'])).resolves.toContain('main')
+  })
+
+  /*
+   * That the environment reaches git is what makes `GIT_TERMINAL_PROMPT=0` a
+   * fact rather than a hope — and that variable is the only thing standing
+   * between a fetch over HTTPS and a prompt written to a terminal that does not
+   * exist. Asserted through a variable whose effect git will state out loud.
+   */
+  it('adds the given environment to the one git inherits', async () => {
+    await initRepo(dir)
+    const named = gitIn(dir, { env: { GIT_AUTHOR_NAME: 'Fetcher' } })
+
+    await expect(named(['var', 'GIT_AUTHOR_IDENT'])).resolves.toContain('Fetcher')
+  })
+
+  it('leaves the inherited environment alone when given none', async () => {
+    await initRepo(dir)
+    await expect(exec(['var', 'GIT_AUTHOR_IDENT'])).resolves.toContain('test@example.com')
+  })
+})
+
+describe('reasonFrom', () => {
+  it('takes the first line, which is where git puts the reason', () => {
+    expect(reasonFrom({ stderr: 'fatal: could not read Username\nhint: try this\n' })).toBe(
+      'fatal: could not read Username'
+    )
+  })
+
+  it('keeps a single-line reason whole', () => {
+    expect(reasonFrom({ stderr: 'fatal: repository not found' })).toBe(
+      'fatal: repository not found'
+    )
+  })
+
+  // A sentence, not a paragraph: this ends up inside a message in the UI.
+  it('caps a reason that runs on', () => {
+    expect(reasonFrom({ stderr: 'x'.repeat(500) })).toHaveLength(200)
+  })
+
+  // Not every failure carries stderr — a command that never ran carries only a
+  // message, and saying nothing would be worse than saying that.
+  it('falls back to what the error itself says', () => {
+    expect(reasonFrom(new Error('spawn git ENOENT'))).toContain('ENOENT')
   })
 })
 

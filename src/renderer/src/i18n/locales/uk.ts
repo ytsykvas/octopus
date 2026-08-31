@@ -727,6 +727,8 @@ export const uk: Translation = {
     cloneFailed: 'Не вдалося клонувати {{repository}}.',
     noCommits: 'У цій гілці немає нічого, чого немає в {{base}}.',
     pushFailed: 'Не вдалося запушити {{branch}}. Git каже: {{reason}}',
+    fetchFailed:
+      'Не вдалося отримати оновлення з {{remote}}, тож цей воркспейс почався б із застарілої базової гілки. Git каже: {{reason}}',
     createFailed: 'Не вдалося відкрити pull request. GitHub каже: {{reason}}',
     nothingToCommit: 'Тут немає чого комітити.',
     commitFailed: 'Не вдалося зробити коміт. Git каже: {{reason}}',

@@ -450,7 +450,8 @@ Further rules:
 
 ### 12.1 Workspaces
 
-- Create a workspace: `git worktree add -b <prefix>/<name> <path> <base>`.
+- Create a workspace: `git worktree add -b <prefix>/<name> <path> <base>`, and **the base is fetched first**. Until it was, `<base>` meant this checkout's copy of the base branch as of whenever somebody last fetched by hand — measured on a real project, a fortnight behind, with the cost landing at review as conflicts or as work already merged being done again. A base stored as a local name resolves to its remote counterpart, because a fetch does not move a local branch; `origin/develop` is used as it stands. A remote that refuses or cannot be reached **stops the creation**, since a workspace quietly cut from a stale base is the failure being prevented. A repository with **no remote** — a project added from a local folder that was never pushed — has nothing to fetch and nothing that could be stale, and is created exactly as before.
+- Everything that measures against the base follows it to the same ref: the diff's merge base, the count of commits ahead, the merged check before a removal. `main` and `origin/main` are the same point only until somebody else pushes, and measuring against the local one reports their commits as this workspace's work.
 - The branch prefix is configurable (a sensible default is the GitHub username).
 - List workspaces with status, reconciled between `git worktree list --porcelain` and our own state.
 - Removal with a check for uncommitted changes.

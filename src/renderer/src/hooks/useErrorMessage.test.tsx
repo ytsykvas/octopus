@@ -82,6 +82,22 @@ describe('useErrorMessage', () => {
     expect(result.current({ ok: false, error: 'raw', code: 'createFailed' })).not.toContain('raw')
   })
 
+  // A refused fetch stops a workspace being made, so the sentence has to name
+  // the remote and repeat what git said — there is nothing else to act on.
+  it('names the remote and what git said when a fetch was refused', () => {
+    const { result } = renderHook(() => useErrorMessage())
+
+    const said = result.current({
+      ok: false,
+      error: 'raw',
+      code: 'fetchFailed',
+      params: { remote: 'origin', reason: 'could not read Username' }
+    })
+
+    expect(said).toContain('origin')
+    expect(said).toContain('could not read Username')
+  })
+
   /*
    * The three either side of opening one: committing what the request would
    * carry, and merging it afterwards. `mergeFailed` names the request, because
@@ -106,6 +122,7 @@ describe('useErrorMessage', () => {
 
     expect(result.current({ ok: false, error: 'raw', code: 'noCommits' })).not.toContain('{{')
     expect(result.current({ ok: false, error: 'raw', code: 'pushFailed' })).not.toContain('{{')
+    expect(result.current({ ok: false, error: 'raw', code: 'fetchFailed' })).not.toContain('{{')
   })
 
   // Core sends the English text as a fallback for logs. An unknown code still

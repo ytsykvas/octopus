@@ -864,6 +864,8 @@ export const en = {
     cloneFailed: 'Could not clone {{repository}}.',
     noCommits: 'This branch has nothing that {{base}} does not.',
     pushFailed: 'Could not push {{branch}}. Git said: {{reason}}',
+    fetchFailed:
+      'Could not fetch {{remote}}, so this workspace would start from a base branch that is behind. Git said: {{reason}}',
     createFailed: 'Could not open the pull request. GitHub said: {{reason}}',
     nothingToCommit: 'There is nothing here to commit.',
     commitFailed: 'Could not commit the changes. Git said: {{reason}}',

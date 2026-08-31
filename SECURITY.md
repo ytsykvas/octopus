@@ -36,7 +36,10 @@ service of its own — so most of the usual surface does not exist. What does:
   settings writes there and nowhere else, through fixed path constants a test
   checks, and refuses a symbolic link that could redirect the write out of the
   directory. A write that escapes it is worth reporting —
-  see [docs/repo-config.md](docs/repo-config.md).
+  see [docs/repo-config.md](docs/repo-config.md). This is about **files a
+  checkout holds**: git writes under `.git` on the app's behalf whenever it is
+  asked to, as `worktree add` and `branch` always have and as the fetch before a
+  workspace is created now does, and none of that touches tracked content.
 
 ## What is not a vulnerability
 

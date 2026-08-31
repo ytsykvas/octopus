@@ -23,7 +23,7 @@ import type { CommandExec } from './accounts.js'
 import type { UsageWindow } from './agent.js'
 import { ABANDONED, DENIED, type QueryFn, READ_ONLY_TOOLS } from './agent.js'
 import type { RemoteRepository } from './github.js'
-import { gitIn } from './git.js'
+import { type GitOptions, gitIn } from './git.js'
 import { WORKSPACE_NAMES } from './names.js'
 import { ProjectValidationError } from './projects.js'
 import {
@@ -222,6 +222,150 @@ describe('workspaces', () => {
     const listed = await service.listWorkspaces(projectId)
     expect(listed).toHaveLength(1)
     expect(listed[0]?.missing).toBe(false)
+  })
+
+  /*
+   * The end of the chain the whole change exists for: the remote moves on, the
+   * checkout is not touched, and the workspace still starts from what the
+   * remote has.
+   */
+  it('branches from the remote rather than from what was last fetched', async () => {
+    const repo = join(dir, 'planner')
+    await initRepo(repo)
+
+    const remote = join(dir, 'remote')
+    await run('git', ['init', '-q', '--bare', '--initial-branch=main', remote])
+    await run('git', ['remote', 'add', 'origin', remote], { cwd: repo })
+    await run('git', ['push', '-q', 'origin', 'main'], { cwd: repo })
+    await run('git', ['fetch', '-q', 'origin'], { cwd: repo })
+
+    // A commit lands from somewhere this checkout knows nothing about.
+    const elsewhere = join(dir, 'elsewhere')
+    await run('git', ['clone', '-q', remote, elsewhere])
+    await run('git', ['config', 'user.email', 'other@example.com'], { cwd: elsewhere })
+    await run('git', ['config', 'user.name', 'Other'], { cwd: elsewhere })
+    await writeFile(join(elsewhere, 'THEIRS.md'), '# theirs\n', 'utf8')
+    await run('git', ['add', '.'], { cwd: elsewhere })
+    await run('git', ['commit', '-q', '-m', 'from elsewhere'], { cwd: elsewhere })
+    await run('git', ['push', '-q', 'origin', 'main'], { cwd: elsewhere })
+    const landed = (await run('git', ['rev-parse', 'HEAD'], { cwd: elsewhere })).stdout.trim()
+
+    const service = await createService(paths(dir))
+    const project = await service.addProjectFromPath(repo)
+    const workspace = await service.createWorkspaceIn(project.id)
+
+    const head = (await run('git', ['rev-parse', 'HEAD'], { cwd: workspace.path })).stdout.trim()
+    expect(head).toBe(landed)
+  })
+
+  it('refuses to create a workspace when the remote cannot be reached', async () => {
+    const repo = join(dir, 'planner')
+    await initRepo(repo)
+
+    const remote = join(dir, 'remote')
+    await run('git', ['init', '-q', '--bare', '--initial-branch=main', remote])
+    await run('git', ['remote', 'add', 'origin', remote], { cwd: repo })
+    await run('git', ['push', '-q', 'origin', 'main'], { cwd: repo })
+    await run('git', ['fetch', '-q', 'origin'], { cwd: repo })
+    await rm(remote, { recursive: true, force: true })
+
+    const service = await createService(paths(dir))
+    const project = await service.addProjectFromPath(repo)
+
+    const failure = await service.createWorkspaceIn(project.id).catch((error: unknown) => error)
+    expect((failure as WorkspaceError).code).toBe('fetchFailed')
+
+    // And nothing half-made was recorded either.
+    await expect(service.listWorkspaces(project.id)).resolves.toEqual([])
+  })
+
+  /*
+   * The consequence of branching from the remote copy, and the reason every
+   * comparison had to follow the base there.
+   *
+   * The base is stored as a local `main` — which is what detection produces,
+   * and what this repository's own project holds. The workspace is cut from
+   * `origin/main`, so measuring against local `main` would count the commit
+   * that landed from elsewhere as this workspace's own work: the row would say
+   * two, the diff would show somebody else's file, and neither is true.
+   *
+   * Coverage says nothing about this. Every line here ran before the reads were
+   * changed; they simply ran against the wrong ref.
+   */
+  it('counts only the workspace own commits when the base moved on', async () => {
+    const repo = join(dir, 'planner')
+    await initRepo(repo)
+
+    const remote = join(dir, 'remote')
+    await run('git', ['init', '-q', '--bare', '--initial-branch=main', remote])
+    await run('git', ['remote', 'add', 'origin', remote], { cwd: repo })
+    await run('git', ['push', '-q', 'origin', 'main'], { cwd: repo })
+    await run('git', ['fetch', '-q', 'origin'], { cwd: repo })
+
+    const elsewhere = join(dir, 'elsewhere')
+    await run('git', ['clone', '-q', remote, elsewhere])
+    await run('git', ['config', 'user.email', 'other@example.com'], { cwd: elsewhere })
+    await run('git', ['config', 'user.name', 'Other'], { cwd: elsewhere })
+    await writeFile(join(elsewhere, 'THEIRS.md'), '# theirs\n', 'utf8')
+    await run('git', ['add', '.'], { cwd: elsewhere })
+    await run('git', ['commit', '-q', '-m', 'from elsewhere'], { cwd: elsewhere })
+    await run('git', ['push', '-q', 'origin', 'main'], { cwd: elsewhere })
+
+    const service = await createService(paths(dir))
+    const project = await service.addProjectFromPath(repo)
+    expect(project.baseBranch).toBe('main')
+
+    const workspace = await service.createWorkspaceIn(project.id)
+    await writeFile(join(workspace.path, 'mine.txt'), 'mine\n', 'utf8')
+    await run('git', ['add', '.'], { cwd: workspace.path })
+    await run('git', ['commit', '-q', '-m', 'mine'], { cwd: workspace.path })
+
+    const [listed] = await service.listWorkspaces(project.id)
+    expect(listed?.ahead).toBe(1)
+
+    const diff = await service.readWorkspaceChanges(workspace.id)
+    expect(diff.files.map((file) => file.path)).toEqual(['mine.txt'])
+  })
+
+  /*
+   * The one regression that would be silent.
+   *
+   * git spawned from Electron has no controlling terminal, so a fetch that
+   * decides to ask for a password writes the prompt nowhere and waits for ever
+   * — behind a button with no way to cancel, and with every test still green,
+   * because a bare repository on disk never asks for anything. Nothing else
+   * here would notice the protection going missing, so it is asserted directly.
+   */
+  it('gives the fetch a deadline and refuses to let git ask for a password', async () => {
+    const repo = join(dir, 'planner')
+    await initRepo(repo)
+
+    const remote = join(dir, 'remote')
+    await run('git', ['init', '-q', '--bare', '--initial-branch=main', remote])
+    await run('git', ['remote', 'add', 'origin', remote], { cwd: repo })
+    await run('git', ['push', '-q', 'origin', 'main'], { cwd: repo })
+    await run('git', ['fetch', '-q', 'origin'], { cwd: repo })
+
+    const handed: (GitOptions | undefined)[] = []
+    const service = await createService({
+      ...paths(dir),
+      makeExec: (cwd, options) => {
+        handed.push(options)
+        return gitIn(cwd, options)
+      }
+    })
+
+    const project = await service.addProjectFromPath(repo)
+    await service.createWorkspaceIn(project.id)
+
+    const guarded = handed.filter((options) => options !== undefined)
+    expect(guarded).not.toHaveLength(0)
+    expect(guarded.every((options) => (options.timeout ?? 0) > 0)).toBe(true)
+    expect(guarded.every((options) => options.env?.GIT_TERMINAL_PROMPT === '0')).toBe(true)
+
+    // And the protection is for the fetch alone: everything else runs without a
+    // deadline, because nothing else can hang.
+    expect(handed.some((options) => options === undefined)).toBe(true)
   })
 
   it('keeps workspaces across a restart', async () => {

@@ -70,7 +70,7 @@ import {
 } from './config.js'
 import { type AgentEvent, isEphemeral } from './events.js'
 import { cloneRepository, listRepositories, type RemoteRepository } from './github.js'
-import type { GitExec } from './git.js'
+import type { GitExec, GitOptions } from './git.js'
 import {
   commitAndPush,
   createPullRequest,
@@ -87,6 +87,7 @@ import {
 } from './pullRequests.js'
 import type { BranchRequest, PullRequestDetail } from './pullRequestShapes.js'
 import { gitIn, isIgnored } from './git.js'
+import { FETCH_OPTIONS, resolveBase } from './remotes.js'
 import { type InstructionSource, instructionSources } from './instructionSources.js'
 import { type CapabilityFile, capabilityFiles, trustDigest, withApproval } from './repoTrust.js'
 import {
@@ -190,7 +191,14 @@ export interface ServiceOptions {
    * directory.
    */
   readonly dataRoot?: string
-  readonly makeExec?: (cwd: string) => GitExec
+  /**
+   * The options parameter is what the fetch needs: it alone leaves the machine,
+   * so it alone wants a deadline and an environment. A fake may still take one
+   * parameter — a function is assignable to a type taking more — so every
+   * existing injection keeps working, and a fake spawns nothing for a deadline
+   * to apply to anyway.
+   */
+  readonly makeExec?: (cwd: string, options?: GitOptions) => GitExec
   readonly commandExec?: CommandExec
   /**
    * `gh` in a worktree, injected for the reason the two above are: a test that
@@ -835,6 +843,36 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
       throw new WorkspaceError('worktreeMissing', { projectId }, `Project ${projectId} not found.`)
     }
     return project
+  }
+
+  /**
+   * The ref a project's base branch actually names.
+   *
+   * A workspace is now cut from the remote copy of its base where there is one,
+   * because a fetch does not move a local branch. Everything that compares
+   * against the base has to follow it there: `main` and `origin/main` are the
+   * same point only until somebody else pushes, and measuring against the local
+   * one then reports a fortnight of their commits as this workspace's work —
+   * in the diff, in the count of changes, and in the check that asks whether a
+   * branch is safe to delete.
+   *
+   * Not applied to what is stored or to what is validated: the project holds
+   * the branch the user chose, and `assertBranchExists` has to check the name
+   * they actually typed.
+   *
+   * Falls back to the stored name when git says nothing — a repository that was
+   * moved or renamed answers no question at all, and the reads this serves have
+   * to keep working: `listWorkspaces` marks such workspaces missing, which is
+   * the answer the UI acts on, and it cannot do that from an exception. The
+   * creation path does not come through here; there a remote that cannot be
+   * reached is exactly the failure worth refusing on.
+   */
+  async function baseRefOf(project: Project): Promise<string> {
+    try {
+      return (await resolveBase(makeExec(project.repoPath), project.baseBranch)).ref
+    } catch {
+      return project.baseBranch
+    }
   }
 
   /**
@@ -1912,7 +1950,7 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
       // worktrees" marked every workspace missing — which the UI acts on by
       // closing their terminals.
       const worktrees = await listWorktrees(makeExec(project.repoPath)).catch(() => null)
-      const counts = await countChanges(stored, project.baseBranch, makeExec)
+      const counts = await countChanges(stored, await baseRefOf(project), makeExec)
 
       return reconcile(stored, worktrees, counts, state.chats)
     },
@@ -1921,7 +1959,10 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
       const project = requireProject(projectId)
       const exec = makeExec(project.repoPath)
 
-      const workspace = await createWorkspace(project, state, exec, { root: dataRoot })
+      const workspace = await createWorkspace(project, state, exec, {
+        root: dataRoot,
+        fetchExec: makeExec(project.repoPath, FETCH_OPTIONS)
+      })
 
       try {
         // Inside the rollback, not after it: a worktree missing the files it
@@ -1976,6 +2017,11 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
         dataRoot
       )
 
+      // Resolved once and used twice below: the two answers have to be about
+      // the same ref, or a branch reads as unmerged against one and merged
+      // against the other.
+      const baseRef = await baseRefOf(project)
+
       await removeWorkspace(
         workspace,
         { repository: makeExec(project.repoPath), workspace: makeExec(workspace.path) },
@@ -1983,7 +2029,7 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
         // answered before the worktree is destroyed rather than after.
         {
           ...options,
-          baseBranch: project.baseBranch,
+          baseBranch: baseRef,
           /*
            * What git cannot see.
            *
@@ -2000,7 +2046,7 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
             try {
               const view = await readPullRequest(
                 workspace.branch,
-                project.baseBranch,
+                baseRef,
                 makeGh(workspace.path),
                 makeExec(workspace.path)
               )
@@ -2020,7 +2066,7 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
       return (await changeCount(workspace, makeExec)) > 0
     },
 
-    readWorkspaceChanges(workspaceId) {
+    async readWorkspaceChanges(workspaceId) {
       const workspace = requireWorkspace(workspaceId)
       const project = requireProject(workspace.projectId)
 
@@ -2028,26 +2074,26 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
       // about the project, but everything else — the working tree, the index,
       // the untracked files — is a fact about this workspace's own directory.
       return readWorkspaceDiff(makeExec(workspace.path), {
-        baseBranch: project.baseBranch,
+        baseBranch: await baseRefOf(project),
         root: workspace.path
       })
     },
 
-    revertWorkspaceFile(workspaceId, path, oldPath = null) {
+    async revertWorkspaceFile(workspaceId, path, oldPath = null) {
       const workspace = requireWorkspace(workspaceId)
       const project = requireProject(workspace.projectId)
 
       // Run from the worktree for the same reason the diff read is: the base
       // branch belongs to the project, everything being written belongs here.
       return revertFile(makeExec(workspace.path), {
-        baseBranch: project.baseBranch,
+        baseBranch: await baseRefOf(project),
         root: workspace.path,
         path,
         oldPath
       })
     },
 
-    readPullRequest(workspaceId) {
+    async readPullRequest(workspaceId) {
       const workspace = requireWorkspace(workspaceId)
       const project = requireProject(workspace.projectId)
 
@@ -2055,18 +2101,18 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
       // directory it is in, and the branch's own state is a fact about there.
       return readPullRequest(
         workspace.branch,
-        project.baseBranch,
+        await baseRefOf(project),
         makeGh(workspace.path),
         makeExec(workspace.path)
       )
     },
 
-    createPullRequest(workspaceId, request) {
+    async createPullRequest(workspaceId, request) {
       const workspace = requireWorkspace(workspaceId)
       const project = requireProject(workspace.projectId)
 
       return createPullRequest(
-        { ...request, branch: workspace.branch, base: project.baseBranch },
+        { ...request, branch: workspace.branch, base: await baseRefOf(project) },
         makeGh(workspace.path),
         makeExec(workspace.path)
       )
@@ -2078,7 +2124,7 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
 
       const [diff, changed, instruction, commitInstruction] = await Promise.all([
         readWorkspaceDiff(makeExec(workspace.path), {
-          baseBranch: project.baseBranch,
+          baseBranch: await baseRefOf(project),
           root: workspace.path
         }),
         changeCount(workspace, makeExec),

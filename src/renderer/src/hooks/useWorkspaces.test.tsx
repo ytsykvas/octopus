@@ -572,6 +572,69 @@ describe('useWorkspaces', () => {
       expect(result.current.editingId).toBeNull()
     })
 
+    /*
+     * Creation now fetches first, which is a real interval — and two presses
+     * inside it do worse than make two workspaces: both read the same list of
+     * taken names, so the second is handed one the first has claimed and fails
+     * on a path that already exists.
+     */
+    it('ignores a second press while the first is still going', async () => {
+      workspacesPerProject({ planner: [anna] })
+      // Held open deliberately: the window between the press and the answer is
+      // exactly what this is about, and a resolved promise has none.
+      type Created = Awaited<ReturnType<typeof window.octopus.workspaces.create>>
+      let answer: (created: Created) => void = () => undefined
+      vi.mocked(window.octopus.workspaces.create).mockReturnValue(
+        new Promise<Created>((resolve) => {
+          answer = resolve
+        })
+      )
+      const projects = [planner]
+
+      const { result } = renderHook(() => useWorkspaces(projects, accepts(), vi.fn<OnError>()))
+      await waitFor(() => {
+        expect(result.current.flat).toEqual([anna])
+      })
+
+      let first: Promise<void> = Promise.resolve()
+      act(() => {
+        first = result.current.create('planner')
+      })
+      await waitFor(() => {
+        expect(result.current.creating).toBe(true)
+      })
+
+      await act(() => result.current.create('planner'))
+      expect(window.octopus.workspaces.create).toHaveBeenCalledTimes(1)
+
+      await act(async () => {
+        answer({ ok: true, value: bob })
+        await first
+      })
+      expect(result.current.creating).toBe(false)
+    })
+
+    // Including when it fails: a button left spinning after a refusal is a
+    // second thing gone wrong on top of the first.
+    it('stops saying it is creating when the creation is refused', async () => {
+      workspacesPerProject({ planner: [anna] })
+      vi.mocked(window.octopus.workspaces.create).mockResolvedValue({
+        ok: false,
+        error: 'no remote',
+        code: 'fetchFailed',
+        params: { remote: 'origin', reason: 'gone' }
+      })
+      const projects = [planner]
+
+      const { result } = renderHook(() => useWorkspaces(projects, accepts(), vi.fn<OnError>()))
+      await waitFor(() => {
+        expect(result.current.flat).toEqual([anna])
+      })
+
+      await act(() => result.current.create('planner'))
+      expect(result.current.creating).toBe(false)
+    })
+
     it('stops the rename when the editor is closed', async () => {
       workspacesPerProject({ planner: [anna] })
       vi.mocked(window.octopus.workspaces.create).mockResolvedValue({ ok: true, value: anna })

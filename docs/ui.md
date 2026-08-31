@@ -1307,6 +1307,20 @@ The split is not all-or-nothing: `useProjects.remove` asks and deletes, while
 `App` clears the selection afterwards — what points at a project is the window's
 business.
 
+**An operation that waits is guarded in the hook, not on the button.** Creating
+a workspace fetches its base branch first, so it is no longer over before a
+second press is possible — and the three places that offer it (the sidebar's
+`+`, the centre's empty state, ⌘⇧N) would otherwise each need their own guard,
+with the shortcut having nothing to hang one on. `useWorkspaces.create` holds
+the latch in a ref rather than in state, because state is what a second press in
+the same tick would not have seen yet, and exposes `creating` for the buttons to
+show. Two presses do worse than make two workspaces: both read the same list of
+taken names, so the second is refused over a path the first has claimed.
+
+A button that stops responding also has to say why. The `+` swaps its plus for a
+turning mark while it waits — a still, dimmed icon reads as the app having hung
+rather than as it working.
+
 ## Two lint rules that will stop you
 
 - **No `setState` in an effect.** State derived from a prop is adjusted during

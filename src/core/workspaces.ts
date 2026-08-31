@@ -13,7 +13,8 @@ import { access, realpath } from 'node:fs/promises'
 import { isAbsolute, relative, resolve } from 'node:path'
 
 import type { AgentKind, Chat, ChatStatus } from './chats.js'
-import { anyBranchExists, countAhead, type GitExec, toSlug } from './git.js'
+import { anyBranchExists, countAhead, type GitExec, reasonFrom, toSlug } from './git.js'
+import { fetchRemote, resolveBase } from './remotes.js'
 import { nextWorkspaceName, type Random } from './names.js'
 import { workspacePath } from './paths.js'
 import { firstFreeBlock, POOL_START } from './ports.js'
@@ -42,6 +43,8 @@ export type WorkspaceErrorCode =
   | 'branchUnmerged'
   | 'nameEmpty'
   | 'worktreeMissing'
+  /** The base branch's remote refused, or could not be reached. */
+  | 'fetchFailed'
 
 export class WorkspaceError extends Error {
   constructor(
@@ -140,6 +143,44 @@ interface CreateOptions {
   readonly random?: Random
   /** Injectable so a test never opens a socket to find a free port. */
   readonly answers?: (port: number) => Promise<boolean>
+  /**
+   * The executor the fetch runs through, when it must differ from the rest.
+   *
+   * The fetch is the only command here that leaves the machine, so it is the
+   * only one wanting a deadline and a refusal to prompt for credentials.
+   * Defaults to `exec`, which is what a test driving a bare repository on disk
+   * wants — there is nothing there to hang on.
+   */
+  readonly fetchExec?: GitExec
+}
+
+/**
+ * The ref to branch from, brought up to date first.
+ *
+ * A stale base is the whole failure this exists to prevent, so a remote that
+ * refuses or cannot be reached stops the creation rather than quietly handing
+ * back a workspace a fortnight behind. It runs before anything is created, so
+ * there is nothing to roll back when it throws.
+ *
+ * A repository with no remote — a project added from a local folder that was
+ * never pushed — has nothing to fetch and nothing that could be stale. That is
+ * not a failure of any kind, and `resolveBase` says so in one command.
+ */
+export async function freshBase(base: string, exec: GitExec, fetchExec: GitExec): Promise<string> {
+  const { remote, ref } = await resolveBase(exec, base)
+  if (remote === null) return ref
+
+  try {
+    await fetchRemote(fetchExec, remote)
+  } catch (error) {
+    throw new WorkspaceError(
+      'fetchFailed',
+      { remote, reason: reasonFrom(error) },
+      `Could not fetch ${remote}.`
+    )
+  }
+
+  return ref
 }
 
 /**
@@ -157,6 +198,7 @@ export async function createWorkspace(
   options: CreateOptions = {}
 ): Promise<Workspace> {
   const exists = options.exists ?? pathExists
+  const fetchExec = options.fetchExec ?? exec
 
   // Names are picked per project, so every project starts from the top of the
   // pool: two projects may both have an `anna`.
@@ -182,7 +224,10 @@ export async function createWorkspace(
     throw new WorkspaceError('pathExists', { path }, `${path} already exists.`)
   }
 
-  await addWorktree(exec, path, branch, project.baseBranch)
+  // Last of the local checks rather than first: the refusals above are instant,
+  // and putting a network call in front of them would make a cheap "that name
+  // is taken" cost half a minute.
+  await addWorktree(exec, path, branch, await freshBase(project.baseBranch, exec, fetchExec))
 
   return {
     id,

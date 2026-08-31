@@ -1,4 +1,4 @@
-import { GitBranch, Plus } from 'lucide-react'
+import { GitBranch, LoaderCircle, Plus } from 'lucide-react'
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
@@ -30,6 +30,8 @@ interface SidebarProps {
   readonly selectedWorkspaceId: string | null
   readonly onSelectWorkspace: (workspaceId: string) => void
   readonly onCreateWorkspace: () => void
+  /** A workspace is being made; the button says so and refuses a second press. */
+  readonly creating: boolean
   readonly width: number
   /** Persists the width; called when a drag ends, not during it. */
   readonly onWidthChange: (width: number) => void
@@ -55,6 +57,7 @@ export function Sidebar({
   selectedWorkspaceId,
   onSelectWorkspace,
   onCreateWorkspace,
+  creating,
   width,
   onWidthChange,
   onRenameWorkspace,
@@ -94,7 +97,11 @@ export function Sidebar({
         // Strongest at the name and fading down the list, so the colour reads
         // as belonging to the header rather than as a wash over the rows.
         <div className="project-tinted flex min-h-0 flex-1 flex-col">
-          <ProjectHeader project={project} onCreateWorkspace={onCreateWorkspace} />
+          <ProjectHeader
+            project={project}
+            onCreateWorkspace={onCreateWorkspace}
+            creating={creating}
+          />
 
           <nav className="flex-1 overflow-auto px-2 py-2">
             {workspaces.length === 0 ? (
@@ -150,10 +157,12 @@ export function Sidebar({
  */
 function ProjectHeader({
   project,
-  onCreateWorkspace
+  onCreateWorkspace,
+  creating
 }: {
   project: Project
   onCreateWorkspace: () => void
+  creating: boolean
 }): React.JSX.Element {
   const { t } = useTranslation()
 
@@ -182,10 +191,18 @@ function ProjectHeader({
       <button
         type="button"
         onClick={onCreateWorkspace}
+        disabled={creating}
         title={t('workspaces.create')}
-        className="text-ink-faint hover:text-ink focus-ring shrink-0 rounded p-1 transition-colors"
+        className="text-ink-faint hover:text-ink focus-ring shrink-0 rounded p-1 transition-colors disabled:cursor-default disabled:opacity-60"
       >
-        <Plus aria-hidden size={14} />
+        {/* A turning mark rather than a dimmed plus: creation now fetches
+            first, and a still icon on a button that stopped responding reads
+            as the app having hung rather than as it working. */}
+        {creating ? (
+          <LoaderCircle aria-hidden className="animate-spin" size={14} />
+        ) : (
+          <Plus aria-hidden size={14} />
+        )}
       </button>
     </div>
   )
