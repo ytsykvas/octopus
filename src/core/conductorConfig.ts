@@ -125,8 +125,14 @@ export interface ConductorScript {
 export interface ConductorConfig {
   /** Every settings file that contributed, relative to the checkout. */
   readonly files: readonly string[]
-  /** Which file the prompts came from, or null when there are none. */
-  readonly promptsPath: string | null
+  /**
+   * Which file the prompts came from; empty when there are none.
+   *
+   * An empty string rather than `null` because the only reader asks for it
+   * *having found a prompt*, where it is always a path — a nullable field would
+   * be an arm nothing could reach.
+   */
+  readonly promptsPath: string
   readonly scripts: Readonly<Partial<Record<ScriptKind, ConductorScript>>>
   /** Paths from `file_include_globs` that name a file rather than a pattern. */
   readonly carried: readonly string[]
@@ -361,8 +367,7 @@ function normalise(layers: readonly Layer[]): ConductorConfig {
 
   return {
     files: layers.map((layer) => layer.path),
-    promptsPath:
-      promptsLayer !== null && Object.keys(prompts).length > 0 ? promptsLayer.path : null,
+    promptsPath: promptsLayer !== null && Object.keys(prompts).length > 0 ? promptsLayer.path : '',
     scripts,
     carried: lines.filter((line) => !GLOB.test(line)),
     patterns: lines.filter((line) => GLOB.test(line)),

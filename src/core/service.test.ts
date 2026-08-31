@@ -1632,6 +1632,46 @@ describe('the cleanup script', () => {
   })
 })
 
+describe('instructions a repository supplies', () => {
+  it("sends the repository's prose rather than the project's", async () => {
+    const repo = join(dir, 'planner')
+    await initRepo(repo)
+    const project = await service.addProjectFromPath(repo)
+    const workspace = await service.createWorkspaceIn(project.id)
+    await service.saveProjectInstruction(project.id, 'pullRequest', 'the local one\n')
+
+    await mkdir(join(workspace.path, '.conductor'), { recursive: true })
+    await writeFile(
+      join(workspace.path, '.conductor', 'settings.toml'),
+      '[prompts]\ncreate_pr = "always target develop"\n',
+      'utf8'
+    )
+
+    await expect(service.readEffectiveInstruction(workspace.id, 'pullRequest')).resolves.toBe(
+      'always target develop'
+    )
+  })
+
+  it("falls to the project's own for a kind the repository says nothing about", async () => {
+    const repo = join(dir, 'planner')
+    await initRepo(repo)
+    const project = await service.addProjectFromPath(repo)
+    const workspace = await service.createWorkspaceIn(project.id)
+    await service.saveProjectInstruction(project.id, 'commitMessage', 'ours\n')
+
+    await mkdir(join(workspace.path, '.conductor'), { recursive: true })
+    await writeFile(
+      join(workspace.path, '.conductor', 'settings.toml'),
+      '[prompts]\ncreate_pr = "theirs"\n',
+      'utf8'
+    )
+
+    await expect(service.readEffectiveInstruction(workspace.id, 'commitMessage')).resolves.toBe(
+      'ours\n'
+    )
+  })
+})
+
 describe('sets of variables', () => {
   async function withWorkspace(): Promise<{ projectId: string; workspaceId: string }> {
     const repo = join(dir, 'planner')

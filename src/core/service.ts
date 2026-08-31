@@ -118,7 +118,12 @@ import {
   orderBaseBranches,
   removeProjectData
 } from './projects.js'
-import { type ScriptsInWorkspace, resolveScripts, scriptsDigest } from './repoSource.js'
+import {
+  type ScriptsInWorkspace,
+  repoInstruction,
+  resolveScripts,
+  scriptsDigest
+} from './repoSource.js'
 import { readScript, type ScriptKind, scriptExists, scriptPath, writeScript } from './scripts.js'
 import {
   compareRepoItem,
@@ -2068,7 +2073,13 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
 
     async readEffectiveInstruction(workspaceId, kind) {
       const workspace = requireWorkspace(workspaceId)
-      return effectiveInstruction(kind, workspace.projectId, dataRoot)
+
+      // The repository first, as with the scripts. Not gated, though: this text
+      // goes into the log as a visible message, where it is read before it does
+      // anything — a dialog in front of every one would be friction for no gain.
+      const supplied = await repoInstruction(kind, workspace.path)
+
+      return supplied?.body ?? effectiveInstruction(kind, workspace.projectId, dataRoot)
     },
 
     async removeProjectById(projectId) {

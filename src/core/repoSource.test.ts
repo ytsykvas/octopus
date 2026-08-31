@@ -4,7 +4,14 @@ import { dirname, join } from 'node:path'
 
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 
-import { octopusScriptPath, resolveScript, resolveScripts, scriptsDigest } from './repoSource.js'
+import {
+  octopusInstructionPath,
+  octopusScriptPath,
+  repoInstruction,
+  resolveScript,
+  resolveScripts,
+  scriptsDigest
+} from './repoSource.js'
 import { writeScript } from './scripts.js'
 
 let cwd: string
@@ -145,5 +152,65 @@ describe('scriptsDigest', () => {
     const asSetup = scriptsDigest(await resolveScripts(cwd, 'planner', root))
 
     expect(asSetup).not.toBe(asArchive)
+  })
+})
+
+describe('repoInstruction', () => {
+  it('answers with nothing for a checkout that supplies none', async () => {
+    await expect(repoInstruction('pullRequest', cwd)).resolves.toBeNull()
+  })
+
+  it('reads one the repository carries under .octopus', async () => {
+    await put('.octopus/instructions/pull-request.md', '# How we describe a change\n')
+
+    await expect(repoInstruction('pullRequest', cwd)).resolves.toEqual({
+      source: 'repoOctopus',
+      from: octopusInstructionPath('pullRequest'),
+      body: '# How we describe a change\n'
+    })
+  })
+
+  it("takes Conductor's prompt where there is no .octopus one", async () => {
+    await put('.conductor/settings.toml', '[prompts]\ncreate_pr = "target develop"\n')
+
+    await expect(repoInstruction('pullRequest', cwd)).resolves.toMatchObject({
+      source: 'repoConductor',
+      body: 'target develop'
+    })
+  })
+
+  it('lets .octopus win, as it does for a script', async () => {
+    await put('.conductor/settings.toml', '[prompts]\ncreate_pr = "from conductor"\n')
+    await put('.octopus/instructions/pull-request.md', 'from octopus\n')
+
+    await expect(repoInstruction('pullRequest', cwd)).resolves.toMatchObject({
+      source: 'repoOctopus'
+    })
+  })
+
+  it('has nothing for a kind Conductor has no counterpart for', async () => {
+    // Four of the seven map; the rest fall through to the project's own, then
+    // the installation's, then the written template.
+    await put('.conductor/settings.toml', '[prompts]\ncode_review = "review it"\n')
+
+    await expect(repoInstruction('commitMessage', cwd)).resolves.toBeNull()
+    await expect(repoInstruction('review', cwd)).resolves.toMatchObject({ body: 'review it' })
+  })
+
+  it('keeps an empty one, which is how a repository says it adds nothing', async () => {
+    await put('.octopus/instructions/review.md', '')
+
+    await expect(repoInstruction('review', cwd)).resolves.toMatchObject({ body: '' })
+  })
+
+  it('refuses a .octopus that is a symbolic link', async () => {
+    const outside = await mkdtemp(join(tmpdir(), 'octopus-elsewhere-'))
+    await symlink(outside, join(cwd, '.octopus'))
+
+    await expect(repoInstruction('pullRequest', cwd)).rejects.toMatchObject({
+      code: 'repoConfigSymlink'
+    })
+
+    await rm(outside, { recursive: true, force: true })
   })
 })

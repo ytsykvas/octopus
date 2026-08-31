@@ -31,6 +31,7 @@ import { readFile } from 'node:fs/promises'
 import { join } from 'node:path'
 
 import { readConductorConfig } from './conductorConfig.js'
+import { INSTRUCTION_FILES, type InstructionKind } from './instructions.js'
 import { REPO_DIR, assertUnlinkedPath } from './repoConfig.js'
 import { trustDigest } from './repoTrust.js'
 import { SCRIPT_KINDS } from './scriptEnv.js'
@@ -190,4 +191,56 @@ export function scriptsDigest(
   })
 
   return trustDigest(supplied)
+}
+
+/** Where a repository keeps octopus's own instructions, relative to a checkout. */
+export function octopusInstructionPath(kind: InstructionKind): string {
+  return join(REPO_DIR, 'instructions', INSTRUCTION_FILES[kind])
+}
+
+/** One instruction a repository supplies, and which file it came from. */
+export interface RepoInstruction {
+  readonly source: 'repoOctopus' | 'repoConductor'
+  readonly from: string
+  readonly body: string
+}
+
+/**
+ * The prose a repository supplies for one action, or null.
+ *
+ * The same chain as the scripts and for the same reason: a clone should send
+ * the pull-request description this project wants without anybody configuring
+ * it. Unlike a script it is **not** gated — this text goes into the log as a
+ * visible user message, where it is read before it does anything, and a dialog
+ * in front of every one of them would be friction for no gain.
+ *
+ * Four of the seven have a Conductor counterpart; the rest fall through to the
+ * project's own, then the installation's, then the written template.
+ */
+export async function repoInstruction(
+  kind: InstructionKind,
+  cwd: string
+): Promise<RepoInstruction | null> {
+  const relative = octopusInstructionPath(kind)
+  await assertUnlinkedPath(cwd, relative)
+
+  try {
+    const body = await readFile(join(cwd, relative), 'utf8')
+    // An empty file is how a repository says "nothing extra here", exactly as
+    // it is for the project's own copy.
+    return { source: 'repoOctopus', from: relative, body }
+  } catch {
+    // Not carried under `.octopus/`, which is the ordinary case.
+  }
+
+  const conductor = await readConductorConfig(cwd)
+  if (conductor === null) return null
+
+  const prompt = conductor.prompts[kind]
+
+  // A prompt implies the file that carried it, which is why `promptsPath` is a
+  // string rather than a nullable one.
+  return prompt === undefined
+    ? null
+    : { source: 'repoConductor', from: conductor.promptsPath, body: prompt }
 }
