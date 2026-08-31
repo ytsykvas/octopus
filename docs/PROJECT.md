@@ -459,6 +459,7 @@ Further rules:
   three-dot form compares two commits and so cannot see the working tree, which
   is most of what there is to review; resolving the merge base explicitly gives
   the same left-hand side and takes committed, staged and unstaged work at once.
+- **Revert, per file, from the pane's header.** It puts that file back to the state the workspace branched from — the pane's own scope, so the row leaves it. Committed work is not erased: the commits stand and what is written is a change in the working tree that undoes them. Uncommitted work is, and nothing in git holds a copy of it, which is what the confirmation says rather than warning in general. Which command runs is decided by asking git whether the base commit had the path and whether it is tracked now, rather than by branching on the status the diff reported — rename detection is a heuristic, and a wrong guess would send a file down the wrong arm.
 
 ### 12.2 Scripts
 
