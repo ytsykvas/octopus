@@ -12,7 +12,8 @@ else joins a home directory by hand.
   instructions/*.md                  five prompts every project falls back to
   projects/<projectId>/
     carry                            paths carried from the checkout into a workspace
-    env                              variables written last into every workspace's .env
+    envs/                            named sets of variables, one written last into every workspace's .env
+      default                        the name the old single `env` file is moved to
     scripts/setup.sh                 prepares a new workspace, on Run
     scripts/run.sh                   starts the dev server
     scripts/archive.sh               takes back what setup gave out, on removal
@@ -521,6 +522,31 @@ A **set**, capped at ten: two branches whose settings differ would otherwise ask
 on every switch. A worktree that grants nothing digests to the empty string,
 which is how "nothing to approve" is told apart from "approved" without a second
 field.
+
+`approvedScripts` beside it holds the same shape of digest over the scripts the
+**repository** supplies — `.octopus/scripts/*` or the command lines in
+`.conductor/settings.toml`. A separate list on purpose: what the agent may load
+and what the Run button may execute are different questions, and one list would
+mean reading a hook file quietly approved a build script. The kind goes into it
+beside the text, so allowing a line as the cleanup script is not allowing it as
+the one that runs on every build. A script the user wrote in Project settings is
+never in it — approving your own text is a dialog people learn to click through.
+
+## Which set of variables a workspace runs with
+
+`envProfile` on a project names the set its workspaces use; `envProfile` on a
+workspace overrides it, and `null` there means "follow the project". A third
+state rather than a copy taken at creation: a copy would silently stop following
+a project that later moved, and nothing could ask to follow again.
+
+Both default to `default`, which is also the name the migration gives the old
+single `env` file — so a record written before this existed reads back pointing
+at exactly what is now on disk, and no record needs migrating.
+
+A set whose file has gone resolves to an **empty** block rather than to the
+project's default. A workspace pinned to a production set must not silently
+receive dev credentials; nothing written is a run that fails on a missing
+variable, which is loud.
 
 The Instructions panel narrows by the same rule, over the same directory — one
 function, so the two cannot drift into disagreeing. They did once: the panel
