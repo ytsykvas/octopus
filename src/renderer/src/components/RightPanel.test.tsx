@@ -101,6 +101,7 @@ function renderPanel(overrides: Partial<Props> = {}): {
     projectId: 'planner',
     rootPath: '/Users/test/planner',
     scripts: new Map(),
+    scriptFailures: new Map(),
     onScriptsChanged: vi.fn(),
     defaultBranch: 'main',
     defaultEnvProfile: 'default',
@@ -438,6 +439,33 @@ describe('RightPanel', () => {
       })
     })
 
+    it('says the server is still on the previous set after a move', async () => {
+      /*
+       * A server reads its `.env` once, at boot. Moving the workspace rewrites
+       * the block on the next run, so until then the header named one
+       * environment while the process held another — the same
+       * silent-wrong-environment failure this feature exists to prevent, only
+       * pointing the other way.
+       */
+      const { rerender, props } = renderPanel({
+        workspaces: [anna],
+        activeWorkspaceId: anna.id,
+        scripts: SCRIPTS
+      })
+      await userEvent.click(scriptsTab())
+      await userEvent.click(screen.getByRole('button', { name: 'Run' }))
+      // Build first, then the server — the second session is the one that reads
+      // the env and therefore the one this is about.
+      await sessionsOpened(1)
+      processExits(1)
+      await sessionsOpened(2)
+
+      const moved = { ...anna, envProfile: 'prod' }
+      rerender({ ...props, workspaces: [moved], activeWorkspaceId: moved.id })
+
+      expect(await screen.findByText(/Restart it to pick up the change/)).toBeInTheDocument()
+    })
+
     it('says why a workspace could not be moved', async () => {
       vi.mocked(octopus().workspaces.setEnvProfile).mockResolvedValue({ ok: false, error: 'nope' })
       const onError = vi.fn()
@@ -483,6 +511,59 @@ describe('RightPanel', () => {
       expect(screen.getByText('.conductor/settings.toml')).toBeInTheDocument()
       expect(screen.getByText(fromRepo.contents)).toBeInTheDocument()
       // Not a button that quietly does nothing: the notice above says why.
+      expect(screen.getByRole('button', { name: 'Run' })).toBeDisabled()
+    })
+
+    it('names the file once, however many scripts came out of it', async () => {
+      // All three usually come from one settings.toml, and the path above each
+      // box said the same thing three times without saying anything.
+      const from = '.conductor/settings.toml'
+      const of = (kind: ScriptKind): ResolvedScript => ({
+        kind,
+        source: 'repoConductor',
+        from,
+        run: { type: 'command', command: `${kind} it` },
+        contents: `${kind} it`
+      })
+
+      renderPanel({
+        workspaces: [anna],
+        activeWorkspaceId: anna.id,
+        scripts: scriptsFor({
+          approved: false,
+          scripts: { setup: of('setup'), run: of('run'), archive: of('archive') }
+        })
+      })
+      await userEvent.click(scriptsTab())
+
+      // Inside the panel alone: the Build half's own header names its source
+      // too, and that one is right to.
+      // `!` is allowed in tests, and the notice has just been found, so its
+      // parent exists by construction.
+      // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
+      const panel = within((await screen.findByText(/This repository supplies/)).parentElement!)
+      expect(panel.getAllByText(from)).toHaveLength(1)
+      expect(panel.getByText('setup it')).toBeInTheDocument()
+      expect(panel.getByText('archive it')).toBeInTheDocument()
+    })
+
+    it('says why nothing can run when the settings could not be read', async () => {
+      /*
+       * The pane used to disable Run and say nothing at all: a repository whose
+       * settings will not parse resolves to no scripts, which is
+       * indistinguishable from a project that simply has none.
+       */
+      renderPanel({
+        workspaces: [anna],
+        activeWorkspaceId: anna.id,
+        scripts: new Map(),
+        scriptFailures: new Map([
+          [anna.id, { ok: false as const, error: 'settings.toml could not be parsed' }]
+        ])
+      })
+      await userEvent.click(scriptsTab())
+
+      expect(await screen.findByText(/could not be parsed/)).toBeInTheDocument()
       expect(screen.getByRole('button', { name: 'Run' })).toBeDisabled()
     })
 

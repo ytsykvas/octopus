@@ -250,8 +250,12 @@ export const en = {
        a build reads, and the moment you notice one is missing is the moment the
        build in front of you did not find it. */
     env: 'Env',
+    envRestart:
+      'The server is still running with the previous set of variables. Restart it to pick up the change.',
     envFollow: 'Follow the project ({{name}})',
     editEnv: 'Variables…',
+    repoUnreadable:
+      'This repository\u2019s settings could not be read, so nothing here can run: {{reason}}',
     repoNotice:
       'This repository supplies the scripts below. Read them before they run \u2014 they arrive with a git pull, so what runs here is whatever the branch says.',
     repoApprove: 'Allow these',

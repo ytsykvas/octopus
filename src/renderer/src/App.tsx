@@ -749,6 +749,7 @@ export function App(): React.JSX.Element {
             color={selectedProject?.color ?? null}
             projectId={openProjectId}
             scripts={workspaceScripts.scripts}
+            scriptFailures={workspaceScripts.failures}
             onScriptsChanged={workspaceScripts.refresh}
             defaultBranch={shortBranchName(selectedProject?.baseBranch ?? '')}
             defaultEnvProfile={selectedProject?.envProfile ?? 'default'}

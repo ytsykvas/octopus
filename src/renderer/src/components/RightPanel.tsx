@@ -12,11 +12,12 @@ import { useTranslation } from 'react-i18next'
 
 import type { ProjectColor } from '@core/colors.js'
 import type { RightPanelTab } from '@core/config.js'
-import type { ScriptsInWorkspace } from '@core/repoSource.js'
+import type { ResolvedScript, ScriptsInWorkspace } from '@core/repoSource.js'
 import { SCRIPT_KINDS } from '@core/scriptEnv.js'
 import type { DiffCommentController } from '../hooks/useDiffComments.js'
 import type { FileRevertController } from '../hooks/useFileRevert.js'
 import type { PullRequestQuoteController } from '../hooks/usePullRequestQuotes.js'
+import type { Failure } from '../../../preload/index.js'
 import { useErrorMessage } from '../hooks/useErrorMessage.js'
 import { useRunSequence } from '../hooks/useRunSequence.js'
 import { useServingPort } from '../hooks/useServingPort.js'
@@ -129,6 +130,8 @@ interface RightPanelProps {
    * repository supplying a script is the one checked out in that worktree.
    */
   readonly scripts: ReadonlyMap<string, ScriptsInWorkspace>
+  /** Why a workspace is missing from the map above, where there is a reason. */
+  readonly scriptFailures: ReadonlyMap<string, Failure>
   /** Re-reads the map, after an approval has changed the answer. */
   readonly onScriptsChanged: () => void
   /** The open project's base branch, for a script that reads it as Conductor's. */
@@ -180,6 +183,7 @@ export function RightPanel({
   projectId,
   rootPath,
   scripts,
+  scriptFailures,
   onScriptsChanged,
   defaultBranch,
   defaultEnvProfile,
@@ -305,6 +309,17 @@ export function RightPanel({
     else onError(describeFailure(done))
   }
 
+  /**
+   * The set of variables each running server was started with.
+   *
+   * A server reads its `.env` once, at boot. Moving a workspace to another set
+   * rewrites the block on the **next** run, so until then the header would name
+   * one environment while the process held another — which is the
+   * silent-wrong-environment failure this feature exists to prevent, pointing
+   * the other way.
+   */
+  const [servingProfiles, setServingProfiles] = useState<Readonly<Record<string, string>>>({})
+
   /** What this workspace would run, and whether it is allowed to yet. */
   const activeScripts = activeWorkspaceId === null ? undefined : scripts.get(activeWorkspaceId)
 
@@ -322,6 +337,39 @@ export function RightPanel({
           // write one rather than a runner that could answer.
           sequence.start(activeWorkspace.id, activeScripts.scripts.setup !== undefined)
         }
+
+  /**
+   * What the repository supplies, gathered by the file it came from.
+   *
+   * Usually one file holding all three, so this is one heading rather than the
+   * same path written three times.
+   */
+  const suppliedScripts = SCRIPT_KINDS.reduce<{ from: string; scripts: ResolvedScript[] }[]>(
+    (groups, kind) => {
+      const script = activeScripts?.scripts[kind]
+      if (script === undefined || script.source === 'project') return groups
+
+      const group = groups.find((candidate) => candidate.from === script.from)
+      if (group === undefined) return [...groups, { from: script.from, scripts: [script] }]
+
+      group.scripts.push(script)
+      return groups
+    },
+    []
+  )
+
+  /** Why this workspace has no scripts, where there is a reason. */
+  const scriptFailure =
+    activeWorkspaceId === null ? undefined : scriptFailures.get(activeWorkspaceId)
+
+  /** The set in force for a workspace: its own, or the project's. */
+  const profileOf = (workspace: WorkspaceView): string => workspace.envProfile ?? projectEnvProfile
+
+  const staleProfile =
+    activeWorkspace !== null &&
+    activeRun.stage === 'serving' &&
+    servingProfiles[activeWorkspace.id] !== undefined &&
+    servingProfiles[activeWorkspace.id] !== profileOf(activeWorkspace)
 
   const servingAt =
     activeWorkspace !== null && activeRun.stage === 'serving'
@@ -589,6 +637,11 @@ export function RightPanel({
           <span className="text-ink-faint min-w-0 flex-1 truncate text-[11px]">
             {activeRun.stage === 'failed' ? (
               <span className="text-danger">{t('scripts.buildFailed')}</span>
+            ) : staleProfile ? (
+              /* Said rather than enforced, like the silent port beside it: the
+                 server is somebody's work in progress and taking it down to be
+                 consistent would be the ruder of the two. */
+              <span className="text-warning">{t('scripts.envRestart')}</span>
             ) : servingAt !== null && silentPort ? (
               /* Said rather than enforced. The script is the user's, and being
                  wrong about it must not take the link or the controls away. */
@@ -678,21 +731,35 @@ export function RightPanel({
             to be readable at the moment somebody presses it. Every byte of what
             would run is shown — an approval over a summary is an approval of
             the summary. */}
+        {/* Why Run is doing nothing, in the place Run is. A repository whose
+            settings will not parse resolves to no scripts at all, and without
+            this the pane disabled the button and said nothing. */}
+        {scriptFailure !== undefined && (
+          <p className="border-line bg-muted/40 text-danger shrink-0 border-b px-3 py-2.5">
+            {t('scripts.repoUnreadable', { reason: describeFailure(scriptFailure) })}
+          </p>
+        )}
+
         {activeScripts !== undefined && !activeScripts.approved && activeWorkspaceId !== null && (
           <div className="border-line bg-muted/40 shrink-0 space-y-2 border-b px-3 py-2.5">
             <p className="text-ink-soft leading-relaxed">{t('scripts.repoNotice')}</p>
 
-            {SCRIPT_KINDS.map((kind) => {
-              const script = activeScripts.scripts[kind]
-              return script === undefined || script.source === 'project' ? null : (
-                <div key={kind}>
-                  <p className="text-ink-faint font-mono text-[11px]">{script.from}</p>
-                  <pre className="border-line bg-canvas mt-1 overflow-x-auto rounded-[var(--radius-control)] border px-2 py-1.5 font-mono text-[11px]">
+            {/* Grouped by the file they came from. All three usually come from
+                one `settings.toml`, and naming it above each box said the same
+                path three times without saying anything. */}
+            {suppliedScripts.map(({ from, scripts: supplied }) => (
+              <div key={from}>
+                <p className="text-ink-faint font-mono text-[11px]">{from}</p>
+                {supplied.map((script) => (
+                  <pre
+                    key={script.kind}
+                    className="border-line bg-canvas mt-1 overflow-x-auto rounded-[var(--radius-control)] border px-2 py-1.5 font-mono text-[11px]"
+                  >
                     {script.contents}
                   </pre>
-                </div>
-              )
-            })}
+                ))}
+              </div>
+            ))}
 
             <Button
               size="sm"
@@ -880,8 +947,17 @@ export function RightPanel({
             onOutcome={(id, ok) => {
               sequence.finished('run', id, ok)
             }}
-            onPort={(id, settled) => {
-              setSettledPorts((current) => ({ ...current, [id]: settled }))
+            onPort={(workspace, settled) => {
+              setSettledPorts((current) => ({ ...current, [workspace.id]: settled }))
+
+              // The port settles as the server starts, which is also the moment
+              // it reads its `.env` — so this is when the set it is holding
+              // stops being a guess. The workspace comes with the call rather
+              // than being looked up, which leaves nothing to be undefined.
+              setServingProfiles((current) => ({
+                ...current,
+                [workspace.id]: profileOf(workspace)
+              }))
             }}
           />
         </section>

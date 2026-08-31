@@ -47,7 +47,7 @@ interface WorkspaceScriptsProps {
   readonly stopTokenFor: (workspaceId: string) => number
   readonly onOutcome: (workspaceId: string, ok: boolean) => void
   /** Where a run's server actually ended up, which the header links to. */
-  readonly onPort?: (workspaceId: string, port: number) => void
+  readonly onPort?: (workspace: WorkspaceView, port: number) => void
   /** A runner that was still going has unmounted. */
   readonly onGone?: (workspaceId: string) => void
 }
@@ -141,7 +141,7 @@ export function WorkspaceScripts({
             defaultBranch={defaultBranch}
             onOpenSettings={onOpenSettings}
             onPort={(settled) => {
-              onPort?.(workspace.id, settled)
+              onPort?.(workspace, settled)
             }}
             onGone={() => {
               onGone?.(workspace.id)
