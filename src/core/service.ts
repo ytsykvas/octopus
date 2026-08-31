@@ -120,6 +120,7 @@ import {
   removeProjectData
 } from './projects.js'
 import {
+  type ResolvedScript,
   type ScriptsInWorkspace,
   repoInstruction,
   resolveScripts,
@@ -1546,6 +1547,46 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
     return carried
   }
 
+  /**
+   * The cleanup script to run for a workspace, or null for none.
+   *
+   * Null covers three different things on purpose, because a removal treats
+   * them alike: the project has no cleanup script, the repository supplies one
+   * nobody has read, and the repository's settings could not be read at all.
+   *
+   * That last one is why this exists. `readConductorConfig` throws on
+   * unparseable TOML, on a file too large and on a symlinked directory — and a
+   * worktree is where an agent works, so half-written and conflict-marked
+   * settings are ordinary rather than exotic. Left to throw, one such file made
+   * its workspace, and through `removeProjectById` the entire project,
+   * impossible to remove: the opposite of what `archive.ts` promises and what
+   * the comment at the call site says.
+   *
+   * Losing the cleanup leaves a database behind. Losing the removal leaves a
+   * project that cannot be deleted from the interface at all.
+   */
+  async function cleanupFor(
+    project: Project,
+    workspace: Workspace
+  ): Promise<ResolvedScript | null> {
+    let scripts: Readonly<Partial<Record<ScriptKind, ResolvedScript>>>
+    try {
+      scripts = await resolveScripts(workspace.path, project.id, dataRoot)
+    } catch {
+      return null
+    }
+
+    const cleanup = scripts.archive
+    if (cleanup === undefined) return null
+
+    // The user's own script is never gated; a repository's runs only once
+    // somebody has read it.
+    const allowed =
+      cleanup.source === 'project' || project.approvedScripts.includes(scriptsDigest(scripts))
+
+    return allowed ? cleanup : null
+  }
+
   async function closeChatsOf(workspaceId: string): Promise<void> {
     // One at a time rather than all at once, so a session that hangs on close
     // is one wait rather than a race between several.
@@ -2128,13 +2169,7 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
            * its workspaces had been given — the accumulation the script exists
            * to prevent, at the one moment there is most of it to clean up.
            */
-          const scripts = await resolveScripts(workspace.path, project.id, dataRoot)
-          const cleanup = scripts.archive ?? null
-          const gated =
-            cleanup?.source !== 'project' &&
-            !project.approvedScripts.includes(scriptsDigest(scripts))
-
-          await runArchiveScript(gated ? null : cleanup, {
+          await runArchiveScript(await cleanupFor(project, workspace), {
             rootPath: project.repoPath,
             workspaceName: workspace.name,
             path: workspace.path,
@@ -2228,9 +2263,6 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
       // worktree. Whatever it says, the removal continues: a workspace that
       // cannot be deleted because a cleanup script is broken is the worse
       // problem of the two.
-      const scripts = await resolveScripts(workspace.path, project.id, dataRoot)
-      const cleanup = scripts.archive ?? null
-
       /*
        * A repository's script that nobody has read is skipped, not run.
        *
@@ -2241,10 +2273,7 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
        * is the lesser of the two: the alternative is executing shell that
        * arrived with a `git pull` at the one moment the user is not looking.
        */
-      const gated =
-        cleanup?.source !== 'project' && !project.approvedScripts.includes(scriptsDigest(scripts))
-
-      await runArchiveScript(gated ? null : cleanup, {
+      await runArchiveScript(await cleanupFor(project, workspace), {
         rootPath: project.repoPath,
         workspaceName: workspace.name,
         path: workspace.path,

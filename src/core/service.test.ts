@@ -1609,6 +1609,31 @@ describe('the cleanup script', () => {
     await expect(service.listWorkspaces(project.id)).resolves.toHaveLength(0)
   })
 
+  /*
+   * A worktree is where an agent works, so a half-written or conflict-marked
+   * settings file is ordinary rather than exotic — and this app ships a
+   * "resolve conflicts" action. Before the guard, one such file made its
+   * workspace impossible to remove from the interface at all.
+   */
+  it('removes the workspace even when the repository settings cannot be read', async () => {
+    const repo = join(dir, 'planner')
+    await initRepo(repo)
+    const project = await service.addProjectFromPath(repo)
+    const workspace = await service.createWorkspaceIn(project.id)
+
+    await mkdir(join(workspace.path, '.conductor'), { recursive: true })
+    await writeFile(
+      join(workspace.path, '.conductor', 'settings.toml'),
+      '<<<<<<< HEAD\n[scripts]\narchive = "true"\n=======\n',
+      'utf8'
+    )
+
+    await expect(
+      service.removeWorkspaceById(workspace.id, { deleteBranch: false, force: true })
+    ).resolves.toBeUndefined()
+    await expect(service.listWorkspaces(project.id)).resolves.toHaveLength(0)
+  })
+
   it("runs a repository's script once it has been read", async () => {
     const repo = join(dir, 'planner')
     await initRepo(repo)
@@ -1906,6 +1931,66 @@ describe('removing a project', () => {
     // whatever project next takes the same id.
     await expect(stat(join(dir, 'data', 'projects', project.id))).rejects.toThrow()
     expect(service.listProjects()).toHaveLength(0)
+  })
+
+  it('removes the project even when the repository settings cannot be read', async () => {
+    // Worse than the workspace case: one unparseable file in one worktree used
+    // to make the whole project impossible to remove.
+    const repo = join(dir, 'planner')
+    await initRepo(repo)
+    const project = await service.addProjectFromPath(repo)
+    const workspace = await service.createWorkspaceIn(project.id)
+
+    await mkdir(join(workspace.path, '.conductor'), { recursive: true })
+    await writeFile(join(workspace.path, '.conductor', 'settings.toml'), 'scripts = [[[', 'utf8')
+
+    await expect(service.removeProjectById(project.id)).resolves.toBeUndefined()
+    expect(service.listProjects()).toHaveLength(0)
+  })
+
+  it("does not run a repository's cleanup script for a project nobody has read it in", async () => {
+    /*
+     * The unattended path. Removing a project runs a script per workspace with
+     * nobody watching, so the gate matters more here than anywhere — and it was
+     * a hand-copied duplicate of the one in `removeWorkspaceById` with no test
+     * of its own.
+     */
+    const repo = join(dir, 'planner')
+    await initRepo(repo)
+    const project = await service.addProjectFromPath(repo)
+    const workspace = await service.createWorkspaceIn(project.id)
+
+    const marker = join(dir, 'project-cleanup.txt')
+    await mkdir(join(workspace.path, '.conductor'), { recursive: true })
+    await writeFile(
+      join(workspace.path, '.conductor', 'settings.toml'),
+      `[scripts]\narchive = "printf ran > '${marker}'"\n`,
+      'utf8'
+    )
+
+    await service.removeProjectById(project.id)
+
+    await expect(readFile(marker, 'utf8')).rejects.toThrow()
+  })
+
+  it("runs a repository's cleanup script for every workspace once it has been read", async () => {
+    const repo = join(dir, 'planner')
+    await initRepo(repo)
+    const project = await service.addProjectFromPath(repo)
+    const workspace = await service.createWorkspaceIn(project.id)
+
+    const marker = join(dir, 'project-cleanup-approved.txt')
+    await mkdir(join(workspace.path, '.conductor'), { recursive: true })
+    await writeFile(
+      join(workspace.path, '.conductor', 'settings.toml'),
+      `[scripts]\narchive = "printf '%s' \\"$CONDUCTOR_WORKSPACE_NAME\\" > '${marker}'"\n`,
+      'utf8'
+    )
+    await service.approveWorkspaceScripts(workspace.id)
+
+    await service.removeProjectById(project.id)
+
+    await expect(readFile(marker, 'utf8')).resolves.toBe(workspace.name)
   })
 
   it('removes the project even when the cleanup script fails', async () => {
