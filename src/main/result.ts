@@ -11,6 +11,7 @@ import { DiffError } from '../core/diff.js'
 import { GitHubError } from '../core/github.js'
 import { describeError } from '../core/persist.js'
 import { ProjectValidationError } from '../core/projects.js'
+import { StateConflictError } from '../core/store.js'
 import { RepoConfigError } from '../core/repoConfig.js'
 import { WorkspaceError } from '../core/workspaces.js'
 
@@ -41,9 +42,18 @@ export async function attempt<T>(operation: () => Promise<T> | T): Promise<Resul
       error instanceof WorkspaceError ||
       error instanceof DiffError ||
       error instanceof ChatError ||
-      error instanceof RepoConfigError
+      error instanceof RepoConfigError ||
+      error instanceof StateConflictError
     ) {
-      return { ok: false, error: error.message, code: error.code, params: error.params }
+      return {
+        ok: false,
+        error: error.message,
+        // `StateConflictError` is the one of these whose code is optional: most
+        // of what it refuses is a condition the interface cannot reach, and an
+        // explicit `undefined` is not the same as an absent key here.
+        ...(error.code === undefined ? {} : { code: error.code }),
+        params: error.params
+      }
     }
 
     return { ok: false, error: describeError(error) }

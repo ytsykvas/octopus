@@ -14,6 +14,10 @@ const CODES: readonly {
   readonly code: string
   readonly parameter?: readonly [name: string, value: string]
 }[] = [
+  { code: 'repoPathHasWorkspaces' },
+  { code: 'repoPathTaken', parameter: ['name', 'ledger'] },
+  { code: 'repoPathRelative', parameter: ['path', 'repos/moved'] },
+  { code: 'repoPathEmpty' },
   { code: 'notARepository', parameter: ['path', '/Users/someone/code/planner'] },
   { code: 'emptyRepository', parameter: ['path', '/Users/someone/code/fresh'] },
   { code: 'noBaseBranch', parameter: ['path', '/Users/someone/code/detached'] },

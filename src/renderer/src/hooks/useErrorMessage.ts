@@ -16,6 +16,14 @@ export function useErrorMessage(): (failure: Failure) => string {
   return useCallback(
     (failure: Failure) => {
       switch (failure.code) {
+        case 'repoPathHasWorkspaces':
+          return t('errors.repoPathHasWorkspaces')
+        case 'repoPathTaken':
+          return t('errors.repoPathTaken', { name: failure.params?.name ?? '' })
+        case 'repoPathRelative':
+          return t('errors.repoPathRelative', { path: failure.params?.path ?? '' })
+        case 'repoPathEmpty':
+          return t('errors.repoPathEmpty')
         case 'notARepository':
           return t('errors.notARepository', { path: failure.params?.path ?? '' })
         case 'emptyRepository':

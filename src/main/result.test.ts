@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 
 import { ChatError } from '../core/chats.js'
 import { ProjectValidationError } from '../core/projects.js'
+import { StateConflictError } from '../core/store.js'
 import { WorkspaceError } from '../core/workspaces.js'
 import { attempt } from './result.js'
 
@@ -30,6 +31,28 @@ describe('attempt', () => {
       code: 'notARepository',
       params: { path: '/tmp/x' }
     })
+  })
+
+  /*
+   * `StateConflictError` is the one whose code is optional: most of what it
+   * refuses is a condition the interface cannot reach, and only the few a user
+   * can produce carry one. An explicit `undefined` is not the same as an absent
+   * key at this boundary, which is why the spread is conditional.
+   */
+  it('keeps the code of a state conflict that has one', async () => {
+    const result = await attempt(() => {
+      throw new StateConflictError('still has workspaces', 'repoPathHasWorkspaces')
+    })
+
+    expect(result).toMatchObject({ ok: false, code: 'repoPathHasWorkspaces' })
+  })
+
+  it('carries no code at all for a state conflict without one', async () => {
+    const result = await attempt(() => {
+      throw new StateConflictError('a project name cannot be empty')
+    })
+
+    expect(result).toEqual({ ok: false, error: 'a project name cannot be empty', params: {} })
   })
 
   it('keeps the code of a workspace failure', async () => {

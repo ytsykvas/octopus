@@ -811,6 +811,9 @@ export function App(): React.JSX.Element {
           project={editingProject}
           initialSection={editingProjectSection}
           workspaceId={selectedWorkspaceId}
+          hasWorkspaces={workspaces.flat.some(
+            (workspace) => workspace.projectId === editingProject.id
+          )}
           onUpdate={(patch) => projects.update(editingProject.id, patch)}
           onImported={() => {
             void projects.refresh()

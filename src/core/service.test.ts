@@ -1632,6 +1632,50 @@ describe('the cleanup script', () => {
   })
 })
 
+describe('pointing a project at another checkout', () => {
+  it('asks whether the new directory is a repository at all', async () => {
+    const repo = join(dir, 'planner')
+    await initRepo(repo)
+    const project = await service.addProjectFromPath(repo)
+
+    await expect(
+      service.updateProjectById(project.id, { repoPath: join(dir, 'not-a-repo') })
+    ).rejects.toMatchObject({ code: 'notARepository' })
+  })
+
+  it('refuses one whose branches do not include the stored base', async () => {
+    // Otherwise this surfaces as a git error on the next workspace, saying
+    // nothing about settings.
+    const repo = join(dir, 'planner')
+    await initRepo(repo)
+    const project = await service.addProjectFromPath(repo)
+
+    const other = join(dir, 'other')
+    await initRepo(other)
+    await run('git', ['branch', '-m', 'main', 'trunk'], { cwd: other })
+
+    await expect(service.updateProjectById(project.id, { repoPath: other })).rejects.toMatchObject({
+      code: 'branchMissing'
+    })
+  })
+
+  it('records the new checkout, keeping everything filed under the project', async () => {
+    const repo = join(dir, 'planner')
+    await initRepo(repo)
+    const project = await service.addProjectFromPath(repo)
+    await service.saveProjectScript(project.id, 'setup', '#!/bin/sh\n')
+
+    const other = join(dir, 'other')
+    await initRepo(other)
+
+    await service.updateProjectById(project.id, { repoPath: other })
+
+    expect(service.listProjects()[0]?.repoPath).toBe(await realpath(other))
+    // The scripts stay: they are filed under the id, not under the path.
+    await expect(service.readProjectScript(project.id, 'setup')).resolves.toBe('#!/bin/sh\n')
+  })
+})
+
 describe('instructions a repository supplies', () => {
   it("sends the repository's prose rather than the project's", async () => {
     const repo = join(dir, 'planner')

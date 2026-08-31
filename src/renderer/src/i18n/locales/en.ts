@@ -203,6 +203,12 @@ export const en = {
     sourceAbsent: 'none',
     sourceCount: '{{count}} loaded',
     repository: 'Repository',
+    repositoryHint:
+      'Where the project lives. It can be pointed somewhere else while the project has no workspaces \u2014 the scripts, variables and instructions kept for it stay, because they are filed under the project rather than under the path.',
+    repositoryLocked:
+      'Each workspace is a git worktree registered in this repository, so the path cannot change while any exist. Remove them first.',
+    repositoryChange: 'Change\u2026',
+    repositoryPick: 'Choose the repository for this project',
     dangerZone: 'Danger zone',
     removeHint:
       'Removes the project from octopus. Every workspace goes, its cleanup script running first, and the scripts, files and variables kept for this project are deleted from ~/.octopus \u2014 credentials included. The repository stays on disk.'
@@ -866,6 +872,11 @@ export const en = {
     review: 'Review'
   },
   errors: {
+    repoPathHasWorkspaces:
+      'This project still has workspaces, and each is a git worktree registered in its current repository. Remove them before pointing it somewhere else.',
+    repoPathTaken: '\u201c{{name}}\u201d already uses that repository.',
+    repoPathRelative: '{{path}} is not an absolute path.',
+    repoPathEmpty: 'A repository path cannot be empty.',
     notARepository: '{{path}} is not a git repository.',
     emptyRepository:
       '{{path}} has no commits yet. Make an initial commit — a worktree cannot be created without one.',

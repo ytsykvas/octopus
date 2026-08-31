@@ -464,6 +464,8 @@ Further rules:
 
 ### 12.2 Scripts
 
+- **A project can be pointed at another checkout**, but only while it has no workspaces. Each one is a git worktree registered in the **current** repository's `.git/worktrees`; repoint and git in the new one knows nothing about them — every workspace reads as missing, the interface closes their terminals, and `git worktree remove` then fails, so they cannot even be cleaned up through the app. A warning would arrive after that is already true, so the control is disabled with the reason underneath instead. What the project keeps stays: scripts, variables and instructions are filed under its **id**, not under its path.
+
 - `setup.sh` — prepares a workspace: installing dependencies, building what a fresh checkout needs. Runs on a button, not on workspace creation — no step is mandatory (§4).
 - `run.sh` — the dev server; receives `$OCTOPUS_PORT`.
 - `archive.sh` — runs when a workspace is removed, in its directory, while it still exists. It takes back what setup gave out — a database or a container named after the workspace. Nothing it does can stop the removal: a workspace that cannot be deleted because a cleanup script is broken is the worse problem of the two.

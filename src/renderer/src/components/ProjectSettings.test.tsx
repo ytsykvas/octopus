@@ -612,6 +612,73 @@ describe('ProjectSettings', () => {
     expect(await screen.findByDisplayValue('MYSQL_HOST=dev.example')).toBeInTheDocument()
   })
 
+  describe('the repository a project points at', () => {
+    it('offers no change while the project has workspaces', async () => {
+      // Disabled with the reason underneath rather than refused after the fact:
+      // by the time a warning is read, the worktrees are already orphaned.
+      const user = userEvent.setup()
+      await renderDialog({ hasWorkspaces: true })
+
+      expect(screen.getByRole('button', { name: 'Change…' })).toBeDisabled()
+      expect(screen.getByText(/cannot change while any exist/)).toBeInTheDocument()
+      await user.click(screen.getByRole('button', { name: 'Change…' }))
+      expect(window.octopus.dialog.pickDirectory).not.toHaveBeenCalled()
+    })
+
+    it('records the directory that was chosen', async () => {
+      vi.mocked(window.octopus.dialog.pickDirectory).mockResolvedValue({
+        ok: true,
+        value: '/repos/moved'
+      })
+      const user = userEvent.setup()
+      const props = await renderDialog()
+
+      await user.click(screen.getByRole('button', { name: 'Change…' }))
+
+      expect(props.onUpdate).toHaveBeenCalledWith({ repoPath: '/repos/moved' })
+      // The list holds a copy of the project, so it has to be told.
+      await waitFor(() => {
+        expect(props.onImported).toHaveBeenCalled()
+      })
+    })
+
+    it('does nothing when the picker is dismissed', async () => {
+      vi.mocked(window.octopus.dialog.pickDirectory).mockResolvedValue({ ok: true, value: null })
+      const user = userEvent.setup()
+      const props = await renderDialog()
+
+      await user.click(screen.getByRole('button', { name: 'Change…' }))
+
+      expect(props.onUpdate).not.toHaveBeenCalled()
+    })
+
+    it('leaves the list alone when the change was refused', async () => {
+      vi.mocked(window.octopus.dialog.pickDirectory).mockResolvedValue({
+        ok: true,
+        value: '/repos/moved'
+      })
+      const user = userEvent.setup()
+      const props = await renderDialog({ onUpdate: vi.fn(() => Promise.resolve(false)) })
+
+      await user.click(screen.getByRole('button', { name: 'Change…' }))
+
+      expect(props.onImported).not.toHaveBeenCalled()
+    })
+
+    it('says nothing when the picker itself failed', async () => {
+      vi.mocked(window.octopus.dialog.pickDirectory).mockResolvedValue({
+        ok: false,
+        error: 'no'
+      })
+      const user = userEvent.setup()
+      const props = await renderDialog()
+
+      await user.click(screen.getByRole('button', { name: 'Change…' }))
+
+      expect(props.onUpdate).not.toHaveBeenCalled()
+    })
+  })
+
   describe('sets of variables', () => {
     beforeEach(() => {
       vi.mocked(window.octopus.projects.envProfiles).mockResolvedValue({

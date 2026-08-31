@@ -59,6 +59,14 @@ interface ProjectSettingsProps {
    * answer available.
    */
   readonly workspaceId?: string | null
+  /**
+   * Whether this project has any workspaces.
+   *
+   * Only the checkout question needs it, and the answer is already on screen
+   * beside this dialog — reading it again here would be a second source for one
+   * fact.
+   */
+  readonly hasWorkspaces?: boolean
 }
 
 /**
@@ -137,7 +145,8 @@ export function ProjectSettings({
   onImported,
   onClose,
   initialSection,
-  workspaceId = null
+  workspaceId = null,
+  hasWorkspaces = false
 }: ProjectSettingsProps): React.JSX.Element {
   const { t } = useTranslation()
   const describeFailure = useErrorMessage()
@@ -407,13 +416,39 @@ export function ProjectSettings({
                 </div>
               </Field>
 
-              <Field label={t('project.repository')}>
-                <p
-                  className="text-ink-faint truncate font-mono text-[11px]"
-                  title={project.repoPath}
-                >
-                  {project.repoPath}
-                </p>
+              {/* Changeable, but only while nothing has been cut from it: each
+                  workspace is a worktree registered in *this* repository, and
+                  git in another one knows nothing about them. Disabled with the
+                  reason underneath rather than refused after the fact. */}
+              <Field
+                label={t('project.repository')}
+                hint={hasWorkspaces ? t('project.repositoryLocked') : t('project.repositoryHint')}
+              >
+                <div className="flex max-w-lg items-center gap-2">
+                  <p
+                    className="text-ink-faint min-w-0 flex-1 truncate font-mono text-[11px]"
+                    title={project.repoPath}
+                  >
+                    {project.repoPath}
+                  </p>
+
+                  <Button
+                    disabled={hasWorkspaces}
+                    onClick={() => {
+                      void (async () => {
+                        const picked = await window.octopus.dialog.pickDirectory(
+                          t('project.repositoryPick')
+                        )
+                        if (!picked.ok || picked.value === null) return
+
+                        if (!(await onUpdate({ repoPath: picked.value }))) return
+                        onImported()
+                      })()
+                    }}
+                  >
+                    {t('project.repositoryChange')}
+                  </Button>
+                </div>
               </Field>
             </>
           )}

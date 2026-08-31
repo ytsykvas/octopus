@@ -115,6 +115,7 @@ import {
 import {
   assertBranchExists,
   createProject,
+  inspectRepository,
   orderBaseBranches,
   removeProjectData
 } from './projects.js'
@@ -1689,15 +1690,36 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
     async updateProjectById(projectId, patch) {
       const project = requireProject(projectId)
 
+      /*
+       * A new checkout is asked about before it is recorded.
+       *
+       * `updateProject` refuses what it can see from the state alone — a
+       * relative path, another project's, a project that still has workspaces.
+       * Whether the directory is a repository at all it cannot know, and the
+       * **stored base branch** may simply not exist in the new one, which would
+       * otherwise surface as a git error on the next workspace saying nothing
+       * about settings.
+       */
+      let applied = patch
+      if (patch.repoPath !== undefined) {
+        const info = await inspectRepository(patch.repoPath, makeExec)
+        await assertBranchExists(makeExec(info.root), patch.baseBranch ?? project.baseBranch)
+
+        // The repository's root, not the directory that was picked — the same
+        // answer `addProjectFromPath` records, so choosing a subdirectory means
+        // the same thing whichever way a project arrives at a checkout.
+        applied = { ...patch, repoPath: info.root }
+      }
+
       // Checked before the write, so a branch deleted since the dialog opened
       // is reported here rather than as a worktree failure days later.
-      if (patch.baseBranch !== undefined) {
+      if (patch.baseBranch !== undefined && patch.repoPath === undefined) {
         await assertBranchExists(makeExec(project.repoPath), patch.baseBranch)
       }
 
       const wasEnvFile = project.envFile
 
-      await commit((current) => updateProject(current, projectId, patch))
+      await commit((current) => updateProject(current, projectId, applied))
 
       /*
        * The block in the file the project used to name.

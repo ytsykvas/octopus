@@ -833,3 +833,57 @@ describe('the env file a project writes its variables into', () => {
     expect(stored.envFile).toBe('.env')
   })
 })
+
+describe('pointing a project at another checkout', () => {
+  const other: Project = { ...project, id: 'ledger', name: 'ledger', repoPath: '/repos/ledger' }
+
+  it('records an absolute path', () => {
+    const state = { ...EMPTY_STATE, projects: [project] }
+
+    const next = updateProject(state, 'planner', { repoPath: '/repos/moved' })
+
+    expect(next.projects[0]?.repoPath).toBe('/repos/moved')
+  })
+
+  it('refuses while the project still has a workspace', () => {
+    /*
+     * Each is a worktree registered in the *current* repository. Repoint and
+     * git in the new one knows nothing about them: they read as missing and
+     * cannot even be removed through the app.
+     */
+    const state = { ...EMPTY_STATE, projects: [project], workspaces: [makeWorkspace()] }
+
+    expect(() => updateProject(state, 'planner', { repoPath: '/repos/moved' })).toThrow(
+      StateConflictError
+    )
+  })
+
+  it("refuses another project's repository", () => {
+    const state = { ...EMPTY_STATE, projects: [project, other] }
+
+    try {
+      updateProject(state, 'planner', { repoPath: '/repos/ledger' })
+      expect.unreachable()
+    } catch (error) {
+      expect(error).toMatchObject({ code: 'repoPathTaken', params: { name: 'ledger' } })
+    }
+  })
+
+  it('refuses a relative path and an empty one', () => {
+    const state = { ...EMPTY_STATE, projects: [project] }
+
+    expect(() => updateProject(state, 'planner', { repoPath: 'repos/moved' })).toThrow(
+      StateConflictError
+    )
+    expect(() => updateProject(state, 'planner', { repoPath: '   ' })).toThrow(StateConflictError)
+  })
+
+  it('leaves a project alone that is not the one being pointed', () => {
+    const state = { ...EMPTY_STATE, projects: [project, other], workspaces: [makeWorkspace()] }
+
+    // The workspace belongs to `planner`, so `ledger` may still move.
+    const next = updateProject(state, 'ledger', { repoPath: '/repos/moved' })
+
+    expect(next.projects[1]?.repoPath).toBe('/repos/moved')
+  })
+})

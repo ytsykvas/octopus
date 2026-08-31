@@ -219,8 +219,24 @@ export const EMPTY_STATE: State = {
 }
 
 /** State integrity violation — a duplicate or a dangling reference. */
+/** What a refusal from this module is, where it is one the reader can act on. */
+export type StateConflictCode =
+  'repoPathHasWorkspaces' | 'repoPathTaken' | 'repoPathRelative' | 'repoPathEmpty'
+
 export class StateConflictError extends Error {
-  constructor(message: string) {
+  /**
+   * Optional, because most of these are conditions the interface cannot reach.
+   *
+   * The ones that can — a checkout being repointed — carry a code so the
+   * renderer can say what happened in the reader's own language. Without one it
+   * arrives as its English message, which is where every one of these used to
+   * arrive, including the duplicate branch name a user can actually produce.
+   */
+  constructor(
+    message: string,
+    readonly code?: StateConflictCode,
+    readonly params: Readonly<Record<string, string>> = {}
+  ) {
     super(message)
     this.name = 'StateConflictError'
   }
@@ -357,7 +373,8 @@ export const ProjectPatchSchema = ProjectSchema.pick({
   envFile: true,
   approvedSettings: true,
   approvedScripts: true,
-  envProfile: true
+  envProfile: true,
+  repoPath: true
 }).partial()
 
 export type ProjectPatch = z.infer<typeof ProjectPatchSchema>
@@ -381,6 +398,46 @@ export function updateProject(state: State, projectId: string, patch: ProjectPat
   const baseBranch = patch.baseBranch?.trim()
   if (baseBranch !== undefined && baseBranch === '') {
     throw new StateConflictError('A base branch cannot be empty')
+  }
+
+  const repoPath = patch.repoPath?.trim()
+  if (repoPath !== undefined) {
+    if (repoPath === '') {
+      throw new StateConflictError('A repository path cannot be empty', 'repoPathEmpty')
+    }
+    if (!isAbsolute(repoPath)) {
+      throw new StateConflictError(`${repoPath} is not an absolute path`, 'repoPathRelative', {
+        path: repoPath
+      })
+    }
+
+    // The same rule `addProject` keeps, which `updateProject` could not enforce
+    // while the field was not editable: two projects on one checkout would
+    // create each other's worktrees.
+    const other = state.projects.find(
+      (project) => project.id !== projectId && project.repoPath === repoPath
+    )
+    if (other) {
+      throw new StateConflictError(`${other.name} already uses that repository`, 'repoPathTaken', {
+        name: other.name
+      })
+    }
+
+    /*
+     * And only while the project has no workspaces.
+     *
+     * Each one is a worktree registered in the **current** repository's
+     * `.git/worktrees`. Repoint and git in the new one knows nothing about
+     * them: every workspace reads as missing, the interface closes their
+     * terminals, and `git worktree remove` then fails — so they cannot even be
+     * cleaned up through the app. A warning would arrive after that is true.
+     */
+    if (state.workspaces.some((workspace) => workspace.projectId === projectId)) {
+      throw new StateConflictError(
+        'A project can only be repointed while it has no workspaces',
+        'repoPathHasWorkspaces'
+      )
+    }
   }
 
   const envFile = patch.envFile?.trim()
@@ -411,6 +468,7 @@ export function updateProject(state: State, projectId: string, patch: ProjectPat
               approvedScripts: patch.approvedScripts
             }),
             ...(patch.envProfile !== undefined && { envProfile: patch.envProfile }),
+            ...(repoPath !== undefined && { repoPath }),
             ...(patch.approvedSettings !== undefined && {
               approvedSettings: patch.approvedSettings
             })
