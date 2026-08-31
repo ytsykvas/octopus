@@ -188,6 +188,58 @@ describe('revertFile', () => {
     expect(await changed()).toEqual([])
   })
 
+  /*
+   * The order the two paths are handled in is load-bearing, and only on a
+   * case-insensitive filesystem — which is the default on macOS, where this
+   * runs. git's tree is case-sensitive, so `foo.ts` is absent from the base and
+   * gets removed while `Foo.ts` is present and gets restored. Doing it the
+   * other way round would restore the file and then delete it again, through
+   * the same directory entry, and the workspace would be left without it.
+   */
+  it('survives a rename that changes only the case of the name', async () => {
+    await run('git', ['mv', 'kept.txt', 'KEPT.txt'], { cwd: dir })
+    await commit('case rename')
+
+    await revert('KEPT.txt', 'kept.txt')
+
+    expect(await readFile(join(dir, 'kept.txt'), 'utf8')).toBe('one\ntwo\n')
+    expect(await changed()).toEqual([])
+  })
+
+  it('brings back a file deleted in the working tree but never committed', async () => {
+    await rm(join(dir, 'kept.txt'))
+    expect(await changed()).toEqual(['kept.txt'])
+
+    await revert('kept.txt')
+
+    expect(await readFile(join(dir, 'kept.txt'), 'utf8')).toBe('one\ntwo\n')
+    expect(await changed()).toEqual([])
+  })
+
+  // The diff unquotes what git prints, so the path arriving here is the real
+  // one — with the space and the accent in it, not git's escaped spelling.
+  it('reverts a path with a space and a character outside ASCII', async () => {
+    const awkward = 'дока ція.md'
+    await writeFile(join(dir, awkward), 'draft\n', 'utf8')
+    expect(await changed()).toEqual([awkward])
+
+    await revert(awkward)
+
+    expect(await exists(awkward)).toBe(false)
+    expect(await changed()).toEqual([])
+  })
+
+  it('reverts a tracked path with a space in it', async () => {
+    await writeFile(join(dir, 'two words.txt'), 'first\n', 'utf8')
+    await commit('add it')
+    await writeFile(join(dir, 'two words.txt'), 'edited\n', 'utf8')
+
+    await revert('two words.txt')
+
+    expect(await exists('two words.txt')).toBe(false)
+    expect(await changed()).toEqual([])
+  })
+
   it('reverts a file inside a directory the branch created', async () => {
     await run('git', ['checkout', '-q', 'main'], { cwd: dir })
     await run('git', ['checkout', '-q', 'work'], { cwd: dir })
@@ -200,11 +252,18 @@ describe('revertFile', () => {
     expect(await changed()).toEqual([])
   })
 
-  it('says nothing went wrong when the file is already gone', async () => {
+  // Tolerance is the promise: somebody deleting the file between the pane
+  // being drawn and the button being pressed has arrived where the button was
+  // going. `toBeUndefined` alone would hold for any call that did not throw,
+  // so the state afterwards is what the assertion is about.
+  it('is content when the file is already gone', async () => {
     await writeFile(join(dir, 'new.txt'), 'fresh\n', 'utf8')
     await rm(join(dir, 'new.txt'))
 
     await expect(revert('new.txt')).resolves.toBeUndefined()
+
+    expect(await exists('new.txt')).toBe(false)
+    expect(await changed()).toEqual([])
   })
 
   it('refuses a path that leaves the workspace', async () => {

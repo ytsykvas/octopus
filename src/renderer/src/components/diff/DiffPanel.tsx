@@ -224,6 +224,27 @@ export function DiffPanel({
   }, [])
 
   const { add, remove, pending } = comments
+  /**
+   * Steady, because `DiffFile` is memoised and every prop it is handed has to
+   * be — an arrow written inline here is a new function on every render, which
+   * redraws every file and every row on each pointer move of a width drag, and
+   * a redraw drops a live text selection. That is the bug `DiffFileMemo.test`
+   * was written about.
+   *
+   * `revert.revert` and `refresh` are both `useCallback`s, so this holds still
+   * for as long as they do.
+   */
+  const revertFile = useCallback(
+    (file: FileDiff) => {
+      void (async () => {
+        // Only re-read when something moved: a reader who said no has changed
+        // nothing, and a refusal has already been reported.
+        if (await revert.revert(file.path, file.oldPath)) await refresh()
+      })()
+    },
+    [revert, refresh]
+  )
+
   const surface = useMemo(
     () => ({
       pending,
@@ -346,13 +367,7 @@ export function DiffPanel({
             tokens={tokens.get(file.path) ?? NO_TOKENS}
             comments={surface}
             onOpen={openFile}
-            onRevert={(reverted) => {
-              void (async () => {
-                // Only re-read when something moved: a reader who said no has
-                // changed nothing, and a refusal has already been reported.
-                if (await revert.revert(reverted.path, reverted.oldPath)) await refresh()
-              })()
-            }}
+            onRevert={revertFile}
           />
         ))}
       </div>
