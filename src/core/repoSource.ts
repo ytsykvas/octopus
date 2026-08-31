@@ -33,6 +33,7 @@ import { join } from 'node:path'
 import { readConductorConfig } from './conductorConfig.js'
 import { REPO_DIR, assertUnlinkedPath } from './repoConfig.js'
 import { trustDigest } from './repoTrust.js'
+import { SCRIPT_KINDS } from './scriptEnv.js'
 import { SCRIPT_FILES, type ScriptKind, readScript, scriptExists, scriptPath } from './scripts.js'
 import type { ProjectId } from './types.js'
 
@@ -142,9 +143,6 @@ export async function resolveScript(
 
   return null
 }
-
-/** Every kind, resolved. `null` where nothing supplies one. */
-export const SCRIPT_KINDS: readonly ScriptKind[] = ['setup', 'run', 'archive']
 
 /** What runs in one workspace, and whether the repository's part is approved. */
 export interface ScriptsInWorkspace {

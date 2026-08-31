@@ -14,6 +14,17 @@
 
 import type { ScriptKind } from './scripts.js'
 
+/**
+ * The three kinds, in the order they are run and shown.
+ *
+ * Here rather than beside `ScriptKindSchema`, which lives in a module that
+ * reaches `node:fs` — the renderer needs this as a **value** and importing it
+ * from there would drag `node:os` into the browser behind it. That is not
+ * hypothetical: it happened, every check stayed green, and the window failed at
+ * runtime (§ CLAUDE.md, "the rule in the other direction").
+ */
+export const SCRIPT_KINDS: readonly ScriptKind[] = ['setup', 'run', 'archive']
+
 /** Environment variable carrying the port `run.sh` should listen on. */
 export const PORT_VARIABLE = 'OCTOPUS_PORT'
 
