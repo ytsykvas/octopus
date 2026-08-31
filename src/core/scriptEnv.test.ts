@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 
 import {
   BLOCK,
+  conductorEnv,
   PORT_VARIABLE,
   SLUG_MAX_LENGTH,
   blockPorts,
@@ -50,6 +51,33 @@ describe('blockPorts', () => {
   it('answers with the workspace port and the nine after it', () => {
     expect(blockPorts(3100)).toEqual([3100, 3101, 3102, 3103, 3104, 3105, 3106, 3107, 3108, 3109])
     expect(blockPorts(3100)).toHaveLength(BLOCK)
+  })
+})
+
+describe('conductorEnv', () => {
+  const values = {
+    rootPath: '/repo',
+    workspaceName: 'Fix login bug',
+    port: 3110,
+    defaultBranch: 'develop'
+  }
+
+  it("gives a Conductor script the slug as the workspace's name", () => {
+    /*
+     * Their scripts slugify whatever they are given before naming a database
+     * with it. Handing them the slug makes that a no-op, so the name their
+     * script drops and the name our env block wrote are one string.
+     */
+    expect(conductorEnv('setup', values)).toEqual({
+      CONDUCTOR_ROOT_PATH: '/repo',
+      CONDUCTOR_WORKSPACE_NAME: 'fix_login_bug',
+      CONDUCTOR_DEFAULT_BRANCH: 'develop'
+    })
+  })
+
+  it('gives the port to the server script alone, as we do', () => {
+    expect(conductorEnv('run', values)).toMatchObject({ CONDUCTOR_PORT: '3110' })
+    expect(conductorEnv('archive', values)).not.toHaveProperty('CONDUCTOR_PORT')
   })
 })
 

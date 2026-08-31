@@ -21,6 +21,7 @@ const project = (id: string, name: string): Project => ({
   branchPrefix: 'ytsykvas',
   envFile: '.env',
   approvedSettings: [],
+  approvedScripts: [],
   color: 'blue'
 })
 

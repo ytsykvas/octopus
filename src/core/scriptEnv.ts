@@ -96,6 +96,44 @@ export function blockPorts(port: number): number[] {
 }
 
 /**
+ * Conductor's names for the same values.
+ *
+ * Given only to a script that came out of a repository's `.conductor/` settings,
+ * because that is the vocabulary those scripts were written against. It is what
+ * removes the wrapper a project used to keep in its own settings for no purpose
+ * but translating one set of names into the other.
+ *
+ * **The workspace name is the slug**, not the label. A `.conductor` script
+ * slugifies whatever it is given before naming a database with it, so handing
+ * it the slug makes that a no-op — and then the name our env block writes and
+ * the name their script drops are the same string, which is the whole point of
+ * the slug rule matching theirs.
+ *
+ * `CONDUCTOR_IS_LOCAL` is deliberately absent. Scripts branch on it, its value
+ * is not documented, and being wrong about a flag is worse than not setting it.
+ */
+export function conductorEnv(
+  kind: ScriptKind,
+  values: {
+    readonly rootPath: string
+    readonly workspaceName: string
+    readonly port: number
+    readonly defaultBranch: string
+  }
+): Record<string, string> {
+  const env: Record<string, string> = {
+    CONDUCTOR_ROOT_PATH: values.rootPath,
+    CONDUCTOR_WORKSPACE_NAME: workspaceSlug(values.workspaceName),
+    CONDUCTOR_DEFAULT_BRANCH: values.defaultBranch
+  }
+
+  // The same rule as ours: serving is the only thing a port is about.
+  if (kind === 'run') env.CONDUCTOR_PORT = String(values.port)
+
+  return env
+}
+
+/**
  * The environment a script is given.
  *
  * All three get the root and the name, in both forms; only the server gets the

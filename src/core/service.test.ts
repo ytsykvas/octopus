@@ -1579,6 +1579,56 @@ describe('the cleanup script', () => {
     ).resolves.toBeUndefined()
     await expect(service.listWorkspaces(project.id)).resolves.toHaveLength(0)
   })
+
+  /*
+   * The one place an unapproved repository script is skipped rather than
+   * refused. Nothing may stop a removal, and a dialog in the middle of one is a
+   * dialog nobody can answer usefully — so the cleanup is not performed, which
+   * leaves a database behind and is the lesser of the two.
+   */
+  it("skips a repository's script that nobody has read, and still removes the workspace", async () => {
+    const repo = join(dir, 'planner')
+    await initRepo(repo)
+    const project = await service.addProjectFromPath(repo)
+    const workspace = await service.createWorkspaceIn(project.id)
+
+    const marker = join(dir, 'unapproved.txt')
+    await mkdir(join(workspace.path, '.conductor'), { recursive: true })
+    await writeFile(
+      join(workspace.path, '.conductor', 'settings.toml'),
+      `[scripts]\narchive = "printf ran > '${marker}'"\n`,
+      'utf8'
+    )
+
+    // `force`, because writing the settings into the worktree is itself an
+    // uncommitted change.
+    await service.removeWorkspaceById(workspace.id, { deleteBranch: false, force: true })
+
+    await expect(readFile(marker, 'utf8')).rejects.toThrow()
+    await expect(service.listWorkspaces(project.id)).resolves.toHaveLength(0)
+  })
+
+  it("runs a repository's script once it has been read", async () => {
+    const repo = join(dir, 'planner')
+    await initRepo(repo)
+    const project = await service.addProjectFromPath(repo)
+    const workspace = await service.createWorkspaceIn(project.id)
+
+    const marker = join(dir, 'approved.txt')
+    await mkdir(join(workspace.path, '.conductor'), { recursive: true })
+    await writeFile(
+      join(workspace.path, '.conductor', 'settings.toml'),
+      `[scripts]\narchive = "printf '%s' \\"$CONDUCTOR_WORKSPACE_NAME\\" > '${marker}'"\n`,
+      'utf8'
+    )
+    await service.approveWorkspaceScripts(workspace.id)
+
+    await service.removeWorkspaceById(workspace.id, { deleteBranch: false, force: true })
+
+    // Conductor's own name for the workspace, and the slug rather than the
+    // label — which is what makes their setup and archive agree.
+    await expect(readFile(marker, 'utf8')).resolves.toBe(workspace.name)
+  })
 })
 
 describe('files carried into a workspace', () => {
@@ -1876,6 +1926,80 @@ describe('settings a repository carries', () => {
     await expect(service.projectRepoConfig(id)).rejects.toMatchObject({
       code: 'repoConfigSymlink'
     })
+  })
+})
+
+describe('scripts a repository supplies', () => {
+  async function withWorkspace(): Promise<{
+    projectId: string
+    workspaceId: string
+    repo: string
+  }> {
+    const repo = join(dir, 'planner')
+    await initRepo(repo)
+    const project = await service.addProjectFromPath(repo)
+    const workspace = await service.createWorkspaceIn(project.id)
+    return { projectId: project.id, workspaceId: workspace.id, repo }
+  }
+
+  /** Writes into the **worktree**, which is where a run would read from. */
+  async function inWorktree(workspaceId: string, relative: string, body: string): Promise<void> {
+    const workspace = (await service.listWorkspaces('planner')).find(
+      (candidate) => candidate.id === workspaceId
+    )
+    const path = join(workspace?.path ?? '', relative)
+    await mkdir(join(path, '..'), { recursive: true })
+    await writeFile(path, body, 'utf8')
+  }
+
+  it('has nothing to approve for a project whose scripts are its own', async () => {
+    const { projectId, workspaceId } = await withWorkspace()
+    await service.saveProjectScript(projectId, 'setup', '#!/bin/sh\nnpm install\n')
+
+    const answer = await service.workspaceScripts(workspaceId)
+
+    expect(answer.scripts.setup?.source).toBe('project')
+    // Approved without asking: the user wrote it.
+    expect(answer.approved).toBe(true)
+  })
+
+  it('does not run a repository script until it has been read', async () => {
+    const { workspaceId } = await withWorkspace()
+    await inWorktree(workspaceId, '.conductor/settings.toml', '[scripts]\nsetup = "make dev"\n')
+
+    const before = await service.workspaceScripts(workspaceId)
+    expect(before.scripts.setup?.source).toBe('repoConductor')
+    expect(before.approved).toBe(false)
+
+    await service.approveWorkspaceScripts(workspaceId)
+    await expect(service.workspaceScripts(workspaceId)).resolves.toMatchObject({ approved: true })
+  })
+
+  it('asks again once the repository changes what it runs', async () => {
+    // The point of a digest rather than a flag: a `git pull` that rewrites the
+    // build script is a new thing to read.
+    const { workspaceId } = await withWorkspace()
+    await inWorktree(workspaceId, '.conductor/settings.toml', '[scripts]\nsetup = "make dev"\n')
+    await service.approveWorkspaceScripts(workspaceId)
+
+    await inWorktree(workspaceId, '.conductor/settings.toml', '[scripts]\nsetup = "curl | sh"\n')
+
+    await expect(service.workspaceScripts(workspaceId)).resolves.toMatchObject({ approved: false })
+  })
+
+  it('records nothing when there is nothing to record', async () => {
+    const { projectId, workspaceId } = await withWorkspace()
+
+    await service.approveWorkspaceScripts(workspaceId)
+
+    // An empty list rather than a digest of nothing, so the panel keeps telling
+    // "no repository scripts" apart from "approved".
+    expect(service.listProjects().find((p) => p.id === projectId)?.approvedScripts).toEqual([])
+  })
+
+  it('refuses a workspace it does not know', async () => {
+    await expect(service.workspaceScripts('missing')).rejects.toThrow()
+    await expect(service.approveWorkspaceScripts('missing')).rejects.toThrow()
   })
 })
 

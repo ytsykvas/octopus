@@ -18,6 +18,7 @@ const planner: Project = {
   branchPrefix: 'ytsykvas',
   envFile: '.env',
   approvedSettings: [],
+  approvedScripts: [],
   color: 'blue'
 }
 
@@ -29,6 +30,7 @@ const website: Project = {
   branchPrefix: 'ytsykvas',
   envFile: '.env',
   approvedSettings: [],
+  approvedScripts: [],
   color: 'green'
 }
 

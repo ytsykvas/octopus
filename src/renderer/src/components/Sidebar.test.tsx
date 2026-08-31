@@ -16,6 +16,7 @@ function project(overrides: Partial<Project> = {}): Project {
     branchPrefix: 'ytsykvas',
     envFile: '.env',
     approvedSettings: [],
+    approvedScripts: [],
     color: 'blue',
     ...overrides
   }

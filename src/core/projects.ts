@@ -138,8 +138,10 @@ export async function createProject(
     branchPrefix,
     color: nextProjectColor(state.projects.map((project) => project.color)),
     envFile: DEFAULT_ENV_FILE,
-    // Nothing has been read yet, which is exactly what an empty list says.
-    approvedSettings: []
+    // Nothing has been read yet, which is exactly what an empty list says —
+    // for what the agent may load, and for what the Run button may execute.
+    approvedSettings: [],
+    approvedScripts: []
   }
 }
 

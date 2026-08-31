@@ -121,7 +121,7 @@ beforeEach(() => {
   renderer = target()
 })
 
-const SPEC = { cwd: '/tmp/work', command: [], env: {}, cols: 80, rows: 24 }
+const SPEC = { cwd: '/tmp/work', command: [], commandLine: '', env: {}, cols: 80, rows: 24 }
 
 describe('creating a session', () => {
   it('starts one pty and hands back an id', () => {

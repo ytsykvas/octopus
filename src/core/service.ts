@@ -59,6 +59,7 @@ import {
   writeProjectEnv
 } from './env.js'
 import { runArchiveScript } from './archive.js'
+import { shortBranchName } from './branches.js'
 import { subscriptionFrom } from './usage.js'
 import {
   type Config,
@@ -108,6 +109,7 @@ import {
   removeTranscript
 } from './transcript.js'
 import { assertBranchExists, createProject, orderBaseBranches } from './projects.js'
+import { type ResolvedScript, resolveScripts, scriptsDigest } from './repoSource.js'
 import { readScript, type ScriptKind, scriptExists, scriptPath, writeScript } from './scripts.js'
 import {
   compareRepoItem,
@@ -351,8 +353,27 @@ export interface OctopusService {
    *
    * A path rather than a flag: the tab has to show which file it runs and hand
    * it to a shell, and only the core knows where the data root is.
+   *
+   * The project's own copies alone — what the editors in Project settings read
+   * and write. What actually **runs** is `workspaceScripts`, which asks the
+   * repository first.
    */
   projectScriptPaths(projectId: string): Promise<Record<ScriptKind, string | null>>
+
+  /**
+   * Which script would run for each kind in this workspace, and from where.
+   *
+   * `approved` is about the ones the repository supplies: until somebody has
+   * read them, they do not run. A project's own scripts are never gated — the
+   * user wrote them, and a dialog asking somebody to approve their own text is
+   * one they learn to click through.
+   */
+  workspaceScripts(workspaceId: string): Promise<{
+    readonly approved: boolean
+    readonly scripts: Readonly<Partial<Record<ScriptKind, ResolvedScript>>>
+  }>
+  /** Records that these scripts were read, so they may run. */
+  approveWorkspaceScripts(workspaceId: string): Promise<void>
 
   /** Which of the checkout's files travel into a workspace, one path per line. */
   readProjectCarryList(projectId: string): Promise<string>
@@ -1806,6 +1827,30 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
       return { approved: digest === '' || project.approvedSettings.includes(digest), files }
     },
 
+    async workspaceScripts(workspaceId) {
+      const workspace = requireWorkspace(workspaceId)
+      const project = requireProject(workspace.projectId)
+      const scripts = await resolveScripts(workspace.path, project.id, dataRoot)
+      const digest = scriptsDigest(scripts)
+
+      // Nothing supplied by the repository is nothing to approve, which is
+      // every project configured the way they all used to be.
+      return { approved: digest === '' || project.approvedScripts.includes(digest), scripts }
+    },
+
+    async approveWorkspaceScripts(workspaceId) {
+      const workspace = requireWorkspace(workspaceId)
+      const project = requireProject(workspace.projectId)
+      const digest = scriptsDigest(await resolveScripts(workspace.path, project.id, dataRoot))
+      if (digest === '') return
+
+      await commit((current) =>
+        updateProject(current, project.id, {
+          approvedScripts: withApproval(project.approvedScripts, digest)
+        })
+      )
+    },
+
     async approveWorkspaceSettings(workspaceId) {
       const workspace = requireWorkspace(workspaceId)
       const project = requireProject(workspace.projectId)
@@ -2011,16 +2056,29 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
       // worktree. Whatever it says, the removal continues: a workspace that
       // cannot be deleted because a cleanup script is broken is the worse
       // problem of the two.
-      await runArchiveScript(
-        project.id,
-        {
-          rootPath: project.repoPath,
-          workspaceName: workspace.name,
-          path: workspace.path,
-          port: workspace.port
-        },
-        dataRoot
-      )
+      const scripts = await resolveScripts(workspace.path, project.id, dataRoot)
+      const cleanup = scripts.archive ?? null
+
+      /*
+       * A repository's script that nobody has read is skipped, not run.
+       *
+       * Everywhere else an unapproved script refuses the run and says so. Here
+       * it cannot: nothing may stop a workspace being removed, and a dialog in
+       * the middle of a deletion is a dialog nobody can answer usefully. So the
+       * cleanup is simply not performed — which leaves a database behind, and
+       * is the lesser of the two: the alternative is executing shell that
+       * arrived with a `git pull` at the one moment the user is not looking.
+       */
+      const gated =
+        cleanup?.source !== 'project' && !project.approvedScripts.includes(scriptsDigest(scripts))
+
+      await runArchiveScript(gated ? null : cleanup, {
+        rootPath: project.repoPath,
+        workspaceName: workspace.name,
+        path: workspace.path,
+        port: workspace.port,
+        defaultBranch: shortBranchName(project.baseBranch)
+      })
 
       // Resolved once and used twice below: the two answers have to be about
       // the same ref, or a branch reads as unmerged against one and merged

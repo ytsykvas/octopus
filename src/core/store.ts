@@ -87,7 +87,17 @@ export const ProjectSchema = z.object({
    * a clone grants it that unless somebody has looked. A **set**, so moving
    * between two branches whose settings differ does not ask on every switch.
    */
-  approvedSettings: z.array(z.string()).default([])
+  approvedSettings: z.array(z.string()).default([]),
+  /**
+   * Digests of the scripts this repository supplies that somebody has read.
+   *
+   * A separate list from `approvedSettings` on purpose. The two answer
+   * different questions — what the agent may load, and what the Run button may
+   * execute — and one list would mean reading a hook file quietly approved a
+   * build script as well. Same shape otherwise: a bounded set, so moving
+   * between two branches whose scripts differ does not ask on every switch.
+   */
+  approvedScripts: z.array(z.string()).default([])
 })
 
 export const WorkspaceStatusSchema = z.enum(['idle', 'running', 'waiting_permission', 'error'])
@@ -328,7 +338,8 @@ export const ProjectPatchSchema = ProjectSchema.pick({
   color: true,
   icon: true,
   envFile: true,
-  approvedSettings: true
+  approvedSettings: true,
+  approvedScripts: true
 }).partial()
 
 export type ProjectPatch = z.infer<typeof ProjectPatchSchema>
@@ -378,6 +389,9 @@ export function updateProject(state: State, projectId: string, patch: ProjectPat
             ...(name !== undefined && { name }),
             ...(baseBranch !== undefined && { baseBranch }),
             ...(envFile !== undefined && { envFile }),
+            ...(patch.approvedScripts !== undefined && {
+              approvedScripts: patch.approvedScripts
+            }),
             ...(patch.approvedSettings !== undefined && {
               approvedSettings: patch.approvedSettings
             })
