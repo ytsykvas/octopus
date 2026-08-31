@@ -21,9 +21,9 @@ export function formatTokens(count: number): string {
 }
 
 /** Below this a share is unremarkable; at it, worth noticing. */
-const NOTICEABLE = 75
+const NOTICEABLE = 60
 /** At this, worth acting on before it decides for you. */
-const PRESSING = 90
+const PRESSING = 80
 
 /**
  * How much of something being gone should be made of.
@@ -50,7 +50,11 @@ const TONES = {
 } as const
 
 const FILLS = {
-  calm: 'bg-ink-faint',
+  // Green rather than neutral, and the one place a calm reading is coloured at
+  // all: a bar is a block by design, so an empty one has room to say "fine"
+  // where a number in green would only be a number wearing a colour. The tone
+  // beside it stays `ink-faint` for that reason.
+  calm: 'bg-success',
   noticeable: 'bg-warning',
   pressing: 'bg-danger'
 } as const

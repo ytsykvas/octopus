@@ -86,6 +86,19 @@ export const uk: Translation = {
     removeCancel: 'Скасувати'
   },
 
+  limits: {
+    title: 'Клод',
+    fiveHour: '5h',
+    week: '1w',
+    reading: 'Вікно {{name}}, використано {{percentage}}%',
+    resets: 'скинеться через {{time}}',
+    hours: 'г',
+    minutes: 'хв',
+    soon: 'ось-ось',
+    stale:
+      'Прочитано до того, як це вікно обнулилось, тож частка застаріла. Наступний хід її оновить.'
+  },
+
   project: {
     title: 'Налаштування проєкту',
     sectionGeneral: 'Загальні',
@@ -441,10 +454,6 @@ export const uk: Translation = {
     clearDetail: 'Запис розмови видаляється разом із нею, і повернути його не вийде.',
     clearConfirm: 'Очистити',
     clearCancel: 'Скасувати',
-    windowFiveHour: '5 год',
-    windowFiveHourTitle: 'П’ятигодинне вікно',
-    windowWeek: 'Тиждень',
-    windowWeekTitle: 'Тижневе вікно',
 
     model: 'Модель',
     modelDefault: 'Модель за замовчуванням',
@@ -517,11 +526,7 @@ export const uk: Translation = {
     endedBlocked: 'зупинив хук',
     endedFailed: 'завершилось помилкою',
 
-    usageResets: 'скинеться через {{time}}',
-    usageReached: 'ліміт вичерпано',
-    hours: 'г',
-    minutes: 'хв',
-    soon: 'ось-ось'
+    usageReached: 'ліміт вичерпано'
   },
 
   usage: {

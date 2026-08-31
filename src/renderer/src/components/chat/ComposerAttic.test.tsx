@@ -1,6 +1,6 @@
 import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
+import { beforeAll, describe, expect, it, vi } from 'vitest'
 
 import type { RateLimit, SessionUsage } from '@core/service.js'
 
@@ -35,12 +35,17 @@ function renderAttic(
 }
 
 describe('what the next message is up against', () => {
-  it('shows the context share and both windows', () => {
+  /*
+   * The context share and nothing else about the account. The two subscription
+   * windows moved to the foot of the sidebar — they say nothing about this
+   * conversation, and `SubscriptionLimits.test` is where they are now.
+   */
+  it('shows the context share, and no longer the account windows', () => {
     renderAttic()
 
     expect(screen.getByText(/Context 48%/)).toBeInTheDocument()
-    expect(screen.getByText(/5h 31%/)).toBeInTheDocument()
-    expect(screen.getByText(/Week 84%/)).toBeInTheDocument()
+    expect(screen.queryByText(/5h/)).not.toBeInTheDocument()
+    expect(screen.queryByText(/84%/)).not.toBeInTheDocument()
   })
 
   // A workspace nobody has spoken to, an API-key session with no plan windows,
@@ -52,38 +57,23 @@ describe('what the next message is up against', () => {
     expect(container).toBeEmptyDOMElement()
   })
 
-  it('drops the context share on its own without taking the windows with it', () => {
-    renderAttic({ ...FULL, context: null })
+  // With the windows gone, the context share is the only measurement left —
+  // so a conversation without one leaves nothing above the field at all.
+  it('is not there at all once the context share goes', () => {
+    const { container } = render(
+      <ComposerAttic usage={{ ...FULL, context: null }} limit={null} onSend={vi.fn()} />
+    )
 
-    expect(screen.queryByText(/Context/)).not.toBeInTheDocument()
-    expect(screen.getByText(/Week 84%/)).toBeInTheDocument()
-  })
-
-  it('keeps the window that has a share when the other has none', () => {
-    renderAttic({
-      ...FULL,
-      subscription: { fiveHour: null, sevenDay: { utilization: 84, resetsAt: null } }
-    })
-
-    expect(screen.queryByText(/5h/)).not.toBeInTheDocument()
-    expect(screen.getByText(/Week 84%/)).toBeInTheDocument()
-  })
-
-  it('shows the context alone when the account reports no windows', () => {
-    renderAttic({ ...FULL, subscription: null })
-
-    expect(screen.getByText(/Context 48%/)).toBeInTheDocument()
-    expect(screen.queryByText(/Week/)).not.toBeInTheDocument()
+    expect(container).toBeEmptyDOMElement()
   })
 
   // A refusal says something no percentage can — that the next turn will not
   // run — so it is worth a word. Beside the figures, not over them: covering
   // them was the first attempt and it hid the very numbers the strip is for.
-  it('names a refusal without covering the figures', () => {
+  it('names a refusal without covering the figure', () => {
     renderAttic(FULL, limitWith('rejected'))
 
     expect(screen.getByText('limit reached')).toBeInTheDocument()
-    expect(screen.getByText(/Week 84%/)).toBeInTheDocument()
     expect(screen.getByText(/Context 48%/)).toBeInTheDocument()
   })
 
@@ -93,7 +83,7 @@ describe('what the next message is up against', () => {
     renderAttic(FULL, limitWith('allowed_warning'))
 
     expect(screen.queryByText('close to the limit')).not.toBeInTheDocument()
-    expect(screen.getByText(/Week 84%/)).toBeInTheDocument()
+    expect(screen.getByText(/Context 48%/)).toBeInTheDocument()
   })
 
   // The percentages come from a pull that an older CLI cannot answer; the
@@ -107,7 +97,7 @@ describe('what the next message is up against', () => {
   it('says nothing extra while everything is fine', () => {
     renderAttic(FULL, limitWith('allowed'))
 
-    expect(screen.getByText(/Week 84%/)).toBeInTheDocument()
+    expect(screen.getByText(/Context 48%/)).toBeInTheDocument()
     expect(screen.queryByText('limit reached')).not.toBeInTheDocument()
   })
 
@@ -249,121 +239,5 @@ describe('the way out of a full context window', () => {
     renderAttic()
 
     expect(reading()).toHaveAttribute('title', 'Context window — 48k of 200k')
-  })
-})
-
-describe('when the windows come back', () => {
-  /*
-   * A wall clock has to be read against a clock. Without a fixed "now" a reset
-   * two hours away lands on tomorrow whenever the suite runs late in the
-   * evening, and the expected string changes with the hour of the run.
-   *
-   * `Date` alone is faked: the menu tests in this file drive `userEvent`, which
-   * needs real timers and hangs rather than failing without them.
-   */
-  beforeEach(() => {
-    vi.useFakeTimers({ toFake: ['Date'] })
-    vi.setSystemTime(new Date('2026-08-11T16:00:00+00:00'))
-  })
-
-  // `restoreAllMocks` in the shared setup does not put the clock back.
-  afterEach(() => {
-    vi.useRealTimers()
-  })
-
-  const RESETTING: SessionUsage = {
-    ...FULL,
-    subscription: {
-      // `.000000` rather than the measured `.149775`: the microseconds are the
-      // shape the CLI sends, but a real fraction pushes `Math.ceil` in the
-      // countdown to `3h 51m` beside a visible `22:50` — true, and reading like
-      // a bug. The measured sample proves the parse in `format.test.ts`.
-      fiveHour: { utilization: 31, resetsAt: '2026-08-11T19:50:00.000000+00:00' },
-      sevenDay: { utilization: 84, resetsAt: '2026-08-14T04:00:00.000000+00:00' }
-    }
-  }
-
-  // The question the strip could not answer: "5h 31%" says how much is gone and
-  // nothing about when it comes back.
-  it('says what hour the five-hour window resets', () => {
-    renderAttic(RESETTING)
-
-    expect(screen.getByText(/5h 31%/)).toHaveTextContent(/^5h 31% · 22:50$/)
-  })
-
-  // Days off, so an hour on its own would not say which day it is the hour of.
-  it('dates the weekly reset, which an hour alone would not place', () => {
-    renderAttic(RESETTING)
-
-    expect(screen.getByText(/Week 84%/)).toHaveTextContent(/^Week 84% · 14\.08 07:00$/)
-  })
-
-  // The glance says when, the hover says how long. The countdown is the half
-  // that cannot go on the strip: it is worked out as the strip is drawn, and the
-  // strip is drawn only when the agent says something.
-  it('keeps the countdown in the tooltip where the moment is on the strip', () => {
-    renderAttic(RESETTING)
-
-    expect(screen.getByText(/5h 31%/)).toHaveAttribute(
-      'title',
-      'Five-hour window — resets in 3h 50m'
-    )
-    // Each window names itself. One `share` draws both, so a title handed the
-    // wrong label is a copy-paste nothing else here would notice.
-    //
-    // `60h`, not `2d 12h`: the countdown does not roll into days, which is
-    // fine where it is — a tooltip is read deliberately, and the strip beside
-    // it already gives the date.
-    expect(screen.getByText(/Week 84%/)).toHaveAttribute(
-      'title',
-      'Weekly window — resets in 60h 0m'
-    )
-  })
-
-  /*
-   * `usageTone` paints what is measured, and an hour of the day is not a
-   * measurement. Drawn in `danger` beside a share that is also red, the moment
-   * would read as the hour being the problem rather than the share — so it
-   * keeps the strip's own tone while the figure beside it does not.
-   *
-   * A class assertion, which this suite otherwise avoids: here the colour *is*
-   * the decision, the same reason the context reading's own tone is asserted
-   * further up this file.
-   */
-  it('leaves the moment in the strip’s tone while the share turns red', () => {
-    renderAttic({
-      ...FULL,
-      subscription: {
-        fiveHour: { utilization: 92, resetsAt: '2026-08-11T19:50:00.000000+00:00' },
-        sevenDay: null
-      }
-    })
-
-    const reading = screen.getByText(/5h 92%/)
-    expect(reading).toHaveClass('text-danger')
-    expect(screen.getByText(/22:50/)).toHaveClass('text-ink-faint')
-  })
-
-  // An older CLI answers with a share and no reset at all, and a separator with
-  // nothing after it is worse than no separator.
-  it('shows the share on its own when the account gives no reset', () => {
-    renderAttic(FULL)
-
-    expect(screen.getByText(/5h 31%/)).toHaveTextContent(/^5h 31%$/)
-    expect(screen.getByText(/5h 31%/)).toHaveAttribute('title', 'Five-hour window')
-  })
-
-  // Nobody has spoken to the agent since the window turned over, so the strip is
-  // still showing what the last turn pulled.
-  it('drops a moment that has already passed', () => {
-    renderAttic({
-      ...FULL,
-      subscription: {
-        fiveHour: { utilization: 100, resetsAt: '2026-08-11T15:00:00+00:00' },
-        sevenDay: null
-      }
-    })
-
-    expect(screen.getByText(/5h 100%/)).toHaveTextContent(/^5h 100%$/)
   })
 })

@@ -525,6 +525,10 @@ export function registerIpc(
   // in the same stream as everything else the agent says.
   host.handle('chats:rateLimit', () => attempt(() => service.getRateLimit()))
 
+  // No chat in the question: the sidebar draws this, and the figures belong to
+  // the account rather than to any conversation.
+  host.handle('chats:subscription', () => attempt(() => service.getSubscriptionUsage()))
+
   // Choosing a directory needs Electron's dialog, so it lives here.
   host.handle('dialog:pickDirectory', async (event, title: string) => {
     const window = host.windowFor(event)

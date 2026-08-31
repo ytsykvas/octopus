@@ -105,6 +105,28 @@ export const WorkspaceSchema = z.object({
   ownerId: z.string().nullable()
 })
 
+/**
+ * One subscription window, as the account last reported it.
+ *
+ * Mirrors `UsageWindow` in `agent.ts` rather than importing it: that module
+ * reaches the SDK, and this one is read by the renderer.
+ *
+ * Nothing has to keep the two in step by hand. `service.ts` assigns what it
+ * loads from here to a `SubscriptionUsage`, so a field that drifts on either
+ * side fails to compile there — a stronger check than a test, and one nobody
+ * has to remember to write.
+ */
+export const UsageWindowSchema = z.object({
+  /** Share of the window used, 0–100. */
+  utilization: z.number(),
+  resetsAt: z.string().nullable()
+})
+
+export const SubscriptionUsageSchema = z.object({
+  fiveHour: UsageWindowSchema.nullable(),
+  sevenDay: UsageWindowSchema.nullable()
+})
+
 export const StateSchema = z.object({
   version: z.literal(1),
   projects: z.array(ProjectSchema),
@@ -129,7 +151,20 @@ export const StateSchema = z.object({
    * agent can list its models solely while a session is running. Replaced whole
    * at the next session start.
    */
-  knownModels: z.array(AgentModelSchema).default([])
+  knownModels: z.array(AgentModelSchema).default([]),
+  /**
+   * How much of the account's windows the agent last said were gone.
+   *
+   * Here for the same two reasons as the models above, and remembered for the
+   * same one: the figures arrive from a running session's control channel, so
+   * without this the sidebar has nothing to show until somebody has sent a
+   * message. A reading is a fact about the account rather than about any
+   * conversation, which is why it sits beside the projects and not inside one.
+   *
+   * `null` is "never read one", which is a different statement from a reading
+   * of zero and has to stay tellable apart from it.
+   */
+  subscriptionUsage: SubscriptionUsageSchema.nullable().default(null)
 })
 
 /**
@@ -152,7 +187,8 @@ export const EMPTY_STATE: State = {
   projects: [],
   workspaces: [],
   chats: [],
-  knownModels: []
+  knownModels: [],
+  subscriptionUsage: null
 }
 
 /** State integrity violation — a duplicate or a dangling reference. */

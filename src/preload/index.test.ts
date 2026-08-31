@@ -297,6 +297,7 @@ describe('channel names', () => {
       'chats:permission'
     ],
     ['chats.rateLimit', () => method('chats', 'rateLimit')(), 'chats:rateLimit'],
+    ['chats.subscription', () => method('chats', 'subscription')(), 'chats:subscription'],
     ['accounts.status', () => method('accounts', 'status')(), 'accounts:status'],
     ['accounts.github', () => method('accounts', 'github')(), 'accounts:github'],
     [

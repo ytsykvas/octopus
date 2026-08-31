@@ -1,15 +1,20 @@
 /**
  * A share of something, drawn as a bar.
  *
- * The first one in the app, and deliberately not a general-purpose component:
- * it exists because a percentage in words answers "how much" and not "how
- * close", and the usage card is asked the second question. Two kinds, because
- * two different things are being shown with the same shape — see below.
+ * Not a general-purpose component: it exists because a percentage in words
+ * answers "how much" and not "how close", and two places are asked the second
+ * question — the usage card a command draws, and the block of subscription
+ * windows at the foot of the sidebar. Two kinds, because two different things
+ * are being shown with the same shape — see below.
+ *
+ * It sits here rather than under `chat/` for that second caller: the sidebar is
+ * not a conversation, and a component reached from two panes belongs to
+ * neither.
  */
 
 import type React from 'react'
 
-import { usageFill } from './format.js'
+import { usageFill } from './chat/format.js'
 
 interface Props {
   /** 0–100. Anything outside is clamped rather than drawn off the end. */

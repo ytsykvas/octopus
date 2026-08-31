@@ -24,6 +24,7 @@ import type { Workspace } from '@core/store.js'
 import type { RemoveOptions, WorkspaceView } from '@core/workspaces.js'
 import type { InstructionKind } from '@core/instructions.js'
 import type { ScriptKind } from '@core/scripts.js'
+import type { SubscriptionUsage } from '@core/agent.js'
 import type { InstructionSource } from '@core/instructionSources.js'
 import type { RepoConfigView, RepoItemId } from '@core/repoConfig.js'
 import type { CapabilityFile } from '@core/repoTrust.js'
@@ -238,6 +239,15 @@ const api = {
     /** The last rate limit any session reported; `null` before one has. */
     rateLimit: (): Promise<Result<RateLimit | null>> =>
       ipcRenderer.invoke('chats:rateLimit') as Promise<Result<RateLimit | null>>,
+
+    /**
+     * How much of the account's windows is gone, with no chat in the question.
+     *
+     * Answered from the last reading, which is kept in the state file — so it
+     * is there when the window opens rather than after the first message.
+     */
+    subscription: (): Promise<Result<SubscriptionUsage | null>> =>
+      ipcRenderer.invoke('chats:subscription') as Promise<Result<SubscriptionUsage | null>>,
 
     onEvent: (handler: (event: ChatEvent) => void): (() => void) => {
       const listener = (_event: unknown, chatEvent: ChatEvent): void => {
