@@ -24,7 +24,7 @@ import { formatTokens } from './format.js'
 import type { Change, ChangeLine } from './changeSummary.js'
 import { Markdown } from './Markdown.js'
 import { QuestionCard } from './QuestionCard.js'
-import { answersByRequest, groupToolRuns, toolCount } from './toolRuns.js'
+import { answersByRequest, groupToolRuns, planCalls, toolCount } from './toolRuns.js'
 import { readFailure } from './toolFailure.js'
 import { describeToolInput, readPlan } from './toolSummary.js'
 import { UsageCard } from './UsageCard.js'
@@ -94,6 +94,9 @@ export function ChatLog({
   // it sits further down than the question whose card draws it.
   const answers = useMemo(() => answersByRequest(entries), [entries])
   const blocks = useMemo(() => groupToolRuns(entries), [entries])
+  // Which calls handed over a plan, so that a plan sent back for another round
+  // is not drawn as something that broke.
+  const plans = useMemo(() => planCalls(entries), [entries])
 
   return (
     <div className="mx-auto flex w-full max-w-6xl flex-col gap-3 px-6 py-5">
@@ -118,6 +121,7 @@ export function ChatLog({
           <EntryRow
             key={block.at}
             entry={block.entry}
+            plans={plans}
             busy={busy}
             pendingRequestId={pendingRequestId}
             answers={answers}
@@ -154,10 +158,16 @@ interface AnswerProps {
   onExecutePlan: (plan: string) => void
 }
 
+/** Everything a row needs on top of the entry itself. */
+interface RowProps extends AnswerProps {
+  /** The calls that handed over a plan, by id. See `planCalls`. */
+  plans: ReadonlySet<string>
+}
+
 function EntryRow({
   entry,
   ...answering
-}: { entry: ChatEntry } & AnswerProps): React.JSX.Element | null {
+}: { entry: ChatEntry } & RowProps): React.JSX.Element | null {
   if (entry.role === 'user') return <UserMessage text={entry.text} />
 
   return <AgentRow event={entry.event} {...answering} />
@@ -165,13 +175,14 @@ function EntryRow({
 
 function AgentRow({
   event,
+  plans,
   busy,
   pendingRequestId,
   answers,
   onAnswer,
   onAnswerQuestions,
   onExecutePlan
-}: { event: AgentEvent } & AnswerProps): React.JSX.Element | null {
+}: { event: AgentEvent } & RowProps): React.JSX.Element | null {
   switch (event.type) {
     case 'text':
       return <Prose text={event.text} />
@@ -201,7 +212,14 @@ function AgentRow({
     }
 
     case 'tool_result':
-      return event.ok ? null : <ToolFailure content={event.content} />
+      if (event.ok) return null
+
+      // A plan handed back is not a failure, however the SDK had to record it.
+      return plans.has(event.toolUseId) ? (
+        <PlanNote content={event.content} />
+      ) : (
+        <ToolFailure content={event.content} />
+      )
 
     case 'permission_request': {
       // A plan's request has nothing left to say here. The plan itself is
@@ -559,6 +577,27 @@ function Plan({
 function ToolFailure({ content }: { content: string }): React.JSX.Element {
   return (
     <p className="text-danger border-danger/25 border-l pl-3 font-mono text-[11px] break-all">
+      {readFailure(content)}
+    </p>
+  )
+}
+
+/**
+ * What was said back to a plan.
+ *
+ * The dialog's field sends the note as the refusal's reason, so it reaches the
+ * log as a failed `ExitPlanMode` — accurate about the call, and wrong about the
+ * moment: nothing broke, someone read a plan and asked for a different one.
+ * In `danger` and monospaced at 11px it was the reader's own sentence drawn as
+ * a stack trace.
+ *
+ * The warning colour instead, and the interface's own text: a note against the
+ * plan above, which is what it is. The rule stays, since what ties it to that
+ * plan is standing beside it.
+ */
+function PlanNote({ content }: { content: string }): React.JSX.Element {
+  return (
+    <p className="text-warning border-warning/25 border-l pl-3 whitespace-pre-wrap">
       {readFailure(content)}
     </p>
   )

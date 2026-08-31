@@ -96,6 +96,31 @@ function changeIn(entry: ChatEntry): Change | null {
 }
 
 /**
+ * Which calls were the agent handing a plan over.
+ *
+ * Gathered because the result of one has to be told apart from a real failure,
+ * and a result carries only the id of the call it answers. A plan sent back for
+ * another round is recorded as a failed `ExitPlanMode` whose content is what
+ * the person typed into the dialog — true of the call, and misleading about the
+ * moment, since nothing went wrong.
+ */
+export function planCalls(entries: readonly ChatEntry[]): ReadonlySet<string> {
+  const found = new Set<string>()
+
+  for (const entry of entries) {
+    if (
+      entry.role === 'agent' &&
+      entry.event.type === 'tool_use' &&
+      readPlan(entry.event.name, entry.event.input) !== null
+    ) {
+      found.add(entry.event.toolUseId)
+    }
+  }
+
+  return found
+}
+
+/**
  * An entry that draws nothing at all.
  *
  * Counted as part of a run rather than as something between two of them,

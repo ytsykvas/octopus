@@ -423,6 +423,36 @@ describe('what the log shows', () => {
 
     expect(screen.queryByText('the whole file')).not.toBeInTheDocument()
     expect(screen.getByText('no such file')).toBeInTheDocument()
+    expect(screen.getByText('no such file')).toHaveClass('text-danger')
+  })
+
+  /*
+   * A plan sent back for another round is a refusal in the SDK's bookkeeping
+   * and nothing else: the note travels as the reason, so it lands in the log as
+   * a failed `ExitPlanMode`. Drawn like a failure it read as though the user's
+   * own sentence had crashed something.
+   */
+  it('draws a note against a plan as a note, not as a failure', () => {
+    renderLog({
+      entries: [
+        fromAgent({
+          type: 'tool_use',
+          toolUseId: 'c-1',
+          name: 'ExitPlanMode',
+          input: { plan: '## The plan\n\nRefactor the callback.' }
+        }),
+        fromAgent({
+          type: 'tool_result',
+          toolUseId: 'c-1',
+          ok: false,
+          content: 'Do it without the new component.'
+        })
+      ]
+    })
+
+    const note = screen.getByText('Do it without the new component.')
+    expect(note).toHaveClass('text-warning')
+    expect(note).not.toHaveClass('text-danger')
   })
 
   // Transcripts written before the mapping learned to drop these already hold
