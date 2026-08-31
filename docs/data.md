@@ -350,12 +350,28 @@ The subscription's rate limit lives in the service's memory and never reaches
 a reading restored from disk after a night is worse than none: it would be drawn
 with full confidence and be wrong. It is re-learned from the first turn that runs.
 
-The same goes for the two figures the composer's attic shows, which are pulled
-from a running agent rather than pushed. **The context share is not kept at all**,
-not even in memory: it describes a live child process, and once that process ends
-the next one rebuilds a context we never observed. **The subscription windows are
-cached beside the rate limit** — they belong to the account, so a workspace with
-no session of its own can still show what another workspace's turn learned.
+**The context share is not kept at all**, not even in memory: it describes a
+live child process, and once that process ends the next one rebuilds a context
+we never observed.
+
+**The subscription windows are the exception, and were not always.** They used
+to be cached beside the rate limit and go no further, on the reasoning above —
+a reading restored after a night would be drawn with full confidence and be
+wrong. They are now written to `state.json` as well, because they moved out of
+the composer and into the sidebar, where they are on screen from the moment the
+window opens rather than after a turn. Without the last one on disk that block
+is empty on every launch until somebody sends a message, which is the thing it
+exists to fix.
+
+What makes the trade different from the rate limit's is that the objection is
+answerable here. A window carries `resetsAt`, so a reading can be checked
+against the clock: past that moment it is drawn faded and says so, rather than
+standing there as fact. The rate limit has no such handle, so it still expires
+into nothing.
+
+It is written only when it changes — the figures are read up to three times a
+turn, and a write per read would put the busiest path in the app on the state
+file to record a number that had not moved.
 
 The `usage` event in a transcript is not an exception to any of that, though it
 looks like one. It is not a reading kept in case it is wanted later; it is the
