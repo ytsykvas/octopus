@@ -738,8 +738,12 @@ export async function readWorkspaceDiff(
  * A failure here is not git falling over — it is a base branch that has been
  * deleted, renamed, or was never fetched into this worktree. The user can fix
  * that in the project's settings, so it gets a code rather than raw stderr.
+ *
+ * Exported for `revert.ts`, which needs the same left-hand side to put a file
+ * back to. A read, so the promise at the top of this module — that nothing
+ * here writes — is unaffected by who calls it.
  */
-async function mergeBase(exec: GitExec, baseBranch: string): Promise<string> {
+export async function mergeBase(exec: GitExec, baseBranch: string): Promise<string> {
   try {
     const out = (await exec(['merge-base', baseBranch, 'HEAD'])).trim()
     if (out !== '') return out
