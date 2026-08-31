@@ -136,34 +136,41 @@ Never lower the coverage threshold or disable a lint rule to make the gate pass.
 
 ## Git
 
-`origin` is a **public** repository, `ytsykvas/octopus`, MIT-licensed. Push only
+`origin` is `ytsykvas/octopus`, MIT-licensed and **currently private**. Push only
 when asked.
 
-Public changes what care means. Nothing is retractable — a pushed commit is
-mirrored and indexed within minutes, so a secret removed in the next commit has
-still been published. Before writing a path, a token, a hostname or a real
-name into a file, assume it stays readable forever.
+Write as though it were already public, because it is meant to be and nothing is
+retractable once it is: a pushed commit is mirrored and indexed within minutes,
+so a secret removed in the next commit has still been published. Before writing
+a path, a token, a hostname or a real name into a file, assume it stays readable
+forever. Going public is a switch; a history is not.
 
-**`main` is protected. Every change goes through a branch and a pull request** —
-including one-line fixes, and including the author's own. Direct pushes are
-refused by the remote, so this is not a convention to remember but a rule the
-server keeps.
+**`main` accepts direct pushes for now.** One person is developing here, and
+while that holds, a branch and a pull request for a one-line fix is ceremony
+with nobody to perform it for.
 
 ```bash
-git checkout -b fix/short-description
-# work, then
+git checkout -b feat/short-description   # still right for anything substantial
 gh pr create --fill
 ```
 
-A pull request merges once CI is green. Force pushes to `main` and deleting it
-are blocked outright.
+A branch is still worth it when the work is large enough to want reviewing as a
+unit, or when two changes are in flight at once — that is what keeps a commit
+about one thing. It is a judgement now, not a rule the server keeps.
 
-**Administrators are not exempt.** They were at first, and the very next push
-went through carrying `Bypassed rule violations` — a protection the only person
-who commits here can step over is decoration. If `main` is ever broken so badly
-that it cannot be fixed through a pipeline that is also broken, turn the
-protection off deliberately in Settings and back on afterwards. That is visible;
-a silent bypass on every push is not.
+**Nothing enforces any of this at the moment**, and that is worth knowing rather
+than assuming otherwise: branch protection is not available for a private
+repository on this plan, so the remote refuses nothing. `git push` to `main`
+will go through, including one that was a mistake. The only guard left is the
+local `deny` on `git push --force`.
+
+**When the repository goes public, turn protection back on** — and do not exempt
+administrators. They were exempt at first, and the very next push went through
+carrying `Bypassed rule violations`: a protection the only person who commits
+here can step over is decoration. If `main` is ever broken so badly that it
+cannot be fixed through a pipeline that is also broken, turn the protection off
+deliberately in Settings and back on afterwards. That is visible; a silent
+bypass on every push is not.
 
 ## Design
 

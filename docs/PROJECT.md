@@ -442,7 +442,7 @@ Further rules:
 
 - Conventional Commits (`feat:`, `fix:`, `refactor:`, `test:`, `chore:`) — a readable history and a basis for changelog automation later.
 - Atomic commits: one logical change each.
-- Every change reaches `main` through a branch and a pull request, which CI gates. `main` is protected on the remote, so this holds whether or not anyone remembers it.
+- Every substantial change reaches `main` through a branch and a pull request, which CI gates. While the repository is private and one person is developing in it, `main` also accepts direct pushes and **the remote enforces nothing** — branch protection is unavailable for a private repository on this plan. Protection goes back on when the repository goes public, administrators included; `CLAUDE.md` holds the reasoning and the story that produced it.
 
 ---
 
