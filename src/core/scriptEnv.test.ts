@@ -1,9 +1,11 @@
 import { describe, expect, it } from 'vitest'
 
+import { ScriptKindSchema } from './scripts.js'
 import {
   BLOCK,
   conductorEnv,
   PORT_VARIABLE,
+  SCRIPT_KINDS,
   SLUG_MAX_LENGTH,
   blockPorts,
   scriptEnv,
@@ -44,6 +46,21 @@ describe('workspaceSlug', () => {
     // whole of the invariant a cleanup script depends on: an empty slug would
     // name the shared database rather than the workspace's own.
     expect(workspaceSlug('!!!')).toBe('___')
+  })
+})
+
+describe('SCRIPT_KINDS', () => {
+  it('is every kind the schema declares', () => {
+    /*
+     * One line, on the security path. This list decides which kinds
+     * `resolveScripts` walks and therefore which enter `scriptsDigest` — so a
+     * fourth kind added to the schema and forgotten here would be a script the
+     * repository supplies and nobody is asked about.
+     *
+     * It lives here rather than beside the schema because the renderer needs it
+     * as a value, and `scripts.ts` reaches `node:fs`.
+     */
+    expect([...SCRIPT_KINDS].sort()).toEqual([...ScriptKindSchema.options].sort())
   })
 })
 

@@ -158,14 +158,10 @@ describe('readConductorConfig', () => {
       expect(config?.otherRuns).toEqual(['one'])
     })
 
-    it('skips a hidden or cloud-only entry when nothing is marked default', async () => {
+    it('skips an entry this machine could not run when nothing is marked default', async () => {
       await put(
         '.conductor/settings.toml',
         [
-          '[scripts.run.hidden]',
-          'command = "hidden"',
-          'hide = true',
-          '',
           '[scripts.run.cloud]',
           'command = "cloud"',
           'available_in = "cloud"',
@@ -178,20 +174,24 @@ describe('readConductorConfig', () => {
 
       const config = await readConductorConfig(repo)
       expect(config?.scripts.run?.name).toBe('here')
-      expect(config?.otherRuns).toEqual(['hidden', 'cloud'])
+      expect(config?.otherRuns).toEqual(['cloud'])
     })
 
-    it('takes the first when every entry is hidden or elsewhere', async () => {
+    it('takes the first when every entry belongs somewhere else', async () => {
       await put(
         '.conductor/settings.toml',
-        '[scripts.run.a]\ncommand = "a"\nhide = true\n\n[scripts.run.b]\ncommand = "b"\nhide = true\n'
+        '[scripts.run.a]\ncommand = "a"\navailable_in = "cloud"\n\n[scripts.run.b]\ncommand = "b"\navailable_in = "cloud"\n'
       )
 
       expect((await readConductorConfig(repo))?.scripts.run?.name).toBe('a')
     })
 
     it('has no server script when no entry names a command', async () => {
-      await put('.conductor/settings.toml', '[scripts.run.empty]\nhide = true\n')
+      // `args` without a `command` — which is what an entry with nothing to run
+      // actually looks like. The published schema is `additionalProperties:
+      // false`, so a field invented for a fixture is a state Conductor's own
+      // validator would reject and this parser would never meet.
+      await put('.conductor/settings.toml', '[scripts.run.empty]\nargs = ["--flag"]\n')
 
       const config = await readConductorConfig(repo)
       expect(config?.scripts.run).toBeUndefined()

@@ -16,7 +16,7 @@
  * into a running process is `repoSource.ts`, behind an approval.
  */
 
-import { readFile } from 'node:fs/promises'
+import { readFile, stat } from 'node:fs/promises'
 import { join } from 'node:path'
 
 import { parse as parseToml } from 'smol-toml'
@@ -82,7 +82,6 @@ const RunEntrySchema = z
       .loose()
       .optional(),
     default: z.boolean().optional(),
-    hide: z.boolean().optional(),
     available_in: z.union([z.string(), z.array(z.string()).max(8)]).optional()
   })
   .loose()
@@ -182,7 +181,7 @@ function runsLocally(entry: RunEntry): boolean {
  *
  * octopus has one server script, so one has to be picked, and the rule is
  * Conductor's own reading of its fields: the one marked `default`, else the
- * first that is neither hidden nor cloud-only, else simply the first. The rest
+ * first that this machine could run at all, else simply the first. The rest
  * are named in `otherRuns` and written into the script as comments, because a
  * choice nobody is told about is indistinguishable from a bug.
  */ function chooseRun(
@@ -198,7 +197,7 @@ function runsLocally(entry: RunEntry): boolean {
 
   const pick =
     named.find(({ entry }) => entry.default === true) ??
-    named.find(({ entry }) => entry.hide !== true && runsLocally(entry)) ??
+    named.find(({ entry }) => runsLocally(entry)) ??
     named[0]
 
   if (pick === undefined) return { chosen: null, others: [] }
@@ -280,23 +279,33 @@ async function readLayers(
 /** One candidate's text, or null when it is not there. */
 async function readCandidate(repoPath: string, relative: string): Promise<string | null> {
   await assertUnlinkedPath(repoPath, relative)
+  const path = join(repoPath, relative)
 
-  let text: string
+  /*
+   * Asked before the read, not after it.
+   *
+   * The size is refused so that a large file cannot hold the app up — and
+   * measuring it from the string meant the whole thing was in memory before
+   * anybody objected, which is the opposite of the promise. `stat` costs one
+   * syscall and answers first.
+   */
   try {
-    text = await readFile(join(repoPath, relative), 'utf8')
-  } catch {
+    if ((await stat(path)).size > MAX_BYTES) {
+      throw new RepoConfigError(
+        'repoConfigTooLarge',
+        { path: relative },
+        `${relative} is too large to read.`
+      )
+    }
+
+    return await readFile(path, 'utf8')
+  } catch (error) {
+    // A refusal is an answer; anything else here means the file is not there —
+    // the ordinary case — or went between the two calls, which is the same
+    // thing from where this stands.
+    if (error instanceof RepoConfigError) throw error
     return null
   }
-
-  if (Buffer.byteLength(text) > MAX_BYTES) {
-    throw new RepoConfigError(
-      'repoConfigTooLarge',
-      { path: relative },
-      `${relative} is too large to read.`
-    )
-  }
-
-  return text
 }
 
 /**

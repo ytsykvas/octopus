@@ -734,6 +734,32 @@ describe('ProjectSettings', () => {
       expect(await screen.findByDisplayValue('FROM=prod')).toBeInTheDocument()
     })
 
+    it('never writes the set on screen into the one just chosen', async () => {
+      /*
+       * The dangerous half of the same trap. `FileEditor` loads on its label and
+       * saves on blur, so without the remount switching profile would carry the
+       * old body across and write it under the new name — dev credentials into
+       * `prod`, silently. The other test asserts the display changes; this one
+       * asserts nothing is written, which is the half that costs something.
+       */
+      vi.mocked(window.octopus.projects.readEnv).mockImplementation((_id, name) =>
+        Promise.resolve({ ok: true, value: `FROM=${name}` })
+      )
+      const user = userEvent.setup()
+      await renderDialog()
+      await openSection(user, 'Env')
+      await screen.findByDisplayValue('FROM=default')
+
+      await user.selectOptions(screen.getByLabelText('Set of variables'), 'prod')
+      await screen.findByDisplayValue('FROM=prod')
+
+      expect(window.octopus.projects.saveEnv).not.toHaveBeenCalledWith(
+        'planner',
+        'prod',
+        'FROM=default'
+      )
+    })
+
     it('makes the chosen one the default only when it is not already', async () => {
       const user = userEvent.setup()
       const props = await renderDialog()

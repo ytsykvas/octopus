@@ -605,10 +605,15 @@ export function ProjectSettings({
 
               <FileEditor
                 /*
-                 * Keyed **and** labelled by the profile, both on purpose.
+                 * Keyed and labelled by the profile, and measured: either alone
+                 * prevents the write, and removing both lets it through.
+                 *
                  * `FileEditor` loads on its label and saves on blur, so without
-                 * the remount switching profile would show the old text and
-                 * then write it into the new one.
+                 * a reload switching profile would show the old text and then
+                 * write it into the set just chosen. The `key` is the
+                 * deliberate half; the label's dependence is incidental, and
+                 * would go the moment somebody shortened the wording. Keeping
+                 * both means neither edit is the one that breaks it.
                  */
                 key={profile}
                 label={t('project.envOf', { name: profile })}

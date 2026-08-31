@@ -1,4 +1,4 @@
-import { renderHook, waitFor } from '@testing-library/react'
+import { act, renderHook, waitFor } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import type { ResolvedScript } from '@core/repoSource.js'
@@ -88,6 +88,46 @@ describe('useWorkspaceScripts', () => {
     await waitFor(() => {
       expect(octopus().workspaces.scripts).toHaveBeenCalledTimes(2)
     })
+  })
+
+  it('drops an answer that arrives after the list has moved on', async () => {
+    /*
+     * The guard this covers looked tested and was not: both stubs resolved on
+     * the same tick, so there was no race to lose and deleting the `aborted`
+     * check changed nothing. Held open, the late answer for the first list
+     * overwrites the second — and `RightPanel` then hands a runner another
+     * workspace's script.
+     */
+    let releaseFirst: (() => void) | null = null
+    vi.mocked(octopus().workspaces.scripts).mockImplementation((id: string) =>
+      id === 'planner/anna'
+        ? new Promise((resolve) => {
+            releaseFirst = () => {
+              resolve({ ok: true, value: { approved: true, scripts: { setup: scriptOf(id) } } })
+            }
+          })
+        : Promise.resolve({ ok: true, value: { approved: true, scripts: { setup: scriptOf(id) } } })
+    )
+
+    const { result, rerender } = renderHook(
+      ({ ids }: { ids: string[] }) => useWorkspaceScripts(ids, null),
+      { initialProps: { ids: ['planner/anna'] } }
+    )
+
+    rerender({ ids: ['planner/bob'] })
+    await waitFor(() => {
+      expect(result.current.scripts.has('planner/bob')).toBe(true)
+    })
+
+    // The first read answers now, for a list nobody is showing any more.
+    act(() => {
+      releaseFirst?.()
+    })
+
+    await waitFor(() => {
+      expect(result.current.scripts.has('planner/bob')).toBe(true)
+    })
+    expect(result.current.scripts.has('planner/anna')).toBe(false)
   })
 
   it('does not keep an answer that arrived after the list changed', async () => {
