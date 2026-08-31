@@ -1,4 +1,4 @@
-import { useCallback } from 'react'
+import { useCallback, useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import type { ConfirmRequest, ConfirmResult } from './useConfirm.js'
@@ -63,5 +63,11 @@ export function useFileRevert(
     [workspaceId, confirm, onError, t, describeFailure]
   )
 
-  return { revert }
+  /*
+   * Memoised, unlike the controllers beside it. Those are unpacked by whoever
+   * takes them; this one is handed straight to a `useCallback` in the diff
+   * pane, and `DiffFile` is memoised — so an object rebuilt on every render
+   * would redraw every file on every pointer move of a width drag.
+   */
+  return useMemo(() => ({ revert }), [revert])
 }
