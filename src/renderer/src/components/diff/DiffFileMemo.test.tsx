@@ -45,6 +45,7 @@ const props = {
   tokens: NO_TOKENS,
   comments,
   onToggle: vi.fn(),
+  onRevert: vi.fn(),
   onOpen: vi.fn()
 }
 

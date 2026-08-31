@@ -1,6 +1,7 @@
 import { vi } from 'vitest'
 
 import type { DiffCommentController } from '../hooks/useDiffComments.js'
+import type { FileRevertController } from '../hooks/useFileRevert.js'
 import type { PullRequestQuoteController } from '../hooks/usePullRequestQuotes.js'
 
 /**
@@ -26,4 +27,17 @@ export function quoteController(
   overrides: Partial<PullRequestQuoteController> = {}
 ): PullRequestQuoteController {
   return { pending: [], add: vi.fn(), remove: vi.fn(), clear: vi.fn(), ...overrides }
+}
+
+/**
+ * Undoing a file, for the panes that take the controller and never press it.
+ *
+ * Answers "nothing moved" by default, which is what a reader saying no looks
+ * like — so a test that does not care about reverting never re-reads the diff
+ * behind its own back.
+ */
+export function revertController(
+  overrides: Partial<FileRevertController> = {}
+): FileRevertController {
+  return { revert: vi.fn(() => Promise.resolve(false)), ...overrides }
 }

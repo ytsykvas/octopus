@@ -4,7 +4,8 @@ import {
   Copy,
   ExternalLink,
   MoreHorizontal,
-  TriangleAlert
+  TriangleAlert,
+  Undo2
 } from 'lucide-react'
 import { memo, useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
@@ -89,6 +90,14 @@ interface DiffFileProps {
    * identity on every render and leave `memo` below nothing to compare.
    */
   readonly onToggle: (path: string, collapsed: boolean) => void
+  /**
+   * Puts this file back to the state the workspace branched from.
+   *
+   * Given the file rather than its path alone: a rename is one row here and
+   * two paths on disk, and reverting only the one the row is filed under would
+   * leave the file present twice.
+   */
+  readonly onRevert: (file: FileDiff) => void
   readonly onOpen: (path: string) => void
 }
 
@@ -119,6 +128,7 @@ export const DiffFile = memo(function DiffFile({
   tokens,
   comments,
   onToggle,
+  onRevert,
   onOpen
 }: DiffFileProps): React.JSX.Element {
   const { t } = useTranslation()
@@ -205,6 +215,22 @@ export const DiffFile = memo(function DiffFile({
             <TriangleAlert aria-hidden size={12} />
           </span>
         )}
+
+        {/* Named after the file rather than "Revert": twenty buttons sharing
+            one name identify nothing, and this is the row's only destructive
+            control. Outside the collapse button for the same reason the mark
+            above is — that button already owns the whole row as its name. */}
+        <button
+          type="button"
+          onClick={() => {
+            onRevert(file)
+          }}
+          aria-label={t('diff.revertFile', { path: file.path })}
+          title={t('diff.revert')}
+          className="focus-ring text-ink-faint hover:text-danger shrink-0 rounded-[var(--radius-control)] p-0.5 transition-colors"
+        >
+          <Undo2 aria-hidden size={12} />
+        </button>
 
         <DropdownMenu
           align="right"

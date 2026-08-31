@@ -34,6 +34,7 @@ import { useErrorMessage } from './hooks/useErrorMessage.js'
 import { DEFAULT_ENV_FILE } from '@core/envBlock.js'
 
 import { useDiffComments } from './hooks/useDiffComments.js'
+import { useFileRevert } from './hooks/useFileRevert.js'
 import { useBranchRequests } from './hooks/useBranchRequests.js'
 import { usePullRequestQuotes } from './hooks/usePullRequestQuotes.js'
 import { type ChatTab, useChatTabs } from './hooks/useChatTabs.js'
@@ -107,6 +108,7 @@ export function App(): React.JSX.Element {
   // Held here because the diff writes the notes and the composer sends them,
   // and the two panes are siblings that know nothing of each other.
   const diffComments = useDiffComments(selectedWorkspaceId)
+  const fileRevert = useFileRevert(selectedWorkspaceId, confirm, setError)
   /* Remarks pulled in from the review on this branch's request. A second store
      beside the diff's rather than one union, so the diff pane keeps narrowing a
      shape whose every member it can hold. */
@@ -786,6 +788,7 @@ export function App(): React.JSX.Element {
             tab={config?.rightPanelTab ?? 'diff'}
             onTab={(rightPanelTab) => void updateConfig({ rightPanelTab })}
             comments={diffComments}
+            revert={fileRevert}
             quotes={reviewQuotes}
             envFile={selectedProject?.envFile ?? DEFAULT_ENV_FILE}
             onRequestChanged={branchRequests.refresh}
