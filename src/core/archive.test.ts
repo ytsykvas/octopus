@@ -9,7 +9,14 @@ import { writeScript } from './scripts.js'
 
 let root: string
 
-const values = { rootPath: '/Users/test/planner', workspaceName: 'anna', path: '/tmp/anna' }
+const values = {
+  rootPath: '/Users/test/planner',
+  // Capitalised and spaced on purpose: the slug is what a cleanup script has to
+  // name a database with, and the raw label is what it must not be.
+  workspaceName: 'Fix login bug',
+  path: '/tmp/anna',
+  port: 3100
+}
 
 beforeEach(async () => {
   root = await mkdtemp(join(tmpdir(), 'octopus-archive-'))
@@ -34,9 +41,12 @@ describe('runArchiveScript', () => {
     const call = seen as unknown as { path: string; options: Parameters<RunScript>[1] }
     expect(call.path).toContain(join('planner', 'scripts', 'archive.sh'))
     expect(call.options.cwd).toBe('/tmp/anna')
+    // No port among them, though one was passed: `scriptEnv` gives the ports to
+    // the server script alone, and cleanup is not serving.
     expect(call.options.env).toEqual({
       OCTOPUS_ROOT_PATH: '/Users/test/planner',
-      OCTOPUS_WORKSPACE_NAME: 'anna'
+      OCTOPUS_WORKSPACE_NAME: 'Fix login bug',
+      OCTOPUS_WORKSPACE_SLUG: 'fix_login_bug'
     })
   })
 

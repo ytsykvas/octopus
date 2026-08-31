@@ -293,7 +293,11 @@ describe('ScriptRunner', () => {
     await sessionsOpened(1)
     expect(octopus().terminal.create).toHaveBeenCalledWith(
       expect.objectContaining({
-        env: { OCTOPUS_ROOT_PATH: '/Users/test/planner', OCTOPUS_WORKSPACE_NAME: 'anna' }
+        env: {
+          OCTOPUS_ROOT_PATH: '/Users/test/planner',
+          OCTOPUS_WORKSPACE_NAME: 'anna',
+          OCTOPUS_WORKSPACE_SLUG: 'anna'
+        }
       })
     )
   })

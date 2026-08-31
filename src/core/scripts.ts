@@ -21,7 +21,7 @@ import { dirname } from 'node:path'
 import { z } from 'zod'
 
 import { projectScript, projectScriptsDir } from './paths.js'
-import { PORT_VARIABLE, ROOT_VARIABLE, WORKSPACE_VARIABLE } from './scriptEnv.js'
+import { PORT_VARIABLE, ROOT_VARIABLE, SLUG_VARIABLE, WORKSPACE_VARIABLE } from './scriptEnv.js'
 import type { ProjectId } from './types.js'
 
 export const ScriptKindSchema = z.enum(['setup', 'run', 'archive'])
@@ -50,9 +50,14 @@ const TEMPLATES: Record<ScriptKind, string> = {
 # $${ROOT_VARIABLE} is the project's own checkout — where anything gitignored
 # still lives — and $${WORKSPACE_VARIABLE} is this workspace's name, for
 # giving it a database or a directory of its own.
+#
+# $${SLUG_VARIABLE} is that name lowercased, with everything that is not a
+# letter or a digit turned into an underscore, so it can be part of an
+# identifier. Use it wherever a name has to be one — the cleanup script builds
+# it the same way, and only then can it drop what this script created.
 
 # npm install
-# createdb "myapp_$${WORKSPACE_VARIABLE}"
+# createdb "myapp_$${SLUG_VARIABLE}"
 `,
   archive: `#!/bin/sh
 # Runs when this workspace is removed, in its directory, while it still exists.
@@ -61,8 +66,12 @@ const TEMPLATES: Record<ScriptKind, string> = {
 # container, a directory named after the workspace. Nothing here can stop the
 # removal: a workspace you cannot delete is worse than one that left something
 # behind.
+#
+# Name things through $${SLUG_VARIABLE}, exactly as the build script did:
+# $${WORKSPACE_VARIABLE} is the label as typed, so a workspace renamed to a
+# sentence would be dropped under a name nothing was ever created with.
 
-# dropdb --if-exists "myapp_$${WORKSPACE_VARIABLE}"
+# dropdb --if-exists "myapp_$${SLUG_VARIABLE}"
 `,
   run: `#!/bin/sh
 # Starts the dev server for this workspace.

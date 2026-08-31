@@ -593,7 +593,8 @@ was live: credentials, and a port frozen at the moment of the switch.
 
 **`$OCTOPUS_PORT` in the block becomes the workspace's own port**, along with
 the rest of the names the scripts get — `$OCTOPUS_PORT_1`…`_9`,
-`$OCTOPUS_ROOT_PATH`, `$OCTOPUS_WORKSPACE_NAME`, in either the bare or the
+`$OCTOPUS_ROOT_PATH`, `$OCTOPUS_WORKSPACE_NAME` and `$OCTOPUS_WORKSPACE_SLUG`,
+in either the bare or the
 `${…}` form. The block is one text for the whole project and the port is the one
 thing that differs per workspace, so without this a value naming a port could
 not be written at all: hard-code 3000 in a redirect URI and single sign-on works

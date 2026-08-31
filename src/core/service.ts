@@ -2013,7 +2013,12 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
       // problem of the two.
       await runArchiveScript(
         project.id,
-        { rootPath: project.repoPath, workspaceName: workspace.name, path: workspace.path },
+        {
+          rootPath: project.repoPath,
+          workspaceName: workspace.name,
+          path: workspace.path,
+          port: workspace.port
+        },
         dataRoot
       )
 

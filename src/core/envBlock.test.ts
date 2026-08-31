@@ -42,6 +42,20 @@ describe('substituteEnv', () => {
   })
 
   /*
+   * The whole point of the slug being a variable rather than a note in the
+   * hint. A block is static text with no shell around it, so a name the user
+   * typed as a sentence has to arrive already safe or not at all.
+   */
+  it('knows the workspace by a name an identifier can hold', () => {
+    expect(
+      substituteEnv('DB=planner_$OCTOPUS_WORKSPACE_SLUG', {
+        ...values(),
+        workspaceName: 'Fix login bug'
+      })
+    ).toBe('DB=planner_fix_login_bug')
+  })
+
+  /*
    * The reason only our own names are recognised. A value in an env file is
    * frequently a password and a password frequently contains a `$`; mangling
    * one silently is the worst way to lose an afternoon.
@@ -104,6 +118,18 @@ describe('checkEnvBody', () => {
 
   it('says nothing about the ones it does substitute', () => {
     expect(checkEnvBody('URL=$OCTOPUS_PORT/$OCTOPUS_PORT_9/${OCTOPUS_WORKSPACE_NAME}')).toEqual([])
+  })
+
+  /*
+   * An absence is the whole of the wiring here: the checker builds its list of
+   * known names from `scriptEnv`, so a name added there is understood without
+   * an edit — and nothing but this would notice if that stopped being true.
+   */
+  it('says nothing about the slug, which it never had to be told about', () => {
+    expect(checkEnvBody('DB=planner_$OCTOPUS_WORKSPACE_SLUG')).toEqual([])
+    expect(checkEnvBody('DB=planner_$OCTOPUS_WORKSPACE_SLUGX')).toEqual([
+      { line: 1, reason: 'unknownVariable', subject: 'OCTOPUS_WORKSPACE_SLUGX' }
+    ])
   })
 
   // A password is a value, and a `$` in one is not a variable of ours.

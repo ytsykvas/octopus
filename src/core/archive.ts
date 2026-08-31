@@ -13,7 +13,7 @@
 import { execFile } from 'node:child_process'
 import { promisify } from 'node:util'
 
-import { ROOT_VARIABLE, WORKSPACE_VARIABLE } from './scriptEnv.js'
+import { scriptEnv } from './scriptEnv.js'
 import { scriptPath } from './scripts.js'
 import type { ProjectId } from './types.js'
 
@@ -50,7 +50,12 @@ const defaultRun: RunScript = async (path, options) => {
  */
 export async function runArchiveScript(
   projectId: ProjectId,
-  values: { readonly rootPath: string; readonly workspaceName: string; readonly path: string },
+  values: {
+    readonly rootPath: string
+    readonly workspaceName: string
+    readonly path: string
+    readonly port: number
+  },
   root?: string,
   runner: RunScript = defaultRun
 ): Promise<string | null> {
@@ -59,7 +64,15 @@ export async function runArchiveScript(
   try {
     await runner(path, {
       cwd: values.path,
-      env: { [ROOT_VARIABLE]: values.rootPath, [WORKSPACE_VARIABLE]: values.workspaceName },
+      /*
+       * Built by `scriptEnv` rather than by hand, which is what it used to be.
+       * A variable added there would otherwise reach the two scripts that go
+       * through the terminal and miss this one — and this is the script that
+       * most needs the slug, since it has to name what the build script
+       * created. The port is passed and then not emitted: `scriptEnv` gives it
+       * to `run` alone.
+       */
+      env: scriptEnv('archive', values),
       timeout: TIMEOUT_MS
     })
     return null
