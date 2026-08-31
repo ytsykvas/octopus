@@ -308,7 +308,7 @@ async function assertNotLink(path: string, name: string): Promise<void> {
  * wherever it pointed. Reading did the same in reverse, presenting a file from
  * outside the repository under a path inside it.
  */
-async function assertUnlinkedPath(repoPath: string, relative: string): Promise<void> {
+export async function assertUnlinkedPath(repoPath: string, relative: string): Promise<void> {
   let walked = repoPath
   let named = ''
 

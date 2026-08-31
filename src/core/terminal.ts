@@ -82,7 +82,7 @@ export function resolveCwd(cwd: string, home: string): string {
  * point; a single quote inside the value is the one thing they cannot contain,
  * so it is closed, escaped and reopened.
  */
-function shellQuote(argument: string): string {
+export function shellQuote(argument: string): string {
   return `'${argument.replaceAll("'", "'\\''")}'`
 }
 
