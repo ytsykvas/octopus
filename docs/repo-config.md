@@ -14,26 +14,51 @@ before.** This is insurance, not a new way of configuring anything.
 
 ## The one thing to understand
 
-**The copy is a snapshot. Nothing reads it while the app works.**
+**The scripts are live and the repository wins; everything else here is a
+snapshot.**
 
-Scripts still run from `~/.octopus/projects/<id>/scripts/`. `carryInto` still
-reads the list it always read. The agent still gets the instruction the app
-holds. `.octopus/` is touched only by the two actions below, both of which
-somebody presses.
+Which of the three scripts runs is asked of the **worktree**, in this order:
+`.octopus/scripts/` in it, then its `.conductor/settings.toml`, then the
+project's own settings under `~/.octopus`. The carry list and the instructions
+still come from the app, and `.octopus/` is otherwise touched only by the two
+actions below, both of which somebody presses.
 
-That is the whole security story, and it is worth spelling out why the obvious
-alternative was rejected.
+### This reverses an earlier decision, and the reason is worth keeping
 
-Reading the repository live would mean **executing shell that arrived with a
-`git pull`**. octopus already has a gate for repository-supplied capability —
-`repoTrust.ts` digests `.claude/settings.json` and the hooks it names, and asks
-once before any of it is believed — but that approval is a fact about a
-**worktree**. A project just re-added after a wipe has approved nothing and has
-no workspace to approve in, so a live layer would be switched off in exactly the
-situation it exists for, and switched off _silently_: the app would fall back to
-a local copy that had just been deleted.
+It used to say: _nothing is live_, because reading the repository live would
+mean **executing shell that arrived with a `git pull`** — and octopus's existing
+gate (`repoTrust.ts`) is a fact about a **worktree**, so a project just re-added
+after a wipe has approved nothing and has no workspace to approve in. A live
+layer would be switched off in exactly the situation it exists for, and switched
+off _silently_: the app would fall back to a local copy that had just been
+deleted.
 
-So the answer is not a gate on a live layer. It is that nothing is live.
+The silence was the whole of that objection, and **putting the repository first
+removes it**. There is no local copy to fall back to. A project whose scripts
+have not been approved does not quietly run something else; Run is disabled and
+the tab says which file it would have run and shows every byte of it.
+
+What survives is that this executes shell somebody else may have written, and
+that is answered rather than avoided:
+
+- the digest covers only what the **repository** supplies, so a script the user
+  wrote is not gated — a dialog asking somebody to approve their own text is one
+  they learn to click through;
+- it is a digest and not a flag, so a pull that rewrites the script asks again;
+- the kind goes into it beside the text, so allowing a line as the cleanup
+  script is not allowing it as the one that runs on every build;
+- it lives in `approvedScripts`, separate from `approvedSettings`: what the agent
+  may load and what the Run button may execute are different questions, and one
+  list would mean reading a hook file quietly approved a build script.
+
+**And the environment never travels.** Variables are credentials and stay on the
+machine. That is the line the arrangement rests on: the repository decides _what
+runs_, the machine decides _what it runs against_. A pull can change the build
+script; it cannot point a workspace at production.
+
+`.conductor/` is **read and never written**. Export still goes to `.octopus/`
+alone, so what `SECURITY.md` promises about where this app writes inside a
+checkout is unchanged.
 
 ## The directory
 
