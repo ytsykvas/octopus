@@ -1,7 +1,7 @@
 # IPC
 
 Every call from the interface to the rest of the application goes through one
-of 76 channels. The table lives in [`src/main/ipc.ts`](../src/main/ipc.ts); the
+of the channels below. The table lives in [`src/main/ipc.ts`](../src/main/ipc.ts); the
 renderer never names a channel itself, it calls
 [`src/preload/index.ts`](../src/preload/index.ts).
 
@@ -123,6 +123,7 @@ The only channel outside this shape is `theme:get`, which cannot fail.
 | `chats:answerQuestions` | `requestId`, `answers`             | answers the agent's own questions. Not a permission — the user hands over information rather than saying whether the agent may act — and the answers reach the tool as a modified copy of its own arguments, which is the only way in it has        |
 | `chats:permission`      | `requestId`, `answer`, `feedback?` | the agent is blocked until this arrives. `feedback` accompanies a refusal and reaches the agent as the reason — how the plan dialog's "keep planning" sends a correction without costing a turn                                                     |
 | `chats:rateLimit`       | —                                  | the last reading; `null` before a turn has run                                                                                                                                                                                                      |
+| `chats:subscription`    | —                                  | the account's window shares, from the last reading the service kept — answered with no chat in the question, since the sidebar draws them and they belong to the account                                                                            |
 
 Events flow the other way, on `chats:event`, carrying `{ chatId, workspaceId,
 event }`. A **broadcast**, not a reply to whoever asked: events keep arriving

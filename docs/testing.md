@@ -229,7 +229,13 @@ no browser makes, and stops exercising the nesting the running app always has.
 ## Main and preload
 
 `registerIpc` takes its Electron surface as a parameter, so `ipc.test.ts`
-supplies nine small functions and drives all 76 channels without a window.
+supplies nine small functions and drives every channel in the table without a
+window — `EXPECTED` in that file lists them and the suite asserts the count
+against it, so a channel registered without a row there fails rather than
+slipping past.
+
+A number written into prose here does not: this said 49 for long enough to be
+wrong by half, which is why neither document counts them any more.
 
 Two lists are load-bearing: `EXPECTED` in `ipc.test.ts` and `CALLS` in
 `preload/index.test.ts`. A channel name that drifts between the two sides fails
