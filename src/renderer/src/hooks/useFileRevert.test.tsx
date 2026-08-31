@@ -88,7 +88,11 @@ describe('useFileRevert', () => {
     const { result } = renderHook(() => useFileRevert('anna', confirm, onError))
 
     await expect(result.current.revert('a.txt', null)).resolves.toBe(false)
-    expect(onError).toHaveBeenCalledWith(expect.not.stringContaining('raw'))
+    // Not the raw English, and not nothing: a code with no localised message
+    // renders as an empty string, which `not.stringContaining` would accept.
+    const message: string = vi.mocked(onError).mock.calls[0]?.[0] ?? ''
+    expect(message).not.toContain('raw')
+    expect(message.length).toBeGreaterThan(0)
   })
 
   // Nothing is open, so there is nothing to revert and nobody to ask.

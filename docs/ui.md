@@ -1021,6 +1021,34 @@ them. It sits on the code rather than the row: the gutters are `select-none`, so
 a selection is always inside one, and side by side draws two per row addressing
 different files.
 
+**Every prop a file is handed has to hold still.** `DiffFile` is memoised, and
+that is not a micro-optimisation: highlighting arrives one file at a time and
+the pane's width changes on every pointer move of a drag. Each of those used to
+redraw every file, every hunk and every row — and a redraw drops a live text
+selection, which is the thing the note button acts on.
+
+So the pane hands down `useCallback`s and a `useMemo`d comment surface, and the
+draft being typed is kept in a **ref** rather than in state, precisely so a
+keystroke does not rebuild the surface and redraw the diff per character. An
+arrow function written inline in the file list is enough to undo all of it, and
+nothing about the pane looks wrong when it happens.
+
+Two tests guard the two halves, and neither is sufficient alone.
+`DiffFileMemo.test` builds steady props by hand and checks a file ignores its
+parent's render; `DiffPanelMemo.test` drives the pane with the props `App`
+actually holds still and counts what it redraws. The first holds whatever the
+pane passes, so only the second can see the pane passing something new — and a
+test of this has to hold still exactly what `App` holds still, or it measures
+itself.
+
+**Revert, on each file's header.** The one destructive control in the pane, so
+it is named after its file rather than "Revert" — twenty buttons sharing one
+name identify nothing to anybody reading through a screen reader. It puts that
+file back to the state the workspace branched from, which is the pane's own
+scope, so the row leaves the pane. It always asks first, and what the dialog
+says is the asymmetry: committed work survives, undone by a change in the
+working tree, while uncommitted work is gone and nothing in git holds a copy.
+
 ## Colour
 
 Tokens only, declared twice — `:root` and `.dark` — in
