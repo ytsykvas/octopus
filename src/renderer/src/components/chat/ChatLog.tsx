@@ -307,7 +307,22 @@ function AgentRow({
  */
 function UserMessage({ text }: { text: string }): React.JSX.Element {
   return (
-    <div className="bubble-sent self-end rounded-[var(--radius-panel)] border px-3 py-2 whitespace-pre-wrap">
+    /*
+     * `max-w-full` and `wrap-anywhere` are what keeps a long message inside the
+     * column, and both are needed.
+     *
+     * `self-end` takes the bubble out of the column's stretch and sizes it to
+     * its content, so a message with no break opportunity in it — a pasted URL,
+     * a line of minified JSON — is laid out at its full single-line width. The
+     * overflow goes to the left, because the bubble is aligned to the right
+     * edge: the text runs off under the sidebar and the start of every line is
+     * what the reader loses.
+     *
+     * `wrap-anywhere` rather than `break-words`: only `anywhere` counts towards
+     * the intrinsic size, so the bubble is allowed to be narrow instead of
+     * merely spilling its text once the width is capped.
+     */
+    <div className="bubble-sent max-w-full self-end rounded-[var(--radius-panel)] border px-3 py-2 whitespace-pre-wrap wrap-anywhere">
       {text}
     </div>
   )

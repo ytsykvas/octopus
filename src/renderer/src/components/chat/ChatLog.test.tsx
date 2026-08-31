@@ -127,6 +127,23 @@ describe('what the log shows', () => {
     expect(screen.getByText('is it **bold** or not?')).toBeInTheDocument()
   })
 
+  /*
+   * A long message used to be laid out at its full single-line width, and since
+   * the bubble hangs off the right edge the overflow went left — off the pane,
+   * under the sidebar, taking the start of every line with it.
+   *
+   * Asserted on the classes because jsdom has no layout: it computes no widths,
+   * so the only thing a test can hold here is that the cap and the break
+   * opportunity are still on the element.
+   */
+  it('keeps a message with nowhere to wrap inside the column', () => {
+    const unbroken = `{"issuer":"${'x'.repeat(400)}"}`
+
+    renderLog({ entries: [{ role: 'user', at: AT, text: unbroken }] })
+
+    expect(screen.getByText(unbroken)).toHaveClass('max-w-full', 'wrap-anywhere')
+  })
+
   // The row has to say what the agent did to the working tree, not just that
   // it did something.
   it('names the tool and what it acted on', () => {
