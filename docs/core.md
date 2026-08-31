@@ -40,13 +40,14 @@ Nothing but zod behind them, so a **value** can cross into the window.
 
 ### git
 
-| Module                                       | What it decides                                       |
-| -------------------------------------------- | ----------------------------------------------------- |
-| [`git.ts`](../src/core/git.ts)               | running git safely; slugs; which branch is the base   |
-| [`worktree.ts`](../src/core/worktree.ts)     | worktrees and branches, and parsing what git prints   |
-| [`workspaces.ts`](../src/core/workspaces.ts) | the workspace lifecycle and reconciliation            |
-| [`projects.ts`](../src/core/projects.ts)     | whether a directory can be a project                  |
-| [`diff.ts`](../src/core/diff.ts)             | what a workspace changed, and parsing what git prints |
+| Module                                       | What it decides                                                |
+| -------------------------------------------- | -------------------------------------------------------------- |
+| [`git.ts`](../src/core/git.ts)               | running git safely; slugs; which branch is the base            |
+| [`worktree.ts`](../src/core/worktree.ts)     | worktrees and branches, and parsing what git prints            |
+| [`workspaces.ts`](../src/core/workspaces.ts) | the workspace lifecycle and reconciliation                     |
+| [`projects.ts`](../src/core/projects.ts)     | whether a directory can be a project                           |
+| [`diff.ts`](../src/core/diff.ts)             | what a workspace changed, and parsing what git prints          |
+| [`revert.ts`](../src/core/revert.ts)         | putting one of those files back, which is the half that writes |
 
 ### External tools and processes
 
@@ -527,6 +528,24 @@ closed the chats of the workspace it removed and `removeProjectById` did not, so
 every agent in a removed project stayed alive with its working directory deleted
 underneath it, reachable from nothing but a quit. A test asserting that the
 records are gone will not notice: the records were the part that worked.
+
+### Reading and writing about the same thing live apart
+
+`diff.ts` opens by promising that nothing in it writes: "a review pane that
+modified the repository it is reporting on would change the answer by asking the
+question." Reverting a file is the operation that undoes what the pane draws,
+which makes it the obvious thing to add there and the wrong thing to add there.
+
+So `revert.ts` sits beside it and borrows one function, `mergeBase`, which is a
+read. The promise survives, and a reader of either module can tell at a glance
+which of the two can change the repository.
+
+The rule inside it is worth carrying elsewhere: **which command to run is
+decided by asking git, not by branching on what git already told us.** The diff
+reports a `FileStatus`, and rename and copy detection are heuristics — a status
+that guessed wrong would send a file down the wrong arm of a `switch`. Two
+questions instead, "did the base commit have this path" and "is it tracked now",
+and the answers cannot be wrong about the repository they are asked of.
 
 ### The one place the app writes inside a checkout
 
