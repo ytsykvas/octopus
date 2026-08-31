@@ -42,6 +42,23 @@ tests share no jsdom, no `document`, and no `Element.prototype`, so every
 candidate under "Where to start" below is ruled out for that one; whatever this
 is reaches both suites.
 
+**Two core tests failed together on 2026-08-31**, in one `npm run check` —
+`pullRequests.test.ts` › "says GitHub could not be asked rather than inventing an
+answer" and › "refuses an answer shaped like something else". The file passed
+alone immediately after (54 tests, 8.9s) and the next full run was green, 1847
+for 1847. Same shape, core suite again, and again on a machine that was busy —
+the dev app was running and a full renderer suite had just finished.
+
+Worth one number: that file takes **8.9 seconds for 54 tests on its own**, which
+is an order of magnitude more per test than the rest of the core suite. If the
+cause is a deadline being missed under load, the slowest file is where it would
+show first, and this is the slowest file. Reading what those 8.9 seconds are
+spent on is cheap and has not been done.
+
+The assertion messages were not captured here either — the run's output was
+read through a filter that kept only the `FAIL` lines. Same mistake as below;
+next time, keep the message.
+
 Recorded with a caveat, because it is worth less than it looks: the run's output
 was read from a tail and **the assertion message was not captured**. What the
 `gh` test could plausibly fail on is not obvious either — it writes a fake `gh`
