@@ -45,6 +45,7 @@ import {
 } from './chats.js'
 import { type EditTarget, readChangeContext, readEditTarget } from './changeContext.js'
 import { readWorkspaceDiff, type WorkspaceDiff } from './diff.js'
+import { revertFile } from './revert.js'
 import { draftPullRequest, type DraftedPullRequest } from './pullRequestDraft.js'
 import { isListening, settlePort } from './ports.js'
 import { carriedPaths, carryInto, readCarryList, storedCarryList, writeCarryList } from './carry.js'
@@ -442,6 +443,14 @@ export interface OctopusService {
   workspaceHasChanges(workspaceId: string): Promise<boolean>
   /** Everything the workspace changed since it left the project's base branch. */
   readWorkspaceChanges(workspaceId: string): Promise<WorkspaceDiff>
+  /**
+   * Puts one file back to the state the workspace branched from.
+   *
+   * The pane's own scope, so the file's row leaves it afterwards: committed
+   * work is undone as a change in the working tree, and the commits stand.
+   * `oldPath` is the far end of a rename, which is one row and two paths.
+   */
+  revertWorkspaceFile(workspaceId: string, path: string, oldPath?: string | null): Promise<void>
 
   /** What has become of this workspace's branch on GitHub, if anything. */
   readPullRequest(workspaceId: string): Promise<PullRequestView>
@@ -1950,6 +1959,20 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
       return readWorkspaceDiff(makeExec(workspace.path), {
         baseBranch: project.baseBranch,
         root: workspace.path
+      })
+    },
+
+    revertWorkspaceFile(workspaceId, path, oldPath = null) {
+      const workspace = requireWorkspace(workspaceId)
+      const project = requireProject(workspace.projectId)
+
+      // Run from the worktree for the same reason the diff read is: the base
+      // branch belongs to the project, everything being written belongs here.
+      return revertFile(makeExec(workspace.path), {
+        baseBranch: project.baseBranch,
+        root: workspace.path,
+        path,
+        oldPath
       })
     },
 

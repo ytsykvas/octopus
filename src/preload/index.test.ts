@@ -195,6 +195,11 @@ describe('channel names', () => {
     ],
     ['workspaces.diff', () => method('workspaces', 'diff')('w' as never), 'workspaces:diff'],
     [
+      'workspaces.revertFile',
+      () => method('workspaces', 'revertFile')('w' as never, 'a.txt' as never),
+      'workspaces:revertFile'
+    ],
+    [
       'workspaces.pullRequest',
       () => method('workspaces', 'pullRequest')('w' as never),
       'workspaces:pullRequest'

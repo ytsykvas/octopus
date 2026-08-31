@@ -306,6 +306,21 @@ const api = {
     diff: (workspaceId: string): Promise<Result<WorkspaceDiff>> =>
       ipcRenderer.invoke('workspaces:diff', workspaceId) as Promise<Result<WorkspaceDiff>>,
 
+    /**
+     * Puts one file back to the state the workspace branched from.
+     *
+     * `oldPath` is the far end of a rename — one row in the pane, two paths on
+     * disk, and both have to move.
+     */
+    revertFile: (
+      workspaceId: string,
+      path: string,
+      oldPath: string | null = null
+    ): Promise<Result<void>> =>
+      ipcRenderer.invoke('workspaces:revertFile', workspaceId, path, oldPath) as Promise<
+        Result<void>
+      >,
+
     /** What has become of this workspace's branch on GitHub, if anything. */
     pullRequest: (workspaceId: string): Promise<Result<PullRequestView>> =>
       ipcRenderer.invoke('workspaces:pullRequest', workspaceId) as Promise<Result<PullRequestView>>,

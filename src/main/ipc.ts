@@ -39,6 +39,7 @@ import {
 } from '../core/pullRequests.js'
 import { QuestionAnswerSchema } from '../core/questions.js'
 import { RepoItemIdsSchema } from '../core/repoConfig.js'
+import { RevertPathSchema } from '../core/revert.js'
 import { ScriptBodySchema, ScriptKindSchema } from '../core/scripts.js'
 import type {
   ChatEvent,
@@ -352,6 +353,20 @@ export function registerIpc(
 
   host.handle('workspaces:diff', (_event, workspaceId: string) =>
     attempt(() => service.readWorkspaceChanges(workspaceId))
+  )
+
+  // Both paths are parsed rather than trusted: one becomes a git argument and,
+  // for a file nobody added, a file to delete.
+  host.handle(
+    'workspaces:revertFile',
+    (_event, workspaceId: string, path: unknown, oldPath: unknown) =>
+      attempt(() =>
+        service.revertWorkspaceFile(
+          workspaceId,
+          RevertPathSchema.parse(path),
+          oldPath == null ? null : RevertPathSchema.parse(oldPath)
+        )
+      )
   )
 
   host.handle('workspaces:pullRequest', (_event, workspaceId: string) =>

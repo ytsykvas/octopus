@@ -297,6 +297,7 @@ describe('channel table', () => {
     'workspaces:remove',
     'workspaces:hasChanges',
     'workspaces:diff',
+    'workspaces:revertFile',
     'workspaces:pullRequest',
     'workspaces:createPullRequest',
     'workspaces:draftPullRequest',
@@ -416,6 +417,24 @@ describe('validation at the boundary', () => {
 
   // The ids name files the app reads and writes, so one the app does not know
   // is refused at the boundary rather than reaching a path.
+  // It becomes a git argument and, for an untracked file, a path to unlink.
+  it('rejects a revert of a path that leaves the workspace', async () => {
+    const result = await invoke('workspaces:revertFile', 'nothing', '../escape.txt', null)
+    expect(result).toMatchObject({ ok: false })
+  })
+
+  // A valid path for a workspace that is not there: the paths are parsed before
+  // the service is reached, so this is the service refusing rather than zod.
+  it('rejects a revert for a workspace it does not know', async () => {
+    const result = await invoke('workspaces:revertFile', 'nothing', 'a.txt', null)
+    expect(result).toMatchObject({ ok: false })
+  })
+
+  it('rejects a revert whose far end leaves the workspace', async () => {
+    const result = await invoke('workspaces:revertFile', 'nothing', 'a.txt', '/etc/passwd')
+    expect(result).toMatchObject({ ok: false })
+  })
+
   it('rejects a repository item it does not know', async () => {
     const result = await invoke('repoConfig:import', 'nothing', ['script.evil'])
     expect(result).toMatchObject({ ok: false })
