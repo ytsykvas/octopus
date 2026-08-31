@@ -249,6 +249,16 @@ const api = {
     subscription: (): Promise<Result<SubscriptionUsage | null>> =>
       ipcRenderer.invoke('chats:subscription') as Promise<Result<SubscriptionUsage | null>>,
 
+    /**
+     * Asks the account now rather than waiting for a turn.
+     *
+     * `null` where there is no conversation anywhere to ask through — a
+     * session runs in a worktree, so an installation with no workspace has
+     * nowhere to start one.
+     */
+    refreshSubscription: (): Promise<Result<SubscriptionUsage | null>> =>
+      ipcRenderer.invoke('chats:refreshSubscription') as Promise<Result<SubscriptionUsage | null>>,
+
     onEvent: (handler: (event: ChatEvent) => void): (() => void) => {
       const listener = (_event: unknown, chatEvent: ChatEvent): void => {
         handler(chatEvent)

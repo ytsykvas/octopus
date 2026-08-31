@@ -9,11 +9,18 @@
  */
 
 import { render, screen } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import type { SubscriptionUsage } from '@core/agent.js'
 
+import type { SubscriptionController } from '../hooks/useSubscriptionUsage.js'
 import { SubscriptionLimits } from './SubscriptionLimits.js'
+
+/** The controller as `Sidebar` hands it over, holding whatever a test says. */
+function controller(overrides: Partial<SubscriptionController> = {}): SubscriptionController {
+  return { usage: null, busy: false, unavailable: false, refresh: vi.fn(), ...overrides }
+}
 
 /*
  * A wall clock has to be read against a clock. Without a fixed "now" a reset two
@@ -39,7 +46,7 @@ const BOTH: SubscriptionUsage = {
 
 describe('the account block', () => {
   it('draws a row for each window the account reported', () => {
-    render(<SubscriptionLimits usage={BOTH} />)
+    render(<SubscriptionLimits subscription={controller({ usage: BOTH })} />)
 
     expect(screen.getByText('Claude')).toBeInTheDocument()
     expect(screen.getByText('5h')).toBeInTheDocument()
@@ -49,14 +56,14 @@ describe('the account block', () => {
   // The question a percentage cannot answer: "31%" says how much is gone and
   // nothing about when it comes back.
   it('says what hour the five-hour window resets', () => {
-    render(<SubscriptionLimits usage={BOTH} />)
+    render(<SubscriptionLimits subscription={controller({ usage: BOTH })} />)
 
     expect(screen.getByText(/31%/)).toHaveTextContent(/^31% · 22:50$/)
   })
 
   // Days off, so an hour on its own would not say which day it is the hour of.
   it('dates the weekly reset, which an hour alone would not place', () => {
-    render(<SubscriptionLimits usage={BOTH} />)
+    render(<SubscriptionLimits subscription={controller({ usage: BOTH })} />)
 
     expect(screen.getByText(/84%/)).toHaveTextContent(/^84% · 14\.08 07:00$/)
   })
@@ -65,7 +72,7 @@ describe('the account block', () => {
   // that cannot go on screen: it is worked out as the block is drawn, and the
   // block is drawn only when a turn ends.
   it('keeps the countdown in the tooltip where the moment is on screen', () => {
-    render(<SubscriptionLimits usage={BOTH} />)
+    render(<SubscriptionLimits subscription={controller({ usage: BOTH })} />)
 
     expect(screen.getByTitle('resets in 3h 50m')).toBeInTheDocument()
     // `60h`, not `2d 12h`: the countdown does not roll into days, which is fine
@@ -77,7 +84,9 @@ describe('the account block', () => {
   it('leaves out a window the account did not report', () => {
     render(
       <SubscriptionLimits
-        usage={{ fiveHour: null, sevenDay: { utilization: 84, resetsAt: null } }}
+        subscription={controller({
+          usage: { fiveHour: null, sevenDay: { utilization: 84, resetsAt: null } }
+        })}
       />
     )
 
@@ -86,27 +95,68 @@ describe('the account block', () => {
   })
 
   /*
-   * Nothing has ever been read, or the account reported neither window. A
-   * heading over two empty bars would be the sidebar claiming to know something
-   * it does not — and this is the state of a fresh installation, before any
-   * turn has run, which is the one case the block cannot fill.
+   * Nothing has ever been read. Two empty bars would be the sidebar claiming to
+   * know something it does not, and nothing at all would leave no way to ask —
+   * so it says what it is and offers the press that fills it. This is the state
+   * of a fresh installation, before any turn has run.
    */
-  it('is not there at all with nothing to report', () => {
-    const { container } = render(<SubscriptionLimits usage={null} />)
+  it('asks to be pressed while it has nothing to draw', () => {
+    render(<SubscriptionLimits subscription={controller({ usage: null })} />)
 
-    expect(container).toBeEmptyDOMElement()
+    expect(screen.getByText(/press to ask/i)).toBeInTheDocument()
+    expect(screen.queryByRole('progressbar')).not.toBeInTheDocument()
   })
 
-  it('is not there when the account reports two empty windows either', () => {
-    const { container } = render(<SubscriptionLimits usage={{ fiveHour: null, sevenDay: null }} />)
+  it('says the same when the account reports two empty windows', () => {
+    render(
+      <SubscriptionLimits
+        subscription={controller({ usage: { fiveHour: null, sevenDay: null } })}
+      />
+    )
 
-    expect(container).toBeEmptyDOMElement()
+    expect(screen.getByText(/press to ask/i)).toBeInTheDocument()
+  })
+
+  /*
+   * Nothing fills this on its own: answering costs a session, and the service
+   * refuses to spawn one for a gauge nobody requested. The press is the request
+   * — which is the whole reason there is a control here rather than a timer.
+   */
+  it('asks the account when the control is pressed', async () => {
+    const refresh = vi.fn(() => Promise.resolve())
+    render(<SubscriptionLimits subscription={controller({ refresh })} />)
+
+    await userEvent.click(screen.getByRole('button', { name: /read the limits/i }))
+
+    expect(refresh).toHaveBeenCalled()
+  })
+
+  // Starting a session takes a moment, and a second press would start a second.
+  it('will not be pressed twice while it is reading', () => {
+    render(<SubscriptionLimits subscription={controller({ busy: true })} />)
+
+    expect(screen.getByRole('button', { name: /read the limits/i })).toBeDisabled()
+  })
+
+  /*
+   * A press that found no conversation to ask through. A session runs in a
+   * worktree, so an installation with no workspace has nowhere to start one —
+   * and no amount of waiting fixes it, which is why it says something different
+   * from "not read yet".
+   */
+  it('says when there was nowhere to ask', () => {
+    render(<SubscriptionLimits subscription={controller({ unavailable: true })} />)
+
+    expect(screen.getByText(/open a workspace first/i)).toBeInTheDocument()
+    expect(screen.queryByText(/press to ask/i)).not.toBeInTheDocument()
   })
 
   it('shows the share on its own when the account gives no reset', () => {
     render(
       <SubscriptionLimits
-        usage={{ fiveHour: { utilization: 31, resetsAt: null }, sevenDay: null }}
+        subscription={controller({
+          usage: { fiveHour: { utilization: 31, resetsAt: null }, sevenDay: null }
+        })}
       />
     )
 
@@ -124,10 +174,12 @@ describe('the account block', () => {
   it('leaves the moment neutral while the share turns red', () => {
     render(
       <SubscriptionLimits
-        usage={{
-          fiveHour: { utilization: 92, resetsAt: '2026-08-11T19:50:00.000000+00:00' },
-          sevenDay: null
-        }}
+        subscription={controller({
+          usage: {
+            fiveHour: { utilization: 92, resetsAt: '2026-08-11T19:50:00.000000+00:00' },
+            sevenDay: null
+          }
+        })}
       />
     )
 
@@ -139,10 +191,12 @@ describe('the account block', () => {
   it('fills the bar green while there is room, and red when there is not', () => {
     render(
       <SubscriptionLimits
-        usage={{
-          fiveHour: { utilization: 31, resetsAt: null },
-          sevenDay: { utilization: 84, resetsAt: null }
-        }}
+        subscription={controller({
+          usage: {
+            fiveHour: { utilization: 31, resetsAt: null },
+            sevenDay: { utilization: 84, resetsAt: null }
+          }
+        })}
       />
     )
 
@@ -152,7 +206,7 @@ describe('the account block', () => {
   })
 
   it('names each bar for whoever cannot see its length', () => {
-    render(<SubscriptionLimits usage={BOTH} />)
+    render(<SubscriptionLimits subscription={controller({ usage: BOTH })} />)
 
     expect(screen.getByLabelText('5h window, 31% used')).toBeInTheDocument()
     expect(screen.getByLabelText('1w window, 84% used')).toBeInTheDocument()
@@ -167,10 +221,12 @@ describe('the account block', () => {
   it('fades a reading whose window has already reset, and says why', () => {
     render(
       <SubscriptionLimits
-        usage={{
-          fiveHour: { utilization: 100, resetsAt: '2026-08-11T15:00:00+00:00' },
-          sevenDay: null
-        }}
+        subscription={controller({
+          usage: {
+            fiveHour: { utilization: 100, resetsAt: '2026-08-11T15:00:00+00:00' },
+            sevenDay: null
+          }
+        })}
       />
     )
 

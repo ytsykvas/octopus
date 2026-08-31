@@ -819,11 +819,25 @@ catalogue and for the reason already written on that field: so a picker is
 usable before the first message. Without it the block would be empty on every
 launch until somebody sent something, which is the thing it exists to fix.
 
-**Nothing is polled, and no session is started for it.** `service.ts` says
-plainly that spawning an agent to fill a gauge would create a record for a
-workspace nobody has spoken to. The block shows what is known and the next turn
-refreshes it. The cost is honest and worth stating: on a brand-new installation,
-before anything has ever run, there is nothing to show.
+**Nothing is polled, and nothing starts a session on its own.** `service.ts`
+says plainly that spawning an agent to fill a gauge nobody requested is not
+done — but the same passage draws the line where it matters: "the difference is
+who asked". So the block carries a control, and a press of it is the request.
+It starts a session if none is running, asks the account and stops; nothing is
+sent to the agent, so it costs no turn and no tokens.
+
+While the block has nothing to draw it says so and offers that press, rather
+than rendering nothing. Two empty bars would be the sidebar claiming to know
+something it does not, and no block at all would leave no way to ask.
+
+A press can still come back with nothing: a session runs in a worktree, so an
+installation with no conversation anywhere has nowhere to start one. That is a
+different sentence from "not read yet", because no amount of waiting fixes it.
+
+**A typed `/usage` fills it too.** That command already asks for everything and
+the answer carries these two windows, so the reading is kept rather than drawn
+once and let go — which used to leave the block empty beside a card that had
+just shown the same figures.
 
 **The windows are named** (`5h`, `1w`) although the old header chip never named
 its one: two figures under each other are unreadable without labels, while one

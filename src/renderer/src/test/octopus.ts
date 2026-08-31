@@ -77,6 +77,7 @@ export function installOctopusStub(): Api {
       answerQuestions: vi.fn(() => ok(undefined)),
       rateLimit: vi.fn(() => ok(null)),
       subscription: vi.fn(() => ok(null)),
+      refreshSubscription: vi.fn(() => ok(null)),
       onEvent: vi.fn(subscription),
       onStatus: vi.fn(subscription)
     },

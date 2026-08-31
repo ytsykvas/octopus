@@ -88,6 +88,9 @@ export const uk: Translation = {
 
   limits: {
     title: 'Клод',
+    empty: 'Ще не читалось — натисніть, щоб запитати акаунт.',
+    refresh: 'Прочитати ліміти зараз',
+    unavailable: 'Немає через що запитати. Спершу відкрийте воркспейс.',
     fiveHour: '5h',
     week: '1w',
     reading: 'Вікно {{name}}, використано {{percentage}}%',

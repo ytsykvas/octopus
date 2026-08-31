@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 
 import type { SubscriptionUsage } from '@core/agent.js'
 
@@ -19,8 +19,19 @@ import { onChatEvent } from './chatEvents.js'
  * `useSessionUsage` re-reads at that moment anyway, so this follows it rather
  * than asking on a timer.
  */
-export function useSubscriptionUsage(): SubscriptionUsage | null {
+export interface SubscriptionController {
+  readonly usage: SubscriptionUsage | null
+  /** A read is in flight, which may be spawning a session to do it. */
+  readonly busy: boolean
+  /** Nothing came back from a read somebody asked for. */
+  readonly unavailable: boolean
+  readonly refresh: () => Promise<void>
+}
+
+export function useSubscriptionUsage(): SubscriptionController {
   const [usage, setUsage] = useState<SubscriptionUsage | null>(null)
+  const [busy, setBusy] = useState(false)
+  const [unavailable, setUnavailable] = useState(false)
 
   useEffect(() => {
     const controller = new AbortController()
@@ -48,5 +59,23 @@ export function useSubscriptionUsage(): SubscriptionUsage | null {
     }
   }, [])
 
-  return usage
+  /*
+   * Asked for, rather than happening. Nothing fills this block on its own —
+   * the service will start a session to answer, and spawning one for a gauge
+   * nobody requested is the thing its own rule forbids. A press is the request.
+   */
+  const refresh = useCallback(async () => {
+    setBusy(true)
+    const read = await window.octopus.chats.refreshSubscription()
+    setBusy(false)
+
+    if (!read.ok) return
+    // `null` is "there was nowhere to ask" — an installation with no workspace
+    // has no worktree to run a session in. Said rather than left as a button
+    // that appears to do nothing.
+    setUnavailable(read.value === null)
+    if (read.value !== null) setUsage(read.value)
+  }, [])
+
+  return { usage, busy, unavailable, refresh }
 }

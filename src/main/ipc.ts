@@ -529,6 +529,10 @@ export function registerIpc(
   // the account rather than to any conversation.
   host.handle('chats:subscription', () => attempt(() => service.getSubscriptionUsage()))
 
+  // A press of the block in the sidebar, which is somebody asking — nothing
+  // fills it on its own. A control request: no turn, no tokens.
+  host.handle('chats:refreshSubscription', () => attempt(() => service.refreshSubscriptionUsage()))
+
   // Choosing a directory needs Electron's dialog, so it lives here.
   host.handle('dialog:pickDirectory', async (event, title: string) => {
     const window = host.windowFor(event)

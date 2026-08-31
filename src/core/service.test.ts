@@ -2381,6 +2381,56 @@ describe('the agent chat', () => {
       await expect(readFile(join(dir, 'state.json'), 'utf8')).resolves.toBe(before)
     })
 
+    /*
+     * The press on the block in the sidebar. Nothing fills it on its own —
+     * answering costs a session, and this service refuses to spawn one for a
+     * gauge nobody requested — so the request is what makes the read allowed.
+     */
+    it('reads the account on request, through a session already running', async () => {
+      const { service, workspaceId } = await withWorkspace()
+      const chat = await service.openChat(workspaceId)
+      await service.sendToChat(chat.id, 'work')
+
+      const read = await service.refreshSubscriptionUsage()
+
+      expect(read?.fiveHour?.utilization).toBe(18)
+    })
+
+    // No session anywhere, so one is started — in a conversation that already
+    // exists, because `openChat` is lazy on purpose and a gauge is not a reason
+    // to give a workspace nobody has spoken to a record.
+    it('starts a session in a conversation that exists when none is running', async () => {
+      const { service, workspaceId } = await withWorkspace()
+      await service.openChat(workspaceId)
+
+      const read = await service.refreshSubscriptionUsage()
+
+      expect(read?.fiveHour?.utilization).toBe(18)
+      expect(service.listChats(workspaceId)).toHaveLength(1)
+    })
+
+    // A session runs in a worktree, so an installation with no conversation has
+    // nowhere to start one. Said rather than left as a button that does nothing.
+    it('answers nothing when there is no conversation to ask through', async () => {
+      const { service } = await withWorkspace()
+
+      await expect(service.refreshSubscriptionUsage()).resolves.toBeNull()
+    })
+
+    /*
+     * `/usage` asks for everything and the answer carries these two windows, so
+     * a command somebody typed fills the sidebar without a second request. The
+     * app was reading them and throwing them away for that purpose.
+     */
+    it('keeps the windows a typed /usage already asked for', async () => {
+      const { service, workspaceId } = await withWorkspace()
+      const chat = await service.openChat(workspaceId)
+
+      await service.sendToChat(chat.id, '/usage')
+
+      expect(service.getSubscriptionUsage()).not.toBeNull()
+    })
+
     // Nothing is asked of the agent for this: the sidebar has no chat, and the
     // figures belong to the account rather than to any conversation.
     it('answers the account reading with no chat in the question', async () => {
