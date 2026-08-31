@@ -328,6 +328,7 @@ describe('channel table', () => {
     'chats:permission',
     'chats:rateLimit',
     'chats:subscription',
+    'chats:refreshSubscription',
     'terminal:create',
     'terminal:write',
     'terminal:resize',
@@ -1655,6 +1656,9 @@ describe('the agent chat', () => {
     await expect(invoke('chats:rateLimit')).resolves.toEqual({ ok: true, value: null })
     // The same before anything has run, and answerable without a chat at all.
     await expect(invoke('chats:subscription')).resolves.toEqual({ ok: true, value: null })
+    // Nothing to ask through either, which the press is told rather than left
+    // to read as a control that does nothing.
+    await expect(invoke('chats:refreshSubscription')).resolves.toEqual({ ok: true, value: null })
   })
 
   // Events keep arriving long after the call that started them returned, and a

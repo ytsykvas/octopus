@@ -92,6 +92,9 @@ export const en = {
   limits: {
     /* The account whose windows these are, not the app drawing them. */
     title: 'Claude',
+    empty: 'Not read yet — press to ask the account.',
+    refresh: 'Read the limits now',
+    unavailable: 'Nothing to ask through yet. Open a workspace first.',
     fiveHour: '5h',
     week: '1w',
     reading: '{{name}} window, {{percentage}}% used',

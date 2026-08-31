@@ -1,4 +1,4 @@
-import { renderHook, waitFor } from '@testing-library/react'
+import { act, renderHook, waitFor } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
 
 import type { SubscriptionUsage } from '@core/agent.js'
@@ -29,7 +29,63 @@ describe('what the sidebar knows about the account', () => {
   it('is nothing until something has reported it', () => {
     const { result } = renderHook(() => useSubscriptionUsage())
 
-    expect(result.current).toBeNull()
+    expect(result.current.usage).toBeNull()
+  })
+
+  /*
+   * The press. Nothing fills the block on its own — answering costs a session,
+   * and the service refuses to spawn one for a gauge nobody requested.
+   *
+   * That it says so *while* it is asking is asserted where it can be seen:
+   * `SubscriptionLimits.test` checks the control is disabled mid-read, which is
+   * the behaviour, rather than the flag behind it.
+   */
+  it('reads the account when asked to', async () => {
+    vi.mocked(octopus().chats.refreshSubscription).mockResolvedValue({
+      ok: true,
+      value: READING
+    })
+    const { result } = renderHook(() => useSubscriptionUsage())
+
+    await act(async () => {
+      await result.current.refresh()
+    })
+
+    expect(result.current.usage).toEqual(READING)
+    expect(result.current.busy).toBe(false)
+  })
+
+  // A session runs in a worktree, so an installation with no conversation has
+  // nowhere to start one — and no amount of waiting fixes that.
+  it('says when there was nowhere to ask', async () => {
+    vi.mocked(octopus().chats.refreshSubscription).mockResolvedValue({ ok: true, value: null })
+    const { result } = renderHook(() => useSubscriptionUsage())
+
+    await act(async () => {
+      await result.current.refresh()
+    })
+
+    expect(result.current.unavailable).toBe(true)
+    expect(result.current.usage).toBeNull()
+  })
+
+  it('leaves the figures alone when the read is refused', async () => {
+    vi.mocked(octopus().chats.subscription).mockResolvedValue({ ok: true, value: READING })
+    const { result } = renderHook(() => useSubscriptionUsage())
+    await waitFor(() => {
+      expect(result.current.usage).toEqual(READING)
+    })
+
+    vi.mocked(octopus().chats.refreshSubscription).mockResolvedValue({
+      ok: false,
+      error: 'no service'
+    })
+    await act(async () => {
+      await result.current.refresh()
+    })
+
+    expect(result.current.usage).toEqual(READING)
+    expect(result.current.unavailable).toBe(false)
   })
 
   /*
@@ -44,7 +100,7 @@ describe('what the sidebar knows about the account', () => {
     const { result } = renderHook(() => useSubscriptionUsage())
 
     await waitFor(() => {
-      expect(result.current).toEqual(READING)
+      expect(result.current.usage).toEqual(READING)
     })
   })
 
@@ -60,7 +116,7 @@ describe('what the sidebar knows about the account', () => {
     emitTurnEnd()
 
     await waitFor(() => {
-      expect(result.current).toEqual(READING)
+      expect(result.current.usage).toEqual(READING)
     })
   })
 
@@ -73,7 +129,7 @@ describe('what the sidebar knows about the account', () => {
     emitAgentEvent({ type: 'text', text: 'Looking at auth.rb' })
 
     await waitFor(() => {
-      expect(result.current).toBeNull()
+      expect(result.current.usage).toBeNull()
     })
     expect(octopus().chats.subscription).toHaveBeenCalledTimes(1)
   })
@@ -98,7 +154,7 @@ describe('what the sidebar knows about the account', () => {
     )
 
     await waitFor(() => {
-      expect(result.current).toEqual(READING)
+      expect(result.current.usage).toEqual(READING)
     })
   })
 
@@ -108,7 +164,7 @@ describe('what the sidebar knows about the account', () => {
     vi.mocked(octopus().chats.subscription).mockResolvedValue({ ok: true, value: READING })
     const { result } = renderHook(() => useSubscriptionUsage())
     await waitFor(() => {
-      expect(result.current).toEqual(READING)
+      expect(result.current.usage).toEqual(READING)
     })
 
     vi.mocked(octopus().chats.subscription).mockResolvedValue({ ok: false, error: 'no service' })
@@ -117,7 +173,7 @@ describe('what the sidebar knows about the account', () => {
     await waitFor(() => {
       expect(octopus().chats.subscription).toHaveBeenCalledTimes(2)
     })
-    expect(result.current).toEqual(READING)
+    expect(result.current.usage).toEqual(READING)
   })
 
   it('says nothing when the first read fails', async () => {
@@ -128,7 +184,7 @@ describe('what the sidebar knows about the account', () => {
     await waitFor(() => {
       expect(octopus().chats.subscription).toHaveBeenCalled()
     })
-    expect(result.current).toBeNull()
+    expect(result.current.usage).toBeNull()
   })
 
   // Closing the window mid-read. Applying the answer then would set state on
@@ -146,6 +202,6 @@ describe('what the sidebar knows about the account', () => {
     release({ ok: true, value: READING })
     await pending
 
-    expect(result.current).toBeNull()
+    expect(result.current.usage).toBeNull()
   })
 })

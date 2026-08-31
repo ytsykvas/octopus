@@ -298,6 +298,11 @@ describe('channel names', () => {
     ],
     ['chats.rateLimit', () => method('chats', 'rateLimit')(), 'chats:rateLimit'],
     ['chats.subscription', () => method('chats', 'subscription')(), 'chats:subscription'],
+    [
+      'chats.refreshSubscription',
+      () => method('chats', 'refreshSubscription')(),
+      'chats:refreshSubscription'
+    ],
     ['accounts.status', () => method('accounts', 'status')(), 'accounts:status'],
     ['accounts.github', () => method('accounts', 'github')(), 'accounts:github'],
     [

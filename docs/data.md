@@ -373,6 +373,10 @@ It is written only when it changes — the figures are read up to three times a
 turn, and a write per read would put the busiest path in the app on the state
 file to record a number that had not moved.
 
+Three things write it now — a turn ending, a `/usage` somebody typed, and the
+sidebar's own refresh — through one function, so they cannot drift about when a
+reading counts as new.
+
 The `usage` event in a transcript is not an exception to any of that, though it
 looks like one. It is not a reading kept in case it is wanted later; it is the
 answer to a command somebody typed, dated to the moment they typed it. The

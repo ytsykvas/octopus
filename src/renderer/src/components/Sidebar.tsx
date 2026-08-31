@@ -136,7 +136,7 @@ export function Sidebar({
       {/* Outside the branch above: the windows belong to the account, and the
           account is the same whether a project is open or not. At the foot
           rather than the head because the list is what the pane is for. */}
-      <SubscriptionLimits usage={subscription} />
+      <SubscriptionLimits subscription={subscription} />
     </aside>
   )
 }

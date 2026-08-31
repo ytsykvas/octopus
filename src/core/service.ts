@@ -59,6 +59,7 @@ import {
   writeProjectEnv
 } from './env.js'
 import { runArchiveScript } from './archive.js'
+import { subscriptionFrom } from './usage.js'
 import {
   type Config,
   ConfigSchema,
@@ -659,6 +660,19 @@ export interface OctopusService {
    * message of a session rather than after it.
    */
   getSubscriptionUsage(): SubscriptionUsage | null
+  /**
+   * Asks the account for its window shares now, rather than waiting for a turn.
+   *
+   * The block in the sidebar is a gauge nobody requested, so nothing fills it
+   * on its own — but a press of it is somebody asking, which is the difference
+   * `sendChatMessage` already draws for `/usage`. Nothing is sent to the agent:
+   * this is a control request, so it costs no turn and no tokens.
+   *
+   * `null` when there is no conversation anywhere to ask through. A session
+   * runs in a worktree, so an installation with no workspace has nowhere to
+   * start one, and saying so is better than a button that does nothing.
+   */
+  refreshSubscriptionUsage(): Promise<SubscriptionUsage | null>
   /** Subscribes to agent events; the returned function unsubscribes. */
   onAgentEvent(handler: (event: ChatEvent) => void): () => void
   /** What a workspace is doing, as it changes. A broadcast, like the above. */
@@ -882,6 +896,25 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
     }
 
     await commit((current) => updateProject(current, project.id, fields))
+  }
+
+  /**
+   * Holds on to a reading, and writes it down when it says something new.
+   *
+   * Three callers now — a turn ending, a `/usage` somebody typed, and the
+   * sidebar's own refresh — and one of them runs up to three times a turn. A
+   * write per read would put the busiest path in the app on the state file to
+   * record a number that had not moved, so the comparison comes first.
+   *
+   * A reading that failed leaves the last good one standing: blanking the
+   * figures because one request was refused would report a change in the
+   * account that never happened.
+   */
+  async function keepSubscription(reading: SubscriptionUsage | null): Promise<void> {
+    if (!reading || sameUsage(reading, subscriptionUsage)) return
+
+    subscriptionUsage = reading
+    await commit((current) => ({ ...current, subscriptionUsage: reading }))
   }
 
   function requireWorkspace(workspaceId: string): Workspace {
@@ -2365,7 +2398,13 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
        * "running" for the rest of its life is a worse answer than the prose.
        */
       if (isUsageCommand(text, chat.knownCommands)) {
-        handleEvent(chat, { type: 'usage', report: await session.usageReport() })
+        const report = await session.usageReport()
+        handleEvent(chat, { type: 'usage', report })
+
+        // The card and the sidebar are the same two windows, and this answer
+        // already carries them. Reading them and letting them go would leave
+        // the block empty beside a card that had just drawn them.
+        if (report) await keepSubscription(subscriptionFrom(report))
         return
       }
 
@@ -2550,6 +2589,33 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
       return subscriptionUsage
     },
 
+    async refreshSubscriptionUsage() {
+      // A session already running is free to ask: it is one control request
+      // against a process that exists. Any of them answers the same thing, so
+      // the first is as good as the rest.
+      const [running] = sessions.values()
+      if (running) {
+        await keepSubscription(await running.subscriptionUsage())
+        return subscriptionUsage
+      }
+
+      /*
+       * Otherwise one is started, in a conversation that already exists.
+       *
+       * Deliberately not in a new one: `openChat` is lazy so that a workspace
+       * nobody has spoken to has no record, and filling a gauge is not a reason
+       * to give it one. With no chat anywhere there is nothing to ask through,
+       * which the caller is told rather than left to guess.
+       */
+      const chat = state.chats.at(-1)
+      const workspace = state.workspaces.find((item) => item.id === chat?.workspaceId)
+      if (!chat || !workspace) return null
+
+      const session = startFor(chat, workspace, await sourcesFor(workspace))
+      await keepSubscription(await session.subscriptionUsage())
+      return subscriptionUsage
+    },
+
     async sessionUsage(chatId) {
       requireChat(chatId)
 
@@ -2570,13 +2636,7 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
       // A reading that failed leaves the last good one standing. Blanking the
       // figure because one request was refused would report a change in the
       // account that never happened.
-      if (subscription && !sameUsage(subscription, subscriptionUsage)) {
-        subscriptionUsage = subscription
-        // Only on a change. This is read up to three times a turn, and a state
-        // write per read would put the file under the busiest path in the app
-        // to record a number that had not moved.
-        await commit((current) => ({ ...current, subscriptionUsage: subscription }))
-      }
+      await keepSubscription(subscription)
 
       return { context, subscription: subscriptionUsage }
     },

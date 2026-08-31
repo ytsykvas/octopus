@@ -17,6 +17,8 @@
 
 import { z } from 'zod'
 
+import type { SubscriptionUsage, UsageWindow } from './agent.js'
+
 /**
  * Tolerant on purpose, in both directions.
  *
@@ -206,6 +208,33 @@ export const UsageReportSchema = z.object({
 
 export type UsageReport = z.infer<typeof UsageReportSchema>
 export type UsageLimit = z.infer<typeof UsageLimitSchema>
+
+/**
+ * The two windows the sidebar draws, taken out of a full report.
+ *
+ * `/usage` already asks for everything and the answer carries these, so a
+ * command somebody typed can fill the block at the foot of the sidebar without
+ * a second request — the app was reading them and throwing them away for that
+ * purpose.
+ *
+ * `null` when the account has no plan windows at all: an API-key, Bedrock or
+ * Vertex session has no plan to be near the end of, and a pair of nulls would
+ * say "read, and empty" about something never read.
+ */
+export function subscriptionFrom(report: UsageReport): SubscriptionUsage | null {
+  if (!report.limitsApply) return null
+
+  const of = (key: 'five_hour' | 'seven_day'): UsageWindow | null => {
+    const found = report.limits.find((limit) => limit.key === key)
+    return found ? { utilization: found.utilization, resetsAt: found.resetsAt } : null
+  }
+
+  const fiveHour = of('five_hour')
+  const sevenDay = of('seven_day')
+
+  return fiveHour === null && sevenDay === null ? null : { fiveHour, sevenDay }
+}
+
 export type UsageContributing = z.infer<typeof ContributingSchema>
 
 type Response = z.infer<typeof UsageResponseSchema>
