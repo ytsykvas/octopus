@@ -546,6 +546,50 @@ describe('RightPanel', () => {
       expect(panel.getByText('archive it')).toBeInTheDocument()
     })
 
+    it('keeps a long script from eating the tab, and lets it be read', async () => {
+      /*
+       * Both halves of one report: the panel filled the Scripts tab and the two
+       * terminals were gone, with nothing anywhere to scroll.
+       *
+       * Measured in a browser against the real `setup.sh`, because jsdom does
+       * no layout and could not have caught this: the block came out 1909px
+       * tall in a pane about a thousand, which left Build and Server one pixel
+       * each — and the script itself was 771px wide in a 354px box, clipped
+       * with the scrollbar macOS hides until it moves.
+       *
+       * So this asserts the two classes that fix it rather than the geometry
+       * they produce. It is a weak test of the symptom and an exact test of the
+       * cause: delete either class and it fails.
+       */
+      const long: ResolvedScript = {
+        kind: 'setup',
+        source: 'repoOctopus',
+        from: '.octopus/scripts/setup.sh',
+        run: { type: 'file', path: '/ws/anna/.octopus/scripts/setup.sh' },
+        contents: Array.from(
+          { length: 120 },
+          (_, line) => `# a comment long enough to need wrapping, line ${String(line)}`
+        ).join('\n')
+      }
+
+      renderPanel({
+        workspaces: [anna],
+        activeWorkspaceId: anna.id,
+        scripts: scriptsFor({ approved: false, scripts: { setup: long } })
+      })
+      await userEvent.click(scriptsTab())
+
+      const box = (await screen.findByText(/a comment long enough/)).closest('pre')
+      expect(box).toHaveClass('whitespace-pre-wrap')
+
+      // The notice and the Approve button stay outside the scrolling group:
+      // they are the two things that must never scroll out of reach.
+      const group = box?.closest('div.overflow-y-auto')
+      expect(group).not.toBeNull()
+      expect(group).toHaveClass('max-h-[38vh]')
+      expect(group?.contains(screen.getByRole('button', { name: 'Allow these' }))).toBe(false)
+    })
+
     it('says why nothing can run when the settings could not be read', async () => {
       /*
        * The pane used to disable Run and say nothing at all: a repository whose

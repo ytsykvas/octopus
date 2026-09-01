@@ -744,22 +744,40 @@ export function RightPanel({
           <div className="border-line bg-muted/40 shrink-0 space-y-2 border-b px-3 py-2.5">
             <p className="text-ink-soft leading-relaxed">{t('scripts.repoNotice')}</p>
 
-            {/* Grouped by the file they came from. All three usually come from
-                one `settings.toml`, and naming it above each box said the same
-                path three times without saying anything. */}
-            {suppliedScripts.map(({ from, scripts: supplied }) => (
-              <div key={from}>
-                <p className="text-ink-faint font-mono text-[11px]">{from}</p>
-                {supplied.map((script) => (
-                  <pre
-                    key={script.kind}
-                    className="border-line bg-canvas mt-1 overflow-x-auto rounded-[var(--radius-control)] border px-2 py-1.5 font-mono text-[11px]"
-                  >
-                    {script.contents}
-                  </pre>
-                ))}
-              </div>
-            ))}
+            {/* Bounded, with a scroll of its own.
+                
+                The block around it is `shrink-0`, so without a ceiling here a
+                long script simply grew: a 110-line `setup.sh` measured 1909px
+                against a pane about a thousand tall, which left the Build and
+                Server terminals **one pixel** each and nothing anywhere to
+                scroll. The tab became the notice and nothing else. The notice
+                and the button stay outside this box on purpose — they are the
+                two things that must never scroll out of reach. */}
+            <div className="max-h-[38vh] space-y-2 overflow-y-auto">
+              {/* Grouped by the file they came from. All three usually come from
+                  one `settings.toml`, and naming it above each box said the same
+                  path three times without saying anything. */}
+              {suppliedScripts.map(({ from, scripts: supplied }) => (
+                <div key={from}>
+                  <p className="text-ink-faint font-mono text-[11px]">{from}</p>
+                  {supplied.map((script) => (
+                    <pre
+                      key={script.kind}
+                      /* Wrapped rather than scrolled sideways. `overflow-x-auto`
+                         alone did clip correctly — but macOS hides the scrollbar
+                         until it moves, so 80-column shell in a 354px box read
+                         as text simply cut off. Asking somebody to scroll every
+                         line right and back is not a way to read code they are
+                         being asked to approve. `overflow-x-auto` stays for the
+                         one thing wrapping cannot break: an unbroken token. */
+                      className="border-line bg-canvas mt-1 overflow-x-auto rounded-[var(--radius-control)] border px-2 py-1.5 font-mono text-[11px] break-words whitespace-pre-wrap"
+                    >
+                      {script.contents}
+                    </pre>
+                  ))}
+                </div>
+              ))}
+            </div>
 
             <Button
               size="sm"
