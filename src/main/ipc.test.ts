@@ -291,6 +291,7 @@ describe('channel table', () => {
     'trust:read',
     'trust:approve',
     'scripts:resolved',
+    'scripts:project',
     'scripts:approve',
     'workspace:env',
     'workspaces:serving',
@@ -960,6 +961,23 @@ describe('scripts and instructions of a real project', () => {
     await expect(invoke('scripts:resolved', workspace.id)).resolves.toMatchObject({
       ok: true,
       value: { approved: true }
+    })
+  })
+
+  // Asked of the project rather than a workspace, because Project settings is
+  // open with no workspace to ask about.
+  it('says which scripts the checkout itself supplies', async () => {
+    const projectId = await addProject()
+    await mkdir(join(dir, 'planner', '.conductor'), { recursive: true })
+    await writeFile(
+      join(dir, 'planner', '.conductor', 'settings.toml'),
+      '[scripts]\nsetup = "make dev"\n',
+      'utf8'
+    )
+
+    await expect(invoke('scripts:project', projectId)).resolves.toMatchObject({
+      ok: true,
+      value: { approved: false, scripts: { setup: { source: 'repoConductor' } } }
     })
   })
 

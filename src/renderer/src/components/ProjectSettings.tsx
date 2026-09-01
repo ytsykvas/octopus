@@ -17,6 +17,8 @@ import { PROJECT_ICONS } from '@core/icons.js'
 import { checkEnvBody } from '@core/envBlock.js'
 import type { InstructionSource } from '@core/instructionSources.js'
 import { initials } from '@core/initials.js'
+import type { ScriptsInWorkspace } from '@core/repoSource.js'
+import type { ScriptKind } from '@core/scripts.js'
 import type { Project, ProjectPatch } from '@core/store.js'
 
 import { useErrorMessage } from '../hooks/useErrorMessage.js'
@@ -81,6 +83,21 @@ const ENV_PROBLEMS = {
   duplicate: 'project.envDuplicate',
   unknownVariable: 'project.envUnknownVariable',
   marker: 'project.envMarker'
+} as const
+
+/**
+ * The three scripts, in the order they run, and what each is called.
+ *
+ * A list rather than three written-out editors: each now carries a source line
+ * as well as a label and a hint, and three copies of that is three places for
+ * one of them to be forgotten.
+ */
+const SCRIPT_ORDER = ['setup', 'archive', 'run'] as const satisfies readonly ScriptKind[]
+
+const SCRIPT_FIELDS = {
+  setup: { label: 'project.setupScript', hint: 'project.setupScriptHint' },
+  archive: { label: 'project.archiveScript', hint: 'project.archiveScriptHint' },
+  run: { label: 'project.runScript', hint: 'project.runScriptHint' }
 } as const
 
 /** What each source is called to the reader. */
@@ -163,6 +180,14 @@ export function ProjectSettings({
    */
   const [envIgnored, setEnvIgnored] = useState(true)
   const [sources, setSources] = useState<readonly InstructionSource[]>([])
+  /**
+   * Where each script would actually come from, once the checkout is consulted.
+   *
+   * Resolved against the project's own repository rather than a worktree: this
+   * dialog is about the project, and it opens with no workspace as often as
+   * with one.
+   */
+  const [resolved, setResolved] = useState<ScriptsInWorkspace | null>(null)
   /** The named sets this project holds, and which of them is being edited. */
   const [profiles, setProfiles] = useState<readonly string[]>([project.envProfile])
   const [profile, setProfile] = useState(project.envProfile)
@@ -214,6 +239,23 @@ export function ProjectSettings({
       controller.abort()
     }
   }, [section, project.id, project.envFile])
+
+  useEffect(() => {
+    if (section !== 'scripts') return
+    const controller = new AbortController()
+
+    void (async () => {
+      const answer = await window.octopus.projects.scripts(project.id)
+      // A checkout that cannot be read leaves the editors as they were: a
+      // settings file with conflict markers in it is not a reason to tell
+      // somebody their own script does not run.
+      if (!controller.signal.aborted && answer.ok) setResolved(answer.value)
+    })()
+
+    return () => {
+      controller.abort()
+    }
+  }, [section, project.id])
 
   useEffect(() => {
     if (section !== 'instructions') return
@@ -473,44 +515,30 @@ export function ProjectSettings({
 
           {section === 'scripts' && (
             <>
-              <FileEditor
-                label={t('project.setupScript')}
-                hint={t('project.setupScriptHint')}
-                placeholder="#!/bin/sh"
-                read={async () => {
-                  const result = await window.octopus.projects.readScript(project.id, 'setup')
-                  return result.ok ? result.value : null
-                }}
-                save={(contents) =>
-                  void window.octopus.projects.saveScript(project.id, 'setup', contents)
-                }
-              />
+              {SCRIPT_ORDER.map((kind) => {
+                const repo = resolved?.scripts[kind]
 
-              <FileEditor
-                label={t('project.archiveScript')}
-                hint={t('project.archiveScriptHint')}
-                placeholder="#!/bin/sh"
-                read={async () => {
-                  const result = await window.octopus.projects.readScript(project.id, 'archive')
-                  return result.ok ? result.value : null
-                }}
-                save={(contents) =>
-                  void window.octopus.projects.saveScript(project.id, 'archive', contents)
-                }
-              />
-
-              <FileEditor
-                label={t('project.runScript')}
-                hint={t('project.runScriptHint')}
-                placeholder="#!/bin/sh"
-                read={async () => {
-                  const result = await window.octopus.projects.readScript(project.id, 'run')
-                  return result.ok ? result.value : null
-                }}
-                save={(contents) =>
-                  void window.octopus.projects.saveScript(project.id, 'run', contents)
-                }
-              />
+                return (
+                  <FileEditor
+                    key={kind}
+                    label={t(SCRIPT_FIELDS[kind].label)}
+                    hint={t(SCRIPT_FIELDS[kind].hint)}
+                    placeholder="#!/bin/sh"
+                    supersededBy={
+                      repo === undefined || repo.source === 'project'
+                        ? undefined
+                        : t('project.scriptFromRepo', { from: repo.from })
+                    }
+                    read={async () => {
+                      const result = await window.octopus.projects.readScript(project.id, kind)
+                      return result.ok ? result.value : null
+                    }}
+                    save={(contents) =>
+                      void window.octopus.projects.saveScript(project.id, kind, contents)
+                    }
+                  />
+                )
+              })}
             </>
           )}
 
@@ -681,7 +709,12 @@ export function ProjectSettings({
           {/* Reaching removal now takes choosing the section it lives in, which
               is a further step away from a mis-click than a scroll was. */}
           {section === 'repository' && (
-            <RepoConfig projectId={project.id} onImported={onImported} />
+            <RepoConfig
+              projectId={project.id}
+              trusted={project.trustRepoScripts}
+              onTrustChange={(trusted) => void onUpdate({ trustRepoScripts: trusted })}
+              onImported={onImported}
+            />
           )}
 
           {section === 'danger' && (

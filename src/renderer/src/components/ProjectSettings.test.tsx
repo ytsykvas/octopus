@@ -23,6 +23,7 @@ function project(overrides: Partial<Project> = {}): Project {
     approvedSettings: [],
     approvedScripts: [],
     envProfile: 'default',
+    trustRepoScripts: false,
     color: 'blue',
     ...overrides
   }
@@ -1002,6 +1003,18 @@ describe('ProjectSettings', () => {
     expect(window.octopus.projects.repoConfig).toHaveBeenCalledWith('planner')
   })
 
+  // The switch lives beside Import and Export because it is the same question:
+  // how much of this checkout the app believes.
+  it('trusts a repository from the same section that moves settings', async () => {
+    const user = userEvent.setup()
+    const props = await renderDialog()
+
+    await openSection(user, 'Repository')
+    await user.click(await screen.findByRole('checkbox'))
+
+    expect(props.onUpdate).toHaveBeenCalledWith({ trustRepoScripts: true })
+  })
+
   it('shows the pull request instructions under Instructions', async () => {
     vi.mocked(window.octopus.projects.readInstruction).mockResolvedValue({
       ok: true,
@@ -1102,6 +1115,78 @@ describe('ProjectSettings', () => {
       'pullRequest',
       'Lead with the why.'
     )
+  })
+
+  it('names the file a script really comes from, and refuses to be typed into', async () => {
+    // Editing Build here with a `.conductor` present used to save happily and
+    // change nothing that runs: `resolveScript` returns the repository's
+    // command line regardless of what this file holds.
+    offerScripts()
+    vi.mocked(window.octopus.projects.scripts).mockResolvedValue({
+      ok: true,
+      value: {
+        approved: true,
+        scripts: {
+          setup: {
+            kind: 'setup',
+            source: 'repoConductor',
+            from: '.conductor/settings.toml',
+            run: { type: 'command', command: 'bin/setup' },
+            contents: 'bin/setup'
+          }
+        }
+      }
+    })
+    const user = userEvent.setup()
+    await renderDialog()
+
+    await openSection(user, 'Scripts')
+
+    expect(await screen.findByText(/\.conductor\/settings\.toml/)).toBeInTheDocument()
+    expect(screen.getByLabelText('Build script')).toHaveAttribute('readonly')
+    // The other two are the project's own and stay editable.
+    expect(screen.getByLabelText('Server script')).not.toHaveAttribute('readonly')
+  })
+
+  it('says nothing about a source when the script is the project\u2019s own', async () => {
+    offerScripts()
+    vi.mocked(window.octopus.projects.scripts).mockResolvedValue({
+      ok: true,
+      value: {
+        approved: true,
+        scripts: {
+          setup: {
+            kind: 'setup',
+            source: 'project',
+            from: '/scripts/setup.sh',
+            run: { type: 'file', path: '/scripts/setup.sh' },
+            contents: 'npm install'
+          }
+        }
+      }
+    })
+    const user = userEvent.setup()
+    await renderDialog()
+
+    await openSection(user, 'Scripts')
+
+    expect(await screen.findByLabelText('Build script')).not.toHaveAttribute('readonly')
+  })
+
+  it('leaves the editors alone when the checkout cannot be read', async () => {
+    // A settings file with conflict markers in it is not a reason to tell
+    // somebody their own script does not run.
+    offerScripts()
+    vi.mocked(window.octopus.projects.scripts).mockResolvedValue({
+      ok: false,
+      error: 'unparseable'
+    })
+    const user = userEvent.setup()
+    await renderDialog()
+
+    await openSection(user, 'Scripts')
+
+    expect(await screen.findByLabelText('Build script')).not.toHaveAttribute('readonly')
   })
 
   // A file that cannot be read leaves an empty editor rather than one holding

@@ -148,6 +148,7 @@ export function installOctopusStub(): Api {
       exportRepoConfig: vi.fn(() => ok([])),
       readCarryList: vi.fn(() => ok('.env\n')),
       saveCarryList: vi.fn(() => ok(undefined)),
+      scripts: vi.fn(() => ok({ approved: true, scripts: {} })),
       envProfiles: vi.fn(() => ok({ profiles: ['default'], projectDefault: 'default' })),
       readEnv: vi.fn(() => ok('')),
       createEnv: vi.fn(() => ok(undefined)),

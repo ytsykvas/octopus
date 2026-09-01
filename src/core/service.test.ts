@@ -2387,9 +2387,42 @@ describe('scripts a repository supplies', () => {
     expect(service.listProjects().find((p) => p.id === projectId)?.approvedScripts).toEqual([])
   })
 
+  it('answers for the checkout itself, which is what Project settings asks', async () => {
+    // Settings opens with no workspace as often as with one, and every worktree
+    // is cut from this checkout.
+    const { projectId, repo } = await withWorkspace()
+    await mkdir(join(repo, '.conductor'), { recursive: true })
+    await writeFile(
+      join(repo, '.conductor', 'settings.toml'),
+      '[scripts]\nrun = "make s"\n',
+      'utf8'
+    )
+
+    const answer = await service.projectScripts(projectId)
+
+    expect(answer.scripts.run?.source).toBe('repoConductor')
+    expect(answer.approved).toBe(false)
+  })
+
+  it('lets a trusted repository run without being read first', async () => {
+    // The switch in Project settings. Off, every version is shown once; on,
+    // whatever the checkout holds runs — reasonable for a repository you write.
+    const { projectId, repo } = await withWorkspace()
+    await mkdir(join(repo, '.conductor'), { recursive: true })
+    await writeFile(
+      join(repo, '.conductor', 'settings.toml'),
+      '[scripts]\nrun = "make s"\n',
+      'utf8'
+    )
+    await service.updateProjectById(projectId, { trustRepoScripts: true })
+
+    await expect(service.projectScripts(projectId)).resolves.toMatchObject({ approved: true })
+  })
+
   it('refuses a workspace it does not know', async () => {
     await expect(service.workspaceScripts('missing')).rejects.toThrow()
     await expect(service.approveWorkspaceScripts('missing')).rejects.toThrow()
+    await expect(service.projectScripts('missing')).rejects.toThrow()
   })
 })
 

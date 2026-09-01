@@ -152,7 +152,9 @@ export async function createProject(
     approvedScripts: [],
     // The set the migration gives the old single file, so a project that has
     // never had one still names something it could write.
-    envProfile: DEFAULT_PROFILE
+    envProfile: DEFAULT_PROFILE,
+    // A repository is read before it is believed, until somebody says otherwise.
+    trustRepoScripts: false
   }
 }
 

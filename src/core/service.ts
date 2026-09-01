@@ -387,6 +387,13 @@ export interface OctopusService {
   workspaceScripts(workspaceId: string): Promise<ScriptsInWorkspace>
   /** Records that these scripts were read, so they may run. */
   approveWorkspaceScripts(workspaceId: string): Promise<void>
+  /**
+   * The same answer for a project, resolved against its checkout.
+   *
+   * Project settings has no workspace to ask about, and the checkout is the
+   * best answer available — it is what every worktree is cut from.
+   */
+  projectScripts(projectId: string): Promise<ScriptsInWorkspace>
 
   /** Which of the checkout's files travel into a workspace, one path per line. */
   readProjectCarryList(projectId: string): Promise<string>
@@ -1548,6 +1555,19 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
   }
 
   /**
+   * Whether the scripts a repository supplies may run.
+   *
+   * Three ways to yes, and they are different statements. Nothing supplied is
+   * nothing to approve. A digest that has been read says *this text* is fine. A
+   * project marked trusted says whatever its repository holds is fine — one
+   * decision, recorded in settings where it can be seen and undone, rather than
+   * a prompt every time a script is edited.
+   */
+  function allowedToRun(project: Project, digest: string): boolean {
+    return digest === '' || project.trustRepoScripts || project.approvedScripts.includes(digest)
+  }
+
+  /**
    * The cleanup script to run for a workspace, or null for none.
    *
    * Null covers three different things on purpose, because a removal treats
@@ -1581,8 +1601,7 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
 
     // The user's own script is never gated; a repository's runs only once
     // somebody has read it.
-    const allowed =
-      cleanup.source === 'project' || project.approvedScripts.includes(scriptsDigest(scripts))
+    const allowed = cleanup.source === 'project' || allowedToRun(project, scriptsDigest(scripts))
 
     return allowed ? cleanup : null
   }
@@ -2049,7 +2068,14 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
 
       // Nothing supplied by the repository is nothing to approve, which is
       // every project configured the way they all used to be.
-      return { approved: digest === '' || project.approvedScripts.includes(digest), scripts }
+      return { approved: allowedToRun(project, digest), scripts }
+    },
+
+    async projectScripts(projectId) {
+      const project = requireProject(projectId)
+      const scripts = await resolveScripts(project.repoPath, project.id, dataRoot)
+
+      return { approved: allowedToRun(project, scriptsDigest(scripts)), scripts }
     },
 
     async approveWorkspaceScripts(workspaceId) {

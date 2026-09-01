@@ -17,6 +17,15 @@ interface FileEditorProps {
    * parser, and ours cannot be the authority on what that one accepts.
    */
   readonly notes?: (contents: string) => readonly string[]
+  /**
+   * Where the text that actually runs comes from, when it is not this file.
+   *
+   * A repository supplying a script wins over the project's own copy, so
+   * without this the box takes an edit, saves it, and changes nothing that
+   * runs. Read-only rather than hidden: the old text is still worth reading,
+   * and worth copying into the repository's file.
+   */
+  readonly supersededBy?: string | undefined
 }
 
 /**
@@ -33,7 +42,8 @@ export function FileEditor({
   rows = 16,
   read,
   save,
-  notes
+  notes,
+  supersededBy
 }: FileEditorProps): React.JSX.Element {
   const [body, setBody] = useState('')
   const [saved, setSaved] = useState('')
@@ -73,10 +83,13 @@ export function FileEditor({
 
   return (
     <Field label={label} hint={hint}>
+      {supersededBy !== undefined && <p className="text-warning mb-1.5">{supersededBy}</p>}
+
       <textarea
         value={body}
         spellCheck={false}
         rows={rows}
+        readOnly={supersededBy !== undefined}
         /* `Field` draws the label as a paragraph, which names nothing to a
            screen reader. One editor to a section, that was merely thin; five
            instruction editors one after another are five unnamed boxes, and the
@@ -88,7 +101,9 @@ export function FileEditor({
         }}
         onBlur={commit}
         placeholder={placeholder}
-        className="focus-ring border-line bg-canvas w-full resize-y rounded-[var(--radius-control)] border px-2 py-1.5 font-mono text-[11px] leading-relaxed"
+        className={`focus-ring border-line bg-canvas w-full resize-y rounded-[var(--radius-control)] border px-2 py-1.5 font-mono text-[11px] leading-relaxed ${
+          supersededBy === undefined ? '' : 'text-ink-faint'
+        }`}
       />
 
       {problems.length > 0 && (

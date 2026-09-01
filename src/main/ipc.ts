@@ -260,6 +260,12 @@ export function registerIpc(
     attempt(() => service.approveWorkspaceScripts(workspaceId))
   )
 
+  // Keyed by project rather than workspace: settings is open with no workspace
+  // to ask about, and the checkout is what every worktree is cut from.
+  host.handle('scripts:project', (_event, projectId: string) =>
+    attempt(() => service.projectScripts(projectId))
+  )
+
   // The workspace as well, because whether a source is read depends on the
   // worktree a session would run in — that is where the trust gate looks.
   host.handle('instructions:sources', (_event, projectId: string, workspaceId: unknown) =>

@@ -106,7 +106,20 @@ export const ProjectSchema = z.object({
    * single file — so a record written before profiles existed reads back
    * pointing at exactly what is now on disk, and no record has to be migrated.
    */
-  envProfile: ProfileNameSchema.default(DEFAULT_PROFILE)
+  envProfile: ProfileNameSchema.default(DEFAULT_PROFILE),
+  /**
+   * Whether this repository's scripts run without being read first.
+   *
+   * Off by default, because a clone somebody else wrote must not execute its
+   * own shell the moment it is opened. On, and `approvedScripts` is not
+   * consulted at all — one decision, recorded where it can be seen and undone,
+   * instead of a prompt every time a script is edited.
+   *
+   * A separate thing from `approvedScripts` rather than a permanent entry in
+   * it: a digest says "this text was read", and that is a different statement
+   * from "whatever this repository says is fine".
+   */
+  trustRepoScripts: z.boolean().default(false)
 })
 
 export const WorkspaceStatusSchema = z.enum(['idle', 'running', 'waiting_permission', 'error'])
@@ -374,6 +387,7 @@ export const ProjectPatchSchema = ProjectSchema.pick({
   approvedSettings: true,
   approvedScripts: true,
   envProfile: true,
+  trustRepoScripts: true,
   repoPath: true
 }).partial()
 
@@ -468,6 +482,9 @@ export function updateProject(state: State, projectId: string, patch: ProjectPat
               approvedScripts: patch.approvedScripts
             }),
             ...(patch.envProfile !== undefined && { envProfile: patch.envProfile }),
+            ...(patch.trustRepoScripts !== undefined && {
+              trustRepoScripts: patch.trustRepoScripts
+            }),
             ...(repoPath !== undefined && { repoPath }),
             ...(patch.approvedSettings !== undefined && {
               approvedSettings: patch.approvedSettings

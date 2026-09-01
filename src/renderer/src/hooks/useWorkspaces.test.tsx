@@ -23,6 +23,7 @@ const project = (id: string, name: string): Project => ({
   approvedSettings: [],
   approvedScripts: [],
   envProfile: 'default',
+  trustRepoScripts: false,
   color: 'blue'
 })
 

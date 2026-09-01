@@ -17,6 +17,7 @@ function project(overrides: Partial<Project> = {}): Project {
     approvedSettings: [],
     approvedScripts: [],
     envProfile: 'default',
+    trustRepoScripts: false,
     color: 'blue',
     ...overrides
   }

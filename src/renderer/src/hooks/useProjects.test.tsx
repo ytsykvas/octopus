@@ -20,6 +20,7 @@ const planner: Project = {
   approvedSettings: [],
   approvedScripts: [],
   envProfile: 'default',
+  trustRepoScripts: false,
   color: 'blue'
 }
 
@@ -33,6 +34,7 @@ const website: Project = {
   approvedSettings: [],
   approvedScripts: [],
   envProfile: 'default',
+  trustRepoScripts: false,
   color: 'green'
 }
 

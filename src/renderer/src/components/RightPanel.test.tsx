@@ -540,7 +540,6 @@ describe('RightPanel', () => {
       // too, and that one is right to.
       // `!` is allowed in tests, and the notice has just been found, so its
       // parent exists by construction.
-      // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
       const panel = within((await screen.findByText(/This repository supplies/)).parentElement!)
       expect(panel.getAllByText(from)).toHaveLength(1)
       expect(panel.getByText('setup it')).toBeInTheDocument()

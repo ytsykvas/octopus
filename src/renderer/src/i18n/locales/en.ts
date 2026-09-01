@@ -123,6 +123,16 @@ export const en = {
       'A project keeps its settings in ~/.octopus, which lives on this machine and goes with it. Its repository can carry a copy in .octopus/, so a fresh installation is rebuilt from the repository rather than from memory. Nothing here is read while the app works, and nothing in it runs on its own.',
     repoIgnored:
       'git ignores .octopus/, so anything written there stays on this machine. Take it out of .gitignore for the copy to reach anybody else.',
+    scriptFromRepo:
+      'This checkout supplies this script, in {{from}}, and that is what runs. The text below is this project\u2019s own copy, kept but not used.',
+    repoRuns: 'What this repository runs',
+    repoRunsNone:
+      'This repository supplies no scripts, so the ones in this project\u2019s settings are what run.',
+    repoRunsAllowed: 'These have been read and are allowed to run.',
+    repoRunsWaiting:
+      'These have not been read yet, so Run is disabled until they are allowed \u2014 on the Scripts tab, or with the switch below.',
+    repoTrustHint:
+      'Trust this repository\u2019s scripts. Off, and each version is shown once before it runs, so a git pull that rewrites one asks again. On, and whatever the repository holds runs without asking \u2014 which is reasonable for a repository you write, and is not for a clone.',
     repoIn: 'From the repository',
     repoOut: 'Into the repository',
     repoImport: 'Import',

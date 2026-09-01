@@ -3,11 +3,20 @@ import { useCallback, useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import type { RepoConfigItem, RepoConfigView, RepoItemId } from '@core/repoConfig.js'
+import type { ScriptsInWorkspace } from '@core/repoSource.js'
+import { SCRIPT_KINDS } from '@core/scriptEnv.js'
 
 import type { Result } from '../../../preload/index.js'
 
 import { useErrorMessage } from '../hooks/useErrorMessage.js'
 import { Button } from './Button.js'
+
+/** What each script is called to the reader, in the order they run. */
+const SCRIPT_LABELS = {
+  setup: 'project.setupScript',
+  run: 'project.runScript',
+  archive: 'project.archiveScript'
+} as const
 
 /** What each state is called to the reader. */
 const STATES = {
@@ -19,6 +28,10 @@ const STATES = {
 
 interface RepoConfigProps {
   readonly projectId: string
+  /** Whether this repository's scripts run without being read first. */
+  readonly trusted: boolean
+  /** Applies the switch; the dialog holds the project and has to be told. */
+  readonly onTrustChange: (trusted: boolean) => void
   /**
    * Reports that something was imported.
    *
@@ -40,7 +53,12 @@ interface RepoConfigProps {
  * would mean running shell somebody pushed, so what a repository carries is
  * shown — every byte of it, on the row — and imported only when asked.
  */
-export function RepoConfig({ projectId, onImported }: RepoConfigProps): React.JSX.Element {
+export function RepoConfig({
+  projectId,
+  trusted,
+  onTrustChange,
+  onImported
+}: RepoConfigProps): React.JSX.Element {
   const { t } = useTranslation()
   const describeFailure = useErrorMessage()
 
@@ -50,6 +68,29 @@ export function RepoConfig({ projectId, onImported }: RepoConfigProps): React.JS
   const [given, setGiven] = useState<RepoItemId[]>([])
   const [open, setOpen] = useState<readonly RepoItemId[]>([])
   const [busy, setBusy] = useState(false)
+  /** Which scripts the repository supplies, and whether they may run. */
+  const [runs, setRuns] = useState<ScriptsInWorkspace | null>(null)
+
+  useEffect(() => {
+    const controller = new AbortController()
+
+    void (async () => {
+      const answer = await window.octopus.projects.scripts(projectId)
+      // A repository whose settings will not parse supplies nothing as far as
+      // this list is concerned; the Scripts tab is where the reason belongs.
+      if (!controller.signal.aborted) setRuns(answer.ok ? answer.value : null)
+    })()
+
+    return () => {
+      controller.abort()
+    }
+  }, [projectId, trusted])
+
+  const supplied = SCRIPT_KINDS.flatMap((kind) => {
+    const script = runs?.scripts[kind]
+    return script === undefined || script.source === 'project' ? [] : [script]
+  })
+  const approved = runs?.approved ?? false
 
   /**
    * Reads what both sides hold, and ticks everything each can offer.
@@ -121,6 +162,47 @@ export function RepoConfig({ projectId, onImported }: RepoConfigProps): React.JS
       {error !== null && <p className="text-danger">{error}</p>}
 
       {view.ignored && <p className="text-warning max-w-lg">{t('project.repoIgnored')}</p>}
+
+      {/* What this repository is allowed to *run*, beside what it carries.
+          Both are the same question — how much of this checkout does the app
+          believe — so they belong in one place rather than in a banner on
+          another tab that appears once and is gone. */}
+      <section className="flex flex-col gap-2">
+        <p className="section-label">{t('project.repoRuns')}</p>
+
+        {supplied.length === 0 ? (
+          <p className="text-ink-faint max-w-lg leading-relaxed">{t('project.repoRunsNone')}</p>
+        ) : (
+          <>
+            <ul className="max-w-lg space-y-1">
+              {supplied.map((script) => (
+                <li key={script.kind} className="flex items-baseline justify-between gap-3">
+                  <span>{t(SCRIPT_LABELS[script.kind])}</span>
+                  <span className="text-ink-faint truncate font-mono text-[11px]">
+                    {script.from}
+                  </span>
+                </li>
+              ))}
+            </ul>
+
+            <p className={approved ? 'text-ink-faint' : 'text-warning'}>
+              {t(approved ? 'project.repoRunsAllowed' : 'project.repoRunsWaiting')}
+            </p>
+          </>
+        )}
+
+        <label className="mt-1 flex max-w-lg items-start gap-2">
+          <input
+            type="checkbox"
+            checked={trusted}
+            onChange={(event) => {
+              onTrustChange(event.target.checked)
+            }}
+            className="focus-ring mt-0.5"
+          />
+          <span className="text-ink-soft leading-relaxed">{t('project.repoTrustHint')}</span>
+        </label>
+      </section>
 
       <section className="flex flex-col gap-2">
         <div className="flex items-center justify-between gap-3">
