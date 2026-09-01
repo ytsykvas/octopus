@@ -597,6 +597,25 @@ export const en = {
     clearConfirm: 'Clear',
     clearCancel: 'Cancel',
 
+    /* The composer's own name for the panel, and the count beside it: how many
+       skills this conversation may reach for. A count rather than a fraction —
+       the interesting number is what the agent has, not what it is missing. */
+    skills: 'Skills',
+    skillsTitle: 'Skills for this conversation',
+    skillsGlobal: 'Everywhere',
+    skillsProject: 'This project',
+    skillsRepository: 'From this repository',
+    /* Said once at the foot of the panel, because a switch that looks like a
+       lock is worse than no switch. The SDK's own words for this mechanism are
+       "a context filter, not a sandbox". */
+    skillsNote: 'Switching one off keeps it out of the agent’s list. The files stay on disk.',
+    skillsEmpty: 'No skills yet.',
+    skillsEmptyNote: 'Add one in settings, and it appears here for every conversation.',
+    /* A control with nothing behind it yet, and it says so rather than
+       swallowing the click. */
+    attach: 'Attach',
+    attachSoon: 'Attachments are not wired up yet.',
+
     model: 'Model',
     /* The default row's name, for a catalogue that has not arrived yet and so
        cannot say which model the default actually runs. */

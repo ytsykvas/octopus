@@ -498,6 +498,17 @@ export const uk: Translation = {
     clearConfirm: 'Очистити',
     clearCancel: 'Скасувати',
 
+    skills: 'Скіли',
+    skillsTitle: 'Скіли цієї розмови',
+    skillsGlobal: 'Скрізь',
+    skillsProject: 'Цей проєкт',
+    skillsRepository: 'З цього репозиторію',
+    skillsNote: 'Вимкнений скіл не потрапляє в список агента. Файли залишаються на диску.',
+    skillsEmpty: 'Скілів поки немає.',
+    skillsEmptyNote: 'Додайте скіл у налаштуваннях — і він з’явиться тут у кожній розмові.',
+    attach: 'Прикріпити',
+    attachSoon: 'Прикріплення ще не працює.',
+
     model: 'Модель',
     modelDefault: 'Модель за замовчуванням',
     modelDefaultNote: 'за замовчуванням',

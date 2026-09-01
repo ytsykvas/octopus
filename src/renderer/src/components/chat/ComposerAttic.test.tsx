@@ -3,6 +3,7 @@ import userEvent from '@testing-library/user-event'
 import { beforeAll, describe, expect, it, vi } from 'vitest'
 
 import type { RateLimit, SessionUsage } from '@core/service.js'
+import type { SkillListing } from '@core/skills.js'
 
 import { stubDialogElement } from '../../test/dialog.js'
 import { ComposerAttic } from './ComposerAttic.js'
@@ -24,14 +25,43 @@ function limitWith(status: RateLimit['status']): RateLimit {
   return { type: 'rate_limit', status, window: 'five_hour', utilization: null, resetsAt: null }
 }
 
+function skill(overrides: Partial<SkillListing> = {}): SkillListing {
+  return {
+    key: 'octopus:review',
+    name: 'review',
+    description: 'When reviewing.',
+    path: '/skills/review',
+    scope: 'global',
+    enabled: true,
+    ...overrides
+  }
+}
+
 function renderAttic(
   usage: SessionUsage = FULL,
-  limit: RateLimit | null = null
-): { onSend: ReturnType<typeof vi.fn> } {
+  limit: RateLimit | null = null,
+  skills: readonly SkillListing[] = []
+): {
+  onSend: ReturnType<typeof vi.fn>
+  onToggleSkill: ReturnType<typeof vi.fn>
+  onRefreshSkills: ReturnType<typeof vi.fn>
+} {
   const onSend = vi.fn()
-  render(<ComposerAttic usage={usage} limit={limit} onSend={onSend} />)
+  const onToggleSkill = vi.fn()
+  const onRefreshSkills = vi.fn()
 
-  return { onSend }
+  render(
+    <ComposerAttic
+      usage={usage}
+      limit={limit}
+      onSend={onSend}
+      skills={skills}
+      onToggleSkill={onToggleSkill}
+      onRefreshSkills={onRefreshSkills}
+    />
+  )
+
+  return { onSend, onToggleSkill, onRefreshSkills }
 }
 
 describe('what the next message is up against', () => {
@@ -48,23 +78,17 @@ describe('what the next message is up against', () => {
     expect(screen.queryByText(/84%/)).not.toBeInTheDocument()
   })
 
-  // A workspace nobody has spoken to, an API-key session with no plan windows,
-  // and a CLI too old to answer all land here. An empty rule above the field
-  // would be chrome asserting a measurement exists.
-  it('is not there at all when there is nothing to say', () => {
-    const { container } = render(<ComposerAttic usage={NOTHING} limit={null} onSend={vi.fn()} />)
+  /*
+   * The strip used to disappear entirely here, and that was right while
+   * everything on it was a measurement. It carries controls now, and a control
+   * that comes and goes with an unrelated reading is worse than a strip that is
+   * sometimes half empty — so the reading goes and the strip stays.
+   */
+  it('keeps its controls when there is no measurement to show', () => {
+    renderAttic(NOTHING)
 
-    expect(container).toBeEmptyDOMElement()
-  })
-
-  // With the windows gone, the context share is the only measurement left —
-  // so a conversation without one leaves nothing above the field at all.
-  it('is not there at all once the context share goes', () => {
-    const { container } = render(
-      <ComposerAttic usage={{ ...FULL, context: null }} limit={null} onSend={vi.fn()} />
-    )
-
-    expect(container).toBeEmptyDOMElement()
+    expect(screen.queryByText(/Context/)).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Skills for this conversation' })).toBeInTheDocument()
   })
 
   // A refusal says something no percentage can — that the next turn will not
@@ -206,13 +230,14 @@ describe('the way out of a full context window', () => {
     expect(onSend).toHaveBeenCalledExactlyOnceWith('/clear')
   })
 
-  // No session has answered yet, so the strip stands on the account's windows
-  // alone — and then there is no conversation to clear and no figure to hang
-  // the menu off.
-  it('offers nothing to click when there is no context reading', () => {
+  // No session has answered yet, so there is no conversation to clear and no
+  // figure to hang the menu off. The strip's own controls stay: they are about
+  // the next message rather than about a reading that has not arrived.
+  it('offers no menu when there is no context reading', () => {
     renderAttic({ ...FULL, context: null })
 
-    expect(screen.queryByRole('button')).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /Context/ })).not.toBeInTheDocument()
+    expect(screen.queryByText(/Context/)).not.toBeInTheDocument()
   })
 
   // The colour is the measurement, not the control's state. A window at 92% has
@@ -239,5 +264,54 @@ describe('the way out of a full context window', () => {
     renderAttic()
 
     expect(reading()).toHaveAttribute('title', 'Context window — 48k of 200k')
+  })
+})
+
+describe('the controls on the right', () => {
+  it('opens the skills panel and asks for a fresh list on the way in', async () => {
+    const user = userEvent.setup()
+    const { onRefreshSkills } = renderAttic(FULL, null, [skill()])
+
+    await user.click(screen.getByRole('button', { name: 'Skills for this conversation' }))
+
+    expect(onRefreshSkills).toHaveBeenCalledTimes(1)
+    expect(screen.getByRole('dialog', { name: 'Skills for this conversation' })).toBeInTheDocument()
+  })
+
+  it('counts what the conversation may reach for, not what it may not', () => {
+    renderAttic(FULL, null, [skill(), skill({ key: 'octopus:ship', name: 'ship', enabled: false })])
+
+    expect(screen.getByRole('button', { name: 'Skills for this conversation' })).toHaveTextContent(
+      'Skills1'
+    )
+  })
+
+  it('says nothing about a count when there are no skills anywhere', () => {
+    renderAttic(FULL, null, [])
+
+    expect(screen.getByRole('button', { name: 'Skills for this conversation' })).toHaveTextContent(
+      /^Skills$/
+    )
+  })
+
+  it('switches one, by the key the agent knows it under', async () => {
+    const user = userEvent.setup()
+    const { onToggleSkill } = renderAttic(FULL, null, [skill()])
+
+    await user.click(screen.getByRole('button', { name: 'Skills for this conversation' }))
+    await user.click(screen.getByRole('switch', { name: 'review' }))
+
+    expect(onToggleSkill).toHaveBeenCalledExactlyOnceWith('octopus:review', false)
+  })
+
+  /*
+   * A control that looks live and does nothing is read as a bug in the app.
+   * One that is plainly not ready is read as a plan, so it says so and refuses
+   * the click rather than swallowing it.
+   */
+  it('shows the paperclip as something not wired up yet', () => {
+    renderAttic()
+
+    expect(screen.getByRole('button', { name: 'Attach' })).toBeDisabled()
   })
 })

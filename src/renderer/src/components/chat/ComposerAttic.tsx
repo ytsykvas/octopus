@@ -1,11 +1,13 @@
-import { ChevronDown, Eraser, FoldVertical } from 'lucide-react'
+import { ChevronDown, Eraser, FoldVertical, Paperclip } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 
 import type { RateLimit, SessionUsage } from '@core/service.js'
+import type { SkillListing } from '@core/skills.js'
 
 import { useConfirm } from '../../hooks/useConfirm.js'
 import { DropdownMenu } from '../DropdownMenu.js'
 import { formatTokens, usageTone } from './format.js'
+import { SkillsPanel } from './SkillsPanel.js'
 
 interface ComposerAtticProps {
   readonly usage: SessionUsage
@@ -27,6 +29,11 @@ interface ComposerAtticProps {
    * path a typed command already takes.
    */
   readonly onSend: (text: string) => Promise<boolean>
+  /** Every skill this conversation could use, and whether it is on. */
+  readonly skills: readonly SkillListing[]
+  readonly onToggleSkill: (key: string, enabled: boolean) => void
+  /** Asked for a fresh list when the panel opens; nothing pushes one. */
+  readonly onRefreshSkills: () => void
 }
 
 /**
@@ -52,16 +59,22 @@ const COMPACT = '/compact'
  * the account's windows empty on a clock nobody here controls, while a full
  * context window has two commands that answer it.
  *
- * The strip disappears entirely when there is nothing to say, which is the
- * ordinary state of a workspace nobody has spoken to, of an API-key session
- * with no plan windows, and of a CLI too old to answer. An empty rule above the
- * field would be chrome asserting that a measurement exists.
+ * It used to disappear entirely when it had nothing to say, and that was right
+ * while everything on it was a measurement: an empty rule above the field would
+ * have been chrome asserting that a reading exists. It carries controls now —
+ * the skills this conversation may use, and what a message may bring with it —
+ * and a control that comes and goes with an unrelated measurement is worse than
+ * a strip that is sometimes half empty. So the readings still vanish one by
+ * one, and the strip itself stays.
  */
 export function ComposerAttic({
   usage,
   limit,
-  onSend
-}: ComposerAtticProps): React.JSX.Element | null {
+  onSend,
+  skills,
+  onToggleSkill,
+  onRefreshSkills
+}: ComposerAtticProps): React.JSX.Element {
   const { t } = useTranslation()
   // Owned here rather than threaded down from `App`, where the shared one
   // lives: that one is passed into `useProjects` and `useWorkspaces` because a
@@ -112,8 +125,6 @@ export function ComposerAttic({
    * next turn will not run — and it is the one thing a percentage cannot say.
    */
   const { context } = usage
-
-  if (context === null && refused === null) return null
 
   return (
     <>
@@ -188,10 +199,27 @@ export function ComposerAttic({
           />
         )}
 
-        {/* Only a refusal is left on the right, and it is pushed there rather
-            than grouped: the account's two windows used to sit beside it and
-            moved to the sidebar, so there is no longer a group to hold apart. */}
-        {refused !== null && <span className="text-danger ml-auto">{refused}</span>}
+        {/* The right-hand group, held apart by `ml-auto` on the group rather
+            than on the refusal — which used to own it alone, back when there
+            was nothing else over here to hold together. */}
+        <span className="ml-auto flex items-center gap-2">
+          {refused !== null && <span className="text-danger">{refused}</span>}
+
+          <SkillsPanel skills={skills} onToggle={onToggleSkill} onOpen={onRefreshSkills} />
+
+          {/* No behaviour yet, and it says so rather than swallowing a click.
+              A control that looks live and does nothing is read as a bug in
+              the app; one that is plainly not ready yet is read as a plan. */}
+          <button
+            type="button"
+            disabled
+            aria-label={t('chat.attach')}
+            title={t('chat.attachSoon')}
+            className="text-ink-faint -my-0.5 inline-flex items-center rounded-[var(--radius-control)] px-1 py-0.5 opacity-50"
+          >
+            <Paperclip aria-hidden size={12} />
+          </button>
+        </span>
       </div>
 
       {dialog}

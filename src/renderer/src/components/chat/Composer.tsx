@@ -12,6 +12,7 @@ import {
 } from '@core/chats.js'
 
 import type { RateLimit, SessionUsage } from '@core/service.js'
+import type { SkillListing } from '@core/skills.js'
 
 import { useDismiss } from '../../hooks/useDismiss.js'
 import { CommandMenu } from './CommandMenu.js'
@@ -69,9 +70,13 @@ interface ComposerProps {
   readonly activeModel: string | null
   /** Slash commands to suggest; empty until this chat has run a session. */
   readonly commands: readonly AgentCommand[]
-  /** What the next message is up against; the strip hides when there is none. */
+  /** What the next message is up against; each reading hides when there is none. */
   readonly usage: SessionUsage
   readonly limit: RateLimit | null
+  /** Every skill this conversation could use, and whether it is on. */
+  readonly skills: readonly SkillListing[]
+  readonly onToggleSkill: (key: string, enabled: boolean) => void
+  readonly onRefreshSkills: () => void
   /** Answers whether the message went; the field and the notes clear only then. */
   readonly onSend: (text: string) => Promise<boolean>
   readonly onStop: () => void
@@ -149,6 +154,9 @@ export function Composer({
   commands,
   usage,
   limit,
+  skills,
+  onToggleSkill,
+  onRefreshSkills,
   onSend,
   onStop,
   notes,
@@ -324,7 +332,14 @@ export function Composer({
         {/* The strip's own menu sends slash commands, and it sends them the
             way the field does — a slash command here is the text of an
             ordinary message, so there is one channel and not two. */}
-        <ComposerAttic usage={usage} limit={limit} onSend={onSend} />
+        <ComposerAttic
+          usage={usage}
+          limit={limit}
+          onSend={onSend}
+          skills={skills}
+          onToggleSkill={onToggleSkill}
+          onRefreshSkills={onRefreshSkills}
+        />
 
         <ComposerAttachments notes={notes} onRemove={onRemoveNote} />
 

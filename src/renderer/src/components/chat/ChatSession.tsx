@@ -15,6 +15,7 @@ import { useCommands } from '../../hooks/useCommands.js'
 import { useModels } from '../../hooks/useModels.js'
 import { useRateLimit } from '../../hooks/useRateLimit.js'
 import { useSessionUsage } from '../../hooks/useSessionUsage.js'
+import { useSkills } from '../../hooks/useSkills.js'
 import { ChatLog } from './ChatLog.js'
 import { Composer } from './Composer.js'
 import { PlanDialog } from './PlanDialog.js'
@@ -95,6 +96,7 @@ export function ChatSession({
   const models = useModels()
   const commands = useCommands(chat.chat?.id ?? null)
   const usage = useSessionUsage(chat.chat?.id ?? null)
+  const skills = useSkills(chat.chat?.id ?? null)
 
   const scroller = useRef<HTMLDivElement | null>(null)
   const pinnedToBottom = useRef(true)
@@ -237,6 +239,9 @@ export function ChatSession({
         commands={commands}
         usage={usage}
         limit={rateLimit}
+        skills={skills.skills}
+        onToggleSkill={skills.toggle}
+        onRefreshSkills={skills.refresh}
         onSend={chat.send}
         onStop={() => void chat.interrupt()}
         /* The two queues become one list here rather than in the composer:
