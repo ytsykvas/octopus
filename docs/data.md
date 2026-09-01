@@ -10,6 +10,9 @@ else joins a home directory by hand.
   state.json                         projects, workspaces and chats
   chats/<chatId>.jsonl               one conversation each, append-only
   instructions/*.md                  seven prompts every project falls back to
+  skills/                            a local plugin holding the skills every project gets
+    .claude-plugin/plugin.json       what makes the directory one the SDK will load
+    skills/<name>/SKILL.md           one skill, in Claude Code's own format
   projects/<projectId>/
     carry                            paths carried from the checkout into a workspace
     envs/                            named sets of variables, one written last into every workspace's .env
@@ -18,6 +21,7 @@ else joins a home directory by hand.
     scripts/run.sh                   starts the dev server
     scripts/archive.sh               takes back what setup gave out, on removal
     instructions/*.md                this project's own, which win
+    skills/                          the same shape again, for skills only this project gets
   workspaces/<projectId>/<name>/     the git worktrees
 ```
 
@@ -41,21 +45,22 @@ paths alone reported such a workspace as healthy. The parser reads the flag now.
 
 Validated by `ConfigSchema` in [`config.ts`](../src/core/config.ts).
 
-| Field                             | Meaning                                                                                                                                                            |
-| --------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `version`                         | format version, for future migrations                                                                                                                              |
-| `branchPrefix`                    | branches are `<prefix>/<workspace>`                                                                                                                                |
-| `cloneDirectory`                  | where GitHub clones land; empty means "ask, then remember"                                                                                                         |
-| `settingSources`                  | what the agent loads for itself — `all` by default, as the CLI does; `none` is available for isolation (§4)                                                        |
-| `workingMode`                     | what a new chat may do before asking; planning is not one of them                                                                                                  |
-| `effort`                          | how much thinking a new chat asks for; `medium` unless changed. Five levels, never `ultracode` — see below                                                         |
-| `model`, `planModel`              | the pair a new chat starts on — which model writes the code, which one plans                                                                                       |
-| `alwaysAllowedTools`              | tools the user answered "always" for, listed so they can be undone                                                                                                 |
-| `theme`, `language`               | appearance                                                                                                                                                         |
-| `rightPanelWidth`, `sidebarWidth` | pane widths in pixels, as last dragged — resizing the **window** moves the right pane without rewriting this                                                       |
-| `diffView`                        | whether a diff is drawn in one column or two — a preference about how code is read, not a per-session mood                                                         |
-| `rightPanelTab`                   | which of the right pane's tabs is showing; whether the pane is folded away is **not** stored — `build` and `server` are still read and become `scripts`, see below |
-| `deviceId`, `installedAt`         | shown in Settings; no other reader                                                                                                                                 |
+| Field                             | Meaning                                                                                                                                                                                |
+| --------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `version`                         | format version, for future migrations                                                                                                                                                  |
+| `branchPrefix`                    | branches are `<prefix>/<workspace>`                                                                                                                                                    |
+| `cloneDirectory`                  | where GitHub clones land; empty means "ask, then remember"                                                                                                                             |
+| `settingSources`                  | what the agent loads for itself — `all` by default, as the CLI does; `none` is available for isolation (§4)                                                                            |
+| `workingMode`                     | what a new chat may do before asking; planning is not one of them                                                                                                                      |
+| `effort`                          | how much thinking a new chat asks for; `medium` unless changed. Five levels, never `ultracode` — see below                                                                             |
+| `model`, `planModel`              | the pair a new chat starts on — which model writes the code, which one plans                                                                                                           |
+| `alwaysAllowedTools`              | tools the user answered "always" for, listed so they can be undone                                                                                                                     |
+| `disabledSkillDefaults`           | skills off in every new conversation, by the key the agent knows them by. A list of what is **off**, so empty means every skill is available — how Claude Code treats one it discovers |
+| `theme`, `language`               | appearance                                                                                                                                                                             |
+| `rightPanelWidth`, `sidebarWidth` | pane widths in pixels, as last dragged — resizing the **window** moves the right pane without rewriting this                                                                           |
+| `diffView`                        | whether a diff is drawn in one column or two — a preference about how code is read, not a per-session mood                                                                             |
+| `rightPanelTab`                   | which of the right pane's tabs is showing; whether the pane is folded away is **not** stored — `build` and `server` are still read and become `scripts`, see below                     |
+| `deviceId`, `installedAt`         | shown in Settings; no other reader                                                                                                                                                     |
 
 `alwaysAllowedTools` is filtered on the way in **and on the way out**, and never
 holds `ExitPlanMode`. An entry there is not merely a pre-answered question — it
@@ -118,7 +123,10 @@ anything changed underneath it.
 Validated by `StateSchema` in [`store.ts`](../src/core/store.ts).
 
 A **project** is a repository that has been added: `id`, `name`, `repoPath`,
-`baseBranch`, `branchPrefix`, `color`, `icon`.
+`baseBranch`, `branchPrefix`, `color`, `icon`, and — beside the approvals below
+— its own `disabledSkillDefaults`, which is the config field one layer down: it
+answers for this project's conversations where the config answers for every
+project's.
 
 `baseBranch` is the branch the **user chose**, stored the way they chose it —
 `main` or `origin/develop`, both are accepted. It is deliberately not the ref a
@@ -181,7 +189,7 @@ type — which is the only reason the second shape is known to exist.
 
 A **chat** is a conversation with one agent inside one workspace: `id`,
 `workspaceId`, `agent`, `sessionId`, `model`, `planModel`, `effort`,
-`workingMode`, `planMode`, `knownCommands`, `createdAt`.
+`workingMode`, `planMode`, `knownCommands`, `skillOverrides`, `createdAt`.
 
 **`model` and `planModel` are two models for two jobs**, and their nulls do not
 mean the same thing. `model` null is the agent's own default. `planModel` null
@@ -195,6 +203,17 @@ picker offers like any other. The asymmetry is forced rather than untidy, and
 `sessionModel` in `chats.ts` is the only place allowed to unfold it — nothing
 but its return value ever reaches the SDK, because a model literally called
 `default` is not one.
+
+**`skillOverrides` holds only what this conversation was told**, not the whole
+answer. Whether a skill is on is that map over the project's
+`disabledSkillDefaults` over the installation's, narrowest last. Storing the
+resolved answer instead would freeze it: a skill added, renamed or removed after
+the conversation started would be stuck at a copy of defaults that no longer
+exist, and a conversation nobody has opened the panel in would carry a record of
+every skill on the machine. It is keyed the way the agent names a skill —
+`octopus:review` for one of ours, bare for one the checkout supplies — because
+the CLI looks an override up by the qualified name and falls back to the bare
+one, so a bare key of ours would silence a repository skill sharing the name.
 
 `knownCommands` is the same kind of thing as `knownModels` above, kept in a
 different place for a reason worth stating: which models an account may use is a

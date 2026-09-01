@@ -5,28 +5,25 @@ Claude Code rather than a filter on it: _"пізніше реалізуємо і
 додаток й зручне вмикання та вимикання. Заготовані команди та промпти та інші
 цікаві штуки."_
 
-Three features, in the order they build on each other.
+Three features, in the order they build on each other. **The first two have
+shipped**; what is left is the third.
 
 **See what is loaded.** Done — the project settings dialog lists what the agent
-picks up on its own (`instructionSources.ts`). Everything below turns that list
-into controls.
+picks up on its own (`instructionSources.ts`).
 
-**Switch skills on and off, per project.** The SDK already takes it:
-`skills?: string[] | 'all'` (`sdk.d.ts:1964`). Read the doc comment before
-designing around it — omitting the option is **not** "skills off", and the
-option is described as a context filter rather than a sandbox: unlisted skills
-are hidden from the model and refused by the Skill tool, but their files stay on
-disk and are reachable through Read and Bash. So this is a way to keep the
-listing short, not a security boundary, and the UI must not imply otherwise.
-`Query.supportedAgents()` (`sdk.d.ts:2465`, never called) is the same move for
-subagents.
+**Switch skills on and off, per project.** Done, and per conversation rather
+than per project: a Skills panel in the composer's attic, default marks in both
+settings dialogs, and two stores of the user's own reaching a session as local
+plugins. `Query.supportedAgents()` (`sdk.d.ts:2465`, still never called) is the
+same move for subagents and has not been made.
 
-**Import skills, commands and prompts into a project.** A catalogue in the app
-that writes into the repository's `.claude/`, so a project gains a reviewer
-subagent or a `/ship` command without anybody copying files by hand. This is
-where octopus stops being a window onto Claude Code and starts being worth
-opening for its own sake — and it is additive, which the withdrawn "load
-nothing" principle would have made awkward and this one does not.
+**Import commands and subagents into a project.** Skills now arrive from a
+folder, from pasted text and from a link — but into `~/.octopus`, never into the
+repository. A catalogue that writes into a checkout's `.claude/commands/` or
+`.claude/agents/` is the part still ahead, so a project gains a reviewer
+subagent or a `/ship` command without anybody copying files by hand.
 
-The obvious trap: anything imported lands in a tracked directory, so the same
-approval question that guards `.octopus/` applies here.
+The obvious trap, unchanged: anything written there lands in a tracked
+directory, so the same approval question that guards `.octopus/` applies — and
+`repoConfig.ts`'s export is the only write octopus makes inside a checkout
+today, which that feature would be the second of.

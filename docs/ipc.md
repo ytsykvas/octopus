@@ -80,6 +80,23 @@ The only channel outside this shape is `theme:get`, which cannot fail.
 | `instructions:save`      | `id`, `kind`, `body`  | same, and it needs no project to exist                                                                                                                                                                                     |
 | `instructions:effective` | `workspaceId`, `kind` | what this workspace would send: its project's, or the installation's. Resolved in core so the renderer need not know the order and ask twice                                                                               |
 
+### Skills
+
+| Channel               | Arguments                  | Notes                                                                                                                                                                                              |
+| --------------------- | -------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `skills:list`         | `store`                    | what one of the two stores holds. `store` is `{ kind: 'global' }` or `{ kind: 'project', projectId }`, parsed before it becomes a path                                                             |
+| `skills:read`         | `store`, `name`            | the form's two fields and the whole document. The name is parsed with `SkillNameSchema`, which is what refuses `..` — this becomes a directory                                                     |
+| `skills:save`         | `store`, `name`, `save`    | `{ kind: 'form', content }` keeps frontmatter the form never saw; `{ kind: 'raw', text }` writes the document as given                                                                             |
+| `skills:remove`       | `store`, `name`            | the skill's whole folder, references and all                                                                                                                                                       |
+| `skills:import`       | `store`, `request`         | a folder or a lone `SKILL.md` from disk, pasted text, or one document over `https`                                                                                                                 |
+| `skills:inRepository` | `workspaceId`              | what the checkout carries in `.claude/skills`, so one can be copied out. Listed whatever the Agent setting says: these are files that are there either way                                         |
+| `skills:forChat`      | `chatId`                   | every skill this conversation could use and whether it is on — three sources over two lists of defaults over the chat's own answer, resolved in core because a window would have to ask four times |
+| `skills:setForChat`   | `chatId`, `key`, `enabled` | switches one, and tells a running session at once rather than at its next start                                                                                                                    |
+
+The default marks need no channel of their own: they are a field on the config
+and a field on the project, so they travel on `config:update` and
+`projects:update` like any other setting.
+
 ### Workspaces
 
 | Channel                        | Arguments                         | Notes                                                                                                                                                                                                                                                                                                                 |
@@ -180,6 +197,7 @@ Output flows the other way, on `terminal:data` and `terminal:exit`.
 | `accounts:github`      | —               | `gh` alone, on a short timeout: it sits behind a button  |
 | `accounts:signOut`     | `kind`, `login` | signing in is interactive and runs in a terminal instead |
 | `dialog:pickDirectory` | `title`         | `null` when cancelled                                    |
+| `dialog:pickSkill`     | `title`         | a file **or** a folder: a skill arrives as either        |
 
 ## Validation
 

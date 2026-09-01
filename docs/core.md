@@ -13,21 +13,22 @@ Coverage here is 100%, enforced. That is the floor, not the goal: see
 
 Nothing but zod behind them, so a **value** can cross into the window.
 
-| Module                                                     | What it decides                                                             |
-| ---------------------------------------------------------- | --------------------------------------------------------------------------- |
-| [`branches.ts`](../src/core/branches.ts)                   | how a branch name is shown — `origin/` is noise                             |
-| [`colors.ts`](../src/core/colors.ts)                       | the project palette, and which colour a new project gets                    |
-| [`initials.ts`](../src/core/initials.ts)                   | the two characters on a project tab                                         |
-| [`icons.ts`](../src/core/icons.ts)                         | the icons a project may be marked with instead                              |
-| [`chats.ts`](../src/core/chats.ts)                         | what a chat is, and how much it may do without asking                       |
-| [`events.ts`](../src/core/events.ts)                       | `AgentEvent` — the only shape the UI sees of the SDK                        |
-| [`questions.ts`](../src/core/questions.ts)                 | the questions the agent asks, and how an answer reaches it                  |
-| [`usage.ts`](../src/core/usage.ts)                         | what `/usage` answers, narrowed from a response wider than its own type     |
-| [`names.ts`](../src/core/names.ts)                         | workspace names, drawn at random from 256                                   |
-| [`types.ts`](../src/core/types.ts)                         | shared identifiers                                                          |
-| [`pullRequestShapes.ts`](../src/core/pullRequestShapes.ts) | what a pull request, its checks and its review threads look like            |
-| [`envBlock.ts`](../src/core/envBlock.ts)                   | the block of variables written into a workspace, and what is wrong with one |
-| [`scriptEnv.ts`](../src/core/scriptEnv.ts)                 | the variables a script is given, and the three kinds of script there are    |
+| Module                                                     | What it decides                                                                     |
+| ---------------------------------------------------------- | ----------------------------------------------------------------------------------- |
+| [`branches.ts`](../src/core/branches.ts)                   | how a branch name is shown — `origin/` is noise                                     |
+| [`colors.ts`](../src/core/colors.ts)                       | the project palette, and which colour a new project gets                            |
+| [`initials.ts`](../src/core/initials.ts)                   | the two characters on a project tab                                                 |
+| [`icons.ts`](../src/core/icons.ts)                         | the icons a project may be marked with instead                                      |
+| [`chats.ts`](../src/core/chats.ts)                         | what a chat is, and how much it may do without asking                               |
+| [`events.ts`](../src/core/events.ts)                       | `AgentEvent` — the only shape the UI sees of the SDK                                |
+| [`questions.ts`](../src/core/questions.ts)                 | the questions the agent asks, and how an answer reaches it                          |
+| [`usage.ts`](../src/core/usage.ts)                         | what `/usage` answers, narrowed from a response wider than its own type             |
+| [`names.ts`](../src/core/names.ts)                         | workspace names, drawn at random from 256                                           |
+| [`types.ts`](../src/core/types.ts)                         | shared identifiers                                                                  |
+| [`pullRequestShapes.ts`](../src/core/pullRequestShapes.ts) | what a pull request, its checks and its review threads look like                    |
+| [`envBlock.ts`](../src/core/envBlock.ts)                   | the block of variables written into a workspace, and what is wrong with one         |
+| [`scriptEnv.ts`](../src/core/scriptEnv.ts)                 | the variables a script is given, and the three kinds of script there are            |
+| [`skillNames.ts`](../src/core/skillNames.ts)               | what may name a skill, which store it belongs to, and the key the agent knows it by |
 
 The last is the one that has to be **kept** pure. `SCRIPT_KINDS` began life in
 `repoSource.ts`, which reaches `node:fs` — importing it into the window passed
@@ -83,6 +84,7 @@ Node imports, rather than being imported out of one that has them.
 | [`instructions.ts`](../src/core/instructions.ts)             | prose handed to the agent, per project and for the installation; `effectiveInstruction` is the order between those two, with `repoSource.ts` supplying the layer above both                                                                                                         |
 | [`instructionSources.ts`](../src/core/instructionSources.ts) | what a checkout offers the agent, and which of it the current `settingSources` actually loads                                                                                                                                                                                       |
 | [`repoTrust.ts`](../src/core/repoTrust.ts)                   | what a checkout can make the agent do before anybody has looked at it, as a digest of the settings and the hook scripts they name                                                                                                                                                   |
+| [`skills.ts`](../src/core/skills.ts)                         | the two stores of the user's own skills, shaped as local plugins: reading a `SKILL.md`, writing one without losing frontmatter the form never saw, importing from a folder, from text or from a link, and whether a skill is on for one conversation                                |
 | [`agent.ts`](../src/core/agent.ts)                           | the Agent SDK: session lifecycle and event mapping                                                                                                                                                                                                                                  |
 
 ### The façade

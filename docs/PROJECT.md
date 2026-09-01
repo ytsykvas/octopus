@@ -32,7 +32,12 @@ to read the project's own instructions did not make the agent more transparent;
 it made it less capable than the same model in a terminal.
 
 The rule now is narrower and holds: octopus adds nothing of its own to the
-context, and withholds nothing the user has put there.
+context, and withholds nothing the user has put there **except what they asked
+it to withhold**. The exception is the skills panel, and it is a real one: a
+conversation can be told to leave a skill out of the agent's listing. What
+makes it consistent rather than a hole is who is asking — the user, in a panel
+they opened, about one conversation. The app still withholds nothing on its
+own initiative.
 
 **Conductor's UI draws no complaints** — its layout is considered good and is taken as the model (§10.8).
 
@@ -73,7 +78,9 @@ task → workspace → agent works → diff → PR → merge → archive
 
 ## 4. Guiding principles
 
-**We add nothing, and we withhold nothing.** octopus puts no text of its own into the agent's context — no additions to the system prompt, no bundled skill, and the prose it does send goes as a visible user message the reader wrote and can edit. It equally does not stand between the agent and what the user has written for it: `CLAUDE.md`, settings, commands, skills and subagents all load, exactly as they do in a terminal. An agent that knows less here than there is a defect, not a feature.
+**We add nothing of our own, and we withhold only what we were told to.** octopus puts no text of its own into the agent's context — no additions to the system prompt, **no skill of ours**, and the prose it does send goes as a visible user message the reader wrote and can edit. It equally does not stand between the agent and what the user has written for it: `CLAUDE.md`, settings, commands, skills and subagents all load, exactly as they do in a terminal. An agent that knows less here than there is a defect, not a feature.
+
+The skills feature is the one place both halves need a sentence, because it looks like a breach of each and is neither. What reaches a session as a local plugin is **the user's own skills**, written or imported in this app — ours in storage, never in authorship. And a skill switched off in a conversation is withheld because somebody switched it off there, which is the user deciding what their agent reads rather than the app deciding for them. Nothing is ever withheld that was not named in a panel or a settings list.
 
 **A thin layer.** The application manages worktrees, processes and the UI. It does not try to outsmart the agent, rewrite prompts or decide on the user's behalf.
 
@@ -522,11 +529,26 @@ but reads nothing of the repository's, `CLAUDE.md` included, and the chat says
 so. Prose is deliberately outside the digest — it changes constantly, and a
 dialog that fires on every edit is one people learn to click through.
 
-What octopus does **not** do is add: no text is appended to the system prompt and no skill of ours is bundled. The prose the app sends is seven instruction files — describing a change for a pull request, writing a commit message, fixing failing checks, answering a review, reviewing one, reviewing it with several subagents, resolving a conflict — and each goes as a visible user message in the log. They are files rather than strings in the app precisely because of this section: a prompt nobody can read is a prompt nobody can correct, so each ships with a written template, is edited in Settings, and is overridden per project. Emptying one is how a project says it adds nothing.
+What octopus does **not** do is add: no text is appended to the system prompt, and no skill it wrote is bundled — the two stores it hands over as local plugins hold what the user put in them. The prose the app sends is seven instruction files — describing a change for a pull request, writing a commit message, fixing failing checks, answering a review, reviewing one, reviewing it with several subagents, resolving a conflict — and each goes as a visible user message in the log. They are files rather than strings in the app precisely because of this section: a prompt nobody can read is a prompt nobody can correct, so each ships with a written template, is edited in Settings, and is overridden per project. Emptying one is how a project says it adds nothing.
 
 **A repository may supply that prose too**, through the same chain the scripts use: `.octopus/instructions/` in the worktree, then the four `[prompts]` in `.conductor/settings.toml` that have a counterpart here, then the project's, the installation's, and the written template. Unlike a script it is **not** gated — this text goes into the log as a visible user message, where it is read before it does anything, and a dialog in front of every one would be friction for no gain. `general` is deliberately not among the four: octopus adds nothing to the system prompt, and importing a general prompt would make it start doing so without saying it had.
 
 The project settings dialog lists what the agent picked up on its own, so "what is it working from" is a question the app can answer.
+
+**Skills are the one source with a switch on it.** Two stores of the user's own
+— one for every project, one per project — reach a session as local plugins,
+and the composer's panel turns any of them off for one conversation, along with
+whatever the checkout's `.claude/skills` carries. Three details are worth
+holding on to. It is a **deny-list**: only what is off is named, so Claude
+Code's own bundled skills, which octopus cannot enumerate, are never hidden by
+accident. It is a **context filter and not a sandbox** — the SDK's own words —
+so a skill switched off is out of the listing and still on a disk the agent can
+read, which the panel says in as many words. And a plugin is a launch option
+that **`settingSources` does not filter**, so the user's own skills arrive even
+under "load nothing": that setting governs what the machine and the checkout
+contribute unasked, and these are neither. The checkout's own skills do follow
+it, because a switch over something the session would not load is a control
+with nothing behind it.
 
 **One slash command is answered here rather than by the CLI.** A harness does not filter what reaches the agent, and this is not that: `/usage` asks the local process to print figures it already holds structured, and the CLI prints them as prose. `usage_EXPERIMENTAL_MAY_CHANGE_DO_NOT_RELY_ON_THIS_API_YET` is documented as "the structured data behind the `/usage` command", so the service recognises the command, reads the report and draws a card of bars — plan windows and when they reset, what the session spent, and the local scan of what has been eating the limit. Everything else, `/clear` included, goes to the agent as ordinary message text. The card is the only surface in the app that shows a session's cost in dollars, for the reason given in §16.
 

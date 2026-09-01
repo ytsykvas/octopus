@@ -192,11 +192,11 @@ chat until its history has loaded, so one arriving in that window is dropped and
 a seeded flag would stay stuck on.
 
 **The composer has an attic**, a strip above the field mirroring the settings
-footer below it: how full this conversation's context window is on the left, how
-much of the subscription's five-hour and weekly windows is gone on the right.
-Both are read one step fainter than the pickers underneath, which are clicked
-where these are mostly read — mostly, because the left one is also the way out
-of what it reports.
+footer below it: how full this conversation's context window is on the left, and
+on the right the skills it may reach for, a paperclip, and a refusal when the
+account has one. The reading is one step fainter than the pickers underneath,
+which are clicked where it is mostly read — mostly, because it is also the way
+out of what it reports.
 
 It used to be one figure in the chat header, and it was almost always blank.
 Measured against a live session, `rate_limit_event` usually carries no
@@ -206,10 +206,13 @@ agent instead, which answers with both.
 
 Two rules there are worth keeping:
 
-- **The strip vanishes when it has nothing to say**, rather than standing empty.
-  A workspace nobody has spoken to, an API-key session with no plan windows and
-  a CLI too old to answer all get the composer as it was. An empty rule above
-  the field would be chrome asserting that a measurement exists.
+- **The strip used to vanish when it had nothing to say**, and that was right
+  while everything on it was a measurement: an empty rule above the field would
+  have been chrome asserting a reading exists. It carries controls now, and a
+  control that comes and goes with an unrelated number is worse than a strip
+  that is sometimes half empty. So the readings still vanish one by one and the
+  strip itself stays. The rule that replaced it is the general one: **a
+  measurement hides when it has nothing to say, a control does not.**
 - **The reading never enters the log.** It arrives on the same stream as the
   agent's own output, and was appended there like anything else for a while:
   that wiped the answer being typed out, and left a row that draws nothing in
@@ -674,6 +677,16 @@ about what the session was started with, and printing the first under the
 second's name made the panel wrong in every `settingSources` mode at once. Its
 `notes` are keyed by position: one line can carry the same complaint twice, and
 identical strings collide as keys.
+
+**Skills sit in both dialogs, and the section is one component.** The two
+differ only in reach — every project, or this one — which is what the store
+prop says, so writing them separately would have been two copies of a list that
+drift apart the first time either is touched. The switch on each row is about
+what a **new** conversation starts with; the panel in the composer is about the
+one in hand, and the two are deliberately different questions in different
+places. The project section additionally lists what the checkout carries,
+read-only with a single Copy action: those files belong to the repository, and
+editing them from here would be the app writing inside somebody's checkout.
 
 `FileEditor` can carry `notes` — a function run against the text on every
 keystroke, whose answers appear under the box. The env block uses it; told on
@@ -1322,6 +1335,10 @@ field styling had already drifted by a few pixels of height.
 | `ComposerChip`                                                  | the button each composer setting opens from. Ghost, not `Button` — a bordered control on that surface reads as a chip, and a row of them makes a toolbar competing with the field above. Its own file because the two things opening from that row are not the same kind of thing, and written twice the classes would drift the first time either was touched                                                                                                                                                                                                                                                                                                                                                                                                                                          |
 | `EffortPicker`                                                  | the effort chip and the scale behind it, `Faster` to `Smarter`, with `ultracode` past a gap at the end and an octopus above it. A `slider` rather than a row of buttons: the ordering between the levels is the fact it exists to show, and buttons inside would be a tab stop each on a control whose whole point is one handle                                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
 | `ModelPicker`                                                   | the model chip and the two-column panel behind it: which model plans, which one writes the code. A `dialog` that **does not close on a pick** — two columns is two answers, and closing on the first would mean opening it twice                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
+| `Switch`                                                        | on or off, as a control that says which without a word. `role="switch"` on a `button` rather than an `input`: what it toggles applies at once, and the row it sits in is not a form. Painted exactly like `.choice` so the two read as one family in a dialog that shows both — the checkbox stays for "include this in what I am about to do", this is for a state something is already in                                                                                                                                                                                                                                                                                                                                                                                                             |
+| `SkillsPanel`                                                   | which skills this conversation may reach for, in three groups — ours everywhere, ours for this project, and what the checkout carries. A group with nothing in it is not drawn, and the third is absent entirely when the Agent setting would not load it. The foot says what switching one off does, because a switch that looks like a lock is worse than no switch: the skill leaves the agent's listing and its files stay on disk                                                                                                                                                                                                                                                                                                                                                                  |
+| `SkillsSection`                                                 | the same list in both settings dialogs, given the store as a prop — they differ only in reach, and two copies would drift into looking like different features. Its switch is about **new** conversations; the panel above is about the one in hand. The project one also lists the checkout's own, read-only: editing those from a settings dialog would be octopus writing inside somebody's checkout                                                                                                                                                                                                                                                                                                                                                                                                 |
+| `SkillEditor`                                                   | a form for the two fields anybody writing a skill is actually choosing, and the document itself one click away. The raw mode is not an afterthought — `allowed-tools` and `when_to_use` live in that frontmatter, and the form's save keeps every key it does not know about. The name is disabled after creation: it is the folder and the key every stored answer uses                                                                                                                                                                                                                                                                                                                                                                                                                                |
 | `useAnchoredPanel`                                              | where both composer panels are drawn: `fixed` against the window the way `DropdownMenu` does it and for the same reason, flipped above the chip when it would run off the bottom, clamped when it would run off the right, closed on a scroll of something the chip sits inside. The size is given per opening, since a panel's height can depend on how many rows it is about to hold                                                                                                                                                                                                                                                                                                                                                                                                                  |
 | `selectionAnchor`                                               | how a browser selection becomes a review note: the rows carry a `data-line` address and this reduces the ones a range touched to a file, a side and two line numbers. Pure and string-only, so the awkward cases — two files, both sides, a path with a colon in it — are tested without a layout engine                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
 | `Markdown`, `CodeBlock`                                         | how the agent's own output is drawn. A fenced block gets a frame and a copy button in its own row, never floating over code that scrolls sideways. The block/inline distinction is taken from `pre`, not from the language class: a fence with no language hands the `code` override exactly what inline code does                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      |
