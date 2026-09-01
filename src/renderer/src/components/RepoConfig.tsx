@@ -28,6 +28,14 @@ const STATES = {
 
 interface RepoConfigProps {
   readonly projectId: string
+  /**
+   * The workspace the dialog was opened from, or null.
+   *
+   * What a repository runs is a fact about a worktree, so this section answers
+   * about the same directory the Scripts section does — otherwise one dialog
+   * gives two answers to one question.
+   */
+  readonly workspaceId: string | null
   /** Whether this repository's scripts run without being read first. */
   readonly trusted: boolean
   /** Applies the switch; the dialog holds the project and has to be told. */
@@ -55,6 +63,7 @@ interface RepoConfigProps {
  */
 export function RepoConfig({
   projectId,
+  workspaceId,
   trusted,
   onTrustChange,
   onImported
@@ -75,7 +84,7 @@ export function RepoConfig({
     const controller = new AbortController()
 
     void (async () => {
-      const answer = await window.octopus.projects.scripts(projectId)
+      const answer = await window.octopus.projects.scripts(projectId, workspaceId)
       // A repository whose settings will not parse supplies nothing as far as
       // this list is concerned; the Scripts tab is where the reason belongs.
       if (!controller.signal.aborted) setRuns(answer.ok ? answer.value : null)
@@ -84,7 +93,7 @@ export function RepoConfig({
     return () => {
       controller.abort()
     }
-  }, [projectId, trusted])
+  }, [projectId, workspaceId, trusted])
 
   const supplied = SCRIPT_KINDS.flatMap((kind) => {
     const script = runs?.scripts[kind]

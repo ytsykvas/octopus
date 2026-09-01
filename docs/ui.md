@@ -656,6 +656,13 @@ plain editors: with a `.conductor` present, editing Build there saved happily
 and changed nothing that runs. A box that takes an edit it will not honour is
 worse than no box.
 
+**It asks about the workspace the dialog was opened from**, and about the
+checkout only when there is none. A run happens in a worktree, and a branch may
+carry a script the checkout has not got — asked of the checkout alone the
+section described one set of scripts while the workspace beside it ran another,
+and marked the editors read-only against scripts that were never going to run.
+The Repository section resolves the same way, so one dialog gives one answer.
+
 **A repository whose settings will not parse says so.** Half a file left by an
 agent, or conflict markers left by a merge, used to disable `Run` and say
 nothing at all — in an app that ships a _resolve conflicts_ action.

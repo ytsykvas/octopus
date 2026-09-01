@@ -181,11 +181,13 @@ export function ProjectSettings({
   const [envIgnored, setEnvIgnored] = useState(true)
   const [sources, setSources] = useState<readonly InstructionSource[]>([])
   /**
-   * Where each script would actually come from, once the checkout is consulted.
+   * Where each script would actually come from.
    *
-   * Resolved against the project's own repository rather than a worktree: this
-   * dialog is about the project, and it opens with no workspace as often as
-   * with one.
+   * Resolved against the open workspace's worktree, and against the checkout
+   * only when the dialog was opened without one. The dialog is about the
+   * project, but a script is not: a branch may carry one the checkout has not
+   * got, and answering about the checkout described scripts that were never
+   * going to run.
    */
   const [resolved, setResolved] = useState<ScriptsInWorkspace | null>(null)
   /** The named sets this project holds, and which of them is being edited. */
@@ -245,7 +247,7 @@ export function ProjectSettings({
     const controller = new AbortController()
 
     void (async () => {
-      const answer = await window.octopus.projects.scripts(project.id)
+      const answer = await window.octopus.projects.scripts(project.id, workspaceId)
       // A checkout that cannot be read leaves the editors as they were: a
       // settings file with conflict markers in it is not a reason to tell
       // somebody their own script does not run.
@@ -255,7 +257,7 @@ export function ProjectSettings({
     return () => {
       controller.abort()
     }
-  }, [section, project.id])
+  }, [section, project.id, workspaceId])
 
   useEffect(() => {
     if (section !== 'instructions') return
@@ -711,6 +713,7 @@ export function ProjectSettings({
           {section === 'repository' && (
             <RepoConfig
               projectId={project.id}
+              workspaceId={workspaceId}
               trusted={project.trustRepoScripts}
               onTrustChange={(trusted) => void onUpdate({ trustRepoScripts: trusted })}
               onImported={onImported}

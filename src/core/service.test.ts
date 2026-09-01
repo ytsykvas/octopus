@@ -2398,10 +2398,37 @@ describe('scripts a repository supplies', () => {
       'utf8'
     )
 
-    const answer = await service.projectScripts(projectId)
+    const answer = await service.projectScripts(projectId, null)
 
     expect(answer.scripts.run?.source).toBe('repoConductor')
     expect(answer.approved).toBe(false)
+  })
+
+  it('answers about the workspace when one is open, not about the checkout', async () => {
+    /*
+     * The defect this fixes, from the real app. planner's checkout sat on a
+     * branch that still had a `.conductor/` while every worktree was cut from
+     * one carrying an `.octopus/` — so Project settings named three scripts
+     * that were never going to run, and marked the editors read-only against
+     * them.
+     */
+    const { projectId, workspaceId, repo } = await withWorkspace()
+
+    await mkdir(join(repo, '.conductor'), { recursive: true })
+    await writeFile(
+      join(repo, '.conductor', 'settings.toml'),
+      '[scripts]\nsetup = "the checkout\'s"\n',
+      'utf8'
+    )
+    await inWorktree(workspaceId, '.octopus/scripts/setup.sh', "#!/bin/sh\n# the worktree's\n")
+
+    const forWorkspace = await service.projectScripts(projectId, workspaceId)
+    expect(forWorkspace.scripts.setup?.source).toBe('repoOctopus')
+
+    // And the checkout is still the answer when there is no workspace to ask
+    // about, which is how the dialog opens from the sidebar.
+    const forCheckout = await service.projectScripts(projectId, null)
+    expect(forCheckout.scripts.setup?.source).toBe('repoConductor')
   })
 
   it('lets a trusted repository run without being read first', async () => {
@@ -2416,13 +2443,15 @@ describe('scripts a repository supplies', () => {
     )
     await service.updateProjectById(projectId, { trustRepoScripts: true })
 
-    await expect(service.projectScripts(projectId)).resolves.toMatchObject({ approved: true })
+    await expect(service.projectScripts(projectId, null)).resolves.toMatchObject({
+      approved: true
+    })
   })
 
   it('refuses a workspace it does not know', async () => {
     await expect(service.workspaceScripts('missing')).rejects.toThrow()
     await expect(service.approveWorkspaceScripts('missing')).rejects.toThrow()
-    await expect(service.projectScripts('missing')).rejects.toThrow()
+    await expect(service.projectScripts('missing', null)).rejects.toThrow()
   })
 })
 

@@ -975,7 +975,7 @@ describe('scripts and instructions of a real project', () => {
       'utf8'
     )
 
-    await expect(invoke('scripts:project', projectId)).resolves.toMatchObject({
+    await expect(invoke('scripts:project', projectId, null)).resolves.toMatchObject({
       ok: true,
       value: { approved: false, scripts: { setup: { source: 'repoConductor' } } }
     })

@@ -400,7 +400,7 @@ export interface OctopusService {
    * Project settings has no workspace to ask about, and the checkout is the
    * best answer available — it is what every worktree is cut from.
    */
-  projectScripts(projectId: string): Promise<ScriptsInWorkspace>
+  projectScripts(projectId: string, workspaceId: string | null): Promise<ScriptsInWorkspace>
 
   /** Which of the checkout's files travel into a workspace, one path per line. */
   readProjectCarryList(projectId: string): Promise<string>
@@ -2082,9 +2082,29 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
       return { approved: allowedToRun(project, digest), scripts }
     },
 
-    async projectScripts(projectId) {
+    async projectScripts(projectId, workspaceId) {
       const project = requireProject(projectId)
-      const scripts = await resolveScripts(project.repoPath, project.id, dataRoot)
+      /*
+       * The worktree when there is one, exactly as `projectInstructionSources`
+       * does, and for the same reason: a run happens in a worktree and a branch
+       * may carry a script the checkout has not got.
+       *
+       * Asked of the checkout alone, the dialog described one set of scripts
+       * while the workspace beside it ran another. Seen in the real app —
+       * planner's checkout sat on `main` with a `.conductor/` while every
+       * worktree was cut from `develop` and carried an `.octopus/` — and the
+       * section even marked the project's own editors read-only against scripts
+       * that were not going to run.
+       *
+       * The checkout otherwise, which is the best answer available before a
+       * workspace is open.
+       */
+      const workspace = workspaceId === null ? null : requireWorkspace(workspaceId)
+      const scripts = await resolveScripts(
+        workspace?.path ?? project.repoPath,
+        project.id,
+        dataRoot
+      )
 
       return { approved: allowedToRun(project, scriptsDigest(scripts)), scripts }
     },

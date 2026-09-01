@@ -92,6 +92,7 @@ describe('RepoConfig', () => {
     render(
       <RepoConfig
         projectId="planner"
+        workspaceId={null}
         trusted={false}
         onTrustChange={vi.fn()}
         onImported={vi.fn()}
@@ -107,6 +108,7 @@ describe('RepoConfig', () => {
     render(
       <RepoConfig
         projectId="planner"
+        workspaceId={null}
         trusted={false}
         onTrustChange={vi.fn()}
         onImported={vi.fn()}
@@ -133,6 +135,7 @@ describe('RepoConfig', () => {
     render(
       <RepoConfig
         projectId="planner"
+        workspaceId={null}
         trusted={false}
         onTrustChange={vi.fn()}
         onImported={vi.fn()}
@@ -159,6 +162,7 @@ describe('RepoConfig', () => {
     render(
       <RepoConfig
         projectId="planner"
+        workspaceId={null}
         trusted={false}
         onTrustChange={vi.fn()}
         onImported={vi.fn()}
@@ -179,6 +183,7 @@ describe('RepoConfig', () => {
     render(
       <RepoConfig
         projectId="planner"
+        workspaceId={null}
         trusted={false}
         onTrustChange={vi.fn()}
         onImported={onImported}
@@ -203,6 +208,7 @@ describe('RepoConfig', () => {
     render(
       <RepoConfig
         projectId="planner"
+        workspaceId={null}
         trusted={false}
         onTrustChange={vi.fn()}
         onImported={vi.fn()}
@@ -221,6 +227,7 @@ describe('RepoConfig', () => {
     render(
       <RepoConfig
         projectId="planner"
+        workspaceId={null}
         trusted={false}
         onTrustChange={vi.fn()}
         onImported={vi.fn()}
@@ -239,6 +246,7 @@ describe('RepoConfig', () => {
     render(
       <RepoConfig
         projectId="planner"
+        workspaceId={null}
         trusted={false}
         onTrustChange={vi.fn()}
         onImported={vi.fn()}
@@ -261,6 +269,7 @@ describe('RepoConfig', () => {
     render(
       <RepoConfig
         projectId="planner"
+        workspaceId={null}
         trusted={false}
         onTrustChange={vi.fn()}
         onImported={vi.fn()}
@@ -281,6 +290,7 @@ describe('RepoConfig', () => {
     render(
       <RepoConfig
         projectId="planner"
+        workspaceId={null}
         trusted={false}
         onTrustChange={vi.fn()}
         onImported={vi.fn()}
@@ -301,6 +311,7 @@ describe('RepoConfig', () => {
     render(
       <RepoConfig
         projectId="planner"
+        workspaceId={null}
         trusted={false}
         onTrustChange={vi.fn()}
         onImported={vi.fn()}
@@ -323,6 +334,7 @@ describe('RepoConfig', () => {
     render(
       <RepoConfig
         projectId="planner"
+        workspaceId={null}
         trusted={false}
         onTrustChange={vi.fn()}
         onImported={onImported}
@@ -350,6 +362,7 @@ describe('RepoConfig', () => {
     render(
       <RepoConfig
         projectId="planner"
+        workspaceId={null}
         trusted={false}
         onTrustChange={vi.fn()}
         onImported={vi.fn()}
@@ -367,6 +380,7 @@ describe('RepoConfig', () => {
     render(
       <RepoConfig
         projectId="planner"
+        workspaceId={null}
         trusted={false}
         onTrustChange={vi.fn()}
         onImported={vi.fn()}
@@ -392,13 +406,20 @@ describe('RepoConfig', () => {
     const { rerender } = render(
       <RepoConfig
         projectId="planner"
+        workspaceId={null}
         trusted={false}
         onTrustChange={vi.fn()}
         onImported={vi.fn()}
       />
     )
     rerender(
-      <RepoConfig projectId="ledger" trusted={false} onTrustChange={vi.fn()} onImported={vi.fn()} />
+      <RepoConfig
+        projectId="ledger"
+        workspaceId={null}
+        trusted={false}
+        onTrustChange={vi.fn()}
+        onImported={vi.fn()}
+      />
     )
 
     ledger.settle({
@@ -425,6 +446,7 @@ describe('RepoConfig', () => {
       render(
         <RepoConfig
           projectId="planner"
+          workspaceId={null}
           trusted={false}
           onTrustChange={vi.fn()}
           onImported={vi.fn()}
@@ -441,6 +463,7 @@ describe('RepoConfig', () => {
       render(
         <RepoConfig
           projectId="planner"
+          workspaceId={null}
           trusted={false}
           onTrustChange={vi.fn()}
           onImported={vi.fn()}
@@ -458,6 +481,7 @@ describe('RepoConfig', () => {
       render(
         <RepoConfig
           projectId="planner"
+          workspaceId={null}
           trusted={false}
           onTrustChange={vi.fn()}
           onImported={vi.fn()}
@@ -476,6 +500,7 @@ describe('RepoConfig', () => {
       render(
         <RepoConfig
           projectId="planner"
+          workspaceId={null}
           trusted={false}
           onTrustChange={vi.fn()}
           onImported={vi.fn()}
@@ -503,6 +528,7 @@ describe('RepoConfig', () => {
       render(
         <RepoConfig
           projectId="planner"
+          workspaceId={null}
           trusted={false}
           onTrustChange={vi.fn()}
           onImported={vi.fn()}
@@ -519,6 +545,7 @@ describe('RepoConfig', () => {
       render(
         <RepoConfig
           projectId="planner"
+          workspaceId={null}
           trusted={false}
           onTrustChange={onTrustChange}
           onImported={vi.fn()}
@@ -536,6 +563,7 @@ describe('RepoConfig', () => {
       const { rerender } = render(
         <RepoConfig
           projectId="planner"
+          workspaceId={null}
           trusted={false}
           onTrustChange={vi.fn()}
           onImported={vi.fn()}
@@ -546,7 +574,13 @@ describe('RepoConfig', () => {
       })
 
       rerender(
-        <RepoConfig projectId="planner" trusted onTrustChange={vi.fn()} onImported={vi.fn()} />
+        <RepoConfig
+          projectId="planner"
+          workspaceId={null}
+          trusted
+          onTrustChange={vi.fn()}
+          onImported={vi.fn()}
+        />
       )
 
       await waitFor(() => {

@@ -175,7 +175,11 @@ describe('channel names', () => {
       'trust:approve'
     ],
     ['workspaces.scripts', () => method('workspaces', 'scripts')('w' as never), 'scripts:resolved'],
-    ['projects.scripts', () => method('projects', 'scripts')('p' as never), 'scripts:project'],
+    [
+      'projects.scripts',
+      () => method('projects', 'scripts')('p' as never, null as never),
+      'scripts:project'
+    ],
     [
       'workspaces.setEnvProfile',
       () => method('workspaces', 'setEnvProfile')('w' as never, null as never),

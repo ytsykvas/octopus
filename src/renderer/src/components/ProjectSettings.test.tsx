@@ -1117,6 +1117,19 @@ describe('ProjectSettings', () => {
     )
   })
 
+  it('asks about the open workspace, not about the checkout', async () => {
+    // A branch may carry a script the checkout has not got, and the dialog used
+    // to describe the checkout's while the workspace beside it ran the other.
+    const user = userEvent.setup()
+    await renderDialog({ workspaceId: 'planner/thea' })
+
+    await openSection(user, 'Scripts')
+
+    await waitFor(() => {
+      expect(window.octopus.projects.scripts).toHaveBeenCalledWith('planner', 'planner/thea')
+    })
+  })
+
   it('names the file a script really comes from, and refuses to be typed into', async () => {
     // Editing Build here with a `.conductor` present used to save happily and
     // change nothing that runs: `resolveScript` returns the repository's

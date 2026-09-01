@@ -537,8 +537,10 @@ const api = {
       ipcRenderer.invoke('env:remove', projectId, name) as Promise<Result<void>>,
 
     /** Which scripts this repository supplies, and whether they may run. */
-    scripts: (projectId: string): Promise<Result<ScriptsInWorkspace>> =>
-      ipcRenderer.invoke('scripts:project', projectId) as Promise<Result<ScriptsInWorkspace>>,
+    scripts: (projectId: string, workspaceId: string | null): Promise<Result<ScriptsInWorkspace>> =>
+      ipcRenderer.invoke('scripts:project', projectId, workspaceId) as Promise<
+        Result<ScriptsInWorkspace>
+      >,
 
     /** What this project offers the agent, and what this machine adds. */
     instructionSources: (

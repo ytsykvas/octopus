@@ -260,10 +260,11 @@ export function registerIpc(
     attempt(() => service.approveWorkspaceScripts(workspaceId))
   )
 
-  // Keyed by project rather than workspace: settings is open with no workspace
-  // to ask about, and the checkout is what every worktree is cut from.
-  host.handle('scripts:project', (_event, projectId: string) =>
-    attempt(() => service.projectScripts(projectId))
+  // The workspace as well, because a run happens in a worktree and a branch may
+  // carry a script the checkout has not got. Null when settings is open with no
+  // workspace to ask about, and the checkout answers then.
+  host.handle('scripts:project', (_event, projectId: string, workspaceId: unknown) =>
+    attempt(() => service.projectScripts(projectId, z.string().nullable().parse(workspaceId)))
   )
 
   // The workspace as well, because whether a source is read depends on the
