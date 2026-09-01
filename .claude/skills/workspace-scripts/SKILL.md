@@ -53,12 +53,17 @@ wrote, and it does not run a migration, a dump, a `dropdb` or a container to
 "check". Verification is by reading — the section at the end says how — and the
 person asking presses Run.
 
-The same goes for the environment: **propose variables, never write them.** An
-env set is keyed by a project id in `state.json`, and the running app holds that
-in memory, so a file written from underneath it is overwritten from a stale
-copy. Read variable **names** to know what is needed. A value in one of these
-files is a credential; it does not go into the plan, the repository, or the
-reply.
+The same goes for the environment: **propose variables, never write them.** The
+reason is that they are credentials — reading a value to copy it is the thing
+not to do, and a value does not go into the plan, the repository, or the reply.
+Read variable **names** to know what is needed.
+
+Not because the file cannot be written: a set is an ordinary file under
+`~/.octopus/projects/<id>/envs/`, read from disk at every run, and `state.json`
+holds only which set is chosen. This once said the running app caches the
+contents and would overwrite them, which is untrue and was worth checking before
+being written down. `state.json` itself is the file to leave alone while the app
+is running.
 
 ## The question that produces the scripts
 
