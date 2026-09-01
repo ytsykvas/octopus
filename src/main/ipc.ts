@@ -438,6 +438,12 @@ export function registerIpc(
     attempt(() => service.skillsForChat(chatId))
   )
 
+  // For a workspace whose first message has not been sent: `openChat` is lazy,
+  // so there is no conversation to ask about yet.
+  host.handle('skills:forWorkspace', (_event, workspaceId: string) =>
+    attempt(() => service.skillsForWorkspace(workspaceId))
+  )
+
   host.handle('skills:setForChat', (_event, chatId: string, key: unknown, enabled: unknown) =>
     attempt(() =>
       service.setChatSkill(

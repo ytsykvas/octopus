@@ -381,6 +381,11 @@ describe('channel names', () => {
     ],
     ['skills.forChat', () => method('skills', 'forChat')('c' as never), 'skills:forChat'],
     [
+      'skills.forWorkspace',
+      () => method('skills', 'forWorkspace')('w' as never),
+      'skills:forWorkspace'
+    ],
+    [
       'skills.setForChat',
       () => method('skills', 'setForChat')('c' as never, 'k' as never, false as never),
       'skills:setForChat'

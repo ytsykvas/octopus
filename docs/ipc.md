@@ -91,6 +91,7 @@ The only channel outside this shape is `theme:get`, which cannot fail.
 | `skills:import`       | `store`, `request`         | a folder or a lone `SKILL.md` from disk, pasted text, or one document over `https`                                                                                                                 |
 | `skills:inRepository` | `workspaceId`              | what the checkout carries in `.claude/skills`, so one can be copied out. Listed whatever the Agent setting says: these are files that are there either way                                         |
 | `skills:forChat`      | `chatId`                   | every skill this conversation could use and whether it is on — three sources over two lists of defaults over the chat's own answer, resolved in core because a window would have to ask four times |
+| `skills:forWorkspace` | `workspaceId`              | the same before the first message. `openChat` is lazy, so a fresh workspace has no conversation to ask about — and that is exactly where the panel is opened first                                 |
 | `skills:setForChat`   | `chatId`, `key`, `enabled` | switches one, and tells a running session at once rather than at its next start                                                                                                                    |
 
 The default marks need no channel of their own: they are a field on the config

@@ -6315,6 +6315,42 @@ describe('the agent chat', () => {
       await expect(service.skillsForChat(chat.id)).resolves.toEqual([])
     })
 
+    /*
+     * `openChat` is lazy, so a fresh workspace has no record to ask about —
+     * and a fresh workspace is exactly where somebody opens the panel first.
+     * Nothing has been said about any skill yet, so the defaults are the whole
+     * answer, and asking must not create a conversation to give it.
+     */
+    it('answers for a workspace whose first message has not been sent', async () => {
+      const { service, projectId, workspaceId } = await withWorkspace()
+      const workspace = (await service.listWorkspaces(projectId))[0]
+      if (!workspace) throw new Error('no workspace')
+      await placeInRepo(workspace.path, 'in-repo')
+      await service.saveStoredSkill({ kind: 'global' }, 'review', { kind: 'raw', text: DOCUMENT })
+
+      await expect(service.skillsForWorkspace(workspaceId)).resolves.toMatchObject([
+        { key: 'review', scope: 'global', enabled: true },
+        { key: 'in-repo', scope: 'repository', enabled: true }
+      ])
+      expect(service.listChats(workspaceId)).toHaveLength(0)
+    })
+
+    it('reads the default lists for a workspace as well as for a conversation', async () => {
+      const { service, projectId, workspaceId } = await withWorkspace()
+      await service.saveStoredSkill({ kind: 'global' }, 'review', { kind: 'raw', text: DOCUMENT })
+      await service.updateProjectById(projectId, { disabledSkillDefaults: ['review'] })
+
+      expect((await service.skillsForWorkspace(workspaceId))[0]?.enabled).toBe(false)
+    })
+
+    it('refuses to answer for a workspace that is not there', async () => {
+      const { service } = await withWorkspace()
+
+      await expect(service.skillsForWorkspace('planner/nowhere')).rejects.toBeInstanceOf(
+        WorkspaceError
+      )
+    })
+
     it('reads the two default lists, narrowest last', async () => {
       const { service, projectId, workspaceId } = await withWorkspace()
       await service.saveStoredSkill({ kind: 'global' }, 'review', { kind: 'raw', text: DOCUMENT })

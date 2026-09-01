@@ -595,6 +595,15 @@ export interface OctopusService {
    * to ask four times to get one answer.
    */
   skillsForChat(chatId: string): Promise<SkillListing[]>
+  /**
+   * The same, for a workspace whose first message has not been sent.
+   *
+   * `openChat` is lazy — a conversation has no record until it has something
+   * to record — so the panel would otherwise be empty in every fresh
+   * workspace, which is exactly where somebody looks first. Nothing has been
+   * said about any skill yet, so the defaults are the whole answer.
+   */
+  skillsForWorkspace(workspaceId: string): Promise<SkillListing[]>
   /** Switches one skill for one conversation, on a running session included. */
   setChatSkill(chatId: string, key: string, enabled: boolean): Promise<void>
 
@@ -1760,7 +1769,10 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
   async function sessionSkills(
     project: Project,
     workspace: Workspace,
-    chat: Chat,
+    // Narrowed to the one field this reads, so a workspace nobody has spoken
+    // to can be answered for as well — before the first message there is no
+    // record, and the two default lists are then the whole answer.
+    chat: { readonly skillOverrides: Readonly<Record<string, boolean>> },
     settingSources: readonly SettingSourceName[]
   ): Promise<SessionSkills> {
     const globalRoot = globalSkillsRoot(dataRoot)
@@ -2441,6 +2453,19 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
         requireProject(workspace.projectId),
         workspace,
         chat,
+        await sourcesFor(workspace)
+      )
+
+      return listing
+    },
+
+    async skillsForWorkspace(workspaceId) {
+      const workspace = requireWorkspace(workspaceId)
+
+      const { listing } = await sessionSkills(
+        requireProject(workspace.projectId),
+        workspace,
+        { skillOverrides: {} },
         await sourcesFor(workspace)
       )
 

@@ -58,6 +58,16 @@ export interface ChatController {
   readonly setEffort: (effort: EffortChoice) => Promise<void>
   readonly setModel: (model: string | null) => Promise<void>
   readonly setPlanModel: (model: string | null) => Promise<void>
+  /**
+   * The conversation's record, created if this is the first thing to need one.
+   *
+   * `openChat` is lazy: a workspace nobody has spoken to has no record, and
+   * the settings in the composer's footer already create one the first time
+   * any of them is changed. The skills panel is another such setting, and it
+   * is the only one that also has something to **show** before that happens —
+   * hence this, rather than a second copy of `ensureChat`.
+   */
+  readonly ensure: () => Promise<Chat | null>
 }
 
 /** Turns a failed IPC result into a sentence — what `useErrorMessage` returns. */
@@ -456,6 +466,7 @@ export function useChat(
     setPlanMode,
     setEffort,
     setModel,
-    setPlanModel
+    setPlanModel,
+    ensure: ensureChat
   }
 }

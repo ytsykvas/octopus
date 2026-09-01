@@ -504,6 +504,10 @@ const api = {
     forChat: (chatId: string): Promise<Result<SkillListing[]>> =>
       ipcRenderer.invoke('skills:forChat', chatId) as Promise<Result<SkillListing[]>>,
 
+    /** The same before the first message, when there is no conversation yet. */
+    forWorkspace: (workspaceId: string): Promise<Result<SkillListing[]>> =>
+      ipcRenderer.invoke('skills:forWorkspace', workspaceId) as Promise<Result<SkillListing[]>>,
+
     /** Switches one skill for one conversation, a running session included. */
     setForChat: (chatId: string, key: string, enabled: boolean): Promise<Result<void>> =>
       ipcRenderer.invoke('skills:setForChat', chatId, key, enabled) as Promise<Result<void>>

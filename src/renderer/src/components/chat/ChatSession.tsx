@@ -99,7 +99,7 @@ export function ChatSession({
   const models = useModels()
   const commands = useCommands(chat.chat?.id ?? null)
   const usage = useSessionUsage(chat.chat?.id ?? null)
-  const skills = useSkills(chat.chat?.id ?? null)
+  const skills = useSkills(chat.chat?.id ?? null, workspace.id, chat.ensure)
 
   const scroller = useRef<HTMLDivElement | null>(null)
   const pinnedToBottom = useRef(true)

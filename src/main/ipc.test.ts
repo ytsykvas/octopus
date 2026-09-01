@@ -315,6 +315,7 @@ describe('channel table', () => {
     'skills:import',
     'skills:inRepository',
     'skills:forChat',
+    'skills:forWorkspace',
     'skills:setForChat',
     'dialog:pickSkill',
     'workspaces:list',
@@ -652,6 +653,17 @@ describe('skills', () => {
     await expect(invoke('skills:inRepository', workspace.id)).resolves.toMatchObject({
       ok: true,
       value: [{ name: 'in-repo' }]
+    })
+  })
+
+  it('answers for a workspace whose conversation has not started', async () => {
+    const projectId = await addProject('unspoken')
+    const workspace = await createWorkspace(projectId)
+    await invoke('skills:save', { kind: 'global' }, 'review', { kind: 'raw', text: DOCUMENT })
+
+    await expect(invoke('skills:forWorkspace', workspace.id)).resolves.toMatchObject({
+      ok: true,
+      value: [{ key: 'review', enabled: true }]
     })
   })
 
