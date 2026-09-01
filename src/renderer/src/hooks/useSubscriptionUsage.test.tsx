@@ -3,7 +3,6 @@ import { describe, expect, it, vi } from 'vitest'
 
 import type { UsageWindows } from '@core/usage.js'
 
-import { emitAgentEvent } from '../test/chat.js'
 import { octopus } from '../test/octopus.js'
 import { useSubscriptionUsage } from './useSubscriptionUsage.js'
 
@@ -14,19 +13,6 @@ const READING: UsageWindows = {
   ],
   limitsApply: true,
   readAt: '2026-08-11T16:00:00.000Z'
-}
-
-/** A turn ending, which is the one moment the figures can have moved. */
-function emitTurnEnd(): void {
-  emitAgentEvent({
-    type: 'result',
-    ok: true,
-    costUsd: 0,
-    durationMs: 1,
-    inputTokens: 0,
-    outputTokens: 0,
-    terminalReason: 'completed'
-  })
 }
 
 describe('what the sidebar knows about the account', () => {
@@ -135,76 +121,128 @@ describe('what the sidebar knows about the account', () => {
     })
   })
 
-  // Pulled rather than pushed: the agent answers a control request and does not
-  // announce these, so a turn ending is the cue to ask again.
-  it('asks again when a turn ends', async () => {
+  /*
+   * Told rather than asked. This used to watch for a finished turn and then
+   * read the service's *cache* — which the chat pane was filling on the same
+   * event, one round trip later. The sidebar won that race never, and drew the
+   * previous turn's figure every time.
+   */
+  it('takes the reading the service announces', async () => {
     const { result } = renderHook(() => useSubscriptionUsage())
-    await waitFor(() => {
-      expect(octopus().chats.subscription).toHaveBeenCalledTimes(1)
-    })
+    const [announce] = vi.mocked(octopus().chats.onUsageWindows).mock.calls.at(-1) ?? []
+    if (!announce) throw new Error('the sidebar never subscribed')
 
-    vi.mocked(octopus().chats.subscription).mockResolvedValue({ ok: true, value: READING })
-    emitTurnEnd()
+    act(() => {
+      announce(READING)
+    })
 
     await waitFor(() => {
       expect(result.current.usage).toEqual(READING)
     })
   })
 
-  it('ignores the rest of the conversation', async () => {
-    const { result } = renderHook(() => useSubscriptionUsage())
+  /*
+   * Whatever happened while the window was in the background announced itself
+   * to nobody here, and the figure informs a decision taken the moment somebody
+   * looks: whether to start something at all.
+   */
+  it('asks again when the window is looked at', async () => {
+    renderHook(() => useSubscriptionUsage())
     await waitFor(() => {
-      expect(octopus().chats.subscription).toHaveBeenCalledTimes(1)
+      expect(octopus().chats.refreshSubscription).toHaveBeenCalledTimes(1)
     })
 
-    emitAgentEvent({ type: 'text', text: 'Looking at auth.rb' })
+    act(() => {
+      window.dispatchEvent(new Event('focus'))
+    })
 
     await waitFor(() => {
-      expect(result.current.usage).toBeNull()
+      expect(octopus().chats.refreshSubscription).toHaveBeenCalledTimes(2)
     })
-    expect(octopus().chats.subscription).toHaveBeenCalledTimes(1)
   })
 
-  // The figures belong to the account, so whichever conversation ran is the
-  // one that learned them.
-  it('takes a reading after a turn in a chat other than the one on screen', async () => {
-    vi.mocked(octopus().chats.subscription).mockResolvedValue({ ok: true, value: READING })
+  // Nothing behind a hidden window is worth spawning a process for.
+  it('asks nothing while the window is hidden, and asks on the way back', async () => {
+    const hidden = vi.spyOn(document, 'hidden', 'get').mockReturnValue(true)
+    renderHook(() => useSubscriptionUsage())
 
-    const { result } = renderHook(() => useSubscriptionUsage())
-    emitAgentEvent(
-      {
-        type: 'result',
-        ok: true,
-        costUsd: 0,
-        durationMs: 1,
-        inputTokens: 0,
-        outputTokens: 0,
-        terminalReason: 'completed'
-      },
-      'some-other-chat'
-    )
+    act(() => {
+      document.dispatchEvent(new Event('visibilitychange'))
+    })
+    expect(octopus().chats.refreshSubscription).not.toHaveBeenCalled()
+
+    hidden.mockReturnValue(false)
+    act(() => {
+      document.dispatchEvent(new Event('visibilitychange'))
+    })
 
     await waitFor(() => {
-      expect(result.current.usage).toEqual(READING)
+      expect(octopus().chats.refreshSubscription).toHaveBeenCalledTimes(1)
     })
+  })
+
+  /*
+   * For the window left open and watched. A read costs no tokens and, measured,
+   * under a second — worth keeping roughly current, not worth asking about
+   * every minute.
+   */
+  it('asks again on a slow timer while it is being looked at', async () => {
+    vi.useFakeTimers()
+    try {
+      renderHook(() => useSubscriptionUsage())
+      expect(octopus().chats.refreshSubscription).toHaveBeenCalledTimes(1)
+
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(180_000)
+      })
+      expect(octopus().chats.refreshSubscription).toHaveBeenCalledTimes(2)
+
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(180_000)
+      })
+      expect(octopus().chats.refreshSubscription).toHaveBeenCalledTimes(3)
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  // A hook that unmounts without stopping its timer keeps asking about a block
+  // that is gone.
+  it('stops asking once the sidebar has gone', async () => {
+    vi.useFakeTimers()
+    try {
+      const { unmount } = renderHook(() => useSubscriptionUsage())
+      unmount()
+
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(180_000 * 3)
+      })
+
+      expect(octopus().chats.refreshSubscription).toHaveBeenCalledTimes(1)
+    } finally {
+      vi.useRealTimers()
+    }
   })
 
   // "Could not ask" and "nothing to report" are different statements, and
   // blanking the block would make the first look like the second.
-  it('leaves the last figures standing when a read fails', async () => {
+  it('leaves the last figures standing when a later read fails', async () => {
     vi.mocked(octopus().chats.subscription).mockResolvedValue({ ok: true, value: READING })
     const { result } = renderHook(() => useSubscriptionUsage())
     await waitFor(() => {
       expect(result.current.usage).toEqual(READING)
     })
 
-    vi.mocked(octopus().chats.subscription).mockResolvedValue({ ok: false, error: 'no service' })
-    emitTurnEnd()
-
-    await waitFor(() => {
-      expect(octopus().chats.subscription).toHaveBeenCalledTimes(2)
+    vi.mocked(octopus().chats.refreshSubscription).mockResolvedValue({
+      ok: true,
+      value: { kind: 'failed' }
     })
+    await act(async () => {
+      await result.current.refresh()
+    })
+
     expect(result.current.usage).toEqual(READING)
+    expect(result.current.outcome).toBe('failed')
   })
 
   it('says nothing when the first read fails', async () => {
