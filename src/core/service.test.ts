@@ -3139,6 +3139,30 @@ describe('the agent chat', () => {
       await expect(readFile(join(dir, 'state.json'), 'utf8')).resolves.toBe(before)
     })
 
+    /*
+     * Pushed rather than left to be asked for. A window that watched for a
+     * finished turn and then read the cache was racing whatever filled it, and
+     * drew the previous turn's figure every time.
+     */
+    it('announces a reading that moved, and stays quiet about one that did not', async () => {
+      const { service, workspaceId } = await withWorkspace()
+      const chat = await service.openChat(workspaceId)
+      await service.sendToChat(chat.id, 'work')
+
+      const announced: UsageWindows[] = []
+      const stop = service.onUsageWindows((windows) => announced.push(windows))
+
+      await service.refreshSubscriptionUsage()
+      expect(share(announced.at(-1) ?? null, 'five_hour')).toBe(18)
+
+      await service.refreshSubscriptionUsage()
+      expect(announced).toHaveLength(1)
+
+      stop()
+      await service.refreshSubscriptionUsage()
+      expect(announced).toHaveLength(1)
+    })
+
     /** The reading out of an outcome, for the tests that are about the figures. */
     const readingOf = (outcome: UsageOutcome): UsageWindows | null =>
       outcome.kind === 'read' ? outcome.windows : null

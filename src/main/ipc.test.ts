@@ -22,6 +22,7 @@ import type { RemoteRepository } from '../core/github.js'
 import { createService, type OctopusService, type ServiceOptions } from '../core/service.js'
 import type { ChatEvent, ChatStatusEvent, WorkspaceStatusEvent } from '../core/service.js'
 import type { ThemeName, Workspace } from '../core/types.js'
+import type { UsageWindows } from '../core/usage.js'
 import { type IpcHost, registerIpc, type PickedDirectory } from './ipc.js'
 import type { Result } from './result.js'
 import type { TerminalManager } from './terminals.js'
@@ -62,6 +63,8 @@ interface Harness {
   openRefusal: string
   /** What each picker was opened with, so a test can name the shapes it takes. */
   dialogOptions: OpenDialogOptions[]
+  /** Every account reading pushed at the windows, newest last. */
+  usageBroadcasts: UsageWindows[]
   /** null once the window a call came from has closed, as Electron reports it. */
   window: unknown
 }
@@ -74,6 +77,7 @@ function harness(): Harness {
   const chatStatusEvents: ChatStatusEvent[] = []
   const opened: string[] = []
   const dialogOptions: OpenDialogOptions[] = []
+  const usageBroadcasts: UsageWindows[] = []
 
   const state: Harness = {
     handlers,
@@ -83,6 +87,7 @@ function harness(): Harness {
     chatStatusEvents,
     opened,
     dialogOptions,
+    usageBroadcasts,
     picked: { canceled: true, filePaths: [] },
     prefersDark: false,
     openRefusal: '',
@@ -100,6 +105,7 @@ function harness(): Harness {
       broadcastTheme: (theme) => broadcasts.push(theme),
       broadcastChatEvent: (event) => chatEvents.push(event),
       broadcastWorkspaceStatus: (event) => statusEvents.push(event),
+      broadcastUsageWindows: (windows) => usageBroadcasts.push(windows),
       broadcastChatStatus: (event) => chatStatusEvents.push(event),
       openPath: (path) => {
         opened.push(path)
@@ -1945,6 +1951,25 @@ describe('the agent chat', () => {
     })
   })
 
+  /*
+   * The block at the foot of the sidebar, told rather than asked. A window that
+   * watched for a finished turn and then read the cache was racing whatever
+   * filled it, and drew the previous turn's figure every time.
+   */
+  it('broadcasts the account reading when it moves', async () => {
+    const projectId = await addProject()
+    const workspace = await createWorkspace(projectId)
+
+    // Built after the workspace exists, so the replacement reads it back from
+    // the state file the first service wrote.
+    await useService({ query: answeringQuery('there') })
+
+    await invoke('chats:open', workspace.id)
+    await invoke('chats:refreshSubscription')
+
+    expect(bench.usageBroadcasts.at(-1)?.limits.at(0)?.utilization).toBe(18)
+  })
+
   // Events keep arriving long after the call that started them returned, and a
   // second window on the same workspace should see the same conversation, so
   // they are broadcast rather than answered back to whoever asked.
@@ -2001,6 +2026,24 @@ function answeringQuery(text: string): QueryFn {
     return Object.assign(stream(), {
       interrupt: () => Promise.resolve(undefined),
       setPermissionMode: () => Promise.resolve(),
+      // Enough of the account's answer for the reading to be a reading. The
+      // narrowing itself is `core/usage.test.ts`; what this table is about is
+      // that the figure reaches every window.
+      usage_EXPERIMENTAL_MAY_CHANGE_DO_NOT_RELY_ON_THIS_API_YET: () =>
+        Promise.resolve({
+          session: {
+            total_cost_usd: 0,
+            total_api_duration_ms: 0,
+            total_duration_ms: 0,
+            total_lines_added: 0,
+            total_lines_removed: 0,
+            model_usage: {}
+          },
+          subscription_type: 'max',
+          rate_limits_available: true,
+          rate_limits: { five_hour: { utilization: 18, resets_at: null } },
+          behaviors: null
+        }),
       close: () => undefined
     }) as unknown as Query
   }

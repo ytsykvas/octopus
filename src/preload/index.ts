@@ -280,6 +280,23 @@ const api = {
     },
 
     /**
+     * The account's windows, whenever the service learns they moved.
+     *
+     * Pushed rather than asked for. A window that watched for a finished turn
+     * and then read the cache was racing whatever filled it, and drew the
+     * previous turn's figure every time.
+     */
+    onUsageWindows: (handler: (windows: UsageWindows) => void): (() => void) => {
+      const listener = (_event: unknown, windows: UsageWindows): void => {
+        handler(windows)
+      }
+      ipcRenderer.on('usage:windows', listener)
+      return () => {
+        ipcRenderer.off('usage:windows', listener)
+      }
+    },
+
+    /**
      * What each conversation is doing, as it changes.
      *
      * A stream of its own rather than a variant of `onEvent`: that one carries

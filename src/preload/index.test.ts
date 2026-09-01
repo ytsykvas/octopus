@@ -461,6 +461,27 @@ describe('subscriptions', () => {
     expect(off).toHaveBeenCalledWith('terminal:data', expect.any(Function))
   })
 
+  /*
+   * The block at the foot of the sidebar. Pushed rather than asked for, which
+   * is what stopped it drawing the previous turn's figure — so the delivery and
+   * the unsubscribe are both worth a test.
+   */
+  it('chats.onUsageWindows delivers the reading and unsubscribes', () => {
+    const handler = vi.fn()
+    const stop = method('chats', 'onUsageWindows')(handler as never) as () => void
+
+    const listener = on.mock.calls.find(([channel]) => channel === 'usage:windows')?.[1] as (
+      event: unknown,
+      windows: unknown
+    ) => void
+
+    listener({}, { limits: [], limitsApply: true, readAt: 'now' })
+    expect(handler).toHaveBeenCalledWith({ limits: [], limitsApply: true, readAt: 'now' })
+
+    stop()
+    expect(off).toHaveBeenCalledWith('usage:windows', expect.any(Function))
+  })
+
   it('settings.onOpen unsubscribes too', () => {
     const stop = method('settings', 'onOpen')(vi.fn() as never) as () => void
 

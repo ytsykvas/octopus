@@ -11,6 +11,7 @@ import {
   type WorkspaceStatusEvent
 } from '../core/service.js'
 import type { ThemeName } from '../core/types.js'
+import type { UsageWindows } from '../core/usage.js'
 import { registerIpc } from './ipc.js'
 import { applyLoginShellPath } from './loginPath.js'
 import { canvasColor, resolveTheme } from './theme.js'
@@ -122,6 +123,12 @@ function broadcastWorkspaceStatus(event: WorkspaceStatusEvent): void {
   }
 }
 
+function broadcastUsageWindows(windows: UsageWindows): void {
+  for (const window of BrowserWindow.getAllWindows()) {
+    window.webContents.send('usage:windows', windows)
+  }
+}
+
 function broadcastChatStatus(event: ChatStatusEvent): void {
   for (const window of BrowserWindow.getAllWindows()) {
     window.webContents.send('chats:status', event)
@@ -189,6 +196,7 @@ async function start(): Promise<void> {
     broadcastTheme,
     broadcastChatEvent,
     broadcastWorkspaceStatus,
+    broadcastUsageWindows,
     broadcastChatStatus,
     openPath: (path) => shell.openPath(path)
   })

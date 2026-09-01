@@ -847,6 +847,14 @@ export interface OctopusService {
   onAgentEvent(handler: (event: ChatEvent) => void): () => void
   /** What a workspace is doing, as it changes. A broadcast, like the above. */
   onWorkspaceStatus(handler: (event: WorkspaceStatusEvent) => void): () => void
+  /**
+   * The account's windows, whenever they move.
+   *
+   * Pushed rather than pulled, and that is the whole of what stops the block
+   * lagging: a window watching for a finished turn and then reading the cache
+   * was racing whatever filled it, and lost every time.
+   */
+  onUsageWindows(handler: (windows: UsageWindows) => void): () => void
   /** What each conversation is doing, as it changes. The tab strip draws this. */
   onChatStatus(handler: (event: ChatStatusEvent) => void): () => void
   /** Ends every live session. Called when the application quits. */
@@ -899,6 +907,7 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
   const sessions = new Map<string, AgentSession>()
   const listeners = new Set<(event: ChatEvent) => void>()
   const statusListeners = new Set<(event: WorkspaceStatusEvent) => void>()
+  const usageListeners = new Set<(windows: UsageWindows) => void>()
   const chatStatusListeners = new Set<(event: ChatStatusEvent) => void>()
   const pending = new Map<string, PendingPermission>()
 
@@ -1195,6 +1204,12 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
 
     usageWindows = reading
     await commit((current) => ({ ...current, usageWindows: reading }))
+
+    // Announced rather than left to be asked for. This is the single moment the
+    // figures change, and a window that had to notice by polling the cache was
+    // racing whoever filled it — which is exactly how the block came to draw
+    // the previous turn's reading on every turn.
+    for (const listener of usageListeners) listener(reading)
   }
 
   function requireWorkspace(workspaceId: string): Workspace {
@@ -3371,6 +3386,11 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
     onWorkspaceStatus(handler) {
       statusListeners.add(handler)
       return () => statusListeners.delete(handler)
+    },
+
+    onUsageWindows(handler) {
+      usageListeners.add(handler)
+      return () => usageListeners.delete(handler)
     },
 
     onChatStatus(handler) {

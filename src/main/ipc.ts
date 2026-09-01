@@ -53,6 +53,7 @@ import type {
 import { ProjectPatchSchema } from '../core/store.js'
 import { TerminalSpecSchema } from '../core/terminal.js'
 import type { ThemeName } from '../core/types.js'
+import type { UsageWindows } from '../core/usage.js'
 import type { RemoveOptions } from '../core/workspaces.js'
 import type { TerminalManager } from './terminals.js'
 import { attempt } from './result.js'
@@ -110,6 +111,8 @@ export interface IpcHost {
    * about a conversation, and the list that draws it is not looking at a chat.
    */
   readonly broadcastWorkspaceStatus: (event: WorkspaceStatusEvent) => void
+  /** The account's windows, whenever the service learns they moved. */
+  readonly broadcastUsageWindows: (windows: UsageWindows) => void
   /**
    * What each conversation is doing, to every window.
    *
@@ -560,6 +563,7 @@ export function registerIpc(
   // stored record, so each argument is validated rather than trusted.
   service.onAgentEvent(host.broadcastChatEvent)
   service.onWorkspaceStatus(host.broadcastWorkspaceStatus)
+  service.onUsageWindows(host.broadcastUsageWindows)
   service.onChatStatus(host.broadcastChatStatus)
 
   // Listing does not create, opening does. The distinction is what keeps a

@@ -173,7 +173,13 @@ carries `AgentEvent`, which is the isolation boundary around the SDK and the
 shape written to the transcript — while half of these changes come from moments
 no agent message describes: an interrupt, an answered permission, a closed tab.
 
-None of the three is a `handle`, so none is counted among the channels above.
+**`usage:windows`** is the fourth, carrying the account's plan windows whenever
+the service learns they moved. Pushed rather than left to be asked for, and
+that is the whole of what stopped the block at the foot of the sidebar lagging:
+it used to watch for a finished turn and then read a cache the chat pane was
+still filling, so it drew the previous turn's figure on every turn.
+
+None of the four is a `handle`, so none is counted among the channels above.
 
 Listing and opening are separate on purpose. A workspace nobody has spoken to
 should have no record and no transcript file, so the pane looks the chat up
