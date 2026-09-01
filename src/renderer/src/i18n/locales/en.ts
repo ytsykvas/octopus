@@ -96,6 +96,13 @@ export const en = {
     empty: 'Not read yet — press to ask the account.',
     refresh: 'Read the limits now',
     unavailable: 'Nothing to ask through yet. Open a workspace first.',
+    /* An API-key, Bedrock or Vertex session. A different sentence from the one
+       above because no amount of pressing changes it. */
+    noPlan: 'This account has no plan windows.',
+    failed: 'The account did not answer. Press to try again.',
+    /* A plan that reported no windows at all — read, and empty, which is not
+       the same as never read. */
+    none: 'The account reported no windows.',
     /* The same windows the `/usage` card names, at the width a rail has for
        them. `usage.window*` is the long form; a window added to the allowlist
        in `core/usage.ts` has to be named in both, which `usageWindows.ts`

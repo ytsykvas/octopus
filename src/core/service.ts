@@ -367,6 +367,25 @@ export interface SessionUsage {
   readonly context: ContextUsage | null
 }
 
+/**
+ * What came of asking the account how much of its windows is gone.
+ *
+ * Four answers rather than a nullable reading, because the block has four
+ * things to say and used to guess them from one value — getting two wrong. A
+ * read that failed returned the previous figures and reported success, so the
+ * press redrew a stale number as though it were fresh; and a cache that was
+ * empty when a live read failed said "open a workspace first", which describes
+ * only one of the ways it can happen.
+ */
+export type UsageOutcome =
+  | { readonly kind: 'read'; readonly windows: UsageWindows }
+  /** An API-key, Bedrock or Vertex session: no plan to be near the end of. */
+  | { readonly kind: 'noPlan' }
+  /** A session runs in a worktree, and this installation has none to run in. */
+  | { readonly kind: 'nowhereToAsk' }
+  /** Asked, and the answer did not come: an older CLI, a refused request. */
+  | { readonly kind: 'failed' }
+
 /** A permission request the agent is still blocked on. */
 /**
  * A question the agent is blocked on, as anyone asking after the fact sees it.
@@ -815,16 +834,15 @@ export interface OctopusService {
   /**
    * Asks the account for its window shares now, rather than waiting for a turn.
    *
-   * The block in the sidebar is a gauge nobody requested, so nothing fills it
-   * on its own — but a press of it is somebody asking, which is the difference
-   * `sendChatMessage` already draws for `/usage`. Nothing is sent to the agent:
-   * this is a control request, so it costs no turn and no tokens.
+   * Nothing is sent to the agent: this is a control request, so it costs no
+   * turn and no tokens. Measured, a cold one — spawn the CLI, ask, answer — is
+   * 720–850ms, and one against a session already running is about 260ms.
    *
-   * `null` when there is no conversation anywhere to ask through. A session
-   * runs in a worktree, so an installation with no workspace has nowhere to
-   * start one, and saying so is better than a button that does nothing.
+   * Answers what came of it rather than a reading that may be the old one:
+   * four outcomes, because the block has four things to say and inferring them
+   * from one nullable value got two of them wrong.
    */
-  refreshSubscriptionUsage(): Promise<UsageWindows | null>
+  refreshSubscriptionUsage(): Promise<UsageOutcome>
   /** Subscribes to agent events; the returned function unsubscribes. */
   onAgentEvent(handler: (event: ChatEvent) => void): () => void
   /** What a workspace is doing, as it changes. A broadcast, like the above. */
@@ -943,6 +961,8 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
   // the block would be empty until somebody sent a message, which is the whole
   // thing this is here to avoid.
   let usageWindows: UsageWindows | null = state.usageWindows
+  /** The read in flight, so four callers at once make one request. */
+  let reading: Promise<UsageOutcome> | null = null
 
   /**
    * State writes, run one after another.
@@ -1116,10 +1136,58 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
    * account that never happened.
    */
   /** One session's answer, narrowed to what the sidebar draws and dated. */
-  async function readWindows(session: AgentSession): Promise<UsageWindows | null> {
+  async function readWindows(session: AgentSession): Promise<UsageOutcome> {
     const report = await session.usageReport()
+    if (report === null) return { kind: 'failed' }
+    if (!report.limitsApply) return { kind: 'noPlan' }
 
-    return report === null ? null : windowsFrom(report, now())
+    const windows = windowsFrom(report, now())
+    await keepWindows(windows)
+
+    return { kind: 'read', windows }
+  }
+
+  /**
+   * Asks the account, through whatever session there is or one started for it.
+   *
+   * **Coalesced.** A finished turn, the window regaining focus, the timer and a
+   * press of the control can all land at once, and each starting its own read
+   * would spawn its own CLI. The one in flight is shared instead.
+   *
+   * A session already running answers for nothing: one control request against
+   * a process that exists, about 260ms. With none, one is started — and closed
+   * again, which the button did not do: `startFor` registers into `sessions`,
+   * so every press used to leave an agent alive for the rest of the run.
+   *
+   * Started in a conversation that already exists rather than a new one, for
+   * the reason `openChat` is lazy: a workspace nobody has spoken to has no
+   * record, and filling a gauge is not enough to give it one.
+   */
+  function askAccount(): Promise<UsageOutcome> {
+    reading ??= (async (): Promise<UsageOutcome> => {
+      try {
+        const [running] = sessions.values()
+        if (running) return await readWindows(running)
+
+        const chat = state.chats.at(-1)
+        const workspace = state.workspaces.find((item) => item.id === chat?.workspaceId)
+        if (!chat || !workspace) return { kind: 'nowhereToAsk' }
+
+        const probe = await startFor(chat, workspace, await sourcesFor(workspace))
+        try {
+          return await readWindows(probe)
+        } finally {
+          // Removed before it is closed: a closed session left in the map is
+          // one the next caller would ask and get nothing from.
+          sessions.delete(chat.id)
+          await probe.close()
+        }
+      } finally {
+        reading = null
+      }
+    })()
+
+    return reading
   }
 
   async function keepWindows(reading: UsageWindows | null): Promise<void> {
@@ -1448,6 +1516,25 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
 
     if (event.type === 'result') {
       background(chat, setChatStatus(chat.id, event.ok ? 'idle' : 'error'))
+
+      /*
+       * The account's windows have just moved, and this is the moment they can
+       * be read for nothing — the session is up and the request is warm.
+       *
+       * Read here rather than by whichever pane happens to be mounted, which is
+       * where it used to live: a workspace with no chat pane open refreshed
+       * nothing, and the sidebar's own handler read a **cache** the pane was
+       * still filling, so the block drew the previous turn's figure on every
+       * turn. Swallowed like the model list above: a reading that will not come
+       * is not a reason to report a failure into somebody's conversation.
+       */
+      background(
+        chat,
+        askAccount().then(
+          () => undefined,
+          () => undefined
+        )
+      )
     }
 
     if (event.type === 'error') {
@@ -3075,7 +3162,7 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
         // The card and the sidebar draw the same windows out of the same
         // answer. Reading them and letting them go would leave the block stale
         // beside a card that had just drawn them fresh.
-        if (report) await keepWindows(windowsFrom(report, now()))
+        if (report?.limitsApply) await keepWindows(windowsFrom(report, now()))
         return
       }
 
@@ -3260,31 +3347,8 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
       return usageWindows
     },
 
-    async refreshSubscriptionUsage() {
-      // A session already running is free to ask: it is one control request
-      // against a process that exists. Any of them answers the same thing, so
-      // the first is as good as the rest.
-      const [running] = sessions.values()
-      if (running) {
-        await keepWindows(await readWindows(running))
-        return usageWindows
-      }
-
-      /*
-       * Otherwise one is started, in a conversation that already exists.
-       *
-       * Deliberately not in a new one: `openChat` is lazy so that a workspace
-       * nobody has spoken to has no record, and filling a gauge is not a reason
-       * to give it one. With no chat anywhere there is nothing to ask through,
-       * which the caller is told rather than left to guess.
-       */
-      const chat = state.chats.at(-1)
-      const workspace = state.workspaces.find((item) => item.id === chat?.workspaceId)
-      if (!chat || !workspace) return null
-
-      const session = await startFor(chat, workspace, await sourcesFor(workspace))
-      await keepWindows(await readWindows(session))
-      return usageWindows
+    refreshSubscriptionUsage() {
+      return askAccount()
     },
 
     async sessionUsage(chatId) {

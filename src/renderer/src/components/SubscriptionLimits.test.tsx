@@ -19,7 +19,7 @@ import { SubscriptionLimits } from './SubscriptionLimits.js'
 
 /** The controller as `Sidebar` hands it over, holding whatever a test says. */
 function controller(overrides: Partial<SubscriptionController> = {}): SubscriptionController {
-  return { usage: null, busy: false, unavailable: false, refresh: vi.fn(), ...overrides }
+  return { usage: null, busy: false, outcome: 'unread', refresh: vi.fn(), ...overrides }
 }
 
 /*
@@ -192,10 +192,25 @@ describe('the account block', () => {
    * from "not read yet".
    */
   it('says when there was nowhere to ask', () => {
-    render(<SubscriptionLimits subscription={controller({ unavailable: true })} />)
+    render(<SubscriptionLimits subscription={controller({ outcome: 'nowhereToAsk' })} />)
 
     expect(screen.getByText(/open a workspace first/i)).toBeInTheDocument()
     expect(screen.queryByText(/press to ask/i)).not.toBeInTheDocument()
+  })
+
+  /*
+   * The three the block used to get wrong, each said in its own words. A read
+   * that failed looked like a fresh reading, and an account with no plan was
+   * told to open a workspace.
+   */
+  it.each([
+    { outcome: 'noPlan' as const, says: /no plan windows/i },
+    { outcome: 'failed' as const, says: /did not answer/i },
+    { outcome: 'read' as const, says: /reported no windows/i }
+  ])('says why it has nothing when the answer was $outcome', ({ outcome, says }) => {
+    render(<SubscriptionLimits subscription={controller({ outcome })} />)
+
+    expect(screen.getByText(says)).toBeInTheDocument()
   })
 
   it('shows the share on its own when the account gives no reset', () => {

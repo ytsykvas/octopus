@@ -32,6 +32,7 @@ import {
   createService,
   sameWindows,
   type OctopusService,
+  type UsageOutcome,
   type WorkspaceStatusEvent
 } from './service.js'
 import { POOL_START } from './ports.js'
@@ -3138,40 +3139,110 @@ describe('the agent chat', () => {
       await expect(readFile(join(dir, 'state.json'), 'utf8')).resolves.toBe(before)
     })
 
-    /*
-     * The press on the block in the sidebar. Nothing fills it on its own —
-     * answering costs a session, and this service refuses to spawn one for a
-     * gauge nobody requested — so the request is what makes the read allowed.
-     */
+    /** The reading out of an outcome, for the tests that are about the figures. */
+    const readingOf = (outcome: UsageOutcome): UsageWindows | null =>
+      outcome.kind === 'read' ? outcome.windows : null
+
     it('reads the account on request, through a session already running', async () => {
       const { service, workspaceId } = await withWorkspace()
       const chat = await service.openChat(workspaceId)
       await service.sendToChat(chat.id, 'work')
 
-      const read = await service.refreshSubscriptionUsage()
-
-      expect(share(read, 'five_hour')).toBe(18)
+      expect(share(readingOf(await service.refreshSubscriptionUsage()), 'five_hour')).toBe(18)
     })
 
-    // No session anywhere, so one is started — in a conversation that already
-    // exists, because `openChat` is lazy on purpose and a gauge is not a reason
-    // to give a workspace nobody has spoken to a record.
-    it('starts a session in a conversation that exists when none is running', async () => {
+    /*
+     * No session anywhere, so one is started — in a conversation that already
+     * exists, because `openChat` is lazy on purpose and a gauge is not a reason
+     * to give a workspace nobody has spoken to a record.
+     *
+     * And **closed again**, which it was not: `startFor` registers into the
+     * session map, so every press used to leave an agent running for the rest
+     * of the session. On a timer that would be one more each time.
+     */
+    it('starts a session when none is running, and does not leave it behind', async () => {
       const { service, workspaceId } = await withWorkspace()
       await service.openChat(workspaceId)
 
-      const read = await service.refreshSubscriptionUsage()
-
-      expect(share(read, 'five_hour')).toBe(18)
+      expect(share(readingOf(await service.refreshSubscriptionUsage()), 'five_hour')).toBe(18)
       expect(service.listChats(workspaceId)).toHaveLength(1)
+      expect(agents[0]?.closed()).toBe(1)
+    })
+
+    // Four things can ask at once — a finished turn, the window regaining
+    // focus, the timer, a press — and each starting its own read would spawn
+    // its own CLI to answer the same question.
+    it('makes one request of four callers at once', async () => {
+      const { service, workspaceId } = await withWorkspace()
+      await service.openChat(workspaceId)
+
+      await Promise.all([
+        service.refreshSubscriptionUsage(),
+        service.refreshSubscriptionUsage(),
+        service.refreshSubscriptionUsage(),
+        service.refreshSubscriptionUsage()
+      ])
+
+      expect(agents).toHaveLength(1)
     })
 
     // A session runs in a worktree, so an installation with no conversation has
     // nowhere to start one. Said rather than left as a button that does nothing.
-    it('answers nothing when there is no conversation to ask through', async () => {
+    it('says when there is no conversation to ask through', async () => {
       const { service } = await withWorkspace()
 
-      await expect(service.refreshSubscriptionUsage()).resolves.toBeNull()
+      await expect(service.refreshSubscriptionUsage()).resolves.toEqual({
+        kind: 'nowhereToAsk'
+      })
+    })
+
+    // An API-key, Bedrock or Vertex session. A different sentence from "not
+    // read yet", because no amount of pressing changes it.
+    it('says when the account has no plan windows at all', async () => {
+      const { service, workspaceId } = await withWorkspace()
+      const chat = await service.openChat(workspaceId)
+      await service.sendToChat(chat.id, 'work')
+
+      usageAnswer = () =>
+        Promise.resolve({ ...USAGE_RESPONSE, rate_limits_available: false, rate_limits: null })
+
+      await expect(service.refreshSubscriptionUsage()).resolves.toEqual({ kind: 'noPlan' })
+    })
+
+    /*
+     * The press used to report success here and hand back the previous figures,
+     * so a read that never happened redrew a stale number as though it were
+     * fresh.
+     */
+    it('says when the read failed rather than answering with the old figures', async () => {
+      const { service, workspaceId } = await withWorkspace()
+      const chat = await service.openChat(workspaceId)
+      await service.sendToChat(chat.id, 'work')
+      await service.refreshSubscriptionUsage()
+
+      usageAnswer = () => Promise.reject(new Error('unknown control request'))
+
+      await expect(service.refreshSubscriptionUsage()).resolves.toEqual({ kind: 'failed' })
+      expect(share(service.getUsageWindows(), 'five_hour')).toBe(18)
+    })
+
+    /*
+     * The reading is taken when a turn ends, by the service that knows a turn
+     * ended — not by whichever pane happens to be mounted, which is where it
+     * used to live. A workspace with no chat pane open refreshed nothing, and
+     * the sidebar read a cache the pane was still filling, so the block drew
+     * the previous turn's figure on every turn.
+     */
+    it('reads the account when a turn ends, with nothing else asking', async () => {
+      const { service, workspaceId } = await withWorkspace()
+      const chat = await service.openChat(workspaceId)
+      await service.sendToChat(chat.id, 'work')
+
+      agent().emit(resultMessage)
+
+      await vi.waitFor(() => {
+        expect(share(service.getUsageWindows(), 'five_hour')).toBe(18)
+      })
     })
 
     /*

@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 
+import type { UsageOutcome } from '@core/service.js'
 import type { UsageWindows } from '@core/usage.js'
 
 import { onChatEvent } from './chatEvents.js'
@@ -19,19 +20,28 @@ import { onChatEvent } from './chatEvents.js'
  * `useSessionUsage` re-reads at that moment anyway, so this follows it rather
  * than asking on a timer.
  */
+/** What the block has to say when it has no figures: four things, not one. */
+export type SubscriptionOutcome = UsageOutcome['kind'] | 'unread'
+
 export interface SubscriptionController {
   readonly usage: UsageWindows | null
   /** A read is in flight, which may be spawning a session to do it. */
   readonly busy: boolean
-  /** Nothing came back from a read somebody asked for. */
-  readonly unavailable: boolean
+  /**
+   * What came of the last read, or `unread` before there has been one.
+   *
+   * A boolean stood here and got two of the four wrong: a read that failed
+   * cleared it and redrew stale figures as though they were fresh, and an
+   * account with no plan windows was told to open a workspace first.
+   */
+  readonly outcome: SubscriptionOutcome
   readonly refresh: () => Promise<void>
 }
 
 export function useSubscriptionUsage(): SubscriptionController {
   const [usage, setUsage] = useState<UsageWindows | null>(null)
   const [busy, setBusy] = useState(false)
-  const [unavailable, setUnavailable] = useState(false)
+  const [outcome, setOutcome] = useState<SubscriptionOutcome>('unread')
 
   useEffect(() => {
     const controller = new AbortController()
@@ -69,13 +79,16 @@ export function useSubscriptionUsage(): SubscriptionController {
     const read = await window.octopus.chats.refreshSubscription()
     setBusy(false)
 
-    if (!read.ok) return
-    // `null` is "there was nowhere to ask" — an installation with no workspace
-    // has no worktree to run a session in. Said rather than left as a button
-    // that appears to do nothing.
-    setUnavailable(read.value === null)
-    if (read.value !== null) setUsage(read.value)
+    // The call itself failing is the same story as the read failing, and there
+    // is no fifth thing for the block to say about it.
+    if (!read.ok) {
+      setOutcome('failed')
+      return
+    }
+
+    setOutcome(read.value.kind)
+    if (read.value.kind === 'read') setUsage(read.value.windows)
   }, [])
 
-  return { usage, busy, unavailable, refresh }
+  return { usage, busy, outcome, refresh }
 }

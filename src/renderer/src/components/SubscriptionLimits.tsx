@@ -3,13 +3,32 @@ import { useTranslation } from 'react-i18next'
 
 import { MODEL_SCOPED } from '@core/usage.js'
 
-import type { SubscriptionController } from '../hooks/useSubscriptionUsage.js'
+import type { SubscriptionController, SubscriptionOutcome } from '../hooks/useSubscriptionUsage.js'
 import { formatCountdown, formatResetAt, usageTone } from './chat/format.js'
 import { SHORT_WINDOW_NAMES } from './usageWindows.js'
 import { UsageBar } from './UsageBar.js'
 
 interface SubscriptionLimitsProps {
   readonly subscription: SubscriptionController
+}
+
+/**
+ * What the block says while it has no figures.
+ *
+ * Exhaustive by its type, so an outcome the service starts answering with has
+ * to be given words here rather than falling through to the wrong sentence.
+ * `read` is in the table for completeness: an account can have a plan and
+ * report no windows, and that is a fifth thing again.
+ */
+const EMPTY_REASONS: Record<
+  SubscriptionOutcome,
+  'limits.empty' | 'limits.unavailable' | 'limits.noPlan' | 'limits.failed' | 'limits.none'
+> = {
+  unread: 'limits.empty',
+  nowhereToAsk: 'limits.unavailable',
+  noPlan: 'limits.noPlan',
+  failed: 'limits.failed',
+  read: 'limits.none'
 }
 
 /**
@@ -32,7 +51,7 @@ interface SubscriptionLimitsProps {
  */
 export function SubscriptionLimits({ subscription }: SubscriptionLimitsProps): React.JSX.Element {
   const { t } = useTranslation()
-  const { usage, busy, unavailable, refresh } = subscription
+  const { usage, busy, outcome, refresh } = subscription
 
   /*
    * Every window the account reported, not two of them. They arrive in one
@@ -61,14 +80,12 @@ export function SubscriptionLimits({ subscription }: SubscriptionLimitsProps): R
       </div>
 
       {windows.length === 0 ? (
-        /* Nothing has ever been read, so there is nothing to draw — and saying
-           so beats an empty heading over two empty bars, which would be the
-           sidebar claiming to know something it does not. `unavailable` is the
-           narrower case: a press that found no conversation to ask through,
-           which no amount of waiting fixes. */
-        <p className="text-ink-faint leading-relaxed">
-          {unavailable ? t('limits.unavailable') : t('limits.empty')}
-        </p>
+        /* Four things to say, not one. An empty heading over two empty bars
+           would be the sidebar claiming to know something it does not, and a
+           single sentence for every way of having nothing said the wrong one
+           three times out of four: a failed read looked like a fresh reading,
+           and an account with no plan was told to open a workspace. */
+        <p className="text-ink-faint leading-relaxed">{t(EMPTY_REASONS[outcome])}</p>
       ) : (
         <div className="flex flex-col gap-2">
           {windows.map((window) => {

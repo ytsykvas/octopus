@@ -47,7 +47,7 @@ describe('what the sidebar knows about the account', () => {
   it('reads the account when asked to', async () => {
     vi.mocked(octopus().chats.refreshSubscription).mockResolvedValue({
       ok: true,
-      value: READING
+      value: { kind: 'read', windows: READING }
     })
     const { result } = renderHook(() => useSubscriptionUsage())
 
@@ -59,18 +59,45 @@ describe('what the sidebar knows about the account', () => {
     expect(result.current.busy).toBe(false)
   })
 
-  // A session runs in a worktree, so an installation with no conversation has
-  // nowhere to start one — and no amount of waiting fixes that.
-  it('says when there was nowhere to ask', async () => {
-    vi.mocked(octopus().chats.refreshSubscription).mockResolvedValue({ ok: true, value: null })
+  /*
+   * The four things the block has to say when it has no figures, each from the
+   * service rather than inferred. A boolean stood here and got two of them
+   * wrong: a failed read cleared it and redrew stale figures as fresh, and an
+   * account with no plan was told to open a workspace.
+   */
+  it.each([
+    { kind: 'nowhereToAsk' as const },
+    { kind: 'noPlan' as const },
+    { kind: 'failed' as const }
+  ])('carries the outcome $kind through as it came', async (value) => {
+    vi.mocked(octopus().chats.refreshSubscription).mockResolvedValue({ ok: true, value })
     const { result } = renderHook(() => useSubscriptionUsage())
 
     await act(async () => {
       await result.current.refresh()
     })
 
-    expect(result.current.unavailable).toBe(true)
+    expect(result.current.outcome).toBe(value.kind)
     expect(result.current.usage).toBeNull()
+  })
+
+  // The call itself failing is the same story as the read failing, and there is
+  // no fifth thing for the block to say about it.
+  it('says the read failed when the call itself did', async () => {
+    vi.mocked(octopus().chats.refreshSubscription).mockResolvedValue({ ok: false, error: 'no' })
+    const { result } = renderHook(() => useSubscriptionUsage())
+
+    await act(async () => {
+      await result.current.refresh()
+    })
+
+    expect(result.current.outcome).toBe('failed')
+  })
+
+  it('has nothing to report before anything has been read', () => {
+    const { result } = renderHook(() => useSubscriptionUsage())
+
+    expect(result.current.outcome).toBe('unread')
   })
 
   it('leaves the figures alone when the read is refused', async () => {
@@ -89,7 +116,7 @@ describe('what the sidebar knows about the account', () => {
     })
 
     expect(result.current.usage).toEqual(READING)
-    expect(result.current.unavailable).toBe(false)
+    expect(result.current.outcome).toBe('failed')
   })
 
   /*

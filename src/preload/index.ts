@@ -9,6 +9,7 @@ import type {
   PermissionRequest,
   RateLimit,
   SessionUsage,
+  UsageOutcome,
   WorkspaceStatusEvent
 } from '@core/service.js'
 import type { ScriptsInWorkspace } from '@core/repoSource.js'
@@ -265,8 +266,8 @@ const api = {
      * session runs in a worktree, so an installation with no workspace has
      * nowhere to start one.
      */
-    refreshSubscription: (): Promise<Result<UsageWindows | null>> =>
-      ipcRenderer.invoke('chats:refreshSubscription') as Promise<Result<UsageWindows | null>>,
+    refreshSubscription: (): Promise<Result<UsageOutcome>> =>
+      ipcRenderer.invoke('chats:refreshSubscription') as Promise<Result<UsageOutcome>>,
 
     onEvent: (handler: (event: ChatEvent) => void): (() => void) => {
       const listener = (_event: unknown, chatEvent: ChatEvent): void => {
