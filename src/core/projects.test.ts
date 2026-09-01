@@ -226,6 +226,16 @@ describe('removeProjectData', () => {
     await writeFile(join(scripts, 'setup.sh'), '#!/bin/sh\n', 'utf8')
     await writeFile(join(root, 'projects', 'planner', 'env'), 'SECRET=1\n', 'utf8')
 
+    /*
+     * The skills go with the rest because they sit inside the same directory,
+     * and this asserts it rather than assuming: a store left behind would be
+     * invisible to the app and inherited whole by the next project to take
+     * this id.
+     */
+    const skill = join(root, 'projects', 'planner', 'skills', 'skills', 'review')
+    await mkdir(skill, { recursive: true })
+    await writeFile(join(skill, 'SKILL.md'), '---\nname: review\n---\n', 'utf8')
+
     await removeProjectData('planner', root)
 
     await expect(stat(join(root, 'projects', 'planner'))).rejects.toThrow()

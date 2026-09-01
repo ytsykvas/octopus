@@ -52,6 +52,16 @@ service of its own — so most of the usual surface does not exist. What does:
   checkout holds**: git writes under `.git` on the app's behalf whenever it is
   asked to, as `worktree add` and `branch` always have and as the fetch before a
   workspace is created now does, and none of that touches tracked content.
+- **Importing a skill by URL.** The one place the app fetches something the
+  user does not already have on their disk. It is `https` only, checked again
+  after the redirects so a hop down to plaintext is refused, capped at 256 KB
+  read as the bytes arrive rather than after they are all held, abandoned after
+  ten seconds, and it takes **one document** — never a tree, so nothing beside
+  the `SKILL.md` is written. What lands is prose the agent may later read, not
+  a capability: a skill grants nothing on its own, which is why
+  `src/core/repoTrust.ts` leaves prose out of its digest. A way to get this to
+  write outside the store, to follow a redirect off `https`, or to pull down
+  more than the one document is worth reporting.
 
 ## What is not a vulnerability
 

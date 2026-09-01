@@ -132,6 +132,34 @@ export function globalInstruction(file: string, root: string = rootDir()): strin
 }
 
 /**
+ * The plugin root holding the skills every project of this installation gets.
+ *
+ * A plugin rather than a loose directory because that is the one way the SDK
+ * takes skills it did not discover itself, and a plugin root is a shape: a
+ * manifest beside a `skills/` directory. Hence the two helpers below rather
+ * than one path — the manifest and the skills are written by different code
+ * and neither should spell the other's location.
+ */
+export function globalSkillsRoot(root: string = rootDir()): string {
+  return join(root, 'skills')
+}
+
+/** The same, for the skills only one project gets. */
+export function projectSkillsRoot(projectId: ProjectId, root: string = rootDir()): string {
+  return join(projectDir(projectId, root), 'skills')
+}
+
+/** Where the skills themselves sit inside a plugin root. */
+export function skillsDirOf(pluginRoot: string): string {
+  return join(pluginRoot, 'skills')
+}
+
+/** The manifest that makes a directory a plugin the SDK will load. */
+export function pluginManifest(pluginRoot: string): string {
+  return join(pluginRoot, '.claude-plugin', 'plugin.json')
+}
+
+/**
  * One of a project's scripts, named by the caller.
  *
  * A function per kind used to live here, each holding its own filename. The

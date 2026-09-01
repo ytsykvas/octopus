@@ -7,10 +7,14 @@ import {
   chatsDir,
   chatTranscript,
   configFile,
+  globalSkillsRoot,
+  pluginManifest,
   projectDir,
   projectScript,
   projectScriptsDir,
+  projectSkillsRoot,
   rootDir,
+  skillsDirOf,
   stateFile,
   stateTempFile,
   workspacePath,
@@ -74,6 +78,36 @@ describe('project paths', () => {
     expect(projectScript(PROJECT, 'setup.sh')).toBe(
       join(root, 'projects', PROJECT, 'scripts', 'setup.sh')
     )
+  })
+})
+
+describe('skill paths', () => {
+  it('keeps the installation-wide store beside the projects, not inside one', () => {
+    expect(globalSkillsRoot(ROOT)).toBe(join(ROOT, 'skills'))
+    expect(globalSkillsRoot(ROOT)).not.toContain(join(ROOT, 'projects'))
+  })
+
+  it("nests a project's store inside that project's directory", () => {
+    expect(projectSkillsRoot(PROJECT, ROOT)).toBe(join(ROOT, 'projects', PROJECT, 'skills'))
+  })
+
+  /*
+   * The shape the SDK looks for in a local plugin: a manifest in
+   * `.claude-plugin`, and the skills one level down in `skills`. Asserted
+   * together because a store where only one of the two is right loads nothing
+   * and says nothing about why.
+   */
+  it('gives either store the shape a local plugin has', () => {
+    for (const root of [globalSkillsRoot(ROOT), projectSkillsRoot(PROJECT, ROOT)]) {
+      expect(skillsDirOf(root)).toBe(join(root, 'skills'))
+      expect(pluginManifest(root)).toBe(join(root, '.claude-plugin', 'plugin.json'))
+    }
+  })
+
+  it('falls back to rootDir when no root is given', () => {
+    const root = rootDir()
+    expect(globalSkillsRoot()).toBe(join(root, 'skills'))
+    expect(projectSkillsRoot(PROJECT)).toBe(join(root, 'projects', PROJECT, 'skills'))
   })
 })
 

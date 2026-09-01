@@ -204,9 +204,10 @@ export function orderBaseBranches(branches: readonly string[]): string[] {
 /**
  * Deletes everything a project kept on this machine.
  *
- * Its scripts, its carry list, its instructions and its env overrides — the
- * last of which are credentials. Left behind, they are invisible to the app and
- * silently inherited by the next project that happens to take the same id.
+ * Its scripts, its carry list, its instructions, its skills and its env
+ * overrides — the last of which are credentials. Left behind, they are
+ * invisible to the app and silently inherited by the next project that happens
+ * to take the same id.
  *
  * The id reaches this from `state.json`, which is a file somebody can edit, and
  * this is a recursive delete. So the path it builds is checked against the one
