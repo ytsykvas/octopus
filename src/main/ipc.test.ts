@@ -625,16 +625,16 @@ describe('skills', () => {
 
     await expect(invoke('skills:forChat', opened.value.id)).resolves.toMatchObject({
       ok: true,
-      value: [{ key: 'octopus:review', enabled: true }]
+      value: [{ key: 'review', enabled: true }]
     })
 
     await expect(
-      invoke('skills:setForChat', opened.value.id, 'octopus:review', false)
+      invoke('skills:setForChat', opened.value.id, 'review', false)
     ).resolves.toMatchObject({ ok: true })
 
     await expect(invoke('skills:forChat', opened.value.id)).resolves.toMatchObject({
       ok: true,
-      value: [{ key: 'octopus:review', enabled: false }]
+      value: [{ key: 'review', enabled: false }]
     })
   })
 
@@ -656,7 +656,7 @@ describe('skills', () => {
   })
 
   it('refuses a switch whose answer is not a yes or a no', async () => {
-    await expect(invoke('skills:setForChat', 'c', 'octopus:review', 'yes')).resolves.toMatchObject({
+    await expect(invoke('skills:setForChat', 'c', 'review', 'yes')).resolves.toMatchObject({
       ok: false
     })
   })

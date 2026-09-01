@@ -11,8 +11,7 @@ import { join } from 'node:path'
 
 import {
   forkSession as defaultForkSession,
-  query as defaultQuery,
-  type SdkPluginConfig
+  query as defaultQuery
 } from '@anthropic-ai/claude-agent-sdk'
 
 import { type CommandExec, defaultExec } from './accounts.js'
@@ -122,7 +121,7 @@ import {
 } from './paths.js'
 import {
   DOWNLOAD_TIMEOUT_MS,
-  ensurePlugin,
+  ensureStore,
   importFromPath,
   importFromText,
   importFromUrl,
@@ -138,13 +137,7 @@ import {
   writeRawSkill,
   writeSkill
 } from './skills.js'
-import {
-  GLOBAL_PLUGIN,
-  PROJECT_PLUGIN,
-  type SkillStore,
-  skillKey,
-  type SkillScope
-} from './skillNames.js'
+import { type SkillStore, skillKey, type SkillScope } from './skillNames.js'
 import { type QuestionAnswer, readQuestions, withAnswers } from './questions.js'
 import { describeError } from './persist.js'
 import {
@@ -1734,7 +1727,7 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
 
   /** The same, made into a plugin — only ever on the way to writing. */
   function writableStore(store: SkillStore): Promise<string> {
-    return ensurePlugin(storeRoot(store), store.kind === 'global' ? GLOBAL_PLUGIN : PROJECT_PLUGIN)
+    return ensureStore(storeRoot(store))
   }
 
   function storeSkills(store: SkillStore): Promise<SkillEntry[]> {
@@ -1742,7 +1735,8 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
   }
 
   interface SessionSkills {
-    readonly plugins: SdkPluginConfig[]
+    /** Extra roots to hand the session, so it finds the stores' skills. */
+    readonly roots: string[]
     readonly overrides: Record<string, 'off'>
     readonly listing: SkillListing[]
   }
@@ -1756,13 +1750,12 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
    * installation's default list, the project's, and what this conversation was
    * told.
    *
-   * Only the checkout's are gated by `settingSources`. Ours arrive as a local
-   * plugin, which is a launch option the setting does not filter — and that is
-   * right rather than a leak: the setting governs what the machine and the
-   * repository contribute without being asked, while these are the user's own
-   * skills, made in this app, listed in a panel they opened. The trust digest
-   * is the same story: an unapproved repository says nothing about skills the
-   * user wrote here.
+   * All three follow `settingSources`, because all three are discovered the
+   * same way — our stores are extra working-directory roots rather than a
+   * plugin, and a root's `.claude/skills` is read exactly when the checkout's
+   * is. A plugin would have escaped that gate, and was tried: its skills load
+   * and then cannot be switched off, which is the whole feature. "Load
+   * nothing" therefore means what it says, skills included.
    */
   async function sessionSkills(
     project: Project,
@@ -1773,14 +1766,14 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
     const globalRoot = globalSkillsRoot(dataRoot)
     const projectRoot = projectSkillsRoot(project.id, dataRoot)
 
+    // A switch over something the session would not load is a control with
+    // nothing behind it, so the list is empty rather than inert.
+    const loaded = settingSources.includes('project')
+
     const [ours, theirs, carried] = await Promise.all([
-      readSkillsIn(skillsDirOf(globalRoot)),
-      readSkillsIn(skillsDirOf(projectRoot)),
-      // A switch over something the session would not load is a control with
-      // nothing behind it, so the group is empty rather than inert.
-      settingSources.includes('project')
-        ? readSkillsIn(join(workspace.path, '.claude', 'skills'))
-        : []
+      loaded ? readSkillsIn(skillsDirOf(globalRoot)) : [],
+      loaded ? readSkillsIn(skillsDirOf(projectRoot)) : [],
+      loaded ? readSkillsIn(join(workspace.path, '.claude', 'skills')) : []
     ])
 
     const defaults = {
@@ -1789,7 +1782,7 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
     }
 
     const row = (scope: SkillScope, skill: SkillEntry): SkillListing => {
-      const key = skillKey(scope, skill.name)
+      const key = skillKey(skill.name)
 
       return { ...skill, key, scope, enabled: skillEnabled(key, defaults, chat.skillOverrides) }
     }
@@ -1806,12 +1799,12 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
     }
 
     return {
-      // A store with nothing in it is left unmentioned: a plugin list is read
-      // once at start-up, and naming an empty one asserts a session has
-      // something it has not.
-      plugins: [
-        ...(ours.length > 0 ? [{ type: 'local' as const, path: globalRoot }] : []),
-        ...(theirs.length > 0 ? [{ type: 'local' as const, path: projectRoot }] : [])
+      // A store with nothing in it is left unmentioned. A root widens what the
+      // session may reach, and one handed over for an empty directory buys
+      // nothing to pay for that with.
+      roots: [
+        ...(ours.length > 0 ? [globalRoot] : []),
+        ...(theirs.length > 0 ? [projectRoot] : [])
       ],
       overrides,
       listing
@@ -1866,7 +1859,7 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
         // already doing. `askPermission` consults `alwaysAllowedTools` itself,
         // on every call, against the config as it stands at that moment.
         allowedTools: [...READ_ONLY_TOOLS],
-        plugins: skills.plugins,
+        additionalDirectories: skills.roots,
         skillOverrides: skills.overrides
       },
       {

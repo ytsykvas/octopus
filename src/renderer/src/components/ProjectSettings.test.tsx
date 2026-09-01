@@ -1292,7 +1292,7 @@ describe('the skills section', () => {
     await user.click(await screen.findByRole('switch', { name: 'On by default' }))
 
     expect(props.onUpdate).toHaveBeenCalledExactlyOnceWith({
-      disabledSkillDefaults: ['octopus-project:deploy']
+      disabledSkillDefaults: ['deploy']
     })
   })
 

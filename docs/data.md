@@ -10,9 +10,8 @@ else joins a home directory by hand.
   state.json                         projects, workspaces and chats
   chats/<chatId>.jsonl               one conversation each, append-only
   instructions/*.md                  seven prompts every project falls back to
-  skills/                            a local plugin holding the skills every project gets
-    .claude-plugin/plugin.json       what makes the directory one the SDK will load
-    skills/<name>/SKILL.md           one skill, in Claude Code's own format
+  skills/                            an extra working-directory root: the skills every project gets
+    .claude/skills/<name>/SKILL.md   one skill, in Claude Code's own format
   projects/<projectId>/
     carry                            paths carried from the checkout into a workspace
     envs/                            named sets of variables, one written last into every workspace's .env

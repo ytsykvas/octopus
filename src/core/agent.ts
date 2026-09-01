@@ -19,7 +19,6 @@ import type {
   SDKMessage,
   SDKPartialAssistantMessage,
   SDKUserMessage,
-  SdkPluginConfig,
   SettingSource,
   SlashCommand
 } from '@anthropic-ai/claude-agent-sdk'
@@ -72,14 +71,15 @@ export interface SessionOptions {
   /** Tools allowed without asking, on top of the agent's own rules. */
   readonly allowedTools: readonly string[]
   /**
-   * Local plugins to load — how the skills octopus keeps reach the session.
+   * Extra working-directory roots — how the skills octopus keeps are found.
    *
-   * A launch option, and deliberately not filtered by `settingSources`: that
-   * setting governs what the machine and the checkout contribute without being
-   * asked, and these are the user's own skills, made in this app and listed in
-   * a panel they opened.
+   * A root rather than a plugin because a plugin's skills cannot be switched
+   * off: `skillOverrides` has no effect on them, measured against a live
+   * session, while a skill discovered under a root obeys it like any other.
+   * The cost is that these follow `settingSources` as the checkout's own do,
+   * which is the honest reading of "load nothing" anyway.
    */
-  readonly plugins: readonly SdkPluginConfig[]
+  readonly additionalDirectories: readonly string[]
   /**
    * Skills this conversation is not to be offered, by the name the agent knows.
    *
@@ -437,10 +437,12 @@ export function startSession(options: SessionOptions, hooks: SessionHooks): Agen
       // hands the answer to whichever settings file happens to mention it.
       settings: { ultracode, enableWorkflows: ultracode, skillOverrides: options.skillOverrides },
       settingSources: [...options.settingSources],
-      // Omitted when there are none rather than passed empty: a plugin list is
-      // read at start-up, and an empty one is a claim about the session that
-      // is better left unmade.
-      ...(options.plugins.length > 0 && { plugins: [...options.plugins] }),
+      // Omitted when there are none rather than passed empty: a root widens
+      // what the session may reach, and an empty list is a claim about that
+      // which is better left unmade.
+      ...(options.additionalDirectories.length > 0 && {
+        additionalDirectories: [...options.additionalDirectories]
+      }),
       systemPrompt: { type: 'preset', preset: 'claude_code' },
       permissionMode: options.permissionMode,
       allowedTools: [...options.allowedTools],

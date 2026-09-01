@@ -8,7 +8,6 @@ import {
   chatTranscript,
   configFile,
   globalSkillsRoot,
-  pluginManifest,
   projectDir,
   projectScript,
   projectScriptsDir,
@@ -92,15 +91,13 @@ describe('skill paths', () => {
   })
 
   /*
-   * The shape the SDK looks for in a local plugin: a manifest in
-   * `.claude-plugin`, and the skills one level down in `skills`. Asserted
-   * together because a store where only one of the two is right loads nothing
-   * and says nothing about why.
+   * The shape a session discovers skills in — a root with a `.claude/skills`
+   * inside it — because that is what puts them under the same switch as the
+   * checkout's own. A local plugin was tried and cannot be switched off.
    */
-  it('gives either store the shape a local plugin has', () => {
+  it('gives either store the shape a working-directory root has', () => {
     for (const root of [globalSkillsRoot(ROOT), projectSkillsRoot(PROJECT, ROOT)]) {
-      expect(skillsDirOf(root)).toBe(join(root, 'skills'))
-      expect(pluginManifest(root)).toBe(join(root, '.claude-plugin', 'plugin.json'))
+      expect(skillsDirOf(root)).toBe(join(root, '.claude', 'skills'))
     }
   })
 

@@ -10,19 +10,6 @@
 import { z } from 'zod'
 
 /**
- * The two plugin names octopus's own skill stores answer to.
- *
- * A local plugin is how a directory of skills reaches a session, and a plugin
- * has a name the agent prefixes onto every skill inside it. These two are
- * fixed rather than derived from the project: only one project's store is ever
- * loaded into a session, so there is nothing to collide with, and a name built
- * from a project would change under a rename and orphan every key stored
- * against it.
- */
-export const GLOBAL_PLUGIN = 'octopus'
-export const PROJECT_PLUGIN = 'octopus-project'
-
-/**
  * Where a skill came from.
  *
  * The first two are ours and can be written to. `repository` is what the
@@ -63,16 +50,20 @@ export function isSkillName(value: string): boolean {
 }
 
 /**
- * The name the agent knows a skill by.
+ * The name the agent knows a skill by, which is also the key every stored
+ * answer uses.
  *
- * Ours are qualified by their plugin; the checkout's are bare, because nothing
- * qualifies them. The CLI looks an override up by the qualified name and falls
- * back to the bare one, so a bare key written for one of ours would silence a
- * repository skill of the same name as well — hence always the qualified form.
+ * The bare name, whichever of the three sources it came from — and that is a
+ * fact about the agent rather than a simplification of ours. Every source
+ * reaches a session the same way, so two skills sharing a name are one skill
+ * as far as the CLI is concerned: measured against a live session, a
+ * `local-probe` in the checkout and a `local-probe` in our own store came back
+ * as a single row. A key that distinguished them would be describing something
+ * the agent cannot tell apart.
+ *
+ * A function rather than the name itself so there is one place saying so, and
+ * one place to change if a source ever qualifies its skills again.
  */
-export function skillKey(scope: SkillScope, name: string): string {
-  if (scope === 'global') return `${GLOBAL_PLUGIN}:${name}`
-  if (scope === 'project') return `${PROJECT_PLUGIN}:${name}`
-
+export function skillKey(name: string): string {
   return name
 }

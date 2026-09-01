@@ -152,7 +152,7 @@ function fakeAgent(
       model: null,
       effort: 'medium',
       allowedTools: [...READ_ONLY_TOOLS],
-      plugins: [],
+      additionalDirectories: [],
       skillOverrides: {},
       ...overrides
     },
@@ -762,14 +762,21 @@ describe('a session', () => {
     })
   })
 
-  it('leaves the plugin list unsaid when there are no plugins to load', () => {
-    expect(fakeAgent().agent.options().plugins).toBeUndefined()
+  it('leaves the extra roots unsaid when there are none to hand over', () => {
+    expect(fakeAgent().agent.options().additionalDirectories).toBeUndefined()
   })
 
-  it('loads the stores it was given as local plugins', () => {
-    const plugins = [{ type: 'local' as const, path: '/data/skills' }]
+  /*
+   * A root rather than a local plugin, which was tried first: a plugin's
+   * skills load and then cannot be switched off under any spelling of the
+   * override key, while a root's obey it like the checkout's own.
+   */
+  it('hands over the stores as extra working-directory roots', () => {
+    const additionalDirectories = ['/data/skills']
 
-    expect(fakeAgent({ plugins }).agent.options().plugins).toEqual(plugins)
+    expect(fakeAgent({ additionalDirectories }).agent.options().additionalDirectories).toEqual(
+      additionalDirectories
+    )
   })
 
   it('moves the withheld skills of a running session', async () => {
@@ -920,7 +927,7 @@ describe('a session that will not close', () => {
         model: null,
         effort: 'medium',
         allowedTools: [],
-        plugins: [],
+        additionalDirectories: [],
         skillOverrides: {}
       },
       {

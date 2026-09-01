@@ -6,7 +6,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 
 import {
   type Download,
-  ensurePlugin,
+  ensureStore,
   importFromPath,
   importFromText,
   importFromUrl,
@@ -278,27 +278,21 @@ describe('removeSkill', () => {
   })
 })
 
-describe('ensurePlugin', () => {
-  it('gives the store the shape the SDK loads a local plugin from', async () => {
-    const skills = await ensurePlugin(root, 'octopus')
-
-    expect(skills).toBe(join(root, 'skills'))
-    expect(
-      JSON.parse(await readFile(join(root, '.claude-plugin', 'plugin.json'), 'utf8'))
-    ).toMatchObject({ name: 'octopus' })
+describe('ensureStore', () => {
+  /*
+   * The shape a session discovers skills in: a root with `.claude/skills`
+   * inside it. A local plugin was the obvious answer and cannot be switched
+   * off — measured against a live session, `skillOverrides` does not touch a
+   * plugin's skills under any spelling of the key.
+   */
+  it('gives the store the shape a working-directory root has', async () => {
+    expect(await ensureStore(root)).toBe(join(root, '.claude', 'skills'))
   })
 
-  it('leaves a manifest that is already there alone', async () => {
-    await ensurePlugin(root, 'octopus')
-    await writeFile(
-      join(root, '.claude-plugin', 'plugin.json'),
-      '{ "name": "octopus", "edited": true }',
-      'utf8'
-    )
+  it('is content with a store that already has it', async () => {
+    await ensureStore(root)
 
-    await ensurePlugin(root, 'octopus')
-
-    expect(await readFile(join(root, '.claude-plugin', 'plugin.json'), 'utf8')).toContain('edited')
+    await expect(ensureStore(root)).resolves.toBe(join(root, '.claude', 'skills'))
   })
 })
 

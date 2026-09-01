@@ -108,21 +108,26 @@ describe('the skills one store holds', () => {
 
     await userEvent.click(screen.getByRole('switch', { name: 'On by default' }))
 
-    expect(onDefaults).toHaveBeenCalledExactlyOnceWith(['octopus:review'])
+    expect(onDefaults).toHaveBeenCalledExactlyOnceWith(['review'])
   })
 
-  it('keys the default by the plugin the skill arrives in', async () => {
+  /*
+   * The bare name whichever store it is in, because that is what the agent
+   * calls it: every source reaches a session the same way, and two skills of
+   * one name come back as a single row.
+   */
+  it('keys the default by the name the agent uses, in either store', async () => {
     holding([entry()])
     const { onDefaults } = await renderSection({ project: true })
 
     await userEvent.click(screen.getByRole('switch', { name: 'On by default' }))
 
-    expect(onDefaults).toHaveBeenCalledExactlyOnceWith(['octopus-project:review'])
+    expect(onDefaults).toHaveBeenCalledExactlyOnceWith(['review'])
   })
 
   it('shows a skill already off as off, and turns it back on', async () => {
     holding([entry()])
-    const { onDefaults } = await renderSection({ disabled: ['octopus:review'] })
+    const { onDefaults } = await renderSection({ disabled: ['review'] })
 
     const control = screen.getByRole('switch', { name: 'On by default' })
     expect(control).not.toBeChecked()

@@ -2,7 +2,7 @@ import { Plus } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
-import { type SkillScope, type SkillStore, skillKey } from '@core/skillNames.js'
+import { type SkillStore, skillKey } from '@core/skillNames.js'
 import type { SkillDocument, SkillEntry } from '@core/skills.js'
 
 import { useConfirm } from '../../hooks/useConfirm.js'
@@ -56,8 +56,6 @@ export function SkillsSection({
   const [importing, setImporting] = useState(false)
   const [carried, setCarried] = useState<readonly SkillEntry[]>([])
 
-  const scope: SkillScope = store.kind === 'global' ? 'global' : 'project'
-
   useEffect(() => {
     if (workspaceId === null) return
 
@@ -92,7 +90,7 @@ export function SkillsSection({
   }
 
   const setDefault = (name: string, on: boolean): void => {
-    const key = skillKey(scope, name)
+    const key = skillKey(name)
 
     onDefaults(on ? disabledDefaults.filter((entry) => entry !== key) : [...disabledDefaults, key])
   }
@@ -136,7 +134,7 @@ export function SkillsSection({
             {skills.skills.map((skill) => (
               <li key={skill.name} className="flex items-center gap-3 px-3 py-2">
                 <Switch
-                  checked={!disabledDefaults.includes(skillKey(scope, skill.name))}
+                  checked={!disabledDefaults.includes(skillKey(skill.name))}
                   label={t('skills.onByDefault')}
                   onChange={(on) => {
                     setDefault(skill.name, on)

@@ -6172,17 +6172,18 @@ describe('the agent chat', () => {
     })
 
     /*
-     * The shape the SDK looks for in a local plugin. Without the manifest the
-     * directory is loaded by nothing, and the skill would be written, listed
-     * and never reach a session.
+     * The shape a session discovers skills in: a root with `.claude/skills`
+     * inside it. Written anywhere else the skill is listed here and never
+     * reaches an agent.
      */
-    it('makes the store a plugin on the first write', async () => {
+    it('gives the store the shape a session reads on the first write', async () => {
       const { service } = await withWorkspace()
 
       await service.saveStoredSkill({ kind: 'global' }, 'review', { kind: 'raw', text: DOCUMENT })
 
-      const manifest = join(dir, 'data', 'skills', '.claude-plugin', 'plugin.json')
-      expect(JSON.parse(await readFile(manifest, 'utf8'))).toMatchObject({ name: 'octopus' })
+      await expect(
+        readFile(join(dir, 'data', 'skills', '.claude', 'skills', 'review', 'SKILL.md'), 'utf8')
+      ).resolves.toContain('name: review')
     })
 
     it('creates nothing merely by listing an empty store', async () => {
@@ -6238,7 +6239,7 @@ describe('the agent chat', () => {
       ])
     })
 
-    it('lists all three sources for a conversation, each key qualified by where it came from', async () => {
+    it('lists all three sources for a conversation, each under the name the agent uses', async () => {
       const { service, projectId, workspaceId } = await withWorkspace()
       const workspace = (await service.listWorkspaces(projectId))[0]
       if (!workspace) throw new Error('no workspace')
@@ -6256,8 +6257,8 @@ describe('the agent chat', () => {
       const chat = await service.openChat(workspaceId)
 
       await expect(service.skillsForChat(chat.id)).resolves.toMatchObject([
-        { key: 'octopus:everywhere', scope: 'global', enabled: true },
-        { key: 'octopus-project:here-only', scope: 'project', enabled: true },
+        { key: 'everywhere', scope: 'global', enabled: true },
+        { key: 'here-only', scope: 'project', enabled: true },
         { key: 'in-repo', scope: 'repository', enabled: true }
       ])
     })
@@ -6293,7 +6294,15 @@ describe('the agent chat', () => {
       )
     })
 
-    it("drops the repository's own when the settings would not load them", async () => {
+    /*
+     * A switch over something the session would not load is a control with
+     * nothing behind it — and ours are in that boat too, since a store reaches
+     * a session as an extra working-directory root rather than as a plugin. A
+     * plugin would have escaped the gate and was tried: its skills load and
+     * then cannot be switched off, which is the whole feature. So "load
+     * nothing" means what it says, skills included.
+     */
+    it('offers nothing at all when the settings would load nothing', async () => {
       const { service, projectId, workspaceId } = await withWorkspace()
       const workspace = (await service.listWorkspaces(projectId))[0]
       if (!workspace) throw new Error('no workspace')
@@ -6303,9 +6312,7 @@ describe('the agent chat', () => {
       await service.updateConfig({ settingSources: 'none' })
       const chat = await service.openChat(workspaceId)
 
-      await expect(service.skillsForChat(chat.id)).resolves.toMatchObject([
-        { key: 'octopus:review', scope: 'global' }
-      ])
+      await expect(service.skillsForChat(chat.id)).resolves.toEqual([])
     })
 
     it('reads the two default lists, narrowest last', async () => {
@@ -6314,24 +6321,24 @@ describe('the agent chat', () => {
 
       const chat = await service.openChat(workspaceId)
 
-      await service.updateConfig({ disabledSkillDefaults: ['octopus:review'] })
+      await service.updateConfig({ disabledSkillDefaults: ['review'] })
       expect((await service.skillsForChat(chat.id))[0]?.enabled).toBe(false)
 
       await service.updateConfig({ disabledSkillDefaults: [] })
-      await service.updateProjectById(projectId, { disabledSkillDefaults: ['octopus:review'] })
+      await service.updateProjectById(projectId, { disabledSkillDefaults: ['review'] })
       expect((await service.skillsForChat(chat.id))[0]?.enabled).toBe(false)
     })
 
     it("lets the conversation's own answer win over both", async () => {
       const { service, projectId, workspaceId } = await withWorkspace()
       await service.saveStoredSkill({ kind: 'global' }, 'review', { kind: 'raw', text: DOCUMENT })
-      await service.updateProjectById(projectId, { disabledSkillDefaults: ['octopus:review'] })
+      await service.updateProjectById(projectId, { disabledSkillDefaults: ['review'] })
 
       const chat = await service.openChat(workspaceId)
-      await service.setChatSkill(chat.id, 'octopus:review', true)
+      await service.setChatSkill(chat.id, 'review', true)
 
       expect((await service.skillsForChat(chat.id))[0]?.enabled).toBe(true)
-      expect(service.listChats(workspaceId)[0]?.skillOverrides).toEqual({ 'octopus:review': true })
+      expect(service.listChats(workspaceId)[0]?.skillOverrides).toEqual({ review: true })
     })
 
     it('hands a session the stores it can load and the skills it may not offer', async () => {
@@ -6339,12 +6346,12 @@ describe('the agent chat', () => {
       await service.saveStoredSkill({ kind: 'global' }, 'review', { kind: 'raw', text: DOCUMENT })
 
       const chat = await service.openChat(workspaceId)
-      await service.setChatSkill(chat.id, 'octopus:review', false)
+      await service.setChatSkill(chat.id, 'review', false)
       await service.sendToChat(chat.id, 'hello')
 
       const options = agents[0]?.options()
-      expect(options?.plugins).toEqual([{ type: 'local', path: join(dir, 'data', 'skills') }])
-      expect(options?.settings).toMatchObject({ skillOverrides: { 'octopus:review': 'off' } })
+      expect(options?.additionalDirectories).toEqual([join(dir, 'data', 'skills')])
+      expect(options?.settings).toMatchObject({ skillOverrides: { review: 'off' } })
     })
 
     it('mentions no store that has nothing in it', async () => {
@@ -6353,7 +6360,7 @@ describe('the agent chat', () => {
 
       await service.sendToChat(chat.id, 'hello')
 
-      expect(agents[0]?.options().plugins).toBeUndefined()
+      expect(agents[0]?.options().additionalDirectories).toBeUndefined()
     })
 
     /*
@@ -6366,13 +6373,11 @@ describe('the agent chat', () => {
 
       const chat = await service.openChat(workspaceId)
       await service.sendToChat(chat.id, 'hello')
-      await service.setChatSkill(chat.id, 'octopus:review', false)
+      await service.setChatSkill(chat.id, 'review', false)
 
-      expect(agents[0]?.flagSettings().at(-1)?.skillOverrides).toEqual({
-        'octopus:review': 'off'
-      })
+      expect(agents[0]?.flagSettings().at(-1)?.skillOverrides).toEqual({ review: 'off' })
 
-      await service.setChatSkill(chat.id, 'octopus:review', true)
+      await service.setChatSkill(chat.id, 'review', true)
 
       expect(agents[0]?.flagSettings().at(-1)?.skillOverrides).toEqual({})
     })

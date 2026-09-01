@@ -1,13 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import {
-  GLOBAL_PLUGIN,
-  isSkillName,
-  PROJECT_PLUGIN,
-  SkillNameSchema,
-  SkillScopeSchema,
-  skillKey
-} from './skillNames.js'
+import { isSkillName, SkillNameSchema, skillKey } from './skillNames.js'
 
 describe('SkillNameSchema', () => {
   it('accepts the shape a skill directory is allowed to have', () => {
@@ -45,22 +38,12 @@ describe('SkillNameSchema', () => {
 
 describe('skillKey', () => {
   /*
-   * The CLI looks an override up by the qualified name and falls back to the
-   * bare one. So a bare key written for one of ours would silence a
-   * repository skill that happens to share the name — which is why the two
-   * stores qualify and only the checkout's does not.
+   * The bare name, wherever the skill came from — a fact about the agent
+   * rather than a simplification of ours. Every source reaches a session the
+   * same way, and measured against a live one, a skill of the same name in the
+   * checkout and in our own store came back as a single row.
    */
-  it('qualifies our own skills by the plugin they arrive in', () => {
-    expect(skillKey('global', 'review')).toBe(`${GLOBAL_PLUGIN}:review`)
-    expect(skillKey('project', 'review')).toBe(`${PROJECT_PLUGIN}:review`)
-  })
-
-  it("leaves the checkout's own skills bare, because nothing qualifies them", () => {
-    expect(skillKey('repository', 'review')).toBe('review')
-  })
-
-  it('gives the three scopes three different keys for one name', () => {
-    const keys = SkillScopeSchema.options.map((scope) => skillKey(scope, 'review'))
-    expect(new Set(keys).size).toBe(keys.length)
+  it('is the name the agent knows the skill by', () => {
+    expect(skillKey('review')).toBe('review')
   })
 })

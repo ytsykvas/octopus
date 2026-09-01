@@ -52,6 +52,18 @@ service of its own — so most of the usual surface does not exist. What does:
   checkout holds**: git writes under `.git` on the app's behalf whenever it is
   asked to, as `worktree add` and `branch` always have and as the fetch before a
   workspace is created now does, and none of that touches tracked content.
+- **The skill stores are working-directory roots.** They have to be: a skill is
+  switchable only when the session discovers it the ordinary way, and a local
+  plugin's skills cannot be switched off at all. The cost is that
+  `~/.octopus/skills` and `~/.octopus/projects/<id>/skills` are directories the
+  agent may reach without being handed them again. Reading them is what they are
+  for. Writing is not pre-approved: octopus passes only the read-only tool set
+  in `allowedTools`, so an `Edit` or a `Write` there is still a permission
+  prompt — unless the user has answered "always" for that tool, which is the
+  same exposure they already accepted for the worktree. A path that lets the
+  agent write into a store **without** a prompt, or that reaches outside the two
+  roots, is worth reporting: a skill is prose the agent will later follow, so an
+  agent that can rewrite one has written its own next instruction.
 - **Importing a skill by URL.** The one place the app fetches something the
   user does not already have on their disk. It is `https` only, checked again
   after the redirects so a hop down to plaintext is refused, capped at 256 KB

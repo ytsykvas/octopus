@@ -9,11 +9,14 @@
  *
  * Two things make this more than a directory of markdown.
  *
- * **It is a plugin.** The SDK loads skills it did not discover itself only as
- * a local plugin, so each store carries a `.claude-plugin/plugin.json` beside
- * its `skills/`. That is also what qualifies the names — `octopus:review`
- * rather than `review` — and a qualified name is what `skillNames.ts` stores
- * keys against.
+ * **A store is a working-directory root, not a plugin.** A local plugin was
+ * the obvious way to hand the SDK skills it would not find on its own, and it
+ * works — right up to the point of switching one off, which is the feature.
+ * Measured against a live session: a plugin's skills load and appear in the
+ * listing, and `skillOverrides` does not touch them under any spelling of the
+ * key, while the same override hides a skill discovered the ordinary way. So a
+ * store is a directory holding `.claude/skills/`, handed over as an extra
+ * root, and its skills are then exactly as switchable as the checkout's own.
  *
  * **Nothing here is written inside a checkout.** These live under
  * `~/.octopus`, so a workspace's `git status` is unchanged by any of it, and
@@ -27,7 +30,7 @@ import { join } from 'node:path'
 import { type Document, parseDocument, stringify } from 'yaml'
 import { z } from 'zod'
 
-import { pluginManifest, skillsDirOf } from './paths.js'
+import { skillsDirOf } from './paths.js'
 import { isSkillName, type SkillScope } from './skillNames.js'
 
 /** The one file a skill must have, named as Claude Code names it. */
@@ -386,26 +389,16 @@ export async function removeSkill(dir: string, name: string): Promise<void> {
 }
 
 /**
- * Makes a directory into a plugin the SDK will load, and answers where the
- * skills go inside it.
+ * Gives a store the shape a session discovers skills in, and answers where
+ * they go inside it.
  *
- * Called before every write rather than once at startup: a store is created
- * the first time somebody puts something in it, and a manifest written eagerly
- * for a store nobody uses is a directory the user has to wonder about.
+ * Called before every write rather than once at startup: a store exists from
+ * the moment somebody puts something in it, and a directory created eagerly
+ * for one nobody uses is a thing the user has to wonder about.
  */
-export async function ensurePlugin(root: string, pluginName: string): Promise<string> {
+export async function ensureStore(root: string): Promise<string> {
   const skills = skillsDirOf(root)
   await mkdir(skills, { recursive: true })
-
-  const manifest = pluginManifest(root)
-  if ((await readText(manifest)) === null) {
-    await mkdir(join(root, '.claude-plugin'), { recursive: true })
-    await writeFile(
-      manifest,
-      `${JSON.stringify({ name: pluginName, version: '1.0.0', description: 'Skills kept in octopus.' }, null, 2)}\n`,
-      'utf8'
-    )
-  }
 
   return skills
 }

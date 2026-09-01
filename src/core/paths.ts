@@ -132,13 +132,16 @@ export function globalInstruction(file: string, root: string = rootDir()): strin
 }
 
 /**
- * The plugin root holding the skills every project of this installation gets.
+ * The directory holding the skills every project of this installation gets.
  *
- * A plugin rather than a loose directory because that is the one way the SDK
- * takes skills it did not discover itself, and a plugin root is a shape: a
- * manifest beside a `skills/` directory. Hence the two helpers below rather
- * than one path — the manifest and the skills are written by different code
- * and neither should spell the other's location.
+ * Handed to a session as an extra working-directory root, which is why it is a
+ * root with a `.claude/skills` inside it rather than a directory of skills:
+ * that is the shape the agent discovers skills in, and discovering them that
+ * way is what puts them under the same switch as the checkout's own.
+ *
+ * A local plugin was the obvious answer and is the wrong one, measured against
+ * a live session: a plugin's skills load, and `skillOverrides` does not touch
+ * them under any spelling of the key. See `docs/core.md`.
  */
 export function globalSkillsRoot(root: string = rootDir()): string {
   return join(root, 'skills')
@@ -149,14 +152,9 @@ export function projectSkillsRoot(projectId: ProjectId, root: string = rootDir()
   return join(projectDir(projectId, root), 'skills')
 }
 
-/** Where the skills themselves sit inside a plugin root. */
-export function skillsDirOf(pluginRoot: string): string {
-  return join(pluginRoot, 'skills')
-}
-
-/** The manifest that makes a directory a plugin the SDK will load. */
-export function pluginManifest(pluginRoot: string): string {
-  return join(pluginRoot, '.claude-plugin', 'plugin.json')
+/** Where the skills themselves sit inside such a root. */
+export function skillsDirOf(skillRoot: string): string {
+  return join(skillRoot, '.claude', 'skills')
 }
 
 /**
