@@ -49,7 +49,14 @@ import { readWorkspaceDiff, type WorkspaceDiff } from './diff.js'
 import { revertFile } from './revert.js'
 import { draftPullRequest, type DraftedPullRequest } from './pullRequestDraft.js'
 import { isListening, settlePort } from './ports.js'
-import { carriedPaths, carryInto, readCarryList, storedCarryList, writeCarryList } from './carry.js'
+import {
+  carriedFiles,
+  carryInto,
+  carryListForExport,
+  readCarryList,
+  storedCarryList,
+  writeCarryList
+} from './carry.js'
 import { applyEnvOverrides, discardIfOnlyBlock, removeEnvBlock, readWorkspaceEnv } from './env.js'
 import {
   createProfile,
@@ -986,7 +993,10 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
     const instruction = instructionKindOf(id)
     if (instruction !== undefined) return storedInstruction(instruction, project.id, dataRoot)
 
-    if (id === 'carry') return storedCarryList(project.id, dataRoot)
+    // Stripped of its sources on the way out. `.octopus/carry` is committed and
+    // cloned by everybody; where this machine keeps its `.env` is nobody else's
+    // business and would be readable for ever.
+    if (id === 'carry') return carryListForExport(await storedCarryList(project.id, dataRoot))
 
     // The project's own fields, which it always has.
     return formatRepoProject(exportedFields(project))
@@ -2045,8 +2055,9 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
         cwd,
         await sourcesIn(cwd, project),
         // The carry list, because it is what puts a gitignored file into a
-        // worktree.
-        carriedPaths(await readCarryList(project.id, dataRoot))
+        // worktree. The destinations alone: this asks what the worktree ends up
+        // holding, not where any of it was read from.
+        carriedFiles(await readCarryList(project.id, dataRoot)).map((file) => file.path)
       )
     },
 

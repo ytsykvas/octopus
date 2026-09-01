@@ -1,10 +1,17 @@
 import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
-import { tmpdir } from 'node:os'
+import { homedir, tmpdir } from 'node:os'
 import { join } from 'node:path'
 
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 
-import { carriedPaths, carryInto, carryPath, readCarryList, writeCarryList } from './carry.js'
+import {
+  carriedFiles,
+  carryInto,
+  carryListForExport,
+  carryPath,
+  readCarryList,
+  writeCarryList
+} from './carry.js'
 
 let root: string
 let repo: string
@@ -47,11 +54,11 @@ describe('readCarryList', () => {
   })
 })
 
-describe('carriedPaths', () => {
+describe('carriedFiles', () => {
   it('drops comments and blank lines', () => {
-    expect(carriedPaths('# a note\n\n.env\n  config/master.key  \n')).toEqual([
-      '.env',
-      'config/master.key'
+    expect(carriedFiles('# a note\n\n.env\n  config/master.key  \n')).toEqual([
+      { path: '.env', from: null },
+      { path: 'config/master.key', from: null }
     ])
   })
 
@@ -61,7 +68,62 @@ describe('carriedPaths', () => {
    * refused: one bad line should not stop the rest of a workspace being made.
    */
   it('drops anything that reaches outside the checkout', () => {
-    expect(carriedPaths('/etc/passwd\n../../secrets\n.env\n')).toEqual(['.env'])
+    expect(carriedFiles('/etc/passwd\n../../secrets\n.env\n')).toEqual([
+      { path: '.env', from: null }
+    ])
+  })
+
+  it('reads the source after the first equals sign', () => {
+    expect(carriedFiles('.env = ~/work/planner/.env\n')).toEqual([
+      { path: '.env', from: '~/work/planner/.env' }
+    ])
+  })
+
+  it('splits on the first equals only, because a path may contain one', () => {
+    expect(carriedFiles('.env = /tmp/a=b/.env\n')).toEqual([
+      { path: '.env', from: '/tmp/a=b/.env' }
+    ])
+  })
+
+  /*
+   * The rule that matters: the source says what is READ and never where
+   * anything lands. Widen the filter to the source and an absolute one would
+   * start deciding the destination.
+   */
+  it('checks the destination alone, not the source', () => {
+    expect(carriedFiles('../out = /tmp/x\n.env = /etc/passwd\n')).toEqual([
+      { path: '.env', from: '/etc/passwd' }
+    ])
+  })
+
+  it('treats a half-written line as having no source, or no line at all', () => {
+    expect(carriedFiles('.env =\n= /tmp/x\n')).toEqual([{ path: '.env', from: null }])
+  })
+})
+
+describe('carryListForExport', () => {
+  /*
+   * `.octopus/carry` is committed and cloned by everybody. A source is a fact
+   * about one laptop, and a path written into a repository should be assumed
+   * readable for ever.
+   */
+  it('takes the sources out, keeping the files and the comments', () => {
+    expect(carryListForExport('# a note\n\n.env = ~/work/planner/.env\nconfig/master.key\n')).toBe(
+      '# a note\n\n.env\nconfig/master.key\n'
+    )
+  })
+
+  it('leaves a list with no sources exactly as it is', () => {
+    expect(carryListForExport('.env\nconfig/master.key\n')).toBe('.env\nconfig/master.key\n')
+  })
+
+  it('keeps a comment that happens to contain an equals sign', () => {
+    expect(carryListForExport('# KEY=value lives here\n')).toBe('# KEY=value lives here\n')
+  })
+
+  // A list nobody has written is still not a setting worth committing.
+  it('answers with nothing for a list that was never written', () => {
+    expect(carryListForExport(null)).toBeNull()
   })
 })
 
@@ -104,6 +166,77 @@ describe('carryInto', () => {
     await writeCarryList('planner', 'gone.txt\n.env\n', root)
 
     await expect(carryInto('planner', repo, workspace, root)).resolves.toEqual(['.env'])
+  })
+
+  /*
+   * The failure this whole feature exists for. planner was re-added by cloning
+   * it from GitHub, and a fresh clone has no `.env` and no `config/master.key`
+   * at all — they are gitignored, so GitHub never had them. The real ones were
+   * on the same disk the whole time, in another checkout, and there was no way
+   * to say so; the workspace came up empty and silent.
+   */
+  it('copies from the source when the checkout has no such file', async () => {
+    const elsewhere = await mkdtemp(join(tmpdir(), 'octopus-other-'))
+    try {
+      await writeFile(join(elsewhere, '.env'), 'API_KEY=from-the-other-checkout\n', 'utf8')
+      await writeCarryList('planner', `.env = ${join(elsewhere, '.env')}\n`, root)
+
+      // Nothing is written into `repo`: it stands for the fresh clone.
+      await expect(carryInto('planner', repo, workspace, root)).resolves.toEqual(['.env'])
+
+      await expect(readFile(join(workspace, '.env'), 'utf8')).resolves.toBe(
+        'API_KEY=from-the-other-checkout\n'
+      )
+    } finally {
+      await rm(elsewhere, { recursive: true, force: true })
+    }
+  })
+
+  it('prefers the source over a file the checkout does have', async () => {
+    // The line says where the file comes from, and that is where it comes from.
+    // No precedence table, and nothing to be surprised by.
+    const elsewhere = await mkdtemp(join(tmpdir(), 'octopus-other-'))
+    try {
+      await writeFile(join(repo, '.env'), 'API_KEY=stale\n', 'utf8')
+      await writeFile(join(elsewhere, '.env'), 'API_KEY=wanted\n', 'utf8')
+      await writeCarryList('planner', `.env = ${join(elsewhere, '.env')}\n`, root)
+
+      await carryInto('planner', repo, workspace, root)
+
+      await expect(readFile(join(workspace, '.env'), 'utf8')).resolves.toBe('API_KEY=wanted\n')
+    } finally {
+      await rm(elsewhere, { recursive: true, force: true })
+    }
+  })
+
+  it('resolves a relative source against the checkout', async () => {
+    // Which is what a bare path already means, so it is one rule spelled three
+    // ways rather than an error nobody would read.
+    await mkdir(join(repo, 'secrets'), { recursive: true })
+    await writeFile(join(repo, 'secrets', 'env.local'), 'API_KEY=nested\n', 'utf8')
+    await writeCarryList('planner', '.env = secrets/env.local\n', root)
+
+    await carryInto('planner', repo, workspace, root)
+
+    await expect(readFile(join(workspace, '.env'), 'utf8')).resolves.toBe('API_KEY=nested\n')
+  })
+
+  it('expands a leading ~ to the home directory', async () => {
+    // `HOME` is a scratch directory for the whole suite (vitest.shared.ts), so
+    // this writes nowhere near a real one.
+    const home = homedir()
+    await mkdir(home, { recursive: true })
+    await writeFile(join(home, 'carried.env'), 'API_KEY=from-home\n', 'utf8')
+
+    try {
+      await writeCarryList('planner', '.env = ~/carried.env\n', root)
+
+      await carryInto('planner', repo, workspace, root)
+
+      await expect(readFile(join(workspace, '.env'), 'utf8')).resolves.toBe('API_KEY=from-home\n')
+    } finally {
+      await rm(join(home, 'carried.env'), { force: true })
+    }
   })
 
   it('carries nothing for a list that names nothing', async () => {

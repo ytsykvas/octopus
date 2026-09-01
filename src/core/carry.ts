@@ -9,11 +9,18 @@
  *
  * A list of paths rather than one file's contents. Contents kept here would be
  * a copy that goes stale — and it did: a snapshot taken while a `.env` pointed
- * at production kept pointing there long after the checkout had moved on. The
- * checkout is the source; this only says which parts of it travel.
+ * at production kept pointing there long after the checkout had moved on. This
+ * names files; it never holds them.
+ *
+ * The checkout is where they come from by default, and a line may say
+ * otherwise. That exists because a project added by cloning it from GitHub has
+ * a checkout with **no** gitignored file in it — they were never pushed — while
+ * the real `.env` sits in another copy of the same repository, on the same
+ * disk. A workspace then came up with nothing and said nothing about it.
  */
 
 import { constants, copyFile, mkdir, readFile, writeFile } from 'node:fs/promises'
+import { homedir } from 'node:os'
 import { dirname, isAbsolute, join, normalize } from 'node:path'
 
 import { z } from 'zod'
@@ -34,6 +41,9 @@ export const CarryListSchema = z.string().max(8_000)
 const DEFAULT_LIST = `# One path per line, relative to the project's checkout.
 # Each is copied into a new workspace unless it already has one.
 # Lines starting with # are ignored.
+#
+# A line may say where its file comes from, for a checkout that has not got it:
+#   .env = ~/another/checkout/.env
 
 .env
 `
@@ -74,20 +84,104 @@ export async function writeCarryList(
   await writeFile(path, contents, 'utf8')
 }
 
+/** One line of the list: where the file lands, and where it comes from. */
+export interface CarriedFile {
+  /** Relative to the worktree, and checked to stay inside it. */
+  readonly path: string
+  /**
+   * Where to copy it from, or null for the project's own checkout.
+   *
+   * A fact about this machine rather than about the project, which is why it
+   * never travels: `carryListForExport` takes it back out again.
+   */
+  readonly from: string | null
+}
+
 /**
- * The paths a list names, with the comments and the blank lines gone.
+ * Splits one line into where the file lands and where it comes from.
  *
- * Anything absolute or reaching outside the checkout is dropped rather than
- * refused. The list is edited by hand in a text box, and one bad line should
- * not stop the rest of a workspace being prepared — but neither should it read
- * a file the project does not contain.
+ * `.env` is the form that has always existed and means the checkout.
+ * `.env = ~/work/planner/.env` is the other one, and it exists because a
+ * checkout cloned fresh from GitHub has no gitignored file to offer — the
+ * `.env` is on the disk, in another copy of the same repository, and there was
+ * no way to say so.
+ *
+ * Split on the **first** `=` only: everything after it is one path, and a path
+ * may contain another `=`.
  */
-export function carriedPaths(list: string): string[] {
+function splitLine(line: string): CarriedFile {
+  const at = line.indexOf('=')
+  if (at === -1) return { path: line, from: null }
+
+  const from = line.slice(at + 1).trim()
+
+  return { path: line.slice(0, at).trim(), from: from === '' ? null : from }
+}
+
+/**
+ * The files a list names, with the comments and the blank lines gone.
+ *
+ * A destination reaching outside the checkout is dropped rather than refused.
+ * The list is edited by hand in a text box, and one bad line should not stop
+ * the rest of a workspace being prepared — but neither should it write a file
+ * the worktree does not contain. **That rule applies to the left side alone**,
+ * which is the half that decides where anything is written; the right side only
+ * ever says what is read.
+ */
+export function carriedFiles(list: string): CarriedFile[] {
   return list
     .split('\n')
     .map((line) => line.trim())
     .filter((line) => line !== '' && !line.startsWith('#'))
-    .filter((line) => !isAbsolute(line) && !normalize(line).startsWith('..'))
+    .map(splitLine)
+    .filter(({ path }) => path !== '' && !isAbsolute(path) && !normalize(path).startsWith('..'))
+}
+
+/**
+ * The same list with every source taken out.
+ *
+ * `.octopus/carry` is committed and read by everybody who clones the
+ * repository, and `~/work/planner/.env` is a fact about one laptop. So what
+ * travels is the list as it always was — the files, not where this machine
+ * happens to keep them.
+ *
+ * `null` stays `null`: a list nobody has written is still not a setting worth
+ * committing, which is the distinction `storedCarryList` exists to make.
+ */
+export function carryListForExport(list: string | null): string | null {
+  if (list === null) return null
+
+  return list
+    .split('\n')
+    .map((line) => {
+      const trimmed = line.trim()
+      if (trimmed === '' || trimmed.startsWith('#')) return line
+
+      const at = line.indexOf('=')
+      return at === -1 ? line : line.slice(0, at).trimEnd()
+    })
+    .join('\n')
+}
+
+/**
+ * Where one file is read from.
+ *
+ * A line with no source means the checkout, which is the whole of what this
+ * did before. A source is expanded for `~` and then used as it stands, and one
+ * that is still relative resolves against the checkout — the same thing a bare
+ * path already means, so there are three spellings and one rule rather than an
+ * error nobody would read.
+ *
+ * Only ever a *read*. Where the file lands is decided by `path` alone, which
+ * `carriedFiles` has already confined to the worktree.
+ */
+function sourcePath(source: string | null, repoPath: string, path: string): string {
+  if (source === null) return join(repoPath, path)
+
+  const expanded =
+    source === '~' || source.startsWith('~/') ? join(homedir(), source.slice(1)) : source
+
+  return isAbsolute(expanded) ? expanded : join(repoPath, expanded)
 }
 
 /**
@@ -106,13 +200,13 @@ export async function carryInto(
   workspacePath: string,
   root?: string
 ): Promise<string[]> {
-  // Every path here is relative and cannot climb out: `carriedPaths` is what
-  // guarantees it, so nothing below has to check again.
-  const list = carriedPaths(await readCarryList(projectId, root))
+  // Every destination here is relative and cannot climb out: `carriedFiles` is
+  // what guarantees it, so nothing below has to check again.
+  const list = carriedFiles(await readCarryList(projectId, root))
   const written: string[] = []
 
-  for (const path of list) {
-    const from = join(repoPath, path)
+  for (const { path, from: source } of list) {
+    const from = sourcePath(source, repoPath, path)
     const to = join(workspacePath, path)
 
     try {

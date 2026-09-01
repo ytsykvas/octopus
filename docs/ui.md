@@ -673,11 +673,18 @@ keystroke, whose answers appear under the box. The env block uses it; told on
 blur instead, a warning arrives after the attention that could act on it.
 
 **Files and Env are two sections, because they are two mechanisms.** `Files`
-names paths copied out of the checkout; `Env` holds `KEY=value` lines typed by
-hand. The split is not tidiness: the copy answers nothing for a project cloned
-from GitHub, where the gitignored files were never on GitHub to clone, and
-typing the variables is the only answer there. One editor holding both would
-have to explain why half of it does nothing for half the projects.
+names whole files to copy; `Env` holds `KEY=value` lines typed by hand. The
+split is not tidiness — one names files, the other names values, and one editor
+holding both would have to explain why half of it does nothing for half the
+projects.
+
+The reason used to be sharper and is worth correcting rather than leaving: it
+said the copy answers nothing for a project cloned from GitHub, since the
+gitignored files were never on GitHub to clone. That was true until a line could
+say **where** its file comes from. A checkout that has not got the file is now
+answerable too, as long as another copy of the repository is on the disk — which
+it usually is, and was in the case that prompted this. What stays true is that a
+fresh machine has neither, and there the variables are still the only answer.
 
 **The change count follows the work.** It used to be read when the list was —
 on create, rename, remove and first load — and never again, so the agent could

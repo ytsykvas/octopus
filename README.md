@@ -68,8 +68,10 @@ can serve at the same time, each on its own port.
 
 **The files a fresh worktree does not have.** A worktree holds what git tracks,
 so a gitignored `.env` or `config/master.key` is missing from every new one. A
-project names the files to copy in, and can add a block of `KEY=value` overrides
-on top.
+project names the files to copy in — from its own checkout, or from another one
+on the same disk, which is the answer when the project was cloned from GitHub and
+its checkout has no gitignored file to give. On top of that it can add a block of
+`KEY=value` overrides.
 
 **Settings that survive the machine.** A project's scripts, carried files and
 instructions can live in `~/.octopus`, which goes when the disk does — or in the

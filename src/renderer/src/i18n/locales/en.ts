@@ -163,7 +163,7 @@ export const en = {
       'Runs in a new workspace: install dependencies, build what has to be built, anything a fresh checkout needs. Saved as setup.sh.',
     files: 'Files carried into a workspace',
     filesHint:
-      'One path per line, relative to the repository. A worktree holds what git tracks and nothing else, so gitignored files — an .env, a config/master.key — have to be brought. Copied at creation and again before a run; a file already there is never overwritten.',
+      'One path per line, relative to the repository. A worktree holds what git tracks and nothing else, so gitignored files — an .env, a config/master.key — have to be brought. Copied at creation and again before a run; a file already there is never overwritten. Add “= /somewhere/else/.env” to take one from another checkout instead — which is the answer for a project cloned from GitHub, where the checkout has no gitignored file to give. Those sources stay on this machine and are left out of the copy in the repository.',
     archiveScript: 'Cleanup script',
     archiveScriptHint:
       'Runs when a workspace is removed, in its directory, while it still exists. Use it to take back what the build script gave out — a database or a container named after the workspace. Nothing it does can stop the removal. Saved as archive.sh.',

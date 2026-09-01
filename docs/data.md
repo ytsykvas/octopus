@@ -492,8 +492,38 @@ before a run so a workspace that predates a list entry picks it up.
 
 **A list of paths, not the contents.** Keeping contents here would be a copy
 that goes stale, and it did: a `.env` snapshot taken while it pointed at
-production kept pointing there long after the checkout had moved on. The
-checkout is the source; the list only says which parts of it travel.
+production kept pointing there long after the checkout had moved on. The list
+names files; it never holds them.
+
+**A line may say where its file comes from**, after an `=`:
+
+```
+.env = ~/work/planner/.env
+config/master.key = ~/work/planner/config/master.key
+```
+
+Written for the case that has no other answer. A project added by **cloning it
+from GitHub** has a checkout with no gitignored file in it at all — they were
+never pushed — while the real `.env` is on the same disk, in another copy of the
+same repository. Before this the workspace simply came up without it and said
+nothing.
+
+The split is on the **first** `=`, since a path may contain another. A source is
+expanded for `~` and used as it stands; one that is still relative resolves
+against the checkout, which is what a bare path already means. A line with a
+source uses it and does not fall back — the line says where the file comes from.
+
+The confinement rule applies to the **left side alone**. That half decides where
+a file is written and stays inside the worktree; the right half only ever says
+what is read, so an absolute path there is the ordinary case rather than an
+escape.
+
+**Sources do not travel.** `.octopus/carry` is committed and cloned by everybody,
+and `~/work/planner/.env` is a fact about one laptop — so `carryListForExport`
+strips every source on the way out and the repository receives the list it always
+did. The cost is worth knowing: importing the `carry` item replaces the local
+list, and the sources in it go too. The Repository panel shows every byte of what
+it would write first, so it is visible rather than silent.
 
 It **never overwrites** — `COPYFILE_EXCL`, so a file edited inside the worktree
 survives and there is no window between a check and a write. A path the checkout
