@@ -56,16 +56,17 @@ written down there before the import is written.
 
 **Skills** (`.claude/skills/`) load automatically when relevant:
 
-| Skill             | Trigger                                                                |
-| ----------------- | ---------------------------------------------------------------------- |
-| `core-module`     | automatically when touching `src/core/**`                              |
-| `ui-component`    | automatically when touching `src/renderer/**`                          |
-| `agent-sdk`       | when integrating with the Claude Agent SDK                             |
-| `conductor-study` | when Conductor comes up, or before building a feature it already ships |
-| `docs-check`      | when docs may have fallen behind the code                              |
-| `test-check`      | when the suite may have gaps coverage cannot see                       |
-| `/check`          | manual — quality gate with plain explanations                          |
-| `/ship`           | manual — gate plus a conventional commit                               |
+| Skill               | Trigger                                                                |
+| ------------------- | ---------------------------------------------------------------------- |
+| `core-module`       | automatically when touching `src/core/**`                              |
+| `ui-component`      | automatically when touching `src/renderer/**`                          |
+| `agent-sdk`         | when integrating with the Claude Agent SDK                             |
+| `conductor-study`   | when Conductor comes up, or before building a feature it already ships |
+| `workspace-scripts` | when a project's build, server or cleanup script needs writing         |
+| `docs-check`        | when docs may have fallen behind the code                              |
+| `test-check`        | when the suite may have gaps coverage cannot see                       |
+| `/check`            | manual — quality gate with plain explanations                          |
+| `/ship`             | manual — gate plus a conventional commit                               |
 
 **Subagent** `octopus-reviewer` reviews against this project's standards.
 
