@@ -980,9 +980,7 @@ export const en = {
     fromUrl: 'From a link',
     fromUrlNote: 'An https address answering with one SKILL.md. Nothing beside it is fetched.',
     url: 'Address',
-    importAction: 'Import',
-    /* Shown once the document has been read, before anything is written. */
-    found: 'Found “{{name}}”'
+    importAction: 'Import'
   },
 
   trust: {

@@ -6596,21 +6596,51 @@ describe('the agent chat', () => {
       ).resolves.toMatchObject({ name: 'review' })
     })
 
+    /*
+     * A skill written while a conversation is open would otherwise not exist
+     * for it: the session listed the directories when it started. Asserted by
+     * counting the reloads rather than by the calls resolving — which they do
+     * whether or not anything is told.
+     */
     it('tells a running conversation to look at the directories again after a write', async () => {
       const { service, workspaceId } = await withWorkspace()
       const chat = await service.openChat(workspaceId)
       await service.sendToChat(chat.id, 'hello')
 
-      await expect(
-        service.saveStoredSkill({ kind: 'global' }, 'review', { kind: 'raw', text: DOCUMENT })
-      ).resolves.toBeDefined()
-      await expect(
-        service.importStoredSkill(
-          { kind: 'global' },
-          { kind: 'text', text: DOCUMENT.replace('review', 'second') }
-        )
-      ).resolves.toBeDefined()
-      await expect(service.removeStoredSkill({ kind: 'global' }, 'review')).resolves.toBeUndefined()
+      let reloads = 0
+      skillReload = () => {
+        reloads += 1
+        return Promise.resolve({ skills: [] })
+      }
+
+      await service.saveStoredSkill({ kind: 'global' }, 'review', { kind: 'raw', text: DOCUMENT })
+      expect(reloads).toBe(1)
+
+      await service.importStoredSkill(
+        { kind: 'global' },
+        { kind: 'text', text: DOCUMENT.replace('review', 'second') }
+      )
+      expect(reloads).toBe(2)
+
+      await service.removeStoredSkill({ kind: 'global' }, 'review')
+      expect(reloads).toBe(3)
+    })
+
+    // Nothing running, nothing to tell. A write with no session should not be
+    // reaching for one.
+    it('tells nothing when no conversation is running', async () => {
+      const { service } = await withWorkspace()
+
+      let reloads = 0
+      skillReload = () => {
+        reloads += 1
+        return Promise.resolve({ skills: [] })
+      }
+
+      await service.saveStoredSkill({ kind: 'global' }, 'review', { kind: 'raw', text: DOCUMENT })
+
+      expect(reloads).toBe(0)
+      expect(agents).toHaveLength(0)
     })
   })
 

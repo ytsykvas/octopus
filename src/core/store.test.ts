@@ -35,6 +35,7 @@ import {
   updateWorkspace,
   type Workspace,
   workspacesOfProject,
+  type ProjectPatch,
   workspaceStatusFrom
 } from './store.js'
 
@@ -317,6 +318,46 @@ describe('projects', () => {
     const updated = updateProject(withProject, 'planner', { baseBranch: 'develop' })
     expect(updated.projects[0]?.name).toBe('planner')
   })
+
+  /*
+   * Every field the patch may carry, asserted to actually land.
+   *
+   * The bug this exists for has happened twice, with the same shape both
+   * times: `updateProject` spreads its fields one by one — `...(name !==
+   * undefined && { name })` — which is what stops a patch writing back stale
+   * copies of what it does not carry, and pays for it by silently dropping a
+   * field somebody added to the type and not to the spread. The colour picker
+   * looked inert for a week for exactly this.
+   *
+   * A `Record` over the patch's own keys rather than a list, and that is the
+   * whole point: a field added to `ProjectPatchSchema` fails to **compile**
+   * here until it is given a value, and then fails to pass until the spread
+   * applies it. Written as a list it could only ever hold what somebody
+   * remembered to add — the same reasoning as `CODE_PARAMETERS` in
+   * `useErrorMessage.test.tsx`.
+   */
+  const CHANGES: { readonly [K in keyof Required<ProjectPatch>]: NonNullable<ProjectPatch[K]> } = {
+    name: 'Weekly planner',
+    baseBranch: 'develop',
+    color: 'teal',
+    icon: 'rocket',
+    envFile: 'config/.env',
+    approvedSettings: ['a-digest'],
+    approvedScripts: ['another-digest'],
+    envProfile: 'prod',
+    trustRepoScripts: true,
+    disabledSkillDefaults: ['review'],
+    repoPath: '/repos/moved'
+  }
+
+  it.each(Object.keys(CHANGES) as (keyof typeof CHANGES)[])(
+    'applies %s rather than dropping it on the way through',
+    (field) => {
+      const updated = updateProject(withProject, 'planner', { [field]: CHANGES[field] })
+
+      expect(updated.projects[0]?.[field]).toEqual(CHANGES[field])
+    }
+  )
 
   // The patch type grew a field and the update forgot to apply it, so the
   // colour picker looked like it did nothing at all.

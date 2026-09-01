@@ -814,8 +814,7 @@ export const uk: Translation = {
     fromUrl: 'За посиланням',
     fromUrlNote: 'Адреса https, що віддає один SKILL.md. Нічого поруч не завантажується.',
     url: 'Адреса',
-    importAction: 'Імпортувати',
-    found: 'Знайдено «{{name}}»'
+    importAction: 'Імпортувати'
   },
 
   trust: {
