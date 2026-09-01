@@ -25,6 +25,14 @@ import type { Workspace } from '@core/store.js'
 import type { RemoveOptions, WorkspaceView } from '@core/workspaces.js'
 import type { InstructionKind } from '@core/instructions.js'
 import type { ScriptKind } from '@core/scripts.js'
+import type {
+  SkillDocument,
+  SkillEntry,
+  SkillImport,
+  SkillListing,
+  SkillSave
+} from '@core/skills.js'
+import type { SkillStore } from '@core/skillNames.js'
 import type { SubscriptionUsage } from '@core/agent.js'
 import type { InstructionSource } from '@core/instructionSources.js'
 import type { RepoConfigView, RepoItemId } from '@core/repoConfig.js'
@@ -457,7 +465,44 @@ const api = {
   dialog: {
     /** Opens a directory picker; `null` means the user cancelled. */
     pickDirectory: (title: string): Promise<Result<string | null>> =>
-      ipcRenderer.invoke('dialog:pickDirectory', title) as Promise<Result<string | null>>
+      ipcRenderer.invoke('dialog:pickDirectory', title) as Promise<Result<string | null>>,
+
+    /** The same for a skill, which may be a folder or a lone `SKILL.md`. */
+    pickSkill: (title: string): Promise<Result<string | null>> =>
+      ipcRenderer.invoke('dialog:pickSkill', title) as Promise<Result<string | null>>
+  },
+
+  skills: {
+    /** What one of the two stores holds, for a settings section. */
+    list: (store: SkillStore): Promise<Result<SkillEntry[]>> =>
+      ipcRenderer.invoke('skills:list', store) as Promise<Result<SkillEntry[]>>,
+
+    /** One of them opened: the form's two fields and the raw document. */
+    read: (store: SkillStore, name: string): Promise<Result<SkillDocument>> =>
+      ipcRenderer.invoke('skills:read', store, name) as Promise<Result<SkillDocument>>,
+
+    save: (store: SkillStore, name: string, save: SkillSave): Promise<Result<SkillEntry>> =>
+      ipcRenderer.invoke('skills:save', store, name, save) as Promise<Result<SkillEntry>>,
+
+    remove: (store: SkillStore, name: string): Promise<Result<void>> =>
+      ipcRenderer.invoke('skills:remove', store, name) as Promise<Result<void>>,
+
+    /** Brings in a skill written elsewhere: on disk, pasted, or downloaded. */
+    import: (store: SkillStore, request: SkillImport): Promise<Result<SkillEntry>> =>
+      ipcRenderer.invoke('skills:import', store, request) as Promise<Result<SkillEntry>>,
+
+    /**
+     * Every skill this conversation could use, and whether it is on.
+     *
+     * Resolved in core: three sources and two lists of defaults are more than
+     * a window should have to ask four questions to work out.
+     */
+    forChat: (chatId: string): Promise<Result<SkillListing[]>> =>
+      ipcRenderer.invoke('skills:forChat', chatId) as Promise<Result<SkillListing[]>>,
+
+    /** Switches one skill for one conversation, a running session included. */
+    setForChat: (chatId: string, key: string, enabled: boolean): Promise<Result<void>> =>
+      ipcRenderer.invoke('skills:setForChat', chatId, key, enabled) as Promise<Result<void>>
   },
 
   settings: {

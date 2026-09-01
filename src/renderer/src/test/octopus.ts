@@ -126,7 +126,19 @@ export function installOctopusStub(): Api {
       open: vi.fn(() => ok(undefined))
     },
     dialog: {
-      pickDirectory: vi.fn(() => ok(null))
+      pickDirectory: vi.fn(() => ok(null)),
+      pickSkill: vi.fn(() => ok(null))
+    },
+    skills: {
+      list: vi.fn(() => ok([])),
+      read: vi.fn(() =>
+        ok({ name: 'review', description: '', body: '', raw: '', path: '/skills/review' })
+      ),
+      save: vi.fn(() => ok({ name: 'review', description: '', path: '/skills/review' })),
+      remove: vi.fn(() => ok(undefined)),
+      import: vi.fn(() => ok({ name: 'review', description: '', path: '/skills/review' })),
+      forChat: vi.fn(() => ok([])),
+      setForChat: vi.fn(() => ok(undefined))
     },
     settings: {
       onOpen: vi.fn(subscription)

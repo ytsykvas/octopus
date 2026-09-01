@@ -42,6 +42,8 @@ import { QuestionAnswerSchema } from '../core/questions.js'
 import { RepoItemIdsSchema } from '../core/repoConfig.js'
 import { RevertPathSchema } from '../core/revert.js'
 import { ScriptBodySchema, ScriptKindSchema } from '../core/scripts.js'
+import { SkillImportSchema, SkillSaveSchema } from '../core/skills.js'
+import { SkillNameSchema, SkillStoreSchema } from '../core/skillNames.js'
 import type {
   ChatEvent,
   ChatStatusEvent,
@@ -390,6 +392,58 @@ export function registerIpc(
     attempt(() => service.readEffectiveInstruction(workspaceId, InstructionKindSchema.parse(kind)))
   )
 
+  /*
+   * Every skill argument is parsed rather than trusted, and the name most of
+   * all: it becomes a directory under `~/.octopus` and reaches a recursive
+   * delete, so `SkillNameSchema` is the boundary that refuses `..` before any
+   * of it is a path.
+   */
+  host.handle('skills:list', (_event, store: unknown) =>
+    attempt(() => service.listSkills(SkillStoreSchema.parse(store)))
+  )
+
+  host.handle('skills:read', (_event, store: unknown, name: unknown) =>
+    attempt(() =>
+      service.readStoredSkill(SkillStoreSchema.parse(store), SkillNameSchema.parse(name))
+    )
+  )
+
+  host.handle('skills:save', (_event, store: unknown, name: unknown, save: unknown) =>
+    attempt(() =>
+      service.saveStoredSkill(
+        SkillStoreSchema.parse(store),
+        SkillNameSchema.parse(name),
+        SkillSaveSchema.parse(save)
+      )
+    )
+  )
+
+  host.handle('skills:remove', (_event, store: unknown, name: unknown) =>
+    attempt(() =>
+      service.removeStoredSkill(SkillStoreSchema.parse(store), SkillNameSchema.parse(name))
+    )
+  )
+
+  host.handle('skills:import', (_event, store: unknown, request: unknown) =>
+    attempt(() =>
+      service.importStoredSkill(SkillStoreSchema.parse(store), SkillImportSchema.parse(request))
+    )
+  )
+
+  host.handle('skills:forChat', (_event, chatId: string) =>
+    attempt(() => service.skillsForChat(chatId))
+  )
+
+  host.handle('skills:setForChat', (_event, chatId: string, key: unknown, enabled: unknown) =>
+    attempt(() =>
+      service.setChatSkill(
+        chatId,
+        z.string().min(1).max(200).parse(key),
+        z.boolean().parse(enabled)
+      )
+    )
+  )
+
   host.handle('projects:remove', (_event, projectId: string) =>
     attempt(() => service.removeProjectById(projectId))
   )
@@ -597,6 +651,27 @@ export function registerIpc(
   // A press of the block in the sidebar, which is somebody asking — nothing
   // fills it on its own. A control request: no turn, no tokens.
   host.handle('chats:refreshSubscription', () => attempt(() => service.refreshSubscriptionUsage()))
+
+  /*
+   * A skill arrives as either shape, so the picker offers both.
+   *
+   * One that carries references or scripts is a folder; one copied out of a
+   * README is a lone `SKILL.md`. Refusing either would send the user off to
+   * rearrange files before importing them.
+   */
+  host.handle('dialog:pickSkill', async (event, title: string) => {
+    const window = host.windowFor(event)
+    const options: Electron.OpenDialogOptions = {
+      title,
+      properties: ['openFile', 'openDirectory'],
+      filters: [{ name: 'SKILL.md', extensions: ['md'] }]
+    }
+
+    const picked = await host.showOpenDialog(options, window ?? undefined)
+
+    const [chosen] = picked.filePaths
+    return { ok: true, value: picked.canceled ? null : (chosen ?? null) }
+  })
 
   // Choosing a directory needs Electron's dialog, so it lives here.
   host.handle('dialog:pickDirectory', async (event, title: string) => {

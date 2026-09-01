@@ -72,6 +72,7 @@ describe('the exposed bridge', () => {
       'files',
       'projects',
       'settings',
+      'skills',
       'terminal',
       'theme',
       'workspaces'
@@ -341,6 +342,43 @@ describe('channel names', () => {
       'dialog.pickDirectory',
       () => method('dialog', 'pickDirectory')('t' as never),
       'dialog:pickDirectory'
+    ],
+    ['dialog.pickSkill', () => method('dialog', 'pickSkill')('t' as never), 'dialog:pickSkill'],
+    ['skills.list', () => method('skills', 'list')({ kind: 'global' } as never), 'skills:list'],
+    [
+      'skills.read',
+      () => method('skills', 'read')({ kind: 'global' } as never, 'review' as never),
+      'skills:read'
+    ],
+    [
+      'skills.save',
+      () =>
+        method('skills', 'save')(
+          { kind: 'global' } as never,
+          'review' as never,
+          { kind: 'raw', text: '' } as never
+        ),
+      'skills:save'
+    ],
+    [
+      'skills.remove',
+      () => method('skills', 'remove')({ kind: 'global' } as never, 'review' as never),
+      'skills:remove'
+    ],
+    [
+      'skills.import',
+      () =>
+        method('skills', 'import')(
+          { kind: 'global' } as never,
+          { kind: 'text', text: '' } as never
+        ),
+      'skills:import'
+    ],
+    ['skills.forChat', () => method('skills', 'forChat')('c' as never), 'skills:forChat'],
+    [
+      'skills.setForChat',
+      () => method('skills', 'setForChat')('c' as never, 'k' as never, false as never),
+      'skills:setForChat'
     ],
     ['terminal.create', () => method('terminal', 'create')({} as never), 'terminal:create']
   ]

@@ -4,6 +4,8 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { promisify } from 'node:util'
 
+import type { OpenDialogOptions } from 'electron'
+
 import type { Query, SDKMessage } from '@anthropic-ai/claude-agent-sdk'
 import { afterEach, beforeEach, describe, expect, it, type Mock, vi } from 'vitest'
 
@@ -58,6 +60,8 @@ interface Harness {
   prefersDark: boolean
   /** What the system says about the next open; empty means it worked. */
   openRefusal: string
+  /** What each picker was opened with, so a test can name the shapes it takes. */
+  dialogOptions: OpenDialogOptions[]
   /** null once the window a call came from has closed, as Electron reports it. */
   window: unknown
 }
@@ -69,6 +73,7 @@ function harness(): Harness {
   const statusEvents: WorkspaceStatusEvent[] = []
   const chatStatusEvents: ChatStatusEvent[] = []
   const opened: string[] = []
+  const dialogOptions: OpenDialogOptions[] = []
 
   const state: Harness = {
     handlers,
@@ -77,6 +82,7 @@ function harness(): Harness {
     statusEvents,
     chatStatusEvents,
     opened,
+    dialogOptions,
     picked: { canceled: true, filePaths: [] },
     prefersDark: false,
     openRefusal: '',
@@ -85,7 +91,10 @@ function harness(): Harness {
       handle: (channel, handler) => {
         handlers.set(channel, handler as (event: unknown, ...args: unknown[]) => unknown)
       },
-      showOpenDialog: () => Promise.resolve(state.picked),
+      showOpenDialog: (options) => {
+        dialogOptions.push(options)
+        return Promise.resolve(state.picked)
+      },
       windowFor: () => state.window,
       prefersDark: () => state.prefersDark,
       broadcastTheme: (theme) => broadcasts.push(theme),
@@ -299,6 +308,14 @@ describe('channel table', () => {
     'instructions:read',
     'instructions:save',
     'instructions:effective',
+    'skills:list',
+    'skills:read',
+    'skills:save',
+    'skills:remove',
+    'skills:import',
+    'skills:forChat',
+    'skills:setForChat',
+    'dialog:pickSkill',
     'workspaces:list',
     'workspaces:create',
     'workspaces:rename',
@@ -534,6 +551,99 @@ describe('failures come back as results', () => {
   })
 })
 
+describe('skills', () => {
+  const DOCUMENT = '---\nname: review\ndescription: When reviewing.\n---\n\n# Review\n'
+
+  it('writes, lists, opens and removes a skill', async () => {
+    const store = { kind: 'global' }
+
+    await expect(
+      invoke('skills:save', store, 'review', { kind: 'raw', text: DOCUMENT })
+    ).resolves.toMatchObject({ ok: true, value: { name: 'review' } })
+
+    await expect(invoke('skills:list', store)).resolves.toMatchObject({
+      ok: true,
+      value: [{ name: 'review', description: 'When reviewing.' }]
+    })
+
+    await expect(invoke('skills:read', store, 'review')).resolves.toMatchObject({
+      ok: true,
+      value: { body: '# Review\n' }
+    })
+
+    await expect(invoke('skills:remove', store, 'review')).resolves.toMatchObject({ ok: true })
+    await expect(invoke('skills:list', store)).resolves.toMatchObject({ ok: true, value: [] })
+  })
+
+  it('imports a document handed over as text', async () => {
+    await expect(
+      invoke('skills:import', { kind: 'global' }, { kind: 'text', text: DOCUMENT })
+    ).resolves.toMatchObject({ ok: true, value: { name: 'review' } })
+  })
+
+  /*
+   * The name becomes a directory under `~/.octopus` and reaches a recursive
+   * delete, so it is refused here rather than anywhere further in. Types are
+   * gone by this point: a renderer sending this is the case the parse exists
+   * for.
+   */
+  it('refuses a name that would name a directory somewhere else', async () => {
+    for (const name of ['../escape', 'a/b', '..']) {
+      await expect(invoke('skills:read', { kind: 'global' }, name)).resolves.toMatchObject({
+        ok: false
+      })
+      await expect(invoke('skills:remove', { kind: 'global' }, name)).resolves.toMatchObject({
+        ok: false
+      })
+    }
+  })
+
+  it('refuses a store that is neither of the two', async () => {
+    await expect(invoke('skills:list', { kind: 'somewhere' })).resolves.toMatchObject({
+      ok: false
+    })
+    await expect(invoke('skills:list', 'global')).resolves.toMatchObject({ ok: false })
+  })
+
+  it('refuses a save that is neither shape, and an import that is none of the three', async () => {
+    await expect(
+      invoke('skills:save', { kind: 'global' }, 'review', { kind: 'sideways', text: '' })
+    ).resolves.toMatchObject({ ok: false })
+    await expect(
+      invoke('skills:import', { kind: 'global' }, { kind: 'sideways' })
+    ).resolves.toMatchObject({ ok: false })
+  })
+
+  it("carries a conversation's list across, and switches one of them", async () => {
+    const projectId = await addProject('skilled')
+    const workspace = await createWorkspace(projectId)
+    await invoke('skills:save', { kind: 'global' }, 'review', { kind: 'raw', text: DOCUMENT })
+
+    const opened = (await invoke('chats:open', workspace.id)) as Result<{ id: string }>
+    if (!opened.ok) throw new Error(opened.error)
+
+    await expect(invoke('skills:forChat', opened.value.id)).resolves.toMatchObject({
+      ok: true,
+      value: [{ key: 'octopus:review', enabled: true }]
+    })
+
+    await expect(
+      invoke('skills:setForChat', opened.value.id, 'octopus:review', false)
+    ).resolves.toMatchObject({ ok: true })
+
+    await expect(invoke('skills:forChat', opened.value.id)).resolves.toMatchObject({
+      ok: true,
+      value: [{ key: 'octopus:review', enabled: false }]
+    })
+  })
+
+  it('refuses a switch whose answer is not a yes or a no', async () => {
+    await expect(invoke('skills:setForChat', 'c', 'octopus:review', 'yes')).resolves.toMatchObject({
+      ok: false
+    })
+  })
+})
+
 describe('directory pickers', () => {
   it('reports null when the picker is cancelled, which is not an error', async () => {
     bench.picked = { canceled: true, filePaths: [] }
@@ -559,6 +669,34 @@ describe('directory pickers', () => {
       ok: true,
       value: null
     })
+  })
+
+  /*
+   * A skill arrives as either shape — a folder when it carries references, a
+   * lone `SKILL.md` when it was copied out of a README — so the picker takes
+   * both rather than sending the user off to rearrange files first.
+   */
+  it('lets a skill be picked as a folder or as a file', async () => {
+    bench.picked = { canceled: false, filePaths: ['/tmp/skill'] }
+
+    await expect(invoke('dialog:pickSkill', 'Pick')).resolves.toEqual({
+      ok: true,
+      value: '/tmp/skill'
+    })
+    expect(bench.dialogOptions.at(-1)?.properties).toEqual(['openFile', 'openDirectory'])
+  })
+
+  it('reports null when the skill picker is cancelled', async () => {
+    bench.picked = { canceled: true, filePaths: [] }
+
+    await expect(invoke('dialog:pickSkill', 'Pick')).resolves.toEqual({ ok: true, value: null })
+  })
+
+  it('opens the skill picker unparented when the window has closed', async () => {
+    bench.window = null
+    bench.picked = { canceled: false, filePaths: [] }
+
+    await expect(invoke('dialog:pickSkill', 'Pick')).resolves.toEqual({ ok: true, value: null })
   })
 
   // The window can be gone by the time the call lands; the dialog then opens
