@@ -26,10 +26,22 @@ service of its own — so most of the usual surface does not exist. What does:
   they name, and shows them once before any of it is believed. A way to get
   settings or a hook honoured without that prompt is the most serious bug this
   project can have.
+- **A repository can supply the shell the Run button executes.** A checkout
+  carrying `.octopus/scripts/` or a `.conductor/` decides what runs, ahead of
+  anything configured in the app — so a `git pull` can change it.
+  `src/core/repoSource.ts` digests what the repository supplies and shows every
+  version once before it runs; a project can be marked trusted, which turns that
+  off deliberately and per project. A way to get a repository's script executed
+  without either — an approval that survives the script changing, a path that
+  resolves outside the checkout, a source that skips the digest — is as serious
+  as the item above, and for the same reason.
 - **Anything reaching a process argument.** External commands go through
-  `execFile`, never a shell, and values crossing IPC are parsed with zod at the
-  boundary. A path that reaches an argument unvalidated — branch names and
-  project ids come from repository directory names — is worth reporting.
+  `execFile` with an argument array, and values crossing IPC are parsed with zod
+  at the boundary. A path that reaches an argument unvalidated — branch names
+  and project ids come from repository directory names — is worth reporting. The
+  one place a string is handed to a shell on purpose is a terminal's
+  `commandLine`, which has to reach `zsh -i -c` unquoted to be a command line at
+  all; everything about who may write one is the item above.
 - **Files written outside `~/.octopus`, the worktree, and `.octopus/` inside a
   project's checkout.** Those three are the whole of what the app is allowed to
   touch. The third is the narrowest and the newest: exporting a project's

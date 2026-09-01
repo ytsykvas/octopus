@@ -374,9 +374,15 @@ export function addProject(state: State, project: Project): State {
 /**
  * The parts of a project a user may change after it is added.
  *
- * `id` and `repoPath` are absent on purpose: workspaces and on-disk paths are
- * keyed by the id, and the repository is not ours to move. `branchPrefix`
- * belongs to the config, which is shared across projects.
+ * `id` is absent on purpose: workspaces and on-disk paths are keyed by it, so a
+ * project that could be renamed would leave every one of them pointing at a
+ * directory nobody writes to any more. `branchPrefix` belongs to the config,
+ * which is shared across projects.
+ *
+ * `repoPath` **is** here, and was not at first. A checkout moves — a laptop is
+ * replaced, a directory is renamed — and a project whose path is wrong is a
+ * project that has to be removed and added again, losing its workspaces along
+ * with it.
  */
 export const ProjectPatchSchema = ProjectSchema.pick({
   name: true,

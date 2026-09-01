@@ -13,18 +13,27 @@ Coverage here is 100%, enforced. That is the floor, not the goal: see
 
 Nothing but zod behind them, so a **value** can cross into the window.
 
-| Module                                     | What it decides                                                         |
-| ------------------------------------------ | ----------------------------------------------------------------------- |
-| [`branches.ts`](../src/core/branches.ts)   | how a branch name is shown — `origin/` is noise                         |
-| [`colors.ts`](../src/core/colors.ts)       | the project palette, and which colour a new project gets                |
-| [`initials.ts`](../src/core/initials.ts)   | the two characters on a project tab                                     |
-| [`icons.ts`](../src/core/icons.ts)         | the icons a project may be marked with instead                          |
-| [`chats.ts`](../src/core/chats.ts)         | what a chat is, and how much it may do without asking                   |
-| [`events.ts`](../src/core/events.ts)       | `AgentEvent` — the only shape the UI sees of the SDK                    |
-| [`questions.ts`](../src/core/questions.ts) | the questions the agent asks, and how an answer reaches it              |
-| [`usage.ts`](../src/core/usage.ts)         | what `/usage` answers, narrowed from a response wider than its own type |
-| [`names.ts`](../src/core/names.ts)         | workspace names, drawn at random from 256                               |
-| [`types.ts`](../src/core/types.ts)         | shared identifiers                                                      |
+| Module                                                     | What it decides                                                             |
+| ---------------------------------------------------------- | --------------------------------------------------------------------------- |
+| [`branches.ts`](../src/core/branches.ts)                   | how a branch name is shown — `origin/` is noise                             |
+| [`colors.ts`](../src/core/colors.ts)                       | the project palette, and which colour a new project gets                    |
+| [`initials.ts`](../src/core/initials.ts)                   | the two characters on a project tab                                         |
+| [`icons.ts`](../src/core/icons.ts)                         | the icons a project may be marked with instead                              |
+| [`chats.ts`](../src/core/chats.ts)                         | what a chat is, and how much it may do without asking                       |
+| [`events.ts`](../src/core/events.ts)                       | `AgentEvent` — the only shape the UI sees of the SDK                        |
+| [`questions.ts`](../src/core/questions.ts)                 | the questions the agent asks, and how an answer reaches it                  |
+| [`usage.ts`](../src/core/usage.ts)                         | what `/usage` answers, narrowed from a response wider than its own type     |
+| [`names.ts`](../src/core/names.ts)                         | workspace names, drawn at random from 256                                   |
+| [`types.ts`](../src/core/types.ts)                         | shared identifiers                                                          |
+| [`pullRequestShapes.ts`](../src/core/pullRequestShapes.ts) | what a pull request, its checks and its review threads look like            |
+| [`envBlock.ts`](../src/core/envBlock.ts)                   | the block of variables written into a workspace, and what is wrong with one |
+| [`scriptEnv.ts`](../src/core/scriptEnv.ts)                 | the variables a script is given, and the three kinds of script there are    |
+
+The last is the one that has to be **kept** pure. `SCRIPT_KINDS` began life in
+`repoSource.ts`, which reaches `node:fs` — importing it into the window passed
+every check and broke the app at runtime, the second time this project has made
+exactly that mistake. A constant the renderer needs belongs in a module with no
+Node imports, rather than being imported out of one that has them.
 
 ### Storage
 
@@ -71,7 +80,7 @@ Nothing but zod behind them, so a **value** can cross into the window.
 | [`env.ts`](../src/core/env.ts)                               | the files: a project's block on disk, and writing it into a workspace                                                                                                                                                                                                               |
 | [`envBlock.ts`](../src/core/envBlock.ts)                     | the block as text — checked and filled in. No Node imports: the renderer checks a block as it is typed                                                                                                                                                                              |
 | [`ports.ts`](../src/core/ports.ts)                           | which block of ten a workspace gets, and whether anything is already answering there                                                                                                                                                                                                |
-| [`instructions.ts`](../src/core/instructions.ts)             | prose handed to the agent, per project and for the installation; `effectiveInstruction` is the order between them                                                                                                                                                                   |
+| [`instructions.ts`](../src/core/instructions.ts)             | prose handed to the agent, per project and for the installation; `effectiveInstruction` is the order between those two, with `repoSource.ts` supplying the layer above both                                                                                                         |
 | [`instructionSources.ts`](../src/core/instructionSources.ts) | what a checkout offers the agent, and which of it the current `settingSources` actually loads                                                                                                                                                                                       |
 | [`repoTrust.ts`](../src/core/repoTrust.ts)                   | what a checkout can make the agent do before anybody has looked at it, as a digest of the settings and the hook scripts they name                                                                                                                                                   |
 | [`agent.ts`](../src/core/agent.ts)                           | the Agent SDK: session lifecycle and event mapping                                                                                                                                                                                                                                  |
@@ -617,8 +626,10 @@ the code, deliberately. The paths cannot vary, so a runtime `if` guarding them
 is a branch no input reaches — a line nobody can exercise and therefore nobody
 should trust. What varies is the id, and that is checked where it arrives.
 
-Nothing from `.octopus/` is read while the app works, which is the other half of
-the same decision: [repo-config.md](repo-config.md) has the reasoning.
+`.octopus/` is read while the app works — it is where a script is looked for
+first — which is why the same guard applies to every path assembled from it:
+[repo-config.md](repo-config.md) has the chain, and `repoSource.ts` the gate in
+front of it.
 
 ### Errors are not swallowed
 

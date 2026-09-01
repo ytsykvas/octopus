@@ -597,12 +597,21 @@ with one name are ambiguous to anything reading the pane aloud.
 is missing. The moment anyone notices an env is missing is a run that could not
 find it, and by then the empty state that might have carried the button is gone.
 It is a **sibling** of the fold control rather than a child of it, so reaching
-for the env cannot put the build away. It is a menu rather than a button because there are
-three answers and they are genuinely different: the variables are typed, the
-files are copied, and showing this workspace's env is not an edit at all. A
-single button could only ever reach one of them, and for a project cloned from
-GitHub that was reliably the wrong one — nothing gitignored was ever on GitHub
-to copy.
+for the env cannot put the build away. It is a menu rather than a button because
+the answers are genuinely different in kind: the variables are typed, the files
+are copied, showing this workspace's env is not an edit at all, and the set of
+variables this workspace runs with is a choice among several. A single button
+could only ever reach one of them, and for a project cloned from GitHub that was
+reliably the wrong one — nothing gitignored was ever on GitHub to copy.
+
+**Which set it runs with is on that menu too**, listing the project's named sets
+with the workspace's own marked. The project's choice is the default and
+`Follow the project` is a real entry rather than the absence of a choice, so a
+workspace can be put back on the project's set after being pinned. Choosing one
+while the server is up says so: the header turns the label to warning and the
+pane says the server is still holding the old values, because a header that
+changed silently would be the failure the whole feature exists to prevent,
+pointing the other way.
 
 The third is disabled with no workspace selected. It was not, and the dialog it
 asks for is rendered behind a workspace check — so the click was lost and the
@@ -624,6 +633,32 @@ except reality.
 
 The Env section names the file before the block, because the file is the
 question a project answers once and the block is the one it keeps editing.
+
+### What a repository is allowed to run
+
+**The Scripts tab shows the panel when there is something to read.** A checkout
+supplying its own scripts has them listed there — grouped by the file they came
+from, since all three of Conductor's live in one `settings.toml` and naming it
+three times reads as three files — with every byte of what would run, and `Run`
+disabled until it is allowed. This is where it belongs because it is the answer
+to "why is Run doing nothing", and that question is asked in front of `Run`.
+
+After it is allowed the panel goes quiet, and the place to look is **Project
+settings → Repository**: the same section as Import and Export, listing each
+script the checkout supplies, the file it came from, and whether it may run,
+with the per-project trust switch under it. One question — how much of this
+checkout the app believes — in one place, rather than a banner that appears once
+and is gone.
+
+**The Scripts section of that dialog names the source above each editor**, and
+makes it read-only where the repository supplies the script. It used to be three
+plain editors: with a `.conductor` present, editing Build there saved happily
+and changed nothing that runs. A box that takes an edit it will not honour is
+worse than no box.
+
+**A repository whose settings will not parse says so.** Half a file left by an
+agent, or conflict markers left by a merge, used to disable `Run` and say
+nothing at all — in an app that ships a _resolve conflicts_ action.
 
 The project dialog's **Instructions** section lists what the agent picks up on
 its own, in three states rather than two: absent, on disk but not read, or read.

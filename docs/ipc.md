@@ -42,7 +42,7 @@ The only channel outside this shape is `theme:get`, which cannot fail.
 | `projects:add`           | —             | opens a directory picker; `null` means cancelled                                                                                                       |
 | `projects:addFromGitHub` | `repository`  | asks for a destination the first time, then remembers it                                                                                               |
 | `projects:update`        | `id`, `patch` | patch validated with `ProjectPatchSchema`                                                                                                              |
-| `projects:remove`        | `id`          | deletes the workspaces and their branches too                                                                                                          |
+| `projects:remove`        | `id`          | runs each workspace's cleanup script, then deletes the workspaces, their branches, and the project's directory under the data root                     |
 | `projects:branches`      | `id`          | remote branches, ordered with main/master/develop first                                                                                                |
 | `projects:pullRequests`  | `id`          | every branch of the repository that has a request, in one call — the workspace list marks each row, and a read per row would be a network call per row |
 | `projects:listRemote`    | —             | what the account can push to, personal and organisation alike, through `gh api graphql`                                                                |
@@ -205,6 +205,15 @@ Two related rules, both learned the hard way:
   `exec` — a branch name reaching a shell is command injection;
 - nothing is interpolated into a shell command or AppleScript source.
 
+There is exactly one deliberate exception, and it is worth knowing rather than
+tripping over. A terminal opened for a script may be given a `commandLine`
+instead of an argv, and that string reaches `zsh -i -c` **as written** — because
+what it carries is a command line, and quoting `bin/rails s -p $OCTOPUS_PORT`
+would make the whole line the name of a program. It is not a hole in the rule
+above so much as the reason the rule has a shape: the only strings that go that
+way are ones a person or a repository wrote as a command, and a repository's is
+shown before it runs (see [repo-config.md](repo-config.md)).
+
 ## Adding a channel
 
 1. Register it in `main/ipc.ts` — validate anything that leaves the process.
@@ -220,7 +229,7 @@ Two related rules, both learned the hard way:
 
 `registerIpc` takes an `IpcHost` — `handle`, `showOpenDialog`, `windowFor`,
 `prefersDark`, `broadcastTheme`, `broadcastChatEvent`, `openPath` — instead of
-importing Electron. A test then supplies seven small functions rather than a
+importing Electron. A test then supplies nine small functions rather than a
 framework, and
 the whole table can be exercised without a window. It is the same reasoning that
 keeps the core headless, applied to the process that talks to it.

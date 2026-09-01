@@ -415,11 +415,16 @@ installation can be rebuilt from the repository instead of from memory.
 | \`scripts/archive.sh\` | takes back what setup gave out, when a workspace is removed |
 | \`instructions/\` | prose the app sends the agent, one file per action |
 
-**Nothing here runs on its own.** octopus never reads this directory while it
-works: the scripts it executes live in \`~/.octopus\`. These files move by two
-explicit actions in Project Settings — Import, which shows every file before
-writing it, and Export, which writes this directory from the settings in the
-app.
+**These scripts run.** A checkout that carries them is the one octopus obeys,
+ahead of anything in \`~/.octopus\`, so a clone works with nothing configured —
+and so a change pushed here is shell that will execute on the machine of
+whoever pulls it. It is shown to them first: every version is displayed once
+and runs only after it is allowed, unless they have turned that off for this
+repository in Project Settings.
+
+The other files here move by two explicit actions in Project Settings — Import,
+which shows every file before writing it, and Export, which writes this
+directory from the settings in the app.
 
 **No credentials.** The env overrides a project applies to each workspace are
 never written here. They stay in \`~/.octopus\`, readable by their owner alone,

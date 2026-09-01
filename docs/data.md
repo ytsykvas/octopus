@@ -9,7 +9,7 @@ else joins a home directory by hand.
   config.json                        settings
   state.json                         projects, workspaces and chats
   chats/<chatId>.jsonl               one conversation each, append-only
-  instructions/*.md                  five prompts every project falls back to
+  instructions/*.md                  seven prompts every project falls back to
   projects/<projectId>/
     carry                            paths carried from the checkout into a workspace
     envs/                            named sets of variables, one written last into every workspace's .env
@@ -396,9 +396,20 @@ readings above are not.
 
 ### Ports
 
-`assignPort` derives a port from the workspace id — the same id always gives the
-same port, so a restart does not reshuffle them — and walks forward on collision
-until it finds a free one in 3000–9000.
+[`ports.ts`](../src/core/ports.ts) hands out **blocks of ten from 3100**, twenty
+of them: a workspace gets `3100`, and `3101`–`3109` are its own to use for a
+second server. It starts at 3100 rather than 3000 because 3000 is what an
+unconfigured framework binds, and a pool meant to coexist with that must not
+begin by fighting it.
+
+`firstFreeBlock` takes the lowest block no workspace holds **and** nothing
+answers on — the second half is the one that matters, since a port another
+application is holding is not in our records and used to be handed out anyway.
+`settlePort` asks again on the way into a run, while nothing of that workspace
+is alive, which is what makes the answer knowable: anything answering then
+belongs to somebody else. A pool with nothing free answers with the port the
+workspace already had, so the failure is the server's own and not an invented
+one of ours.
 
 ## Migrations
 
@@ -433,11 +444,13 @@ went wrong is worse than refusing to start.
 
 ## Scripts and instructions
 
-**Instructions come at two levels.** The files under the data root's
-`instructions/` are the installation's own; the same names under a project's
-directory are that project's, and they win where they exist.
-`effectiveInstruction` in `instructions.ts` is the one place that order is
-written down.
+**Instructions come at three levels.** A worktree may carry them, in
+`.octopus/instructions/` or as Conductor's `[prompts]`, and that wins; below it
+the files under a project's directory are the project's own; below that the same
+names under the data root's `instructions/` are the installation's.
+`effectiveInstruction` in `instructions.ts` writes down the lower two, and
+`repoInstruction` in `repoSource.ts` is the layer above it — the two are joined
+in `readEffectiveInstruction`, which is what the panel and the prompts ask.
 
 There is one per button on the pull request tab — `pull-request.md`,
 `commit-message.md`, `fix-checks.md`, `address-review.md`, `review.md`,
@@ -455,11 +468,11 @@ Both are files rather than strings in the config: they outgrow a text field,
 they are worth reading in a diff, and they can be run or edited outside the app —
 which is the point of not owning the workflow (§4).
 
-They live under the data root, and that is where they are read from and run.
-A repository may carry a **copy** in `.octopus/`, so a wiped installation can be
-rebuilt from it — but it is a snapshot moved by two explicit actions, never a
-source the app consults while it works. [repo-config.md](repo-config.md) is the
-whole of it, and the reasoning for why nothing there is live.
+They live under the data root, and that is the **last** place looked. A checkout
+carrying `.octopus/scripts/` or a `.conductor/` wins over both, so a clone runs
+with nothing configured — and so a script can arrive with a `git pull`, which is
+why the version is shown once before it runs.
+[repo-config.md](repo-config.md) has the chain and the gate.
 
 There are three of them now, and the third runs on the way out. `archive.sh`
 is given the same environment as the others and the workspace as its working
@@ -532,6 +545,22 @@ beside the text, so allowing a line as the cleanup script is not allowing it as
 the one that runs on every build. A script the user wrote in Project settings is
 never in it — approving your own text is a dialog people learn to click through.
 
+`trustRepoScripts` turns the digest off for one project. Off — the default — a
+version is shown once and runs only after it is allowed, so a `git pull` that
+rewrites a script asks again. On, whatever the checkout holds runs unasked,
+which is a reasonable thing to say about a repository you write and not about a
+clone. It is a project's own setting rather than a global one, and it lives in
+Project settings beside Import and Export: what a repository may run and what it
+may carry are the same question about the same checkout.
+
+Both lists are read from the **worktree a session runs in**, not the checkout —
+the SDK is pointed at the worktree, and a branch may carry different settings
+from the one beside it. The Instructions panel narrows by the same rule over the
+same directory, through one function, so the two cannot drift into disagreeing.
+They did once: the panel narrowed by the setting alone while the session narrowed
+by the setting and the gate, and an unapproved repository was reported as read
+while the agent read none of it.
+
 ## Which set of variables a workspace runs with
 
 `envProfile` on a project names the set its workspaces use; `envProfile` on a
@@ -548,20 +577,12 @@ project's default. A workspace pinned to a production set must not silently
 receive dev credentials; nothing written is a run that fails on a missing
 variable, which is loud.
 
-The Instructions panel narrows by the same rule, over the same directory — one
-function, so the two cannot drift into disagreeing. They did once: the panel
-narrowed by the setting alone while the session narrowed by the setting and the
-gate, and an unapproved repository was reported as read while the agent read none
-of it.
-
-Read from the worktree a session runs in, not the checkout — the SDK is pointed
-at the worktree, and a branch may carry different settings from the one beside
-it.
-
 ## Env overrides typed against a project
 
-`projects/<projectId>/env` holds variables typed in project settings, mode
-`0o600` because they are credentials. They are written into each workspace's
+`projects/<projectId>/envs/<name>` holds one **named set** of variables typed in
+project settings, mode `0o600` because they are credentials, in a directory that
+is `0o700` because "prod" is information about this machine even when its
+contents are not. The section above says which set a workspace runs with. They are written into each workspace's
 env file — `.env` unless the project says otherwise, since `.env` is only most
 stacks: Vite reads `.env.local` and would ignore anything written beside it. The
 name is a project field in `state.json`, defaulted rather than migrated, and

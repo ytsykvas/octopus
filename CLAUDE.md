@@ -46,7 +46,11 @@ src/renderer/  UI (React + Tailwind + i18next)
 core module, but a **value** only from one that pulls in nothing Node-only.
 `colors.ts` and `initials.ts` are safe; `store.ts` reaches `node:os` through
 `paths.ts`, and importing a constant from it broke the window at runtime while
-every check stayed green — types are erased, values are not.
+every check stayed green — types are erased, values are not. It has now happened
+twice, so: when the window needs a constant that lives in a module which is not
+safe, **move the constant** into one that is. Do not import it out. The list of
+safe modules is the first table in `docs/core.md`, and a module joining it is
+written down there before the import is written.
 
 ## Project infrastructure
 

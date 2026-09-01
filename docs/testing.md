@@ -104,7 +104,7 @@ Questions worth asking, from the audit that found the above:
 | Ask                                          | Because                                                                                                             |
 | -------------------------------------------- | ------------------------------------------------------------------------------------------------------------------- |
 | what does a hostile name become              | `toSlug` output goes straight into `git branch`, which rejects `.lock`, `..`, leading `-`, `@{`, control characters |
-| what happens on collision                    | a port hash collides long before the range fills                                                                    |
+| what happens on collision                    | the pool is twenty blocks, and the port a probe finds free can be taken by the time a server binds                  |
 | what does a half-written file look like      | a crash between temp-write and rename leaves the temp behind                                                        |
 | what does the tool print about a stale entry | `prunable`, `locked` and `bare` lines the parser had never seen                                                     |
 
@@ -173,6 +173,17 @@ configured, and every remote the suite configures is a path on this disk.
 a temporary directory. Writing to `~/.octopus` while the app runs leaves it
 acting on a stale in-memory copy — a repro that corrupts what it diagnoses is
 worse than no repro.
+
+Discipline is not enough on its own, so both configs set **`HOME` to a scratch
+directory** through `testEnv` in `vitest.shared.ts`. Every path goes through
+`rootDir()`, which defaults to `homedir()`, so a test that simply forgets to
+pass its temporary root writes into the real data directory rather than failing.
+That happened: one call in `envProfiles.ts` lost its `root` argument, and the
+test caught the wrong answer instead of the wrong place — after creating an
+`envs/` directory beside a real project's credentials, which left there would
+have convinced the migration it had already run and stranded that project's
+variables for good. `homedir()` reads `HOME` on macOS and Linux, so pointing it
+somewhere harmless turns that whole class of mistake into a missing file.
 
 ## Renderer tests
 

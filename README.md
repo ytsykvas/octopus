@@ -72,10 +72,12 @@ project names the files to copy in, and can add a block of `KEY=value` overrides
 on top.
 
 **Settings that survive the machine.** A project's scripts, carried files and
-instructions live in `~/.octopus`, which goes when the disk does. Its repository
-can carry a copy in `.octopus/`, so a fresh installation is rebuilt from the
-repository — a snapshot moved by two buttons, never read while the app runs, and
-never holding a credential.
+instructions can live in `~/.octopus`, which goes when the disk does — or in the
+repository itself, under `.octopus/` or the `.conductor/` it may already have.
+The repository wins, so a clone works with nothing configured, and a second
+machine needs no setting up. What it may never carry is a credential: variables
+stay on the machine, so a pull can change what runs and never what it runs
+against. A script arriving that way is shown before it runs.
 
 **Review and open a pull request.** The right pane shows the diff against the
 base branch, takes comments on it, and opens a PR through `gh` — with a

@@ -28,7 +28,7 @@ daemon later — the same reason the layer exists at all.
 
 If a core operation needs a window, a dialog or a menu, the decision stays in
 core as a pure function and `main/` supplies the Electron part. `main/ipc.ts`
-is the worked example: it takes `IpcHost` — seven functions — rather than
+is the worked example: it takes `IpcHost` — nine functions — rather than
 importing `ipcMain`, `dialog`, `BrowserWindow` and `nativeTheme`.
 
 ### The renderer may import types from core, but values only from safe modules
@@ -46,8 +46,12 @@ Safe to import as values are the modules that depend on nothing but zod —
 `colors.ts` and `initials.ts` among them, and the renderer already imports
 `turnOutcome` from `events.ts` this way. The list is the first table in
 [`core.md`](core.md), named there rather than repeated here so that a module
-joining it is written down once. Anything reaching `paths.ts`, `persist.ts` or
-`node:*` is not safe, whatever the table says about the module importing it.
+joining it is written down once; every module the renderer takes a value from
+is in it, and a new one has to be added there before the import is written.
+Anything reaching `paths.ts`, `persist.ts` or `node:*` is not safe, whatever the
+table says about the module importing it — and when a constant is wanted in the
+window from a module that is not safe, the constant moves rather than the
+import.
 
 ### The Agent SDK stops at `events.ts`
 

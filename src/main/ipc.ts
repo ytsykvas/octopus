@@ -63,13 +63,6 @@ export interface PickedDirectory {
 }
 
 /**
- * The parts of Electron this module needs.
- *
- * Named explicitly so a test can supply seven small functions instead of a
- * framework, and so it is obvious at a glance how much of Electron the IPC
- * layer actually touches.
- */
-/**
  * The part of an IPC event this module uses.
  *
  * A type-only import from Electron: it is erased at build time, so nothing
@@ -79,6 +72,13 @@ export interface IpcEvent {
   readonly sender: WebContents
 }
 
+/**
+ * The parts of Electron this module needs.
+ *
+ * Named explicitly so a test can supply nine small functions instead of a
+ * framework, and so it is obvious at a glance how much of Electron the IPC
+ * layer actually touches.
+ */
 export interface IpcHost {
   readonly handle: (
     channel: string,

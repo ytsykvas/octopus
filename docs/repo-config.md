@@ -14,14 +14,22 @@ before.** This is insurance, not a new way of configuring anything.
 
 ## The one thing to understand
 
-**The scripts are live and the repository wins; everything else here is a
-snapshot.**
+**The scripts and the instructions are live and the repository wins; the rest
+here is a snapshot.**
 
 Which of the three scripts runs is asked of the **worktree**, in this order:
-`.octopus/scripts/` in it, then its `.conductor/settings.toml`, then the
-project's own settings under `~/.octopus`. The carry list and the instructions
-still come from the app, and `.octopus/` is otherwise touched only by the two
-actions below, both of which somebody presses.
+`.octopus/scripts/` in it, then the `.conductor/` config beside it, then the
+project's own settings under `~/.octopus`. The seven instructions follow the
+same chain — `.octopus/instructions/`, then Conductor's `[prompts]`, then the
+project's own, then the installation's, then the written template — so a clone
+sends the pull-request description this project wants with nothing configured.
+
+The carry list and the fields in `project.json` are **not** live: they move only
+by the two actions below, both of which somebody presses.
+
+An instruction is not gated the way a script is. It becomes a visible user
+message in the log, where it is read before it does anything, and a dialog in
+front of every one of them would be friction for no gain.
 
 ### This reverses an earlier decision, and the reason is worth keeping
 
@@ -56,6 +64,19 @@ machine. That is the line the arrangement rests on: the repository decides _what
 runs_, the machine decides _what it runs against_. A pull can change the build
 script; it cannot point a workspace at production.
 
+### Turning the gate off, per project
+
+A repository you write yourself asks the same question after every commit that
+touches a script, and the answer is always yes. **Trust this repository's
+scripts** in Project settings → Repository says so once: on, the digest is not
+consulted at all. Off is the default, and off is what a clone should stay.
+
+It is a project's own field (`trustRepoScripts`) rather than a global setting or
+a per-script one, because the unit somebody actually trusts is a repository. The
+same section lists what the checkout supplies and where each script comes from,
+so what has been agreed to is readable afterwards rather than only at the moment
+of agreeing.
+
 `.conductor/` is **read and never written**. Export still goes to `.octopus/`
 alone, so what `SECURITY.md` promises about where this app writes inside a
 checkout is unchanged.
@@ -83,6 +104,34 @@ Every entry is optional and moves on its own. A repository holding nothing but
 `scripts/setup.sh` offers one file; everything else comes from the app, as
 before.
 
+### Which `.conductor` files are read
+
+Four of them, in two layers:
+
+```
+.conductor/settings.toml           the repository's
+.conductor/settings.local.toml     a person's own, usually gitignored
+.conductor/settings.json           the legacy syntax
+conductor.json                     the same, at the repository root
+```
+
+The two TOML files **merge per top-level key**, local over committed, which is
+what Conductor itself does; any TOML at all beats the JSON entirely. Reading the
+local file is right for a tool installed on one machine — it is the answer to
+"what does this checkout do _here_".
+
+Because the merge is per key, the source shown for a script is the file that
+actually named it, not the last file read: a `settings.local.toml` holding only
+`[git]` leaves the scripts to `settings.toml`, and saying otherwise would send
+the reader to a file that does not mention one.
+
+Read and never written. Unknown keys are ignored rather than refused, since the
+schema is somebody else's and grows without asking us — but a file that will not
+parse at all is an error rather than a shrug, because silently supplying nothing
+is how a workspace ends up running the wrong script. Size is checked with
+`stat` before the read, so a file too large to accept is never held in memory
+first.
+
 ### `project.json`
 
 ```json
@@ -109,8 +158,10 @@ Two fields are deliberately **not** here:
 
 **The env overrides.** A project's `KEY=value` block is written into every
 workspace's env file, and it holds credentials. It stays in
-`~/.octopus/projects/<id>/env` at mode 0600 and is never exported, never
-imported, and not represented in `.octopus/` even as a list of key names.
+`~/.octopus/projects/<id>/envs/<name>` at mode 0600, in a directory at 0700, and
+is never exported, never imported, and not represented in `.octopus/` even as a
+list of key names — not even the names of the sets, since "prod" is information
+about this machine.
 
 `origin` is frequently public, and a secret that has been pushed has been
 published whatever the next commit does — it is mirrored and indexed within
@@ -205,15 +256,15 @@ the app depends on it, so there is nothing else to undo.
 The `.conductor` directory this was measured against — Conductor's equivalent,
 for a Rails app — translates almost line for line.
 
-| Conductor                                         | octopus                                             |
-| ------------------------------------------------- | --------------------------------------------------- |
-| `settings.toml` → `file_include_globs`            | `.octopus/carry`                                    |
-| `[scripts] setup` / `run` / `archive`             | `.octopus/scripts/setup.sh`, `run.sh`, `archive.sh` |
-| `$CONDUCTOR_PORT`                                 | `$OCTOPUS_PORT`, plus `$OCTOPUS_PORT_1`…`_9`        |
-| `CONDUCTOR_ROOT_PATH`, `CONDUCTOR_WORKSPACE_NAME` | `OCTOPUS_ROOT_PATH`, `OCTOPUS_WORKSPACE_NAME`       |
-| `run_mode = "concurrent"`                         | always; ports come from a pool                      |
-| `[prompts]`, one text for every action            | `.octopus/instructions/`, one file per action       |
-| dev values appended to `.env` inside `setup.sh`   | the env block — and it stays out of the repository  |
+| Conductor                                         | octopus                                                                      |
+| ------------------------------------------------- | ---------------------------------------------------------------------------- |
+| `settings.toml` → `file_include_globs`            | `.octopus/carry`                                                             |
+| `[scripts] setup` / `run` / `archive`             | `.octopus/scripts/setup.sh`, `run.sh`, `archive.sh`                          |
+| `$CONDUCTOR_PORT`                                 | `$OCTOPUS_PORT`, plus `$OCTOPUS_PORT_1`…`_9`                                 |
+| `CONDUCTOR_ROOT_PATH`, `CONDUCTOR_WORKSPACE_NAME` | `OCTOPUS_ROOT_PATH`, `OCTOPUS_WORKSPACE_NAME`                                |
+| `run_mode = "concurrent"`                         | always; ports come from a pool                                               |
+| `[prompts]`, one text for every action            | `.octopus/instructions/`, one file per action — and Conductor's own are read |
+| dev values appended to `.env` inside `setup.sh`   | the env block — and it stays out of the repository                           |
 
 Two differences worth knowing before copying a `setup.sh` across.
 
@@ -221,10 +272,15 @@ Two differences worth knowing before copying a `setup.sh` across.
 gitignored secrets.** Here that is the carry list, which runs before the script,
 so those lines come out.
 
-**Conductor names commands, octopus runs files.** `settings.toml` says
+**Conductor names commands, octopus prefers files.** `settings.toml` says
 `bash .conductor/setup.sh`, and its `run` is not a file at all —
-`bin/rails server -p $CONDUCTOR_PORT` sits directly in the config. Here all
-three are scripts on disk.
+`bin/rails server -p $CONDUCTOR_PORT` sits directly in the config. A script
+resolving from `.octopus/` or from project settings is a **file**, run with its
+own executable bit; one resolving from `.conductor/` is a **command line**, and
+it reaches the shell as written, because quoting `-p $CONDUCTOR_PORT` would make
+the whole line the name of a program. A script that resolved from `.conductor/`
+is also given `CONDUCTOR_*` aliases beside the `OCTOPUS_*` variables, so a
+config written for that tool works here unchanged.
 
 ## Where this lives in the code
 
