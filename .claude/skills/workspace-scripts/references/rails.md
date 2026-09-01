@@ -86,6 +86,13 @@ DATABASE_URL=postgres://localhost/myapp_development_$OCTOPUS_WORKSPACE_SLUG
 it belongs in the carry list, with `.env`. Without it Rails fails on boot
 complaining about credentials, which reads as a Rails problem and is not one.
 
+If the project's checkout is itself a fresh clone it has neither, and the carry
+list needs to say where they are — `config/master.key = ~/work/app/config/master.key`,
+pointing at the checkout the person actually works in. `.ruby-version` is a third
+gitignored file most Rails projects have, and it is the one **not** to carry:
+`setup.sh` writes it from the branch's own `Gemfile`, so a branch that bumps Ruby
+gets the version it asks for.
+
 `RAILS_ENV` stays `development`. A workspace pointed at production by a variable
 is the failure the env sets exist to prevent, and it is not something a script
 should be able to do.
