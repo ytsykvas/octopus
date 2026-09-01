@@ -1725,7 +1725,7 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
       : projectSkillsRoot(requireProject(store.projectId).id, dataRoot)
   }
 
-  /** The same, made into a plugin — only ever on the way to writing. */
+  /** The same, given the shape a session reads — only on the way to writing. */
   function writableStore(store: SkillStore): Promise<string> {
     return ensureStore(storeRoot(store))
   }
