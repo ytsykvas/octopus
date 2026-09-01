@@ -14,6 +14,7 @@ import {
   readSkillsIn,
   removeSkill,
   SkillError,
+  skillEnabled,
   writeRawSkill,
   writeSkill
 } from './skills.js'
@@ -531,5 +532,41 @@ describe('importFromUrl', () => {
     await expect(
       importFromUrl(root, 'https://example.test/x', transport(hanging, 1))
     ).rejects.toThrow('aborted')
+  })
+})
+
+describe('skillEnabled', () => {
+  const none = { global: [], project: [] }
+
+  /*
+   * Nothing said anywhere means on, which is how Claude Code treats a skill it
+   * discovers. A default of off would leave a skill somebody has just written
+   * doing nothing until they found a second control.
+   */
+  it('offers a skill nobody has said anything about', () => {
+    expect(skillEnabled('octopus:review', none, {})).toBe(true)
+  })
+
+  it('withholds one either default list names', () => {
+    expect(skillEnabled('octopus:review', { global: ['octopus:review'], project: [] }, {})).toBe(
+      false
+    )
+    expect(skillEnabled('octopus:review', { global: [], project: ['octopus:review'] }, {})).toBe(
+      false
+    )
+  })
+
+  it("lets the conversation's own answer win over both", () => {
+    const off = { global: ['octopus:review'], project: ['octopus:review'] }
+
+    expect(skillEnabled('octopus:review', off, { 'octopus:review': true })).toBe(true)
+    expect(skillEnabled('octopus:review', none, { 'octopus:review': false })).toBe(false)
+  })
+
+  it('answers for the key it was asked about and no other', () => {
+    const defaults = { global: ['octopus:review'], project: [] }
+
+    expect(skillEnabled('review', defaults, {})).toBe(true)
+    expect(skillEnabled('octopus-project:review', defaults, {})).toBe(true)
   })
 })

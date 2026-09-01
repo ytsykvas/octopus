@@ -46,6 +46,7 @@ interface FakeQuery {
   readonly modes: () => string[]
   /** Settings pushed onto a running session — where effort changes land. */
   readonly flagSettings: () => Record<string, unknown>[]
+  readonly skillReloads: () => number
   /** Models asked for mid-session; `undefined` is "back to the default". */
   readonly requestedModels: () => (string | undefined)[]
   readonly closed: () => number
@@ -68,6 +69,7 @@ function fakeAgent(
   const received: SDKUserMessage[] = []
   const modes: string[] = []
   const flagSettings: Record<string, unknown>[] = []
+  let skillReloads = 0
   const requestedModels: (string | undefined)[] = []
   const offeredModels = hooks.models ?? []
   const offeredCommands = hooks.commands ?? []
@@ -120,6 +122,10 @@ function fakeAgent(
       modes.push(mode)
       return Promise.resolve()
     },
+    reloadSkills: () => {
+      skillReloads += 1
+      return Promise.resolve({ skills: [] })
+    },
     applyFlagSettings: (settings: Record<string, unknown>) => {
       flagSettings.push(settings)
       return Promise.resolve()
@@ -146,6 +152,8 @@ function fakeAgent(
       model: null,
       effort: 'medium',
       allowedTools: [...READ_ONLY_TOOLS],
+      plugins: [],
+      skillOverrides: {},
       ...overrides
     },
     {
@@ -189,6 +197,7 @@ function fakeAgent(
       interrupted: () => interrupted,
       modes: () => modes,
       flagSettings: () => flagSettings,
+      skillReloads: () => skillReloads,
       requestedModels: () => requestedModels,
       closed: () => closed
     }
@@ -709,7 +718,7 @@ describe('a session', () => {
     await agent.session.setEffort('max')
 
     expect(agent.flagSettings()).toEqual([
-      { effortLevel: 'max', ultracode: false, enableWorkflows: false }
+      { effortLevel: 'max', ultracode: false, enableWorkflows: false, skillOverrides: {} }
     ])
   })
 
@@ -723,7 +732,7 @@ describe('a session', () => {
     await agent.session.setEffort('ultracode')
 
     expect(agent.flagSettings()).toEqual([
-      { effortLevel: 'xhigh', ultracode: true, enableWorkflows: true }
+      { effortLevel: 'xhigh', ultracode: true, enableWorkflows: true, skillOverrides: {} }
     ])
   })
 
@@ -738,8 +747,81 @@ describe('a session', () => {
     expect(agent.flagSettings()[1]).toEqual({
       effortLevel: 'high',
       ultracode: false,
-      enableWorkflows: false
+      enableWorkflows: false,
+      skillOverrides: {}
     })
+  })
+
+  it('names the withheld skills at start-up, in the flag layer', () => {
+    const { agent } = fakeAgent({ skillOverrides: { 'octopus:review': 'off' } })
+
+    expect(agent.options().settings).toEqual({
+      ultracode: false,
+      enableWorkflows: false,
+      skillOverrides: { 'octopus:review': 'off' }
+    })
+  })
+
+  it('leaves the plugin list unsaid when there are no plugins to load', () => {
+    expect(fakeAgent().agent.options().plugins).toBeUndefined()
+  })
+
+  it('loads the stores it was given as local plugins', () => {
+    const plugins = [{ type: 'local' as const, path: '/data/skills' }]
+
+    expect(fakeAgent({ plugins }).agent.options().plugins).toEqual(plugins)
+  })
+
+  it('moves the withheld skills of a running session', async () => {
+    const { agent } = fakeAgent()
+
+    await agent.session.setSkills({ 'octopus:review': 'off' })
+
+    expect(agent.flagSettings()).toEqual([
+      {
+        effortLevel: 'medium',
+        ultracode: false,
+        enableWorkflows: false,
+        skillOverrides: { 'octopus:review': 'off' }
+      }
+    ])
+  })
+
+  /*
+   * The two halves of the flag layer travel together because
+   * `applyFlagSettings` replaces a top-level key rather than merging into it.
+   * Sent separately, switching a skill would put the effort back to whatever
+   * the session started on — silently, and a turn later.
+   */
+  it('keeps the effort while the skills move, and the skills while the effort does', async () => {
+    const { agent } = fakeAgent()
+
+    await agent.session.setEffort('max')
+    await agent.session.setSkills({ 'octopus:review': 'off' })
+    await agent.session.setEffort('low')
+
+    expect(agent.flagSettings()[1]).toMatchObject({ effortLevel: 'max' })
+    expect(agent.flagSettings()[2]).toMatchObject({
+      effortLevel: 'low',
+      skillOverrides: { 'octopus:review': 'off' }
+    })
+  })
+
+  it('puts a skill back by sending a map that no longer names it', async () => {
+    const { agent } = fakeAgent()
+
+    await agent.session.setSkills({ 'octopus:review': 'off' })
+    await agent.session.setSkills({})
+
+    expect(agent.flagSettings()[1]).toMatchObject({ skillOverrides: {} })
+  })
+
+  it('re-reads the skill directories on request', async () => {
+    const { agent } = fakeAgent()
+
+    await agent.session.refreshSkills()
+
+    expect(agent.skillReloads()).toBe(1)
   })
 
   it('asks for an effort at start-up when the chat has one', () => {
@@ -763,7 +845,11 @@ describe('a session', () => {
     const { agent } = fakeAgent({ effort: 'ultracode' })
 
     expect(agent.options().effort).toBe('xhigh')
-    expect(agent.options().settings).toEqual({ ultracode: true, enableWorkflows: true })
+    expect(agent.options().settings).toEqual({
+      ultracode: true,
+      enableWorkflows: true,
+      skillOverrides: {}
+    })
   })
 
   // Said rather than left out. Nothing else is loaded that could say otherwise
@@ -772,7 +858,11 @@ describe('a session', () => {
   it('says so at start-up when the level is an ordinary one', () => {
     const { agent } = fakeAgent({ effort: 'high' })
 
-    expect(agent.options().settings).toEqual({ ultracode: false, enableWorkflows: false })
+    expect(agent.options().settings).toEqual({
+      ultracode: false,
+      enableWorkflows: false,
+      skillOverrides: {}
+    })
   })
 
   it('forwards interrupt and mode changes to the SDK', async () => {
@@ -829,7 +919,9 @@ describe('a session that will not close', () => {
         permissionMode: 'default',
         model: null,
         effort: 'medium',
-        allowedTools: []
+        allowedTools: [],
+        plugins: [],
+        skillOverrides: {}
       },
       {
         query: () => conversation,

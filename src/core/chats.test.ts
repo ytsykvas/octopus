@@ -55,6 +55,7 @@ describe('a new chat', () => {
       workingMode: 'default',
       planMode: false,
       knownCommands: [],
+      skillOverrides: {},
       createdAt: '2026-08-11T09:00:00.000Z'
     })
   })
@@ -608,6 +609,7 @@ describe('what a conversation may be doing', () => {
     workingMode: 'default',
     planMode: false,
     knownCommands: [],
+    skillOverrides: {},
     createdAt: '2026-08-11T09:00:00.000Z'
   }
 
@@ -664,6 +666,7 @@ describe('a conversation continuing another', () => {
     workingMode: 'acceptEdits',
     planMode: true,
     knownCommands: [{ name: 'deploy', description: '', argumentHint: '', aliases: [] }],
+    skillOverrides: {},
     createdAt: '2026-08-11T09:00:00.000Z'
   }
 

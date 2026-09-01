@@ -49,6 +49,7 @@ const project: Project = {
   approvedScripts: [],
   envProfile: 'default',
   trustRepoScripts: false,
+  disabledSkillDefaults: [],
   color: 'blue'
 }
 
@@ -84,6 +85,7 @@ function storedChat(overrides: Partial<Chat> = {}): Chat {
     workingMode: 'default',
     planMode: false,
     knownCommands: [],
+    skillOverrides: {},
     createdAt: '2026-08-07T12:00:00.000Z',
     ...overrides
   }
@@ -508,6 +510,7 @@ describe('chats', () => {
       workingMode: 'default',
       planMode: false,
       knownCommands: [],
+      skillOverrides: {},
       createdAt: '2026-08-11T09:00:00.000Z',
       ...overrides
     }
@@ -664,6 +667,7 @@ describe('the remembered model list', () => {
       workingMode: 'default',
       planMode: false,
       knownCommands: [],
+      skillOverrides: {},
       createdAt: '2026-08-11T09:00:00.000Z'
     }
     await writeFile(file, JSON.stringify({ ...withProject, chats: [legacy] }), 'utf8')
@@ -699,6 +703,7 @@ describe('the commands a chat remembers', () => {
     workingMode: 'default',
     planMode: false,
     knownCommands: [],
+    skillOverrides: {},
     createdAt: '2026-08-11T09:00:00.000Z'
   }
 

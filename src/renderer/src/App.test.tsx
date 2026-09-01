@@ -43,6 +43,7 @@ function project(overrides: Partial<Project> = {}): Project {
     approvedScripts: [],
     envProfile: 'default',
     trustRepoScripts: false,
+    disabledSkillDefaults: [],
     color: 'blue',
     ...overrides
   }
@@ -59,6 +60,7 @@ function config(overrides: Partial<Config> = {}): Config {
     model: null,
     planModel: null,
     alwaysAllowedTools: [],
+    disabledSkillDefaults: [],
     theme: 'system',
     language: 'en',
     rightPanelWidth: 360,

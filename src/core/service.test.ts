@@ -2731,8 +2731,11 @@ describe('the agent chat', () => {
     readonly closed: () => number
     /** Permission modes the session was switched to, in order. */
     readonly modes: () => string[]
-    /** Settings pushed onto the running session — where effort lands. */
-    readonly flagSettings: () => { effortLevel?: string }[]
+    /** Settings pushed onto the running session — where effort and skills land. */
+    readonly flagSettings: () => {
+      effortLevel?: string
+      skillOverrides?: Record<string, string>
+    }[]
     /** Models asked for mid-session; `undefined` is "back to the default". */
     readonly requestedModels: () => (string | undefined)[]
     readonly options: () => Record<string, unknown>
@@ -2783,6 +2786,7 @@ describe('the agent chat', () => {
   let offeredCommands: () => Promise<SlashCommand[]>
   /** What the session answers about its context window, and the account's. */
   let contextAnswer: () => Promise<unknown>
+  let skillReload: () => Promise<unknown>
   let usageAnswer: () => Promise<unknown>
 
   function fakeQuery(): QueryFn {
@@ -2793,7 +2797,7 @@ describe('the agent chat', () => {
       let done = false
       let failure: Error | null = null
       const modes: string[] = []
-      const flagSettings: { effortLevel?: string }[] = []
+      const flagSettings: { effortLevel?: string; skillOverrides?: Record<string, string> }[] = []
       const requestedModels: (string | undefined)[] = []
       let interrupted = 0
       let closed = 0
@@ -2860,10 +2864,14 @@ describe('the agent chat', () => {
           interrupted++
           return Promise.resolve(undefined)
         },
-        applyFlagSettings: (settings: { effortLevel?: string }) => {
+        applyFlagSettings: (settings: {
+          effortLevel?: string
+          skillOverrides?: Record<string, string>
+        }) => {
           flagSettings.push(settings)
           return Promise.resolve()
         },
+        reloadSkills: () => skillReload(),
         setModel: (model: string | undefined) => {
           requestedModels.push(model)
           return Promise.resolve()
@@ -2971,6 +2979,7 @@ describe('the agent chat', () => {
     offered = () => Promise.resolve([])
     offeredCommands = () => Promise.resolve([])
     contextAnswer = () => Promise.resolve(CONTEXT_RESPONSE)
+    skillReload = () => Promise.resolve({ skills: [] })
     usageAnswer = () => Promise.resolve(USAGE_RESPONSE)
   })
 
@@ -5140,7 +5149,7 @@ describe('the agent chat', () => {
       await service.setChatEffort(chat.id, 'low')
 
       expect(agent().flagSettings()).toEqual([
-        { effortLevel: 'low', ultracode: false, enableWorkflows: false }
+        { effortLevel: 'low', ultracode: false, enableWorkflows: false, skillOverrides: {} }
       ])
     })
 
@@ -5164,7 +5173,7 @@ describe('the agent chat', () => {
       await service.sendToChat(chat.id, 'second')
 
       expect(agent().flagSettings()).toEqual([
-        { effortLevel: 'high', ultracode: false, enableWorkflows: false }
+        { effortLevel: 'high', ultracode: false, enableWorkflows: false, skillOverrides: {} }
       ])
     })
 
@@ -5185,7 +5194,7 @@ describe('the agent chat', () => {
 
       expect(service.listChats(workspaceId)[0]?.effort).toBe('medium')
       expect(agent().flagSettings()).toEqual([
-        { effortLevel: 'medium', ultracode: false, enableWorkflows: false }
+        { effortLevel: 'medium', ultracode: false, enableWorkflows: false, skillOverrides: {} }
       ])
     })
 
@@ -5211,7 +5220,11 @@ describe('the agent chat', () => {
 
       expect(service.listChats(workspaceId)[0]?.effort).toBe('ultracode')
       expect(agent().options().effort).toBe('xhigh')
-      expect(agent().options().settings).toEqual({ ultracode: true, enableWorkflows: true })
+      expect(agent().options().settings).toEqual({
+        ultracode: true,
+        enableWorkflows: true,
+        skillOverrides: {}
+      })
     })
 
     /*
@@ -6118,6 +6131,277 @@ describe('the agent chat', () => {
       const service = await forkingService(() => Promise.resolve({ sessionId: 'sess-forked' }))
 
       await expect(service.forkChat('chat-nowhere')).rejects.toBeInstanceOf(WorkspaceError)
+    })
+  })
+
+  describe('skills', () => {
+    const DOCUMENT = '---\nname: review\ndescription: When reviewing.\n---\n\n# Review\n'
+
+    /** A skill in the checkout, which is what the third group reads. */
+    async function placeInRepo(root: string, name: string): Promise<void> {
+      const path = join(root, '.claude', 'skills', name)
+      await mkdir(path, { recursive: true })
+      await writeFile(
+        join(path, 'SKILL.md'),
+        `---\nname: ${name}\ndescription: From the checkout.\n---\n\nBody\n`,
+        'utf8'
+      )
+    }
+
+    it('starts with nothing in either store', async () => {
+      const { service, projectId } = await withWorkspace()
+
+      await expect(service.listSkills({ kind: 'global' })).resolves.toEqual([])
+      await expect(service.listSkills({ kind: 'project', projectId })).resolves.toEqual([])
+    })
+
+    it('writes a skill the store then reads back', async () => {
+      const { service } = await withWorkspace()
+
+      await service.saveStoredSkill({ kind: 'global' }, 'review', {
+        kind: 'form',
+        content: { description: 'When reviewing.', body: '# Review\n' }
+      })
+
+      await expect(service.listSkills({ kind: 'global' })).resolves.toMatchObject([
+        { name: 'review', description: 'When reviewing.' }
+      ])
+      await expect(service.readStoredSkill({ kind: 'global' }, 'review')).resolves.toMatchObject({
+        body: '# Review\n'
+      })
+    })
+
+    /*
+     * The shape the SDK looks for in a local plugin. Without the manifest the
+     * directory is loaded by nothing, and the skill would be written, listed
+     * and never reach a session.
+     */
+    it('makes the store a plugin on the first write', async () => {
+      const { service } = await withWorkspace()
+
+      await service.saveStoredSkill({ kind: 'global' }, 'review', { kind: 'raw', text: DOCUMENT })
+
+      const manifest = join(dir, 'data', 'skills', '.claude-plugin', 'plugin.json')
+      expect(JSON.parse(await readFile(manifest, 'utf8'))).toMatchObject({ name: 'octopus' })
+    })
+
+    it('creates nothing merely by listing an empty store', async () => {
+      const { service } = await withWorkspace()
+
+      await service.listSkills({ kind: 'global' })
+
+      await expect(stat(join(dir, 'data', 'skills'))).rejects.toThrow()
+    })
+
+    it('removes a skill', async () => {
+      const { service } = await withWorkspace()
+      await service.saveStoredSkill({ kind: 'global' }, 'review', { kind: 'raw', text: DOCUMENT })
+
+      await service.removeStoredSkill({ kind: 'global' }, 'review')
+
+      await expect(service.listSkills({ kind: 'global' })).resolves.toEqual([])
+    })
+
+    it('refuses a store belonging to a project that is not there', async () => {
+      const { service } = await withWorkspace()
+
+      await expect(service.listSkills({ kind: 'project', projectId: 'nowhere' })).rejects.toThrow()
+    })
+
+    it('imports pasted text, a file on disk and a download', async () => {
+      const repo = join(dir, 'imports')
+      await initRepo(repo)
+      const file = join(dir, 'loose.md')
+      await writeFile(file, '---\nname: from-disk\ndescription: On disk.\n---\n\nBody\n', 'utf8')
+
+      const service = await createService({
+        ...paths(dir),
+        query: fakeQuery(),
+        fetch: () =>
+          Promise.resolve(
+            new Response('---\nname: from-url\ndescription: Downloaded.\n---\n\nBody\n')
+          )
+      })
+      await service.addProjectFromPath(repo)
+
+      await service.importStoredSkill({ kind: 'global' }, { kind: 'text', text: DOCUMENT })
+      await service.importStoredSkill({ kind: 'global' }, { kind: 'path', path: file })
+      await service.importStoredSkill(
+        { kind: 'global' },
+        { kind: 'url', url: 'https://example.test/SKILL.md' }
+      )
+
+      await expect(service.listSkills({ kind: 'global' })).resolves.toMatchObject([
+        { name: 'from-disk' },
+        { name: 'from-url' },
+        { name: 'review' }
+      ])
+    })
+
+    it('lists all three sources for a conversation, each key qualified by where it came from', async () => {
+      const { service, projectId, workspaceId } = await withWorkspace()
+      const workspace = (await service.listWorkspaces(projectId))[0]
+      if (!workspace) throw new Error('no workspace')
+      await placeInRepo(workspace.path, 'in-repo')
+
+      await service.saveStoredSkill({ kind: 'global' }, 'everywhere', {
+        kind: 'raw',
+        text: DOCUMENT.replace('review', 'everywhere')
+      })
+      await service.saveStoredSkill({ kind: 'project', projectId }, 'here-only', {
+        kind: 'raw',
+        text: DOCUMENT.replace('review', 'here-only')
+      })
+
+      const chat = await service.openChat(workspaceId)
+
+      await expect(service.skillsForChat(chat.id)).resolves.toMatchObject([
+        { key: 'octopus:everywhere', scope: 'global', enabled: true },
+        { key: 'octopus-project:here-only', scope: 'project', enabled: true },
+        { key: 'in-repo', scope: 'repository', enabled: true }
+      ])
+    })
+
+    /*
+     * A switch over something the session would not load is a control with
+     * nothing behind it. Ours are unaffected: they arrive as a plugin, which is
+     * a launch option this setting does not filter.
+     */
+    it("drops the repository's own when the settings would not load them", async () => {
+      const { service, projectId, workspaceId } = await withWorkspace()
+      const workspace = (await service.listWorkspaces(projectId))[0]
+      if (!workspace) throw new Error('no workspace')
+      await placeInRepo(workspace.path, 'in-repo')
+      await service.saveStoredSkill({ kind: 'global' }, 'review', { kind: 'raw', text: DOCUMENT })
+
+      await service.updateConfig({ settingSources: 'none' })
+      const chat = await service.openChat(workspaceId)
+
+      await expect(service.skillsForChat(chat.id)).resolves.toMatchObject([
+        { key: 'octopus:review', scope: 'global' }
+      ])
+    })
+
+    it('reads the two default lists, narrowest last', async () => {
+      const { service, projectId, workspaceId } = await withWorkspace()
+      await service.saveStoredSkill({ kind: 'global' }, 'review', { kind: 'raw', text: DOCUMENT })
+
+      const chat = await service.openChat(workspaceId)
+
+      await service.updateConfig({ disabledSkillDefaults: ['octopus:review'] })
+      expect((await service.skillsForChat(chat.id))[0]?.enabled).toBe(false)
+
+      await service.updateConfig({ disabledSkillDefaults: [] })
+      await service.updateProjectById(projectId, { disabledSkillDefaults: ['octopus:review'] })
+      expect((await service.skillsForChat(chat.id))[0]?.enabled).toBe(false)
+    })
+
+    it("lets the conversation's own answer win over both", async () => {
+      const { service, projectId, workspaceId } = await withWorkspace()
+      await service.saveStoredSkill({ kind: 'global' }, 'review', { kind: 'raw', text: DOCUMENT })
+      await service.updateProjectById(projectId, { disabledSkillDefaults: ['octopus:review'] })
+
+      const chat = await service.openChat(workspaceId)
+      await service.setChatSkill(chat.id, 'octopus:review', true)
+
+      expect((await service.skillsForChat(chat.id))[0]?.enabled).toBe(true)
+      expect(service.listChats(workspaceId)[0]?.skillOverrides).toEqual({ 'octopus:review': true })
+    })
+
+    it('hands a session the stores it can load and the skills it may not offer', async () => {
+      const { service, workspaceId } = await withWorkspace()
+      await service.saveStoredSkill({ kind: 'global' }, 'review', { kind: 'raw', text: DOCUMENT })
+
+      const chat = await service.openChat(workspaceId)
+      await service.setChatSkill(chat.id, 'octopus:review', false)
+      await service.sendToChat(chat.id, 'hello')
+
+      const options = agents[0]?.options()
+      expect(options?.plugins).toEqual([{ type: 'local', path: join(dir, 'data', 'skills') }])
+      expect(options?.settings).toMatchObject({ skillOverrides: { 'octopus:review': 'off' } })
+    })
+
+    it('mentions no store that has nothing in it', async () => {
+      const { service, workspaceId } = await withWorkspace()
+      const chat = await service.openChat(workspaceId)
+
+      await service.sendToChat(chat.id, 'hello')
+
+      expect(agents[0]?.options().plugins).toBeUndefined()
+    })
+
+    /*
+     * A switch whose effect waits for a restart is a switch that looks broken.
+     * The flag layer takes this mid-session the way it takes the effort.
+     */
+    it('reaches a running conversation rather than waiting for its next start', async () => {
+      const { service, workspaceId } = await withWorkspace()
+      await service.saveStoredSkill({ kind: 'global' }, 'review', { kind: 'raw', text: DOCUMENT })
+
+      const chat = await service.openChat(workspaceId)
+      await service.sendToChat(chat.id, 'hello')
+      await service.setChatSkill(chat.id, 'octopus:review', false)
+
+      expect(agents[0]?.flagSettings().at(-1)?.skillOverrides).toEqual({
+        'octopus:review': 'off'
+      })
+
+      await service.setChatSkill(chat.id, 'octopus:review', true)
+
+      expect(agents[0]?.flagSettings().at(-1)?.skillOverrides).toEqual({})
+    })
+
+    it('records the answer even with no session to tell', async () => {
+      const { service, workspaceId } = await withWorkspace()
+      const chat = await service.openChat(workspaceId)
+
+      await service.setChatSkill(chat.id, 'in-repo', false)
+
+      expect(agents).toHaveLength(0)
+      expect(service.listChats(workspaceId)[0]?.skillOverrides).toEqual({ 'in-repo': false })
+    })
+
+    it('refuses to answer for a conversation that is not there', async () => {
+      const { service } = await withWorkspace()
+
+      await expect(service.skillsForChat('chat-nowhere')).rejects.toBeInstanceOf(WorkspaceError)
+      await expect(service.setChatSkill('chat-nowhere', 'x', false)).rejects.toBeInstanceOf(
+        WorkspaceError
+      )
+    })
+
+    /*
+     * The reload follows a write that has already succeeded, so a session that
+     * will not answer is a stale listing rather than a lost skill — and the
+     * save must not report a failure for it.
+     */
+    it('does not fail a save because a session would not reload', async () => {
+      const { service, workspaceId } = await withWorkspace()
+      const chat = await service.openChat(workspaceId)
+      await service.sendToChat(chat.id, 'hello')
+
+      skillReload = () => Promise.reject(new Error('the transport is closed'))
+
+      await expect(
+        service.saveStoredSkill({ kind: 'global' }, 'review', { kind: 'raw', text: DOCUMENT })
+      ).resolves.toMatchObject({ name: 'review' })
+    })
+
+    it('tells a running conversation to look at the directories again after a write', async () => {
+      const { service, workspaceId } = await withWorkspace()
+      const chat = await service.openChat(workspaceId)
+      await service.sendToChat(chat.id, 'hello')
+
+      await expect(
+        service.saveStoredSkill({ kind: 'global' }, 'review', { kind: 'raw', text: DOCUMENT })
+      ).resolves.toBeDefined()
+      await expect(
+        service.importStoredSkill(
+          { kind: 'global' },
+          { kind: 'text', text: DOCUMENT.replace('review', 'second') }
+        )
+      ).resolves.toBeDefined()
+      await expect(service.removeStoredSkill({ kind: 'global' }, 'review')).resolves.toBeUndefined()
     })
   })
 

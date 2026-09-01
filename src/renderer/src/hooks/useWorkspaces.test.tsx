@@ -24,6 +24,7 @@ const project = (id: string, name: string): Project => ({
   approvedScripts: [],
   envProfile: 'default',
   trustRepoScripts: false,
+  disabledSkillDefaults: [],
   color: 'blue'
 })
 

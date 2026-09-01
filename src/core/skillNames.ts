@@ -33,6 +33,19 @@ export const SkillScopeSchema = z.enum(['global', 'project', 'repository'])
 export type SkillScope = z.infer<typeof SkillScopeSchema>
 
 /**
+ * Which of the two stores a settings section is editing.
+ *
+ * A shape rather than the bare scope, because "the project's" is not a place
+ * until it says which project — and the id crosses IPC, so it is parsed rather
+ * than trusted.
+ */
+export const SkillStoreSchema = z.discriminatedUnion('kind', [
+  z.object({ kind: z.literal('global') }),
+  z.object({ kind: z.literal('project'), projectId: z.string().min(1) })
+])
+export type SkillStore = z.infer<typeof SkillStoreSchema>
+
+/**
  * A skill's name, which is also the directory it lives in.
  *
  * The pattern is doing security work, not tidiness: this string is joined onto

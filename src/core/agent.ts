@@ -19,6 +19,7 @@ import type {
   SDKMessage,
   SDKPartialAssistantMessage,
   SDKUserMessage,
+  SdkPluginConfig,
   SettingSource,
   SlashCommand
 } from '@anthropic-ai/claude-agent-sdk'
@@ -70,6 +71,24 @@ export interface SessionOptions {
   readonly effort: EffortChoice
   /** Tools allowed without asking, on top of the agent's own rules. */
   readonly allowedTools: readonly string[]
+  /**
+   * Local plugins to load — how the skills octopus keeps reach the session.
+   *
+   * A launch option, and deliberately not filtered by `settingSources`: that
+   * setting governs what the machine and the checkout contribute without being
+   * asked, and these are the user's own skills, made in this app and listed in
+   * a panel they opened.
+   */
+  readonly plugins: readonly SdkPluginConfig[]
+  /**
+   * Skills this conversation is not to be offered, by the name the agent knows.
+   *
+   * A deny-list, because an allow-list would silently hide everything octopus
+   * failed to enumerate — Claude Code's own bundled skills first among them.
+   * Naming only what is off leaves a conversation with nothing switched off
+   * behaving exactly as it did before any of this existed.
+   */
+  readonly skillOverrides: Readonly<Record<string, 'off'>>
 }
 
 /** What the agent wants to do, as handed to whoever decides. */
@@ -133,6 +152,10 @@ export interface AgentSession {
   setEffort: (effort: EffortChoice) => Promise<void>
   /** Changes the model for what follows; null hands the choice back. */
   setModel: (model: string | null) => Promise<void>
+  /** Replaces the set of skills withheld from this conversation, mid-turn. */
+  setSkills: (skillOverrides: Readonly<Record<string, 'off'>>) => Promise<void>
+  /** Re-reads the skill directories, for one written while this was running. */
+  refreshSkills: () => Promise<void>
   /** What this account may use, as the agent reported when the session began. */
   models: () => Promise<AgentModel[]>
   /** The slash commands this session offers, agent's own and the project's. */
@@ -371,6 +394,31 @@ export function startSession(options: SessionOptions, hooks: SessionHooks): Agen
   const input = new InputQueue()
   const { effort, ultracode } = sessionEffort(options.effort)
 
+  /*
+   * The flag layer's two moving parts, held here because both are changed on a
+   * running session through one call.
+   *
+   * `applyFlagSettings` replaces a top-level key outright rather than merging
+   * into it, so a call carrying only the skills would leave the effort at
+   * whatever the last one said and a call carrying only the effort would put
+   * every withheld skill back. One function that always sends both is the only
+   * arrangement where neither can happen, and it is cheaper than reasoning
+   * about the merge twice.
+   */
+  let effortChoice = options.effort
+  let withheld: Readonly<Record<string, 'off'>> = options.skillOverrides
+
+  async function applyFlags(): Promise<void> {
+    const current = sessionEffort(effortChoice)
+
+    await conversation.applyFlagSettings({
+      effortLevel: current.effort,
+      ultracode: current.ultracode,
+      enableWorkflows: current.ultracode,
+      skillOverrides: withheld
+    })
+  }
+
   const conversation = hooks.query({
     prompt: input.stream(),
     options: {
@@ -387,8 +435,12 @@ export function startSession(options: SessionOptions, hooks: SessionHooks): Agen
       // explicitly, `false` included: a session that quietly kept the last
       // one's workflows would be a state nobody chose, and leaving one unsaid
       // hands the answer to whichever settings file happens to mention it.
-      settings: { ultracode, enableWorkflows: ultracode },
+      settings: { ultracode, enableWorkflows: ultracode, skillOverrides: options.skillOverrides },
       settingSources: [...options.settingSources],
+      // Omitted when there are none rather than passed empty: a plugin list is
+      // read at start-up, and an empty one is a claim about the session that
+      // is better left unmade.
+      ...(options.plugins.length > 0 && { plugins: [...options.plugins] }),
       systemPrompt: { type: 'preset', preset: 'claude_code' },
       permissionMode: options.permissionMode,
       allowedTools: [...options.allowedTools],
@@ -483,22 +535,30 @@ export function startSession(options: SessionOptions, hooks: SessionHooks): Agen
     },
 
     async setEffort(choice) {
-      // There is no `setEffort`; `effort` is a start-time option and this is
-      // the only way to move it on a running session.
+      // There is no `setEffort`; `effort` is a start-time option, and the flag
+      // layer is the only way to move it on a running session.
       //
-      // Two things about it that look wrong and are not. It shallow-merges
-      // top-level keys, so a second setting sent later would not join this one
-      // — which is why all three go in one call rather than effort here and
-      // `ultracode` somewhere tidier. And the persisted `effortLevel` excludes
-      // `max` while this parameter allows it, because `max` lasts for the
-      // session and the CLI never writes it to a settings file; we keep it on
-      // the chat instead, and the next session asks for it at start-up.
-      const { effort, ultracode } = sessionEffort(choice)
-      await conversation.applyFlagSettings({
-        effortLevel: effort,
-        ultracode,
-        enableWorkflows: ultracode
-      })
+      // The persisted `effortLevel` excludes `max` while this parameter allows
+      // it, because `max` lasts for the session and the CLI never writes it to
+      // a settings file; we keep it on the chat instead, and the next session
+      // asks for it at start-up.
+      effortChoice = choice
+      await applyFlags()
+    },
+
+    async setSkills(skillOverrides) {
+      // The whole map every time, never a difference: turning a skill back on
+      // is saying its key is no longer there, and there is no way to say that
+      // one key at a time.
+      withheld = skillOverrides
+      await applyFlags()
+    },
+
+    async refreshSkills() {
+      // For a skill written while this conversation was open. Without it the
+      // session goes on listing what the directories held when it started, and
+      // the panel would show a skill the agent cannot see.
+      await conversation.reloadSkills()
     },
 
     close() {

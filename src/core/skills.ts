@@ -28,7 +28,7 @@ import { type Document, parseDocument, stringify } from 'yaml'
 import { z } from 'zod'
 
 import { pluginManifest, skillsDirOf } from './paths.js'
-import { isSkillName } from './skillNames.js'
+import { isSkillName, type SkillScope } from './skillNames.js'
 
 /** The one file a skill must have, named as Claude Code names it. */
 const SKILL_FILE = 'SKILL.md'
@@ -98,6 +98,35 @@ export type SkillContent = z.infer<typeof SkillContentSchema>
 /** A whole `SKILL.md`, as the raw editor and the paste import hand it over. */
 export const SkillRawSchema = z.string().max(MAX_DOCUMENT)
 
+/**
+ * A save, from either half of the editor.
+ *
+ * Two shapes rather than one because they mean different things: the form
+ * edits two fields and leaves the rest of the frontmatter alone, while the raw
+ * mode is the user saying the document is theirs entire.
+ */
+export const SkillSaveSchema = z.discriminatedUnion('kind', [
+  z.object({ kind: z.literal('form'), content: SkillContentSchema }),
+  z.object({ kind: z.literal('raw'), text: SkillRawSchema })
+])
+export type SkillSave = z.infer<typeof SkillSaveSchema>
+
+/** The three ways a skill written elsewhere gets in. */
+export const SkillImportSchema = z.discriminatedUnion('kind', [
+  z.object({ kind: z.literal('path'), path: z.string().min(1) }),
+  z.object({ kind: z.literal('text'), text: SkillRawSchema }),
+  z.object({ kind: z.literal('url'), url: z.string().min(1).max(2_000) })
+])
+export type SkillImport = z.infer<typeof SkillImportSchema>
+
+/** One row of the panel: a skill, where it came from, and whether it is on. */
+export interface SkillListing extends SkillEntry {
+  /** The name the agent knows it by, and the key every stored answer uses. */
+  readonly key: string
+  readonly scope: SkillScope
+  readonly enabled: boolean
+}
+
 interface SplitDocument {
   readonly front: string
   readonly body: string
@@ -161,6 +190,36 @@ function parse(raw: string): ParsedSkill | null {
     body: parts.body,
     raw
   }
+}
+
+/** The two lists a conversation's answer is read over. */
+export interface SkillDefaults {
+  /** Off in every conversation of this installation. */
+  readonly global: readonly string[]
+  /** Off in every conversation of this project. */
+  readonly project: readonly string[]
+}
+
+/**
+ * Whether a skill is on for one conversation.
+ *
+ * Three layers, narrowest first. A chat holds only what the user changed in
+ * it, so a skill it says nothing about follows the two default lists — which
+ * is what lets a skill added, renamed or removed after the conversation
+ * started behave sensibly instead of being stuck at a stale answer.
+ *
+ * An empty everything means on, deliberately: that is how Claude Code treats a
+ * skill it discovers, and octopus withholds only what it was asked to.
+ */
+export function skillEnabled(
+  key: string,
+  defaults: SkillDefaults,
+  overrides: Readonly<Record<string, boolean>>
+): boolean {
+  const chosen = overrides[key]
+  if (chosen !== undefined) return chosen
+
+  return !defaults.global.includes(key) && !defaults.project.includes(key)
 }
 
 /**

@@ -22,6 +22,7 @@ function config(overrides: Partial<Config> = {}): Config {
     model: null,
     planModel: null,
     alwaysAllowedTools: [],
+    disabledSkillDefaults: [],
     theme: 'system',
     language: 'en',
     rightPanelWidth: 360,

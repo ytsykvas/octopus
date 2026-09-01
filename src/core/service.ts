@@ -7,10 +7,12 @@
  */
 
 import { randomUUID } from 'node:crypto'
+import { join } from 'node:path'
 
 import {
   forkSession as defaultForkSession,
-  query as defaultQuery
+  query as defaultQuery,
+  type SdkPluginConfig
 } from '@anthropic-ai/claude-agent-sdk'
 
 import { type CommandExec, defaultExec } from './accounts.js'
@@ -109,7 +111,40 @@ import {
   storedInstruction,
   writeInstruction
 } from './instructions.js'
-import { configFile, rootDir, stateFile, stateTempFile } from './paths.js'
+import {
+  configFile,
+  globalSkillsRoot,
+  projectSkillsRoot,
+  rootDir,
+  skillsDirOf,
+  stateFile,
+  stateTempFile
+} from './paths.js'
+import {
+  DOWNLOAD_TIMEOUT_MS,
+  ensurePlugin,
+  importFromPath,
+  importFromText,
+  importFromUrl,
+  readSkill,
+  readSkillsIn,
+  removeSkill,
+  type SkillDocument,
+  type SkillEntry,
+  skillEnabled,
+  type SkillImport,
+  type SkillListing,
+  type SkillSave,
+  writeRawSkill,
+  writeSkill
+} from './skills.js'
+import {
+  GLOBAL_PLUGIN,
+  PROJECT_PLUGIN,
+  type SkillStore,
+  skillKey,
+  type SkillScope
+} from './skillNames.js'
 import { type QuestionAnswer, readQuestions, withAnswers } from './questions.js'
 import { describeError } from './persist.js'
 import {
@@ -237,6 +272,12 @@ export interface ServiceOptions {
    * or reaching the network — the same reasoning as `makeExec`.
    */
   readonly query?: QueryFn
+  /**
+   * How a skill is downloaded, injected for the reason `makeGh` is: the real
+   * one leaves the machine, and a suite that used it would be testing
+   * somebody's web server.
+   */
+  readonly fetch?: typeof fetch
   /**
    * The SDK's session fork, injected for the same reason as `query`.
    *
@@ -537,6 +578,24 @@ export interface OctopusService {
    */
   readEffectiveInstruction(workspaceId: string, kind: InstructionKind): Promise<string>
 
+  /** The skills one of the two stores holds, for a settings section. */
+  listSkills(store: SkillStore): Promise<SkillEntry[]>
+  /** One of them, opened: the form's two fields and the raw document. */
+  readStoredSkill(store: SkillStore, name: string): Promise<SkillDocument>
+  saveStoredSkill(store: SkillStore, name: string, save: SkillSave): Promise<SkillEntry>
+  removeStoredSkill(store: SkillStore, name: string): Promise<void>
+  importStoredSkill(store: SkillStore, request: SkillImport): Promise<SkillEntry>
+  /**
+   * Every skill this conversation could use, and whether it is on.
+   *
+   * Resolved here rather than in the renderer: three sources and three layers
+   * of defaults are the service's arithmetic, and a window doing it would have
+   * to ask four times to get one answer.
+   */
+  skillsForChat(chatId: string): Promise<SkillListing[]>
+  /** Switches one skill for one conversation, on a running session included. */
+  setChatSkill(chatId: string, key: string, enabled: boolean): Promise<void>
+
   /** Workspaces of a project, reconciled with what git actually has. */
   listWorkspaces(projectId: string): Promise<WorkspaceView[]>
   createWorkspaceIn(projectId: string): Promise<Workspace>
@@ -795,6 +854,15 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
   let config: Config = await loadConfig(configPath)
 
   /** Live agent sessions, keyed by chat. A missing entry means "not started". */
+  /**
+   * How a skill is downloaded, settled once here rather than at each call.
+   *
+   * The real `fetch` and the deadline the module never defaults, put together
+   * where every service gets one — which is also what keeps the injected
+   * stand-in and the real thing on the same footing.
+   */
+  const download = { fetch: options.fetch ?? globalThis.fetch, timeoutMs: DOWNLOAD_TIMEOUT_MS }
+
   const sessions = new Map<string, AgentSession>()
   const listeners = new Set<(event: ChatEvent) => void>()
   const statusListeners = new Set<(event: WorkspaceStatusEvent) => void>()
@@ -1648,6 +1716,112 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
     return configured.filter((source) => source === 'user')
   }
 
+  /** Where a store's files sit; a path, so reading one creates nothing. */
+  function storeRoot(store: SkillStore): string {
+    return store.kind === 'global'
+      ? globalSkillsRoot(dataRoot)
+      : projectSkillsRoot(requireProject(store.projectId).id, dataRoot)
+  }
+
+  /** The same, made into a plugin — only ever on the way to writing. */
+  function writableStore(store: SkillStore): Promise<string> {
+    return ensurePlugin(storeRoot(store), store.kind === 'global' ? GLOBAL_PLUGIN : PROJECT_PLUGIN)
+  }
+
+  function storeSkills(store: SkillStore): Promise<SkillEntry[]> {
+    return readSkillsIn(skillsDirOf(storeRoot(store)))
+  }
+
+  interface SessionSkills {
+    readonly plugins: SdkPluginConfig[]
+    readonly overrides: Record<string, 'off'>
+    readonly listing: SkillListing[]
+  }
+
+  /**
+   * What this conversation may be offered, and what it is not.
+   *
+   * Three sources and three layers, and they are not the same three. The
+   * sources are the two stores octopus keeps and the checkout's own
+   * `.claude/skills`; the layers deciding whether a skill is on are the
+   * installation's default list, the project's, and what this conversation was
+   * told.
+   *
+   * Only the checkout's are gated by `settingSources`. Ours arrive as a local
+   * plugin, which is a launch option the setting does not filter — and that is
+   * right rather than a leak: the setting governs what the machine and the
+   * repository contribute without being asked, while these are the user's own
+   * skills, made in this app, listed in a panel they opened. The trust digest
+   * is the same story: an unapproved repository says nothing about skills the
+   * user wrote here.
+   */
+  async function sessionSkills(
+    project: Project,
+    workspace: Workspace,
+    chat: Chat,
+    settingSources: readonly SettingSourceName[]
+  ): Promise<SessionSkills> {
+    const globalRoot = globalSkillsRoot(dataRoot)
+    const projectRoot = projectSkillsRoot(project.id, dataRoot)
+
+    const [ours, theirs, carried] = await Promise.all([
+      readSkillsIn(skillsDirOf(globalRoot)),
+      readSkillsIn(skillsDirOf(projectRoot)),
+      // A switch over something the session would not load is a control with
+      // nothing behind it, so the group is empty rather than inert.
+      settingSources.includes('project')
+        ? readSkillsIn(join(workspace.path, '.claude', 'skills'))
+        : []
+    ])
+
+    const defaults = {
+      global: config.disabledSkillDefaults,
+      project: project.disabledSkillDefaults
+    }
+
+    const row = (scope: SkillScope, skill: SkillEntry): SkillListing => {
+      const key = skillKey(scope, skill.name)
+
+      return { ...skill, key, scope, enabled: skillEnabled(key, defaults, chat.skillOverrides) }
+    }
+
+    const listing = [
+      ...ours.map((skill) => row('global', skill)),
+      ...theirs.map((skill) => row('project', skill)),
+      ...carried.map((skill) => row('repository', skill))
+    ]
+
+    const overrides: Record<string, 'off'> = {}
+    for (const item of listing) {
+      if (!item.enabled) overrides[item.key] = 'off'
+    }
+
+    return {
+      // A store with nothing in it is left unmentioned: a plugin list is read
+      // once at start-up, and naming an empty one asserts a session has
+      // something it has not.
+      plugins: [
+        ...(ours.length > 0 ? [{ type: 'local' as const, path: globalRoot }] : []),
+        ...(theirs.length > 0 ? [{ type: 'local' as const, path: projectRoot }] : [])
+      ],
+      overrides,
+      listing
+    }
+  }
+
+  /**
+   * Tells every running conversation to look at the skill directories again.
+   *
+   * Best effort and never awaited into a failure: this follows a write that
+   * has already succeeded, and a session that will not answer is a stale
+   * listing rather than a lost skill.
+   */
+  async function refreshRunningSkills(): Promise<void> {
+    await Promise.all(
+      [...sessions.values()].map((session) => session.refreshSkills().catch(() => undefined))
+    )
+  }
+
   async function sourcesFor(workspace: Workspace): Promise<SettingSourceName[]> {
     // `requireProject`, not a lookup with a fallback: a workspace whose project
     // is gone is a broken state, and quietly handing it the full set of sources
@@ -1655,11 +1829,18 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
     return sourcesIn(workspace.path, requireProject(workspace.projectId))
   }
 
-  function startFor(
+  async function startFor(
     chat: Chat,
     workspace: Workspace,
     settingSources: readonly SettingSourceName[]
-  ): AgentSession {
+  ): Promise<AgentSession> {
+    const skills = await sessionSkills(
+      requireProject(workspace.projectId),
+      workspace,
+      chat,
+      settingSources
+    )
+
     const session = startSession(
       {
         cwd: workspace.path,
@@ -1675,7 +1856,9 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
         // ends, so unticking it in Settings changed nothing the agent was
         // already doing. `askPermission` consults `alwaysAllowedTools` itself,
         // on every call, against the config as it stands at that moment.
-        allowedTools: [...READ_ONLY_TOOLS]
+        allowedTools: [...READ_ONLY_TOOLS],
+        plugins: skills.plugins,
+        skillOverrides: skills.overrides
       },
       {
         query: runQuery,
@@ -2200,6 +2383,85 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
       const supplied = await repoInstruction(kind, workspace.path)
 
       return supplied?.body ?? effectiveInstruction(kind, workspace.projectId, dataRoot)
+    },
+
+    // Both `async` although neither awaits anything of its own: `storeRoot`
+    // throws for a project that is gone, and a method returning a promise must
+    // reject rather than throw out of the call — the renderer awaits it.
+    async listSkills(store) {
+      return storeSkills(store)
+    },
+
+    async readStoredSkill(store, name) {
+      return readSkill(skillsDirOf(storeRoot(store)), name)
+    },
+
+    async saveStoredSkill(store, name, save) {
+      const dir = await writableStore(store)
+      const written =
+        save.kind === 'form'
+          ? await writeSkill(dir, name, save.content)
+          : await writeRawSkill(dir, name, save.text)
+
+      await refreshRunningSkills()
+
+      return written
+    },
+
+    async removeStoredSkill(store, name) {
+      await removeSkill(skillsDirOf(storeRoot(store)), name)
+      await refreshRunningSkills()
+    },
+
+    async importStoredSkill(store, request) {
+      const dir = await writableStore(store)
+      const imported =
+        request.kind === 'path'
+          ? await importFromPath(dir, request.path)
+          : request.kind === 'text'
+            ? await importFromText(dir, request.text)
+            : await importFromUrl(dir, request.url, download)
+
+      await refreshRunningSkills()
+
+      return imported
+    },
+
+    async skillsForChat(chatId) {
+      const chat = requireChat(chatId)
+      const workspace = requireWorkspace(chat.workspaceId)
+
+      const { listing } = await sessionSkills(
+        requireProject(workspace.projectId),
+        workspace,
+        chat,
+        await sourcesFor(workspace)
+      )
+
+      return listing
+    },
+
+    async setChatSkill(chatId, key, enabled) {
+      const chat = requireChat(chatId)
+      const workspace = requireWorkspace(chat.workspaceId)
+      const skillOverrides = { ...chat.skillOverrides, [key]: enabled }
+
+      await commit((current) => updateChat(current, chatId, { skillOverrides }))
+
+      // A running conversation is told at once rather than on its next start.
+      // A switch whose effect waits for a restart is a switch that looks
+      // broken, and the flag layer takes this the way it takes the effort.
+      const session = sessions.get(chatId)
+      if (session) {
+        const { overrides } = await sessionSkills(
+          requireProject(workspace.projectId),
+          workspace,
+          { ...chat, skillOverrides },
+          await sourcesFor(workspace)
+        )
+
+        await session.setSkills(overrides)
+      }
     },
 
     async removeProjectById(projectId) {
@@ -2745,7 +3007,7 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
         await running.setEffort(chat.effort)
       }
 
-      const session = running ?? startFor(chat, workspace, await sourcesFor(workspace))
+      const session = running ?? (await startFor(chat, workspace, await sourcesFor(workspace)))
 
       /*
        * `/usage` is answered here, and the message is not sent on.
@@ -2978,7 +3240,7 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
       const workspace = state.workspaces.find((item) => item.id === chat?.workspaceId)
       if (!chat || !workspace) return null
 
-      const session = startFor(chat, workspace, await sourcesFor(workspace))
+      const session = await startFor(chat, workspace, await sourcesFor(workspace))
       await keepSubscription(await session.subscriptionUsage())
       return subscriptionUsage
     },

@@ -119,7 +119,17 @@ export const ProjectSchema = z.object({
    * it: a digest says "this text was read", and that is a different statement
    * from "whatever this repository says is fine".
    */
-  trustRepoScripts: z.boolean().default(false)
+  trustRepoScripts: z.boolean().default(false),
+  /**
+   * Skills that are off in every new conversation of this project.
+   *
+   * The same list as the one in the config, one layer down: the config answers
+   * for every project, this one for this project, and a chat's own overrides
+   * answer over both. Names the checkout's skills as readily as the project
+   * store's — a skill this repository ships that is never wanted here is
+   * turned off once rather than in each conversation.
+   */
+  disabledSkillDefaults: z.array(z.string()).default([])
 })
 
 export const WorkspaceStatusSchema = z.enum(['idle', 'running', 'waiting_permission', 'error'])
@@ -394,6 +404,7 @@ export const ProjectPatchSchema = ProjectSchema.pick({
   approvedScripts: true,
   envProfile: true,
   trustRepoScripts: true,
+  disabledSkillDefaults: true,
   repoPath: true
 }).partial()
 
@@ -490,6 +501,9 @@ export function updateProject(state: State, projectId: string, patch: ProjectPat
             ...(patch.envProfile !== undefined && { envProfile: patch.envProfile }),
             ...(patch.trustRepoScripts !== undefined && {
               trustRepoScripts: patch.trustRepoScripts
+            }),
+            ...(patch.disabledSkillDefaults !== undefined && {
+              disabledSkillDefaults: patch.disabledSkillDefaults
             }),
             ...(repoPath !== undefined && { repoPath }),
             ...(patch.approvedSettings !== undefined && {

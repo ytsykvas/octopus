@@ -559,6 +559,19 @@ export const ChatSchema = z.object({
    * started a session — the same trade as `knownModels`, and the honest one.
    */
   knownCommands: z.array(AgentCommandSchema).default([]),
+  /**
+   * Which skills this conversation was told to differ on, and how.
+   *
+   * Only what the user changed, not the whole answer. The effective state is
+   * this over the project's default list over the installation's, so a skill
+   * added, renamed or removed after a conversation existed follows the new
+   * defaults instead of being stuck at a stale copy of the old ones — and a
+   * conversation nobody has opened the panel in stores nothing at all.
+   *
+   * Keyed by the name the agent knows the skill by: `octopus:review` for one
+   * of ours, bare for one the checkout supplies.
+   */
+  skillOverrides: z.record(z.string(), z.boolean()).default({}),
   createdAt: z.iso.datetime()
 })
 
@@ -632,6 +645,10 @@ export function newChat(workspaceId: string, options: NewChatOptions): Chat {
     // Nothing known until a session has run: the agent is the only thing that
     // can say which commands this worktree has.
     knownCommands: [],
+    // Empty, which is not the same as "no skills": it means this conversation
+    // has been told nothing and follows the defaults, so a skill switched off
+    // for the project after this chat was opened is off here too.
+    skillOverrides: {},
     createdAt: options.createdAt
   }
 }
@@ -679,6 +696,10 @@ export function forkChat(source: Chat, options: ForkChatOptions): Chat {
     workingMode: source.workingMode,
     planMode: false,
     knownCommands: source.knownCommands,
+    // Carried across with the model and the effort, and for the same reason: a
+    // fork is the same work in the same place, and a skill switched off
+    // because it was getting in the way is still in the way.
+    skillOverrides: source.skillOverrides,
     createdAt: options.createdAt
   }
 }

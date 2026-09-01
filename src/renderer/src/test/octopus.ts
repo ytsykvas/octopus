@@ -185,6 +185,7 @@ function chatFixture(): Chat {
     workingMode: 'default',
     planMode: false,
     knownCommands: [],
+    skillOverrides: {},
     createdAt: '2026-08-08T00:00:00.000Z'
   }
 }
@@ -200,6 +201,7 @@ function defaultConfig(): Config {
     model: null,
     planModel: null,
     alwaysAllowedTools: [],
+    disabledSkillDefaults: [],
     theme: 'system' as const,
     language: 'en' as const,
     rightPanelTab: 'diff' as const,

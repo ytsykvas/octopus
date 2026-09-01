@@ -177,6 +177,22 @@ export const ConfigSchema = z.object({
     .default([])
     .transform((tools) => tools.filter((tool) => !NEVER_STANDING.includes(tool))),
 
+  /**
+   * Skills that are off in every new conversation, by the key the agent knows
+   * them by.
+   *
+   * A list of the ones switched **off** rather than the ones switched on, so
+   * an empty list means what it says on a fresh install: every skill the agent
+   * discovers is available, which is how Claude Code behaves without us. The
+   * alternative would leave a skill somebody has just written doing nothing
+   * until they found a second control and ticked it.
+   *
+   * Names the checkout's skills as readily as our own — a repository skill
+   * nobody wants in any conversation is answered here rather than switched off
+   * again in each one.
+   */
+  disabledSkillDefaults: z.array(z.string()).default([]),
+
   theme: ThemePreferenceSchema,
 
   /**
@@ -280,6 +296,7 @@ export function createDefaultConfig(
     model: null,
     planModel: null,
     alwaysAllowedTools: [],
+    disabledSkillDefaults: [],
     theme: 'system',
     language: 'en',
     cloneDirectory: '',
