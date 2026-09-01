@@ -381,14 +381,23 @@ with full confidence and be wrong. It is re-learned from the first turn that run
 live child process, and once that process ends the next one rebuilds a context
 we never observed.
 
-**The subscription windows are the exception, and were not always.** They used
-to be cached beside the rate limit and go no further, on the reasoning above —
-a reading restored after a night would be drawn with full confidence and be
-wrong. They are now written to `state.json` as well, because they moved out of
-the composer and into the sidebar, where they are on screen from the moment the
-window opens rather than after a turn. Without the last one on disk that block
-is empty on every launch until somebody sends a message, which is the thing it
-exists to fix.
+**The plan windows are the exception, and were not always.** They used to be
+cached beside the rate limit and go no further, on the reasoning above — a
+reading restored after a night would be drawn with full confidence and be
+wrong. They are written to `state.json` as `usageWindows`, because they moved
+out of the composer and into the sidebar, where they are on screen from the
+moment the window opens. The block fills within a second of the window taking
+focus now, so what this buys is that second rather than a whole launch — and a
+block drawn empty for it would flicker on every start.
+
+`usageWindows` is a **new key** rather than the reshaped `subscriptionUsage` it
+replaces, which held the five-hour and weekly windows alone. `readJsonFile`
+throws on a shape mismatch rather than falling back, so widening the old field
+in place would have stopped every existing installation opening; zod drops the
+key it no longer knows, and the first read fills the new one. The reading now
+carries **every** window the account reports and the moment it was taken —
+`resetsAt` says a window has since emptied, and cannot say how old the share
+beside it is.
 
 What makes the trade different from the rate limit's is that the objection is
 answerable here. A window carries `resetsAt`, so a reading can be checked
@@ -396,8 +405,9 @@ against the clock: past that moment it is drawn faded and says so, rather than
 standing there as fact. The rate limit has no such handle, so it still expires
 into nothing.
 
-It is written only when it changes — the figures are read up to three times a
-turn, and a write per read would put the busiest path in the app on the state
+It is written only when it changes — the figures are read at the end of every
+turn, on every return to the window and every three minutes besides, and a write
+per read would put the busiest path in the app on the state
 file to record a number that had not moved.
 
 Three things write it now — a turn ending, a `/usage` somebody typed, and the

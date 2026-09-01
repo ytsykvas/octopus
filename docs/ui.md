@@ -874,40 +874,71 @@ about the conversation they were sitting in: the same pair applies to every
 workspace, and the decision they inform is whether to start something at all,
 which is made looking at the list rather than at a chat.
 
-**They are there before the first message.** The figures arrive from a running
-session's control channel, so the app learns them only when a turn runs — and
-the service therefore keeps the last reading in `state.json`, beside the model
-catalogue and for the reason already written on that field: so a picker is
-usable before the first message. Without it the block would be empty on every
-launch until somebody sent something, which is the thing it exists to fix.
+**They are there before the first message.** The service keeps the last reading
+in `state.json`, beside the model catalogue and for the reason already written
+on that field: so something is usable before the first message. It is a second
+of staleness now rather than a launch of it, since the first read lands as soon
+as the window takes focus — but a block drawn empty for that second would
+flicker on every launch.
 
-**Nothing is polled, and nothing starts a session on its own.** `service.ts`
-says plainly that spawning an agent to fill a gauge nobody requested is not
-done — but the same passage draws the line where it matters: "the difference is
-who asked". So the block carries a control, and a press of it is the request.
-It starts a session if none is running, asks the account and stops; nothing is
-sent to the agent, so it costs no turn and no tokens.
+**It is polled, and it will start a session to answer.** This is a reversal, and
+the thing that reversed it is a measurement. The rule was written on the
+assumption that answering costs an agent; a cold read — spawn the CLI, ask,
+answer — is **720–850ms**, one against a session already running is about
+**260ms**, and neither costs a token, because it is a control request rather
+than a turn. Three things keep the figures current:
 
-While the block has nothing to draw it says so and offers that press, rather
-than rendering nothing. Two empty bars would be the sidebar claiming to know
-something it does not, and no block at all would leave no way to ask.
+- **the service announces a reading that moved**, so a finished turn reaches the
+  block on that turn;
+- **coming back to the window asks**, because whatever happened in the
+  background announced itself to nobody here, and the figure informs a decision
+  taken the moment somebody looks;
+- **a slow timer while the window is visible** — three minutes — for the window
+  left open and watched. Stopped while it is hidden: nothing behind a hidden
+  window is worth spawning a process for.
 
-A press can still come back with nothing: a session runs in a worktree, so an
-installation with no conversation anywhere has nowhere to start one. That is a
-different sentence from "not read yet", because no amount of waiting fixes it.
+The control stays, because a press is still the right way to ask _now_. What it
+no longer is, is the only way.
+
+**Reads are coalesced, and a session started to answer is closed again.** All
+four askers can land at once, and each starting its own read would spawn its own
+CLI to ask one question, so the one in flight is shared. And a probe is shut in
+a `finally`: `startFor` registers into the session map, so every press used to
+leave an agent running for the rest of the session — which mattered little at
+one press and would be one more agent every three minutes now.
+
+**Having nothing to draw is four sentences, not one.** Never read; this account
+has no plan windows at all; there was nowhere to ask through; the read failed.
+A single nullable value stood for all four and got two of them wrong — a failed
+read handed back the previous figures and reported success, so the press redrew
+a stale number as though it were fresh, and an empty cache after a failed read
+said "open a workspace first", which describes only one of the ways it happens.
 
 **A typed `/usage` fills it too.** That command already asks for everything and
 the answer carries these two windows, so the reading is kept rather than drawn
 once and let go — which used to leave the block empty beside a card that had
 just shown the same figures.
 
-**The windows are named** (`5h`, `1w`) although the old header chip never named
-its one: two figures under each other are unreadable without labels, while one
-figure beside a countdown was not.
+**Every window the account reports is drawn**, not two of them. They arrive in
+one answer and the block used to keep four numbers out of it, so an account with
+a weekly window per model had it named by the `/usage` card and missing here.
+`toLimits` drops a window with no share, so most accounts still see the two rows
+this always had.
+
+**The windows are named** (`5h`, `1w`, `1w Opus`, `1w Fable`) although the old
+header chip never named its one: two figures under each other are unreadable
+without labels, while one figure beside a countdown was not. The names are
+short here and long on the `/usage` card — `1w` against `Current week (all
+models)` — which is two labels for one window and deliberate: the card has a
+column to write in and this has two hundred pixels for the whole row. What must
+not differ is _which_ windows exist, and `usageWindows.ts` holds both tables so
+a window added to the allowlist fails to compile until it is named at both
+widths.
 
 **Each window says when it comes back, not how long it has left.** `32% · 14:30`
-reads at a glance in a way a countdown cannot: the reading is redrawn only when
-a turn ends, so `2h 30m` written there would be that much wrong an hour later,
+reads at a glance in a way a countdown cannot: the reading is redrawn when the
+service announces one, when the window is looked at, and every three minutes
+while it is — so `2h 30m` written there would be wrong between any two of those,
 while an hour of the day stays true however long it is looked at.
 
 The clock is 24-hour and the date is `DD.MM` in every language, following
