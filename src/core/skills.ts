@@ -178,17 +178,52 @@ function readField(document: Document, key: string): string {
   return typeof value === 'string' ? value.trim() : ''
 }
 
-/** The document, or null when it has no frontmatter we can read. */
+/**
+ * The same, read off the line rather than out of the document.
+ *
+ * Because real frontmatter is often not valid YAML and the agent reads it
+ * anyway. A `description` is one long unquoted sentence, and a sentence has
+ * colons in it — `Triggers on: access_denied` makes YAML see a nested mapping
+ * and refuse the whole block. Two skills shipped in a repository this app was
+ * opened on did exactly that, and the panel called them "no skills yet" while
+ * the agent was using both.
+ *
+ * So this is the fallback, not the reader: everything after the first colon on
+ * the line that starts with the key, unwrapped from quotes if it has them. It
+ * cannot see a block scalar and does not have to — that is what the parser is
+ * for, and this only runs where the parser has already given up.
+ */
+function scanField(front: string, key: string): string {
+  for (const line of front.split('\n')) {
+    if (!line.startsWith(`${key}:`)) continue
+
+    const value = line.slice(key.length + 1).trim()
+
+    return value.replace(/^(['"])(.*)\1$/, '$2')
+  }
+
+  return ''
+}
+
+/**
+ * The document, or null when there is no frontmatter at all.
+ *
+ * Frontmatter that will not parse is **not** a refusal. It is read line by line
+ * instead, because the agent reads those files and a list that dropped them
+ * would be describing a different set of skills than the one in use.
+ */
 function parse(raw: string): ParsedSkill | null {
   const parts = splitDocument(raw)
   if (parts === null) return null
 
   const document = parseDocument(parts.front)
-  if (document.errors.length > 0) return null
+  const parsed = document.errors.length === 0
 
   return {
-    name: readField(document, 'name'),
-    description: readField(document, 'description'),
+    name: parsed ? readField(document, 'name') : scanField(parts.front, 'name'),
+    description: parsed
+      ? readField(document, 'description')
+      : scanField(parts.front, 'description'),
     front: parts.front,
     body: parts.body,
     raw
@@ -319,10 +354,42 @@ function frontmatterFor(previous: string | null, name: string, description: stri
   if (previous === null) return stringify({ name, description })
 
   const document = parseDocument(previous)
-  document.set('name', name)
-  document.set('description', description)
+  if (document.errors.length === 0) {
+    document.set('name', name)
+    document.set('description', description)
 
-  return String(document)
+    return String(document)
+  }
+
+  // Frontmatter the parser will not take, edited the way it was read: the two
+  // lines are replaced and every other line is copied through untouched.
+  // Rewriting it as YAML would tidy away the `allowed-tools` beside them, and
+  // writing back what the parser made of a block it could not read would be
+  // worse than either.
+  return replaceLines(previous, { name, description })
+}
+
+/** Sets two keys in frontmatter no parser will take, line by line. */
+function replaceLines(front: string, fields: Readonly<Record<string, string>>): string {
+  const written = new Set<string>()
+
+  const lines = front.split('\n').map((line) => {
+    for (const [key, value] of Object.entries(fields)) {
+      if (line.startsWith(`${key}:`)) {
+        written.add(key)
+
+        return `${key}: ${value}`
+      }
+    }
+
+    return line
+  })
+
+  const missing = Object.entries(fields)
+    .filter(([key]) => !written.has(key))
+    .map(([key, value]) => `${key}: ${value}`)
+
+  return [...missing, ...lines].join('\n')
 }
 
 function assertFits(text: string): void {

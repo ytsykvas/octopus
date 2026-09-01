@@ -99,10 +99,46 @@ describe('readSkillsIn', () => {
     await mkdir(join(root, 'no-document'), { recursive: true })
     await place(root, 'no-frontmatter', '# Just prose\n')
     await place(root, 'unterminated', '---\nname: x\n')
-    await place(root, 'broken-yaml', '---\nname: [unclosed\n---\n\nBody\n')
     await writeFile(join(root, 'loose.md'), 'not a directory', 'utf8')
 
     expect((await readSkillsIn(root)).map((skill) => skill.name)).toEqual(['good'])
+  })
+
+  /*
+   * Real frontmatter is often not valid YAML, and the agent reads it anyway. A
+   * description is one long unquoted sentence and a sentence has colons in it;
+   * YAML sees `Triggers on: access_denied` as a nested mapping and refuses the
+   * block. Two skills shipped in a repository this app was opened on did
+   * exactly that, and the panel said "no skills yet" while the agent was using
+   * both.
+   */
+  it('reads frontmatter no parser will take, rather than calling it not a skill', async () => {
+    await place(
+      root,
+      'colons',
+      '---\nname: colons\ndescription: Use it when there is an artifact. Triggers on: access_denied, "is this a bug".\nallowed-tools: Read\n---\n\nBody\n'
+    )
+
+    expect(await readSkillsIn(root)).toEqual([
+      {
+        name: 'colons',
+        description:
+          'Use it when there is an artifact. Triggers on: access_denied, "is this a bug".',
+        path: join(root, 'colons')
+      }
+    ])
+  })
+
+  it('unwraps a quoted value the parser never got to', async () => {
+    await place(root, 'quoted', '---\nname: quoted\ndescription: "One: two"\nbad: [\n---\n\nBody\n')
+
+    expect((await readSkillsIn(root))[0]?.description).toBe('One: two')
+  })
+
+  it('reads nothing for a field that is not on any line', async () => {
+    await place(root, 'nameless', '---\ndescription: No name. Colon: here.\nbad: [\n---\n\nBody\n')
+
+    expect((await readSkillsIn(root))[0]?.name).toBe('nameless')
   })
 
   it('answers with nothing for a directory that is not there', async () => {
@@ -209,6 +245,35 @@ describe('writeSkill', () => {
     expect(raw).not.toContain('Old body')
   })
 
+  /*
+   * The two fields are replaced where they stand and everything else is copied
+   * through. Rewriting the block as YAML would tidy away the `allowed-tools`
+   * beside them, and writing back what the parser made of a block it could not
+   * read would be worse than either.
+   */
+  it('edits frontmatter no parser will take without disturbing the rest', async () => {
+    await place(
+      root,
+      'colons',
+      '---\nname: colons\ndescription: Triggers on: old.\nallowed-tools: Read, Bash(npm run:*)\n---\n\nOld body\n'
+    )
+
+    await writeSkill(root, 'colons', { description: 'Triggers on: new.', body: 'New body\n' })
+    const raw = await readFile(join(root, 'colons', 'SKILL.md'), 'utf8')
+
+    expect(raw).toContain('description: Triggers on: new.')
+    expect(raw).toContain('allowed-tools: Read, Bash(npm run:*)')
+    expect(raw).not.toContain('old.')
+  })
+
+  it('adds a field the unreadable frontmatter never had', async () => {
+    await place(root, 'partial', '---\nname: partial\nbad: [\n---\n\nBody\n')
+
+    await writeSkill(root, 'partial', { description: 'Now it has one.', body: 'Body\n' })
+
+    expect((await readSkill(root, 'partial')).description).toBe('Now it has one.')
+  })
+
   it('refuses a document longer than a skill has any business being', async () => {
     const refused = await refusal(() =>
       writeSkill(root, 'huge', { description: 'Big.', body: 'x'.repeat(64_001) })
@@ -250,6 +315,14 @@ describe('writeRawSkill', () => {
     expect((await refusal(() => writeRawSkill(root, 'review', '# Just prose\n'))).code).toBe(
       'skillFrontmatterMissing'
     )
+  })
+
+  it('takes a document whose frontmatter no parser will read', async () => {
+    const raw = '---\nname: review\ndescription: Triggers on: this.\n---\n\nBody\n'
+
+    await expect(writeRawSkill(root, 'review', raw)).resolves.toMatchObject({
+      description: 'Triggers on: this.'
+    })
   })
 
   it('refuses a document past the cap', async () => {
