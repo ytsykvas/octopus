@@ -34,6 +34,8 @@ interface ComposerAtticProps {
   readonly onToggleSkill: (key: string, enabled: boolean) => void
   /** Asked for a fresh list when the panel opens; nothing pushes one. */
   readonly onRefreshSkills: () => void
+  /** Where the panel sends someone who has no skills to switch yet. */
+  readonly onOpenSettings: () => void
 }
 
 /**
@@ -73,7 +75,8 @@ export function ComposerAttic({
   onSend,
   skills,
   onToggleSkill,
-  onRefreshSkills
+  onRefreshSkills,
+  onOpenSettings
 }: ComposerAtticProps): React.JSX.Element {
   const { t } = useTranslation()
   // Owned here rather than threaded down from `App`, where the shared one
@@ -205,7 +208,12 @@ export function ComposerAttic({
         <span className="ml-auto flex items-center gap-2">
           {refused !== null && <span className="text-danger">{refused}</span>}
 
-          <SkillsPanel skills={skills} onToggle={onToggleSkill} onOpen={onRefreshSkills} />
+          <SkillsPanel
+            skills={skills}
+            onToggle={onToggleSkill}
+            onOpen={onRefreshSkills}
+            onOpenSettings={onOpenSettings}
+          />
 
           {/* No behaviour yet, and it says so rather than swallowing a click.
               A control that looks live and does nothing is read as a bug in

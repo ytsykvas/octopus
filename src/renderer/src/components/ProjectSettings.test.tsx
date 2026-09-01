@@ -8,6 +8,7 @@ import type { Project } from '@core/store.js'
 
 import type { Result } from '../../../preload/index.js'
 import { stubDialogElement } from '../test/dialog.js'
+import { octopus } from '../test/octopus.js'
 import { ProjectSettings } from './ProjectSettings.js'
 
 type ProjectSettingsProps = React.ComponentProps<typeof ProjectSettings>
@@ -1266,5 +1267,55 @@ describe('ProjectSettings', () => {
 
     expect(await screen.findByLabelText('Pull request descriptions')).toHaveValue('')
     expect(screen.queryByText(/permission denied/)).toBeNull()
+  })
+})
+
+describe('the skills section', () => {
+  it('opens on the store this project alone reaches', async () => {
+    const user = userEvent.setup()
+    await renderDialog()
+
+    await openSection(user, 'Skills')
+
+    expect(screen.getByText('Skills for this project')).toBeInTheDocument()
+  })
+
+  it("records a skill left off in this project's conversations", async () => {
+    const user = userEvent.setup()
+    vi.mocked(octopus().skills.list).mockResolvedValue({
+      ok: true,
+      value: [{ name: 'deploy', description: '', path: '/data/projects/planner/skills' }]
+    })
+    const props = await renderDialog()
+
+    await openSection(user, 'Skills')
+    await user.click(await screen.findByRole('switch', { name: 'On by default' }))
+
+    expect(props.onUpdate).toHaveBeenCalledExactlyOnceWith({
+      disabledSkillDefaults: ['octopus-project:deploy']
+    })
+  })
+
+  /*
+   * The checkout's own are read-only here — they belong to the repository, and
+   * editing them from a settings dialog would be octopus writing inside
+   * somebody's checkout. Copying is the one thing offered, and it lands in the
+   * installation-wide store, which is the only place it could be useful.
+   */
+  it('copies one of the repository’s own into the store every project reaches', async () => {
+    const user = userEvent.setup()
+    vi.mocked(octopus().skills.inRepository).mockResolvedValue({
+      ok: true,
+      value: [{ name: 'core-module', description: '', path: '/ws/kyiv/.claude/skills/core-module' }]
+    })
+    await renderDialog({ workspaceId: 'planner/kyiv' })
+
+    await openSection(user, 'Skills')
+    await user.click(await screen.findByRole('button', { name: 'Copy to all projects' }))
+
+    expect(octopus().skills.import).toHaveBeenCalledExactlyOnceWith(
+      { kind: 'global' },
+      { kind: 'path', path: '/ws/kyiv/.claude/skills/core-module' }
+    )
   })
 })

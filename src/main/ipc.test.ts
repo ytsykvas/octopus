@@ -313,6 +313,7 @@ describe('channel table', () => {
     'skills:save',
     'skills:remove',
     'skills:import',
+    'skills:inRepository',
     'skills:forChat',
     'skills:setForChat',
     'dialog:pickSkill',
@@ -634,6 +635,23 @@ describe('skills', () => {
     await expect(invoke('skills:forChat', opened.value.id)).resolves.toMatchObject({
       ok: true,
       value: [{ key: 'octopus:review', enabled: false }]
+    })
+  })
+
+  it("carries the checkout's own skills across", async () => {
+    const projectId = await addProject('carried')
+    const workspace = await createWorkspace(projectId)
+    const path = join(workspace.path, '.claude', 'skills', 'in-repo')
+    await mkdir(path, { recursive: true })
+    await writeFile(
+      join(path, 'SKILL.md'),
+      '---\nname: in-repo\ndescription: From the checkout.\n---\n\nBody\n',
+      'utf8'
+    )
+
+    await expect(invoke('skills:inRepository', workspace.id)).resolves.toMatchObject({
+      ok: true,
+      value: [{ name: 'in-repo' }]
     })
   })
 

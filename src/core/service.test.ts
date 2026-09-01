@@ -6267,6 +6267,32 @@ describe('the agent chat', () => {
      * nothing behind it. Ours are unaffected: they arrive as a plugin, which is
      * a launch option this setting does not filter.
      */
+    /*
+     * Listed whatever the Agent setting says, unlike the panel's own group: a
+     * settings dialog is about files that are there either way and can be
+     * taken a copy of, while the panel is about one conversation.
+     */
+    it("lists the checkout's own so one can be copied out", async () => {
+      const { service, projectId, workspaceId } = await withWorkspace()
+      const workspace = (await service.listWorkspaces(projectId))[0]
+      if (!workspace) throw new Error('no workspace')
+      await placeInRepo(workspace.path, 'in-repo')
+
+      await service.updateConfig({ settingSources: 'none' })
+
+      await expect(service.listRepositorySkills(workspaceId)).resolves.toMatchObject([
+        { name: 'in-repo', description: 'From the checkout.' }
+      ])
+    })
+
+    it('refuses to read a checkout that is not there', async () => {
+      const { service } = await withWorkspace()
+
+      await expect(service.listRepositorySkills('planner/nowhere')).rejects.toBeInstanceOf(
+        WorkspaceError
+      )
+    })
+
     it("drops the repository's own when the settings would not load them", async () => {
       const { service, projectId, workspaceId } = await withWorkspace()
       const workspace = (await service.listWorkspaces(projectId))[0]

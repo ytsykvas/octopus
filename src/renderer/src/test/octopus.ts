@@ -137,6 +137,7 @@ export function installOctopusStub(): Api {
       save: vi.fn(() => ok({ name: 'review', description: '', path: '/skills/review' })),
       remove: vi.fn(() => ok(undefined)),
       import: vi.fn(() => ok({ name: 'review', description: '', path: '/skills/review' })),
+      inRepository: vi.fn(() => ok([])),
       forChat: vi.fn(() => ok([])),
       setForChat: vi.fn(() => ok(undefined))
     },

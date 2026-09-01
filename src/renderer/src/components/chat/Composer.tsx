@@ -77,6 +77,8 @@ interface ComposerProps {
   readonly skills: readonly SkillListing[]
   readonly onToggleSkill: (key: string, enabled: boolean) => void
   readonly onRefreshSkills: () => void
+  /** Where the skills panel sends someone who has none to switch yet. */
+  readonly onOpenSettings: () => void
   /** Answers whether the message went; the field and the notes clear only then. */
   readonly onSend: (text: string) => Promise<boolean>
   readonly onStop: () => void
@@ -157,6 +159,7 @@ export function Composer({
   skills,
   onToggleSkill,
   onRefreshSkills,
+  onOpenSettings,
   onSend,
   onStop,
   notes,
@@ -339,6 +342,7 @@ export function Composer({
           skills={skills}
           onToggleSkill={onToggleSkill}
           onRefreshSkills={onRefreshSkills}
+          onOpenSettings={onOpenSettings}
         />
 
         <ComposerAttachments notes={notes} onRemove={onRemoveNote} />

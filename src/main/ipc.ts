@@ -430,6 +430,10 @@ export function registerIpc(
     )
   )
 
+  host.handle('skills:inRepository', (_event, workspaceId: string) =>
+    attempt(() => service.listRepositorySkills(workspaceId))
+  )
+
   host.handle('skills:forChat', (_event, chatId: string) =>
     attempt(() => service.skillsForChat(chatId))
   )

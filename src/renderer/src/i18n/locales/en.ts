@@ -115,6 +115,7 @@ export const en = {
     sectionScripts: 'Scripts',
     sectionFiles: 'Files',
     sectionEnv: 'Env',
+    sectionSkills: 'Skills',
     sectionInstructions: 'Instructions',
     sectionRepository: 'Repository',
     sectionDanger: 'Danger zone',
@@ -611,6 +612,7 @@ export const en = {
     skillsNote: 'Switching one off keeps it out of the agent’s list. The files stay on disk.',
     skillsEmpty: 'No skills yet.',
     skillsEmptyNote: 'Add one in settings, and it appears here for every conversation.',
+    skillsSettings: 'Open settings',
     /* A control with nothing behind it yet, and it says so rather than
        swallowing the click. */
     attach: 'Attach',
@@ -804,6 +806,7 @@ export const en = {
     sectionGeneral: 'General',
     sectionGit: 'Git',
     sectionAgent: 'Agent',
+    sectionSkills: 'Skills',
     sectionInstructions: 'Instructions',
     /* The global one. What a project's own instruction overrides, and what
        applies wherever a project has not written one. */
@@ -895,6 +898,76 @@ export const en = {
     installedAt: 'First run'
   },
 
+  skills: {
+    /* The two stores, named by their reach rather than by where the files sit:
+       "global" is a word about our storage, and the reader is choosing which
+       projects a skill applies to. */
+    global: 'Skills everywhere',
+    globalNote: 'Available in every project, unless a conversation turns one off.',
+    project: 'Skills for this project',
+    projectNote: 'Available in this project only. Kept in octopus, not in the repository.',
+
+    add: 'New skill',
+    /* An ellipsis because it opens a dialog rather than importing anything —
+       and because the dialog's own button is the one called Import. */
+    import: 'Import…',
+    empty: 'No skills here yet.',
+    /* Beside the switch on every row. A skill is on unless somebody says
+       otherwise, which is how Claude Code treats one it discovers — so this
+       reads as the state it is in, not as a favour being asked. */
+    onByDefault: 'On by default',
+    /* The row's menu button. Its face is an ellipsis, which reads as nothing
+       at all to anyone not looking at it. */
+    rowActions: 'What to do with {{name}}',
+    edit: 'Edit',
+    remove: 'Remove',
+    removeTitle: 'Remove {{name}}?',
+    removeMessage: 'The skill and everything in its folder are deleted.',
+    removeDetail: 'Conversations that had it switched on simply stop seeing it.',
+    removeConfirm: 'Remove',
+    removeCancel: 'Cancel',
+
+    /* The checkout's own, in the project section. Read-only here: they belong
+       to the repository, and editing them from a settings dialog would be
+       octopus writing inside somebody's checkout. */
+    inRepository: 'In this repository',
+    inRepositoryNote: 'The agent already loads these. Copy one to use it everywhere.',
+    copyToGlobal: 'Copy to all projects',
+
+    /* The editor. `name` is fixed once created: it is the directory, and every
+       stored answer is keyed by it. */
+    editorNew: 'New skill',
+    editorEdit: 'Edit {{name}}',
+    name: 'Name',
+    nameHint: 'Lowercase letters, digits and dashes. This is the folder it lives in.',
+    nameInvalid: 'Use lowercase letters, digits and single dashes.',
+    nameTaken: 'A skill of this name is already here.',
+    description: 'When to use it',
+    descriptionHint: 'The one line the agent reads to decide whether to reach for this.',
+    body: 'Instructions',
+    bodyHint: 'Markdown. What the agent should do once it has picked this up.',
+    showRaw: 'Show SKILL.md',
+    hideRaw: 'Back to the form',
+    rawHint: 'The whole document, frontmatter included. Saved exactly as written.',
+    save: 'Save',
+    cancel: 'Cancel',
+
+    /* Import. Three routes because a skill arrives in three shapes: as a
+       folder somebody sent, as text in a chat, or as a link. */
+    importTitle: 'Import a skill',
+    fromDisk: 'From disk',
+    fromDiskNote: 'A skill’s folder, or a single SKILL.md.',
+    choose: 'Choose…',
+    fromText: 'Paste',
+    fromTextNote: 'The whole SKILL.md, frontmatter included.',
+    fromUrl: 'From a link',
+    fromUrlNote: 'An https address answering with one SKILL.md. Nothing beside it is fetched.',
+    url: 'Address',
+    importAction: 'Import',
+    /* Shown once the document has been read, before anything is written. */
+    found: 'Found “{{name}}”'
+  },
+
   trust: {
     title: 'What this repository can do',
     explain:
@@ -958,6 +1031,20 @@ export const en = {
       '{{path}} is a symbolic link. octopus will not read or write through one, because it can point anywhere outside the repository.',
     repoConfigTooLarge: '{{path}} is larger than this kind of file is allowed to be.',
     repoConfigMalformed: '{{path}} does not describe a project.',
+    skillNameInvalid:
+      '\u201c{{name}}\u201d cannot be the name of a skill: use lowercase letters, digits and single dashes. The name becomes the folder the skill lives in.',
+    skillNameMismatch:
+      'The document names \u201c{{found}}\u201d, but this skill is filed as \u201c{{name}}\u201d. Rename it in the document, or import it as a new skill.',
+    skillExists: 'A skill called \u201c{{name}}\u201d is already here.',
+    skillMissing: 'That skill is no longer there.',
+    skillFrontmatterMissing:
+      'A SKILL.md needs frontmatter naming the skill and saying when to use it. This one has none that could be read.',
+    skillTooLarge:
+      'That is larger than one skill has any business being, so nothing was written. The limit is {{limit}}.',
+    skillLinkRefused:
+      '\u201c{{name}}\u201d is a symbolic link. A skill is copied as it stands, and a link would make what this holds a question about somewhere else on the disk.',
+    skillUrlRefused:
+      'Nothing could be fetched from {{url}}. Only https addresses are followed, and a redirect off https is refused.',
     unknown: 'Something went wrong: {{message}}'
   }
 }

@@ -374,6 +374,11 @@ describe('channel names', () => {
         ),
       'skills:import'
     ],
+    [
+      'skills.inRepository',
+      () => method('skills', 'inRepository')('w' as never),
+      'skills:inRepository'
+    ],
     ['skills.forChat', () => method('skills', 'forChat')('c' as never), 'skills:forChat'],
     [
       'skills.setForChat',

@@ -21,12 +21,21 @@ function listing(overrides: Partial<SkillListing> = {}): SkillListing {
 function renderPanel(skills: readonly SkillListing[]): {
   onToggle: ReturnType<typeof vi.fn>
   onOpen: ReturnType<typeof vi.fn>
+  onOpenSettings: ReturnType<typeof vi.fn>
 } {
   const onToggle = vi.fn()
   const onOpen = vi.fn()
-  render(<SkillsPanel skills={skills} onToggle={onToggle} onOpen={onOpen} />)
+  const onOpenSettings = vi.fn()
+  render(
+    <SkillsPanel
+      skills={skills}
+      onToggle={onToggle}
+      onOpen={onOpen}
+      onOpenSettings={onOpenSettings}
+    />
+  )
 
-  return { onToggle, onOpen }
+  return { onToggle, onOpen, onOpenSettings }
 }
 
 const openPanel = async (): Promise<void> => {
@@ -66,11 +75,16 @@ describe('the skills a conversation may reach for', () => {
   })
 
   it('says where skills come from when there are none at all', async () => {
-    renderPanel([])
+    const { onOpenSettings } = renderPanel([])
 
     await openPanel()
 
     expect(screen.getByText('No skills yet.')).toBeInTheDocument()
+
+    await userEvent.click(screen.getByRole('button', { name: 'Open settings' }))
+
+    expect(onOpenSettings).toHaveBeenCalledTimes(1)
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
   })
 
   it('switches one, by the key the agent knows it under', async () => {

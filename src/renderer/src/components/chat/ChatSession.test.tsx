@@ -97,6 +97,7 @@ function ChatPane({
       defaultEffort={defaultEffort}
       defaultModel={defaultModel}
       defaultPlanModel={defaultPlanModel}
+      onOpenSkillSettings={vi.fn()}
     />
   )
 }

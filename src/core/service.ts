@@ -580,6 +580,15 @@ export interface OctopusService {
 
   /** The skills one of the two stores holds, for a settings section. */
   listSkills(store: SkillStore): Promise<SkillEntry[]>
+  /**
+   * The skills the checkout itself carries, so one can be copied out of it.
+   *
+   * Listed whatever the Agent setting says, unlike the panel in the composer:
+   * that one is about a conversation and must not offer a switch over
+   * something the session would not load, while this is about files that are
+   * there either way and can be taken a copy of.
+   */
+  listRepositorySkills(workspaceId: string): Promise<SkillEntry[]>
   /** One of them, opened: the form's two fields and the raw document. */
   readStoredSkill(store: SkillStore, name: string): Promise<SkillDocument>
   saveStoredSkill(store: SkillStore, name: string, save: SkillSave): Promise<SkillEntry>
@@ -2390,6 +2399,10 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
     // reject rather than throw out of the call — the renderer awaits it.
     async listSkills(store) {
       return storeSkills(store)
+    },
+
+    async listRepositorySkills(workspaceId) {
+      return readSkillsIn(join(requireWorkspace(workspaceId).path, '.claude', 'skills'))
     },
 
     async readStoredSkill(store, name) {

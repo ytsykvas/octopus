@@ -491,6 +491,10 @@ const api = {
     import: (store: SkillStore, request: SkillImport): Promise<Result<SkillEntry>> =>
       ipcRenderer.invoke('skills:import', store, request) as Promise<Result<SkillEntry>>,
 
+    /** The skills the checkout carries, so one can be copied into a store. */
+    inRepository: (workspaceId: string): Promise<Result<SkillEntry[]>> =>
+      ipcRenderer.invoke('skills:inRepository', workspaceId) as Promise<Result<SkillEntry[]>>,
+
     /**
      * Every skill this conversation could use, and whether it is on.
      *

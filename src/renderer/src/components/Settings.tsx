@@ -1,4 +1,13 @@
-import { BookText, Bot, GitBranch, Info, type LucideIcon, Monitor, Sparkles } from 'lucide-react'
+import {
+  Blocks,
+  BookText,
+  Bot,
+  GitBranch,
+  Info,
+  type LucideIcon,
+  Monitor,
+  Sparkles
+} from 'lucide-react'
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
@@ -21,6 +30,7 @@ import { SectionRail } from './SectionRail.js'
 import { AccountCard } from './settings/AccountCard.js'
 import { AuthTerminal } from './settings/AuthTerminal.js'
 import { ClaudeSection } from './settings/ClaudeSection.js'
+import { SkillsSection } from './settings/SkillsSection.js'
 import { type AccountsController, useAccounts } from './settings/useAccounts.js'
 
 interface SettingsProps {
@@ -38,7 +48,8 @@ interface SettingsProps {
   readonly initialSection?: SectionId
 }
 
-export type SectionId = 'general' | 'git' | 'agent' | 'instructions' | 'accounts' | 'about'
+export type SectionId =
+  'general' | 'git' | 'agent' | 'skills' | 'instructions' | 'accounts' | 'about'
 
 const SECTIONS: readonly {
   readonly id: SectionId
@@ -46,6 +57,7 @@ const SECTIONS: readonly {
     | 'settings.sectionGeneral'
     | 'settings.sectionGit'
     | 'settings.sectionAgent'
+    | 'settings.sectionSkills'
     | 'settings.sectionInstructions'
     | 'settings.sectionAccounts'
     | 'settings.sectionAbout'
@@ -54,6 +66,7 @@ const SECTIONS: readonly {
   { id: 'general', labelKey: 'settings.sectionGeneral', Icon: Monitor },
   { id: 'git', labelKey: 'settings.sectionGit', Icon: GitBranch },
   { id: 'agent', labelKey: 'settings.sectionAgent', Icon: Sparkles },
+  { id: 'skills', labelKey: 'settings.sectionSkills', Icon: Blocks },
   { id: 'instructions', labelKey: 'settings.sectionInstructions', Icon: BookText },
   { id: 'accounts', labelKey: 'settings.sectionAccounts', Icon: Bot },
   { id: 'about', labelKey: 'settings.sectionAbout', Icon: Info }
@@ -96,6 +109,15 @@ export function Settings({
             <GitSection config={config} onChange={onChange} accounts={accounts} />
           )}
           {section === 'agent' && <AgentSection config={config} onChange={onChange} />}
+          {section === 'skills' && (
+            <SkillsSection
+              store={{ kind: 'global' }}
+              disabledDefaults={config.disabledSkillDefaults}
+              onDefaults={(disabledSkillDefaults) => {
+                void onChange({ disabledSkillDefaults })
+              }}
+            />
+          )}
           {section === 'instructions' && <InstructionsSection />}
           {section === 'accounts' && <ClaudeSection accounts={accounts} />}
           {section === 'about' && <AboutSection config={config} />}

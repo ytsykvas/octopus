@@ -7,6 +7,7 @@ import type { EnvProfileCode } from '@core/envProfiles.js'
 import type { GitHubErrorCode } from '@core/github.js'
 import type { ProjectValidationCode } from '@core/projects.js'
 import type { RepoConfigCode } from '@core/repoConfig.js'
+import type { SkillErrorCode } from '@core/skills.js'
 import type { StateConflictCode } from '@core/store.js'
 import type { WorkspaceErrorCode } from '@core/workspaces.js'
 
@@ -33,6 +34,7 @@ type CoreErrorCode =
   | GitHubErrorCode
   | ProjectValidationCode
   | RepoConfigCode
+  | SkillErrorCode
   | StateConflictCode
   | WorkspaceErrorCode
 
@@ -89,7 +91,15 @@ const CODE_PARAMETERS: Record<CoreErrorCode, Interpolated> = {
   mergeFailed: { number: '42', reason: 'checks failing' },
   repoConfigSymlink: { path: '.octopus/scripts/setup.sh' },
   repoConfigTooLarge: { path: '.octopus/carry' },
-  repoConfigMalformed: { path: '.octopus/project.json' }
+  repoConfigMalformed: { path: '.octopus/project.json' },
+  skillNameInvalid: { name: 'Code Review' },
+  skillNameMismatch: { name: 'review', found: 'code-review' },
+  skillExists: { name: 'review' },
+  skillMissing: null,
+  skillFrontmatterMissing: null,
+  skillTooLarge: { limit: '64000' },
+  skillLinkRefused: { name: 'outside' },
+  skillUrlRefused: { url: 'https://example.test/SKILL.md' }
 }
 
 const CODES = Object.entries(CODE_PARAMETERS)

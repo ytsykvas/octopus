@@ -738,6 +738,9 @@ export function App(): React.JSX.Element {
               defaultEffort={defaultEffort}
               defaultModel={defaultModel}
               defaultPlanModel={defaultPlanModel}
+              onOpenSkillSettings={() => {
+                setSettingsSection('skills')
+              }}
             />
           )}
         </main>

@@ -50,6 +50,8 @@ interface ChatProps {
   readonly defaultEffort: Effort
   readonly defaultModel: string | null
   readonly defaultPlanModel: string | null
+  /** Opens the settings on skills — the way out of an empty skills panel. */
+  readonly onOpenSkillSettings: () => void
 }
 
 /**
@@ -80,7 +82,8 @@ export function Chat({
   defaultWorkingMode,
   defaultEffort,
   defaultModel,
-  defaultPlanModel
+  defaultPlanModel,
+  onOpenSkillSettings
 }: ChatProps): React.JSX.Element {
   const { t } = useTranslation()
   const [reviewing, setReviewing] = useState(false)
@@ -197,6 +200,7 @@ export function Chat({
           defaultEffort={defaultEffort}
           defaultModel={defaultModel}
           defaultPlanModel={defaultPlanModel}
+          onOpenSkillSettings={onOpenSkillSettings}
         />
       ))}
     </div>

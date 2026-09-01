@@ -65,6 +65,8 @@ interface ChatSessionProps {
   /** The settings' model pair, for the same reason as the two above. */
   readonly defaultModel: string | null
   readonly defaultPlanModel: string | null
+  /** Opens the settings on skills, for a conversation that has none to switch. */
+  readonly onOpenSkillSettings: () => void
 }
 
 /**
@@ -87,7 +89,8 @@ export function ChatSession({
   defaultWorkingMode,
   defaultEffort,
   defaultModel,
-  defaultPlanModel
+  defaultPlanModel,
+  onOpenSkillSettings
 }: ChatSessionProps): React.JSX.Element {
   const { t } = useTranslation()
   const describeFailure = useErrorMessage()
@@ -242,6 +245,7 @@ export function ChatSession({
         skills={skills.skills}
         onToggleSkill={skills.toggle}
         onRefreshSkills={skills.refresh}
+        onOpenSettings={onOpenSkillSettings}
         onSend={chat.send}
         onStop={() => void chat.interrupt()}
         /* The two queues become one list here rather than in the composer:

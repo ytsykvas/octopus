@@ -687,3 +687,32 @@ describe('Settings', () => {
     })
   })
 })
+
+describe('the skills section', () => {
+  it('opens on the installation-wide store', async () => {
+    const user = userEvent.setup()
+    await renderSettings()
+
+    await openSection(user, 'Skills')
+
+    expect(screen.getByText('Skills everywhere')).toBeInTheDocument()
+  })
+
+  // The switch is the same list the conversation panel reads, one layer up: it
+  // decides what a new conversation begins with rather than what it is.
+  it('records a skill left off by default', async () => {
+    const user = userEvent.setup()
+    vi.mocked(octopus().skills.list).mockResolvedValue({
+      ok: true,
+      value: [{ name: 'review', description: '', path: '/data/skills/skills/review' }]
+    })
+    const props = await renderSettings()
+
+    await openSection(user, 'Skills')
+    await user.click(await screen.findByRole('switch', { name: 'On by default' }))
+
+    expect(props.onChange).toHaveBeenCalledExactlyOnceWith({
+      disabledSkillDefaults: ['octopus:review']
+    })
+  })
+})

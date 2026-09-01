@@ -56,6 +56,7 @@ function renderComposer(overrides: Partial<ComposerProps> = {}): {
       skills={[]}
       onToggleSkill={vi.fn()}
       onRefreshSkills={vi.fn()}
+      onOpenSettings={vi.fn()}
       notes={[]}
       onRemoveNote={vi.fn()}
       onNotesSent={vi.fn()}

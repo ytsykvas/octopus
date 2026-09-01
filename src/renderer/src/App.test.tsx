@@ -475,6 +475,30 @@ describe('App', () => {
     expect(await screen.findByRole('dialog', { name: 'Settings' })).toBeInTheDocument()
   })
 
+  /*
+   * The one thing a conversation with no skills can do about it. The panel is
+   * a dead end otherwise: it can say where they come from, but only the window
+   * knows how to get there.
+   */
+  it('opens the settings on skills from the composer’s panel', async () => {
+    vi.mocked(window.octopus.chats.list).mockResolvedValue({
+      ok: true,
+      value: [chat({ workspaceId: 'planner/anna' })]
+    })
+    givenTwoProjects()
+    const user = await openApp()
+    await user.click(tab('PL'))
+    await user.click(screen.getByRole('button', { name: /anna/ }))
+
+    const [chip] = await screen.findAllByRole('button', { name: 'Skills for this conversation' })
+    if (!chip) throw new Error('the composer has no skills control')
+    await user.click(chip)
+    await user.click(await screen.findByRole('button', { name: 'Open settings' }))
+
+    expect(await screen.findByRole('dialog', { name: 'Settings' })).toBeInTheDocument()
+    expect(screen.getByText('Skills everywhere')).toBeInTheDocument()
+  })
+
   it('closes the settings dialog again', async () => {
     const user = await openApp()
     await user.click(screen.getByRole('button', { name: 'Settings' }))

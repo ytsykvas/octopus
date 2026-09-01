@@ -25,6 +25,8 @@ interface SkillsPanelProps {
    * it, which makes it the cheapest place to be right.
    */
   readonly onOpen: () => void
+  /** Where a conversation with no skills is sent to make one. */
+  readonly onOpenSettings: () => void
 }
 
 /**
@@ -41,9 +43,14 @@ interface SkillsPanelProps {
  * which is decided in core: a switch over something the session never reads
  * would be a control with nothing behind it.
  */
-export function SkillsPanel({ skills, onToggle, onOpen }: SkillsPanelProps): React.JSX.Element {
+export function SkillsPanel({
+  skills,
+  onToggle,
+  onOpen,
+  onOpenSettings
+}: SkillsPanelProps): React.JSX.Element {
   const { t } = useTranslation()
-  const { open, position, container, toggle } = useAnchoredPanel()
+  const { open, position, container, toggle, close } = useAnchoredPanel()
 
   const groups: readonly { readonly scope: SkillScope; readonly heading: string }[] = [
     { scope: 'global', heading: t('chat.skillsGlobal') },
@@ -97,6 +104,16 @@ export function SkillsPanel({ skills, onToggle, onOpen }: SkillsPanelProps): Rea
             <div className="space-y-2 px-3 py-3">
               <p className="text-ink text-[13px]">{t('chat.skillsEmpty')}</p>
               <p className="text-ink-faint text-[11px]">{t('chat.skillsEmptyNote')}</p>
+              <button
+                type="button"
+                onClick={() => {
+                  close()
+                  onOpenSettings()
+                }}
+                className="focus-ring text-accent rounded-[var(--radius-control)] text-[11px] hover:underline"
+              >
+                {t('chat.skillsSettings')}
+              </button>
             </div>
           ) : (
             <div className="max-h-80 overflow-auto py-1">

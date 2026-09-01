@@ -1,4 +1,5 @@
 import {
+  Blocks,
   BookText,
   FolderGit2,
   GitBranch,
@@ -31,6 +32,7 @@ import { SectionRail } from './SectionRail.js'
 import { FileEditor } from './FileEditor.js'
 import { InstructionEditors } from './InstructionEditors.js'
 import { RepoConfig } from './RepoConfig.js'
+import { SkillsSection } from './settings/SkillsSection.js'
 
 interface ProjectSettingsProps {
   readonly project: Project
@@ -116,7 +118,15 @@ const SOURCE_LABELS = {
 } as const
 
 export type SectionId =
-  'general' | 'git' | 'scripts' | 'files' | 'env' | 'instructions' | 'repository' | 'danger'
+  | 'general'
+  | 'git'
+  | 'scripts'
+  | 'files'
+  | 'env'
+  | 'skills'
+  | 'instructions'
+  | 'repository'
+  | 'danger'
 
 const SECTIONS: readonly {
   readonly id: SectionId
@@ -126,6 +136,7 @@ const SECTIONS: readonly {
     | 'project.sectionScripts'
     | 'project.sectionFiles'
     | 'project.sectionEnv'
+    | 'project.sectionSkills'
     | 'project.sectionInstructions'
     | 'project.sectionRepository'
     | 'project.sectionDanger'
@@ -141,6 +152,9 @@ const SECTIONS: readonly {
   // Beside the files rather than inside them: one says which of the checkout's
   // files travel, the other says what to write once they have.
   { id: 'env', labelKey: 'project.sectionEnv', Icon: Variable },
+  // Before the instructions and after the environment: both are prose the
+  // agent reads, and this is the one that comes with a switch.
+  { id: 'skills', labelKey: 'project.sectionSkills', Icon: Blocks },
   { id: 'instructions', labelKey: 'project.sectionInstructions', Icon: BookText },
   // Last before the danger zone, and after everything it moves: the section is
   // about the six above rather than a setting of its own.
@@ -672,6 +686,22 @@ export function ProjectSettings({
                 ]}
               />
             </>
+          )}
+
+          {section === 'skills' && (
+            <SkillsSection
+              store={{ kind: 'project', projectId: project.id }}
+              disabledDefaults={project.disabledSkillDefaults}
+              onDefaults={(disabledSkillDefaults) => {
+                void onUpdate({ disabledSkillDefaults })
+              }}
+              workspaceId={workspaceId}
+              onCopyToGlobal={(path) =>
+                window.octopus.skills
+                  .import({ kind: 'global' }, { kind: 'path', path })
+                  .then((result) => result.ok)
+              }
+            />
           )}
 
           {section === 'instructions' && (

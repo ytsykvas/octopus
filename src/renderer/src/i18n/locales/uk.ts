@@ -110,6 +110,7 @@ export const uk: Translation = {
     sectionScripts: 'Скрипти',
     sectionFiles: 'Файли',
     sectionEnv: 'Env',
+    sectionSkills: 'Скіли',
     sectionInstructions: 'Інструкції',
     sectionRepository: 'Репозиторій',
     sectionDanger: 'Небезпечна зона',
@@ -506,6 +507,7 @@ export const uk: Translation = {
     skillsNote: 'Вимкнений скіл не потрапляє в список агента. Файли залишаються на диску.',
     skillsEmpty: 'Скілів поки немає.',
     skillsEmptyNote: 'Додайте скіл у налаштуваннях — і він з’явиться тут у кожній розмові.',
+    skillsSettings: 'Відкрити налаштування',
     attach: 'Прикріпити',
     attachSoon: 'Прикріплення ще не працює.',
 
@@ -666,6 +668,7 @@ export const uk: Translation = {
     sectionGeneral: 'Загальні',
     sectionGit: 'Git',
     sectionAgent: 'Агент',
+    sectionSkills: 'Скіли',
     sectionInstructions: 'Інструкції',
     sectionAccounts: 'Claude',
     sectionAbout: 'Про застосунок',
@@ -755,6 +758,58 @@ export const uk: Translation = {
     installedAt: 'Перший запуск'
   },
 
+  skills: {
+    global: 'Скіли для всіх проєктів',
+    globalNote: 'Доступні в кожному проєкті, доки розмова їх не вимкне.',
+    project: 'Скіли цього проєкту',
+    projectNote: 'Доступні лише в цьому проєкті. Зберігаються в octopus, а не в репозиторії.',
+
+    add: 'Новий скіл',
+    import: 'Імпортувати…',
+    empty: 'Тут ще немає скілів.',
+    onByDefault: 'Увімкнено за замовчуванням',
+    rowActions: 'Що зробити зі скілом {{name}}',
+    edit: 'Редагувати',
+    remove: 'Видалити',
+    removeTitle: 'Видалити {{name}}?',
+    removeMessage: 'Скіл і весь вміст його теки буде видалено.',
+    removeDetail: 'Розмови, де він був увімкнений, просто перестануть його бачити.',
+    removeConfirm: 'Видалити',
+    removeCancel: 'Скасувати',
+
+    inRepository: 'У цьому репозиторії',
+    inRepositoryNote: 'Агент і так їх завантажує. Скопіюйте, щоб мати скіл усюди.',
+    copyToGlobal: 'Скопіювати для всіх проєктів',
+
+    editorNew: 'Новий скіл',
+    editorEdit: 'Редагування {{name}}',
+    name: 'Назва',
+    nameHint: 'Малі латинські літери, цифри й дефіси. Це назва теки, де він лежить.',
+    nameInvalid: 'Лише малі латинські літери, цифри й одиничні дефіси.',
+    nameTaken: 'Скіл із такою назвою вже є.',
+    description: 'Коли його вмикати',
+    descriptionHint: 'Той єдиний рядок, за яким агент вирішує, чи братися за цей скіл.',
+    body: 'Інструкції',
+    bodyHint: 'Markdown. Що агент має робити, коли візьметься за цей скіл.',
+    showRaw: 'Показати SKILL.md',
+    hideRaw: 'Назад до форми',
+    rawHint: 'Увесь документ разом із frontmatter. Зберігається точно як написано.',
+    save: 'Зберегти',
+    cancel: 'Скасувати',
+
+    importTitle: 'Імпорт скіла',
+    fromDisk: 'З диска',
+    fromDiskNote: 'Тека скіла або окремий SKILL.md.',
+    choose: 'Обрати…',
+    fromText: 'Вставити',
+    fromTextNote: 'Увесь SKILL.md разом із frontmatter.',
+    fromUrl: 'За посиланням',
+    fromUrlNote: 'Адреса https, що віддає один SKILL.md. Нічого поруч не завантажується.',
+    url: 'Адреса',
+    importAction: 'Імпортувати',
+    found: 'Знайдено «{{name}}»'
+  },
+
   trust: {
     title: 'Що цей репозиторій може робити',
     explain:
@@ -822,6 +877,20 @@ export const uk: Translation = {
       '{{path}} — символічне посилання. octopus не читає й не пише через нього, бо воно може вести куди завгодно поза репозиторієм.',
     repoConfigTooLarge: '{{path}} більший, ніж дозволено файлу такого роду.',
     repoConfigMalformed: '{{path}} не описує проєкт.',
+    skillNameInvalid:
+      '\u00ab{{name}}\u00bb не може бути назвою скіла: лише малі латинські літери, цифри й одиничні дефіси. Назва стає текою, де скіл лежить.',
+    skillNameMismatch:
+      'Документ називає \u00ab{{found}}\u00bb, а скіл записаний як \u00ab{{name}}\u00bb. Змініть назву в документі або імпортуйте його як новий скіл.',
+    skillExists: 'Скіл із назвою \u00ab{{name}}\u00bb уже є.',
+    skillMissing: 'Цього скіла вже немає.',
+    skillFrontmatterMissing:
+      'У SKILL.md має бути frontmatter із назвою скіла й описом, коли його вмикати. Тут його прочитати не вдалося.',
+    skillTooLarge:
+      'Це більше, ніж може бути один скіл, тому нічого не записано. Обмеження — {{limit}}.',
+    skillLinkRefused:
+      '\u00ab{{name}}\u00bb — символічне посилання. Скіл копіюється як є, а посилання зробило б його вміст питанням про інше місце на диску.',
+    skillUrlRefused:
+      'З {{url}} нічого не вдалося завантажити. Дозволені лише адреси https, а перенаправлення поза https відхиляється.',
     unknown: 'Щось пішло не так: {{message}}'
   }
 }

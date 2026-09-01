@@ -108,6 +108,25 @@ export function useErrorMessage(): (failure: Failure) => string {
           return t('errors.repoConfigMalformed', { path: failure.params?.path ?? '' })
         case 'forkFailed':
           return t('errors.forkFailed')
+        case 'skillNameInvalid':
+          return t('errors.skillNameInvalid', { name: failure.params?.name ?? '' })
+        case 'skillNameMismatch':
+          return t('errors.skillNameMismatch', {
+            name: failure.params?.name ?? '',
+            found: failure.params?.found ?? ''
+          })
+        case 'skillExists':
+          return t('errors.skillExists', { name: failure.params?.name ?? '' })
+        case 'skillMissing':
+          return t('errors.skillMissing')
+        case 'skillFrontmatterMissing':
+          return t('errors.skillFrontmatterMissing')
+        case 'skillTooLarge':
+          return t('errors.skillTooLarge', { limit: failure.params?.limit ?? '' })
+        case 'skillLinkRefused':
+          return t('errors.skillLinkRefused', { name: failure.params?.name ?? '' })
+        case 'skillUrlRefused':
+          return t('errors.skillUrlRefused', { url: failure.params?.url ?? '' })
         default:
           return t('errors.unknown', { message: failure.error })
       }

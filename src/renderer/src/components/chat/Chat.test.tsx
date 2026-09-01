@@ -39,6 +39,7 @@ function Pane({ workspace = WORKSPACE }: { workspace?: WorkspaceView }): React.J
       defaultEffort="medium"
       defaultModel={null}
       defaultPlanModel={null}
+      onOpenSkillSettings={vi.fn()}
     />
   )
 }

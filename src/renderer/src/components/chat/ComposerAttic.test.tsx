@@ -45,10 +45,12 @@ function renderAttic(
   onSend: ReturnType<typeof vi.fn>
   onToggleSkill: ReturnType<typeof vi.fn>
   onRefreshSkills: ReturnType<typeof vi.fn>
+  onOpenSettings: ReturnType<typeof vi.fn>
 } {
   const onSend = vi.fn()
   const onToggleSkill = vi.fn()
   const onRefreshSkills = vi.fn()
+  const onOpenSettings = vi.fn()
 
   render(
     <ComposerAttic
@@ -58,10 +60,11 @@ function renderAttic(
       skills={skills}
       onToggleSkill={onToggleSkill}
       onRefreshSkills={onRefreshSkills}
+      onOpenSettings={onOpenSettings}
     />
   )
 
-  return { onSend, onToggleSkill, onRefreshSkills }
+  return { onSend, onToggleSkill, onRefreshSkills, onOpenSettings }
 }
 
 describe('what the next message is up against', () => {
