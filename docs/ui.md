@@ -868,11 +868,11 @@ turn has stopped and is waiting on you.
 
 ### What is left of the account, at the foot of the list
 
-The two subscription windows — five-hour and weekly — sit under the workspace
-list rather than above the composer, where they used to be. They say nothing
-about the conversation they were sitting in: the same pair applies to every
-workspace, and the decision they inform is whether to start something at all,
-which is made looking at the list rather than at a chat.
+The account's plan windows sit under the workspace list rather than above the
+composer, where they used to be. They say nothing about the conversation they
+were sitting in: the same set applies to every workspace, and the decision they
+inform is whether to start something at all, which is made looking at the list
+rather than at a chat.
 
 **They are there before the first message.** The service keeps the last reading
 in `state.json`, beside the model catalogue and for the reason already written
@@ -914,10 +914,11 @@ read handed back the previous figures and reported success, so the press redrew
 a stale number as though it were fresh, and an empty cache after a failed read
 said "open a workspace first", which describes only one of the ways it happens.
 
-**A typed `/usage` fills it too.** That command already asks for everything and
-the answer carries these two windows, so the reading is kept rather than drawn
-once and let go — which used to leave the block empty beside a card that had
-just shown the same figures.
+**A typed `/usage` fills it too.** The command and the block draw the same
+windows out of the same answer — one narrowing in `core/usage.ts`, not two
+readers of one request — so the reading is kept rather than drawn once and let
+go, which used to leave the block stale beside a card that had just shown the
+same figures fresh.
 
 **Every window the account reports is drawn**, not two of them. They arrive in
 one answer and the block used to keep four numbers out of it, so an account with
