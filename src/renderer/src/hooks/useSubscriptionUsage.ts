@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 
-import type { SubscriptionUsage } from '@core/agent.js'
+import type { UsageWindows } from '@core/usage.js'
 
 import { onChatEvent } from './chatEvents.js'
 
@@ -20,7 +20,7 @@ import { onChatEvent } from './chatEvents.js'
  * than asking on a timer.
  */
 export interface SubscriptionController {
-  readonly usage: SubscriptionUsage | null
+  readonly usage: UsageWindows | null
   /** A read is in flight, which may be spawning a session to do it. */
   readonly busy: boolean
   /** Nothing came back from a read somebody asked for. */
@@ -29,7 +29,7 @@ export interface SubscriptionController {
 }
 
 export function useSubscriptionUsage(): SubscriptionController {
-  const [usage, setUsage] = useState<SubscriptionUsage | null>(null)
+  const [usage, setUsage] = useState<UsageWindows | null>(null)
   const [busy, setBusy] = useState(false)
   const [unavailable, setUnavailable] = useState(false)
 

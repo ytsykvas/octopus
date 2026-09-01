@@ -656,7 +656,7 @@ export function registerIpc(
 
   // No chat in the question: the sidebar draws this, and the figures belong to
   // the account rather than to any conversation.
-  host.handle('chats:subscription', () => attempt(() => service.getSubscriptionUsage()))
+  host.handle('chats:subscription', () => attempt(() => service.getUsageWindows()))
 
   // A press of the block in the sidebar, which is somebody asking — nothing
   // fills it on its own. A control request: no turn, no tokens.

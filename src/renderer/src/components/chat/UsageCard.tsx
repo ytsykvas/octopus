@@ -14,31 +14,8 @@ import { useTranslation } from 'react-i18next'
 import type { UsageContributing, UsageLimit, UsageReport } from '@core/usage.js'
 
 import { formatDuration, formatResetAt, formatTokens, usageTone } from './format.js'
+import { WINDOW_NAMES } from '../usageWindows.js'
 import { UsageBar } from '../UsageBar.js'
-
-/**
- * What each window is called on screen.
- *
- * A table rather than a switch, and exhaustive by its type: a window added to
- * the allowlist in `core/usage.ts` without a name for it here fails to compile,
- * rather than drawing its own key at someone.
- */
-const WINDOW_NAMES: Record<
-  UsageLimit['key'],
-  | 'usage.windowFiveHour'
-  | 'usage.windowSevenDay'
-  | 'usage.windowSevenDayOpus'
-  | 'usage.windowSevenDaySonnet'
-  | 'usage.windowSevenDayOauthApps'
-  | 'usage.windowModelScoped'
-> = {
-  five_hour: 'usage.windowFiveHour',
-  seven_day: 'usage.windowSevenDay',
-  seven_day_opus: 'usage.windowSevenDayOpus',
-  seven_day_sonnet: 'usage.windowSevenDaySonnet',
-  seven_day_oauth_apps: 'usage.windowSevenDayOauthApps',
-  model_scoped: 'usage.windowModelScoped'
-}
 
 /**
  * What each characteristic of a session is called.

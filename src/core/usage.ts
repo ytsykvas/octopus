@@ -17,8 +17,6 @@
 
 import { z } from 'zod'
 
-import type { SubscriptionUsage, UsageWindow } from './agent.js'
-
 /**
  * Tolerant on purpose, in both directions.
  *
@@ -151,7 +149,7 @@ const NAMED_WINDOWS = [
 export const MODEL_SCOPED = 'model_scoped'
 
 /** One plan window, as a bar draws it. */
-const UsageLimitSchema = z.object({
+export const UsageLimitSchema = z.object({
   /**
    * Which window, for the localised name. `model_scoped` uses `label` instead.
    *
@@ -210,29 +208,34 @@ export type UsageReport = z.infer<typeof UsageReportSchema>
 export type UsageLimit = z.infer<typeof UsageLimitSchema>
 
 /**
- * The two windows the sidebar draws, taken out of a full report.
+ * What the sidebar draws, taken out of a full report.
  *
- * `/usage` already asks for everything and the answer carries these, so a
- * command somebody typed can fill the block at the foot of the sidebar without
- * a second request — the app was reading them and throwing them away for that
- * purpose.
+ * Every window, not two. They arrive in one answer and the block used to keep
+ * four numbers out of it — so an account with a weekly window per model saw the
+ * `/usage` card name it and the sidebar not. There is no second request to
+ * save by dropping the rest.
  *
- * `null` when the account has no plan windows at all: an API-key, Bedrock or
- * Vertex session has no plan to be near the end of, and a pair of nulls would
- * say "read, and empty" about something never read.
+ * Dated at the moment it was read. The figures are a snapshot of something that
+ * moves, and `resetsAt` alone can only say that a window has since emptied —
+ * not how old the share beside it is.
  */
-export function subscriptionFrom(report: UsageReport): SubscriptionUsage | null {
-  if (!report.limitsApply) return null
+export const UsageWindowsSchema = z.object({
+  limits: z.array(UsageLimitSchema),
+  /**
+   * Whether plan windows apply at all.
+   *
+   * Carried through from the report for the reason it is carried there: an
+   * API-key, Bedrock or Vertex session has no plan to be near the end of, and
+   * an empty list is a different statement from a session that has no plan.
+   */
+  limitsApply: z.boolean(),
+  readAt: z.iso.datetime()
+})
 
-  const of = (key: 'five_hour' | 'seven_day'): UsageWindow | null => {
-    const found = report.limits.find((limit) => limit.key === key)
-    return found ? { utilization: found.utilization, resetsAt: found.resetsAt } : null
-  }
+export type UsageWindows = z.infer<typeof UsageWindowsSchema>
 
-  const fiveHour = of('five_hour')
-  const sevenDay = of('seven_day')
-
-  return fiveHour === null && sevenDay === null ? null : { fiveHour, sevenDay }
+export function windowsFrom(report: UsageReport, readAt: string): UsageWindows {
+  return { limits: report.limits, limitsApply: report.limitsApply, readAt }
 }
 
 export type UsageContributing = z.infer<typeof ContributingSchema>

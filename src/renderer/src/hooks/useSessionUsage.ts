@@ -3,7 +3,7 @@ import { useCallback, useEffect, useState } from 'react'
 import type { SessionUsage } from '@core/service.js'
 import { onChatEvent } from './chatEvents.js'
 
-const NOTHING: SessionUsage = { context: null, subscription: null }
+const NOTHING: SessionUsage = { context: null }
 
 /**
  * What the running agent says about its context window and the account's.

@@ -1,10 +1,11 @@
 import { RefreshCw } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 
-import type { UsageWindow } from '@core/agent.js'
+import { MODEL_SCOPED } from '@core/usage.js'
 
 import type { SubscriptionController } from '../hooks/useSubscriptionUsage.js'
 import { formatCountdown, formatResetAt, usageTone } from './chat/format.js'
+import { SHORT_WINDOW_NAMES } from './usageWindows.js'
 import { UsageBar } from './UsageBar.js'
 
 interface SubscriptionLimitsProps {
@@ -33,12 +34,14 @@ export function SubscriptionLimits({ subscription }: SubscriptionLimitsProps): R
   const { t } = useTranslation()
   const { usage, busy, unavailable, refresh } = subscription
 
-  const windows = [
-    { key: 'five' as const, label: t('limits.fiveHour'), window: usage?.fiveHour ?? null },
-    { key: 'week' as const, label: t('limits.week'), window: usage?.sevenDay ?? null }
-  ].filter((entry): entry is { key: 'five' | 'week'; label: string; window: UsageWindow } =>
-    Boolean(entry.window)
-  )
+  /*
+   * Every window the account reported, not two of them. They arrive in one
+   * answer, and keeping four numbers out of it left an account with a weekly
+   * window per model seeing it named by the `/usage` card and missing here.
+   * `toLimits` in `core/usage.ts` already drops a window with no share, so most
+   * accounts still draw the two rows this always had.
+   */
+  const windows = usage?.limits ?? []
 
   return (
     <div className="border-line shrink-0 border-t px-3 py-2.5">
@@ -68,7 +71,14 @@ export function SubscriptionLimits({ subscription }: SubscriptionLimitsProps): R
         </p>
       ) : (
         <div className="flex flex-col gap-2">
-          {windows.map(({ key, label, window }) => {
+          {windows.map((window) => {
+            // The server labels a per-model window itself; the rest have a name
+            // of ours, short enough for the rail.
+            const label =
+              window.key === MODEL_SCOPED && window.label !== null
+                ? t('limits.windowModel', { name: window.label })
+                : t(SHORT_WINDOW_NAMES[window.key])
+
             const share = Math.round(window.utilization)
             const at = window.resetsAt === null ? null : formatResetAt(window.resetsAt)
 
@@ -103,7 +113,11 @@ export function SubscriptionLimits({ subscription }: SubscriptionLimitsProps): R
                 : t('limits.resets', { time: countdown })
 
             return (
-              <div key={key} className={stale ? 'opacity-40' : undefined} title={title}>
+              <div
+                key={`${window.key}:${window.label ?? ''}`}
+                className={stale ? 'opacity-40' : undefined}
+                title={title}
+              >
                 <div className="mb-1 flex items-baseline justify-between gap-2 text-[11px]">
                   <span className="text-ink-faint">{label}</span>
                   <span className={usageTone(share)}>

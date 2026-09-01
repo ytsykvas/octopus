@@ -12,14 +12,10 @@ import { ComposerAttic } from './ComposerAttic.js'
 beforeAll(stubDialogElement)
 
 const FULL: SessionUsage = {
-  context: { percentage: 48, usedTokens: 48_000, maxTokens: 200_000, model: 'claude-opus-5' },
-  subscription: {
-    fiveHour: { utilization: 31, resetsAt: null },
-    sevenDay: { utilization: 84, resetsAt: null }
-  }
+  context: { percentage: 48, usedTokens: 48_000, maxTokens: 200_000, model: 'claude-opus-5' }
 }
 
-const NOTHING: SessionUsage = { context: null, subscription: null }
+const NOTHING: SessionUsage = { context: null }
 
 function limitWith(status: RateLimit['status']): RateLimit {
   return { type: 'rate_limit', status, window: 'five_hour', utilization: null, resetsAt: null }
@@ -248,8 +244,7 @@ describe('the way out of a full context window', () => {
   // thing it exists to say.
   it('keeps the figure’s own tone on the control', async () => {
     renderAttic({
-      context: { percentage: 92, usedTokens: 184_000, maxTokens: 200_000, model: 'claude-opus-5' },
-      subscription: null
+      context: { percentage: 92, usedTokens: 184_000, maxTokens: 200_000, model: 'claude-opus-5' }
     })
 
     const control = screen.getByRole('button', { name: /Context 92%/ })

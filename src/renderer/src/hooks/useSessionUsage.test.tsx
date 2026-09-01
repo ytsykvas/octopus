@@ -12,8 +12,7 @@ import { useSessionUsage } from './useSessionUsage.js'
 const CHAT = 'chat-1'
 
 const READING: SessionUsage = {
-  context: { percentage: 48, usedTokens: 48_000, maxTokens: 200_000, model: 'claude-opus-5' },
-  subscription: { fiveHour: { utilization: 31, resetsAt: null }, sevenDay: null }
+  context: { percentage: 48, usedTokens: 48_000, maxTokens: 200_000, model: 'claude-opus-5' }
 }
 
 /** Delivers an event the way the bridge does, to whoever subscribed. */
@@ -46,7 +45,7 @@ describe('what the running session says about usage', () => {
   })
 
   it('asks again when a session starts', async () => {
-    answering({ context: null, subscription: null })
+    answering({ context: null })
     renderHook(() => useSessionUsage(CHAT))
     await waitFor(() => {
       expect(octopus().chats.usage).toHaveBeenCalledTimes(1)
@@ -60,7 +59,7 @@ describe('what the running session says about usage', () => {
   })
 
   it('asks again when a turn ends, since both figures have moved', async () => {
-    answering({ context: null, subscription: null })
+    answering({ context: null })
     renderHook(() => useSessionUsage(CHAT))
     await waitFor(() => {
       expect(octopus().chats.usage).toHaveBeenCalledTimes(1)
@@ -83,7 +82,7 @@ describe('what the running session says about usage', () => {
 
   // Every read is a round trip, and one of the two goes on to the network.
   it('ignores the events that say nothing about usage', async () => {
-    answering({ context: null, subscription: null })
+    answering({ context: null })
     renderHook(() => useSessionUsage(CHAT))
     await waitFor(() => {
       expect(octopus().chats.usage).toHaveBeenCalledTimes(1)
@@ -95,7 +94,7 @@ describe('what the running session says about usage', () => {
   })
 
   it('ignores a turn that ended in another conversation', async () => {
-    answering({ context: null, subscription: null })
+    answering({ context: null })
     renderHook(() => useSessionUsage(CHAT))
     await waitFor(() => {
       expect(octopus().chats.usage).toHaveBeenCalledTimes(1)
@@ -138,7 +137,7 @@ describe('what the running session says about usage', () => {
     vi.mocked(octopus().chats.usage).mockReturnValue(new Promise(() => undefined))
     rerender({ id: 'chat-2' })
 
-    expect(result.current).toEqual({ context: null, subscription: null })
+    expect(result.current).toEqual({ context: null })
   })
 
   /*
@@ -170,6 +169,6 @@ describe('what the running session says about usage', () => {
       await abandoned.promise
     })
 
-    expect(result.current).toEqual({ context: null, subscription: null })
+    expect(result.current).toEqual({ context: null })
   })
 })

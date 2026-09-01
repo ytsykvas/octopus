@@ -162,8 +162,6 @@ export interface AgentSession {
   commands: () => Promise<AgentCommand[]>
   /** How full this conversation's context window is, or null if it cannot say. */
   contextUsage: () => Promise<ContextUsage | null>
-  /** How much of the subscription's windows is gone, or null if it cannot say. */
-  subscriptionUsage: () => Promise<SubscriptionUsage | null>
   /** Everything `/usage` answers, or null if the session cannot say. */
   usageReport: () => Promise<UsageReport | null>
   /** Ends the session, killing the process the SDK spawned. */
@@ -186,18 +184,6 @@ export interface ContextUsage {
    * turn ends. Null on a CLI old enough not to say.
    */
   readonly model: string | null
-}
-
-/** One subscription window. */
-export interface UsageWindow {
-  /** Share of the window used, 0–100. */
-  readonly utilization: number
-  readonly resetsAt: string | null
-}
-
-export interface SubscriptionUsage {
-  readonly fiveHour: UsageWindow | null
-  readonly sevenDay: UsageWindow | null
 }
 
 /**
@@ -247,64 +233,21 @@ export async function readContextUsage(conversation: Query): Promise<ContextUsag
   }
 }
 
-/** One window of the response, or null when it carries no share. */
-function toUsageWindow(
-  window: { utilization: number | null; resets_at: string | null } | null | undefined
-): UsageWindow | null {
-  if (window?.utilization == null) return null
-  return { utilization: window.utilization, resetsAt: window.resets_at }
-}
-
-/**
- * The subscription's five-hour and weekly windows, or null when there are none.
- *
- * The only place both windows exist at once. The pushed `rate_limit_event`
- * carries one window per message and usually no share at all, so it cannot
- * answer this however long you listen.
- *
- * Null covers every way that can fail, and they are all ordinary: an older CLI
- * without the method, a rejected control request, and an API-key or Bedrock
- * session, where `rate_limits_available` is false because plan windows do not
- * apply. Both windows empty collapses to null too, so a caller tests one thing.
- *
- * Everything else is dropped, and a live response shows why that matters: it
- * carried nine more windows than the type declares — `seven_day_cowork`,
- * `tangelo`, `iguana_necktie` and others — plus dollar fields on every one.
- */
-export async function readSubscriptionUsage(
-  conversation: Query
-): Promise<SubscriptionUsage | null> {
-  const ask = (conversation as UsageCapable)
-    .usage_EXPERIMENTAL_MAY_CHANGE_DO_NOT_RELY_ON_THIS_API_YET
-  if (typeof ask !== 'function') return null
-
-  try {
-    const usage = await ask.call(conversation)
-    if (!usage.rate_limits_available || !usage.rate_limits) return null
-
-    const fiveHour = toUsageWindow(usage.rate_limits.five_hour)
-    const sevenDay = toUsageWindow(usage.rate_limits.seven_day)
-
-    return fiveHour === null && sevenDay === null ? null : { fiveHour, sevenDay }
-  } catch {
-    return null
-  }
-}
-
 /**
  * Everything `/usage` answers, or null when the session will not say.
  *
- * The same call as `readSubscriptionUsage` above, kept apart rather than folded
- * into it because the two want different halves of it at different moments: the
- * strip asks for two numbers at the end of every turn, this asks for all of it
- * once, when someone types the command. Merging them would either widen what
- * the strip carries around or narrow what the card can draw.
+ * The one way this response is read. There were two for a while — this and a
+ * narrower `readSubscriptionUsage` for the sidebar's two windows — on the
+ * argument that the strip wanted two numbers often and the card wanted
+ * everything rarely. Measured, the ask is the same control request either way
+ * (250ms the first time, under 40ms after) and the narrowing is free, so the
+ * second reader bought nothing and cost the sidebar every window it dropped.
  *
- * Null covers every ordinary failure the way the readings above do — an older
- * CLI without the method, a refused control request — and one more: a response
- * whose shape `toUsageReport` does not recognise. The API is marked experimental
- * and says its own shape may change without notice, so that is a case to expect
- * rather than one to be surprised by.
+ * Null covers every ordinary failure: an older CLI without the method, a
+ * refused control request, and one more — a response whose shape
+ * `toUsageReport` does not recognise. The API is marked experimental and says
+ * its own shape may change without notice, so that is a case to expect rather
+ * than one to be surprised by.
  */
 export async function readUsageReport(conversation: Query): Promise<UsageReport | null> {
   const ask = (conversation as UsageCapable)
@@ -526,10 +469,6 @@ export function startSession(options: SessionOptions, hooks: SessionHooks): Agen
 
     contextUsage() {
       return readContextUsage(conversation)
-    },
-
-    subscriptionUsage() {
-      return readSubscriptionUsage(conversation)
     },
 
     usageReport() {

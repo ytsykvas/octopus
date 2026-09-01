@@ -33,8 +33,8 @@ import type {
   SkillSave
 } from '@core/skills.js'
 import type { SkillStore } from '@core/skillNames.js'
-import type { SubscriptionUsage } from '@core/agent.js'
 import type { InstructionSource } from '@core/instructionSources.js'
+import type { UsageWindows } from '@core/usage.js'
 import type { RepoConfigView, RepoItemId } from '@core/repoConfig.js'
 import type { CapabilityFile } from '@core/repoTrust.js'
 import type { Project, ProjectPatch } from '@core/store.js'
@@ -255,8 +255,8 @@ const api = {
      * Answered from the last reading, which is kept in the state file — so it
      * is there when the window opens rather than after the first message.
      */
-    subscription: (): Promise<Result<SubscriptionUsage | null>> =>
-      ipcRenderer.invoke('chats:subscription') as Promise<Result<SubscriptionUsage | null>>,
+    subscription: (): Promise<Result<UsageWindows | null>> =>
+      ipcRenderer.invoke('chats:subscription') as Promise<Result<UsageWindows | null>>,
 
     /**
      * Asks the account now rather than waiting for a turn.
@@ -265,8 +265,8 @@ const api = {
      * session runs in a worktree, so an installation with no workspace has
      * nowhere to start one.
      */
-    refreshSubscription: (): Promise<Result<SubscriptionUsage | null>> =>
-      ipcRenderer.invoke('chats:refreshSubscription') as Promise<Result<SubscriptionUsage | null>>,
+    refreshSubscription: (): Promise<Result<UsageWindows | null>> =>
+      ipcRenderer.invoke('chats:refreshSubscription') as Promise<Result<UsageWindows | null>>,
 
     onEvent: (handler: (event: ChatEvent) => void): (() => void) => {
       const listener = (_event: unknown, chatEvent: ChatEvent): void => {

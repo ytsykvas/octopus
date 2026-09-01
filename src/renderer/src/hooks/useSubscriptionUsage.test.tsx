@@ -1,15 +1,19 @@
 import { act, renderHook, waitFor } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
 
-import type { SubscriptionUsage } from '@core/agent.js'
+import type { UsageWindows } from '@core/usage.js'
 
 import { emitAgentEvent } from '../test/chat.js'
 import { octopus } from '../test/octopus.js'
 import { useSubscriptionUsage } from './useSubscriptionUsage.js'
 
-const READING: SubscriptionUsage = {
-  fiveHour: { utilization: 31, resetsAt: '2026-08-11T19:50:00.000Z' },
-  sevenDay: { utilization: 84, resetsAt: '2026-08-14T04:00:00.000Z' }
+const READING: UsageWindows = {
+  limits: [
+    { key: 'five_hour', label: null, utilization: 31, resetsAt: '2026-08-11T19:50:00.000Z' },
+    { key: 'seven_day', label: null, utilization: 84, resetsAt: '2026-08-14T04:00:00.000Z' }
+  ],
+  limitsApply: true,
+  readAt: '2026-08-11T16:00:00.000Z'
 }
 
 /** A turn ending, which is the one moment the figures can have moved. */
@@ -190,8 +194,8 @@ describe('what the sidebar knows about the account', () => {
   // Closing the window mid-read. Applying the answer then would set state on
   // something that is gone.
   it('drops a read that comes back after the sidebar went away', async () => {
-    let release: (value: { ok: true; value: SubscriptionUsage | null }) => void = () => undefined
-    const pending = new Promise<{ ok: true; value: SubscriptionUsage | null }>((resolve) => {
+    let release: (value: { ok: true; value: UsageWindows | null }) => void = () => undefined
+    const pending = new Promise<{ ok: true; value: UsageWindows | null }>((resolve) => {
       release = resolve
     })
     vi.mocked(octopus().chats.subscription).mockReturnValue(pending)

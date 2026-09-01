@@ -16,7 +16,6 @@ import {
   type SessionOptions,
   promptTokens,
   readContextUsage,
-  readSubscriptionUsage,
   readUsageReport,
   startSession,
   toAgentCommands,
@@ -1378,64 +1377,6 @@ describe('reading how full the context window is', () => {
   })
 })
 
-describe('reading how much of the subscription is gone', () => {
-  const asking = (response: unknown): Query =>
-    queryAnswering({
-      usage_EXPERIMENTAL_MAY_CHANGE_DO_NOT_RELY_ON_THIS_API_YET: () => Promise.resolve(response)
-    })
-
-  it('takes both windows and nothing else', async () => {
-    await expect(readSubscriptionUsage(asking(USAGE_RESPONSE))).resolves.toEqual({
-      fiveHour: { utilization: 18, resetsAt: '2026-08-12T19:50:00.149775+00:00' },
-      sevenDay: { utilization: 84, resetsAt: '2026-08-12T22:00:00.149796+00:00' }
-    })
-  })
-
-  it('says nothing when the CLI has no such control request', async () => {
-    await expect(readSubscriptionUsage(queryAnswering({}))).resolves.toBeNull()
-  })
-
-  it('says nothing when the request is refused', async () => {
-    const refusing = queryAnswering({
-      usage_EXPERIMENTAL_MAY_CHANGE_DO_NOT_RELY_ON_THIS_API_YET: () =>
-        Promise.reject(new Error('unknown control request'))
-    })
-
-    await expect(readSubscriptionUsage(refusing)).resolves.toBeNull()
-  })
-
-  // An API key, Bedrock or Vertex session has no plan windows at all, and the
-  // agent says so rather than reporting zeros.
-  it('says nothing when the account has no plan windows', async () => {
-    const noPlan = asking({ rate_limits_available: false, rate_limits: null })
-
-    await expect(readSubscriptionUsage(noPlan)).resolves.toBeNull()
-  })
-
-  it('says nothing when the windows are there but empty', async () => {
-    const empty = asking({ rate_limits_available: true, rate_limits: {} })
-
-    await expect(readSubscriptionUsage(empty)).resolves.toBeNull()
-  })
-
-  // One window can carry no share while the other does; the reading should not
-  // collapse to nothing over the half that is missing.
-  it('keeps the window that has a share when the other has none', async () => {
-    const partial = asking({
-      rate_limits_available: true,
-      rate_limits: {
-        five_hour: { utilization: null, resets_at: null },
-        seven_day: { utilization: 84, resets_at: null }
-      }
-    })
-
-    await expect(readSubscriptionUsage(partial)).resolves.toEqual({
-      fiveHour: null,
-      sevenDay: { utilization: 84, resetsAt: null }
-    })
-  })
-})
-
 describe('reading everything /usage answers', () => {
   const asking = (response: unknown): Query =>
     queryAnswering({
@@ -1476,9 +1417,6 @@ describe('the session, asked about usage', () => {
     const { agent } = fakeAgent()
 
     await expect(agent.session.contextUsage()).resolves.toMatchObject({ percentage: 2 })
-    await expect(agent.session.subscriptionUsage()).resolves.toMatchObject({
-      sevenDay: { utilization: 84 }
-    })
     await expect(agent.session.usageReport()).resolves.toMatchObject({ subscriptionType: 'max' })
   })
 })

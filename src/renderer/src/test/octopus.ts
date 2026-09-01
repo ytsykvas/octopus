@@ -72,7 +72,7 @@ export function installOctopusStub(): Api {
       models: vi.fn(() => ok([])),
       commands: vi.fn(() => ok([])),
       pendingPermission: vi.fn(() => ok(null)),
-      usage: vi.fn(() => ok({ context: null, subscription: null })),
+      usage: vi.fn(() => ok({ context: null })),
       answerPermission: vi.fn(() => ok(undefined)),
       answerQuestions: vi.fn(() => ok(undefined)),
       rateLimit: vi.fn(() => ok(null)),

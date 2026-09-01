@@ -10,6 +10,8 @@ import { isAbsolute, normalize } from 'node:path'
 
 import { z } from 'zod'
 
+import { UsageWindowsSchema } from './usage.js'
+
 import {
   type AgentCommand,
   type AgentModel,
@@ -155,28 +157,6 @@ export const WorkspaceSchema = z.object({
   ownerId: z.string().nullable()
 })
 
-/**
- * One subscription window, as the account last reported it.
- *
- * Mirrors `UsageWindow` in `agent.ts` rather than importing it: that module
- * reaches the SDK, and this one is read by the renderer.
- *
- * Nothing has to keep the two in step by hand. `service.ts` assigns what it
- * loads from here to a `SubscriptionUsage`, so a field that drifts on either
- * side fails to compile there — a stronger check than a test, and one nobody
- * has to remember to write.
- */
-export const UsageWindowSchema = z.object({
-  /** Share of the window used, 0–100. */
-  utilization: z.number(),
-  resetsAt: z.string().nullable()
-})
-
-export const SubscriptionUsageSchema = z.object({
-  fiveHour: UsageWindowSchema.nullable(),
-  sevenDay: UsageWindowSchema.nullable()
-})
-
 export const StateSchema = z.object({
   version: z.literal(1),
   projects: z.array(ProjectSchema),
@@ -207,14 +187,21 @@ export const StateSchema = z.object({
    *
    * Here for the same two reasons as the models above, and remembered for the
    * same one: the figures arrive from a running session's control channel, so
-   * without this the sidebar has nothing to show until somebody has sent a
-   * message. A reading is a fact about the account rather than about any
-   * conversation, which is why it sits beside the projects and not inside one.
+   * without this the sidebar has nothing to show for the second it takes the
+   * first read to answer. A reading is a fact about the account rather than
+   * about any conversation, which is why it sits beside the projects and not
+   * inside one.
    *
    * `null` is "never read one", which is a different statement from a reading
    * of zero and has to stay tellable apart from it.
+   *
+   * A **new key** rather than the reshaped `subscriptionUsage` it replaces.
+   * `readJsonFile` throws on a shape mismatch rather than falling back, so
+   * widening the old field in place would have stopped every existing
+   * installation opening; zod drops the key it no longer knows, and the first
+   * read fills this one.
    */
-  subscriptionUsage: SubscriptionUsageSchema.nullable().default(null)
+  usageWindows: UsageWindowsSchema.nullable().default(null)
 })
 
 /**
@@ -238,7 +225,7 @@ export const EMPTY_STATE: State = {
   workspaces: [],
   chats: [],
   knownModels: [],
-  subscriptionUsage: null
+  usageWindows: null
 }
 
 /** State integrity violation — a duplicate or a dangling reference. */

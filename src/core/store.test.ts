@@ -240,7 +240,7 @@ describe('migration', () => {
       workspaces: [],
       chats: [],
       knownModels: [],
-      subscriptionUsage: null
+      usageWindows: null
     }
 
     const colours = migrate(legacy).projects.map((item) => item.color)
@@ -254,7 +254,7 @@ describe('migration', () => {
       workspaces: [],
       chats: [],
       knownModels: [],
-      subscriptionUsage: null
+      usageWindows: null
     }
 
     expect(migrate(stored).projects[0]?.color).toBe('teal')
@@ -272,7 +272,7 @@ describe('migration', () => {
       workspaces: [],
       chats: [],
       knownModels: [],
-      subscriptionUsage: null
+      usageWindows: null
     }
 
     expect(migrate(stored).projects[1]?.color).not.toBe(PROJECT_COLORS[0])

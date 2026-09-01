@@ -12,7 +12,7 @@ import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
-import type { SubscriptionUsage } from '@core/agent.js'
+import type { UsageLimit, UsageWindows } from '@core/usage.js'
 
 import type { SubscriptionController } from '../hooks/useSubscriptionUsage.js'
 import { SubscriptionLimits } from './SubscriptionLimits.js'
@@ -36,13 +36,28 @@ afterEach(() => {
   vi.useRealTimers()
 })
 
-const BOTH: SubscriptionUsage = {
-  // `.000000` rather than a measured fraction: the microseconds are the shape
-  // the CLI sends, and a real fraction pushes `Math.ceil` in the countdown to a
-  // minute that reads like a bug beside the visible hour.
-  fiveHour: { utilization: 31, resetsAt: '2026-08-11T19:50:00.000000+00:00' },
-  sevenDay: { utilization: 84, resetsAt: '2026-08-14T04:00:00.000000+00:00' }
+/** One window, as the account reports it. */
+function window(
+  key: UsageLimit['key'],
+  utilization: number,
+  resetsAt: string | null = null,
+  label: string | null = null
+): UsageLimit {
+  return { key, label, utilization, resetsAt }
 }
+
+/** A reading of exactly these windows. */
+function reading(limits: UsageLimit[]): UsageWindows {
+  return { limits, limitsApply: true, readAt: '2026-08-11T16:00:00.000Z' }
+}
+
+// `.000000` rather than a measured fraction: the microseconds are the shape the
+// CLI sends, and a real fraction pushes `Math.ceil` in the countdown to a
+// minute that reads like a bug beside the visible hour.
+const BOTH = reading([
+  window('five_hour', 31, '2026-08-11T19:50:00.000000+00:00'),
+  window('seven_day', 84, '2026-08-14T04:00:00.000000+00:00')
+])
 
 describe('the account block', () => {
   it('draws a row for each window the account reported', () => {
@@ -51,6 +66,42 @@ describe('the account block', () => {
     expect(screen.getByText('Claude')).toBeInTheDocument()
     expect(screen.getByText('5h')).toBeInTheDocument()
     expect(screen.getByText('1w')).toBeInTheDocument()
+  })
+
+  /*
+   * Every window the answer carried, not two of them. The block used to keep
+   * `five_hour` and `seven_day` and drop the rest, so an account with a weekly
+   * window per model had it named by the `/usage` card and missing here — out
+   * of one and the same reading.
+   */
+  it('draws the windows beyond the two it used to', () => {
+    render(
+      <SubscriptionLimits
+        subscription={controller({
+          usage: reading([
+            window('five_hour', 31),
+            window('seven_day_opus', 12),
+            window('model_scoped', 15, null, 'Fable')
+          ])
+        })}
+      />
+    )
+
+    expect(screen.getByText('5h')).toBeInTheDocument()
+    expect(screen.getByText('1w Opus')).toBeInTheDocument()
+    // The server names this one itself, and the row says which week it is about.
+    expect(screen.getByText('1w Fable')).toBeInTheDocument()
+  })
+
+  // The server sends the key without a name on an account it has none for.
+  it('falls back to a name of ours when the server sent none', () => {
+    render(
+      <SubscriptionLimits
+        subscription={controller({ usage: reading([window('model_scoped', 15)]) })}
+      />
+    )
+
+    expect(screen.getByText('1w per model')).toBeInTheDocument()
   })
 
   // The question a percentage cannot answer: "31%" says how much is gone and
@@ -85,7 +136,7 @@ describe('the account block', () => {
     render(
       <SubscriptionLimits
         subscription={controller({
-          usage: { fiveHour: null, sevenDay: { utilization: 84, resetsAt: null } }
+          usage: reading([window('seven_day', 84)])
         })}
       />
     )
@@ -108,11 +159,7 @@ describe('the account block', () => {
   })
 
   it('says the same when the account reports two empty windows', () => {
-    render(
-      <SubscriptionLimits
-        subscription={controller({ usage: { fiveHour: null, sevenDay: null } })}
-      />
-    )
+    render(<SubscriptionLimits subscription={controller({ usage: reading([]) })} />)
 
     expect(screen.getByText(/press to ask/i)).toBeInTheDocument()
   })
@@ -155,7 +202,7 @@ describe('the account block', () => {
     render(
       <SubscriptionLimits
         subscription={controller({
-          usage: { fiveHour: { utilization: 31, resetsAt: null }, sevenDay: null }
+          usage: reading([window('five_hour', 31)])
         })}
       />
     )
@@ -175,10 +222,7 @@ describe('the account block', () => {
     render(
       <SubscriptionLimits
         subscription={controller({
-          usage: {
-            fiveHour: { utilization: 92, resetsAt: '2026-08-11T19:50:00.000000+00:00' },
-            sevenDay: null
-          }
+          usage: reading([window('five_hour', 92, '2026-08-11T19:50:00.000000+00:00')])
         })}
       />
     )
@@ -192,10 +236,7 @@ describe('the account block', () => {
     render(
       <SubscriptionLimits
         subscription={controller({
-          usage: {
-            fiveHour: { utilization: 31, resetsAt: null },
-            sevenDay: { utilization: 84, resetsAt: null }
-          }
+          usage: reading([window('five_hour', 31), window('seven_day', 84)])
         })}
       />
     )
@@ -222,10 +263,7 @@ describe('the account block', () => {
     render(
       <SubscriptionLimits
         subscription={controller({
-          usage: {
-            fiveHour: { utilization: 100, resetsAt: '2026-08-11T15:00:00+00:00' },
-            sevenDay: null
-          }
+          usage: reading([window('five_hour', 100, '2026-08-11T15:00:00+00:00')])
         })}
       />
     )

@@ -23,9 +23,7 @@ import {
   type PermissionOutcome,
   type QueryFn,
   READ_ONLY_TOOLS,
-  startSession,
-  type SubscriptionUsage,
-  type UsageWindow
+  startSession
 } from './agent.js'
 import {
   type AgentCommand,
@@ -72,7 +70,7 @@ import {
 } from './envProfiles.js'
 import { runArchiveScript } from './archive.js'
 import { shortBranchName } from './branches.js'
-import { subscriptionFrom } from './usage.js'
+import { type UsageWindows, windowsFrom } from './usage.js'
 import {
   type Config,
   ConfigSchema,
@@ -341,15 +339,22 @@ export type RateLimit = Extract<AgentEvent, { type: 'rate_limit' }>
  * through a session's fake would be arranging the agent to say something odd
  * rather than asking the question directly.
  */
-export function sameUsage(left: SubscriptionUsage, right: SubscriptionUsage | null): boolean {
-  const same = (a: UsageWindow | null, b: UsageWindow | null): boolean =>
-    a === null || b === null
-      ? a === b
-      : a.utilization === b.utilization && a.resetsAt === b.resetsAt
+export function sameWindows(left: UsageWindows, right: UsageWindows | null): boolean {
+  if (left.limitsApply !== right?.limitsApply) return false
+  if (left.limits.length !== right.limits.length) return false
 
-  return (
-    right !== null && same(left.fiveHour, right.fiveHour) && same(left.sevenDay, right.sevenDay)
-  )
+  // `readAt` is deliberately not compared: it moves on every read and is the
+  // one field that says nothing about the account.
+  return left.limits.every((window, index) => {
+    const other = right.limits[index]
+
+    return (
+      window.key === other?.key &&
+      window.label === other.label &&
+      window.utilization === other.utilization &&
+      window.resetsAt === other.resetsAt
+    )
+  })
 }
 
 /**
@@ -360,7 +365,6 @@ export function sameUsage(left: SubscriptionUsage, right: SubscriptionUsage | nu
  */
 export interface SessionUsage {
   readonly context: ContextUsage | null
-  readonly subscription: SubscriptionUsage | null
 }
 
 /** A permission request the agent is still blocked on. */
@@ -807,7 +811,7 @@ export interface OctopusService {
    * last reading, kept in the state file, so it is there before the first
    * message of a session rather than after it.
    */
-  getSubscriptionUsage(): SubscriptionUsage | null
+  getUsageWindows(): UsageWindows | null
   /**
    * Asks the account for its window shares now, rather than waiting for a turn.
    *
@@ -820,7 +824,7 @@ export interface OctopusService {
    * runs in a worktree, so an installation with no workspace has nowhere to
    * start one, and saying so is better than a button that does nothing.
    */
-  refreshSubscriptionUsage(): Promise<SubscriptionUsage | null>
+  refreshSubscriptionUsage(): Promise<UsageWindows | null>
   /** Subscribes to agent events; the returned function unsubscribes. */
   onAgentEvent(handler: (event: ChatEvent) => void): () => void
   /** What a workspace is doing, as it changes. A broadcast, like the above. */
@@ -938,7 +942,7 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
   // from a running session's control channel — so without the last one on disk
   // the block would be empty until somebody sent a message, which is the whole
   // thing this is here to avoid.
-  let subscriptionUsage: SubscriptionUsage | null = state.subscriptionUsage
+  let usageWindows: UsageWindows | null = state.usageWindows
 
   /**
    * State writes, run one after another.
@@ -1111,11 +1115,18 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
    * figures because one request was refused would report a change in the
    * account that never happened.
    */
-  async function keepSubscription(reading: SubscriptionUsage | null): Promise<void> {
-    if (!reading || sameUsage(reading, subscriptionUsage)) return
+  /** One session's answer, narrowed to what the sidebar draws and dated. */
+  async function readWindows(session: AgentSession): Promise<UsageWindows | null> {
+    const report = await session.usageReport()
 
-    subscriptionUsage = reading
-    await commit((current) => ({ ...current, subscriptionUsage: reading }))
+    return report === null ? null : windowsFrom(report, now())
+  }
+
+  async function keepWindows(reading: UsageWindows | null): Promise<void> {
+    if (!reading || sameWindows(reading, usageWindows)) return
+
+    usageWindows = reading
+    await commit((current) => ({ ...current, usageWindows: reading }))
   }
 
   function requireWorkspace(workspaceId: string): Workspace {
@@ -3061,10 +3072,10 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
         const report = await session.usageReport()
         handleEvent(chat, { type: 'usage', report })
 
-        // The card and the sidebar are the same two windows, and this answer
-        // already carries them. Reading them and letting them go would leave
-        // the block empty beside a card that had just drawn them.
-        if (report) await keepSubscription(subscriptionFrom(report))
+        // The card and the sidebar draw the same windows out of the same
+        // answer. Reading them and letting them go would leave the block stale
+        // beside a card that had just drawn them fresh.
+        if (report) await keepWindows(windowsFrom(report, now()))
         return
       }
 
@@ -3245,8 +3256,8 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
      * to the account, and `sessionUsage` only takes a chat id because it
      * answers about a context window at the same time.
      */
-    getSubscriptionUsage() {
-      return subscriptionUsage
+    getUsageWindows() {
+      return usageWindows
     },
 
     async refreshSubscriptionUsage() {
@@ -3255,8 +3266,8 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
       // the first is as good as the rest.
       const [running] = sessions.values()
       if (running) {
-        await keepSubscription(await running.subscriptionUsage())
-        return subscriptionUsage
+        await keepWindows(await readWindows(running))
+        return usageWindows
       }
 
       /*
@@ -3272,8 +3283,8 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
       if (!chat || !workspace) return null
 
       const session = await startFor(chat, workspace, await sourcesFor(workspace))
-      await keepSubscription(await session.subscriptionUsage())
-      return subscriptionUsage
+      await keepWindows(await readWindows(session))
+      return usageWindows
     },
 
     async sessionUsage(chatId) {
@@ -3283,22 +3294,9 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
       // Deliberately not started. Spawning an agent to fill a gauge would also
       // create a record for a workspace nobody has spoken to, which is the very
       // thing `openChat`'s laziness exists to avoid.
-      if (!session) return { context: null, subscription: subscriptionUsage }
+      if (!session) return { context: null }
 
-      // Together rather than in turn: the subscription reading crosses the
-      // network, the context one does not, and asked in sequence the fast one
-      // would wait on the slow one for no reason.
-      const [context, subscription] = await Promise.all([
-        session.contextUsage(),
-        session.subscriptionUsage()
-      ])
-
-      // A reading that failed leaves the last good one standing. Blanking the
-      // figure because one request was refused would report a change in the
-      // account that never happened.
-      await keepSubscription(subscription)
-
-      return { context, subscription: subscriptionUsage }
+      return { context: await session.contextUsage() }
     },
 
     onAgentEvent(handler) {

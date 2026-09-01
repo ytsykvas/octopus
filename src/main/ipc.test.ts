@@ -1865,7 +1865,7 @@ describe('the agent chat', () => {
 
     await expect(invoke('chats:usage', chatIdOf(opened))).resolves.toEqual({
       ok: true,
-      value: { context: null, subscription: null }
+      value: { context: null }
     })
   })
 

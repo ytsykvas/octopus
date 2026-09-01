@@ -96,8 +96,18 @@ export const en = {
     empty: 'Not read yet — press to ask the account.',
     refresh: 'Read the limits now',
     unavailable: 'Nothing to ask through yet. Open a workspace first.',
-    fiveHour: '5h',
-    week: '1w',
+    /* The same windows the `/usage` card names, at the width a rail has for
+       them. `usage.window*` is the long form; a window added to the allowlist
+       in `core/usage.ts` has to be named in both, which `usageWindows.ts`
+       enforces by type. */
+    windowFiveHour: '5h',
+    windowSevenDay: '1w',
+    windowSevenDayOpus: '1w Opus',
+    windowSevenDaySonnet: '1w Sonnet',
+    windowSevenDayOauthApps: '1w apps',
+    windowModelScoped: '1w per model',
+    /* The server names this one itself — `Fable`, and whatever follows it. */
+    windowModel: '1w {{name}}',
     reading: '{{name}} window, {{percentage}}% used',
     /* The hover half of the pair: the row says when the window comes back, the
        tooltip says how long that is from now. */

@@ -51,7 +51,7 @@ function renderComposer(overrides: Partial<ComposerProps> = {}): {
       models={[]}
       activeModel={null}
       commands={[]}
-      usage={{ context: null, subscription: null }}
+      usage={{ context: null }}
       limit={null}
       skills={[]}
       onToggleSkill={vi.fn()}
@@ -224,8 +224,7 @@ describe('sending', () => {
     const user = userEvent.setup()
     const { onSend } = renderComposer({
       usage: {
-        context: { percentage: 48, usedTokens: 48_000, maxTokens: 200_000, model: 'claude-opus-5' },
-        subscription: null
+        context: { percentage: 48, usedTokens: 48_000, maxTokens: 200_000, model: 'claude-opus-5' }
       }
     })
 
@@ -400,8 +399,7 @@ describe('review notes riding with the message', () => {
     const { onSend } = renderComposer({
       notes: [NOTE],
       usage: {
-        context: { percentage: 48, usedTokens: 9, maxTokens: 20, model: null },
-        subscription: null
+        context: { percentage: 48, usedTokens: 9, maxTokens: 20, model: null }
       }
     })
 
@@ -454,8 +452,7 @@ describe('while the agent is working', () => {
           usedTokens: 182_000,
           maxTokens: 200_000,
           model: 'claude-opus-5'
-        },
-        subscription: null
+        }
       }
     })
 

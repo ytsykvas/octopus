@@ -479,8 +479,7 @@ describe('following the conversation', () => {
     vi.mocked(octopus().chats.usage).mockResolvedValue({
       ok: true,
       value: {
-        context: { percentage: 8, usedTokens: 16_000, maxTokens: 200_000, model: 'claude-opus-5' },
-        subscription: null
+        context: { percentage: 8, usedTokens: 16_000, maxTokens: 200_000, model: 'claude-opus-5' }
       }
     })
     givenChat()

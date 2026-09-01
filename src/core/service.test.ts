@@ -21,7 +21,6 @@ import type { ModelInfo, Query, SDKMessage, SlashCommand } from '@anthropic-ai/c
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import type { CommandExec } from './accounts.js'
-import type { UsageWindow } from './agent.js'
 import { ABANDONED, DENIED, type QueryFn, READ_ONLY_TOOLS } from './agent.js'
 import type { RemoteRepository } from './github.js'
 import { type GitOptions, gitIn } from './git.js'
@@ -31,16 +30,22 @@ import {
   type ChatEvent,
   type ChatStatusEvent,
   createService,
-  sameUsage,
+  sameWindows,
   type OctopusService,
   type WorkspaceStatusEvent
 } from './service.js'
 import { POOL_START } from './ports.js'
+import type { UsageLimit, UsageWindows } from './usage.js'
 import { BLOCK } from './scriptEnv.js'
 import { listWorktrees } from './worktree.js'
 import { WorkspaceError } from './workspaces.js'
 
 const run = promisify(execFile)
+
+/** One window's share out of a reading, by the key the account named it with. */
+function share(windows: UsageWindows | null, key: UsageLimit['key']): number | undefined {
+  return windows?.limits.find((window) => window.key === key)?.utilization
+}
 
 let dir: string
 let service: OctopusService
@@ -2662,53 +2667,83 @@ describe('project instructions', () => {
 })
 
 describe('whether two account readings say the same thing', () => {
-  const window = (utilization: number, resetsAt: string | null = null): UsageWindow => ({
-    utilization,
-    resetsAt
+  const window = (
+    key: UsageLimit['key'],
+    utilization: number,
+    resetsAt: string | null = null
+  ): UsageLimit => ({ key, label: null, utilization, resetsAt })
+
+  const reading = (limits: UsageLimit[], readAt = 'a'): UsageWindows => ({
+    limits,
+    limitsApply: true,
+    readAt
   })
 
   it('is true for two readings of the same figures', () => {
     expect(
-      sameUsage(
-        { fiveHour: window(31, 'a'), sevenDay: window(84) },
-        { fiveHour: window(31, 'a'), sevenDay: window(84) }
+      sameWindows(
+        reading([window('five_hour', 31, 'x'), window('seven_day', 84)]),
+        reading([window('five_hour', 31, 'x'), window('seven_day', 84)])
       )
+    ).toBe(true)
+  })
+
+  /*
+   * `readAt` moves on every read and says nothing about the account. Compared,
+   * it would call every reading a change and put the state file under the
+   * busiest path in the app to record a number that had not moved.
+   */
+  it('ignores when the reading was taken', () => {
+    expect(
+      sameWindows(reading([window('five_hour', 31)], 'a'), reading([window('five_hour', 31)], 'b'))
     ).toBe(true)
   })
 
   it('is false when a share moved, and when only a reset moment did', () => {
     expect(
-      sameUsage({ fiveHour: window(31), sevenDay: null }, { fiveHour: window(32), sevenDay: null })
+      sameWindows(reading([window('five_hour', 31)]), reading([window('five_hour', 32)]))
     ).toBe(false)
     expect(
-      sameUsage(
-        { fiveHour: window(31, 'a'), sevenDay: null },
-        { fiveHour: window(31, 'b'), sevenDay: null }
+      sameWindows(reading([window('five_hour', 31, 'x')]), reading([window('five_hour', 31, 'y')]))
+    ).toBe(false)
+  })
+
+  // An account that starts reporting a window, or stops, is a change — and so
+  // is the same list in a different order, which is the order they are drawn in.
+  it('is false when the windows themselves differ', () => {
+    expect(sameWindows(reading([window('five_hour', 31)]), reading([]))).toBe(false)
+    expect(
+      sameWindows(
+        reading([window('five_hour', 31), window('seven_day', 84)]),
+        reading([window('seven_day', 84), window('five_hour', 31)])
       )
     ).toBe(false)
   })
 
-  // The four ways a window can be on one side and not the other. An account
-  // that starts reporting a weekly window, or stops, is a change.
-  it('is false when one side has a window the other does not', () => {
-    expect(
-      sameUsage({ fiveHour: window(31), sevenDay: null }, { fiveHour: null, sevenDay: null })
-    ).toBe(false)
-    expect(
-      sameUsage({ fiveHour: null, sevenDay: null }, { fiveHour: window(31), sevenDay: null })
-    ).toBe(false)
+  // A window the server labelled itself: two models can report the same share
+  // and they are not the same window.
+  it('is false when only the server label differs', () => {
+    const fable = { ...window('model_scoped', 15), label: 'Fable' }
+    const opus = { ...window('model_scoped', 15), label: 'Opus' }
+
+    expect(sameWindows(reading([fable]), reading([opus]))).toBe(false)
   })
 
-  it('is true when both sides report neither window', () => {
-    expect(sameUsage({ fiveHour: null, sevenDay: null }, { fiveHour: null, sevenDay: null })).toBe(
-      true
-    )
+  // Whether the account has a plan at all is part of the reading: a session
+  // that stops reporting windows is not the same answer as one that never had
+  // any.
+  it('is false when one side has no plan and the other does', () => {
+    expect(sameWindows(reading([]), { limits: [], limitsApply: false, readAt: 'a' })).toBe(false)
+  })
+
+  it('is true when both sides report no windows at all', () => {
+    expect(sameWindows(reading([]), reading([]))).toBe(true)
   })
 
   // Nothing read yet is not the same as a reading of nothing, or the first
   // reading after a launch would never be written.
   it('is false against a reading that has never been taken', () => {
-    expect(sameUsage({ fiveHour: null, sevenDay: null }, null)).toBe(false)
+    expect(sameWindows(reading([]), null)).toBe(false)
   })
 })
 
@@ -2988,14 +3023,11 @@ describe('the agent chat', () => {
       const { service, workspaceId } = await withWorkspace()
       const chat = await service.openChat(workspaceId)
 
-      await expect(service.sessionUsage(chat.id)).resolves.toEqual({
-        context: null,
-        subscription: null
-      })
+      await expect(service.sessionUsage(chat.id)).resolves.toEqual({ context: null })
       expect(agents).toHaveLength(0)
     })
 
-    it('reports both readings once a session is running', async () => {
+    it('reports the context window once a session is running', async () => {
       const { service, workspaceId } = await withWorkspace()
       const chat = await service.openChat(workspaceId)
       await service.sendToChat(chat.id, 'work')
@@ -3006,10 +3038,6 @@ describe('the agent chat', () => {
           usedTokens: 23_921,
           maxTokens: 1_000_000,
           model: 'claude-opus-5[1m]'
-        },
-        subscription: {
-          fiveHour: { utilization: 18, resetsAt: '2026-08-12T19:50:00.149775+00:00' },
-          sevenDay: { utilization: 84, resetsAt: '2026-08-12T22:00:00.149796+00:00' }
         }
       })
     })
@@ -3034,34 +3062,34 @@ describe('the agent chat', () => {
       expect(service.listChats(workspaceId)).toHaveLength(1)
     })
 
-    // The subscription belongs to the account, so a workspace nobody has
-    // spoken to should still show what another one's turn just learned.
-    it('lends the account figure to a chat that has no session', async () => {
-      const { service, projectId, workspaceId } = await withWorkspace()
-      const spoken = await service.openChat(workspaceId)
-      await service.sendToChat(spoken.id, 'work')
-      await service.sessionUsage(spoken.id)
+    /*
+     * The account's windows used to ride along with this, and no longer do:
+     * the composer strip they were drawn in reads only the context share, and
+     * has since they moved to the foot of the sidebar. Asking for both here
+     * made every pane wait on the slower of two readings to draw one of them.
+     */
+    it('answers about the context window and nothing else', async () => {
+      const { service, workspaceId } = await withWorkspace()
+      const chat = await service.openChat(workspaceId)
+      await service.sendToChat(chat.id, 'work')
 
-      const other = await service.createWorkspaceIn(projectId)
-      const silent = await service.openChat(other.id)
-
-      const usage = await service.sessionUsage(silent.id)
-      expect(usage.subscription?.sevenDay?.utilization).toBe(84)
-      expect(usage.context).toBeNull()
+      expect(await service.sessionUsage(chat.id)).toEqual({
+        context: expect.objectContaining({ percentage: 2 })
+      })
     })
 
-    // Blanking the figure because one request was refused would report a change
-    // in the account that never happened.
+    // Blanking the figures because one request was refused would report a
+    // change in the account that never happened.
     it('keeps the last good reading when a later one fails', async () => {
       const { service, workspaceId } = await withWorkspace()
       const chat = await service.openChat(workspaceId)
       await service.sendToChat(chat.id, 'work')
-      await service.sessionUsage(chat.id)
+      await service.refreshSubscriptionUsage()
 
       usageAnswer = () => Promise.reject(new Error('unknown control request'))
+      await service.refreshSubscriptionUsage()
 
-      const usage = await service.sessionUsage(chat.id)
-      expect(usage.subscription?.fiveHour?.utilization).toBe(18)
+      expect(share(service.getUsageWindows(), 'five_hour')).toBe(18)
     })
 
     it('refuses a chat that does not exist', async () => {
@@ -3087,12 +3115,12 @@ describe('the agent chat', () => {
       const chat = await service.openChat(workspaceId)
       await service.sendToChat(chat.id, 'work')
 
-      await service.sessionUsage(chat.id)
+      await service.refreshSubscriptionUsage()
 
       const stored = JSON.parse(await readFile(join(dir, 'state.json'), 'utf8')) as {
-        subscriptionUsage: { fiveHour: { utilization: number } | null } | null
+        usageWindows: UsageWindows | null
       }
-      expect(stored.subscriptionUsage?.fiveHour?.utilization).toBe(18)
+      expect(share(stored.usageWindows, 'five_hour')).toBe(18)
     })
 
     // Read up to three times a turn, so a write per read would put the state
@@ -3102,10 +3130,10 @@ describe('the agent chat', () => {
       const { service, workspaceId } = await withWorkspace()
       const chat = await service.openChat(workspaceId)
       await service.sendToChat(chat.id, 'work')
-      await service.sessionUsage(chat.id)
+      await service.refreshSubscriptionUsage()
       const before = await readFile(join(dir, 'state.json'), 'utf8')
 
-      await service.sessionUsage(chat.id)
+      await service.refreshSubscriptionUsage()
 
       await expect(readFile(join(dir, 'state.json'), 'utf8')).resolves.toBe(before)
     })
@@ -3122,7 +3150,7 @@ describe('the agent chat', () => {
 
       const read = await service.refreshSubscriptionUsage()
 
-      expect(read?.fiveHour?.utilization).toBe(18)
+      expect(share(read, 'five_hour')).toBe(18)
     })
 
     // No session anywhere, so one is started — in a conversation that already
@@ -3134,7 +3162,7 @@ describe('the agent chat', () => {
 
       const read = await service.refreshSubscriptionUsage()
 
-      expect(read?.fiveHour?.utilization).toBe(18)
+      expect(share(read, 'five_hour')).toBe(18)
       expect(service.listChats(workspaceId)).toHaveLength(1)
     })
 
@@ -3157,7 +3185,7 @@ describe('the agent chat', () => {
 
       await service.sendToChat(chat.id, '/usage')
 
-      expect(service.getSubscriptionUsage()).not.toBeNull()
+      expect(service.getUsageWindows()).not.toBeNull()
     })
 
     // Nothing is asked of the agent for this: the sidebar has no chat, and the
@@ -3166,9 +3194,28 @@ describe('the agent chat', () => {
       const { service, workspaceId } = await withWorkspace()
       const chat = await service.openChat(workspaceId)
       await service.sendToChat(chat.id, 'work')
-      await service.sessionUsage(chat.id)
+      await service.refreshSubscriptionUsage()
 
-      expect(service.getSubscriptionUsage()?.fiveHour?.utilization).toBe(18)
+      expect(share(service.getUsageWindows(), 'five_hour')).toBe(18)
+    })
+
+    /*
+     * Every window the answer carried, not two of them. The block used to keep
+     * `five_hour` and `seven_day` and drop the rest — so an account with a
+     * weekly window per model had it named by the `/usage` card and not by the
+     * sidebar, out of one and the same reading.
+     */
+    it('keeps every window the account reported', async () => {
+      const { service, workspaceId } = await withWorkspace()
+      const chat = await service.openChat(workspaceId)
+      await service.sendToChat(chat.id, 'work')
+
+      await service.refreshSubscriptionUsage()
+
+      expect(service.getUsageWindows()?.limits.map((window) => window.key)).toEqual([
+        'five_hour',
+        'seven_day'
+      ])
     })
   })
 

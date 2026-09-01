@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { MODEL_SCOPED, subscriptionFrom, toUsageReport } from './usage.js'
+import { MODEL_SCOPED, toUsageReport, windowsFrom } from './usage.js'
 
 /**
  * The response as CLI 2.1.247 actually sent it, trimmed.
@@ -369,56 +369,57 @@ describe('reading the /usage response', () => {
 })
 
 /*
- * The two windows the sidebar draws, out of the answer `/usage` already gets.
+ * What the sidebar draws, out of the answer `/usage` already gets.
  *
- * The app was reading these and letting them go for that purpose, which left
- * the block empty beside a card that had just drawn the same figures.
+ * Every window, not two. There is no second request to save by dropping the
+ * rest, and dropping them is what left an account's per-model weekly window
+ * named by the card and missing from the block, out of one and the same
+ * reading.
  */
-describe('the two windows a report carries', () => {
+describe('the windows a report carries', () => {
   /** A report of exactly these windows, through the real narrowing. */
   function reportOf(limits: unknown): ReturnType<typeof toUsageReport> {
     return toUsageReport(withLimits(limits))
   }
 
-  it('takes the five-hour and weekly shares out of a full report', () => {
+  const READ_AT = '2026-08-11T18:00:00.000Z'
+
+  it('carries every window the account reported, in the order they are drawn', () => {
     const report = reportOf({
       five_hour: { utilization: 31, resets_at: '2026-08-11T19:50:00Z' },
-      seven_day: { utilization: 84, resets_at: '2026-08-14T04:00:00Z' }
+      seven_day: { utilization: 84, resets_at: '2026-08-14T04:00:00Z' },
+      seven_day_opus: { utilization: 12, resets_at: null },
+      model_scoped: [{ display_name: 'Fable', utilization: 15, resets_at: null }]
     })
 
-    expect(report && subscriptionFrom(report)).toEqual({
-      fiveHour: { utilization: 31, resetsAt: '2026-08-11T19:50:00Z' },
-      sevenDay: { utilization: 84, resetsAt: '2026-08-14T04:00:00Z' }
-    })
+    expect(report && windowsFrom(report, READ_AT).limits.map((window) => window.key)).toEqual([
+      'five_hour',
+      'seven_day',
+      'seven_day_opus',
+      'model_scoped'
+    ])
   })
 
-  it('leaves out a window the account did not report', () => {
+  /*
+   * Dated at the moment it was read. `resetsAt` can only say that a window has
+   * since emptied; it cannot say how old the share beside it is, and staleness
+   * is the whole complaint this shape was made to answer.
+   */
+  it('says when it was read', () => {
     const report = reportOf({ five_hour: { utilization: 31, resets_at: null } })
 
-    expect(report && subscriptionFrom(report)).toEqual({
-      fiveHour: { utilization: 31, resetsAt: null },
-      sevenDay: null
-    })
+    expect(report && windowsFrom(report, READ_AT).readAt).toBe(READ_AT)
   })
 
   /*
    * An API-key, Bedrock or Vertex session has no plan to be near the end of.
-   * A pair of nulls would say "read, and empty" about something never read,
-   * and the block would then stop offering the press that could fill it.
+   * An empty list would say "read, and empty" about an account that has no
+   * windows to read, and the block draws a different sentence for each.
    */
-  it('answers nothing at all for an account with no plan windows', () => {
-    const report = reportOf(null)
+  it('carries whether the account has a plan at all', () => {
+    expect(reportOf(null) && windowsFrom(reportOf(null)!, READ_AT).limitsApply).toBe(false)
 
-    expect(report && subscriptionFrom(report)).toBeNull()
-  })
-
-  // The same distinction from the other side: windows the card can draw, none
-  // of which is one of the two this asks for.
-  it('answers nothing when the only windows are ones it does not draw', () => {
-    const report = reportOf({
-      seven_day_opus: { utilization: 12, resets_at: null }
-    })
-
-    expect(report && subscriptionFrom(report)).toBeNull()
+    const withPlan = reportOf({ five_hour: { utilization: 31, resets_at: null } })
+    expect(withPlan && windowsFrom(withPlan, READ_AT).limitsApply).toBe(true)
   })
 })
