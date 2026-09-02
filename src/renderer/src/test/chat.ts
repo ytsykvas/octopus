@@ -57,6 +57,29 @@ export function givenChats(records: readonly Chat[]): readonly Chat[] {
 }
 
 /**
+ * Refuses to deliver an event nobody is listening for.
+ *
+ * Delivering to an empty handler list is silent: the event goes nowhere, and
+ * the test fails later at whatever it expected the event to produce — reporting
+ * a missing element rather than a missing subscription. That misattribution is
+ * what made an intermittent failure here unreadable for weeks, so the empty
+ * list is a failure of its own and says so where it happens.
+ *
+ * Two things produce it: the component under test never mounted, or a previous
+ * test left `chatEvents.ts`'s module-level `release` held, in which case the
+ * bridge stub this test installed was never subscribed to at all.
+ */
+function refuseSilence(handlers: number, channel: string): void {
+  if (handlers > 0) return
+
+  throw new Error(
+    `nothing is subscribed to ${channel}, so this event was delivered nowhere. ` +
+      'Either the component under test never mounted, or a previous test left ' +
+      "chatEvents.ts's subscription held against an older bridge stub."
+  )
+}
+
+/**
  * Delivers a status change to whatever subscribed, as main would.
  *
  * The twin of `emitAgentEvent`, and wrapped in `act` for the same reason: it
@@ -68,6 +91,7 @@ export function emitChatStatus(
   workspaceId = 'planner/anna'
 ): void {
   const handlers = vi.mocked(octopus().chats.onStatus).mock.calls.map(([handler]) => handler)
+  refuseSilence(handlers.length, 'chats.onStatus')
 
   act(() => {
     for (const handler of handlers) {
@@ -84,6 +108,7 @@ export function emitChatStatus(
  */
 export function emitAgentEvent(event: AgentEvent, chatId: string = CHAT_ID): void {
   const handlers = vi.mocked(octopus().chats.onEvent).mock.calls.map(([handler]) => handler)
+  refuseSilence(handlers.length, 'chats.onEvent')
 
   act(() => {
     for (const handler of handlers) {

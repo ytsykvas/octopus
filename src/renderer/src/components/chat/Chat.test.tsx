@@ -94,7 +94,10 @@ describe('the conversations that are not showing', () => {
     await openTwo()
 
     emitAgentEvent({ type: 'text', text: 'still working on it' }, 'chat-2')
-    expect(screen.getByText('still working on it')).toBeInTheDocument()
+    // `findBy` rather than `getBy`: the event arrives through a synchronous
+    // `act`, which covers the state update but not an effect that lands on the
+    // next tick. A bare read here has no window at all to be late in.
+    expect(await screen.findByText('still working on it')).toBeInTheDocument()
 
     await user.click(screen.getByRole('button', { name: /^Claude 2: / }))
 

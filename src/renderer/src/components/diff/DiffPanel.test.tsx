@@ -769,11 +769,22 @@ describe('DiffPanel', () => {
       renderWithComments()
       await screen.findByText('kept')
 
+      // Select real code first and wait for the button. Asserting an absence
+      // is the one shape of test that passes just as well when nothing
+      // happened at all: the `selectionchange` listener is registered by an
+      // effect, and until it is, every dispatch below goes nowhere and the
+      // button is missing for the wrong reason. This half proves it is live.
+      const lines = codeLines()
+      selectAcross(lines[0]!, lines[0]!)
+      await screen.findByRole('button', { name: 'Ask about the selected code' })
+
       selectAcross(screen.getByText('src/'), screen.getByText('a.ts'))
 
-      expect(
-        screen.queryByRole('button', { name: 'Ask about the selected code' })
-      ).not.toBeInTheDocument()
+      await waitFor(() => {
+        expect(
+          screen.queryByRole('button', { name: 'Ask about the selected code' })
+        ).not.toBeInTheDocument()
+      })
     })
 
     /*
