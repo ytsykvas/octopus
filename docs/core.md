@@ -541,6 +541,29 @@ two could disagree until the next restart, which is the kind of bug that
 survives a screenshot. The parse now happens on the way in as well, which is the
 same parse a moment earlier.
 
+### A refusal does not end the turn
+
+The SDK's deny carries an `interrupt` flag and `agent.ts` leaves it off on
+purpose: the refusal reaches the model as a tool result, and the same turn
+carries on. That is the whole of deny-with-feedback — "not quite, do this
+instead" reaching the agent without costing a turn — and it is what the plan
+dialog's "keep planning" is, Escape and the close button included.
+
+So `answerPermission` writes `running` on a refusal, symmetric with the allow
+arm. It shipped writing `idle`, on the premise that declining ends the turn, and
+the workspace then sat grey for the whole remainder of every steered turn — at
+the moment the agent is doing the most work, and with nothing to put it back,
+since no agent event writes `running`.
+
+Not `interrupt: true`, which would make the write honest by destroying the
+feature. Not leaving it unwritten either: the chat would stay
+`waiting_permission`, which outranks `running`, so the list would show the amber
+"come and answer this" mark against a question nobody can answer any more.
+
+Self-correcting rather than a second thing to remember — the turn always ends in
+a `result`, which writes `idle` or `error`, and `settleStatuses` clears a
+`running` left by a crash.
+
 ### A question nobody can answer is withdrawn
 
 `canUseTool` blocks the agent on a promise, so an open permission request is a

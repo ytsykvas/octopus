@@ -1443,6 +1443,21 @@ The split is not all-or-nothing: `useProjects.remove` asks and deletes, while
 `App` clears the selection afterwards — what points at a project is the window's
 business.
 
+**A reply is claimed before its await, never after.** A hook that reads for the
+workspace on screen has to drop what comes back for one that has been left, and
+the guard is a counter bumped per read: `useWorkspaceDiff` and `usePullRequest`
+both keep one. Where the number is taken decides whether it works. Taken
+**before** the call, a workspace opened in the meantime bumps the counter and
+the late reply is dropped. Taken **after**, the late reply bumps it past the
+number the new workspace's own read had just claimed, and wins — which is how
+the pull request pane came to draw one workspace's branch over another's request
+number, with Merge sending exactly that pair.
+
+The same applies to whatever a pane is _doing_, not only to what it reads: the
+render-time reset that clears the view clears `creating`, `drafting` and the
+action's error with it, or a refusal about the branch just left is shown against
+the one arrived at.
+
 **An operation that waits is guarded in the hook, not on the button.** Creating
 a workspace fetches its base branch first, so it is no longer over before a
 second press is possible — and the three places that offer it (the sidebar's
