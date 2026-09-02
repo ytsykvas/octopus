@@ -38,6 +38,7 @@ import { dirname, join, sep } from 'node:path'
 import { z } from 'zod'
 
 import { CarryListSchema } from './carry.js'
+import { CodedError } from './codedError.js'
 import { ProjectColorSchema } from './colors.js'
 import { ProjectIconSchema } from './icons.js'
 import {
@@ -130,15 +131,8 @@ export const RepoItemIdsSchema = z.array(RepoItemIdSchema).max(REPO_ITEM_IDS.len
 export type RepoConfigCode = 'repoConfigSymlink' | 'repoConfigTooLarge' | 'repoConfigMalformed'
 
 /** A repository's `.octopus/` cannot be read or written, with a reason. */
-export class RepoConfigError extends Error {
-  constructor(
-    readonly code: RepoConfigCode,
-    readonly params: Readonly<Record<string, string>>,
-    message: string
-  ) {
-    super(message)
-    this.name = 'RepoConfigError'
-  }
+export class RepoConfigError extends CodedError<RepoConfigCode> {
+  override readonly name = 'RepoConfigError'
 }
 
 /**

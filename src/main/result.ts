@@ -6,15 +6,8 @@
  * bridge, and getting it wrong means an error the UI cannot explain.
  */
 
-import { ChatError } from '../core/chats.js'
-import { DiffError } from '../core/diff.js'
-import { GitHubError } from '../core/github.js'
+import { isCoded } from '../core/codedError.js'
 import { describeError } from '../core/persist.js'
-import { ProjectValidationError } from '../core/projects.js'
-import { EnvProfileError } from '../core/envProfiles.js'
-import { StateConflictError } from '../core/store.js'
-import { RepoConfigError } from '../core/repoConfig.js'
-import { WorkspaceError } from '../core/workspaces.js'
 
 /**
  * Every IPC call answers with this shape.
@@ -37,22 +30,18 @@ export async function attempt<T>(operation: () => Promise<T> | T): Promise<Resul
   try {
     return { ok: true, value: await operation() }
   } catch (error) {
-    if (
-      error instanceof ProjectValidationError ||
-      error instanceof GitHubError ||
-      error instanceof WorkspaceError ||
-      error instanceof DiffError ||
-      error instanceof ChatError ||
-      error instanceof RepoConfigError ||
-      error instanceof EnvProfileError ||
-      error instanceof StateConflictError
-    ) {
+    // One check rather than a list of classes. The list was written by hand and
+    // nothing connected it to the classes, so a ninth could be — and was — left
+    // off it silently: every skill refusal reached the window as developer
+    // English with eight translations sitting unreachable behind it. A class
+    // extending `CodedError` is in by construction.
+    if (isCoded(error)) {
       return {
         ok: false,
         error: error.message,
-        // `StateConflictError` is the one of these whose code is optional: most
-        // of what it refuses is a condition the interface cannot reach, and an
-        // explicit `undefined` is not the same as an absent key here.
+        // `StateConflictError` is the one whose code is optional: most of what
+        // it refuses is a condition the interface cannot reach, and an explicit
+        // `undefined` is not the same as an absent key here.
         ...(error.code === undefined ? {} : { code: error.code }),
         params: error.params
       }

@@ -18,6 +18,7 @@ import {
 import { rm } from 'node:fs/promises'
 import { basename, dirname, normalize } from 'node:path'
 
+import { CodedError } from './codedError.js'
 import { DEFAULT_ENV_FILE } from './envBlock.js'
 import { DEFAULT_PROFILE } from './envProfiles.js'
 import { projectDir, projectsDir } from './paths.js'
@@ -42,15 +43,8 @@ export type ProjectValidationCode =
   | 'projectPathEscapes'
 
 /** A directory cannot be used as a project, with a reason the user can act on. */
-export class ProjectValidationError extends Error {
-  constructor(
-    readonly code: ProjectValidationCode,
-    readonly params: Readonly<Record<string, string>>,
-    message: string
-  ) {
-    super(message)
-    this.name = 'ProjectValidationError'
-  }
+export class ProjectValidationError extends CodedError<ProjectValidationCode> {
+  override readonly name = 'ProjectValidationError'
 }
 
 export interface RepositoryInfo {

@@ -10,6 +10,7 @@ import { isAbsolute } from 'node:path'
 
 import { z } from 'zod'
 
+import { CodedError } from './codedError.js'
 import { UsageWindowsSchema } from './usage.js'
 
 import {
@@ -238,7 +239,7 @@ export type StateConflictCode =
   | 'envFileEmpty'
 
 /** State integrity violation — a duplicate or a dangling reference. */
-export class StateConflictError extends Error {
+export class StateConflictError extends CodedError {
   /**
    * Optional, because most of what this refuses is a state nothing can ask for
    * — a chat whose workspace is not there, a project added twice under one id.
@@ -252,12 +253,17 @@ export class StateConflictError extends Error {
    */
   constructor(
     message: string,
-    readonly code?: StateConflictCode,
-    readonly params: Readonly<Record<string, string>> = {}
+    code?: StateConflictCode,
+    params: Readonly<Record<string, string>> = {}
   ) {
-    super(message)
-    this.name = 'StateConflictError'
+    // Its own constructor, and the arguments the other way round: this one is
+    // called `(message, code?)` at some forty sites, and reordering them to
+    // match the base would be churn in every file that refuses a state.
+    super(code, params, message)
   }
+
+  override readonly name = 'StateConflictError'
+  declare readonly code: StateConflictCode | undefined
 }
 
 export async function loadState(filePath: string = stateFile()): Promise<State> {

@@ -23,6 +23,7 @@ import { mkdir } from 'node:fs/promises'
 
 import { z } from 'zod'
 
+import { CodedError } from './codedError.js'
 import { projectEnv, projectEnvProfile, projectEnvsDir } from './paths.js'
 import { writeTextFile } from './persist.js'
 import type { Project, Workspace } from './store.js'
@@ -64,15 +65,8 @@ const DIR_MODE = 0o700
 
 export type EnvProfileCode = 'envProfileExists' | 'envProfileName' | 'envProfileMissing'
 
-export class EnvProfileError extends Error {
-  constructor(
-    readonly code: EnvProfileCode,
-    readonly params: Readonly<Record<string, string>>,
-    message: string
-  ) {
-    super(message)
-    this.name = 'EnvProfileError'
-  }
+export class EnvProfileError extends CodedError<EnvProfileCode> {
+  override readonly name = 'EnvProfileError'
 }
 
 /** Refuses a name that could not be a file in that directory. */

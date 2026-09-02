@@ -11,6 +11,7 @@
  */
 
 import { z } from 'zod'
+import { CodedError } from './codedError.js'
 
 /**
  * Which agent runs a chat.
@@ -70,15 +71,8 @@ export const MAX_CHATS_PER_WORKSPACE = 3
 export type ChatErrorCode = 'tooManyChats' | 'lastChat' | 'nothingToFork' | 'forkFailed'
 
 /** A refused operation on a conversation, carrying a code the UI localises. */
-export class ChatError extends Error {
-  constructor(
-    readonly code: ChatErrorCode,
-    readonly params: Readonly<Record<string, string>>,
-    message: string
-  ) {
-    super(message)
-    this.name = 'ChatError'
-  }
+export class ChatError extends CodedError<ChatErrorCode> {
+  override readonly name = 'ChatError'
 }
 
 /**

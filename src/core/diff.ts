@@ -12,6 +12,7 @@
 import { readFile, stat } from 'node:fs/promises'
 import { join } from 'node:path'
 
+import { CodedError } from './codedError.js'
 import { type GitExec, GitError, OUTPUT_TOO_LARGE } from './git.js'
 
 /** Reads a file's bytes; a parameter so tests need no filesystem. */
@@ -23,15 +24,8 @@ export type StatBytes = (path: string) => Promise<number>
 /** Failures a user can act on, as opposed to git falling over (§13). */
 export type DiffErrorCode = 'baseUnknown'
 
-export class DiffError extends Error {
-  constructor(
-    readonly code: DiffErrorCode,
-    readonly params: Readonly<Record<string, string>>,
-    message: string
-  ) {
-    super(message)
-    this.name = 'DiffError'
-  }
+export class DiffError extends CodedError<DiffErrorCode> {
+  override readonly name = 'DiffError'
 }
 
 export type FileStatus =

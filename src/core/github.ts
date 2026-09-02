@@ -11,6 +11,7 @@ import { basename, join } from 'node:path'
 import { z } from 'zod'
 
 import { type CommandExec, defaultExec } from './accounts.js'
+import { CodedError } from './codedError.js'
 
 /** How many repositories to fetch. Beyond this the list needs a search box, not a longer page. */
 export const REPOSITORY_LIMIT = 200
@@ -79,15 +80,8 @@ export type GitHubErrorCode =
   // request too, and fails in the same place as far as the reader is concerned.
   | 'draftFailed'
 
-export class GitHubError extends Error {
-  constructor(
-    readonly code: GitHubErrorCode,
-    readonly params: Readonly<Record<string, string>>,
-    message: string
-  ) {
-    super(message)
-    this.name = 'GitHubError'
-  }
+export class GitHubError extends CodedError<GitHubErrorCode> {
+  override readonly name = 'GitHubError'
 }
 
 /** GraphQL's own ceiling on one page, whatever `REPOSITORY_LIMIT` allows. */

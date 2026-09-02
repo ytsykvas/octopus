@@ -13,6 +13,7 @@ import { access, realpath } from 'node:fs/promises'
 import { isAbsolute, relative, resolve } from 'node:path'
 
 import type { AgentKind, Chat, ChatStatus } from './chats.js'
+import { CodedError } from './codedError.js'
 import { anyBranchExists, countAhead, type GitExec, reasonFrom, toSlug } from './git.js'
 import { fetchRemote, resolveBase } from './remotes.js'
 import { nextWorkspaceName, type Random } from './names.js'
@@ -48,15 +49,8 @@ export type WorkspaceErrorCode =
   /** The env file resolves outside the worktree, through a symbolic link. */
   | 'envPathEscapes'
 
-export class WorkspaceError extends Error {
-  constructor(
-    readonly code: WorkspaceErrorCode,
-    readonly params: Readonly<Record<string, string>>,
-    message: string
-  ) {
-    super(message)
-    this.name = 'WorkspaceError'
-  }
+export class WorkspaceError extends CodedError<WorkspaceErrorCode> {
+  override readonly name = 'WorkspaceError'
 }
 
 /**
