@@ -444,6 +444,35 @@ describe('what the log shows', () => {
   })
 
   /*
+   * A stack trace, a validation error listing what it refused, a compiler's
+   * three lines of context — every failure worth reading arrives with newlines
+   * in it, and `readFailure` keeps them. They were dying at the CSS: no
+   * `white-space` here, none in `styles.css`, and Tailwind's preflight sets
+   * none on a `p`, so the whole thing collapsed into one paragraph.
+   *
+   * `wrap-anywhere` rather than the `break-all` this replaces, which chops
+   * ordinary words mid-character; and pre-*wrap* rather than `pre`, which
+   * would scroll the log sideways.
+   */
+  it('keeps the line breaks a failure arrived with', () => {
+    renderLog({
+      entries: [
+        fromAgent({
+          type: 'tool_result',
+          toolUseId: 'c-1',
+          ok: false,
+          content: 'Error: one\n  at two\n  at three'
+        })
+      ]
+    })
+
+    const failure = screen.getByText(/Error: one/)
+    expect(failure).toHaveClass('whitespace-pre-wrap')
+    expect(failure).toHaveClass('wrap-anywhere')
+    expect(failure).not.toHaveClass('break-all')
+  })
+
+  /*
    * A plan sent back for another round is a refusal in the SDK's bookkeeping
    * and nothing else: the note travels as the reason, so it lands in the log as
    * a failed `ExitPlanMode`. Drawn like a failure it read as though the user's

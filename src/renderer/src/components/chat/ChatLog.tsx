@@ -591,7 +591,19 @@ function Plan({
  */
 function ToolFailure({ content }: { content: string }): React.JSX.Element {
   return (
-    <p className="text-danger border-danger/25 border-l pl-3 font-mono text-[11px] break-all">
+    /*
+     * `whitespace-pre-wrap` because every failure worth reading arrives with
+     * newlines in it — a stack trace, a compiler's three lines of context, a
+     * validation error listing what it refused — and `readFailure` keeps them.
+     * They were dying here: nothing in `styles.css` sets `white-space` and
+     * Tailwind's preflight sets none on a `p`, so the whole thing collapsed
+     * into one paragraph. `PlanNote` below, drawing the same string, had it.
+     *
+     * `wrap-anywhere` rather than the `break-all` it replaces, which chops
+     * ordinary words mid-character; and pre-*wrap* rather than `pre`, because
+     * the log scrolls and an unbroken line would take it sideways.
+     */
+    <p className="text-danger border-danger/25 border-l pl-3 font-mono text-[11px] whitespace-pre-wrap wrap-anywhere">
       {readFailure(content)}
     </p>
   )
