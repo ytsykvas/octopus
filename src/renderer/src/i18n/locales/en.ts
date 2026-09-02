@@ -1028,6 +1028,8 @@ export const en = {
     pushFailed: 'Could not push {{branch}}. Git said: {{reason}}',
     fetchFailed:
       'Could not fetch {{remote}}, so this workspace would start from a base branch that is behind. Git said: {{reason}}',
+    envPathEscapes:
+      '{{file}} leaves this workspace through a symbolic link, so the variables would be written outside it. Point the project at a file the worktree really holds, or remove the link.',
     createFailed: 'Could not open the pull request. GitHub said: {{reason}}',
     nothingToCommit: 'There is nothing here to commit.',
     commitFailed: 'Could not commit the changes. Git said: {{reason}}',

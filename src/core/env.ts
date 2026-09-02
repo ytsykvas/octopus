@@ -35,6 +35,8 @@ import {
   withoutMarkers,
   type WorkspaceValues
 } from './envBlock.js'
+import { unlinkedInside } from './paths.js'
+import { WorkspaceError } from './workspaces.js'
 import { writeTextFile } from './persist.js'
 
 /** A block of overrides as accepted from the renderer. */
@@ -62,6 +64,31 @@ export async function readWorkspaceEnv(
 }
 
 /**
+ * Refuses a path a link would redirect out of the worktree.
+ *
+ * `envFile` is held to the textual rule when it is stored, and that is not the
+ * same question: a worktree can track a symlinked directory, so `config/.env`
+ * can resolve anywhere. Two of the three writers below `rm` through this path,
+ * and all three write credentials.
+ *
+ * Refused rather than skipped, which is the opposite of what `carryInto` does
+ * with a bad line — and deliberately. A carry list is typed by hand and a
+ * workspace missing one file still runs; a workspace whose variables were never
+ * written fails its first build for a reason nothing on screen names. At
+ * creation the rollback then takes the worktree with it, which is the right end
+ * for a workspace that could not have worked.
+ */
+async function assertInsideWorktree(workspacePath: string, envFile: string): Promise<void> {
+  if (await unlinkedInside(workspacePath, envFile)) return
+
+  throw new WorkspaceError(
+    'envPathEscapes',
+    { file: envFile },
+    `${envFile} leaves the workspace through a symbolic link.`
+  )
+}
+
+/**
  * Takes our block out of a file, leaving everything else.
  *
  * For the file a project **used** to name. `applyEnvOverrides` only ever
@@ -74,6 +101,7 @@ export async function readWorkspaceEnv(
  * write over it.
  */
 export async function removeEnvBlock(workspacePath: string, envFile: string): Promise<boolean> {
+  await assertInsideWorktree(workspacePath, envFile)
   const path = join(workspacePath, envFile)
 
   let existing: string
@@ -110,6 +138,7 @@ export async function removeEnvBlock(workspacePath: string, envFile: string): Pr
  * Answers with whether it removed anything.
  */
 export async function discardIfOnlyBlock(workspacePath: string, envFile: string): Promise<boolean> {
+  await assertInsideWorktree(workspacePath, envFile)
   const path = join(workspacePath, envFile)
 
   let existing: string
@@ -141,6 +170,8 @@ export async function discardIfOnlyBlock(workspacePath: string, envFile: string)
 export async function applyEnvOverrides(stored: string, values: WorkspaceValues): Promise<boolean> {
   // Markers out before anything else: one left in the body would make the next
   // read cut in the middle of our own block.
+  await assertInsideWorktree(values.path, values.envFile)
+
   const body = substituteEnv(withoutMarkers(stored.trim()), values).trim()
   const path = join(values.path, values.envFile)
 

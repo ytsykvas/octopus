@@ -8,8 +8,9 @@
  * default, which makes the module testable without mocking the filesystem.
  */
 
+import { lstat } from 'node:fs/promises'
 import { homedir } from 'node:os'
-import { isAbsolute, join, normalize } from 'node:path'
+import { isAbsolute, join, normalize, sep } from 'node:path'
 
 import type { ChatId, ProjectId, WorkspaceId } from './types.js'
 
@@ -224,4 +225,38 @@ export function workspacePath(
 export function insideWorktree(path: string): boolean {
   if (path === '') return false
   return !isAbsolute(path) && !normalize(path).startsWith('..')
+}
+
+/**
+ * Whether a path can be joined to a root without a link redirecting it.
+ *
+ * `insideWorktree` answers about a string; this answers about the filesystem
+ * under it, and the two are not the same question. A checkout can track a
+ * symlinked directory — `config -> ../shared` is ordinary in a monorepo — and a
+ * worktree materialises it verbatim, so `config/master.key` passes the textual
+ * rule and still resolves outside the worktree.
+ *
+ * Every segment, not only the last, and that distinction is the whole of the
+ * guarantee: `lstat` does not follow the final component but does follow the
+ * ones before it, so checking the file alone leaves a symlinked directory free
+ * to redirect the write. `repoConfig.ts` learned this the same way and says so
+ * above `assertUnlinkedPath`.
+ *
+ * An absent segment answers true. The destination is usually a file that does
+ * not exist yet, and nothing that is not there can redirect anything.
+ */
+export async function unlinkedInside(root: string, path: string): Promise<boolean> {
+  let walked = root
+
+  for (const segment of path.split(sep)) {
+    walked = join(walked, segment)
+
+    try {
+      if ((await lstat(walked)).isSymbolicLink()) return false
+    } catch {
+      return true
+    }
+  }
+
+  return true
 }

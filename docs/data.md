@@ -546,6 +546,13 @@ a file is written and stays inside the worktree; the right half only ever says
 what is read, so an absolute path there is the ordinary case rather than an
 escape.
 
+It is two rules rather than one, because a string being relative is not the same
+as a file landing inside. `insideWorktree` answers the first and drops the line;
+`unlinkedInside` answers the second, walking every segment of the destination
+before the copy — a checkout may track `config -> ../shared`, and a worktree
+materialises that verbatim. Both live in `paths.ts`, and the env file is held to
+the same pair.
+
 **Sources do not travel.** `.octopus/carry` is committed and cloned by everybody,
 and `~/work/planner/.env` is a fact about one laptop — so `carryListForExport`
 strips every source on the way out and the repository receives the list it always

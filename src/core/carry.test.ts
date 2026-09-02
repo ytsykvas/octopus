@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
+import { mkdir, mkdtemp, readFile, rm, symlink, writeFile } from 'node:fs/promises'
 import { homedir, tmpdir } from 'node:os'
 import { join } from 'node:path'
 
@@ -148,6 +148,31 @@ describe('carryInto', () => {
     await expect(readFile(join(workspace, 'config', 'master.key'), 'utf8')).resolves.toBe(
       'abc123\n'
     )
+  })
+
+  /*
+   * Lexical containment is not containment. A checkout can track a symlinked
+   * directory — `config -> ../shared` is ordinary in a monorepo — and a
+   * worktree materialises it verbatim, so a destination that passes the textual
+   * rule still resolves outside. What travels here is credentials.
+   *
+   * The line is dropped rather than refused, like every other bad line: an
+   * exception would reach the rollback in `createWorkspaceIn` and take the
+   * whole worktree with it.
+   */
+  it('writes nothing through a symlinked directory, and carries the rest', async () => {
+    const outside = await mkdtemp(join(tmpdir(), 'octopus-outside-'))
+    await symlink(outside, join(workspace, 'config'))
+    await mkdir(join(repo, 'config'), { recursive: true })
+    await writeFile(join(repo, 'config', 'master.key'), 'abc123\n', 'utf8')
+    await writeFile(join(repo, '.env'), 'FROM=checkout\n', 'utf8')
+    await writeCarryList('planner', 'config/master.key\n.env\n', root)
+
+    const written = await carryInto('planner', repo, workspace, root)
+
+    expect(written).toEqual(['.env'])
+    await expect(readFile(join(outside, 'master.key'), 'utf8')).rejects.toThrow()
+    await rm(outside, { recursive: true, force: true })
   })
 
   it('never writes over a file the workspace already has', async () => {

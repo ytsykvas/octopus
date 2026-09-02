@@ -68,6 +68,8 @@ export function useErrorMessage(): (failure: Failure) => string {
             remote: failure.params?.remote ?? '',
             reason: failure.params?.reason ?? ''
           })
+        case 'envPathEscapes':
+          return t('errors.envPathEscapes', { file: failure.params?.file ?? '' })
         case 'createFailed':
           return t('errors.createFailed', { reason: failure.params?.reason ?? '' })
         case 'nothingToCommit':

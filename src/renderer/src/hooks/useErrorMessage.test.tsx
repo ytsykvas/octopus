@@ -78,6 +78,7 @@ const CODE_PARAMETERS: Record<CoreErrorCode, Interpolated> = {
   nameEmpty: null,
   worktreeMissing: null,
   fetchFailed: { remote: 'origin', reason: 'no such host' },
+  envPathEscapes: { file: 'config/.env' },
   baseUnknown: { branch: 'main' },
   tooManyChats: { limit: '3' },
   lastChat: null,

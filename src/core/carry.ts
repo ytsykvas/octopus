@@ -25,7 +25,7 @@ import { dirname, isAbsolute, join } from 'node:path'
 
 import { z } from 'zod'
 
-import { insideWorktree, projectCarry } from './paths.js'
+import { insideWorktree, projectCarry, unlinkedInside } from './paths.js'
 import type { ProjectId } from './types.js'
 
 /** The list as accepted from the renderer: one path per line. */
@@ -86,7 +86,13 @@ export async function writeCarryList(
 
 /** One line of the list: where the file lands, and where it comes from. */
 export interface CarriedFile {
-  /** Relative to the worktree, and checked to stay inside it. */
+  /**
+   * Relative to the worktree, and checked to stay inside it — twice.
+   *
+   * `carriedFiles` answers about the string, and `carryInto` walks the
+   * destination's segments before it writes: a relative path is not the same as
+   * a file landing inside, once a tracked symlink is in the way.
+   */
   readonly path: string
   /**
    * Where to copy it from, or null for the project's own checkout.
@@ -208,6 +214,11 @@ export async function carryInto(
   for (const { path, from: source } of list) {
     const from = sourcePath(source, repoPath, path)
     const to = join(workspacePath, path)
+
+    // Before the mkdir, which creates the intermediate directories itself — a
+    // check after it cannot tell one git checked out from one this call just
+    // made. Skipped rather than refused, like every other bad line here.
+    if (!(await unlinkedInside(workspacePath, path))) continue
 
     try {
       await mkdir(dirname(to), { recursive: true })

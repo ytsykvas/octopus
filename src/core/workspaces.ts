@@ -45,6 +45,8 @@ export type WorkspaceErrorCode =
   | 'worktreeMissing'
   /** The base branch's remote refused, or could not be reached. */
   | 'fetchFailed'
+  /** The env file resolves outside the worktree, through a symbolic link. */
+  | 'envPathEscapes'
 
 export class WorkspaceError extends Error {
   constructor(
@@ -650,8 +652,13 @@ export async function countChanges(
  * the agent's word for a file, arriving over a boundary where types have been
  * erased. Before it is handed to the operating system it has to be shown to be
  * inside the workspace it claims to belong to. `readChangeContext` asks the
- * same question of the same kind of value, privately; a third caller is when
- * this should move into `paths.ts` rather than be written a third time.
+ * same question of the same kind of value, privately.
+ *
+ * The family now lives in `paths.ts` — `insideWorktree` for the string and
+ * `unlinkedInside` for the filesystem under it. This one stays here for the
+ * moment because it answers with the resolved path rather than a yes or no, and
+ * requires the file to exist; a third caller wanting *that* shape is when it
+ * should join them.
  */
 export async function fileInWorkspace(workspace: Workspace, path: string): Promise<string | null> {
   const lexical = resolve(workspace.path, path)

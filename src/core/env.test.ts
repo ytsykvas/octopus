@@ -1,4 +1,4 @@
-import { mkdtemp, readFile, rm, stat, writeFile } from 'node:fs/promises'
+import { mkdtemp, readFile, rm, stat, symlink, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
@@ -48,6 +48,31 @@ function given(body: string): void {
 }
 
 describe('applyEnvOverrides', () => {
+  /*
+   * Lexical containment is not containment. `envFile` is checked against the
+   * textual rule when it is stored, and a worktree can still hold a tracked
+   * symlink — `config -> ../shared` — that makes the same path resolve outside.
+   * What would be written there is a block of credentials, and two of the three
+   * writers here `rm` through the path as well.
+   *
+   * Refused rather than skipped, unlike the carry list: a workspace that
+   * silently never got its variables fails its first build for a reason nothing
+   * names, and at creation the rollback takes the worktree away, which is the
+   * right end for a workspace that could not have worked.
+   */
+  it('refuses a path that leaves the worktree through a link', async () => {
+    const outside = await mkdtemp(join(tmpdir(), 'octopus-outside-'))
+    await symlink(outside, join(workspace, 'config'))
+    given('MYSQL_HOST=dev.example\n')
+
+    await expect(
+      applyEnvOverrides(stored, { ...values(), envFile: 'config/.env' })
+    ).rejects.toMatchObject({ code: 'envPathEscapes' })
+
+    await expect(readFile(join(outside, '.env'), 'utf8')).rejects.toThrow()
+    await rm(outside, { recursive: true, force: true })
+  })
+
   // Last wins: every implementation of dotenv keeps the final definition, which
   // is the whole reason the block goes at the end rather than the start.
   it('writes the block after what was already there', async () => {
