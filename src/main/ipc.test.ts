@@ -407,6 +407,30 @@ describe('validation at the boundary', () => {
     expect(result).toMatchObject({ ok: false })
   })
 
+  /*
+   * The patch is parsed here and nowhere else, which is where zod fills in a
+   * default for every key the caller left out — and `updateProject` applies
+   * anything that is not `undefined`. Every field the dialog sends is sent
+   * alone, so this is the ordinary path rather than a corner of it.
+   *
+   * Asserted field by field on purpose. `toMatchObject` is subset matching, and
+   * the tests below it pass today while the same call quietly resets six
+   * others.
+   */
+  it('leaves the fields a patch does not carry exactly where they were', async () => {
+    const projectId = await addProject()
+
+    await invoke('projects:update', projectId, { envFile: '.env.local' })
+    await invoke('projects:update', projectId, { trustRepoScripts: true })
+
+    await invoke('projects:update', projectId, { icon: 'rocket' })
+
+    const listed = await invoke('projects:list')
+    const project = (listed as { value: { envFile: string; trustRepoScripts: boolean }[] }).value[0]
+    expect(project?.envFile).toBe('.env.local')
+    expect(project?.trustRepoScripts).toBe(true)
+  })
+
   // The patch schema lists its fields one by one, and zod drops what is not
   // listed without a word — which is how the colour picker once spent a week
   // looking inert. An icon has to survive the crossing, not merely be sent.

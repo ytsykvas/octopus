@@ -36,6 +36,7 @@ import {
   type Workspace,
   workspacesOfProject,
   type ProjectPatch,
+  ProjectPatchSchema,
   workspaceStatusFrom
 } from './store.js'
 
@@ -317,6 +318,35 @@ describe('projects', () => {
   it('touches only the fields the patch carries', () => {
     const updated = updateProject(withProject, 'planner', { baseBranch: 'develop' })
     expect(updated.projects[0]?.name).toBe('planner')
+  })
+
+  /*
+   * The same rule, asked of a patch that has been through the schema.
+   *
+   * The test above hands `updateProject` an object literal, which is not what
+   * the boundary hands it: `ProjectPatchSchema.parse` is where a key the caller
+   * left out acquires a value, and `updateProject` applies anything that is not
+   * `undefined`. A patch of one field has to stay a patch of one field for the
+   * spread's `!== undefined` guard to mean anything at all.
+   */
+  it('carries nothing a parsed patch was not given', () => {
+    const stored: State = addProject(EMPTY_STATE, {
+      ...project,
+      envFile: '.env.local',
+      envProfile: 'prod',
+      trustRepoScripts: true,
+      approvedScripts: ['a-digest']
+    })
+
+    const updated = updateProject(stored, 'planner', ProjectPatchSchema.parse({ color: 'teal' }))
+
+    expect(updated.projects[0]).toMatchObject({
+      color: 'teal',
+      envFile: '.env.local',
+      envProfile: 'prod',
+      trustRepoScripts: true,
+      approvedScripts: ['a-digest']
+    })
   })
 
   /*
