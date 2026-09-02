@@ -228,19 +228,27 @@ export const EMPTY_STATE: State = {
   usageWindows: null
 }
 
-/** State integrity violation — a duplicate or a dangling reference. */
 /** What a refusal from this module is, where it is one the reader can act on. */
 export type StateConflictCode =
-  'repoPathHasWorkspaces' | 'repoPathTaken' | 'repoPathRelative' | 'repoPathEmpty'
+  | 'repoPathHasWorkspaces'
+  | 'repoPathTaken'
+  | 'repoPathRelative'
+  | 'repoPathEmpty'
+  | 'envFileEscapes'
+  | 'envFileEmpty'
 
+/** State integrity violation — a duplicate or a dangling reference. */
 export class StateConflictError extends Error {
   /**
-   * Optional, because most of these are conditions the interface cannot reach.
+   * Optional, because most of what this refuses is a state nothing can ask for
+   * — a chat whose workspace is not there, a project added twice under one id.
    *
-   * The ones that can — a checkout being repointed — carry a code so the
-   * renderer can say what happened in the reader's own language. Without one it
-   * arrives as its English message, which is where every one of these used to
-   * arrive, including the duplicate branch name a user can actually produce.
+   * A refusal somebody can actually produce carries a code, so the renderer can
+   * say what happened in their own language rather than showing them the
+   * English sentence meant for a log. Repointing a checkout is four of them and
+   * the env file is two more; the branch name at `addWorkspace` below is the
+   * one left, and it is unreachable today because `createWorkspaceIn` derives
+   * the name itself rather than taking one.
    */
   constructor(
     message: string,
@@ -499,13 +507,17 @@ export function updateProject(state: State, projectId: string, patch: ProjectPat
 
   const envFile = patch.envFile?.trim()
   if (envFile !== undefined) {
-    if (envFile === '') throw new StateConflictError('An env file cannot be empty')
+    if (envFile === '') {
+      throw new StateConflictError('An env file cannot be empty', 'envFileEmpty')
+    }
 
     // It is joined to a worktree path, so it has to stay inside one. The same
     // rule the carry list applies to every line it reads, for the same reason —
     // and now literally the same predicate.
     if (!insideWorktree(envFile)) {
-      throw new StateConflictError('An env file has to sit inside the workspace')
+      throw new StateConflictError(`${envFile} is not inside the workspace`, 'envFileEscapes', {
+        path: envFile
+      })
     }
   }
 

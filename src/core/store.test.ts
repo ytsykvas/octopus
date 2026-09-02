@@ -872,7 +872,7 @@ describe('the env file a project writes its variables into', () => {
 
   it('refuses to be emptied, since the block has to go somewhere', () => {
     expect(() => updateProject(withProject, 'planner', { envFile: '   ' })).toThrow(
-      StateConflictError
+      expect.objectContaining({ code: 'envFileEmpty' })
     )
   })
 
@@ -882,11 +882,14 @@ describe('the env file a project writes its variables into', () => {
    * written to an absolute path is a file nobody expected to be touched.
    */
   it('refuses a path that climbs out of the workspace', () => {
+    // The code, not merely the class. Without one the refusal reaches the window
+    // as its English sentence inside a localised frame, which is the one thing
+    // that fallback is documented as being for logs alone.
     expect(() => updateProject(withProject, 'planner', { envFile: '../.env' })).toThrow(
-      StateConflictError
+      expect.objectContaining({ code: 'envFileEscapes', params: { path: '../.env' } })
     )
     expect(() => updateProject(withProject, 'planner', { envFile: '/etc/passwd' })).toThrow(
-      StateConflictError
+      expect.objectContaining({ code: 'envFileEscapes' })
     )
   })
 

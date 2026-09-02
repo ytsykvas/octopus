@@ -1010,6 +1010,9 @@ export const en = {
     repoPathTaken: '\u201c{{name}}\u201d already uses that repository.',
     repoPathRelative: '{{path}} is not an absolute path.',
     repoPathEmpty: 'A repository path cannot be empty.',
+    envFileEscapes:
+      '{{path}} is not inside the workspace. The variables are written into the worktree, so the file has to sit in it.',
+    envFileEmpty: 'An env file name cannot be empty.',
     notARepository: '{{path}} is not a git repository.',
     emptyRepository:
       '{{path}} has no commits yet. Make an initial commit — a worktree cannot be created without one.',

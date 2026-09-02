@@ -56,6 +56,8 @@ const CODE_PARAMETERS: Record<CoreErrorCode, Interpolated> = {
   repoPathTaken: { name: 'ledger' },
   repoPathRelative: { path: 'repos/moved' },
   repoPathEmpty: null,
+  envFileEscapes: { path: 'config/../../.env' },
+  envFileEmpty: null,
   // Thrown while deleting a project's data, inside a `.catch` that swallows it:
   // the removal has already been committed by then, so this never reaches a
   // renderer and a message for it would be prose nobody can ever read.

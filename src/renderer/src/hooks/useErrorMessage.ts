@@ -34,6 +34,10 @@ export function useErrorMessage(): (failure: Failure) => string {
           return t('errors.repoPathRelative', { path: failure.params?.path ?? '' })
         case 'repoPathEmpty':
           return t('errors.repoPathEmpty')
+        case 'envFileEscapes':
+          return t('errors.envFileEscapes', { path: failure.params?.path ?? '' })
+        case 'envFileEmpty':
+          return t('errors.envFileEmpty')
         case 'notARepository':
           return t('errors.notARepository', { path: failure.params?.path ?? '' })
         case 'emptyRepository':
