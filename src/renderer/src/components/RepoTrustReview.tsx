@@ -66,9 +66,23 @@ export function RepoTrustReview({
         {files.map((file) => (
           <div key={file.path} className="space-y-1.5">
             <p className="font-mono text-[11px] font-medium">{file.path}</p>
-            <pre className="bg-canvas border-line overflow-x-auto rounded-[var(--radius-control)] border px-2 py-1.5 font-mono text-[11px] leading-relaxed">
-              {file.contents}
-            </pre>
+
+            {/* A link out of the worktree is neither read nor left out. Reading
+                it would put whatever it points at — a private key, say — into
+                this card, and leaving it out is how a hook came to run without
+                anybody being shown it. So the destination stands in for the
+                contents, here and in the digest. */}
+            {file.link === true ? (
+              <p className="text-warning border-warning/25 border-l pl-3 text-[11px] leading-relaxed">
+                {file.contents === ''
+                  ? t('trust.linkBroken')
+                  : t('trust.linkRefused', { target: file.contents })}
+              </p>
+            ) : (
+              <pre className="bg-canvas border-line overflow-x-auto rounded-[var(--radius-control)] border px-2 py-1.5 font-mono text-[11px] leading-relaxed">
+                {file.contents}
+              </pre>
+            )}
           </div>
         ))}
       </div>

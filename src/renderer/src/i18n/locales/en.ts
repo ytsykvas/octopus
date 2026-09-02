@@ -995,7 +995,9 @@ export const en = {
     approve: 'Allow these',
     notice:
       'This project ships settings that would pre-approve tools and run its own commands. Until you have read them, the agent works without anything from this repository — including its CLAUDE.md.',
-    review: 'Review'
+    review: 'Review',
+    linkRefused: 'A link leading out of this worktree. It is shown, not read: {{target}}',
+    linkBroken: 'A link pointing at nothing.'
   },
   errors: {
     branchMissing:

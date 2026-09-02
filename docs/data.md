@@ -590,11 +590,17 @@ newer one had put there.
 
 `approvedSettings` on a project holds sha256 digests of the files in a worktree
 that grant capability: `.claude/settings.json`, `.claude/settings.local.json`,
-`.mcp.json`, and every file under `.claude/hooks/`. The hook scripts are in there
-because the settings only **name** them — digesting the settings alone would let
-a repository change what runs while the line that runs it stays put. The path
-goes into the digest beside the contents, so moving a hook to another name counts
-as a change.
+`.mcp.json`, and every file under `.claude/hooks/`, however deep. The hook
+scripts are in there because the settings only **name** them — digesting the
+settings alone would let a repository change what runs while the line that runs
+it stays put. The path goes into the digest beside the contents, so moving a hook
+to another name counts as a change.
+
+A hook that is a **link** out of the worktree is shown rather than read, and what
+is digested for it is where it leads. Following it would put whatever it points
+at — a private key, say — into the trust card; leaving it out is how a hook came
+to run without anybody being shown it. Retargeting such a link therefore asks
+again, while nothing else about the repository has changed.
 
 A **set**, capped at ten: two branches whose settings differ would otherwise ask
 on every switch. A worktree that grants nothing digests to the empty string,

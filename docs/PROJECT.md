@@ -522,9 +522,12 @@ The config keeps the switch — nothing / `project` / `user + project + local` �
 **A repository is asked about before it is believed.** Loading every source means
 a clone can pre-approve tools through `permissions.allow`, run shell commands
 around every tool call through `hooks`, and start servers through `.mcp.json`.
-Those files — and the hook scripts they name, since settings only name them —
-are digested and approved once per project, a set so two branches do not ask in
-turn. Until then a session starts with the user's own layer alone: the agent runs
+Those files — and every file under `.claude/hooks/`, since settings only name
+the script and not what it holds — are digested and approved once per project, a
+set so two branches do not ask in turn. The directory is read whole rather than
+by resolving the names: a hook `command` is a shell line, so there is not always
+a path in it to resolve. A link leading out of the worktree is shown and
+digested by where it points, never read. Until then a session starts with the user's own layer alone: the agent runs
 but reads nothing of the repository's, `CLAUDE.md` included, and the chat says
 so. Prose is deliberately outside the digest — it changes constantly, and a
 dialog that fires on every edit is one people learn to click through.

