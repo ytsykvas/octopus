@@ -429,12 +429,22 @@ describe('what the log shows', () => {
   })
 
   /*
-   * A failure is agent-side text too — a tool that echoes back part of a file
-   * it refused to write puts that file's bytes on screen. The folded tool row
-   * carries the same string as the card, and its tooltip is laid out by the
-   * same algorithm, so the title cannot stay raw either.
+   * Every plain string the agent wrote, in one test on purpose.
+   *
+   * `shown` returns ordinary text untouched, so wrapping a surface in it adds
+   * no branch and coverage stays at 100% whether the call is there or not — a
+   * test per surface is the only thing that stops one being dropped. That is
+   * how the gap arose in the first place: the change block had it, the
+   * permission card did not, and nothing said so.
+   *
+   * Four chips: the folded tool row, the failure, the note against a plan and
+   * the error. The card is in its own describe, with the plan's own dialog and
+   * everything else drawn as markdown still to come — `docs/tasks/` holds that.
+   *
+   * The tooltip is checked too. It is laid out by the same algorithm as the row
+   * it hangs off, so a raw `title` is the same misreading with a delay.
    */
-  it('names such a character in a failure, and in a folded tool row', () => {
+  it('names such a character on every plain surface the agent writes to', () => {
     renderLog({
       entries: [
         fromAgent({
@@ -445,14 +455,27 @@ describe('what the log shows', () => {
         }),
         fromAgent({
           type: 'tool_result',
-          toolUseId: 'c-2',
+          toolUseId: 'c-1',
           ok: false,
           content: 'refused: \u202Ehctap'
-        })
+        }),
+        fromAgent({
+          type: 'tool_use',
+          toolUseId: 'c-2',
+          name: 'ExitPlanMode',
+          input: { plan: '## The plan' }
+        }),
+        fromAgent({
+          type: 'tool_result',
+          toolUseId: 'c-2',
+          ok: false,
+          content: 'do it \u202Eesiwrehto'
+        }),
+        fromAgent({ type: 'error', message: 'claude exited \u202E1 edoc htiw' })
       ]
     })
 
-    expect(screen.getAllByText('U+202E')).toHaveLength(2)
+    expect(screen.getAllByText('U+202E')).toHaveLength(4)
     expect(screen.getByTitle(/U\+202E/)).toBeInTheDocument()
   })
 

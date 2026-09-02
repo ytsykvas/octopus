@@ -106,17 +106,30 @@ describe('a question the agent asked', () => {
    * label itself stays raw: it is the key and the answer, and only what is
    * drawn is substituted.
    */
-  it('names a character in an option that would not draw as itself', async () => {
+  /*
+   * Every string on this card is the agent's, and the card is answered rather
+   * than merely read: an override reordering an option makes somebody choose
+   * one thing while another is sent back.
+   *
+   * All four in one test on purpose. `shown` returns ordinary text untouched,
+   * so wrapping a string in it adds no branch and coverage stays at 100%
+   * whether the call is there or not — only an assertion stops one being
+   * dropped again.
+   *
+   * The label keeps its raw form as the key and as the answer. Only what is
+   * drawn is substituted, which is what the round trip below checks.
+   */
+  it('names a character anywhere in a question that would not draw as itself', async () => {
     const user = userEvent.setup()
     const { onAnswer } = renderCard({
       questions: asked({
         questions: [
           {
-            question: 'Which one?',
-            header: '',
+            question: 'which \u202Eeno?',
+            header: 'a \u202Epeder',
             multiSelect: false,
             options: [
-              { label: 'safe \u202Eesrever', description: 'one' },
+              { label: 'safe \u202Eesrever', description: 'looks \u202Eenif' },
               { label: 'other', description: 'two' }
             ]
           }
@@ -124,13 +137,13 @@ describe('a question the agent asked', () => {
       })
     })
 
-    expect(screen.getByText('U+202E')).toBeVisible()
+    expect(screen.getAllByText('U+202E')).toHaveLength(4)
 
     await user.click(screen.getByRole('radio', { name: /esrever/ }))
     await user.click(send())
 
     expect(onAnswer).toHaveBeenCalledWith([
-      { question: 'Which one?', selected: ['safe \u202Eesrever'], other: null }
+      { question: 'which \u202Eeno?', selected: ['safe \u202Eesrever'], other: null }
     ])
   })
 

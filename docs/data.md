@@ -553,6 +553,15 @@ before the copy — a checkout may track `config -> ../shared`, and a worktree
 materialises that verbatim. Both live in `paths.ts`, and the env file is held to
 the same pair.
 
+`resolvesInside` beside them is the third, and the odd one: it **follows** a link
+rather than refusing it, and answers where it landed. Refusing every link is
+right before a write, where a link is a redirection nobody asked for, and wrong
+before a read of something already committed — `hooks/format.sh ->
+../../tools/format.sh` is ordinary, and the file it names is in the worktree.
+The trust digest is its caller. An absent path answers false here and true
+there, for the same reason read and write differ: nothing that is not there can
+redirect a write, and nothing that is not there can be read.
+
 **Sources do not travel.** `.octopus/carry` is committed and cloned by everybody,
 and `~/work/planner/.env` is a fact about one laptop — so `carryListForExport`
 strips every source on the way out and the repository receives the list it always

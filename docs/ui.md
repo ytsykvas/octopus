@@ -266,6 +266,17 @@ stays in the open, since "1 step" costs more to read than the row it replaces,
 and a failure or anything the agent said breaks the run so it stays where it
 happened.
 
+**Text the agent produced keeps the line breaks it arrived with.** A stack
+trace, a compiler's three lines of context, a validation error listing the value
+it refused — every failure worth reading has newlines in it, and they are the
+first thing a reader uses to find the sentence that says what to do. Nothing in
+`styles.css` sets `white-space` and Tailwind's preflight sets none on a `p`, so
+a paragraph that does not ask for it collapses the lot: the tool failure did,
+while the note against a plan ten lines below it did not. The pairing is
+`whitespace-pre-wrap wrap-anywhere` — not `break-all`, which chops ordinary
+words mid-character, and not `whitespace-pre`, which would take the scrolling
+log sideways.
+
 **A turn's footer needs a turn.** One at the head of the log has nothing above
 it to close, and `/clear` used to leave exactly that: the transcript went with
 the reset and the command's own result landed a tick later, so an emptied

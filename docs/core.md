@@ -38,18 +38,18 @@ Node imports, rather than being imported out of one that has them.
 
 ### Storage
 
-| Module                                                 | What it decides                                                                                                                               |
-| ------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------- |
-| [`paths.ts`](../src/core/paths.ts)                     | every path under `~/.octopus`, in one place                                                                                                   |
-| [`persist.ts`](../src/core/persist.ts)                 | atomic writes of JSON and of text, validated reads, honest failures                                                                           |
-| [`config.ts`](../src/core/config.ts)                   | settings and their bounds                                                                                                                     |
-| [`store.ts`](../src/core/store.ts)                     | projects, workspaces and chats, and the migrations                                                                                            |
-| [`transcript.ts`](../src/core/transcript.ts)           | chat history as append-only JSONL                                                                                                             |
-| [`changeContext.ts`](../src/core/changeContext.ts)     | the lines an edit landed among, read while they are still true                                                                                |
-| [`repoConfig.ts`](../src/core/repoConfig.ts)           | a project's settings as its repository can carry them, in `.octopus/`                                                                         |
-| [`conductorConfig.ts`](../src/core/conductorConfig.ts) | a repository's `.conductor/` settings, as far as octopus can use them: three command lines, the files to carry, four prompts                  |
-| [`repoSource.ts`](../src/core/repoSource.ts)           | which script actually runs for each kind, and the digest that has to be approved before one from the repository may                           |
-| [`envProfiles.ts`](../src/core/envProfiles.ts)         | a project's variables in named sets, one of which a workspace runs with — the half of a project's configuration a repository may never supply |
+| Module                                                 | What it decides                                                                                                                                                                                                                         |
+| ------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| [`paths.ts`](../src/core/paths.ts)                     | every path under `~/.octopus`, in one place — and the three questions about containment: `insideWorktree` about a string, `unlinkedInside` about the filesystem before a write, `resolvesInside` about where a link lands before a read |
+| [`persist.ts`](../src/core/persist.ts)                 | atomic writes of JSON and of text, validated reads, honest failures                                                                                                                                                                     |
+| [`config.ts`](../src/core/config.ts)                   | settings and their bounds                                                                                                                                                                                                               |
+| [`store.ts`](../src/core/store.ts)                     | projects, workspaces and chats, and the migrations                                                                                                                                                                                      |
+| [`transcript.ts`](../src/core/transcript.ts)           | chat history as append-only JSONL                                                                                                                                                                                                       |
+| [`changeContext.ts`](../src/core/changeContext.ts)     | the lines an edit landed among, read while they are still true                                                                                                                                                                          |
+| [`repoConfig.ts`](../src/core/repoConfig.ts)           | a project's settings as its repository can carry them, in `.octopus/`                                                                                                                                                                   |
+| [`conductorConfig.ts`](../src/core/conductorConfig.ts) | a repository's `.conductor/` settings, as far as octopus can use them: three command lines, the files to carry, four prompts                                                                                                            |
+| [`repoSource.ts`](../src/core/repoSource.ts)           | which script actually runs for each kind, and the digest that has to be approved before one from the repository may                                                                                                                     |
+| [`envProfiles.ts`](../src/core/envProfiles.ts)         | a project's variables in named sets, one of which a workspace runs with — the half of a project's configuration a repository may never supply                                                                                           |
 
 ### git
 
