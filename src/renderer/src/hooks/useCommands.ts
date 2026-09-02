@@ -63,7 +63,13 @@ export function useCommands(chatId: string | null): readonly AgentCommand[] {
       // A session has started, which is the one moment a list that was empty
       // can stop being empty.
       if (announced.event.type === 'session_started') void refresh(chatId)
-    })
+      // Subscribed for this chat alone — the second argument. Without it the
+      // handler sat in the everything-list and took every conversation's
+      // commands as its own, so the composer offered another project's
+      // `.claude/commands/` and picking one sent a command this worktree does
+      // not define. The comment on the reset above said what must not
+      // happen; this is the line that made it true.
+    }, chatId)
   }, [chatId, refresh])
 
   return commands

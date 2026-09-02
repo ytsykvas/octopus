@@ -99,7 +99,12 @@ describe('the commands a chat may use', () => {
       expect(result.current).toEqual([CLEAR])
     })
 
-    emit({ type: 'commands_changed', commands: [DEPLOY] }, 'chat-2')
+    // Inside `act`, so the assertion is made after React has flushed. Without
+    // it this read landed before the update and passed against a hook that
+    // took every chat's list — which is how it shipped.
+    act(() => {
+      emit({ type: 'commands_changed', commands: [DEPLOY] }, 'chat-2')
+    })
 
     expect(result.current).toEqual([CLEAR])
   })
