@@ -1,7 +1,8 @@
-import { homedir } from 'node:os'
+import { mkdir, mkdtemp, rm, symlink, writeFile } from 'node:fs/promises'
+import { homedir, tmpdir } from 'node:os'
 import { join } from 'node:path'
 
-import { describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 
 import {
   chatsDir,
@@ -13,6 +14,7 @@ import {
   projectScript,
   projectScriptsDir,
   projectSkillsRoot,
+  resolvesInside,
   rootDir,
   skillsDirOf,
   stateFile,
@@ -163,5 +165,64 @@ describe('insideWorktree', () => {
     expect(insideWorktree('../outside.txt')).toBe(false)
     expect(insideWorktree('a/../../outside.txt')).toBe(false)
     expect(insideWorktree('')).toBe(false)
+  })
+})
+
+describe('resolvesInside', () => {
+  let root: string
+
+  beforeEach(async () => {
+    root = await mkdtemp(join(tmpdir(), 'octopus-inside-'))
+  })
+  afterEach(async () => {
+    await rm(root, { recursive: true, force: true })
+  })
+
+  it('accepts an ordinary file, and a link that stays in the worktree', async () => {
+    await mkdir(join(root, 'tools'), { recursive: true })
+    await writeFile(join(root, 'tools', 'guard.sh'), '#!/bin/sh\n', 'utf8')
+    await symlink(join(root, 'tools', 'guard.sh'), join(root, 'linked.sh'))
+
+    await expect(resolvesInside(root, 'tools/guard.sh')).resolves.toBe(true)
+    await expect(resolvesInside(root, 'linked.sh')).resolves.toBe(true)
+  })
+
+  /*
+   * The case the predicate exists for: the name is inside and the bytes are
+   * somewhere else entirely, so reading it would show a file the worktree does
+   * not contain.
+   */
+  it('refuses a link leading out of the worktree', async () => {
+    const elsewhere = await mkdtemp(join(tmpdir(), 'octopus-elsewhere-'))
+    await writeFile(join(elsewhere, 'secret'), 'x', 'utf8')
+    await symlink(join(elsewhere, 'secret'), join(root, 'out.sh'))
+
+    await expect(resolvesInside(root, 'out.sh')).resolves.toBe(false)
+
+    await rm(elsewhere, { recursive: true, force: true })
+  })
+
+  /*
+   * The other way round from `unlinkedInside`, which treats an absent segment
+   * as fine because its callers are about to create it. Here there is nothing
+   * to resolve, and a link that cannot be followed is one nothing can vouch for.
+   */
+  it('refuses what is not there, and a link pointing at nothing', async () => {
+    await symlink(join(root, 'never-written'), join(root, 'broken.sh'))
+
+    await expect(resolvesInside(root, 'absent.sh')).resolves.toBe(false)
+    await expect(resolvesInside(root, 'broken.sh')).resolves.toBe(false)
+  })
+
+  // A sibling directory whose name merely starts with the root's is outside it.
+  it('is not fooled by a neighbour sharing the root name as a prefix', async () => {
+    const neighbour = `${root}-next-door`
+    await mkdir(neighbour, { recursive: true })
+    await writeFile(join(neighbour, 'guard.sh'), 'x', 'utf8')
+    await symlink(join(neighbour, 'guard.sh'), join(root, 'near.sh'))
+
+    await expect(resolvesInside(root, 'near.sh')).resolves.toBe(false)
+
+    await rm(neighbour, { recursive: true, force: true })
   })
 })

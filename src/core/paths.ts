@@ -8,7 +8,7 @@
  * default, which makes the module testable without mocking the filesystem.
  */
 
-import { lstat } from 'node:fs/promises'
+import { lstat, realpath } from 'node:fs/promises'
 import { homedir } from 'node:os'
 import { isAbsolute, join, normalize, sep } from 'node:path'
 
@@ -259,4 +259,38 @@ export async function unlinkedInside(root: string, path: string): Promise<boolea
   }
 
   return true
+}
+
+/**
+ * Whether a path that exists resolves to somewhere under the root.
+ *
+ * The third question in this family, and the only one that follows links rather
+ * than refusing them. `insideWorktree` answers about a string and
+ * `unlinkedInside` refuses a link outright — which is right before a *write*,
+ * where a link is a redirection nobody asked for, and wrong before a *read* of
+ * something already committed: `hooks/format.sh -> ../../tools/format.sh` is an
+ * ordinary shape in a monorepo, and the file it names is in the worktree, so
+ * reading it shows the worktree's own bytes.
+ *
+ * Both ends are resolved, because the root can itself be reached through a link
+ * — `/var` is `/private/var` on macOS, so comparing an unresolved root against a
+ * resolved target answers false for every path under it.
+ *
+ * The separator is appended before the prefix test. Without it a sibling named
+ * `<root>-next-door` reads as being inside `<root>`.
+ *
+ * Absent answers **false**, the opposite of `unlinkedInside`. There the
+ * destination is a file about to be created and nothing that is not there can
+ * redirect anything; here there is nothing to read, and a link pointing at
+ * nothing is one that cannot be vouched for.
+ */
+export async function resolvesInside(root: string, path: string): Promise<boolean> {
+  try {
+    const real = await realpath(root)
+    const resolved = await realpath(join(root, path))
+
+    return resolved === real || resolved.startsWith(real + sep)
+  } catch {
+    return false
+  }
 }
