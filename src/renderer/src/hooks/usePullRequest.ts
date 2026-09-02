@@ -74,6 +74,12 @@ export function usePullRequest(
     setShownId(workspaceId)
     setView(null)
     setError(null)
+    // What the pane was doing belonged to the workspace being left, and so did
+    // anything it was about to complain about. A refusal held over is a
+    // sentence about a branch nobody is looking at.
+    setCreating(false)
+    setDrafting(false)
+    setActionError(null)
   }
 
   /** Bumped to ask again, which is the whole of what `refresh` does. */
@@ -124,9 +130,20 @@ export function usePullRequest(
     async (draft: PullRequestDraft): Promise<string | null> => {
       if (workspaceId === null) return null
 
+      // Claimed before the await, not after it, and that is the whole of the
+      // guard. Claimed afterwards it beat the effect of the workspace opened
+      // in the meantime — this call bumped the counter past the number that
+      // effect had just taken — and wrote this workspace's request into a pane
+      // drawing another's branch. `PullRequestPanel` then sent the workspace on
+      // screen together with the number it was showing, so Merge would have run
+      // against the wrong branch, which GitHub does not undo.
+      const attempt = ++generation.current
+
       setCreating(true)
       setActionError(null)
       const result = await window.octopus.workspaces.createPullRequest(workspaceId, draft)
+      if (attempt !== generation.current) return null
+
       setCreating(false)
 
       if (!result.ok) {
@@ -137,7 +154,6 @@ export function usePullRequest(
       // Read again rather than assembling the new state here: what came back is
       // a URL, and the number, the title and whether the branch is now pushed
       // are all things the next read knows and this reply does not.
-      const attempt = ++generation.current
       apply(await window.octopus.workspaces.pullRequest(workspaceId), attempt)
 
       return result.value
@@ -148,9 +164,16 @@ export function usePullRequest(
   const draft = useCallback(async (): Promise<DraftedPullRequest | null> => {
     if (workspaceId === null) return null
 
+    // Before the await for the same reason, though this one only ever wrote a
+    // message: it had no check at all, so a description refused for the
+    // workspace being left was drawn against the one arrived at.
+    const attempt = ++generation.current
+
     setDrafting(true)
     setActionError(null)
     const result = await window.octopus.workspaces.draftPullRequest(workspaceId)
+    if (attempt !== generation.current) return null
+
     setDrafting(false)
 
     if (!result.ok) {
