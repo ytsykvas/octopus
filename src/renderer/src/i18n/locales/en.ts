@@ -10,7 +10,6 @@ export const en = {
   },
 
   sidebar: {
-    projects: 'Projects',
     empty: 'Nothing here yet. Add a repository with the "+" button.',
     addProject: 'Add repository',
     addFromDisk: 'From disk…',
@@ -204,7 +203,7 @@ export const en = {
     envProfileRemoveCancel: 'Keep it',
     envProfileMakeDefault: 'Use by default',
     envOf: 'Variables in \u201c{{name}}\u201d',
-    env: 'Variables added to every workspace',
+    envPlaceholder: 'MYSQL_HOST=dev.example\nAPP_URL=http://localhost:$OCTOPUS_PORT',
     envHint:
       'One KEY=value per line. Written at the end of {{file}} in the workspace, so they win over whatever was copied — and they are the whole file where a clone had none to copy. $OCTOPUS_PORT becomes the workspace\u2019s own port, and $OCTOPUS_WORKSPACE_SLUG its name in a form an identifier can hold \u2014 lowercased, everything else an underscore \u2014 which is what a database named after the workspace needs. Kept on this machine, never in the repository.',
     envNotIgnored:

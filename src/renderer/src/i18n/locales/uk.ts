@@ -12,7 +12,6 @@ export const uk: Translation = {
   },
 
   sidebar: {
-    projects: 'Проєкти',
     empty: 'Поки порожньо. Додайте репозиторій кнопкою «+».',
     addProject: 'Додати репозиторій',
     addFromDisk: 'З диска…',
@@ -193,7 +192,7 @@ export const uk: Translation = {
     envProfileMakeDefault:
       '\u0417\u0440\u043e\u0431\u0438\u0442\u0438 \u0442\u0438\u043f\u043e\u0432\u0438\u043c',
     envOf: '\u0417\u043c\u0456\u043d\u043d\u0456 \u0432 \u00ab{{name}}\u00bb',
-    env: 'Змінні, що додаються в кожен воркспейс',
+    envPlaceholder: 'MYSQL_HOST=dev.example\nAPP_URL=http://localhost:$OCTOPUS_PORT',
     envHint:
       'По одному KEY=value в рядку. Дописуються в кінець {{file}} у воркспейсі, тож перебивають те, що скопіювалося, — і стають усім файлом там, де клонові не було чого копіювати. $OCTOPUS_PORT замінюється на власний порт воркспейсу, а $OCTOPUS_WORKSPACE_SLUG — на його назву у формі, придатній для ідентифікатора: малими літерами, усе інше — підкреслення. Саме це потрібно базі, названій за воркспейсом. Лишаються на цій машині, у репозиторій не потрапляють.',
     envNotIgnored:

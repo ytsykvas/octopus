@@ -565,7 +565,7 @@ export function ProjectSettings({
                     key={kind}
                     label={t(SCRIPT_FIELDS[kind].label)}
                     hint={t(SCRIPT_FIELDS[kind].hint)}
-                    placeholder="#!/bin/sh"
+                    placeholder={t('scripts.placeholder')}
                     supersededBy={
                       repo === undefined || repo.source === 'project'
                         ? undefined
@@ -688,7 +688,7 @@ export function ProjectSettings({
                 key={profile}
                 label={t('project.envOf', { name: profile })}
                 hint={t('project.envHint', { file: project.envFile })}
-                placeholder={'MYSQL_HOST=dev.example\nAPP_URL=http://localhost:$OCTOPUS_PORT'}
+                placeholder={t('project.envPlaceholder')}
                 rows={12}
                 read={async () => {
                   const result = await window.octopus.projects.readEnv(project.id, profile)
