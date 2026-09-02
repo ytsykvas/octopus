@@ -223,6 +223,24 @@ state change landed a tick later than it does when the file runs alone.
 effect rather than from the click itself, it may be the same shape of mistake
 wearing a different hat.
 
+**Eighteen clean runs in one session, which the title's rate does not survive.**
+On 2026-09-02 and 2026-09-03 a single session ran `npm run check` to completion —
+both suites, coverage and all — **at least eighteen times, every one green**.
+A floor rather than an exact count: the logs were written to the same handful of
+paths and overwritten, so the true number is higher. Under one-in-five, eighteen
+consecutive passes is about a 1.4% outcome.
+
+Nothing was done to fix this, so do not read that as fixed. What it does mean is
+that **the title is now the least reliable line in this file**, and a rate is
+what decides how long somebody sits waiting for a reproduction. Either the rate
+was always lower than three sightings in a busy week suggested, or something
+between 2026-08-31 and now changed it — the `pullRequests.test.ts` spawn count
+went from eight to five in that window, which is the only measured change to the
+suite's timing.
+
+The session also ran with the dev app up throughout, which is the condition the
+sightings above kept blaming.
+
 ## What not to do
 
 Do not add a retry. A test that passes on the second attempt is a test that has
