@@ -71,7 +71,9 @@ export function PlanDialog({
           // The composer's keys, so there is one convention rather than two —
           // and with no second button, this is what sends the note at all.
           onKeyDown={(event) => {
-            if (event.key !== 'Enter' || event.shiftKey) return
+            // `isComposing` for the reason the composer gives: the Enter that
+            // confirms an IME candidate is not the one that sends.
+            if (event.key !== 'Enter' || event.shiftKey || event.nativeEvent.isComposing) return
             event.preventDefault()
             keepPlanning()
           }}

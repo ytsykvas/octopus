@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react'
+import { fireEvent, render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { beforeAll, describe, expect, it, vi } from 'vitest'
 
@@ -66,6 +66,19 @@ describe('the two ways out', () => {
    * composer's — one convention rather than two — and this is now the only
    * thing that sends the note at all.
    */
+  // The composer's keys, and the composer's IME gap with them: the Enter that
+  // confirms a candidate is not the Enter that sends the note.
+  it('does not send the note on the enter that confirms an IME candidate', async () => {
+    const user = userEvent.setup()
+    const { onKeepPlanning } = renderDialog()
+    const field = screen.getByRole('textbox')
+
+    await user.type(field, 'もう一度')
+    fireEvent.keyDown(field, { key: 'Enter', isComposing: true })
+
+    expect(onKeepPlanning).not.toHaveBeenCalled()
+  })
+
   it('sends the note on Enter, and lets shift break the line', async () => {
     const user = userEvent.setup()
     const { onKeepPlanning, onExecute } = renderDialog()

@@ -57,7 +57,10 @@ export function NameEditor({
       }}
       onBlur={commit}
       onKeyDown={(event) => {
-        if (event.key === 'Enter') {
+        // Not the Enter that confirms an IME candidate: this one writes to
+        // disk, and a name typed through an input method was renamed on every
+        // confirmed word.
+        if (event.key === 'Enter' && !event.nativeEvent.isComposing) {
           event.preventDefault()
           commit()
         }

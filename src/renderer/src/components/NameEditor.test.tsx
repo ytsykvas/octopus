@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react'
+import { fireEvent, render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, it, vi } from 'vitest'
 
@@ -28,6 +28,19 @@ describe('NameEditor', () => {
     await user.type(field, 'bruno', { skipClick: true })
 
     expect(field).toHaveValue('bruno')
+  })
+
+  // The worst of the three sites, because this one writes to disk: a name
+  // typed through an IME was renamed on every confirmed candidate.
+  it('does not commit on the enter that confirms an IME candidate', async () => {
+    const user = userEvent.setup()
+    const { onCommit } = renderEditor()
+    const field = screen.getByRole('textbox')
+
+    await user.type(field, '名前', { skipClick: true })
+    fireEvent.keyDown(field, { key: 'Enter', isComposing: true })
+
+    expect(onCommit).not.toHaveBeenCalled()
   })
 
   it('commits the new name on Enter', async () => {

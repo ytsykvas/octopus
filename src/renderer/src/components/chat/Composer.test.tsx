@@ -1,4 +1,4 @@
-import { render, screen, within } from '@testing-library/react'
+import { fireEvent, render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
@@ -174,6 +174,27 @@ describe('sending', () => {
     await user.type(field(), 'add a test{Enter}')
 
     expect(onSend).toHaveBeenCalledWith('add a test')
+  })
+
+  /*
+   * For anyone typing through an IME, Enter is how a candidate is confirmed —
+   * the Japanese, Chinese and Korean input methods among others — and the same
+   * key used to send. Every committed word fired a message, and it looked like
+   * the app sending on its own.
+   *
+   * `fireEvent` rather than `user.type`: user-event 14 dispatches no
+   * composition events at all, and jsdom's `KeyboardEventInit` does carry
+   * `isComposing`.
+   */
+  it('does not send on the enter that confirms an IME candidate', async () => {
+    const user = userEvent.setup()
+    const { onSend } = renderComposer()
+
+    await user.type(field(), 'にほんご')
+    fireEvent.keyDown(field(), { key: 'Enter', isComposing: true })
+
+    expect(onSend).not.toHaveBeenCalled()
+    expect(field()).toHaveValue('にほんご')
   })
 
   // A prompt is usually one line, but not always, and shift+enter is what every
