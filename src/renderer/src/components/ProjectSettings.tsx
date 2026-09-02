@@ -576,7 +576,7 @@ export function ProjectSettings({
                       return result.ok ? result.value : null
                     }}
                     save={(contents) =>
-                      void window.octopus.projects.saveScript(project.id, kind, contents)
+                      window.octopus.projects.saveScript(project.id, kind, contents)
                     }
                   />
                 )
@@ -599,7 +599,7 @@ export function ProjectSettings({
                 const result = await window.octopus.projects.readCarryList(project.id)
                 return result.ok ? result.value : null
               }}
-              save={(contents) => void window.octopus.projects.saveCarryList(project.id, contents)}
+              save={(contents) => window.octopus.projects.saveCarryList(project.id, contents)}
             />
           )}
 
@@ -694,9 +694,7 @@ export function ProjectSettings({
                   const result = await window.octopus.projects.readEnv(project.id, profile)
                   return result.ok ? result.value : null
                 }}
-                save={(contents) =>
-                  void window.octopus.projects.saveEnv(project.id, profile, contents)
-                }
+                save={(contents) => window.octopus.projects.saveEnv(project.id, profile, contents)}
                 notes={(contents) => [
                   // Only once there is something to expose. An empty block in a
                   // file git does not ignore is a warning about nothing.

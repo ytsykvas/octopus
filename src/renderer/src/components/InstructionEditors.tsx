@@ -102,9 +102,7 @@ export function InstructionEditors({
             const result = await window.octopus.projects.readInstruction(projectId, kind)
             return result.ok ? result.value : null
           }}
-          save={(contents) => {
-            void window.octopus.projects.saveInstruction(projectId, kind, contents)
-          }}
+          save={(contents) => window.octopus.projects.saveInstruction(projectId, kind, contents)}
         />
       ))}
     </>

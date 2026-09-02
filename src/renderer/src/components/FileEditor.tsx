@@ -1,5 +1,7 @@
 import { useEffect, useState } from 'react'
 
+import type { Result } from '../../../preload/index.js'
+import { useErrorMessage } from '../hooks/useErrorMessage.js'
 import { Field } from './Field.js'
 
 interface FileEditorProps {
@@ -9,7 +11,16 @@ interface FileEditorProps {
   readonly rows?: number
   /** Loads the current contents; a file that does not exist yields a template. */
   readonly read: () => Promise<string | null>
-  readonly save: (contents: string) => void
+  /**
+   * Writes the contents, and answers whether it was written.
+   *
+   * The answer is the point. Every one of these goes to a handler that parses
+   * what it is given against a cap — 64 000 characters for a script, 16 000 for
+   * an env block — so a refusal is a thing somebody can actually produce by
+   * pasting a file. It used to return `void`, and the `Result` main had already
+   * built, code and all, went nowhere.
+   */
+  readonly save: (contents: string) => Promise<Result<void>>
   /**
    * What is wrong with the text as it stands, shown under the box.
    *
@@ -45,8 +56,10 @@ export function FileEditor({
   notes,
   supersededBy
 }: FileEditorProps): React.JSX.Element {
+  const describeFailure = useErrorMessage()
   const [body, setBody] = useState('')
   const [saved, setSaved] = useState('')
+  const [refusal, setRefusal] = useState<string | null>(null)
 
   useEffect(() => {
     const controller = new AbortController()
@@ -73,8 +86,14 @@ export function FileEditor({
     // count as one.
     if (body === saved) return
 
-    setSaved(body)
-    save(body)
+    void (async () => {
+      const done = await save(body)
+      setRefusal(done.ok ? null : describeFailure(done))
+      // Only on success, and this is the half that makes the field usable
+      // again: a body marked saved is one the guard above will not offer to
+      // write, so a refusal used to be final as well as silent.
+      if (done.ok) setSaved(body)
+    })()
   }
 
   // Recomputed as it is typed, which is what makes a warning worth anything:
@@ -105,6 +124,11 @@ export function FileEditor({
           supersededBy === undefined ? '' : 'text-ink-faint'
         }`}
       />
+
+      {/* Under the box rather than at the top of the dialog: the message is
+          about this text, and one of the four editors this component draws sits
+          in a window that has no error banner at all. */}
+      {refusal !== null && <p className="text-danger mt-1.5">{refusal}</p>}
 
       {problems.length > 0 && (
         <ul className="text-warning mt-1.5 space-y-0.5">

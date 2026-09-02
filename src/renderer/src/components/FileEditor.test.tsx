@@ -42,7 +42,7 @@ function renderEditor(overrides: Partial<EditorProps> = {}): {
     hint: 'Runs once, when the workspace is created',
     placeholder: '#!/bin/sh',
     read: vi.fn(() => Promise.resolve('template')),
-    save: vi.fn(),
+    save: vi.fn(() => Promise.resolve({ ok: true as const, value: undefined })),
     ...overrides
   }
 
@@ -127,6 +127,52 @@ describe('FileEditor', () => {
 
     expect(save).toHaveBeenLastCalledWith('npm ci --silent')
     expect(save).toHaveBeenCalledTimes(2)
+  })
+
+  /*
+   * A refusal used to look exactly like a success. The prop returned `void`,
+   * so the `Result` main had already built — with a code and the reason in it —
+   * had nowhere to go, and `commit` marked the body saved before calling it.
+   * No error, no warning, and the field stopped offering to try again.
+   */
+  it('says why a save was refused, and stays dirty so the next blur retries', async () => {
+    const user = userEvent.setup()
+    const save = vi.fn(() => Promise.resolve({ ok: false as const, error: 'too long' }))
+    renderEditor({ save })
+
+    const field = await screen.findByDisplayValue('template')
+    await user.clear(field)
+    await user.type(field, 'npm ci')
+    await user.tab()
+
+    expect(await screen.findByText(/too long/)).toBeInTheDocument()
+
+    await user.click(field)
+    await user.tab()
+    expect(save).toHaveBeenCalledTimes(2)
+  })
+
+  it('clears the complaint once a save goes through', async () => {
+    const user = userEvent.setup()
+    const save = vi
+      .fn<(contents: string) => Promise<{ ok: boolean; error?: string; value?: undefined }>>()
+      .mockResolvedValueOnce({ ok: false, error: 'too long' })
+      .mockResolvedValue({ ok: true, value: undefined })
+    renderEditor({ save: save as unknown as EditorProps['save'] })
+
+    const field = await screen.findByDisplayValue('template')
+    await user.clear(field)
+    await user.type(field, 'npm ci')
+    await user.tab()
+    expect(await screen.findByText(/too long/)).toBeInTheDocument()
+
+    await user.click(field)
+    await user.type(field, ' --silent')
+    await user.tab()
+
+    await waitFor(() => {
+      expect(screen.queryByText(/too long/)).not.toBeInTheDocument()
+    })
   })
 
   // A read that yields nothing means the file could not be read at all;
