@@ -99,6 +99,41 @@ describe('a question the agent asked', () => {
     expect(onAnswer).not.toHaveBeenCalled()
   })
 
+  /*
+   * The question and its options are the agent's text, and this card is
+   * answered rather than merely read — an override reordering an option's
+   * label makes somebody choose one thing while another is sent back. The
+   * label itself stays raw: it is the key and the answer, and only what is
+   * drawn is substituted.
+   */
+  it('names a character in an option that would not draw as itself', async () => {
+    const user = userEvent.setup()
+    const { onAnswer } = renderCard({
+      questions: asked({
+        questions: [
+          {
+            question: 'Which one?',
+            header: '',
+            multiSelect: false,
+            options: [
+              { label: 'safe \u202Eesrever', description: 'one' },
+              { label: 'other', description: 'two' }
+            ]
+          }
+        ]
+      })
+    })
+
+    expect(screen.getByText('U+202E')).toBeVisible()
+
+    await user.click(screen.getByRole('radio', { name: /esrever/ }))
+    await user.click(send())
+
+    expect(onAnswer).toHaveBeenCalledWith([
+      { question: 'Which one?', selected: ['safe \u202Eesrever'], other: null }
+    ])
+  })
+
   describe('choosing one of several', () => {
     it('replaces the previous choice', async () => {
       const user = userEvent.setup()

@@ -428,6 +428,34 @@ describe('what the log shows', () => {
     expect(screen.queryByText(/step/)).not.toBeInTheDocument()
   })
 
+  /*
+   * A failure is agent-side text too — a tool that echoes back part of a file
+   * it refused to write puts that file's bytes on screen. The folded tool row
+   * carries the same string as the card, and its tooltip is laid out by the
+   * same algorithm, so the title cannot stay raw either.
+   */
+  it('names such a character in a failure, and in a folded tool row', () => {
+    renderLog({
+      entries: [
+        fromAgent({
+          type: 'tool_use',
+          toolUseId: 'c-1',
+          name: 'Bash',
+          input: { command: 'npm run \u202Ehctap' }
+        }),
+        fromAgent({
+          type: 'tool_result',
+          toolUseId: 'c-2',
+          ok: false,
+          content: 'refused: \u202Ehctap'
+        })
+      ]
+    })
+
+    expect(screen.getAllByText('U+202E')).toHaveLength(2)
+    expect(screen.getByTitle(/U\+202E/)).toBeInTheDocument()
+  })
+
   // A successful Read returns the file; pasting that into the chat would bury
   // the conversation in the codebase.
   it('shows a failed tool result and stays quiet about a successful one', () => {
@@ -765,6 +793,33 @@ describe('a permission request', () => {
     renderLog({ entries: [request], pendingRequestId: 'r-2' })
 
     expect(screen.queryByRole('button', { name: 'Allow' })).not.toBeInTheDocument()
+  })
+
+  /*
+   * The one place in the app where somebody authorises a command to run
+   * against their working tree, and until now the only surface in the chat
+   * that drew agent text raw. A right-to-left override reorders what is on
+   * screen while the string handed to the agent is untouched, so the reader
+   * approves one command and another runs.
+   *
+   * Worse than it looks: "Always allow" writes the tool *name*, so answering
+   * it on a misread Bash command approves every future Bash call in every
+   * workspace.
+   */
+  it('names a character in the command that would not draw as itself', () => {
+    renderLog({
+      entries: [
+        fromAgent({
+          type: 'permission_request',
+          requestId: 'r-9',
+          toolName: 'Bash',
+          input: { command: 'echo safe # \u202Erm -rf /' }
+        })
+      ],
+      pendingRequestId: 'r-9'
+    })
+
+    expect(screen.getByText('U+202E')).toBeVisible()
   })
 
   it('shows the tool alone when its arguments say nothing readable', () => {

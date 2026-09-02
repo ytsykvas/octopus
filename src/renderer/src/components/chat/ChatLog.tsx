@@ -18,6 +18,7 @@ import type { PermissionAnswer } from '@core/service.js'
 import type { ChatEntry } from '@core/transcript.js'
 
 import { Button } from '../Button.js'
+import { named } from '../diff/invisible.js'
 import { shown } from '../diff/shown.js'
 import type { Streaming } from '../../hooks/useChat.js'
 import { formatTokens } from './format.js'
@@ -515,9 +516,13 @@ function ToolCall({ name, input }: { name: string; input: unknown }): React.JSX.
     <div className="text-ink-soft flex min-w-0 items-baseline gap-2">
       <Wrench aria-hidden className="shrink-0 self-center" size={12} />
       <span className="font-medium">{name}</span>
+      {/* Through `shown`, as the change block below does, and the title through
+          its plain-text sibling: a tooltip is laid out by the same
+          bidirectional algorithm as the row it hangs off, so leaving the raw
+          string there would be the same misreading with a delay. */}
       {target !== null && (
-        <span className="text-ink-faint truncate font-mono text-[11px]" title={target}>
-          {target}
+        <span className="text-ink-faint truncate font-mono text-[11px]" title={named(target)}>
+          {shown(target)}
         </span>
       )}
     </div>
@@ -604,7 +609,7 @@ function ToolFailure({ content }: { content: string }): React.JSX.Element {
      * the log scrolls and an unbroken line would take it sideways.
      */
     <p className="text-danger border-danger/25 border-l pl-3 font-mono text-[11px] whitespace-pre-wrap wrap-anywhere">
-      {readFailure(content)}
+      {shown(readFailure(content))}
     </p>
   )
 }
@@ -625,7 +630,7 @@ function ToolFailure({ content }: { content: string }): React.JSX.Element {
 function PlanNote({ content }: { content: string }): React.JSX.Element {
   return (
     <p className="text-warning border-warning/25 border-l pl-3 whitespace-pre-wrap">
-      {readFailure(content)}
+      {shown(readFailure(content))}
     </p>
   )
 }
@@ -651,8 +656,18 @@ function PermissionCard({
         {t('chat.permissionTitle', { tool: toolName })}
       </p>
 
+      {/* The one place somebody authorises a command to run against their
+          working tree, and it has to show the command that will run. An
+          override reorders the text while the string handed to the agent is
+          untouched — and "Always allow" writes the tool *name*, so answering
+          it on a misread line approves every future call of that tool
+          everywhere. `whitespace-pre-wrap` because a command may have newlines
+          in it, and `wrap-anywhere` rather than `break-all`, which chops
+          ordinary words mid-character. */}
       {target !== null && (
-        <p className="text-ink-soft mt-1 font-mono text-[11px] break-all">{target}</p>
+        <p className="text-ink-soft mt-1 font-mono text-[11px] whitespace-pre-wrap wrap-anywhere">
+          {shown(target)}
+        </p>
       )}
 
       {answerable ? (
@@ -774,7 +789,7 @@ function ResetRow(): React.JSX.Element {
 function ErrorRow({ message }: { message: string }): React.JSX.Element {
   return (
     <p className="bg-danger-bg text-danger border-danger/25 rounded-[var(--radius-control)] border px-3 py-2">
-      {message}
+      {shown(message)}
     </p>
   )
 }

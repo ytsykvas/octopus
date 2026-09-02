@@ -1091,8 +1091,10 @@ on screen through the browser's bidirectional algorithm, so a right-to-left
 override reorders what a reviewer reads without changing a byte of what the
 compiler reads — the Trojan Source trick — and a zero-width character draws as
 nothing at all. Nothing is executed: React escapes the markup, and the danger is
-narrower and worse suited to being ignored, because a pane whose only job is
-checking work before it merges would be showing a line that is not the line.
+narrower and worse suited to being ignored, because the surfaces this happens on
+are the ones where somebody authorises something: a pane whose only job is
+checking work before it merges, and a card with an Allow button under a command
+that is about to run.
 
 Such a character is replaced by a chip naming its code point, `U+202E`, which
 stops the reordering as well as reporting it — a marker elsewhere on the row
@@ -1104,8 +1106,19 @@ same bytes: a file can be named to read as an image while ending in `.js`.
 U+200C and U+200D are deliberately left out. Persian and Indic text need them
 and every multi-part emoji carries one, so warning about those is warning about
 nothing by the second file. `shown` in `src/renderer/src/components/diff/shown.tsx`
-is the one place this is decided, and the chat's change block calls it too — the
-surface where a two-line edit is usually read instead of here.
+is the one place this is decided, and the chat pane calls it for every plain
+string the agent wrote: the permission card's command, the folded tool row, a
+failure, a note against a plan, an error, and a question's options. `named` in
+`invisible.ts` beside it makes the same substitution as a string, for a `title`
+or anything else the DOM types as text — a tooltip is laid out by the same
+algorithm as the row it hangs off, so leaving the raw string there would be the
+same misreading with a delay.
+
+The permission card is the strongest case rather than the diff pane. It is the
+one place somebody authorises a command to run against their working tree, and
+answering "Always allow" there writes the tool _name_ — so a misread line
+approves every future call of that tool, in every workspace. Text that goes
+through `Markdown` does not have this yet; `docs/tasks/` holds what is left.
 
 **A note against the code rides out with the next message.** It becomes text —
 the path, the lines, the code as it read when the note was written, then the

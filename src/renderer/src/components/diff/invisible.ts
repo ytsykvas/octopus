@@ -68,6 +68,22 @@ export function splitInvisible(text: string): readonly Piece[] {
 }
 
 /**
+ * The same substitution `shown` makes, where only a string will do.
+ *
+ * `shown` returns a node, so it cannot fill a `title`, an `aria-label` or
+ * anything else the DOM types as text — and leaving the raw string in those is
+ * not a fallback a careful reader could check against, because a tooltip is
+ * laid out by the same bidirectional algorithm as the row it hangs off. The
+ * chip is lost and the code point survives, which is the half that matters
+ * where there is nothing to style.
+ */
+export function named(text: string): string {
+  return splitInvisible(text)
+    .map((piece) => ('text' in piece ? piece.text : piece.code))
+    .join('')
+}
+
+/**
  * `U+202E`, which is how such a character is named everywhere else.
  *
  * The fallback is what the type asks for rather than a state to test: every

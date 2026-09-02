@@ -5,6 +5,7 @@ import { useTranslation } from 'react-i18next'
 import type { QuestionAnswer, UserQuestion, UserQuestions } from '@core/questions.js'
 
 import { Button } from '../Button.js'
+import { shown } from '../diff/shown.js'
 import { Markdown } from './Markdown.js'
 
 interface QuestionCardProps {
@@ -143,13 +144,19 @@ export function QuestionCard({
               {/* The chip sits inside the legend rather than above it. A
                   fieldset lifts its legend to the top of the box whatever the
                   source order, so a chip written first rendered second. */}
+              {/* Every string here is the agent's, so it goes through `shown`
+                  for the reason the chat's other surfaces do: an override
+                  reorders what is read while the label sent back is untouched,
+                  and this card is answered rather than merely read. The label
+                  keeps its raw form as the key and as the answer — only what
+                  is drawn is substituted. */}
               <legend className="font-medium">
                 {question.header !== '' && (
                   <span className="bg-muted text-ink-soft mb-1 block w-fit rounded-[4px] px-1.5 py-0.5 text-[11px] font-normal">
-                    {question.header}
+                    {shown(question.header)}
                   </span>
                 )}
-                {question.question}
+                {shown(question.question)}
               </legend>
 
               <div className="mt-1.5 flex flex-col gap-1">
@@ -178,9 +185,9 @@ export function QuestionCard({
                         className="choice focus-ring mt-1"
                       />
                       <span className="min-w-0">
-                        <span className="font-medium">{option.label}</span>
+                        <span className="font-medium">{shown(option.label)}</span>
                         {option.description !== '' && (
-                          <span className="text-ink-soft"> — {option.description}</span>
+                          <span className="text-ink-soft"> — {shown(option.description)}</span>
                         )}
                       </span>
                     </label>

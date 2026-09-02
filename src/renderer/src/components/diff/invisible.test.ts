@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 
 import { fileDiff, hunk } from '../../test/diff.js'
-import { fileHasInvisible, hasInvisible, splitInvisible } from './invisible.js'
+import { fileHasInvisible, hasInvisible, named, splitInvisible } from './invisible.js'
 
 /*
  * Written with escapes rather than the characters themselves.
@@ -110,5 +110,22 @@ describe('fileHasInvisible', () => {
 
   it('finds one in the name, which is drawn from the same bytes as the lines', () => {
     expect(fileHasInvisible(fileDiff(`src/report${RLO}gnp.js`, { hunks: [] }))).toBe(true)
+  })
+})
+
+describe('named', () => {
+  it('leaves ordinary text exactly as it is', () => {
+    expect(named('rm -rf build')).toBe('rm -rf build')
+  })
+
+  /*
+   * The same substitution `shown` makes, for the places that will not take a
+   * node. A tooltip is laid out by the same bidirectional algorithm as the row
+   * it hangs off, so leaving the raw string in a `title` is not a second
+   * opinion — it is the same misreading with a delay.
+   */
+  it('names a character that would not draw as itself', () => {
+    expect(named(`a${RLO}b`)).toBe('aU+202Eb')
+    expect(named(`${ZWSP}npm`)).toBe('U+200Bnpm')
   })
 })
