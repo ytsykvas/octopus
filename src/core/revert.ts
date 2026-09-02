@@ -79,7 +79,7 @@ async function existedAtBase(exec: GitExec, base: string, path: string): Promise
 
 /** Whether git is tracking this path now. */
 async function tracked(exec: GitExec, path: string): Promise<boolean> {
-  return (await exec(['ls-files', '-z', '--', path])) !== ''
+  return (await exec(['ls-files', '-z', '--', `:(literal)${path}`])) !== ''
 }
 
 /**
@@ -92,20 +92,28 @@ async function tracked(exec: GitExec, path: string): Promise<boolean> {
  * repository they are asked of.
  *
  * `--` before every path, so one beginning with `-` is an argument rather than
- * a flag.
+ * a flag, and `:(literal)` on every pathspec, so one containing `[`, `*` or `?`
+ * is a name rather than a pattern. Both are needed and neither replaces the
+ * other: `app/[slug]/page.tsx` is an ordinary Next.js route, and as a pattern
+ * it matches its neighbours — which `checkout` would restore over their
+ * uncommitted work and `rm` would delete outright. `diff.ts` says the same of
+ * the reading side, above `attachHunks`.
+ *
+ * `existedAtBase` is deliberately not given the prefix: `<rev>:<path>` is git's
+ * object syntax rather than a pathspec, and does not glob.
  */
 async function revertPath(exec: GitExec, base: string, root: string, path: string): Promise<void> {
   if (await existedAtBase(exec, base, path)) {
     // Restores the content and stages it, which is right: the workspace's next
     // commit should carry the file as the base had it.
-    await exec(['checkout', base, '--', path])
+    await exec(['checkout', base, '--', `:(literal)${path}`])
     return
   }
 
   if (await tracked(exec, path)) {
     // `-f` because the point is to discard: without it git refuses a file
     // whose contents differ from the index, which is most of them here.
-    await exec(['rm', '-f', '--', path])
+    await exec(['rm', '-f', '--', `:(literal)${path}`])
     return
   }
 

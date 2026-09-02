@@ -240,6 +240,43 @@ describe('revertFile', () => {
     expect(await changed()).toEqual([])
   })
 
+  // `[slug]` is a one-character class to git, so `app/[slug]/page.tsx` as a
+  // bare pathspec also matches `app/s/page.tsx`. Next.js names its routes this
+  // way, which is the kind of project octopus exists to run.
+  it('restores a path that reads as a glob without touching its neighbour', async () => {
+    await run('git', ['checkout', '-q', 'main'], { cwd: dir })
+    await run('mkdir', ['-p', join(dir, 'app', '[slug]'), join(dir, 'app', 's')])
+    await writeFile(join(dir, 'app', '[slug]', 'page.tsx'), 'bracketed\n', 'utf8')
+    await writeFile(join(dir, 'app', 's', 'page.tsx'), 'neighbour\n', 'utf8')
+    await commit('routes')
+    await run('git', ['checkout', '-q', '-B', 'work'], { cwd: dir })
+    await writeFile(join(dir, 'app', '[slug]', 'page.tsx'), 'edited\n', 'utf8')
+    await writeFile(join(dir, 'app', 's', 'page.tsx'), 'edited too\n', 'utf8')
+
+    await revert('app/[slug]/page.tsx')
+
+    expect(await readFile(join(dir, 'app', '[slug]', 'page.tsx'), 'utf8')).toBe('bracketed\n')
+    expect(await readFile(join(dir, 'app', 's', 'page.tsx'), 'utf8')).toBe('edited too\n')
+    expect(await changed()).toEqual(['app/s/page.tsx'])
+  })
+
+  // The same glob on the other branch, where it inverts the outcome: `tracked`
+  // answers yes because `ls-files` matched the neighbour, so the untracked file
+  // goes down the `git rm` road and takes the neighbour instead of itself.
+  it('deletes the glob-shaped path it was given rather than its neighbour', async () => {
+    await run('git', ['checkout', '-q', 'main'], { cwd: dir })
+    await writeFile(join(dir, 'a1.txt'), 'first\n', 'utf8')
+    await commit('add a1')
+    await run('git', ['checkout', '-q', '-B', 'work'], { cwd: dir })
+    await writeFile(join(dir, 'a1.txt'), 'edited\n', 'utf8')
+    await writeFile(join(dir, 'a[1].txt'), 'untracked\n', 'utf8')
+
+    await revert('a[1].txt')
+
+    expect(await exists('a[1].txt')).toBe(false)
+    expect(await readFile(join(dir, 'a1.txt'), 'utf8')).toBe('edited\n')
+  })
+
   it('reverts a file inside a directory the branch created', async () => {
     await run('git', ['checkout', '-q', 'main'], { cwd: dir })
     await run('git', ['checkout', '-q', 'work'], { cwd: dir })
