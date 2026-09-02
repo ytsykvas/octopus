@@ -24,6 +24,14 @@ import {
 
 const run = promisify(execFile)
 
+/*
+ * Given to each commit rather than written into the repository by two `git
+ * config` runs. `HOME` is redirected to a shared temporary directory
+ * (`vitest.shared.ts`), so there is no global identity to fall back on: get this
+ * wrong and the file fails outright rather than quietly.
+ */
+const IDENTITY = ['-c', 'user.email=test@example.com', '-c', 'user.name=Test']
+
 /**
  * A `gh` that answers from a table and records what it was asked.
  *
@@ -64,14 +72,16 @@ beforeEach(async () => {
   const origin = join(dir, 'origin.git')
   const work = join(dir, 'work')
 
-  await run('git', ['init', '-q', '--bare', origin])
-  await run('git', ['init', '-q', '--initial-branch=main', work])
-  await run('git', ['config', 'user.email', 'test@example.com'], { cwd: work })
-  await run('git', ['config', 'user.name', 'Test'], { cwd: work })
+  // The two inits have nothing to say to each other, and this fixture runs 54
+  // times: every process spawned here is paid for once per test.
+  await Promise.all([
+    run('git', ['init', '-q', '--bare', origin]),
+    run('git', ['init', '-q', '--initial-branch=main', work])
+  ])
   await run('git', ['remote', 'add', 'origin', origin], { cwd: work })
   await writeFile(join(work, 'README.md'), '# test\n', 'utf8')
   await run('git', ['add', '.'], { cwd: work })
-  await run('git', ['commit', '-q', '-m', 'first'], { cwd: work })
+  await run('git', [...IDENTITY, 'commit', '-q', '-m', 'first'], { cwd: work })
   await run('git', ['push', '-q', '-u', 'origin', 'main'], { cwd: work })
 })
 
@@ -85,7 +95,7 @@ async function branchWithCommit(name = 'octopus/anna'): Promise<string> {
   await run('git', ['checkout', '-q', '-b', name], { cwd: work })
   await writeFile(join(work, 'a.txt'), 'one\n', 'utf8')
   await run('git', ['add', '.'], { cwd: work })
-  await run('git', ['commit', '-q', '-m', 'work'], { cwd: work })
+  await run('git', [...IDENTITY, 'commit', '-q', '-m', 'work'], { cwd: work })
   return name
 }
 
