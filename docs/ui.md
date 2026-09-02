@@ -823,6 +823,17 @@ is computed asynchronously, so the first read after every push says it is
 unknown, and a request whose repository runs no CI has no pending check to wait
 on at all.
 
+**And it reads again when a turn ends in the workspace.** A check that has
+_failed_ is not pending, so the poll above stops at exactly the moment a fix is
+on its way — and an agent pushing that fix in its own worktree raised nothing
+the pane listened to. It subscribes the way the diff pane does: filtered on the
+workspace rather than the chat, on `error` as well as `result`, skipped while
+hidden, settled for the same 300 ms. Not a slow poll while a check is failed,
+which would ask GitHub about an abandoned request for ever. The time of the last
+read sits beside the refresh control, because a push from the built-in terminal
+raises no event either, and a pane that says nothing about when it looked reads
+as current however old it is.
+
 **A check's state is a word as well as a mark**, and so is the review's verdict.
 A colour reaches nobody using a screen reader, and it is also the only handle a
 test has on which state a row is in — the lesson the tab row above already
@@ -1065,6 +1076,22 @@ macOS ⌥ is how a great many characters are typed, and ⌥1 in the composer was
 switching conversation while swallowing the `¡` somebody meant to write. The
 terminal is one of the surfaces that counts: xterm.js takes its input through a
 hidden `textarea`, so a key pressed at a shell belongs to the shell.
+
+**Every shortcut first asks whether a dialog is open**, and does nothing if one
+is. `Modal` is the only `<dialog>` in the renderer and `showModal()` is how each
+one opens, so `dialog[open]` in the DOM is the one source of truth — and it
+covers the confirmation dialog, whose hook does not expose its state, which is
+the hole threading a handful of booleans through `App` would have left. Before
+this, ⌃2 pressed behind Project settings changed the selected workspace, which
+re-read the checkout's scripts into the list sitting above the trust checkbox.
+The `role="dialog"` popovers are dismissable and deliberately not matched.
+
+**Enter sends, Shift+Enter breaks the line, and an Enter that is composing does
+neither.** For anyone typing through an input method — Japanese, Chinese,
+Korean among others — Enter confirms a candidate, and it used to send the
+message with it: every committed word went out. `isComposing` on the native
+event is the check, in the three places that have this key: the composer, the
+plan dialog's field, and the rename field, which writes to disk.
 
 ## The diff
 
@@ -1457,6 +1484,16 @@ The same applies to whatever a pane is _doing_, not only to what it reads: the
 render-time reset that clears the view clears `creating`, `drafting` and the
 action's error with it, or a refusal about the branch just left is shown against
 the one arrived at.
+
+**The error banner clears itself, twice over.** Every hook that reports a
+failure to the window takes `(message: string | null) => void` and sends `null`
+as an attempt begins, so what the banner shows is always the latest attempt's;
+and `App` clears it during render when the selection moves, so a failure about
+one project does not follow the reader into another. One transient failure used
+to pin a red sentence to the top of the centre pane for the rest of the session
+— seven writers and nothing that ever wrote `null`. Not a dismiss control: a
+banner here clears on the next thing that happens, which is where the reader's
+attention is anyway.
 
 **An operation that waits is guarded in the hook, not on the button.** Creating
 a workspace fetches its base branch first, so it is no longer over before a
