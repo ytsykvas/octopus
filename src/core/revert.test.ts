@@ -18,7 +18,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 
 import { readWorkspaceDiff } from './diff.js'
 import { type GitExec, gitIn } from './git.js'
-import { insideWorktree, revertFile } from './revert.js'
+import { revertFile } from './revert.js'
 
 const run = promisify(execFile)
 
@@ -64,21 +64,6 @@ beforeEach(async () => {
 
 afterEach(async () => {
   await rm(dir, { recursive: true, force: true })
-})
-
-describe('insideWorktree', () => {
-  it('accepts a path the diff can report', () => {
-    expect(insideWorktree('src/core/revert.ts')).toBe(true)
-    expect(insideWorktree('a.txt')).toBe(true)
-  })
-
-  // It becomes a git argument and, in one branch, a file to delete.
-  it('refuses one that is absolute, climbs out, or is nothing at all', () => {
-    expect(insideWorktree('/etc/passwd')).toBe(false)
-    expect(insideWorktree('../outside.txt')).toBe(false)
-    expect(insideWorktree('a/../../outside.txt')).toBe(false)
-    expect(insideWorktree('')).toBe(false)
-  })
 })
 
 describe('revertFile', () => {

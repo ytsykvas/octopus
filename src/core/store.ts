@@ -6,7 +6,7 @@
  * binding, status and port.
  */
 
-import { isAbsolute, normalize } from 'node:path'
+import { isAbsolute } from 'node:path'
 
 import { z } from 'zod'
 
@@ -36,7 +36,7 @@ export {
 } from './chats.js'
 export { PROJECT_COLORS, type ProjectColor } from './colors.js'
 export { PROJECT_ICONS, type ProjectIcon } from './icons.js'
-import { stateFile, stateTempFile } from './paths.js'
+import { insideWorktree, stateFile, stateTempFile } from './paths.js'
 import { readJsonFile, writeJsonFile } from './persist.js'
 
 /*
@@ -502,8 +502,9 @@ export function updateProject(state: State, projectId: string, patch: ProjectPat
     if (envFile === '') throw new StateConflictError('An env file cannot be empty')
 
     // It is joined to a worktree path, so it has to stay inside one. The same
-    // rule the carry list applies to every line it reads, for the same reason.
-    if (isAbsolute(envFile) || normalize(envFile).startsWith('..')) {
+    // rule the carry list applies to every line it reads, for the same reason —
+    // and now literally the same predicate.
+    if (!insideWorktree(envFile)) {
       throw new StateConflictError('An env file has to sit inside the workspace')
     }
   }

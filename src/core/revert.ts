@@ -20,12 +20,13 @@
  */
 
 import { unlink } from 'node:fs/promises'
-import { isAbsolute, join, normalize } from 'node:path'
+import { join } from 'node:path'
 
 import { z } from 'zod'
 
 import { mergeBase } from './diff.js'
 import type { GitExec } from './git.js'
+import { insideWorktree } from './paths.js'
 
 export interface RevertOptions {
   /** Resolved to the merge base, exactly as the diff read resolves it. */
@@ -36,22 +37,6 @@ export interface RevertOptions {
   readonly path: string
   /** Where it came from when it moved or was copied; both ends are put back. */
   readonly oldPath?: string | null
-}
-
-/**
- * Whether a path is one this may touch.
- *
- * Relative and staying inside the worktree. The value arrives from the
- * renderer, and it becomes both a git argument and, in one branch, a file to
- * delete — so it is checked before it is either.
- *
- * The same rule `carriedPaths` applies to every line it reads and `updateProject`
- * to the env file. Three spellings of one sentence is one too many; the note in
- * `docs/tasks/` says so rather than this change widening to fix it.
- */
-export function insideWorktree(path: string): boolean {
-  if (path === '') return false
-  return !isAbsolute(path) && !normalize(path).startsWith('..')
 }
 
 /**

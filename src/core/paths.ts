@@ -9,7 +9,7 @@
  */
 
 import { homedir } from 'node:os'
-import { join } from 'node:path'
+import { isAbsolute, join, normalize } from 'node:path'
 
 import type { ChatId, ProjectId, WorkspaceId } from './types.js'
 
@@ -202,4 +202,26 @@ export function workspacePath(
   root: string = rootDir()
 ): string {
   return join(workspacesDir(projectId, root), workspaceId)
+}
+
+/**
+ * Whether a path may be joined to a worktree and stay inside it.
+ *
+ * Relative, and not climbing out with `..`. Three modules asked this and each
+ * spelled it itself — the carry list over every destination it reads, the env
+ * file on its way into a project, and the revert path arriving from the
+ * renderer. Each was correct, and none of them could be fixed once: a Windows
+ * drive letter or a normalisation case `normalize` treats differently would
+ * have landed in one of three places with nothing pointing at the other two.
+ *
+ * Lexical only, and deliberately so — it answers about a string, not about a
+ * filesystem. `unlinkedInside` is the question to ask before writing.
+ *
+ * What the three callers do with the answer is still their own: the carry list
+ * drops the line, `updateProject` refuses, and `RevertPathSchema` rejects at the
+ * boundary. The rule is shared; the reaction to it is not.
+ */
+export function insideWorktree(path: string): boolean {
+  if (path === '') return false
+  return !isAbsolute(path) && !normalize(path).startsWith('..')
 }

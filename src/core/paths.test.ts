@@ -8,6 +8,7 @@ import {
   chatTranscript,
   configFile,
   globalSkillsRoot,
+  insideWorktree,
   projectDir,
   projectScript,
   projectScriptsDir,
@@ -143,5 +144,24 @@ describe('chat transcripts', () => {
     const root = rootDir()
     expect(chatsDir()).toBe(join(root, 'chats'))
     expect(chatTranscript('9f3c-1')).toBe(join(root, 'chats', '9f3c-1.jsonl'))
+  })
+})
+
+describe('insideWorktree', () => {
+  it('accepts a path a diff or a carry list can name', () => {
+    expect(insideWorktree('src/core/revert.ts')).toBe(true)
+    expect(insideWorktree('a.txt')).toBe(true)
+    expect(insideWorktree('config/.env')).toBe(true)
+  })
+
+  /*
+   * Every caller joins the answer to a worktree and then hands it to something
+   * that writes: a git argument, a file to delete, a block of credentials.
+   */
+  it('refuses one that is absolute, climbs out, or is nothing at all', () => {
+    expect(insideWorktree('/etc/passwd')).toBe(false)
+    expect(insideWorktree('../outside.txt')).toBe(false)
+    expect(insideWorktree('a/../../outside.txt')).toBe(false)
+    expect(insideWorktree('')).toBe(false)
   })
 })

@@ -21,11 +21,11 @@
 
 import { constants, copyFile, mkdir, readFile, writeFile } from 'node:fs/promises'
 import { homedir } from 'node:os'
-import { dirname, isAbsolute, join, normalize } from 'node:path'
+import { dirname, isAbsolute, join } from 'node:path'
 
 import { z } from 'zod'
 
-import { projectCarry } from './paths.js'
+import { insideWorktree, projectCarry } from './paths.js'
 import type { ProjectId } from './types.js'
 
 /** The list as accepted from the renderer: one path per line. */
@@ -134,7 +134,7 @@ export function carriedFiles(list: string): CarriedFile[] {
     .map((line) => line.trim())
     .filter((line) => line !== '' && !line.startsWith('#'))
     .map(splitLine)
-    .filter(({ path }) => path !== '' && !isAbsolute(path) && !normalize(path).startsWith('..'))
+    .filter(({ path }) => insideWorktree(path))
 }
 
 /**
