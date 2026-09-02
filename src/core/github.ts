@@ -167,6 +167,11 @@ export async function listRepositories(
     (node) => !node.isArchived && CAN_PUSH.has(node.viewerPermission ?? '')
   )
 
+  // A bare `parse` deliberately, unlike the ones `pullRequests.ts` had to
+  // convert: nothing external reaches this. Every node here came through
+  // `RepositoryPageSchema`, which validates them against a schema extending
+  // this one, so all this does is drop the two fields the page carries and a
+  // repository does not. It cannot fail on an answer from GitHub.
   return sortByOwner(offered, login).map((node) => RemoteRepositorySchema.parse(node))
 }
 

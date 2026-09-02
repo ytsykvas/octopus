@@ -488,11 +488,13 @@ export async function readPullRequestDetail(
   number: number,
   gh: GhExec
 ): Promise<PullRequestDetail> {
-  const view = DetailPayloadSchema.parse(
+  const view = shaped(
+    DetailPayloadSchema,
     parsed(await asked(() => gh(['pr', 'view', String(number), '--json', DETAIL_FIELDS])))
   )
 
-  const threads = ThreadsPayloadSchema.parse(
+  const threads = shaped(
+    ThreadsPayloadSchema,
     parsed(
       await asked(() =>
         gh(['api', 'graphql', '-f', `query=${THREADS_QUERY}`, '-F', `id=${view.id}`])
@@ -524,7 +526,8 @@ export async function readBranchRequests(
   gh: GhExec,
   limit: number = BRANCH_REQUEST_LIMIT
 ): Promise<BranchRequest[]> {
-  const payload = BranchListSchema.parse(
+  const payload = shaped(
+    BranchListSchema,
     parsed(
       await asked(() =>
         gh([
@@ -551,6 +554,28 @@ async function asked(run: () => Promise<string>): Promise<string> {
   } catch {
     throw new GitHubError('notConnected', {}, 'Could not ask GitHub about this pull request.')
   }
+}
+
+/**
+ * An answer that is JSON and is not what was asked for.
+ *
+ * `safeParse` rather than `parse`, and the difference is the whole point: a
+ * bare `parse` raises a `ZodError`, which is not one of the classes the bridge
+ * translates — so it reached the pane whose whole job is explaining GitHub as a
+ * serialised array of issue objects, in English, in one unwrapped paragraph.
+ * What the reader can do about it is the same either way, so it says the same
+ * thing an unreadable answer says.
+ *
+ * `readBranchPullRequests` above already does this by hand; this is that, made
+ * reusable, because three more call sites needed it.
+ */
+function shaped<T>(schema: z.ZodType<T>, payload: unknown): T {
+  const result = schema.safeParse(payload)
+  if (!result.success) {
+    throw new GitHubError('listFailed', {}, 'GitHub returned an unexpected response.')
+  }
+
+  return result.data
 }
 
 /** An answer that is not JSON, which no schema can be blamed for. */

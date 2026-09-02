@@ -707,6 +707,13 @@ describe('reading one request in full', () => {
     await expect(readPullRequestDetail(7, gh)).rejects.toMatchObject({ code: 'notConnected' })
   })
 
+  /*
+   * Both halves named, and the second is the one that was only asserted to
+   * throw *something*. A `gh` that exits zero with well-formed JSON of the
+   * wrong shape used to raise a bare `ZodError`, which no class the bridge
+   * translates recognises — so the serialised issue array reached the pane
+   * whose whole job is explaining GitHub, in English, in one paragraph.
+   */
   it('tells an unreadable answer from an unexpected one', async () => {
     const unreadable = fakeGh({ view: 'not json at all' })
     await expect(readPullRequestDetail(7, unreadable.gh)).rejects.toMatchObject({
@@ -714,13 +721,21 @@ describe('reading one request in full', () => {
     })
 
     const unexpected = fakeGh({ view: JSON.stringify({ state: 'OPEN' }) })
-    await expect(readPullRequestDetail(7, unexpected.gh)).rejects.toBeDefined()
+    await expect(readPullRequestDetail(7, unexpected.gh)).rejects.toMatchObject({
+      code: 'listFailed'
+    })
   })
 
-  it('reports a threads reply it cannot read', async () => {
-    const { gh } = fakeGh({ view: VIEW, graphql: 'html, not json' })
+  it('reports a threads reply it cannot read, and one shaped like something else', async () => {
+    const unreadable = fakeGh({ view: VIEW, graphql: 'html, not json' })
+    await expect(readPullRequestDetail(7, unreadable.gh)).rejects.toMatchObject({
+      code: 'listFailed'
+    })
 
-    await expect(readPullRequestDetail(7, gh)).rejects.toMatchObject({ code: 'listFailed' })
+    const unexpected = fakeGh({ view: VIEW, graphql: JSON.stringify({ data: { node: 42 } }) })
+    await expect(readPullRequestDetail(7, unexpected.gh)).rejects.toMatchObject({
+      code: 'listFailed'
+    })
   })
 })
 
@@ -774,10 +789,12 @@ describe('every branch of a project at once', () => {
     await expect(readBranchRequests(gh)).rejects.toMatchObject({ code: 'notConnected' })
   })
 
-  it('reports an answer it cannot read', async () => {
-    const { gh } = fakeGh({ list: 'not json' })
+  it('reports an answer it cannot read, and one shaped like something else', async () => {
+    const unreadable = fakeGh({ list: 'not json' })
+    await expect(readBranchRequests(unreadable.gh)).rejects.toMatchObject({ code: 'listFailed' })
 
-    await expect(readBranchRequests(gh)).rejects.toMatchObject({ code: 'listFailed' })
+    const unexpected = fakeGh({ list: JSON.stringify({ pullRequests: [] }) })
+    await expect(readBranchRequests(unexpected.gh)).rejects.toMatchObject({ code: 'listFailed' })
   })
 })
 
