@@ -318,6 +318,66 @@ describe('the record the pane creates for itself', () => {
   })
 
   /*
+   * The log is the record of what was said, and a line in it that no file
+   * carries is the one kind of wrong a reader cannot catch — the log is the
+   * only thing they have to check against. It also reads as though the message
+   * went and the agent ignored it.
+   *
+   * The transcript decides, not the `Result`, which cannot say how far the call
+   * got: core writes the entry before it asks the agent anything, so a failure
+   * on the way in leaves nothing and a failure after it leaves the message.
+   * Nothing is lost either way — the composer keeps the text until a send
+   * answers true.
+   */
+  it('drops a message the transcript never took, and keeps one it did', async () => {
+    const created = chat()
+    vi.mocked(octopus().chats.open).mockResolvedValue({ ok: true, value: created })
+    vi.mocked(octopus().chats.send).mockResolvedValue({ ok: false, error: 'no session' })
+    vi.mocked(octopus().chats.history).mockResolvedValue({ ok: true, value: [] })
+
+    const { result } = renderHook(() =>
+      useChat(null, 'planner/anna', 'idle', describeFailure, noted)
+    )
+
+    await act(async () => {
+      await result.current.send('add a test')
+    })
+
+    expect(result.current.entries).toHaveLength(0)
+    expect(result.current.error).toContain('no session')
+
+    vi.mocked(octopus().chats.history).mockResolvedValue({
+      ok: true,
+      value: [{ role: 'user', at: '2026-09-02T10:00:00.000Z', text: 'add another' }]
+    })
+
+    await act(async () => {
+      await result.current.send('add another')
+    })
+
+    expect(result.current.entries).toHaveLength(1)
+  })
+
+  // Nothing to check against, so nothing is taken away: blanking the log on a
+  // read that failed would lose the record as well as the message.
+  it('leaves the log alone when the transcript cannot be read either', async () => {
+    const created = chat()
+    vi.mocked(octopus().chats.open).mockResolvedValue({ ok: true, value: created })
+    vi.mocked(octopus().chats.send).mockResolvedValue({ ok: false, error: 'no session' })
+    vi.mocked(octopus().chats.history).mockResolvedValue({ ok: false, error: 'EACCES' })
+
+    const { result } = renderHook(() =>
+      useChat(null, 'planner/anna', 'idle', describeFailure, noted)
+    )
+
+    await act(async () => {
+      await result.current.send('add a test')
+    })
+
+    expect(result.current.entries).toHaveLength(1)
+  })
+
+  /*
    * The composer clears the field and the review on this answer.
    *
    * A review is minutes of reading and nothing writes it to disk, so a send

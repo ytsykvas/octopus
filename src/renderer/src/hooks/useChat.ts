@@ -313,6 +313,26 @@ export function useChat(
       if (!sent.ok) {
         setError(describeFailure(sent))
         setBusy(false)
+
+        /*
+         * The optimistic line above may now be a message no file carries, and
+         * the log is the only record a reader has to check against.
+         *
+         * The transcript decides rather than the `Result`, which cannot say how
+         * far the call got: core writes the entry before it asks the agent
+         * anything, so a refusal on the way in — the boundary parse, a chat or
+         * workspace that is gone — leaves nothing, and a session that failed to
+         * start leaves the message. Re-reading answers both without core having
+         * to describe which happened.
+         *
+         * Nothing is lost either way: the composer keeps the text until a send
+         * answers true. A retry can therefore duplicate a message that did
+         * land, which is the lesser failure — and the log now shows which case
+         * this is.
+         */
+        const history = await window.octopus.chats.history(target.id)
+        if (history.ok) setEntries(history.value)
+
         return false
       }
 
