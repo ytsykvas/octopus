@@ -195,6 +195,13 @@ export const en = {
     envProfileNew: 'New',
     envProfileDuplicate: 'Duplicate',
     envProfileRemove: 'Delete',
+    envProfileRemoveTitle: 'Delete \u201c{{name}}\u201d?',
+    envProfileRemoveMessage:
+      'This is the only copy. A set of variables is never written to the repository, so there is nothing to restore it from.',
+    envProfileRemoveDetail:
+      'Workspaces using it fall back to the project\u2019s default set, and are told nothing.',
+    envProfileRemoveConfirm: 'Delete the set',
+    envProfileRemoveCancel: 'Keep it',
     envProfileMakeDefault: 'Use by default',
     envOf: 'Variables in \u201c{{name}}\u201d',
     env: 'Variables added to every workspace',

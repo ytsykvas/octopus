@@ -22,6 +22,7 @@ import type { ScriptsInWorkspace } from '@core/repoSource.js'
 import type { ScriptKind } from '@core/scripts.js'
 import type { Project, ProjectPatch } from '@core/store.js'
 
+import { useConfirm } from '../hooks/useConfirm.js'
 import { useErrorMessage } from '../hooks/useErrorMessage.js'
 import { Button } from './Button.js'
 import { Combobox } from './Combobox.js'
@@ -181,6 +182,11 @@ export function ProjectSettings({
 }: ProjectSettingsProps): React.JSX.Element {
   const { t } = useTranslation()
   const describeFailure = useErrorMessage()
+  // Owned here rather than threaded down from `App`, the way `SkillsSection`
+  // and `ComposerAttic` own theirs: `Modal` sits on a native `<dialog>`, and
+  // `showModal()` puts it in the top layer wherever in the tree it is written
+  // — so a confirmation inside this dialog draws over it correctly.
+  const { confirm, dialog: confirmDialog } = useConfirm()
 
   const [section, setSection] = useState<SectionId>(initialSection ?? 'general')
   const [name, setName] = useState(project.name)
@@ -339,7 +345,27 @@ export function ProjectSettings({
     setProfilesRead((current) => current + 1)
   }
 
+  /**
+   * Deletes the set on screen, after asking.
+   *
+   * The one destructive action in this dialog that cannot be undone from
+   * anywhere: a set of variables is never exported, never imported and not in
+   * `.octopus/` even as a list of key names, so the file this removes is the
+   * only copy there is. The second consequence is invisible from here —
+   * `service.ts` moves the project default off it and unpins every workspace
+   * that named it — which is why the question says both.
+   */
   const dropProfile = async (): Promise<void> => {
+    const { confirmed } = await confirm({
+      title: t('project.envProfileRemoveTitle', { name: profile }),
+      message: t('project.envProfileRemoveMessage'),
+      detail: t('project.envProfileRemoveDetail'),
+      confirmLabel: t('project.envProfileRemoveConfirm'),
+      cancelLabel: t('project.envProfileRemoveCancel'),
+      destructive: true
+    })
+    if (!confirmed) return
+
     const done = await window.octopus.projects.removeEnv(project.id, profile)
     if (done.ok) setProfilesRead((current) => current + 1)
     else setError(describeFailure(done))
@@ -761,6 +787,7 @@ export function ProjectSettings({
           )}
         </div>
       </div>
+      {confirmDialog}
     </Modal>
   )
 }

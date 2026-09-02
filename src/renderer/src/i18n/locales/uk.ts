@@ -183,6 +183,13 @@ export const uk: Translation = {
     envProfileNew: '\u041d\u043e\u0432\u0438\u0439',
     envProfileDuplicate: '\u041a\u043e\u043f\u0456\u044f',
     envProfileRemove: '\u0412\u0438\u0434\u0430\u043b\u0438\u0442\u0438',
+    envProfileRemoveTitle: 'Видалити «{{name}}»?',
+    envProfileRemoveMessage:
+      'Це єдина копія. Набір змінних ніколи не потрапляє в репозиторій, тож відновити його нізвідки.',
+    envProfileRemoveDetail:
+      'Воркспейси, що ним користуються, перейдуть на типовий набір проєкту — і нічого про це не скажуть.',
+    envProfileRemoveConfirm: 'Видалити набір',
+    envProfileRemoveCancel: 'Залишити',
     envProfileMakeDefault:
       '\u0417\u0440\u043e\u0431\u0438\u0442\u0438 \u0442\u0438\u043f\u043e\u0432\u0438\u043c',
     envOf: '\u0417\u043c\u0456\u043d\u043d\u0456 \u0432 \u00ab{{name}}\u00bb',

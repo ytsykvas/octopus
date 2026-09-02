@@ -829,14 +829,35 @@ describe('ProjectSettings', () => {
       prompt.mockRestore()
     })
 
-    it('deletes the one on screen', async () => {
+    /*
+     * The file this removes is the only copy in existence — an env block is
+     * never exported, never imported and not in `.octopus/` even as a list of
+     * key names. So the button asks first, and the question is where the two
+     * consequences are said out loud: the credentials go, and every workspace
+     * pinned to the set falls back to the project's default.
+     */
+    it('asks first, then deletes the one on screen', async () => {
       const user = userEvent.setup()
       await renderDialog()
       await openSection(user, 'Env')
 
       await user.click(await screen.findByRole('button', { name: 'Delete' }))
+      expect(window.octopus.projects.removeEnv).not.toHaveBeenCalled()
+
+      await user.click(await screen.findByRole('button', { name: 'Delete the set' }))
 
       expect(window.octopus.projects.removeEnv).toHaveBeenCalledWith('planner', 'default')
+    })
+
+    it('deletes nothing when the question is answered no', async () => {
+      const user = userEvent.setup()
+      await renderDialog()
+      await openSection(user, 'Env')
+
+      await user.click(await screen.findByRole('button', { name: 'Delete' }))
+      await user.click(await screen.findByRole('button', { name: 'Keep it' }))
+
+      expect(window.octopus.projects.removeEnv).not.toHaveBeenCalled()
     })
 
     it('offers no way to delete the last one', async () => {
@@ -861,6 +882,7 @@ describe('ProjectSettings', () => {
       await openSection(user, 'Env')
 
       await user.click(await screen.findByRole('button', { name: 'Delete' }))
+      await user.click(await screen.findByRole('button', { name: 'Delete the set' }))
 
       expect(await screen.findByText(/busy/)).toBeInTheDocument()
     })
