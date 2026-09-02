@@ -56,6 +56,13 @@ describe('useDismiss', () => {
     const onDismiss = vi.fn()
     render(<Popup open onDismiss={onDismiss} />)
 
+    // Dismissed from outside first, so the silence below is the guard doing its
+    // work rather than a listener the effect never registered — which would
+    // leave `onDismiss` uncalled just as convincingly.
+    await user.click(screen.getByRole('button', { name: 'Elsewhere on the page' }))
+    expect(onDismiss).toHaveBeenCalledOnce()
+    onDismiss.mockClear()
+
     await user.click(screen.getByRole('button', { name: 'Inside the popup' }))
 
     expect(onDismiss).not.toHaveBeenCalled()
@@ -66,6 +73,12 @@ describe('useDismiss', () => {
     const user = userEvent.setup()
     const onDismiss = vi.fn()
     render(<Popup open onDismiss={onDismiss} />)
+
+    // Escape first, for the same reason: a dead listener says nothing to any
+    // key, and this test is about the ones it hears and lets past.
+    await user.keyboard('{Escape}')
+    expect(onDismiss).toHaveBeenCalledOnce()
+    onDismiss.mockClear()
 
     await user.type(screen.getByRole('textbox', { name: 'Search' }), 'planner')
 

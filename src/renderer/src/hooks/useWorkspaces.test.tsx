@@ -6,6 +6,7 @@ import type { Project } from '@core/store.js'
 import type { WorkspaceView } from '@core/workspaces.js'
 
 import type { Result } from '../../../preload/index.js'
+import { refuseSilence } from '../test/chat.js'
 import { workspaceView } from '../test/workspaces.js'
 import type { ConfirmRequest, ConfirmResult } from './useConfirm.js'
 import { useWorkspaces } from './useWorkspaces.js'
@@ -80,6 +81,7 @@ const emitStatus = (event: WorkspaceStatusEvent): void => {
   const handlers = vi
     .mocked(window.octopus.workspaces.onStatus)
     .mock.calls.map(([handler]) => handler)
+  refuseSilence(handlers.length, 'workspaces.onStatus')
 
   act(() => {
     for (const handler of handlers) handler(event)
@@ -93,6 +95,7 @@ const emitChatStatus = (event: {
   status: 'idle' | 'running' | 'waiting_permission' | 'error'
 }): void => {
   const handlers = vi.mocked(window.octopus.chats.onStatus).mock.calls.map(([handler]) => handler)
+  refuseSilence(handlers.length, 'chats.onStatus')
 
   act(() => {
     for (const handler of handlers) handler(event)
@@ -102,6 +105,7 @@ const emitChatStatus = (event: {
 /** A turn ending in a named workspace, as main broadcasts it. */
 const emitTurnEnd = (workspaceId: string, failed = false): void => {
   const handlers = vi.mocked(window.octopus.chats.onEvent).mock.calls.map(([handler]) => handler)
+  refuseSilence(handlers.length, 'chats.onEvent')
 
   act(() => {
     for (const handler of handlers) {

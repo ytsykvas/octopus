@@ -1642,6 +1642,17 @@ describe('App', () => {
     await user.click(screen.getByRole('button', { name: /anna/ }))
     await screen.findByRole('button', { name: /^Claude 3: / })
 
+    // A shortcut that does do something, first. The silence below would read
+    // exactly the same if the window listener had never been registered — it
+    // is an effect, and nothing else in this test would notice.
+    fireEvent.keyDown(document.body, { key: '™', code: 'Digit2', altKey: true })
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: /^Claude 2: / })).toHaveAttribute(
+        'aria-current',
+        'page'
+      )
+    })
+
     fireEvent.keyDown(window, { key: 't', metaKey: true })
 
     expect(window.octopus.chats.create).not.toHaveBeenCalled()

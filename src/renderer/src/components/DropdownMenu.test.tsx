@@ -131,6 +131,13 @@ describe('DropdownMenu', () => {
   it('stays open when something beside the trigger scrolls', async () => {
     renderMenu([{ id: 'rename', label: 'Rename', onSelect: vi.fn() }])
 
+    // A scroll that does close it first. The listener is registered by an
+    // effect, and a menu that stayed open because nothing was listening looks
+    // exactly like one that stayed open on purpose.
+    await userEvent.click(triggerButton())
+    fireEvent.scroll(document)
+    expect(screen.queryByRole('menu')).toBeNull()
+
     await userEvent.click(triggerButton())
     fireEvent.scroll(screen.getByRole('log'))
 
@@ -189,6 +196,13 @@ describe('DropdownMenu', () => {
     const user = userEvent.setup()
     const onSelect = vi.fn()
     renderMenu([{ id: 'rename', label: 'Rename', onSelect }])
+
+    // A click that does close it first, for the reason the comment below gives
+    // in one direction and this covers in the other: `useDismiss` listens from
+    // an effect, so a dead listener leaves the menu open just as convincingly.
+    await user.click(triggerButton())
+    await user.click(screen.getByRole('button', { name: 'Somewhere else' }))
+    expect(screen.queryByRole('menu')).toBeNull()
 
     await user.click(triggerButton())
     // The panel's own padding rather than an item: an item closes the menu by

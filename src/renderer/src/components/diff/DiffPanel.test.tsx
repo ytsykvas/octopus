@@ -638,8 +638,14 @@ describe('DiffPanel', () => {
       renderWithComments()
       await screen.findByText('kept')
 
+      // Awaited rather than left implied: the selection below is what the test
+      // is about, and it can only take the button away if the button was there.
+      // Without this the whole test holds just as well when the listener was
+      // never registered and neither dispatch reached anything.
       const lines = codeLines()
       selectAcross(lines[0]!, lines[0]!)
+      await screen.findByRole('button', { name: 'Ask about the selected code' })
+
       act(() => {
         window.getSelection()!.removeAllRanges()
         document.dispatchEvent(new Event('selectionchange'))
@@ -748,11 +754,18 @@ describe('DiffPanel', () => {
     // A browser with nothing selected at all, which is what `getSelection`
     // answers before anything has been clicked in the document.
     it('offers nothing when the browser reports no selection', async () => {
-      vi.spyOn(window, 'getSelection').mockReturnValue(null)
       answer(workspaceDiff([fileDiff('src/a.ts')]))
       renderWithComments()
       await screen.findByText('kept')
 
+      // A real selection first — `selectAcross` needs the genuine article, and
+      // the button appearing is what makes its absence below mean the browser's
+      // null answer rather than a listener that was never registered.
+      const lines = codeLines()
+      selectAcross(lines[0]!, lines[0]!)
+      await screen.findByRole('button', { name: 'Ask about the selected code' })
+
+      vi.spyOn(window, 'getSelection').mockReturnValue(null)
       act(() => {
         document.dispatchEvent(new Event('selectionchange'))
       })

@@ -4,6 +4,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { WorkspaceDiff } from '@core/diff.js'
 import type { AgentEvent } from '@core/events.js'
 
+import { refuseSilence } from '../test/chat.js'
 import { fileDiff, workspaceDiff } from '../test/diff.js'
 import { octopus } from '../test/octopus.js'
 import { useWorkspaceDiff } from './useWorkspaceDiff.js'
@@ -12,7 +13,10 @@ const WORKSPACE = 'planner/anna'
 
 /** Delivers an event the way the bridge does, to whoever subscribed. */
 function emit(event: AgentEvent, workspaceId = WORKSPACE): void {
-  const [subscriber] = vi.mocked(octopus().chats.onEvent).mock.calls.at(-1) ?? []
+  const calls = vi.mocked(octopus().chats.onEvent).mock.calls
+  refuseSilence(calls.length, 'chats.onEvent')
+
+  const [subscriber] = calls.at(-1) ?? []
   act(() => {
     subscriber?.({ chatId: 'chat-1', workspaceId, event })
   })

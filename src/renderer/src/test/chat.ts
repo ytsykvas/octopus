@@ -68,8 +68,11 @@ export function givenChats(records: readonly Chat[]): readonly Chat[] {
  * Two things produce it: the component under test never mounted, or a previous
  * test left `chatEvents.ts`'s module-level `release` held, in which case the
  * bridge stub this test installed was never subscribed to at all.
+ *
+ * Exported because the hook tests deliver their own events rather than through
+ * the helpers below, and a silent delivery is worth as little there.
  */
-function refuseSilence(handlers: number, channel: string): void {
+export function refuseSilence(handlers: number, channel: string): void {
   if (handlers > 0) return
 
   throw new Error(

@@ -6,6 +6,7 @@ import type { AgentModel } from '@core/chats.js'
 import type { AgentEvent } from '@core/events.js'
 
 import type { Result } from '../../../preload/index.js'
+import { refuseSilence } from '../test/chat.js'
 import { held } from '../test/held.js'
 import { octopus } from '../test/octopus.js'
 import { useModels } from './useModels.js'
@@ -30,7 +31,10 @@ const SONNET: AgentModel = {
 
 /** Delivers an event the way the bridge does, to whoever subscribed. */
 function emit(event: AgentEvent): void {
-  const [subscriber] = vi.mocked(octopus().chats.onEvent).mock.calls.at(-1) ?? []
+  const calls = vi.mocked(octopus().chats.onEvent).mock.calls
+  refuseSilence(calls.length, 'chats.onEvent')
+
+  const [subscriber] = calls.at(-1) ?? []
   subscriber?.({ chatId: 'chat-1', workspaceId: 'planner/kyiv', event })
 }
 
