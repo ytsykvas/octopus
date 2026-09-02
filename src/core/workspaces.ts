@@ -363,13 +363,20 @@ export interface WorkspaceExec {
 }
 
 /**
- * Removes a workspace's worktree, and optionally its branch.
+ * Answers whether a workspace may be removed, and throws saying why if not.
+ *
+ * Separate from the removal itself because the caller destroys things this
+ * function knows nothing about — a workspace's conversations, and the cleanup
+ * script that drops its database. Those go first, so that a live session is
+ * not left pointed at a directory about to vanish; and a refusal after them is
+ * a refusal that has already cost the user their history. So the question is
+ * asked on its own, before any of it.
  *
  * Uncommitted work blocks the removal unless forced: git refuses on its own,
  * but checking first lets the UI explain what is at stake instead of showing
  * a failed command.
  */
-export async function removeWorkspace(
+export async function ensureRemovable(
   workspace: Workspace,
   exec: WorkspaceExec,
   options: RemoveOptions = {}
@@ -415,14 +422,43 @@ export async function removeWorkspace(
       )
     }
   }
+}
 
-  await discardWorktree(exec.repository, workspace.path, force)
+/**
+ * Discards a workspace's worktree, and optionally its branch.
+ *
+ * Asks nothing: `ensureRemovable` is what refuses, and by here the caller has
+ * already been told yes and acted on it. Calling this without having asked
+ * removes a workspace holding work nobody agreed to lose.
+ */
+export async function discardWorkspace(
+  workspace: Workspace,
+  exec: WorkspaceExec,
+  options: RemoveOptions = {}
+): Promise<void> {
+  await discardWorktree(exec.repository, workspace.path, options.force ?? false)
 
   if (options.deleteBranch === true) {
     // Forced by this point: either the caller asked for force, or the branch
     // was shown to be merged above. Anything else has already thrown.
     await deleteBranch(exec.repository, workspace.branch, true)
   }
+}
+
+/**
+ * Removes a workspace's worktree, and optionally its branch.
+ *
+ * The two halves in the order they belong in, for a caller with nothing of its
+ * own to destroy in between. `removeWorkspaceById` in `service.ts` is the one
+ * that has, and it calls them separately.
+ */
+export async function removeWorkspace(
+  workspace: Workspace,
+  exec: WorkspaceExec,
+  options: RemoveOptions = {}
+): Promise<void> {
+  await ensureRemovable(workspace, exec, options)
+  await discardWorkspace(workspace, exec, options)
 }
 
 /**

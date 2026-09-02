@@ -178,6 +178,16 @@ become permanent.
 Rollback is best-effort and never throws: it runs while another failure is being
 handled, and a second must not replace the first.
 
+Removal is the same rule read backwards. `removeWorkspaceById` asks
+`ensureRemovable` before it closes a single session, because everything after
+that line destroys something a refusal cannot give back — and the refusal is
+the ordinary path, not a rare one: the pane pre-ticks the delete-branch box, so
+a clean workspace whose commits are not merged refuses every time. The split
+between `ensureRemovable` and `discardWorkspace` exists so that a caller with
+work of its own to do in between cannot accidentally ask twice; asking twice is
+worse than it sounds, because the cleanup script runs in the worktree and a
+script that writes there would make the second answer differ from the first.
+
 ### An update applies every field it carries
 
 `updateProject` lists fields explicitly, which protects against writing back a
@@ -446,10 +456,21 @@ leaving the pane with nothing to draw — and does it with a confirmation, which
 second route through the tab's menu would not have carried.
 
 The sequence a closing conversation goes through — abandon its questions and its
-edits in flight, drop its `clearRequests` and `clearedTurns`, close the session,
-remove the transcript — lives in `closeOneChat`, and `closeChatsOf` is a loop
-over it. Written out twice it would drift, which is what `removeProjectById`
-did before its own cascade was factored out.
+edits in flight, drop its `clearRequests` and `clearedTurns`, close the session —
+lives in `closeOneChat`, and `closeChatsOf` is a loop over it. Written out twice
+it would drift, which is what `removeProjectById` did before its own cascade was
+factored out.
+
+The transcript is **not** among them, and the omission is deliberate. Everything
+`closeOneChat` does is memory and a child process, and it runs early — before
+the cleanup script, before the worktree goes. A transcript deleted there is
+deleted before the steps that can still fail, and a removal that then refuses
+leaves a record whose history is gone: the pane draws the conversation empty
+above an agent that remembers all of it. So `discardHistories` takes the
+transcripts after the state commit instead, and each of the three callers that
+wants them gone calls it — the same order, and the same reasoning, as
+`removeProjectData`. A file nothing points at is litter; a record without its
+history is a lie.
 
 `renameChat` trims what it is handed and stores null for an empty name. Trimmed
 in the service rather than at the boundary, because what reaches the record is

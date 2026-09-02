@@ -5569,6 +5569,82 @@ describe('the agent chat', () => {
       await expect(service.chatHistory(chat.id)).resolves.toEqual([])
     })
 
+    /*
+     * The mirror of the test above, and the ordinary path rather than the
+     * exotic one: the pane pre-ticks the branch checkbox and only forces when
+     * the worktree is dirty, so a clean workspace whose commits are not merged
+     * refuses every time. Cancelling must cost nothing — the refusal has to
+     * happen before the sessions close and before the cleanup runs.
+     */
+    it('keeps the conversation and runs no cleanup when the removal is refused', async () => {
+      const repo = join(dir, 'planner')
+      await initRepo(repo)
+
+      const service = await createService({
+        ...paths(dir),
+        query: fakeQuery(),
+        makeGh: () => () => Promise.reject(new Error('gh: not logged in'))
+      })
+      const project = await service.addProjectFromPath(repo)
+      const workspace = await service.createWorkspaceIn(project.id)
+
+      const marker = join(dir, 'cleaned.txt')
+      await service.saveProjectScript(
+        project.id,
+        'archive',
+        `#!/bin/sh\nprintf '%s' "$OCTOPUS_WORKSPACE_NAME" > '${marker}'\n`
+      )
+
+      const chat = await service.openChat(workspace.id)
+      await service.sendToChat(chat.id, 'work')
+
+      await writeFile(join(workspace.path, 'work.txt'), 'work\n', 'utf8')
+      await run('git', ['add', '.'], { cwd: workspace.path })
+      await run('git', ['commit', '-q', '-m', 'never merged'], { cwd: workspace.path })
+
+      await expect(
+        service.removeWorkspaceById(workspace.id, { deleteBranch: true })
+      ).rejects.toMatchObject({ code: 'branchUnmerged' })
+
+      await expect(service.chatHistory(chat.id)).resolves.toHaveLength(1)
+      expect(agent().closed()).toBe(0)
+      await expect(access(marker)).rejects.toThrow()
+      await expect(service.listWorkspaces(project.id)).resolves.toHaveLength(1)
+    })
+
+    /*
+     * The other half. Once the guards have passed there is still one way to
+     * fail — git refusing the worktree — and the records survive that, because
+     * the commit is never reached. The history has to survive with them, which
+     * is why it is discarded after the commit rather than before the guards.
+     */
+    it('keeps the history when the worktree cannot be discarded', async () => {
+      const repo = join(dir, 'planner')
+      await initRepo(repo)
+
+      const service = await createService({
+        ...paths(dir),
+        query: fakeQuery(),
+        makeExec: (cwd, options) => {
+          const exec = gitIn(cwd, options)
+          return async (args) =>
+            args[0] === 'worktree' && args[1] === 'remove'
+              ? Promise.reject(new Error('fatal: validation failed, cannot remove working tree'))
+              : exec(args)
+        }
+      })
+      const project = await service.addProjectFromPath(repo)
+      const workspace = await service.createWorkspaceIn(project.id)
+
+      const chat = await service.openChat(workspace.id)
+      await service.sendToChat(chat.id, 'work')
+
+      await expect(service.removeWorkspaceById(workspace.id, { force: true })).rejects.toThrow()
+
+      await expect(service.chatHistory(chat.id)).resolves.toHaveLength(1)
+      await expect(service.listWorkspaces(project.id)).resolves.toHaveLength(1)
+    })
+
     // A closing session goes on emitting for a moment. Writing the transcript
     // back then would leave a file nothing in the state points at.
     it('ignores events that arrive after the workspace is gone', async () => {

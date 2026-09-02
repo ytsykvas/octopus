@@ -207,6 +207,8 @@ import {
   changeCount,
   countChanges,
   createWorkspace,
+  discardWorkspace,
+  ensureRemovable,
   fileInWorkspace,
   reconcile,
   removeWorkspace,
@@ -1695,11 +1697,16 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
   }
 
   /**
-   * Ends the sessions of a workspace and discards their history.
+   * Ends a chat's session, and leaves its history where it is.
    *
-   * The records themselves go with the workspace in `removeWorkspace`; what
-   * needs doing here is the part outside the state file — a child process and
-   * a transcript, neither of which a record removal would touch.
+   * The record goes with its workspace at the caller's commit; what needs
+   * doing here is the child process, which a record removal would not touch.
+   *
+   * The transcript is deliberately not among it. Everything above is memory
+   * and a process — losing them costs a session that was ending anyway — while
+   * the transcript is the only copy of what was said, and this runs before the
+   * steps that can still fail. `discardHistories` takes it, after the record
+   * has gone.
    */
   async function closeOneChat(chat: Chat): Promise<void> {
     const session = sessions.get(chat.id)
@@ -1720,7 +1727,20 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
     // Best effort: a session that fails to close must not stop the workspace
     // from being removed, nor the tab from closing.
     await session?.close().catch(() => undefined)
-    await removeTranscript(chat.id, dataRoot).catch(() => undefined)
+  }
+
+  /**
+   * Discards the transcripts of chats whose records have already gone.
+   *
+   * After the commit, and swallowing its own failure — the same order and the
+   * same reason as `removeProjectData`. A record that outlives its history is
+   * a conversation the pane draws empty above an agent that remembers all of
+   * it; a file nothing points at is only litter. Of the two, litter.
+   */
+  async function discardHistories(chats: readonly Chat[]): Promise<void> {
+    for (const chat of chats) {
+      await removeTranscript(chat.id, dataRoot).catch(() => undefined)
+    }
   }
 
   /**
@@ -2610,6 +2630,7 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
 
     async removeProjectById(projectId) {
       const project = findProject(state, projectId)
+      const closing: Chat[] = []
 
       // The records go either way, so the directories and branches have to go
       // with them: left behind they are invisible to the app but still occupy
@@ -2618,6 +2639,11 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
         const repository = makeExec(project.repoPath)
 
         for (const workspace of workspacesOfProject(state, projectId)) {
+          // Read before the closing below, which leaves the records in place
+          // but is the last moment the chats are reachable from the state that
+          // is about to be rewritten.
+          closing.push(...chatsOfWorkspace(state, workspace.id))
+
           // The same closing `removeWorkspaceById` does, and for the same
           // reason: a session outliving its worktree holds a child process
           // pointed at a directory that no longer exists, and nothing in the
@@ -2652,6 +2678,7 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
       }
 
       await commit((current) => removeProject(current, projectId))
+      await discardHistories(closing)
 
       /*
        * After the commit, and swallowing its own failure.
@@ -2717,6 +2744,66 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
       const workspace = requireWorkspace(workspaceId)
       const project = requireProject(workspace.projectId)
 
+      // Resolved once and used twice below: the two answers have to be about
+      // the same ref, or a branch reads as unmerged against one and merged
+      // against the other.
+      const baseRef = await baseRefOf(project)
+
+      const execs = {
+        repository: makeExec(project.repoPath),
+        workspace: makeExec(workspace.path)
+      }
+      const removal = {
+        ...options,
+        // The base branch travels with the request so "is this merged" can be
+        // answered before the worktree is destroyed rather than after.
+        baseBranch: baseRef,
+        /*
+         * What git cannot see.
+         *
+         * A squash or a rebase merge rewrites the commits, so none of them is
+         * an ancestor of the base afterwards and git reports the branch as
+         * unmerged — including when it was this app's own merge button that
+         * landed it. GitHub knows better, and is asked only after git has
+         * said no.
+         *
+         * A failure here is not a failure to remove: gh may be missing or
+         * signed out, and then the git answer is the only one there is.
+         */
+        mergedRemotely: async (): Promise<boolean> => {
+          try {
+            const view = await readPullRequest(
+              workspace.branch,
+              baseRef,
+              makeGh(workspace.path),
+              makeExec(workspace.path)
+            )
+            return view.request?.state === 'merged'
+          } catch {
+            return false
+          }
+        }
+      }
+
+      /*
+       * Everything below this line destroys something, so the refusal comes
+       * first.
+       *
+       * The pane pre-ticks the delete-branch box and only forces when the
+       * worktree is dirty, so a clean workspace whose commits are not merged
+       * refuses on the ordinary path rather than a rare one. Asked afterwards,
+       * the answer arrived with the conversations already deleted and the
+       * cleanup script already run, against a workspace that then went on
+       * living — which is the opposite of what docs/core.md promises about an
+       * operation that fails.
+       */
+      await ensureRemovable(workspace, execs, removal)
+
+      // Captured before the chats are closed, because the records go with the
+      // workspace at the commit below and the transcripts are discarded after
+      // it — by which point there is nothing left to read the ids off.
+      const closing = chatsOfWorkspace(state, workspaceId)
+
       // Before the worktree goes: the session's working directory is about to
       // stop existing, and a live agent would keep a child process pointed at
       // a path that is no longer there.
@@ -2744,48 +2831,23 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
         defaultBranch: shortBranchName(project.baseBranch)
       })
 
-      // Resolved once and used twice below: the two answers have to be about
-      // the same ref, or a branch reads as unmerged against one and merged
-      // against the other.
-      const baseRef = await baseRefOf(project)
+      /*
+       * The one window this ordering cannot close, recorded rather than left
+       * to be rediscovered: the script has run, and `discardWorkspace` below
+       * can still fail on a worktree git will not let go of. The workspace
+       * then lives on without whatever the cleanup took back.
+       *
+       * It is irreducible. The script runs *in* the worktree, so it cannot be
+       * moved after the removal, and git offers no way to ask whether a
+       * worktree would come away without trying it. What the ordering does buy
+       * is that the refusals cannot land here: everything reachable by asking
+       * has been asked above.
+       */
 
-      await removeWorkspace(
-        workspace,
-        { repository: makeExec(project.repoPath), workspace: makeExec(workspace.path) },
-        // The base branch travels with the request so "is this merged" can be
-        // answered before the worktree is destroyed rather than after.
-        {
-          ...options,
-          baseBranch: baseRef,
-          /*
-           * What git cannot see.
-           *
-           * A squash or a rebase merge rewrites the commits, so none of them is
-           * an ancestor of the base afterwards and git reports the branch as
-           * unmerged — including when it was this app's own merge button that
-           * landed it. GitHub knows better, and is asked only after git has
-           * said no.
-           *
-           * A failure here is not a failure to remove: gh may be missing or
-           * signed out, and then the git answer is the only one there is.
-           */
-          mergedRemotely: async () => {
-            try {
-              const view = await readPullRequest(
-                workspace.branch,
-                baseRef,
-                makeGh(workspace.path),
-                makeExec(workspace.path)
-              )
-              return view.request?.state === 'merged'
-            } catch {
-              return false
-            }
-          }
-        }
-      )
+      await discardWorkspace(workspace, execs, removal)
 
       await commit((current) => removeWorkspaceRecord(current, workspaceId))
+      await discardHistories(closing)
     },
 
     async workspaceHasChanges(workspaceId) {
@@ -3055,6 +3117,7 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
       // closing the tab that was running leaves the workspace idle, and the
       // list has to hear about it.
       await commitChats(chat.workspaceId, (current) => removeChat(current, chatId))
+      await discardHistories([chat])
     },
 
     listChats(workspaceId) {
