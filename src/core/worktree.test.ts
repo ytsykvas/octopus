@@ -7,7 +7,7 @@
  */
 
 import { execFile } from 'node:child_process'
-import { mkdtemp, rm, writeFile } from 'node:fs/promises'
+import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { promisify } from 'node:util'
@@ -342,6 +342,22 @@ describe('changedFiles', () => {
     await writeFile(join(dir, 'new.txt'), 'work\n', 'utf8')
     await exec(['add', '.'])
     await expect(changedFiles(exec)).resolves.toHaveLength(1)
+  })
+
+  /*
+   * The number this feeds is what tells somebody which of eight parallel
+   * workspaces has done work, and `git status --porcelain` defaults to
+   * `-unormal`: a directory git has never seen is reported as one `?? dir/`
+   * line however much is under it. An agent that wrote thirty files into a new
+   * folder read as "1 changed file".
+   */
+  it('counts every file in a directory git has not seen before', async () => {
+    await mkdir(join(dir, 'src', 'feature'), { recursive: true })
+    await writeFile(join(dir, 'src', 'feature', 'one.ts'), 'x\n', 'utf8')
+    await writeFile(join(dir, 'src', 'feature', 'two.ts'), 'x\n', 'utf8')
+    await writeFile(join(dir, 'src', 'three.ts'), 'x\n', 'utf8')
+
+    await expect(changedFiles(exec)).resolves.toHaveLength(3)
   })
 })
 

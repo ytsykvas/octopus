@@ -218,13 +218,19 @@ export async function renameBranch(exec: GitExec, from: string, to: string): Pro
 }
 
 /**
- * Paths reported by `git status --porcelain`.
+ * Every path `git status` reports, one per line.
  *
  * Both staged and unstaged changes count, as do untracked files: all of them
  * are work that would be lost with the worktree.
+ *
+ * `-uall` because the default, `-unormal`, reports a directory git has never
+ * seen as a single `?? dir/` entry however much is under it. The count this
+ * feeds is what tells somebody which of eight parallel workspaces has done
+ * work, and an agent that wrote thirty files into one new folder read as one
+ * changed file.
  */
 export async function changedFiles(exec: GitExec): Promise<string[]> {
-  const output = await exec(['status', '--porcelain'])
+  const output = await exec(['status', '--porcelain', '-uall'])
   return output.split('\n').filter((line) => line.trim() !== '')
 }
 
