@@ -3193,6 +3193,78 @@ describe('the agent chat', () => {
       expect(agents[0]?.closed()).toBe(1)
     })
 
+    /*
+     * The probe used to be started through `startFor`, which registers it in
+     * the session map under a real chat's id — so a message sent while it was
+     * out was handed to the probe, and the probe's `finally` then closed the
+     * process answering it. The turn vanished without a word: the message in
+     * the log, the tab busy, and no result ever coming.
+     *
+     * Narrowest on the first send of a run, which is also the one most likely
+     * to land on a mount or a focus refresh.
+     */
+    it('does not close a session a message was sent into', async () => {
+      const { service, workspaceId } = await withWorkspace()
+      const chat = await service.openChat(workspaceId)
+
+      const reading = service.refreshSubscriptionUsage()
+      await service.sendToChat(chat.id, 'hello')
+      await reading
+
+      // The conversation's own session, still alive and still holding what was
+      // sent to it — a probe that had been adopted would have taken both.
+      expect(agents.at(-1)?.sent).toEqual(['hello'])
+      expect(agents.at(-1)?.closed()).toBe(0)
+      expect(service.listChats(workspaceId)[0]?.status).toBe('running')
+    })
+
+    /*
+     * The probe used to run as the conversation. `startFor` wires the ordinary
+     * event handler for that chat, resumes its session id and fires the
+     * commands and models reads against its record — so a background gauge
+     * committed writes to a conversation nobody had spoken in, and a probe
+     * whose spawn threw put a red row and a line naming the agent binary into
+     * somebody's transcript.
+     *
+     * `knownCommands` is the visible half of that, and the one a filter on
+     * events alone would have left behind.
+     */
+    it('writes nothing into the conversation it is asked through', async () => {
+      offeredCommands = () =>
+        Promise.resolve([
+          { name: 'deploy', description: '', aliases: [] } as unknown as SlashCommand
+        ])
+      const { service, workspaceId, events } = await withWorkspace()
+      const chat = await service.openChat(workspaceId)
+
+      await service.refreshSubscriptionUsage()
+
+      expect(events).toEqual([])
+      expect(service.listChats(workspaceId)[0]?.knownCommands).toEqual([])
+      await expect(service.chatHistory(chat.id)).resolves.toEqual([])
+      expect(service.listChats(workspaceId)[0]?.status).toBe('idle')
+    })
+
+    /*
+     * A gauge has nothing to permit, so a probe asked for permission refuses
+     * rather than putting a card in front of somebody. It cannot happen while
+     * the probe only issues a control request — but the alternative is a
+     * dialog attributed to a conversation nobody spoke in, which is the whole
+     * shape this fix exists to remove.
+     */
+    it('grants a probe nothing, rather than asking about it', async () => {
+      const { service, workspaceId } = await withWorkspace()
+      await service.openChat(workspaceId)
+
+      const reading = service.refreshSubscriptionUsage()
+      await vi.waitFor(() => {
+        expect(agents).toHaveLength(1)
+      })
+
+      await expect(agents[0]?.ask('Bash')).resolves.toMatchObject({ behavior: 'deny' })
+      await reading
+    })
+
     // Four things can ask at once — a finished turn, the window regaining
     // focus, the timer, a press — and each starting its own read would spawn
     // its own CLI to answer the same question.

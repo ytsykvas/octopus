@@ -32,6 +32,7 @@ import {
   ChatError,
   type ChatStatus,
   DEFAULT_AGENT,
+  DEFAULT_EFFORT,
   type EffortChoice,
   EXIT_PLAN_MODE,
   forkChat as forkChatRecord,
@@ -1166,13 +1167,14 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
    * would spawn its own CLI. The one in flight is shared instead.
    *
    * A session already running answers for nothing: one control request against
-   * a process that exists, about 260ms. With none, one is started — and closed
-   * again, which the button did not do: `startFor` registers into `sessions`,
-   * so every press used to leave an agent alive for the rest of the run.
+   * a process that exists, about 260ms. With none, `startProbe` opens one of
+   * its own and closes it again.
    *
-   * Started in a conversation that already exists rather than a new one, for
-   * the reason `openChat` is lazy: a workspace nobody has spoken to has no
-   * record, and filling a gauge is not enough to give it one.
+   * A workspace is still needed for its worktree, and it is found through a
+   * conversation that already exists, for the reason `openChat` is lazy: a
+   * workspace nobody has spoken to has no record, and filling a gauge is not
+   * enough to give it one. The chat is the *address* of a directory here and
+   * nothing more — see `startProbe` for why that distinction is the fix.
    */
   function askAccount(): Promise<UsageOutcome> {
     reading ??= (async (): Promise<UsageOutcome> => {
@@ -1184,13 +1186,10 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
         const workspace = state.workspaces.find((item) => item.id === chat?.workspaceId)
         if (!chat || !workspace) return { kind: 'nowhereToAsk' }
 
-        const probe = await startFor(chat, workspace, await sourcesFor(workspace))
+        const probe = startProbe(workspace)
         try {
           return await readWindows(probe)
         } finally {
-          // Removed before it is closed: a closed session left in the map is
-          // one the next caller would ask and get nothing from.
-          sessions.delete(chat.id)
           await probe.close()
         }
       } finally {
@@ -1974,6 +1973,57 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
     // is gone is a broken state, and quietly handing it the full set of sources
     // is the one answer it must not get.
     return sourcesIn(workspace.path, requireProject(workspace.projectId))
+  }
+
+  /**
+   * A session of the app's own, for asking the account a question.
+   *
+   * Not `startFor`, and that is the whole of the difference. `startFor` makes a
+   * session **the conversation's**: it registers it in `sessions` under the
+   * chat's id, wires the ordinary event handler, resumes the chat's session id
+   * and fires the commands and models reads against that record. A background
+   * gauge borrowing all of that had three consequences, and none of them was
+   * visible from the button that caused it.
+   *
+   * A message sent while the probe was out was handed to the probe —
+   * `sendToChat` takes whatever is in the map — and the probe's `finally` then
+   * closed the process answering it. The turn vanished: the message in the log,
+   * the tab busy, and no result ever coming. If that message was `/clear`, the
+   * chat stayed in `clearRequests` with nothing left to consume it, and the
+   * next reset the CLI sent — the one that follows an approved plan — was read
+   * as the user's clear and took the transcript with it.
+   *
+   * And a probe that could not spawn became an `error` event in whichever chat
+   * was created last, in any project, turning its row red every three minutes
+   * with a message naming the agent binary rather than the missing worktree.
+   *
+   * So: nothing in the map, nothing to adopt it, and the close is
+   * unconditional again. A sink that drops every event rather than a filter,
+   * because `handleEvent` is what writes the transcript, the status and the
+   * session id. No settings sources and no skills — a usage figure is an
+   * account's, not a repository's, and it is worth saying that a repository's
+   * hooks therefore do not run for a gauge. Nothing to permit, so permission
+   * is refused rather than asked about.
+   */
+  function startProbe(workspace: Workspace): AgentSession {
+    return startSession(
+      {
+        cwd: workspace.path,
+        resume: null,
+        settingSources: [],
+        permissionMode: 'default',
+        model: null,
+        effort: DEFAULT_EFFORT,
+        allowedTools: [],
+        additionalDirectories: [],
+        skillOverrides: {}
+      },
+      {
+        query: runQuery,
+        onEvent: () => undefined,
+        askPermission: () => Promise.resolve({ allow: false, message: DENIED })
+      }
+    )
   }
 
   async function startFor(

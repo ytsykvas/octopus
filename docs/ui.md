@@ -914,9 +914,23 @@ no longer is, is the only way.
 **Reads are coalesced, and a session started to answer is closed again.** All
 four askers can land at once, and each starting its own read would spawn its own
 CLI to ask one question, so the one in flight is shared. And a probe is shut in
-a `finally`: `startFor` registers into the session map, so every press used to
-leave an agent running for the rest of the session — which mattered little at
-one press and would be one more agent every three minutes now.
+a `finally`, which it was not at first — one press left an agent running for the
+rest of the session, and that would now be one more every three minutes.
+
+**A probe is the app's own session, not the conversation's.** It borrowed one at
+first — started through the same function a message uses, which registers it in
+the session map under a real conversation's id. Three things followed, and the
+gauge showed none of them: a message sent while the probe was out was handed to
+the probe and then killed by its `finally`, taking the turn with it; a `/clear`
+sent that way left the conversation armed to discard its transcript on the next
+reset it saw; and a probe that could not spawn wrote a red row and the agent
+binary's name into whichever conversation was created last, in any project.
+
+So it now starts a session of its own: nothing in the map for a message to
+adopt, an event sink that drops everything rather than the handler that writes
+transcripts and statuses, and no settings sources — a usage figure belongs to an
+account rather than to a repository, so a repository's hooks do not run for a
+gauge.
 
 **Having nothing to draw is four sentences, not one.** Never read; this account
 has no plan windows at all; there was nowhere to ask through; the read failed.
