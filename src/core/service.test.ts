@@ -4969,9 +4969,20 @@ describe('the agent chat', () => {
       expect(workspace?.status).toBe('running')
     })
 
-    // Declining ends the turn rather than continuing it, so the workspace is
-    // idle — leaving it 'running' would show a spinner against nothing.
-    it('leaves the workspace idle when the answer is no', async () => {
+    /*
+     * Declining does **not** end the turn — this test used to say it did, and
+     * asserted `idle` on the strength of it. The SDK's deny carries an
+     * `interrupt` flag and `agent.ts` deliberately does not set it, so the
+     * refusal reaches the model as a tool result and the same turn carries on.
+     * Deny-with-feedback is the app's steering mechanism, and the plan dialog's
+     * "keep planning" is exactly this path.
+     *
+     * So the workspace was drawn grey for the whole remainder of every turn
+     * somebody steered — the state the list exists to get right, wrong at the
+     * moment the agent is doing the most work. Nothing put it back either: no
+     * agent event writes `running`.
+     */
+    it('leaves the workspace running when the answer is no', async () => {
       const { service, workspaceId, events } = await withWorkspace()
       const chat = await service.openChat(workspaceId)
       await service.sendToChat(chat.id, 'delete it')
@@ -4980,7 +4991,24 @@ describe('the agent chat', () => {
       await service.answerPermission(await waitForRequest(events), 'deny')
 
       const [workspace] = await service.listWorkspaces('planner')
-      expect(workspace?.status).toBe('idle')
+      expect(workspace?.status).toBe('running')
+      expect(service.listChats(workspaceId)[0]?.status).toBe('running')
+    })
+
+    // Self-correcting rather than a second thing to remember: the turn always
+    // ends in a result, and that is what puts the status back.
+    it('goes idle once the turn that survived the refusal ends', async () => {
+      const { service, workspaceId, events } = await withWorkspace()
+      const chat = await service.openChat(workspaceId)
+      await service.sendToChat(chat.id, 'delete it')
+
+      void agent().ask('Bash')
+      await service.answerPermission(await waitForRequest(events), 'deny')
+      agent().emit(resultMessage)
+
+      await vi.waitFor(() => {
+        expect(service.listChats(workspaceId)[0]?.status).toBe('idle')
+      })
     })
 
     // Already answered, or the session it belonged to is gone.

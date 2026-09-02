@@ -3333,7 +3333,27 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
         // the window had dropped its copy, and `pendingPermission` had none.
         pending.delete(requestId)
         request.resolve({ allow: false, message: note === '' ? DENIED : note })
-        await setChatStatus(request.chatId, 'idle')
+
+        /*
+         * `running`, not `idle`: a refusal does not end the turn. `agent.ts`
+         * returns the SDK's deny without its `interrupt` flag on purpose, so
+         * the refusal reaches the model as a tool result and the same turn
+         * carries on — which is what makes deny-with-feedback the app's
+         * steering mechanism, and what the plan dialog's "keep planning" is.
+         * Written `idle`, the workspace went grey for the whole remainder of
+         * every steered turn, and nothing put it back: no agent event writes
+         * `running`.
+         *
+         * Leaving it unwritten is worse, not better — the chat would stay
+         * `waiting_permission`, which `workspaceStatusFrom` ranks above
+         * `running`, so the sidebar would show the amber "come and answer this"
+         * mark against a question nobody can answer any more.
+         *
+         * Self-correcting: the turn always ends in a `result`, which writes
+         * `idle` or `error`, and `settleStatuses` clears a `running` a crash
+         * left behind.
+         */
+        await setChatStatus(request.chatId, 'running')
         return
       }
 
