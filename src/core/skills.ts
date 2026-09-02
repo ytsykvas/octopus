@@ -30,6 +30,7 @@ import { join } from 'node:path'
 import { type Document, parseDocument, stringify } from 'yaml'
 import { z } from 'zod'
 
+import { CodedError } from './codedError.js'
 import { skillsDirOf } from './paths.js'
 import { isSkillName, type SkillScope } from './skillNames.js'
 
@@ -62,15 +63,8 @@ export type SkillErrorCode =
   | 'skillUrlRefused'
 
 /** A skill could not be read, written or imported, with a reason to show. */
-export class SkillError extends Error {
-  constructor(
-    readonly code: SkillErrorCode,
-    readonly params: Readonly<Record<string, string>>,
-    message: string
-  ) {
-    super(message)
-    this.name = 'SkillError'
-  }
+export class SkillError extends CodedError<SkillErrorCode> {
+  override readonly name = 'SkillError'
 }
 
 /** What a list needs to draw one row. */

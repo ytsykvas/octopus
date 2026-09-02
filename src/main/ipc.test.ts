@@ -607,6 +607,34 @@ describe('skills', () => {
     await expect(invoke('skills:list', store)).resolves.toMatchObject({ ok: true, value: [] })
   })
 
+  /*
+   * The code is what lets the window say this in the reader's own language.
+   * Without it every skill refusal arrived as the developer English thrown in
+   * core, with eight translations sitting unreachable behind it — which is how
+   * it shipped, because `SkillError` was missing from the list `attempt`
+   * translated and nothing tested the crossing.
+   *
+   * A verbatim repeat of the `EnvProfileError` bug above, which is why the
+   * list is no longer written by hand.
+   */
+  it('carries the reason a skill was refused across the boundary', async () => {
+    const store = { kind: 'global' }
+    await invoke('skills:save', store, 'review', { kind: 'raw', text: DOCUMENT })
+
+    await expect(
+      invoke('skills:import', store, { kind: 'text', text: DOCUMENT })
+    ).resolves.toMatchObject({
+      ok: false,
+      code: 'skillExists',
+      params: { name: 'review' }
+    })
+
+    await expect(invoke('skills:read', store, 'absent')).resolves.toMatchObject({
+      ok: false,
+      code: 'skillMissing'
+    })
+  })
+
   it('imports a document handed over as text', async () => {
     await expect(
       invoke('skills:import', { kind: 'global' }, { kind: 'text', text: DOCUMENT })
