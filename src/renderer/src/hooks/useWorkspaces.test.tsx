@@ -12,7 +12,7 @@ import type { ConfirmRequest, ConfirmResult } from './useConfirm.js'
 import { useWorkspaces } from './useWorkspaces.js'
 
 type Confirm = (request: ConfirmRequest) => Promise<ConfirmResult>
-type OnError = (message: string) => void
+type OnError = (message: string | null) => void
 
 const project = (id: string, name: string): Project => ({
   id,
@@ -504,7 +504,7 @@ describe('useWorkspaces', () => {
     expect(result.current.flat).toEqual([])
     // Worth knowing: the failure is swallowed here, so the user sees the
     // workspaces disappear without being told why.
-    expect(onError).not.toHaveBeenCalled()
+    expect(onError).not.toHaveBeenCalledWith(expect.any(String))
   })
 
   // The same guard that protects an unmounted window also protects a live one:
@@ -555,7 +555,7 @@ describe('useWorkspaces', () => {
       expect(window.octopus.workspaces.create).toHaveBeenCalledWith('planner')
       expect(result.current.flat).toEqual([anna, bob])
       expect(result.current.editingId).toBe('planner/bob')
-      expect(onError).not.toHaveBeenCalled()
+      expect(onError).not.toHaveBeenCalledWith(expect.any(String))
     })
 
     it('explains a refused creation and leaves nothing being renamed', async () => {
@@ -681,7 +681,7 @@ describe('useWorkspaces', () => {
 
       expect(window.octopus.workspaces.rename).toHaveBeenCalledWith('planner/anna', 'billing')
       expect(result.current.flat).toEqual([renamed])
-      expect(onError).not.toHaveBeenCalled()
+      expect(onError).not.toHaveBeenCalledWith(expect.any(String))
     })
 
     it('reports a rejected name and leaves the list alone', async () => {
@@ -729,7 +729,7 @@ describe('useWorkspaces', () => {
         force: false,
         deleteBranch: false
       })
-      expect(onError).not.toHaveBeenCalled()
+      expect(onError).not.toHaveBeenCalledWith(expect.any(String))
     })
 
     // Uncommitted work is the only thing here nothing else keeps a copy of, so

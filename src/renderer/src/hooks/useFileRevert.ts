@@ -32,7 +32,7 @@ export interface FileRevertController {
 export function useFileRevert(
   workspaceId: string | null,
   confirm: (request: ConfirmRequest) => Promise<ConfirmResult>,
-  onError: (message: string) => void
+  onError: (message: string | null) => void
 ): FileRevertController {
   const { t } = useTranslation()
   const describeFailure = useErrorMessage()
@@ -52,6 +52,7 @@ export function useFileRevert(
 
       if (!answer.confirmed) return false
 
+      onError(null)
       const result = await window.octopus.workspaces.revertFile(workspaceId, path, oldPath)
       if (!result.ok) {
         onError(describeFailure(result))

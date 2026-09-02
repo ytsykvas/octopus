@@ -28,7 +28,12 @@ interface UseProjects {
  */
 export function useProjects(
   confirm: (request: ConfirmRequest) => Promise<ConfirmResult>,
-  onError: (message: string) => void
+  /**
+   * Reports a failure to the window — or, with `null`, that an attempt has
+   * begun and the last one's message is no longer about anything. Without the
+   * `null` the banner had no way to leave.
+   */
+  onError: (message: string | null) => void
 ): UseProjects {
   const { t } = useTranslation()
   const describeFailure = useErrorMessage()
@@ -69,6 +74,7 @@ export function useProjects(
   const addFromDisk = useCallback(async (): Promise<Project | null> => {
     setBusy(true)
     try {
+      onError(null)
       const result = await window.octopus.projects.add()
       if (!result.ok) {
         onError(describeFailure(result))
@@ -85,6 +91,7 @@ export function useProjects(
 
   const update = useCallback(
     async (projectId: string, patch: ProjectPatch): Promise<boolean> => {
+      onError(null)
       const result = await window.octopus.projects.update(projectId, patch)
       if (!result.ok) {
         onError(describeFailure(result))
@@ -118,6 +125,7 @@ export function useProjects(
 
       if (!answer.confirmed) return false
 
+      onError(null)
       const result = await window.octopus.projects.remove(projectId)
       if (!result.ok) {
         onError(describeFailure(result))

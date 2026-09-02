@@ -98,6 +98,25 @@ export function App(): React.JSX.Element {
   const [checkingGitHub, setCheckingGitHub] = useState(false)
   const [selectedWorkspaceId, setSelectedWorkspaceId] = useState<string | null>(null)
   const [editingProjectId, setEditingProjectId] = useState<string | null>(null)
+
+  /*
+   * The error banner follows the selection out, and no further.
+   *
+   * One transient failure — a config write that lost a race, a `gh` not signed
+   * in yet, a rename git refused — used to pin a red sentence to the top of the
+   * centre pane for the rest of the session, above conversations in projects
+   * it had nothing to do with: seven writers and nothing that ever wrote
+   * `null`. Cleared during render when the selection moves, the way `useChat`
+   * resets on its chat, rather than in each of the four handlers that move it.
+   * The hooks clear it themselves on entry to a new attempt, which is the
+   * other half: a fresh error told apart from an old one.
+   */
+  const selection = `${selectedProjectId ?? ''}/${selectedWorkspaceId ?? ''}`
+  const [shownSelection, setShownSelection] = useState(selection)
+  if (selection !== shownSelection) {
+    setShownSelection(selection)
+    setError(null)
+  }
   /** Which section that dialog opens on, for the callers that know. */
   const [editingProjectSection, setEditingProjectSection] = useState<ProjectSection>('general')
 

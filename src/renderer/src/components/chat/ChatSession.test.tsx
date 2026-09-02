@@ -50,7 +50,7 @@ interface PaneProps {
   readonly defaultModel?: string | null
   readonly defaultPlanModel?: string | null
   /** Where a failure the strip owns is reported, as `App` reports it. */
-  readonly onError?: (message: string) => void
+  readonly onError?: (message: string | null) => void
 }
 
 /**

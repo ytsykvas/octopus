@@ -55,7 +55,7 @@ interface UseWorkspaces {
 export function useWorkspaces(
   projects: readonly Project[],
   confirm: (request: ConfirmRequest) => Promise<ConfirmResult>,
-  onError: (message: string) => void
+  onError: (message: string | null) => void
 ): UseWorkspaces {
   const { t } = useTranslation()
   const describeFailure = useErrorMessage()
@@ -267,6 +267,7 @@ export function useWorkspaces(
       setCreating(true)
 
       try {
+        onError(null)
         const result = await window.octopus.workspaces.create(projectId)
         if (!result.ok) {
           onError(describeFailure(result))
@@ -287,6 +288,7 @@ export function useWorkspaces(
 
   const rename = useCallback(
     async (workspaceId: string, name: string) => {
+      onError(null)
       const result = await window.octopus.workspaces.rename(workspaceId, name)
       if (!result.ok) {
         onError(describeFailure(result))
@@ -325,6 +327,7 @@ export function useWorkspaces(
 
       if (!answer.confirmed) return
 
+      onError(null)
       const result = await window.octopus.workspaces.remove(workspaceId, {
         force: hasChanges,
         deleteBranch: answer.checked

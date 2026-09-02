@@ -145,7 +145,7 @@ export function useChatTabs(
   workspaceId: string | null,
   confirm: (request: ConfirmRequest) => Promise<ConfirmResult>,
   onChats: (workspaceId: string, chats: readonly ChatTab[]) => void,
-  onError: (message: string) => void
+  onError: (message: string | null) => void
 ): ChatTabsController {
   const { t } = useTranslation()
   const describeFailure = useErrorMessage()
@@ -337,6 +337,7 @@ export function useChatTabs(
       }
     }
 
+    report.current(null)
     const created = await window.octopus.chats.create(id)
     if (shown.current !== id) return
 
@@ -355,6 +356,7 @@ export function useChatTabs(
       /* v8 ignore next */
       if (id === null) return
 
+      report.current(null)
       const forked = await window.octopus.chats.fork(chatId)
       if (shown.current !== id) return
 
@@ -399,6 +401,7 @@ export function useChatTabs(
         if (!answer.confirmed || shown.current !== id) return
       }
 
+      report.current(null)
       const closed = await window.octopus.chats.close(chatId)
       if (shown.current !== id) return
 
@@ -420,6 +423,7 @@ export function useChatTabs(
 
       setEditingKey(null)
 
+      report.current(null)
       const renamed = await window.octopus.chats.rename(chatId, title)
       if (shown.current !== id) return
 

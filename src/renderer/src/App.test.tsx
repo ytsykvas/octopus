@@ -640,6 +640,29 @@ describe('App', () => {
     expect(screen.queryByText('/tmp/planner/bob')).not.toBeInTheDocument()
   })
 
+  /*
+   * One transient failure used to pin a red sentence to the top of the centre
+   * pane for the rest of the session, above conversations in projects it had
+   * nothing to do with. A failure about one project does not follow the reader
+   * into another.
+   */
+  it('drops the error banner when another project is opened', async () => {
+    givenTwoProjects()
+    vi.mocked(window.octopus.workspaces.create).mockResolvedValue({
+      ok: false,
+      error: 'no branch to start from'
+    })
+    const user = await openApp()
+    await user.click(await screen.findByRole('button', { name: 'LE' }))
+
+    await user.keyboard('{Meta>}{Shift>}N{/Shift}{/Meta}')
+    expect(await screen.findByText(/no branch to start from/)).toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: 'PL' }))
+
+    expect(screen.queryByText(/no branch to start from/)).not.toBeInTheDocument()
+  })
+
   it('creates nothing with Cmd+Shift+N while no project is open', async () => {
     givenTwoProjects()
     const user = await openApp()

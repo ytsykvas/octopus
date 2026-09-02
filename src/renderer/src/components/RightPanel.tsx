@@ -173,7 +173,7 @@ interface RightPanelProps {
   readonly envFile: string
   /** Tells the window a branch's pull request has changed, so the list re-marks. */
   readonly onRequestChanged: () => void
-  readonly onError: (message: string) => void
+  readonly onError: (message: string | null) => void
 }
 
 export function RightPanel({
@@ -304,6 +304,7 @@ export function RightPanel({
   }, [projectId, defaultEnvProfile])
 
   const setWorkspaceProfile = async (workspaceId: string, name: string | null): Promise<void> => {
+    onError(null)
     const done = await window.octopus.workspaces.setEnvProfile(workspaceId, name)
     if (done.ok) onScriptsChanged()
     else onError(describeFailure(done))
@@ -783,6 +784,7 @@ export function RightPanel({
               size="sm"
               onClick={() => {
                 void (async () => {
+                  onError(null)
                   const done = await window.octopus.workspaces.approveScripts(activeWorkspaceId)
                   if (done.ok) onScriptsChanged()
                   else onError(describeFailure(done))

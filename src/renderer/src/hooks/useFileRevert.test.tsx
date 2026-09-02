@@ -90,7 +90,9 @@ describe('useFileRevert', () => {
     await expect(result.current.revert('a.txt', null)).resolves.toBe(false)
     // Not the raw English, and not nothing: a code with no localised message
     // renders as an empty string, which `not.stringContaining` would accept.
-    const message: string = vi.mocked(onError).mock.calls[0]?.[0] ?? ''
+    // The last call, not the first: an attempt begins by clearing the previous
+    // message with `null`, and the refusal is what follows it.
+    const message: string = vi.mocked(onError).mock.calls.at(-1)?.[0] ?? ''
     expect(message).not.toContain('raw')
     expect(message.length).toBeGreaterThan(0)
   })

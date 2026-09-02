@@ -8,7 +8,7 @@ import type { ConfirmRequest, ConfirmResult } from './useConfirm.js'
 import { useProjects } from './useProjects.js'
 
 type Confirm = (request: ConfirmRequest) => Promise<ConfirmResult>
-type OnError = (message: string) => void
+type OnError = (message: string | null) => void
 
 const planner: Project = {
   id: 'planner',
@@ -180,7 +180,7 @@ describe('useProjects', () => {
       const added = await act(() => result.current.addFromDisk())
 
       expect(added).toBeNull()
-      expect(onError).not.toHaveBeenCalled()
+      expect(onError).not.toHaveBeenCalledWith(expect.any(String))
       // Only the load on mount: cancelling has nothing to reload.
       expect(window.octopus.projects.list).toHaveBeenCalledTimes(1)
     })
@@ -287,6 +287,31 @@ describe('useProjects', () => {
       expect(onError).toHaveBeenCalledWith('The name cannot be empty.')
       // A failed update leaves nothing to reload.
       expect(window.octopus.projects.list).toHaveBeenCalledTimes(1)
+    })
+
+    /*
+     * The message is the previous attempt's, and a new attempt is the moment it
+     * stops being true. Cleared on entry — `null` down the same callback — so
+     * the window can tell a fresh error from an hour-old one, which is the
+     * half a banner with no dismiss control had no way to say.
+     */
+    it('clears the last refusal when a new attempt begins', async () => {
+      listReturns(planner)
+      vi.mocked(window.octopus.projects.update)
+        .mockResolvedValueOnce({ ok: false, error: 'busy' })
+        .mockResolvedValue({ ok: true, value: undefined })
+      const onError = vi.fn<OnError>()
+
+      const { result } = renderHook(() => useProjects(accepts(), onError))
+      await waitFor(() => {
+        expect(result.current.all).toEqual([planner])
+      })
+
+      await act(() => result.current.update('planner', { name: 'One' }))
+      expect(onError).toHaveBeenLastCalledWith(expect.stringContaining('busy'))
+
+      await act(() => result.current.update('planner', { name: 'Two' }))
+      expect(onError).toHaveBeenLastCalledWith(null)
     })
   })
 

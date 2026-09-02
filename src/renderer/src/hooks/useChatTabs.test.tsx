@@ -16,7 +16,7 @@ const refused = (): Promise<ConfirmResult> => Promise.resolve({ confirmed: false
 interface Options {
   readonly confirm?: (request: ConfirmRequest) => Promise<ConfirmResult>
   readonly onChats?: (workspaceId: string, tabs: readonly ChatTab[]) => void
-  readonly onError?: (message: string) => void
+  readonly onError?: (message: string | null) => void
 }
 
 interface Shown {
