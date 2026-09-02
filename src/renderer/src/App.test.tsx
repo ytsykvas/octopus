@@ -610,6 +610,36 @@ describe('App', () => {
     expect(window.octopus.workspaces.create).toHaveBeenCalledWith('ledger')
   })
 
+  /*
+   * A modal takes the keyboard, and the window's shortcuts did not know it.
+   * The sharpest case is Project settings → Repository, which re-reads the
+   * checkout's scripts whenever the selected workspace changes — so ⌃2 pressed
+   * behind the dialog changed the list sitting above the trust checkbox, and
+   * ⌘⇧N made a workspace and put an inert rename field into focus behind it.
+   */
+  it('creates nothing with Cmd+Shift+N while a dialog is open', async () => {
+    givenTwoProjects()
+    const user = await openApp()
+    await user.click(await screen.findByRole('button', { name: 'LE' }))
+    await openProjectSettings(user, 'LE')
+
+    await user.keyboard('{Meta>}{Shift>}N{/Shift}{/Meta}')
+
+    expect(window.octopus.workspaces.create).not.toHaveBeenCalled()
+  })
+
+  it('leaves the workspace alone on a digit pressed behind a dialog', async () => {
+    givenTwoProjects()
+    const user = await openApp()
+    await user.click(await screen.findByRole('button', { name: 'PL' }))
+    await user.click(screen.getByRole('button', { name: 'Terminal' }))
+    await openProjectSettings(user, 'PL')
+
+    await user.keyboard('{Control>}2{/Control}')
+
+    expect(screen.queryByText('/tmp/planner/bob')).not.toBeInTheDocument()
+  })
+
   it('creates nothing with Cmd+Shift+N while no project is open', async () => {
     givenTwoProjects()
     const user = await openApp()

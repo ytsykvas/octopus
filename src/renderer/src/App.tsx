@@ -309,6 +309,22 @@ export function App(): React.JSX.Element {
   // workspace's conversations.
   useEffect(() => {
     const onKey = (event: KeyboardEvent): void => {
+      /*
+       * A modal takes the keyboard, and nothing below asks whether one is open.
+       * `Modal` is the only `<dialog>` in the renderer and `showModal()` is how
+       * every one of them opens — Settings, Project settings, the repository
+       * picker, every confirmation — so the DOM is the one source of truth,
+       * and it covers the confirmation too, whose open state its hook does not
+       * expose. Asked here rather than threaded through as four booleans.
+       *
+       * What it prevented: ⌃2 behind Project settings re-read the checkout's
+       * scripts into the list sitting above the trust checkbox, and ⌘⇧N made a
+       * workspace and put an inert rename field into focus behind the dialog.
+       * The three `role="dialog"` popovers are dismissable and deliberately not
+       * matched.
+       */
+      if (document.querySelector('dialog[open]') !== null) return
+
       if (event.metaKey && !event.shiftKey && event.key.toLowerCase() === 't') {
         event.preventDefault()
         if (chatTabs.canCreate) void chatTabs.create()
