@@ -663,6 +663,29 @@ describe('App', () => {
     expect(screen.queryByText(/no branch to start from/)).not.toBeInTheDocument()
   })
 
+  // The other half of the same reset: the key is the project and the workspace
+  // together, so moving between workspaces of one project clears it too.
+  it('drops the error banner when another workspace is opened', async () => {
+    givenTwoProjects()
+    vi.mocked(window.octopus.workspaces.rename).mockResolvedValue({
+      ok: false,
+      error: 'git refused the name'
+    })
+    const user = await openApp()
+    await user.click(await screen.findByRole('button', { name: 'PL' }))
+    await user.keyboard('{Control>}1{/Control}')
+
+    await user.dblClick(await screen.findByText('anna'))
+    const field = screen.getByTitle('Enter to save, Escape to cancel')
+    await user.clear(field)
+    await user.type(field, 'bruno{Enter}')
+    expect(await screen.findByText(/git refused the name/)).toBeInTheDocument()
+
+    await user.keyboard('{Control>}2{/Control}')
+
+    expect(screen.queryByText(/git refused the name/)).not.toBeInTheDocument()
+  })
+
   it('creates nothing with Cmd+Shift+N while no project is open', async () => {
     givenTwoProjects()
     const user = await openApp()

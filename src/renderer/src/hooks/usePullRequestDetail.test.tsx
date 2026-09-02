@@ -197,7 +197,9 @@ describe('waiting for something to settle', () => {
     await vi.advanceTimersByTimeAsync(0)
 
     emitAgentEvent({ type: 'result', ok: true, durationMs: 1, costUsd: 0 } as never)
-    await vi.advanceTimersByTimeAsync(1_000)
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(1_000)
+    })
 
     expect(octopus().workspaces.pullRequestDetail).toHaveBeenCalledTimes(1)
   })
@@ -217,6 +219,26 @@ describe('waiting for something to settle', () => {
     })
 
     expect(octopus().workspaces.pullRequestDetail).toHaveBeenCalledTimes(1)
+  })
+
+  /*
+   * On its own, because the pair below cannot tell the two arms apart — the
+   * `result` in it schedules the read either way. A turn that failed may well
+   * have pushed before it did, which is the whole reason `error` is in the
+   * guard beside `result`.
+   */
+  it('reads again when a turn ends in failure', async () => {
+    vi.useFakeTimers()
+    answer(detail({ checks: [check('failed')] }))
+    renderHook(() => usePullRequestDetail(ANNA, 7, true))
+    await vi.advanceTimersByTimeAsync(0)
+
+    emitAgentEvent({ type: 'error', message: 'claude exited with code 1' } as never)
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(1_000)
+    })
+
+    expect(octopus().workspaces.pullRequestDetail).toHaveBeenCalledTimes(2)
   })
 
   // Two turns ending within the settle read once, not twice: the second
@@ -264,10 +286,14 @@ describe('waiting for something to settle', () => {
     await vi.advanceTimersByTimeAsync(0)
 
     emitAgentEvent({ type: 'result', ok: true, durationMs: 1, costUsd: 0 } as never)
-    unmount()
-    await vi.advanceTimersByTimeAsync(1_000)
+    expect(vi.getTimerCount()).toBeGreaterThan(0)
 
-    expect(octopus().workspaces.pullRequestDetail).toHaveBeenCalledTimes(1)
+    unmount()
+
+    // The timer itself, not the read it would have caused: the reading effect
+    // is torn down with the hook, so a count of calls says the same thing
+    // whether or not the settle was cleared.
+    expect(vi.getTimerCount()).toBe(0)
   })
 
   // A push from the built-in terminal raises no chat event, so the one thing

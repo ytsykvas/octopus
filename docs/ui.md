@@ -1485,6 +1485,18 @@ render-time reset that clears the view clears `creating`, `drafting` and the
 action's error with it, or a refusal about the branch just left is shown against
 the one arrived at.
 
+**A hook that listens to chat events says whose it is listening for.** Events are
+broadcast to every window and cover every conversation, so a subscription that
+takes them all takes another project's too. There are three honest shapes and no
+fourth: name the chat, and `onChatEvent` delivers only that one's — what the
+conversation, its usage and its commands do; filter on `workspaceId` inside the
+handler, for anything about the worktree rather than the talking, since any chat
+there writes to the same files — what the diff pane and the checks list do; or
+take everything deliberately, for what belongs to the account rather than to any
+conversation, like the rate limit and the model catalogue. Taking everything by
+omission is the one that reads the same and is a bug: the composer offered
+another project's slash commands that way for a release.
+
 **The error banner clears itself, twice over.** Every hook that reports a
 failure to the window takes `(message: string | null) => void` and sends `null`
 as an attempt begins, so what the banner shows is always the latest attempt's;
