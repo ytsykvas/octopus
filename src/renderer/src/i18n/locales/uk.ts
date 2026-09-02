@@ -354,6 +354,8 @@ export const uk: Translation = {
       'Закомітить усі зміни в цьому воркспейсі під цим повідомленням, а тоді відкриє request.',
     envNotIgnored:
       'git не ігнорує {{file}}, а octopus пише туди змінні цього воркспейса. Закомітивши все, ви відправите їх у pull request.',
+    envNotIgnoredPush:
+      'git не ігнорує {{file}}, а octopus пише туди змінні цього воркспейса. Закомітивши й відправивши, ви надішлете їх на GitHub.',
 
     refresh: 'Перечитати з GitHub',
     isDraft: 'Чернетка',

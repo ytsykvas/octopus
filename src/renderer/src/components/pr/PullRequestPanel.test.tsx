@@ -497,16 +497,32 @@ describe('the pull request tab', () => {
    * `.gitignore` does not cover it would have the app commit its own
    * credentials and then push them — said beside the field rather than found
    * out on GitHub.
+   *
+   * Nothing is typed into the commit field on purpose. That is the path the
+   * form itself describes — the agent or the title names the commit — and it
+   * is the one the warning used to be hidden on.
    */
   it('warns before committing an env file git does not ignore', async () => {
-    const user = userEvent.setup()
     answer(view({ dirty: true }))
     vi.mocked(octopus().projects.isEnvIgnored).mockResolvedValue({ ok: true, value: false })
     renderPanel({ envFile: '.env.local' })
 
-    await user.type(await screen.findByLabelText('Commit message'), 'Add the thing')
-
     expect(await screen.findByText(/\.env\.local/)).toBeInTheDocument()
+  })
+
+  /*
+   * The same hazard on the second press. Once the request exists the form is
+   * gone, and `Commit and push` runs the same `add -A` — so the warning has to
+   * be beside that button too, not only on the one that opened the request.
+   */
+  it('warns beside the button that commits onto an open request', async () => {
+    answer(view({ request: request(), dirty: true }))
+    answerDetail(detail())
+    vi.mocked(octopus().projects.isEnvIgnored).mockResolvedValue({ ok: true, value: false })
+    renderPanel({ envFile: '.env.local' })
+
+    expect(await screen.findByRole('button', { name: 'Commit and push' })).toBeInTheDocument()
+    expect(screen.getByText(/\.env\.local/)).toBeInTheDocument()
   })
 
   it('says nothing about the env file where git ignores it', async () => {

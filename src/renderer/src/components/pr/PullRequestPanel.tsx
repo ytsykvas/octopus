@@ -107,7 +107,7 @@ export function PullRequestPanel({
     return () => {
       controller.abort()
     }
-  }, [visible, workspace])
+  }, [visible, workspace, envFile])
 
   if (!workspace) return <Notice>{t('pullRequest.noWorkspace')}</Notice>
   if (error !== null) return <Notice tone="danger">{error}</Notice>
@@ -296,6 +296,7 @@ export function PullRequestPanel({
                 detail={detail.detail}
                 base={view.base}
                 dirty={view.dirty}
+                exposedEnvFile={envIgnored ? null : envFile}
                 /* Null rather than a disabled flag beside a handler that could
                    not run: the guard would be one nothing can reach, and a
                    check nothing reaches is a claim nothing tests. */

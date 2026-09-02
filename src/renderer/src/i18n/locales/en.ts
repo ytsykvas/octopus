@@ -410,6 +410,11 @@ export const en = {
        this file into every worktree, and committing everything would send it. */
     envNotIgnored:
       'git does not ignore {{file}}, and octopus writes this workspace’s variables into it. Committing everything would put them in the pull request.',
+    /* Its twin for the request that already exists. The press there commits and
+       pushes in one go, so the sentence has to name the publishing rather than
+       the request the variables would land in. */
+    envNotIgnoredPush:
+      'git does not ignore {{file}}, and octopus writes this workspace’s variables into it. Committing and pushing would send them to GitHub.',
 
     refresh: 'Read GitHub again',
     isDraft: 'Draft',

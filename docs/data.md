@@ -732,9 +732,17 @@ reads `.env` and the process environment does not reach it.
 directory the agent commits from freely, so a repository whose `.gitignore` does
 not cover the env file turns the block into a change waiting to be committed —
 and a **tracked** env file is worse still. The checkout is asked with
-`git check-ignore`, which consults the index and so answers "no" to both, and
-the project's Env section says so while there is anything in the block to
-expose.
+`git check-ignore`, which consults the index and so answers "no" to both.
+
+Three surfaces say so, and the wording differs because the moment does. The
+project's Env section warns while there is anything in the block to expose — an
+empty block in an unignored file exposes nothing. The pull request pane warns
+beside **both** presses that commit: the form that opens a request, and
+`Commit and push` on one that already exists. Neither of those is gated on the
+block's contents, and gating them on it would be the wrong reading of the same
+rule: a project that carries a real env file in through the carry list and types
+nothing into the app has everything to lose and an empty block. What gates them
+is that a commit is about to happen.
 
 The file is **replaced, not rewritten in place** — written beside itself and
 renamed over, which is atomic on POSIX. A dev server reads its `.env` at boot and

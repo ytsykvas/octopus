@@ -60,6 +60,14 @@ interface PullRequestActionsProps {
   /** Uncommitted work here, which is what makes committing worth offering. */
   readonly dirty: boolean
   /**
+   * The env file, named only when git does not ignore it.
+   *
+   * octopus writes this workspace's variables into that file, so committing
+   * everything would put them in the request and pushing would publish them.
+   * Null is the ordinary case and says nothing.
+   */
+  readonly exposedEnvFile: string | null
+  /**
    * Sends the project's instruction for a kind as a message in the chat, or
    * null where there is no conversation to send it to.
    *
@@ -90,6 +98,7 @@ export function PullRequestActions({
   detail,
   base,
   dirty,
+  exposedEnvFile,
   onPrompt,
   sending,
   onMerge,
@@ -122,6 +131,14 @@ export function PullRequestActions({
     <div className="flex flex-col gap-2">
       {conflicting && (
         <p className="text-warning leading-relaxed">{t('pullRequest.conflicting', { base })}</p>
+      )}
+      {/* The same condition as the button below, so the warning is there for
+          exactly the press it is about — and gone with it when there is
+          nothing to commit or the request is no longer open. */}
+      {dirty && open && exposedEnvFile !== null && (
+        <p className="text-warning leading-relaxed">
+          {t('pullRequest.envNotIgnoredPush', { file: exposedEnvFile })}
+        </p>
       )}
       {!conflicting && note !== undefined && (
         <p className="text-ink-faint leading-relaxed">{t(note, { base })}</p>

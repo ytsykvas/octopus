@@ -131,13 +131,20 @@ export function NewPullRequestForm({
             />
           </label>
 
-          {/* Left empty, the uncommitted work stays behind — which is the
-              warning this field replaced, and it is still the truth. */}
+          {/* Left empty, the commit still happens — under what the agent wrote
+              or under the title. The two strings differ in which; neither of
+              them is the old "the work stays behind", which stopped being true
+              when this field stopped deciding. */}
           <p className="text-ink-faint leading-relaxed">
             {t(committing ? 'pullRequest.commitHint' : 'pullRequest.dirty')}
           </p>
 
-          {committing && exposedEnvFile !== null && (
+          {/* Not gated on the field above. Pressing the button commits whether
+              or not a message was typed, so a warning that waited for one was
+              hidden on exactly the path the hint describes. Dirty is the whole
+              condition, and an env file git does not ignore is itself an
+              uncommitted change — so it is true whenever this can bite. */}
+          {exposedEnvFile !== null && (
             <p className="text-warning leading-relaxed">
               {t('pullRequest.envNotIgnored', { file: exposedEnvFile })}
             </p>
