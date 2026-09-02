@@ -61,8 +61,9 @@ not less.
   guard already covers.
 - `src/core/pullRequests.ts:397-411` — `gh pr merge <number>` with no check that
   the number belongs to the branch at the `gh` cwd.
-- `PullRequestPanel.tsx:74-78` is not keyed by workspace, and the whole
-  `RightPanel` stays mounted across switches, so the hook instance survives.
+- `src/renderer/src/components/pr/PullRequestPanel.tsx:74-78` is not keyed by
+  workspace, and the whole `RightPanel` stays mounted across switches, so the
+  hook instance survives.
 
 ## What is already decided
 
@@ -79,7 +80,7 @@ and the apply, so claiming again after it would not fix anything.
 
 `create` is not the only leak across a switch. `creating`, `drafting` and
 `actionError` are not in the reset, so anna's spinner and anna's error land on
-bob's form — `NewPullRequestForm.tsx:204-209` and `:175`. And `draft()`
-(`:148-164`) has the same late-reply shape, setting `drafting`/`actionError`
-after its await with no guard at all. Whatever reset is added should cover those
-three alongside `view` and `error`.
+bob's form — `src/renderer/src/components/pr/NewPullRequestForm.tsx:204-209`
+and `:175`. And `draft()` (`:148-164`) has the same late-reply shape, setting
+`drafting`/`actionError` after its await with no guard at all. Whatever reset
+is added should cover those three alongside `view` and `error`.

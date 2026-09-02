@@ -7,9 +7,10 @@ the older exchanges are replaced by a summary, and the SDK announces it with a
 `system` message of subtype `compact_boundary`, carrying whether the compaction
 was manual or automatic and the token counts either side of it.
 
-`mapMessage` drops it — `agent.ts:405` handles `init` and `commands_changed` and
-returns nothing for every other subtype — so the log shows an unbroken
-conversation while the agent's memory of its first half is a paragraph.
+`mapMessage` drops it — `agent.ts:530-543` handles `init` and
+`commands_changed` and returns nothing for every other subtype — so the log
+shows an unbroken conversation while the agent's memory of its first half is a
+paragraph.
 
 ## Why it matters
 
@@ -37,6 +38,12 @@ makes it far more common without moving the gap this task describes, since the
 CLI still narrates the one it was asked for. The automatic case is still the
 silent one.
 
+The mapping is wanted for a second reason as well: the `Context N%` reading goes
+on showing the figure from before the compaction until the next message — see
+[the-context-reading-does-not-follow-a-compaction.md](the-context-reading-does-not-follow-a-compaction.md).
+Both want `compact_boundary` mapped to an event, so the two should land together
+rather than mapping the same message twice.
+
 ## Evidence
 
 Probed against a live session: `/compact` on a conversation too short to compact
@@ -45,7 +52,7 @@ message reading "Not enough messages to compact."
 
 A real one was reached later, on `octopus/leslie` with CLI 2.1.224, and the
 metadata arrives in full — under camelCase names rather than the snake_case the
-SDK's prose uses, and with three fields the types do not mention:
+SDK's prose uses, and with two fields `sdk.d.ts:3087-3113` does not mention:
 
 ```json
 "subtype": "compact_boundary",

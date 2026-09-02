@@ -34,17 +34,17 @@ quote quietly disagree.
 
 The pane knows the difference everywhere except the one place it is sent. The
 suite even names the hazard as the reason to record the side —
-`DiffPanel.test.tsx:969-971`, "sending the agent to that number in the current
+`DiffPanel.test.tsx:993-995`, "sending the agent to that number in the current
 file would point at whatever now sits in its place".
 
 ## Evidence
 
 - `src/renderer/src/components/chat/attachments.ts:82` — the only formatter of a
   diff note, with no `note.side`; `lineRange` at `:103-107`.
-- `src/renderer/src/components/diff/DiffPanel.tsx:264` and `:443-455` — the side
+- `src/renderer/src/components/diff/DiffPanel.tsx:264` and `:443-452` — the side
   is stored and the quote is read from the correct side.
-- `src/renderer/src/components/diff/DiffPanel.test.tsx:869-897` and `:969-985` —
-  both gestures driven to an `'old'` anchor, the second asserting
+- `src/renderer/src/components/diff/DiffPanel.test.tsx:897-923` and
+  `:996-1015` — both gestures driven to an `'old'` anchor, the second asserting
   `side: 'old', line: 2, code: 'was here'`.
 - `src/renderer/src/components/diff/DiffHunk.tsx:114-120,145` — `SplitRowView`
   prefers the right-hand line, which is what keeps old anchors rare rather than
@@ -52,7 +52,8 @@ file would point at whatever now sits in its place".
 - `src/renderer/src/i18n/locales/en.ts:549` — `commentIntro` is the whole of what
   precedes the notes, and it says nothing about sides.
 - `src/renderer/src/components/chat/attachments.test.ts:10-18` — every fixture is
-  `side: 'new'`, so the case is untested despite the coverage gate.
+  `side: 'new'`. The coverage gate says nothing here: `fromDiff` is one line and
+  both sides run through it, so what is missing is a fixture, not a branch.
 
 ## What is already decided
 

@@ -46,10 +46,12 @@ of it is erased at compile time.
 - `src/core/store.ts:137`, `:155`, `:214-215`.
 - `docs/PROJECT.md:651`; `docs/data.md:141`; `docs/core.md:27`.
 - `src/main/ipc.test.ts:170-174` — a **cast** on an `unknown` handler return, in a
-  helper whose comment says the assertions need only its id and path. Every call
-  site uses only `.id` or `.path`; nothing reads `envProfile` off it and nothing
-  does a whole-object `toEqual`. So no test currently passes for the wrong
-  reason — the divergence is latent, not active.
+  helper whose comment says the assertions need only its id and path. The call
+  sites read `.id`, `.path`, `.branch` and `.port`, and all four stand
+  character-for-character the same in the interface and in `WorkspaceSchema`;
+  nothing reads `envProfile` off it and nothing does a whole-object `toEqual`. So
+  no test currently passes for the wrong reason — the divergence is latent, not
+  active.
 
 ## What is already decided
 

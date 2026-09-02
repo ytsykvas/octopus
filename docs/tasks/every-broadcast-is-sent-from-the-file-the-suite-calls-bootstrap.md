@@ -62,7 +62,7 @@ something". That was true of `main/index.ts` once; it is 248 lines now.
 
 - `vitest.shared.ts:18`; `src/main/index.ts:86, 110, 116, 122, 128, 134` — each
   the only occurrence of its name in the repository.
-- `node_modules/electron/electron.d.ts:9255`.
+- `node_modules/electron/electron.d.ts:18339` — `WebContents.send`.
 - `src/main/ipc.test.ts:105-109`, `:1959`, `:1976` — the bench asserts the arrays,
   never a channel string.
 - `src/preload/index.test.ts:422, 473, 488, 564, 587, 605` and
@@ -86,15 +86,15 @@ case — a real behavioural branch with a stated intent, "an explicit choice mus
 not be overridden when macOS switches" — but it is second in line behind the
 names.
 
-**Two existing task files need touching in the same pass.**
-`six-channel-names-cross-the-bridge-unchecked.md` says "The subscription side has
-no equivalent hole" — true of the _listening_ half only, and left standing the
-two notes contradict each other with the reassuring one hit first.
-`four-places-count-nine-host-functions-and-there-are-ten.md` already identified
-the process gap this sits in: `docs/ipc.md`'s "Adding a channel" checklist has
-four steps and none covers a push stream. **That checklist is where the durable
-fix lives** — adding a test without adding the step means the seventh channel
-repeats this.
+**One existing task file still needs touching in the same pass.**
+`six-channel-names-cross-the-bridge-unchecked.md` has been amended already: it
+now says "The subscription side has no equivalent hole on the listening half"
+and sends the reader here for the send half, so the two no longer contradict
+each other. `four-places-count-nine-host-functions-and-there-are-ten.md` is
+untouched, and already identified the process gap this sits in: `docs/ipc.md`'s
+"Adding a channel" checklist has four steps and none covers a push stream.
+**That checklist is where the durable fix lives** — adding a test without adding
+the step means the seventh channel repeats this.
 
 ## Sketch
 

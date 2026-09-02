@@ -4,8 +4,8 @@
 
 A conversation now holds two models — `model` and `planModel` — and
 `sessionModel` folds them, so planning can run on one model and the work on
-another. Effort has no such pair: `chat.effort` is one level, and it is what
-both halves run at.
+another. Effort has no such pair: `chat.effort` is one choice (`chats.ts:212`),
+and it is what both halves run at.
 
 ## Why it matters
 
@@ -20,18 +20,19 @@ that level.
 
 ## What is already there to build on
 
-Almost all of it. `sessionModel` in `chats.ts` is the shape — a fold of two
-stored fields into the one thing the SDK takes — and `pushModel` in `service.ts`
-is the mechanic, a guarded push on the two moments the effective value moves
-(planning toggled, plan approved). Both would be duplicated rather than
-invented, which is itself the argument for doing it: a second copy is a cue to
-look at whether one function can carry both.
+Almost all of it. `sessionModel` in `chats.ts:137-144` is the shape — a fold of
+two stored fields into the one thing the SDK takes — and `pushModel` in
+`service.ts:1690-1695` is the mechanic, a guarded push on the two moments the
+effective value moves (planning toggled, plan approved). Both would be
+duplicated rather than invented, which is itself the argument for doing it: a
+second copy is a cue to look at whether one function can carry both.
 
 The control is the awkward half. Effort is a scale in a panel of its own now —
-`EffortPicker`, with `ultracode` past the end and a picture above it — so the
-shape is no longer the problem it was when this note was written. Two of them
-side by side is: a panel per job would be two scales and two octopuses in a
-window that argues for calm, and the picture is most of the panel's height.
+`EffortPicker.tsx:115-248`, with `ultracode` past the end and a picture above
+it — so the shape is no longer the problem it was when this note was written.
+Two of them side by side is: a panel per job would be two scales and two
+octopuses in a window that argues for calm, and the picture is most of the
+panel's height.
 
 Either the scale grows a second marker, or it grows a pair of tabs naming the
 job. The first says the relationship — plan here, code there, on one rule — and
@@ -40,7 +41,8 @@ columns. Which is a design question, and the reason this stays a note.
 
 ## What blocks doing it blind
 
-`docs/tasks/effort-set-by-a-command-is-invisible.md` — `/effort high` changes the
-level inside the CLI and nothing here notices, and unlike the model there is no
-reading that reports the truth. A split built on top of a value that can already
-be wrong would make two settings wrong instead of one. That one comes first.
+Nothing any more. `/effort high` used to change the level inside the CLI with
+nothing here noticing, and a split built on top of a value that could already
+be wrong would have made two settings wrong instead of one. `sendToChat` now
+re-asserts the stored choice on every message (`service.ts:3148-3152`), so a
+level set by a command lasts one turn and the picker tells the truth again.

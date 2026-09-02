@@ -4,9 +4,10 @@
 
 ## What happens
 
-The picker asks GitHub for everything the account can push to and draws whatever
-comes back. If an organisation's repositories are missing from that answer, the
-list simply does not have them — and looks complete.
+The picker asks GitHub for everything the account can push to, drops the
+archived and the read-only, and draws the rest. If an organisation's
+repositories are missing from that answer, the list simply does not have them —
+and looks complete.
 
 Two ordinary causes, neither of which produces an error:
 
@@ -38,6 +39,13 @@ work, which is exactly the audience for organisation support.
   — the information exists and nothing reads it.
 - `src/core/accounts.ts:134` — `checkGitHubAccount` runs `gh api user` and keeps
   only `login` and `name`.
+- `src/core/github.ts:172-174` — archived repositories and ones the account can
+  only read are dropped before the list is built, so shortness has a third
+  cause the picker does not distinguish either.
+- `src/core/github.ts:16` — `REPOSITORY_LIMIT = 200` caps the list as well, and
+  nothing on screen says so.
+  `gh-answers-are-capped-and-the-pane-does-not-say-so.md` covers the
+  pull-request reads, not this cap.
 
 ## Sketch
 

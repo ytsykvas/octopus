@@ -10,16 +10,18 @@ for every conversation in the window — every workspace, every project. On
 `commands_changed` it calls `setCommands(announced.event.commands)` without
 checking whose event it was.
 
-It is the only subscriber that neither passes an id nor filters inside:
+It is the only per-chat subscriber that neither passes an id nor filters inside:
 `useWorkspaceDiff` filters on `announced.workspaceId`, `useWorkspaces` matches
 against the project list, `useSessionUsage` and `useChat` pass the id.
+`useModels` and `useRateLimit` subscribe without an id too, but a model list and
+a rate limit belong to the account, so they have nothing per-chat to filter.
 
 **The leak is sticky.** Nothing restores the pane's own list. The render-time
-reset only fires when `chatId` changes and the mount effect only runs on mount,
-so the composer keeps offering the other project's commands until the reader
-switches conversations or a `session_started` arrives for _this_ chat.
+reset and the read at `useCommands.ts:38-51` both fire only when `chatId`
+changes, so the composer keeps offering the other project's commands until the
+reader switches conversations or a `session_started` arrives for _this_ chat.
 
-**Every pane of the open workspace is hit at once.** `Chat.tsx:181-186` mounts a
+**Every pane of the open workspace is hit at once.** `Chat.tsx:181-189` mounts a
 `ChatSession` for every tab (`visible` only hides it), and each calls
 `useCommands`.
 
@@ -57,7 +59,8 @@ renderer list, so a leaked list cannot misroute those.
   so the comparison is available and simply not made.
 - `src/core/agent.ts:538-539` — `commands_changed` is a recurring per-session SDK
   message, not a one-off.
-- `src/renderer/src/hooks/useCommands.test.tsx:88-101` — the broken assertion.
+- `src/renderer/src/hooks/useCommands.test.tsx:95-105` — the broken assertion,
+  at `:104`.
 
 ## What is already decided
 

@@ -39,7 +39,7 @@ workspace prepared afterwards silently gets the previously saved variables.
 The asymmetry is the tell — `FileEditor`'s read path deliberately handles failure
 (a null leaves the field empty, and there is a test for it), while the write path
 has nowhere to put one. And the same Env section of the same dialog **does**
-report its other failures (`ProjectSettings.test.tsx:819`, `:856`), so the silence
+report its other failures (`ProjectSettings.test.tsx:819`, `:857`), so the silence
 on the body saves is an inconsistency, not a decision.
 
 ## Evidence
@@ -48,12 +48,12 @@ on the body saves is an inconsistency, not a decision.
   mark and the missing outcome; `:12` — `save: (contents: string) => void`, no
   channel for a `Result` even if a caller wanted one; `:51-60` — the read path's
   deliberate failure handling.
-- `src/renderer/src/components/InstructionEditors.tsx:100-107` — `read` checks
+- `src/renderer/src/components/InstructionEditors.tsx:101-107` — `read` checks
   `result.ok`; `save` two lines below does not.
-- `src/main/ipc.ts:220-228, 238-240, 321-328, 382-392` — the four handlers.
+- `src/main/ipc.ts:220-228, 238-240, 321-329, 382-392` — the four handlers.
 - `src/core/scripts.ts:37`, `src/core/carry.ts:32`, `src/core/env.ts:41`,
   `src/core/instructions.ts:49` — the four caps.
-- `src/renderer/src/components/ProjectSettings.tsx:183, 211, 390-395` —
+- `src/renderer/src/components/ProjectSettings.tsx:183, 211, 390-394` —
   `describeFailure`, the `error` state and the banner that already exists in this
   very component and is never fed by the four saves.
 - `FileEditor.test.tsx` never mocks a failing save.

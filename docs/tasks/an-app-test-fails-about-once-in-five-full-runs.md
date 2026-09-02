@@ -21,10 +21,13 @@ hunt for a global left behind by another test can stop.
 On 2026-08-18, `src/renderer/src/components/chat/Chat.test.tsx` › "raises it
 once that conversation is the one showing" failed the same way in one full run —
 `findByText('The plan is ready')` timed out — then passed alone and through
-three consecutive full suites. The two have the same build: an agent event
-emitted outside `act`, a click, then a read of what the event was supposed to
-produce. Whatever the cause, it is not specific to ⌘T, and either test will do
-to reproduce it.
+three consecutive full suites. The two do not have the same build, though it
+read that way for a while: the ⌘T test (`App.test.tsx:1584`) emits no agent
+event at all — clicks, a `keyDown` on `window`, then a `waitFor` on a mock
+call — and the events the chat tests do emit are wrapped in `act`
+(`src/renderer/src/test/chat.ts:116`). What they share is thinner than that: an
+assertion reading something an effect has to land first. Whatever the cause, it
+is not specific to ⌘T, and either test will do to reproduce it.
 
 **They can fail together, which the "something inside the one file" reading does
 not explain.** On 2026-08-27 a single `npm run check` failed both at once — ⌘T
@@ -66,17 +69,17 @@ to a temp directory, puts it on `PATH` and restores it in a `finally`, and
 `defaultExec` allows 15 seconds, which a shell script running `cat` will not
 reach however loaded the machine is. Next time it appears, keep the message.
 
-**It happens on GitHub's machines too, and it now blocks merging.** On
-2026-08-28 the `check` workflow failed on a pull request that touched only the
-pull request pane — `Chat.test.tsx` › "goes on drawing what a background
-conversation says", the same shape as the two above. It passed on a re-run of
-the same commit, and the file passed alone locally, fourteen for fourteen.
+**It happens on GitHub's machines too.** On 2026-08-28 the `check` workflow
+failed on a pull request that touched only the pull request pane —
+`Chat.test.tsx` › "goes on drawing what a background conversation says", the
+same shape as the two above. It passed on a re-run of the same commit, and the
+file passed alone locally, fourteen for fourteen.
 
 Two things follow. The runner is a clean machine with nothing else on it, so
-"the developer's laptop was busy" is not the whole story. And since `main`
-became protected, a green `check` is a merge requirement — so a one-in-five
-flake is now a one-in-five pull request that cannot land without somebody
-noticing it is not their fault and pressing re-run.
+"the developer's laptop was busy" is not the whole story. And `main` is
+unprotected while the repository is private, so a red `check` blocks no merge
+today — it costs a re-run and the minutes somebody spends believing their own
+change was at fault.
 
 **The obvious explanation is now ruled out, with numbers.** On 2026-09-02 the
 deadline theory — that a test misses its timeout under load — was tested and
@@ -93,7 +96,7 @@ under those ceilings is large:
   both alone and as the whole suite.
 - Renderer at `asyncUtilTimeout: 200`, a fifth of the real ceiling: ⌘T and both
   `Chat.test.tsx` victims **passed**. The only four failures were the
-  `useWorkspaces` tests that deliberately wait 400 ms (`useWorkspaces.test.tsx:54`).
+  `useWorkspaces` tests that deliberately wait 400 ms (`useWorkspaces.test.tsx:55`).
 
 So the named tests have four to five times the time they need, and closing that
 gap would take a machine five times slower at exactly that moment. Raising the
@@ -103,7 +106,7 @@ again.
 
 **And the reason no message ever explained it is now fixed.** `emitAgentEvent`
 and `emitChatStatus` (`src/renderer/src/test/chat.ts`) read their handlers from
-`onEvent`'s `mock.calls` and looped over them. When nothing had subscribed the
+the stub's `mock.calls` and looped over them. When nothing had subscribed the
 loop did nothing **silently**, and the test then failed at its own assertion
 with "element never appeared" — a message about the symptom that could never
 name the cause. Both now throw when the handler list is empty. The next
@@ -145,8 +148,35 @@ absence is asserted.
 Two things follow. A run can be red with every test green, so "which test
 failed" is the wrong first question. And an absence assertion anywhere in this
 suite is a candidate, not merely this one — `'offers nothing for a selection
-that is only a cursor'` (`DiffPanel.test.tsx:636`) has the same shape and has
-not been touched.
+that is only a cursor'` (`DiffPanel.test.tsx:636`) and `'offers nothing when
+the browser reports no selection'` (`DiffPanel.test.tsx:756`) had the same
+shape and have since been given the same guard.
+
+**The suite was then swept for the whole class.** Of 485 absence assertions, 228
+follow an interaction; the great majority are prop-wired, where a render that
+never happened throws at `getByRole` before the assertion is reached, so they
+cannot hide anything. Nine reached a listener registered by an effect. Two more
+of those are now proven live before they assert — `useDismiss.test.tsx` dismisses
+from outside first, `DropdownMenu.test.tsx` closes the menu first — and
+`App.test.tsx:1638` fires ⌥2 and waits for the conversation to change before
+pressing ⌘T.
+
+**The class is closed rather than the instances, where that was possible.**
+`refuseSilence` (`src/renderer/src/test/chat.ts`) is now exported, and the five
+test files that rolled their own emit helper call it: `useWorkspaceDiff`,
+`useSessionUsage`, `useModels`, `useCommands` and `useWorkspaces`. All of them
+delivered through `subscriber?.(…)` or a loop over an empty array, which is
+silent for exactly the reason the helpers in `chat.ts` were. Two of the nine
+candidates were only at risk because of those helpers and needed no other change.
+
+**Three are knowingly left vacuous**, because proving the listener would mean
+contriving the setup rather than testing anything: `App.test.tsx:613` and
+`:1972` have no project selected, so no shortcut does anything observable to
+assert on, and `:1708` has one conversation, so the ⌥ trick has nowhere to move
+to. They are lower risk than the rest — `App.tsx:392`'s dependency array
+re-registers the listener on almost every render, and two positive siblings in
+the same `describe` exercise it — but they would not notice a dead listener, and
+that is worth knowing rather than assuming otherwise.
 
 ## Why it matters
 
@@ -166,10 +196,14 @@ nobody has yet named.
 
 The suite shares one jsdom per file but not across files, so the candidates are
 the globals that outlive a render: timers left running, `document`-level
-listeners (the diff pane now adds one for `selectionchange`), and
-`Element.prototype` methods that tests assign rather than spy on —
-`scrollIntoView` in `Composer.test.tsx` and `getBoundingClientRect` in several
-diff tests are assigned, and an assignment has no `restoreMocks` to undo it.
+listeners, and prototype methods that tests assign rather than spy on. The diff
+pane's `selectionchange` listener is not one of them — `DiffPanel.tsx:150` adds
+it and `:154` removes it in the same effect's cleanup. The two assignments are
+`Element.prototype.scrollIntoView` (`Composer.test.tsx:136`) and
+`Range.prototype.getBoundingClientRect` (`DiffPanel.test.tsx:573`), and an
+assignment has no `restoreMocks` to undo it; the other two diff tests that touch
+`getBoundingClientRect` (`DiffPanel.test.tsx:360` and `:1220`) use `vi.spyOn`,
+which the `vi.restoreAllMocks()` in `setup.ts:33` does undo.
 
 `vitest --sequence.shuffle` repeated until it reproduces would name the pair of
 files involved faster than reading them will.

@@ -22,21 +22,21 @@ says which window is the one actually binding right now.
 ## Why it matters
 
 The app recomputes severity itself, from thresholds it chose: `usageLevel` in
-`renderer/components/chat/format.ts` turns amber at 60% and red at 80%. Those
-are guesses, and the server is not guessing. Two surfaces then disagree with the
-account about when a figure is worth worrying over — quietly, and in the
-direction of crying wolf.
+`src/renderer/src/components/chat/format.ts:24-44` turns amber at 60% and red
+at 80%. Those are guesses, and the server is not guessing. Two surfaces
+then disagree with the account about when a figure is worth worrying over —
+quietly, and in the direction of crying wolf.
 
 `is_active` is the more interesting of the two. The sidebar draws every window
-at equal weight, and on an account with four of them the reader has to work out
+at equal weight, and on an account with three of them the reader has to work out
 which one will stop the next turn. The server already knows.
 
 ## Evidence
 
-In the response measured on 2026-09-01, alongside `rate_limits.five_hour` and
+In the response as CLI 2.1.247 sent it, alongside `rate_limits.five_hour` and
 `rate_limits.seven_day` that the app does read. The fixture in
-`src/core/usage.test.ts` carries it — `looseObject` lets it through the parse
-and `toUsageReport` drops it.
+`src/core/usage.test.ts:77-96` carries it — `looseObject` lets it through the
+parse and `toUsageReport` drops it.
 
 ## What is already decided
 

@@ -57,7 +57,7 @@ resolves to the same project id inherits every one of them.
   freshly drawn name, then the `pathExists` throw.
 - `src/core/workspaces.ts:130-132` — `workspaceId` is `${projectId}/${name}`, so
   the creation name is recoverable from `workspace.id`.
-- `src/core/service.ts:2711-2713` — `renameWorkspaceById` commits only
+- `src/core/service.ts:2712-2713` — `renameWorkspaceById` commits only
   `{ name, branch }`.
 - `src/core/store.ts:521-523` — the duplicate-id guard, throwing an uncoded
   `StateConflictError`.
@@ -67,7 +67,7 @@ resolves to the same project id inherits every one of them.
   `src/core/service.ts:2646-2650` — the orphaned-directory half.
 - `src/core/workspaces.test.ts:400-407` asserts the directory is intended to
   stay; nothing asserts the name stays claimed. The two `pathExists` tests
-  (`:324`, `:351`) occupy the path artificially rather than through a rename.
+  (`:325`, `:350`) occupy the path artificially rather than through a rename.
 - `docs/data.md:241-245` — the uniqueness table asserting workspace id is
   `<project>/<name>`, an invariant a rename silently breaks.
 

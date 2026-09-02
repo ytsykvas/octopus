@@ -30,10 +30,12 @@ while writing to exactly the same `state.json`.
 
 ## Evidence
 
-- `src/main/index.ts` — `requestSingleInstanceLock`, and the comment above it
-  saying what it does not reach.
-- `src/core/paths.ts` — `rootDir` is `~/.octopus`, nothing to do with userData.
-- `src/core/service.ts` — `commit` serialises writes within one process only.
+- `src/main/index.ts:217-234` — `requestSingleInstanceLock`, and the comment
+  above it saying what it does not reach.
+- `src/core/paths.ts:19` — `rootDir` is `~/.octopus`, nothing to do with
+  userData.
+- `src/core/service.ts:998` — `commit` serialises writes within one process
+  only.
 
 ## What is already decided
 

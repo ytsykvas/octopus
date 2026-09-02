@@ -6,7 +6,7 @@
 
 `answerPermission` on `'deny'` resolves the blocked call with the user's own
 words and then writes `setChatStatus(request.chatId, 'idle')`. Nothing puts it
-back: of the nine `setChatStatus` sites in `service.ts`, only `sendToChat`, the
+back: of the eight `setChatStatus` sites in `service.ts`, only `sendToChat`, the
 allow path and `answerQuestions` write `running`, and **no agent event maps to
 it**. So the conversation stays `idle` — and its workspace with it, through
 `workspaceStatusFrom` — for the whole remainder of the turn.
@@ -30,12 +30,13 @@ is the one thing the workspace list exists to get right.
 The stop button goes with it, though only in a pane that did not send **and** was
 already mounted when the request arrived: the pane that sent keeps `busy` true
 (`answer` deliberately never clears it), and a pane that mounted while the
-request was pending sets `busy` from `pendingPermission`. The sidebar dot is lost
-for everyone.
+request was pending sets `busy` from `pendingPermission`. Everywhere else the
+button is drawn from the conversation's own status, which this write has just
+made `idle`. The sidebar dot is lost for everyone.
 
 ## Evidence
 
-- `node_modules/@anthropic-ai/claude-agent-sdk/sdk.d.ts:2167-2178` — `interrupt`
+- `node_modules/@anthropic-ai/claude-agent-sdk/sdk.d.ts:2167-2179` — `interrupt`
   is the flag that ends a turn.
 - `src/core/agent.ts:395-397` — `canUseTool` returns deny without it.
 - `src/core/service.ts:3262-3274` — the deny branch: resolve, then
@@ -47,9 +48,10 @@ for everyone.
 - `src/renderer/src/components/chat/ChatSession.tsx:219` and
   `PlanDialog.tsx:38-49` — "keep planning" is a deny carrying feedback.
 - `src/renderer/src/hooks/useChat.ts:253-258` — the `permission_request` handler
-  sets `pending` but not `busy`; `Composer.tsx:481-497` renders stop only on
-  `busy`.
-- `src/core/service.test.ts:4970-4983` — the test and comment recording the wrong
+  sets `pending` but not `busy`; `useChat.ts:450-451` folds `running` and
+  `waiting_permission` into the flag it hands out, and `Composer.tsx:481-497`
+  renders stop only on that.
+- `src/core/service.test.ts:4972-4984` — the test and comment recording the wrong
   premise, "Declining ends the turn rather than continuing it". The fake's `ask`
   (`:2885-2889`) calls `canUseTool` and emits nothing afterwards, so no test can
   tell a continued turn from an ended one.
@@ -75,7 +77,7 @@ right status themselves.
 
 Write `'running'`, symmetric with the allow path and the questions path. It is
 self-correcting: the turn always ends in a `result`, which writes `idle`/`error`,
-and `settleStatuses` (`store.ts:296-303`) turns a `running` left by a crash into
+and `settleStatuses` (`store.ts:298-303`) turns a `running` left by a crash into
 `idle` at load.
 
 The fake has to grow for the new test to mean anything. Flipping the expected

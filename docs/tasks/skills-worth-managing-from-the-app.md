@@ -13,9 +13,11 @@ picks up on its own (`instructionSources.ts`).
 
 **Switch skills on and off, per project.** Done, and per conversation rather
 than per project: a Skills panel in the composer's attic, default marks in both
-settings dialogs, and two stores of the user's own reaching a session as local
-plugins. `Query.supportedAgents()` (`sdk.d.ts:2465`, still never called) is the
-same move for subagents and has not been made.
+settings dialogs, and two stores of the user's own reaching a session as extra
+working-directory roots (`agent.ts:82`). The checkout's own `.claude/skills` is
+a third scope (`skillNames.ts:19`): read and switchable, never written.
+`Query.supportedAgents()` (`sdk.d.ts:2470`, still never called) is the same move
+for subagents and has not been made.
 
 **Import commands and subagents into a project.** Skills now arrive from a
 folder, from pasted text and from a link — but into `~/.octopus`, never into the

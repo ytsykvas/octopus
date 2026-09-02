@@ -16,7 +16,7 @@
    the comment above them even says "Both checks happen before anything is
    destroyed."
 
-When either throws, the commit at `service.ts:2787` never runs. The workspace
+When either throws, the commit at `service.ts:2788` never runs. The workspace
 record, its chat records and its worktree all survive — with every transcript
 deleted and the cleanup script already run.
 
@@ -54,9 +54,11 @@ up after itself."
 - `src/core/service.ts:3064-3066` — `chatHistory` reads the transcript and
   nothing else, so a deleted file is an empty log for good.
 - `src/core/service.ts:2739-2745` — the cleanup script, still before any guard.
-- `src/core/workspaces.ts:379-383` and `:404-415` — the two throws, under the
-  comment at `:385-387`.
-- `src/core/service.ts:2787` — the state commit, never reached on a refusal.
+- `src/core/workspaces.ts:380-384` and `:411-415` — the two throws, under the
+  comment at `:387-390`. The second fires only when all three of
+  `isBranchMerged`, `isReachableElsewhere` and `mergedRemotely` say no
+  (`:405-408`).
+- `src/core/service.ts:2788` — the state commit, never reached on a refusal.
 - `src/renderer/src/hooks/useWorkspaces.ts:319-330` — `checked: true` on the
   branch checkbox, `{ force: hasChanges, deleteBranch: answer.checked }`.
 - `src/core/chats.ts:504` with `src/core/service.ts:1974` — the surviving chat
@@ -70,7 +72,7 @@ up after itself."
 
 **Do not fix it by reordering the destruction.** Both `closeChatsOf` and the
 archive script must run while the worktree still exists, and the comments at
-`service.ts:2719-2722` and `:2725-2728` say why — a live session pointed at a
+`service.ts:2720-2722` and `:2725-2728` say why — a live session pointed at a
 path about to vanish, a script whose cwd is the worktree. `service.test.ts:1553`
 pins it: "runs in the workspace before the worktree goes."
 
@@ -85,12 +87,12 @@ need only execs that already exist at that point — `makeExec(workspace.path)` 
 the dirty check, `makeGh(workspace.path)` for `mergedRemotely`.
 
 Watch the cost: `mergedRemotely` runs `readPullRequest` through `gh`
-(`service.ts:2775-2782`), so a preflight that lets `removeWorkspace` re-check
+(`service.ts:2774-2779`), so a preflight that lets `removeWorkspace` re-check
 doubles a network round trip. Either export an `ensureRemovable` beside
 `removeWorkspace` and call it once, or thread the computed answer down.
 
 A preflight narrows the hole without closing it: if the guards pass and
-`discardWorktree` then throws for a real reason (`workspaces.ts:435-441` rethrows
+`discardWorktree` then throws for a real reason (`workspaces.ts:443-450` rethrows
 when the path is still on disk), the transcripts are already gone. Closing it
 properly means deleting transcripts only after the state commit — `closeOneChat`
 fuses "kill the session" and "discard the history" into one call, and those two

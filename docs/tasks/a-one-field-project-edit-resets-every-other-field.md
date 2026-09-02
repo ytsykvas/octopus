@@ -16,8 +16,9 @@ returns seven keys. Fed to `updateProject`, a project holding `.env.local`,
 
 `src/main/ipc.ts:207` is the only place that parse happens, and it is on the path
 of every project edit. The renderer only ever sends one-key patches — `{ name }`,
-`{ color }`, `{ icon }`, `{ baseBranch }`, `{ envProfile }`, `{ trustRepoScripts }`,
-`{ disabledSkillDefaults }` — so **every** edit path triggers it.
+`{ color }`, `{ icon }`, `{ baseBranch }`, `{ envFile }`, `{ repoPath }`,
+`{ envProfile }`, `{ trustRepoScripts }`, `{ disabledSkillDefaults }` — so
+**every** edit path triggers it.
 
 `updateProjectById` then compares `wasEnvFile` against the new one, sees a
 change, and runs `removeEnvBlock` over every workspace — stripping octopus's
@@ -47,8 +48,9 @@ all, and the `removeEnvBlock` write across every worktree is invisible.
   per-key spreads apply every key that is `!== undefined`, which they now all are.
 - `src/main/ipc.ts:207` — the only `ProjectPatchSchema.parse` in the repository.
   `src/preload/index.ts:556-557` forwards the patch untouched.
-- `src/core/service.ts:2088` — `updateProjectById` applies a local `applied`, not
-  `patch`; a fix touching the service has to account for that variable.
+- `src/core/service.ts:2083,2091` — `updateProjectById` applies a local
+  `applied`, not `patch`; a fix touching the service has to account for that
+  variable.
 - `src/core/service.ts:2100-2118` — `wasEnvFile` compared after the commit,
   `removeEnvBlock` over every workspace.
 - `src/renderer/src/components/ProjectSettings.tsx:240,360,368,423,456,469,502,629,696,748`
@@ -67,7 +69,7 @@ The correct idiom is already in the codebase, one function away — `applyConfig
 so a default can only fill a key genuinely absent from both. `config:update`
 looks like the same bug and is not, for this reason.
 
-Whatever the fix, keep the compile-time link `store.test.ts:340-351` relies on:
+Whatever the fix, keep the compile-time link `store.test.ts:339-351` relies on:
 the `CHANGES` record is typed `{ readonly [K in keyof Required<ProjectPatch>]: ... }`
 so a new patch field fails to compile until it is given a value. A hand-written
 `z.object({...})` keeps that but loses the guarantee that the patch fields track
@@ -79,7 +81,7 @@ so a new patch field fails to compile until it is given a value. A hand-written
 The regression test **must cross `src/main/ipc.ts:207`**. Nothing in `src/core`
 can catch this: every core test calls `updateProject` with hand-written literals
 and would pass with the bug in place — which is why the suite is green while
-`store.test.ts:316-320` states the intent in words ("a patch must not carry a
+`store.test.ts:315-320` states the intent in words ("a patch must not carry a
 stale copy of the others back into the state").
 
 The home is `ipc.test.ts`, on a project first moved off the defaults, then

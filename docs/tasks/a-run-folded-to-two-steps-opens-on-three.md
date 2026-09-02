@@ -23,12 +23,14 @@ Reproduced: rendering with Grep, Grep, AskUserQuestion, permission_request gave 
 summary reading `2 steps`, and after clicking it the document contained
 `<span class="font-medium">AskUserQuestion</span>`.
 
-**Narrower than "every turn that asks a question."** It needs at least two
-counted tool rows immediately before the question with no prose, failure, edit,
-plan or permission card between them. If the assistant explains before asking,
-the `text` event flushes the run first. If exactly one real call precedes it,
-`flush()` sees `toolCount === 1` and pushes an `entry` block, which `AgentRow`
-drops entirely.
+**Narrower than "every turn that asks a question."** It needs a counted tool row
+immediately before the question, with no prose, failure, edit, plan or permission
+card between them, and two counted rows in the run altogether — the second may
+come after the question, as it does in the guard test's own fixture. If the
+assistant explains before asking, the `text` event flushes the run first. If the
+run holds that one real call and nothing else, `flush()` sees `toolCount === 1`
+and pushes an `entry` block built from the call alone; the question goes with the
+rest of the run and never reaches `AgentRow`.
 
 ## Why it matters
 
@@ -44,16 +46,16 @@ nothing inside it accounts for", which is the inverse of what happens.
 
 ## Evidence
 
-- `src/renderer/src/components/chat/ChatLog.tsx:373-394` — `toolCount(entries)`
+- `src/renderer/src/components/chat/ChatLog.tsx:374-394` — `toolCount(entries)`
   for the summary, then `entries.map(...)` for the body. Two rules, one block.
-- `src/renderer/src/components/chat/ChatLog.tsx:204-206` — the unfolded path
+- `src/renderer/src/components/chat/ChatLog.tsx:203-206` — the unfolded path
   returns null, with the comment.
 - `src/renderer/src/components/chat/toolRuns.ts:138-148`, `:74-82`, `:156-158`,
   `:222-228`.
 - `src/renderer/src/components/chat/toolSummary.ts:13-22` — `SummarySchema` looks
   for file_path/command/pattern/path/url/description; a question's input has
   `questions`, so the folded row is a bare name.
-- `src/renderer/src/components/chat/ChatLog.test.tsx:996-1008` — the guard test.
+- `src/renderer/src/components/chat/ChatLog.test.tsx:993-1008` — the guard test.
 - Nothing upstream filters: `handleEvent` records the question's `tool_use` like
   any other, `config.ts` keeps `ASK_USER_QUESTION` out of standing approvals so
   the permission request always follows, and the agent's stream loop maps

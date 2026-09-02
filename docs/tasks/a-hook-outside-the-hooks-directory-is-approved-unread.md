@@ -39,7 +39,7 @@ while the line that runs it stays put."
 The documentation also states, in three places, a promise the code does not keep
 — `SECURITY.md:25`, `docs/PROJECT.md:525` and `docs/core.md:86` all say the
 digest covers "the hook scripts they name", and no hook `command` string is ever
-parsed. `docs/data.md:584-586` is wrong in the other direction: "every file
+parsed. `docs/data.md:586` is wrong in the other direction: "every file
 **under** `.claude/hooks/`" implies recursion, and the listing is one level deep,
 regular files only.
 
@@ -50,7 +50,7 @@ regular files only.
   at `:73`.
 - `src/core/service.ts:1833-1841` — `sourcesIn`: digest matches, `configured`
   returned, nothing else narrows the sources.
-- `src/core/service.ts:2436-2446` — `approveWorkspaceSettings` records that same
+- `src/core/service.ts:2435-2446` — `approveWorkspaceSettings` records that same
   digest, so the approval is keyed to files the hook target is not among.
 - `src/core/agent.ts:382` — `settingSources` passed to the SDK with no filtering
   of `hooks`, so the loaded settings' hooks do run.
@@ -83,7 +83,7 @@ The narrower, honest option: keep digesting the directory, digest it
 claim only what the code does. A promise the code cannot keep is worse than a
 narrower one it can.
 
-**A second place has the same shape.** `scriptsDigest` (`src/core/repoSource.ts:182-193`)
+**A second place has the same shape.** `scriptsDigest` (`src/core/repoSource.ts:183-194`)
 digests `script.contents`; where the supplied script is a `.conductor/settings.toml`
 command line rather than a file, the line is digested and the file it invokes is
 not. `SECURITY.md:29-37` holds `repoSource` to the same bar, so whatever rule is

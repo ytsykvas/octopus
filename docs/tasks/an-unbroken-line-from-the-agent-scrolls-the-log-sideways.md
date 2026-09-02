@@ -10,7 +10,7 @@ The bubble was fixed: `ChatLog.tsx` caps the user's own message at the column
 width and gives it a break opportunity. The agent's prose goes through
 `Markdown` instead, which sets neither, so a long word is laid out at its full
 width and overflows its paragraph. The pane it sits in is `overflow-auto`
-(`ChatSession.tsx:152`), so the overflow becomes a horizontal scrollbar under
+(`ChatSession.tsx:157`), so the overflow becomes a horizontal scrollbar under
 the whole conversation: every other row is now off-centre too, and reading the
 log means scrolling it back each time.
 
@@ -24,9 +24,9 @@ itself one turn later.
 
 - `src/renderer/src/components/chat/Markdown.tsx` — the wrapper is `min-w-0`
   and nothing else; no paragraph carries `overflow-wrap`.
-- `src/renderer/src/components/chat/ChatLog.tsx` — `UserMessage`, for the shape
-  the fix took and why `wrap-anywhere` rather than `break-words`.
-- `src/renderer/src/components/chat/ChatSession.tsx:152` — the scroll container
+- `src/renderer/src/components/chat/ChatLog.tsx:308-329` — `UserMessage`, for
+  the shape the fix took and why `wrap-anywhere` rather than `break-words`.
+- `src/renderer/src/components/chat/ChatSession.tsx:157` — the scroll container
   that turns the overflow into a sideways scroll of the whole log.
 
 Reproduced for the sent bubble, from a screenshot of a real session. The
@@ -38,3 +38,8 @@ picking the fix.
 Fenced code keeps its own horizontal scroll. `CodeBlock` renders `pre`, where
 `white-space: pre` means no wrapping happens whatever `overflow-wrap` says, and
 breaking code at an arbitrary column would misrepresent it.
+
+Tables are already out of it too: `Markdown.tsx:63-67` puts every GFM table in
+an `overflow-x-auto` wrapper, so a wide one scrolls inside its own box. What is
+left exposed is the prose — paragraphs, list items, blockquotes, headings,
+inline code and links.

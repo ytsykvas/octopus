@@ -38,7 +38,7 @@ again.
 
 - `src/core/service.ts:1175-1199` — the probe branch, `startFor` at `:1185`, and
   the unconditional `sessions.delete` / `probe.close()` in the `finally` at
-  `:1190-1192`, with no check that the entry is still an unused probe.
+  `:1191-1192`, with no check that the entry is still an unused probe.
 - `src/core/service.ts:2001` — `sessions.set(chat.id, session)` inside
   `startFor`: the probe is indistinguishable from the chat's own session.
 - `src/core/service.ts:3068-3186` — `sendToChat`: the message on disk at `:3075`,
@@ -48,8 +48,9 @@ again.
   and the read loop ends cleanly, emitting neither `error` nor `result`.
 - `src/renderer/src/hooks/useSubscriptionUsage.ts:100-124` — refreshes on mount,
   on `focus`, on `visibilitychange`, plus a timer while visible.
-- Nothing serialises `chats:send` against the reading: `ipc.ts:601` hands
-  straight to `service.sendToChat`, and `reading` only coalesces readers.
+- Nothing serialises `chats:send` against the reading:
+  `src/main/ipc.ts:601-602` hands straight to `service.sendToChat`, and
+  `reading` only coalesces readers.
 
 ## What is already decided
 
@@ -84,3 +85,9 @@ must also leave the chat's `clearRequests` and permission state alone.
 
 Note `state.chats.at(-1)` is the most recently **created** chat record
 (`openChat` appends), not the one last worked in.
+
+The same race is named in the sketch of
+`docs/tasks/the-usage-poll-writes-into-the-last-conversation.md`, as a second
+hazard beside its own finding. Whichever lands first, the other is still open:
+an event sink for the probe does not stop the `finally` from closing a session
+a message was sent into.

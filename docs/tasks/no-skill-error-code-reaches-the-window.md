@@ -16,13 +16,13 @@ is `{"ok":false,"error":"real-name has no readable SKILL.md."}` — no `code`, n
 In the renderer that misses every `case 'skill…'` in `useErrorMessage` and lands
 in `default:` → `errors.unknown`, so the raw English core message is shown inside
 a Ukrainian frame. `skillMissing`, `skillNameInvalid`, `skillExists`,
-`skillNameMismatch`, `skillTooLarge`, `skillLinkRefused` and `skillUrlRefused` all
-arrive this way.
+`skillNameMismatch`, `skillFrontmatterMissing`, `skillTooLarge`,
+`skillLinkRefused` and `skillUrlRefused` all arrive this way.
 
 ## Why it matters
 
 The house rule is that core throws a code and the renderer localises it; the
-English text is a fallback for logs. Seven codes exist, seven localised messages
+English text is a fallback for logs. Eight codes exist, eight localised messages
 exist, and none of them can ever be reached.
 
 It is a verbatim repeat of the `EnvProfileError` bug the codebase already
@@ -35,15 +35,20 @@ the system never exercises: a test passing for a state that cannot occur.
 
 ## Evidence
 
-- `src/main/result.ts:39-61` — the eight recognised classes; `SkillError` absent.
+- `src/main/result.ts:40-49` — the eight recognised classes; `SkillError` absent.
 - `src/renderer/src/hooks/useErrorMessage.ts` — the `case 'skill…'` arms that
   nothing can reach, and the `default:` that everything lands in.
 - `src/main/ipc.test.ts:1090-1096` — the same omission recorded for
   `EnvProfileError` when it was found.
+- `src/renderer/src/components/settings/SkillsSection.test.tsx:202`, `:295`,
+  `:349`, `:426`, `:544` and `:575` — six mocked IPC failures carrying a skill
+  `code` the bridge cannot currently send.
 
 ## What is already decided
 
-A one-line fix, and independent of the skill-naming bug it was found beside.
+Two lines: the `error instanceof SkillError ||` arm, and the import of it that
+`result.ts` does not have yet. Independent of the skill-naming bug it was found
+beside.
 
 The test that would have caught it has to go through `attempt`, not through
 `useErrorMessage` alone — the renderer test asserts the mapping from a code that

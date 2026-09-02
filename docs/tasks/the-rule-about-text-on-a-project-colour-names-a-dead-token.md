@@ -14,9 +14,10 @@ one of "two rules that are easy to get wrong":
 by nothing. It is also outside the `@theme inline` block, so no
 `text-project-ink` utility exists.
 
-Git settles it: `git log -S 'var(--project-ink)' --all` returns exactly two
-commits — `8335b40` added the token, and `4e03d08` ("the active tab flows into
-the sidebar") deleted its only consumer, replacing
+Git settles it: `git log -S 'var(--project-ink)' --all` returns two commits
+besides `08a4cdf`, which added this note — `8335b40` added the token, and
+`4e03d08` ("the active tab flows into the sidebar") deleted its only consumer,
+replacing
 `{ backgroundColor: 'var(--project-color)', color: 'var(--project-ink)' }` with
 the 18% wash now at `ProjectTabs.tsx:175-176`.
 
@@ -38,7 +39,7 @@ every other project-colour site uses, and not look at the result.
 
 ## Evidence
 
-- `src/renderer/src/styles.css:15,53` and `:101` — declared in plain `:root` and
+- `src/renderer/src/styles.css:53` and `:101` — declared in plain `:root` and
   `.dark`, outside `@theme inline` (`:119-158`).
 - `src/renderer/src/styles.css:99-100` — the comment justifying the dark value by
   a treatment deleted in a commit.
@@ -79,10 +80,10 @@ token whose only correct use is over a fill the design deliberately abandoned.
 documents a palette check reasoning "counting `--project-` in the stylesheet
 gives 32 … `--project-ink` is a text colour, not one of them". Removing the token
 changes that arithmetic. Worth noting separately: that grep already returns 42,
-not 32, because `--project-color` now appears nine times in the wash rules — so
-the skill's guidance is independently stale, and a fix here is the natural moment
-to correct it. The skill's own advice applies to itself: "verify the check before
-believing what it says about the document."
+not 32, because `--project-color` now appears on ten lines of the wash rules,
+three of them comments — so the skill's guidance is independently stale, and a
+fix here is the natural moment to correct it. The skill's own advice applies to
+itself: "verify the check before believing what it says about the document."
 
 ## Sketch
 

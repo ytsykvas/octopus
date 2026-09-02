@@ -49,11 +49,12 @@ worktree"; `carry.ts:89` says "checked to stay inside it".
   `:208-219` — join, mkdir, copyFile, and a catch that swallows every failure.
 - `src/core/service.ts:2685-2705` — `createWorkspaceIn`: worktree add, then
   `prepare`, before any script approval.
-- `src/core/repoConfig.ts:289-320` — `assertUnlinkedPath`, the correct treatment.
-- `src/core/workspaces.ts:611-650` — `fileInWorkspace`, "Lexical containment is
+- `src/core/repoConfig.ts:311-320` — `assertUnlinkedPath`, the correct treatment.
+- `src/core/workspaces.ts:620-648` — `fileInWorkspace`, "Lexical containment is
   not containment", `realpath` on both sides. The only site doing it properly.
 - `src/core/carry.test.ts:70-74` — the only containment test, textual cases only.
-  Nothing in the suite creates a symlink.
+  Neither it nor `env.test.ts` creates a symlink; seven other test files do, and
+  `repoConfig.test.ts:229-240` is the shape to copy.
 
 ## What is already decided
 

@@ -49,7 +49,7 @@ it runs.
 
 - `src/renderer/src/components/chat/ChatLog.tsx:633` and `:643` — the target,
   drawn raw; `:512`, `:519-520` — the same in `ToolCall`.
-- `src/renderer/src/components/chat/ChatLog.tsx:465-468` — the comment naming
+- `src/renderer/src/components/chat/ChatLog.tsx:466-469` — the comment naming
   bidi as the reason; `:471` and `:502` — the two `shown()` calls, both inside
   `ChangeBlock`; `:21` — the import.
 - `src/renderer/src/components/diff/shown.tsx:19-20` — `shown` returns the text
@@ -62,7 +62,7 @@ it runs.
 - No `dir`, `unicode-bidi` or `isolate` anywhere in the renderer; `index.html`
   carries only `lang="uk"`, and `dir=ltr` does not neutralise an explicit
   override. `break-all` and `truncate` are word-breaking and overflow, not bidi.
-- `docs/ui.md:1090-1109` — the Trojan Source section, which scopes the defence to
+- `docs/ui.md:1089-1108` — the Trojan Source section, which scopes the defence to
   the diff pane and the chat's change block and does not mention this card.
 
 ## What is already decided
@@ -75,7 +75,7 @@ That row needs the title dropped, or set from a separately-computed plain-text
 replacement. `describeToolInput` returns `string | null`, so the null check stays
 outside the call.
 
-`docs/ui.md:1106-1109` goes stale with the fix: it says "`shown` … is the one
+`docs/ui.md:1106-1108` goes stale with the fix: it says "`shown` … is the one
 place this is decided, and the chat's change block calls it too", and that
 enumeration becomes wrong the moment the card joins. `docs-check` reads it.
 
@@ -88,7 +88,8 @@ text and none calling `shown`:
   the user reads and then approves for execution. Same authorising gesture, same
   exposure.
 - `QuestionCard.tsx` — the questions and their options come from the agent.
-- `PlanNote` (`ChatLog.tsx:614`) and `ToolFailure`, drawing `readFailure(content)`.
+- `PlanNote` (`ChatLog.tsx:613`) and `ToolFailure` (`:592`), drawing
+  `readFailure(content)`.
 
 So the narrowest correct fix is probably not "add `shown` to the card" but "the
 chat pane draws agent-authored text through `shown` everywhere", with the card as

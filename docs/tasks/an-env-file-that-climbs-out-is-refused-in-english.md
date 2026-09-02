@@ -54,13 +54,13 @@ and the house rule.
   behind the modal.
 - `src/renderer/src/components/ProjectSettings.tsx:348-361` and `:589-600` —
   `commitEnvFile` and the free-text input.
-- `src/core/store.test.ts:852-861` asserts only `.toThrow(StateConflictError)`,
+- `src/core/store.test.ts:854-861` asserts only `.toThrow(StateConflictError)`,
   never the code — unlike `projects.test.ts:137`, which does assert
   `.code === 'duplicateProject'`.
 
 ## What is already decided
 
-The constructor's doc comment at `store.ts:237-243` is misleading in **both**
+The constructor's doc comment at `store.ts:237-244` is misleading in **both**
 directions. It claims the reachable conditions are exactly the coded ones, which
 this breaks; and its own last clause cites "the duplicate branch name a user can
 actually produce", pointing at `store.ts:527-535`, which is not reachable today
@@ -78,7 +78,7 @@ UI — `commitName`, `commitEnvFile` and `changeBranch` all guard upstream, and
 Add `envFileEscapes` — and, while the file is open, `envFileEmpty` — to
 `StateConflictCode`, throw them from the two branches, and add the cases to
 `useErrorMessage` plus keys to `en.ts` then `uk.ts` (TypeScript enforces the
-match). The existing `repoPath` entries sit at `en.ts:1004-1007` / `uk.ts:840-847`.
+match). The existing `repoPath` entries sit at `en.ts:1003-1007` / `uk.ts:840-847`.
 
 Pass the offending path as a `param`, the way `repoPathRelative` does at
 `store.ts:427-429`. The user typed something; a message that repeats it back is

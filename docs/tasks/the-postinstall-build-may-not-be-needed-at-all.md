@@ -9,7 +9,7 @@ reason a contributor needs a working toolchain rather than just npm.
 It may be buying nothing. `node-pty@1.1.0` is built through **Node-API**, not
 against V8 — `nm` on the binary shows 38 `napi_*` symbols and no V8 symbols, and
 `binding.gyp` pulls in `node-addon-api`. Node-API is ABI-stable, which is why
-the same file loads under plain Node (`process.versions.modules` 137) and under
+the same file loads under plain Node (`process.versions.modules` 147) and under
 Electron 43 (148); both were checked.
 
 The package also ships prebuilt binaries in `node_modules/node-pty/prebuilds/`,

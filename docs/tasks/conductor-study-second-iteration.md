@@ -31,6 +31,7 @@ compare against.
 ## Evidence
 
 - `.claude/skills/conductor-study/evals/evals.json` — the three prompts and their assertions
+- `.claude/skills/conductor-study/SKILL.md:62` — the references were written against Conductor 0.80.0, docs fetched 2026-08-12; the installed Conductor is 0.83.1
 - Iteration-one results were written to the session scratchpad and are gone; iteration two starts fresh
 
 ## Sketch
@@ -38,7 +39,16 @@ compare against.
 Re-run all three prompts with and without the skill, grade against the same
 assertions, and compare. The eval prompt that matters most is the third one —
 the request to add Codex and Cursor support. It should now produce a staged plan
-that opens by naming §5 and §6, rather than a refusal.
+that opens by naming the recorded non-goal, rather than a refusal. Which section
+it names does not decide the grade: the skill's guard points at §5 and §12.3
+(`.claude/skills/conductor-study/SKILL.md:159`), the eval's `expected_output`
+says §5 and §6, §6 is where "Claude Code only" is actually settled, and the
+assertion asks only that `docs/PROJECT.md` be cited.
+
+Refresh the references before the run, or at least write down which version they
+were graded against. They describe Conductor 0.80.0 and the installed app is
+0.83.1, so an eval lost on a fact three releases old would say nothing about the
+skill's text.
 
 Worth adding a fourth prompt at the same time: something Conductor's docs answer
 plainly and our references cover, phrased as a feature about to be built. That

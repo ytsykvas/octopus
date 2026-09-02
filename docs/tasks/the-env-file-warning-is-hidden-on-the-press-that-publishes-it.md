@@ -56,11 +56,12 @@ button.
 - `src/renderer/src/components/pr/PullRequestPanel.tsx:94-110`, `:260`,
   `:214-227`, `:318-320`; `PullRequestActions.tsx:134-139` and its props at
   `:57-80`.
-- `src/core/pullRequests.ts:260, 336-341, 350-356`; `src/core/worktree.ts:252-254`
+- `src/core/pullRequests.ts:260, 336-339, 348-354`; `src/core/worktree.ts:252-254`
   — no env guard anywhere on either path.
 - `src/renderer/src/components/pr/PullRequestPanel.test.tsx:501-510` and
   `:512-519` — both tests type a commit message first, so full coverage never
-  exercises the empty-field path, and no test exercises `Commit and push`.
+  exercises the empty-field path. `:1031-1067` presses `Commit and push`, but
+  none of those three tests gives the workspace an env file to expose.
 
 ## What is already decided
 

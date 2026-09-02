@@ -44,8 +44,8 @@ and fully covered over a path that cannot run outside jsdom.
 
 ## Evidence
 
-- `src/renderer/src/components/ProjectSettings.tsx:320-339` — the whole of
-  `addProfile`, including the docstring at `:322-327` stating that `prompt` is
+- `src/renderer/src/components/ProjectSettings.tsx:320-340` — the whole of
+  `addProfile`, including the docstring at `:320-326` stating that `prompt` is
   used **deliberately**, because it is "the one dialog this app does not draw
   itself". That is where the wrong assumption is written down, and it is the line
   the fix must delete.
@@ -57,10 +57,10 @@ and fully covered over a path that cannot run outside jsdom.
   `src/main/ipc.ts:331-338`; `src/preload/index.ts:601` — the single chain.
 - `src/renderer/src/components/RightPanel.tsx:856` and `:906` — the two
   `envProfiles.length > 1` gates that can never open.
-- `src/renderer/src/hooks/useConfirm.tsx:39-43` — **the codebase's own opposite
+- `src/renderer/src/hooks/useConfirm.tsx:38-45` — **the codebase's own opposite
   decision, in writing**: "In-app rather than the system dialog: a native alert
   cannot be styled, so it arrives as a visitor from another application." The
-  comment at `ProjectSettings.tsx:322-327` is the outlier, not the rule — the app
+  comment at `ProjectSettings.tsx:320-326` is the outlier, not the rule — the app
   calls `useConfirm` in six places and `window.confirm`/`window.alert` in none.
 
 ## What is already decided
@@ -92,7 +92,7 @@ the same text-input dialog, so wire both rather than leave a second dead channel
 
 **Sequence this against `deleting-a-set-of-variables-asks-nothing.md`.** That one
 proposes routing Delete through `useConfirm` and names
-`ProjectSettings.test.tsx:842` and `:857` as tests that must change. The four
+`ProjectSettings.test.tsx:832` and `:857` as tests that must change. The four
 create tests sit in the same `describe` and must be rewritten off
 `vi.spyOn(window, 'prompt')`. Both changes rewrite the same block; doing them
 blind will collide.

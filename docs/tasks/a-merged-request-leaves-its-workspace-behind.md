@@ -13,14 +13,21 @@ archive`, and the last arrow is the one the app does not draw. A merged
 workspace looks exactly like a working one in the list, so the list fills with
 finished work and the reader has to remember which of eight branches is done.
 
-Removal already knows how to do the whole thing — it asks about uncommitted
-work, offers to delete the branch, and runs `archive.sh`
-(`src/core/workspaces.ts`). What is missing is anything connecting a merge to it.
+Removal already knows how to do the whole thing — it asks about uncommitted work
+and offers to delete the branch (`src/core/workspaces.ts:372-426`), and
+`removeWorkspaceById` runs `archive.sh` before any of that
+(`src/core/service.ts:2739`). What is missing is anything connecting a merge to
+it.
 
 ## Evidence
 
-- `src/renderer/src/components/pr/PullRequestPanel.tsx` — `merge` re-reads and
-  stops there.
+- `src/renderer/src/components/pr/PullRequestPanel.tsx:179-193` — `merge`
+  re-reads the request, the pane's detail and the workspace list (`:189-191`),
+  and stops there.
+- The header merges too and stops in the same place: `finishRequest`
+  (`src/renderer/src/App.tsx:469-480`) reads the branch's requests again and
+  does nothing else, for the merge at `:553-561` as for the close beside it. A
+  fix has to cover both paths.
 - `docs/PROJECT.md` §3 names archiving as the step after merging.
 
 ## What is already decided

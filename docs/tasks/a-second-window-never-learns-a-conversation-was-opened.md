@@ -27,9 +27,15 @@ idempotent.
 
 ## Evidence
 
-- `src/renderer/src/hooks/useChatTabs.ts` — `load` runs from an effect keyed on the workspace, and from `create`/`fork`/`close` in the window that did them. Nothing else calls it.
-- `src/core/service.ts` — `createChat`, `forkChat` and `closeChat` commit and return; only `setChatStatus` reaches `chatStatusListeners`.
-- `docs/ipc.md` — the three broadcast channels, none of which carries membership.
+- `src/renderer/src/hooks/useChatTabs.ts:225` — the `chats.list` read. `load`
+  runs from an effect keyed on the workspace (`:258-269`), and from
+  `create`/`fork`/`close`/`rename` in the window that did them. Nothing else
+  calls it.
+- `src/core/service.ts:2965`, `:2985` and `:3042` — `createChat`, `forkChat`
+  and `closeChat` commit and return; only `setChatStatus` reaches
+  `chatStatusListeners`, at `:1419`.
+- `docs/ipc.md:155-183` — the four broadcast channels, none of which carries
+  membership.
 
 ## What is already decided
 
@@ -39,7 +45,7 @@ every window re-read on every turn.
 
 ## Sketch
 
-Either a fourth broadcast — `chats:changed` carrying the workspace id, sent by
+Either a fifth broadcast — `chats:changed` carrying the workspace id, sent by
 the three writers — with `useChatTabs` re-reading its own workspace on it; or
 have the status stream carry enough for a window to notice an id it does not
 know and re-read then. The first is simpler and says what it means; the second

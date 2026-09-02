@@ -11,7 +11,7 @@ supplies all ten.
 
 Four places say nine: `docs/architecture.md:31`, `docs/testing.md:250`,
 `docs/ipc.md:258`, and **the interface's own doc comment at `src/main/ipc.ts:81`**,
-three lines above the members it miscounts.
+five lines above the members it miscounts.
 
 The origin is precise: at `eb79498` the interface genuinely had nine members and
 "nine" was correct; `713d623` added `broadcastUsageWindows` as the tenth and
@@ -36,7 +36,7 @@ guard channel names, not host arity.
 
 ## Evidence
 
-- `src/main/ipc.ts:85-131` — the ten members, at lines 86, 90, 95, 96, 98, 106,
+- `src/main/ipc.ts:86-130` — the ten members, at lines 86, 90, 95, 96, 98, 106,
   113, 115, 123, 130; `:81` — the wrong count in code.
 - `src/main/ipc.test.ts:95-114` — the bench's `host` literal supplies all ten, so
   the suite is the proof of the count.

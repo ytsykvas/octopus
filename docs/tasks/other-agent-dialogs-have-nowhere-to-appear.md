@@ -13,10 +13,13 @@ still have nowhere to go:
   flow behind it degrades silently. So we are not ignoring these dialogs — we
   are not being offered them, and the user sees the degraded path without ever
   learning there was a choice.
-- **MCP elicitation** (`onElicitation`, `sdk.d.ts:1300-1306`) — an MCP server
+- **MCP elicitation** (`onElicitation`, `sdk.d.ts:1522-1542`) — an MCP server
   asking for input, with its own JSON Schema for the form. Without the callback
-  the SDK auto-declines. Not reachable today, since nothing configures MCP
-  servers, but it becomes reachable the moment something does.
+  the SDK auto-declines. Reachable today: `settingSources` defaults to `all`
+  (`src/core/config.ts:290`, and `:349` raises an older `none` up to it), and a
+  worktree's own `.mcp.json` starts servers (`src/core/repoTrust.ts:4-8`). Any
+  cloned repository carrying one can raise an elicitation, and the SDK declines
+  it with nothing shown to the user.
 
 ## Why it matters
 
@@ -38,9 +41,10 @@ event and their own way of reaching a window.
 
 ## Evidence
 
-`sdk.d.ts:1543-1578` (`onUserDialog`, `supportedDialogKinds`), `:7325-7357`
-(`UserDialogRequest`, `UserDialogResult`), `:1300-1306` and `:577-605`
-(elicitation). `startSession` in `src/core/agent.ts` passes neither callback.
+`sdk.d.ts:1543-1578` (`onUserDialog`, `supportedDialogKinds`), `:7325-7356`
+(`UserDialogRequest`, `UserDialogResult`), `:1522-1542` and `:577-605`
+(elicitation). `startSession` in `src/core/agent.ts:336` passes neither
+callback — only `canUseTool`, at `:395`.
 
 ## A sketch
 

@@ -32,17 +32,17 @@ a bug.
 
 ## Evidence
 
-- `src/core/agent.ts:671-679` and `:691-700` — `content: describeToolResult(...)`,
+- `src/core/agent.ts:671-679` and `:691-699` — `content: describeToolResult(...)`,
   joined with no bound.
 - `src/core/events.ts:224-231` — `isEphemeral` names only `text_delta`,
   `thinking_delta`, `rate_limit` and `commands_changed`.
 - `src/core/service.ts:1268-1279` — `record` appends the entry verbatim, with no
   filtering of any field.
-- `src/core/service.ts:1521-1526` — the only other core consumer reads
+- `src/core/service.ts:1521-1530` — the only other core consumer reads
   `toolUseId` and `ok`, never `content`.
 - `src/renderer/src/components/chat/ChatLog.tsx:386-391` — `ToolRun` renders a
   row only for `tool_use`, so the field is unreachable on every path.
-- `src/renderer/src/components/chat/ChatLog.test.tsx:431-446` — "shows a failed
+- `src/renderer/src/components/chat/ChatLog.test.tsx:431-444` — "shows a failed
   tool result and stays quiet about a successful one", under the comment "pasting
   that into the chat would bury the conversation in the codebase".
 - Nothing replays the transcript back to the SDK, so the text is not load-bearing
@@ -53,7 +53,7 @@ a bug.
 **The renderer's silence is deliberate and tested**, so the fix belongs at the
 recording end, not the drawing end.
 
-The bound on `ChatMessageSchema` (`chats.ts:583-586`) is not a precedent to
+The bound on `ChatMessageSchema` (`chats.ts:583-587`) is not a precedent to
 follow: it is justified as an input guard on something that becomes a prompt, not
 as a storage policy. Nothing in the codebase bounds anything on the transcript
 side — which is the actual point.

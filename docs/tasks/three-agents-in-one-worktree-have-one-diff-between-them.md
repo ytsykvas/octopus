@@ -26,23 +26,26 @@ surface it actually lands on.
 
 ## Evidence
 
-- `src/core/service.ts` — `readWorkspaceChanges(workspaceId)`; nothing about the diff is per conversation.
-- `src/renderer/src/hooks/useDiffComments.ts` — notes are kept `byWorkspace`, and `App` passes the one controller to every tab of the pane.
-- `src/renderer/src/hooks/useWorkspaces.ts` — the change count on the row is per workspace for the same reason.
+- `src/core/service.ts:641`, `:2796` — `readWorkspaceChanges(workspaceId)`; nothing about the diff is per conversation.
+- `src/renderer/src/hooks/useDiffComments.ts:73` — notes are kept `byWorkspace`, and `App.tsx:108` passes the one controller to every tab of the pane.
+- `src/renderer/src/hooks/usePullRequestQuotes.ts:64` — a remark carried in from a GitHub review is queued `byWorkspace` in the same way, and `components/chat/attachments.ts` merges the two queues into the one message.
+- `src/core/workspaces.ts:69`, `:569` — the change count on the row is per workspace for the same reason.
 
 ## What is already decided
 
 - No locking, no queue, no "one at a time" mode. The user asked for genuine
   parallelism and got it.
-- The tab strip announces what each conversation is doing, so "who is working"
-  is answered. "Who wrote this line" is not.
+- The tab strip announces what each conversation is doing, and the workspace row
+  now carries one status dot per conversation (`WorkspaceRow.tsx:155-179`), so
+  "who is working" is answered. "Who wrote this line" is not.
 
 ## Sketch
 
 Nothing to build yet — the first question is which of these is worth having:
 
 - attributing hunks to a conversation (the service knows which chat announced
-  each edit; `editsInFlight` is already keyed by chat), and offering a filter;
+  each edit; `editsInFlight` is keyed by tool-use id and carries the chat on the
+  value, `service.ts:922`, `:1518`), and offering a filter;
 - keeping review notes per conversation as well as per workspace, so a note goes
   out with the agent it is addressed to;
 - or saying plainly, once, that the diff is the workspace's and leaving it —

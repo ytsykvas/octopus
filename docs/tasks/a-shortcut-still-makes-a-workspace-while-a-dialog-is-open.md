@@ -29,7 +29,7 @@ per-project trust checkbox.
 So ⌃3 behind the open dialog swaps the scripts being listed for another
 workspace's, with nothing on screen naming which workspace they belong to — and
 the tick that follows trusts the repository having read a different set. That
-also contradicts what `docs/ui.md:661` promises of this dialog: "It asks about
+also contradicts what `docs/ui.md:662` promises of this dialog: "It asks about
 the workspace the dialog was opened from."
 
 ⌘⇧N is the noisier one: a worktree appears behind the dialog, and `setEditingId`
@@ -43,24 +43,28 @@ nowhere until it is clicked.
   with no modal check. `:327-333` — `takesText` is inside the `altKey` branch
   only. `:344-348`, `:383-389`, `:802-859`, `:817`.
 - `src/renderer/src/components/Modal.tsx:79` — bare `element.showModal()`; the
-  component has no keydown handler at all. The only `onKeyDown` handlers in the
-  dialogs are two local Enter/Escape inputs, neither stopping propagation.
-- `src/renderer/src/components/RepoConfig.tsx:87`, `:96`, `:204-208`.
+  component has no keydown handler at all. The `onKeyDown` handlers in the
+  dialogs are two local Enter/Escape inputs (`ProjectSettings.tsx:405`, `:596`)
+  and `Combobox`'s arrow-and-Enter list (`Combobox.tsx:75`, used at
+  `ProjectSettings.tsx:521`); none of them stops propagation.
+- `src/renderer/src/components/RepoConfig.tsx:87`, `:96`, `:203-213`.
 - `src/renderer/src/hooks/useWorkspaces.ts:279`;
   `src/renderer/src/components/NameEditor.tsx:51`.
 - `src/main/index.ts:84` — the only `accelerator` in the file.
-- `App.test.tsx` exercises every shortcut (`:517, 553, 608, 1591, 1737, 1924,
-1978`) but never with a dialog on screen.
+- `App.test.tsx` exercises every shortcut (`:517, 553, 608, 1591, 1748, 1935,
+1989`) but never with a dialog on screen.
 - `docs/ui.md:1037-1042` and the matching comment at `App.tsx:328-332` argue only
   about text-entry surfaces and why ⌥ is special; neither considers a modal.
 
 ## What is already decided
 
-**`if (document.querySelector('dialog[open]')) return` is the wrong guard**, because
-not every open `<dialog>` here is a modal. `DropdownMenu` and `ModelPicker` are
-both `dialog` elements by design, and `ModelPicker` deliberately stays open
-across a pick — guarding on any open dialog would kill the shortcuts whenever a
-menu happens to be down.
+**`if (document.querySelector('dialog[open]')) return` was ruled out because not
+every open `<dialog>` here was a modal — and that reason has gone.**
+`DropdownMenu` is a portalled `<div role="menu">` (`DropdownMenu.tsx:184-187`)
+and `ModelPicker` a `<div role="dialog">` (`chat/ModelPicker.tsx:163-164`), so
+neither would match; `Modal.tsx:86` is the only `<dialog>` left in the renderer,
+and it is always opened with `showModal()` (`:79`). The query would match modals
+and nothing else.
 
 The narrow test is `dialog[open]:modal`, or a piece of state in `App`: every
 modal here is already conditionally rendered from `App`, and all four booleans
@@ -77,9 +81,9 @@ switches conversation behind the modal.
 One guard at the top of `onKey` reads better than a check per branch.
 
 Budget for the coverage cost: at 100% enforced, each new guarded branch needs a
-renderer test that opens a modal and fires the key. `Modal.test.tsx:14-43` already
-stubs `showModal`/`close` with an `openDialogs` set and a topmost-wins `cancel`,
-but that stub is local to that file — jsdom implements neither `showModal` nor
-`:modal`, so an `App.test.tsx` guard test needs the stub lifted somewhere shared,
-and a `:modal` selector will not match under jsdom at all. That is a concrete
-argument for the state-based guard over the DOM query.
+renderer test that opens a modal and fires the key. The stub is already shared —
+`stubDialogElement` (`src/renderer/src/test/dialog.ts:12-22`), which
+`App.test.tsx:16` imports — but it sets the `open` attribute and nothing more:
+jsdom implements neither `showModal` nor `:modal`, so a `:modal` selector will
+not match there at all. That is a concrete argument for the state-based guard
+over the DOM query.

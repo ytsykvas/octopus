@@ -66,7 +66,7 @@ other `startFor` caller, `sendToChat` at `service.ts:3154`, where somebody typed
 a message and the error genuinely belongs in the log.
 
 `init` never arrives for a probe, and `ChatLog` draws nothing for a
-`session_started` even when one is recorded (`ChatLog.test.tsx:622-632`). So
+`session_started` even when one is recorded (`ChatLog.test.tsx:623-634`). So
 there is no growing transcript and no "started" dot to fix — only the error path.
 
 ## Sketch
@@ -75,10 +75,13 @@ Give the probe its own event sink. `startSession` takes `onEvent`, so `askAccoun
 can pass a handler that drops everything and never touches `record`,
 `setChatStatus` or the chat record.
 
-That also removes a second hazard on the same lines: while the probe sits in
-`sessions` under a real chat id, a `sendToChat` for that chat adopts it
-(`service.ts:3153`), and the probe's `finally` (`:1191-1193`) then deletes and
-closes the session the message was just handed to.
+It does not touch a second hazard on the same lines, which is worth knowing
+before starting: `startFor` registers the probe in `sessions` under a real chat
+id (`service.ts:2001`), so a `sendToChat` for that chat adopts it
+(`service.ts:3154`), and the probe's `finally` (`:1191-1192`) then deletes and
+closes the session the message was just handed to. A sink that drops events
+leaves all of that exactly where it is; it has its own note,
+`an-account-reading-can-close-a-session-a-message-went-into.md`.
 
 Two marks a filter on events alone will not remove: `startFor` calls
 `session.commands()` and `rememberCommands` commits `knownCommands` onto that

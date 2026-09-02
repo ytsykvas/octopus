@@ -49,7 +49,7 @@ surfaces somewhere.
 - `src/preload/index.test.ts:497-513` — `REMAINING`, the six entries; `:515-520`
   — the loop; `:495-496` — the comment that claims otherwise.
 - `src/preload/index.test.ts:399` — the real guard `CALLS` performs.
-- `src/main/ipc.test.ts:275-368` and `:374-383` — `EXPECTED`, read only against
+- `src/main/ipc.test.ts:276-373` and `:375-383` — `EXPECTED`, read only against
   `bench.handlers`.
 - `src/preload/index.ts:107-113` — `terminal.write`/`resize` as fire-and-forget.
 - All six names are correct **today** (`main/ipc.ts:182, 192, 196, 202, 383, 707`

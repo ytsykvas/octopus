@@ -20,10 +20,13 @@ lines their meaning left out.
 
 ## Evidence
 
-- `src/renderer/src/components/diff/sides.ts` — `sideTexts` walks the hunks and
-  joins them; the comment there states the limit.
-- `src/renderer/src/components/diff/useHighlighting.ts` — one `highlight` call
-  per side per file, over that joined text.
+- `src/renderer/src/components/diff/sides.ts:23-35` — `sideTexts` walks the
+  hunks and joins them; the comment at `:13-16` states the limit.
+- `src/renderer/src/components/diff/useHighlighting.ts:73-76` — one `highlight`
+  call per side per file, over that joined text. A file with no grammar or no
+  hunks is skipped at `:69`, and one carrying a line longer than 2,000
+  characters at `:70`, so the mis-colouring only shows in the files that are
+  coloured at all.
 
 ## What is already decided
 

@@ -32,7 +32,7 @@ point.
 - `src/core/worktree.ts:226-229` — `exec(['status', '--porcelain'])` split on
   newlines. No `-uall` and no `-c status.showUntrackedFiles=all` anywhere in the
   repository.
-- `src/core/git.ts:123-141` — `gitIn` passes argv straight through, so no config
+- `src/core/git.ts:124-140` — `gitIn` passes argv straight through, so no config
   is injected on the way to git. Contrast `RAW_PATHS` at `src/core/diff.ts:177`,
   where the project does prepend `-c` when it needs to.
 - `src/core/workspaces.ts:574` and `:598-603` — the `.length`, into

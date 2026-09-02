@@ -11,9 +11,15 @@ precisely what `WorkspaceScripts.tsx:129-131` warns against in its own comment:
 "a display-hidden element measures zero, so FitAddon would size the terminal to
 no columns".
 
-It does not fail the create: the fit addon clamps to 2 columns and 1 row, and the
-spec schema allows ≥1. So a build started while the pane is folded runs its whole
-log through a two-column terminal.
+It does not fail the create: the spec schema takes anything from 1 column up
+(`src/core/terminal.ts:40-41`). Which wrong size arrives depends on what a
+`display: none` subtree measures. A zero character cell makes `proposeDimensions`
+return nothing and `fit()` leave xterm's 80×24 default standing; otherwise
+`getComputedStyle` hands back the host div's `h-full w-full` as percentages
+rather than pixels, and the geometry is floored at the addon's minimum of 2
+columns and 1 row. Either way the size that goes into `terminal.create`
+(`Terminal.tsx:144-145`) was measured from a box that is not the pane, before a
+line of output is written.
 
 ## Why it matters
 
@@ -31,7 +37,9 @@ fragments — which is exactly the mangled output that comment describes.
 
 ## Sketch
 
-Either keep the pane measurable while folded (height zero with `overflow: hidden`
-rather than `display: none`), or refit the terminal when the pane opens. The
-second is cheaper but leaves the already-written lines wrapped, so it only helps
-a build still running.
+Keep the pane measurable while folded: height zero with `overflow: hidden`
+rather than `display: none`. Refitting the terminal when the pane opens is
+already there — `Terminal.tsx:166-170` observes the container and calls
+`fit.fit()`, which fires the moment the element gains a box — and it is not
+enough on its own: the pty was created at the wrong size and the program
+running in it has already wrapped its output to that width.

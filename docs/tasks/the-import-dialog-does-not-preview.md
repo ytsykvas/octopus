@@ -18,8 +18,11 @@ message about a name the user never saw.
 
 ## Evidence
 
-`SkillImport.tsx` calls `onImport` straight from the button. The parse happens
-in `core/skills.ts`, behind `skills:import`, which writes in the same call.
+`SkillImport.tsx:83-85` calls `onImport` straight from the button, and `submit`
+(`SkillImport.tsx:65-70`) does nothing before it. The parse happens in
+`core/skills.ts`, behind `skills:import`, which writes in the same call:
+`importFromText:503-510`, `importDirectory:553-570` and `importFromUrl:672-706`
+each parse and write before they return.
 
 ## What is already decided
 
@@ -33,3 +36,8 @@ The parse and the write are already separate functions; what they are not is
 separate calls. Either a `skills:inspect` channel answering `{ name,
 description }` for the same three shapes, or `skills:import` gaining a
 `dryRun` — the first is cleaner, the second is one channel fewer.
+
+The link route is where a separate `skills:inspect` costs something:
+`importFromUrl` (`skills.ts:672-706`) downloads and files in one pass, so
+inspecting first would fetch the document twice unless the answer carries the
+text back for the write.

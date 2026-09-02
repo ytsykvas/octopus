@@ -3,10 +3,12 @@
 ## What happens
 
 The pull request tab draws every comment on a request — issue comments, review
-submissions and inline notes, with whoever wrote them and when
-(`src/renderer/src/components/pr/CommentList.tsx`). There is no way to reply to
-any of them. **Add to chat** puts a remark in the composer so the agent can be
-asked about it, and the answer then goes back as a commit or not at all.
+submissions and inline notes, with whoever wrote them and when, an inline note's
+resolved mark and the lines it was written against
+(`src/renderer/src/components/pr/CommentList.tsx:66-126`). There is no way to
+reply to any of them. **Add to chat** puts a remark in the composer so the
+agent can be asked about it, and the answer then goes back as a commit or not
+at all.
 
 ## Why it matters
 
@@ -20,10 +22,12 @@ it is answered.
 
 ## Evidence
 
-- `src/core/pullRequestShapes.ts` — the GraphQL query reads
-  `reviewThreads { comments { … } }` and keeps each comment's id, so replying
-  has the handle it needs already.
-- `docs/PROJECT.md` §16 records this as deliberately out of scope, not missed.
+- `src/core/pullRequests.ts:461-477` — the GraphQL query reads
+  `reviewThreads { comments { … } }` and keeps each comment's id, which
+  `ThreadsPayloadSchema` parses (`src/core/pullRequestShapes.ts:369-395`), so
+  replying has the handle it needs already.
+- `docs/PROJECT.md:679` (§15) records this as deliberately out of scope, not
+  missed.
 
 ## What is already decided
 
@@ -32,4 +36,8 @@ it is answered.
   thing GitHub already has a place for.
 - It is a `gh api` write, so it goes through `pullRequests.ts` beside the other
   commands and reports through `GitHubError` like them.
-- Resolving a thread is the same shape of write and would arrive with it.
+- Resolving a thread is the same shape of write and would arrive with it, with
+  one field to add first: the mutation takes the thread's own id, and the query
+  asks for the thread's fields but not its `id`
+  (`src/core/pullRequests.ts:464-472`), so nothing here has it to pass. Replying
+  off a comment id needs nothing added.

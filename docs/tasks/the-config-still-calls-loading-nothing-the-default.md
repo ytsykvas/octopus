@@ -44,7 +44,7 @@ file contradicts itself.
 - `src/core/config.ts:97-102` and `:334-341` — the two comments in the same file
   that describe the reversal correctly.
 - `docs/PROJECT.md:81` (§4) and `:518-520` (§12.3); `docs/data.md:52`;
-  `src/renderer/src/i18n/locales/en.ts:853-861`;
+  `src/renderer/src/i18n/locales/en.ts:852-861`;
   `src/core/instructionSources.ts:1-13` — everything else has already moved.
 - `src/core/config.test.ts:35-43` and `:361-366` — the tests settle intent
   against the comment, not for it.
@@ -54,8 +54,9 @@ file contradicts itself.
 **`config.ts:392-393` is a rewording, not a correction.** The
 `toSdkSettingSources` comment is not factually wrong — an empty array genuinely
 is what stops the SDK loading `CLAUDE.md`. What is stale is the framing ("behind
-our back", implying that is the app's posture) and the §12.3 citation. The same
-stale framing survives in the test name at `config.test.ts:314`.
+our back", implying that is the app's posture) and the §12.3 citation. The test
+name at `config.test.ts:314` reads the same way, though there it is scoped to
+`none` and literally true, the way `agent.test.ts` is below.
 
 **Do not touch `config.ts:163-174`**, the comment on `alwaysAllowedTools` saying
 "`settingSources` may well be `none` — in which case the SDK has nowhere to write

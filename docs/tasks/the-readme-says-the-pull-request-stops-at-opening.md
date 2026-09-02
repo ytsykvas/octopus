@@ -46,14 +46,14 @@ the line would start building what is already there.
 - `src/core/pullRequests.ts:336, 376, 397, 422, 487`.
 - `src/main/ipc.ts:521, 527, 532, 543`.
 - `src/renderer/src/components/pr/PullRequestPanel.tsx:17-18, 282, 286`;
-  `mergeMethods.ts:14-16`.
+  `mergeMethods.ts:15-17`.
 - `docs/PROJECT.md:677`; `docs/tasks/a-review-thread-can-be-read-here-but-not-answered.md`.
 
 ## What is already decided
 
 **Do not delete the whole line.** Notifications, a Monaco-based diff, and
 Linux/Windows builds are genuinely still out of scope — CLAUDE.md's "Out of scope
-for now" and `docs/PROJECT.md:673` both list them. Only the pull request clause
+for now" and `docs/PROJECT.md:675` both list them. Only the pull request clause
 has gone stale.
 
 **Replace, do not just drop, the PR clause.** `PROJECT.md:679` names the real

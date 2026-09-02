@@ -2,15 +2,19 @@
 
 A skill is keyed by its bare name wherever it came from — the installation's
 store, a project's, or the checkout's `.claude/skills`. Two of them called
-`review` are one row in the panel, one entry in the default lists, and one key
-in a conversation's overrides.
+`review` are two rows in the panel, one under each heading
+(`SkillsPanel.tsx:120-143`), but one entry in the default lists and one key in
+a conversation's overrides — so the switch on either row moves both.
 
 ## Why it matters
 
 Nothing stops it happening. The name is checked for uniqueness **within its own
-store** (`skills.ts`, `refuseExisting`), which is the wrong scope: a global
-`review` and a project `review` are both accepted, and after that switching
-either one switches both.
+store** (`skills.ts:496-500`, `refuseExisting`), which is the wrong scope: a
+global `review` and a project `review` are both accepted, and after that
+switching either one switches both. And only on the three import routes — a
+skill written in the editor goes straight to `writeSkill`/`writeRawSkill`
+(`service.ts:2530-2535`) with no check of any scope, leaving the renderer's
+within-store `taken` list (`SkillEditor.tsx:64`) as the only guard there.
 
 ## Evidence
 

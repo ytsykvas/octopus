@@ -10,9 +10,10 @@ never fire — and `onExit` is the only route to `onOutcome` for the setup half.
 
 `Runner.begin()` has already set `running`/`started` true, so the half sits there
 reporting `busy` for a process that does not exist. `useRunSequence.finished` is
-the only thing that moves a workspace off `building`, so the stage stays there:
-`runAll` is undefined and Run is disabled, `servingAt` is null so no Stop or
-Restart is drawn, and `stopRun` is literally `undefined` outside `serving`.
+the only thing that moves a workspace off `building` while the runner is
+standing, so the stage stays there: `runAll` is undefined and Run is disabled,
+`servingAt` is null so no Stop or Restart is drawn, and `stopRun` is literally
+`undefined` outside `serving`.
 
 The one visible sign is red text inside the build terminal — **and the build half
 is folded on every mount by design**.
@@ -54,13 +55,13 @@ environment, and leaving the project recovers the state without losing anything.
 - `src/renderer/src/components/ScriptRunner.tsx:321-325` — `begin()` sets
   `started`/`running` before the terminal has a session; `:274-281` and `:412-415`
   — the only two routes to `onOutcome` for kind `setup`.
-- `src/renderer/src/hooks/useRunSequence.ts:128-142` and `:110-117`.
-- `src/renderer/src/components/RightPanel.tsx:258`, `:326-339`, `:373-376`,
+- `src/renderer/src/hooks/useRunSequence.ts:128-150` and `:110-117`.
+- `src/renderer/src/components/RightPanel.tsx:258`, `:326-339`, `:374-377`,
   `:682-724`, `:230`, `:919-921`, `:939-942`.
-- `src/main/ipc.ts:188` with `src/main/result.ts:36-62` — a spawn throw crosses
+- `src/main/ipc.ts:188` with `src/main/result.ts:36-63` — a spawn throw crosses
   IPC as an ordinary `{ ok: false }`.
 - `node_modules/node-pty/src/unix/spawn-helper.cc:17-19` and
-  `node_modules/node-pty/lib/utils.js:16-36` — the two refuted triggers.
+  `node_modules/node-pty/lib/utils.js:17-37` — the two refuted triggers.
 
 ## What is already decided
 
@@ -78,10 +79,10 @@ already prints `scripts.buildFailed` in the danger colour — which also unstick
 the server half's identical silence.
 
 **A bare `exitHandler.current?.(null)` is not enough**, because `Terminal` has a
-second consumer: `AuthTerminal.tsx:40-52` passes `onExit={setExitCode}` and
-renders `settings.signInKilled` for null, so a sign-in whose pty never started
-would claim "a signal killed it". A separate `onFailed` prop keeps both callers
-honest.
+second consumer: `src/renderer/src/components/settings/AuthTerminal.tsx:40-52`
+passes `onExit={setExitCode}` and renders `settings.signInKilled` for null, so a
+sign-in whose pty never started would claim "a signal killed it". A separate
+`onFailed` prop keeps both callers honest.
 
 **The same hole exists one layer up for a rejected promise.** The async IIFE at
 `Terminal.tsx:138-164` awaits `terminal.create` with no try/catch, so an

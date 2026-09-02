@@ -41,7 +41,7 @@ Measured on `octopus/leslie`, CLI 2.1.224, Sonnet 5 with a 1M window, on
 
 74k of a 1M window is 7%; 16k is under 2%. The attic went on reading `Context 7%`.
 
-The pull happened. `useSessionUsage.ts:54-63` refreshes on `session_started` and
+The pull happened. `useSessionUsage.ts:60-68` refreshes on `session_started` and
 on `result`, and the chat's own transcript has both, 358ms after the boundary:
 
 ```json
@@ -50,7 +50,7 @@ on `result`, and the chat's own transcript has both, 358ms after the boundary:
           "inputTokens":0,"outputTokens":0,"terminalReason":null}}
 ```
 
-So `getContextUsage()` (`agent.ts:200-217`) answered with the pre-compaction
+So `readContextUsage()` (`agent.ts:217-234`) answered with the pre-compaction
 figure when asked after the compaction had finished. The likely reason is the
 `result` above: the turn reports **zero** tokens although the summarising call
 cost a dollar, so whatever the CLI's context accounting is keyed to had not
@@ -63,12 +63,12 @@ updates on the next request". Ask twice before choosing a fix.
 
 ## What is already decided
 
-**Not a timer.** `useSessionUsage.ts:15-18` rules one out on purpose — each read
+**Not a timer.** `useSessionUsage.ts:16-23` rules one out on purpose — each read
 is a round trip to the agent — and the answer to a stale figure is another
 event, not polling for one.
 
 The event exists and is already being dropped: `mapMessage` returns `[]` for
-every `system` subtype it does not know (`agent.ts:489-490`), `compact_boundary`
+every `system` subtype it does not know (`agent.ts:541-543`), `compact_boundary`
 among them. Mapping it is the same piece of work the log's missing row needs, so
 the two should land together rather than mapping the same event twice.
 
@@ -80,4 +80,5 @@ Map `compact_boundary` to an `AgentEvent` carrying `trigger`, `preTokens` and
 If the CLI turns out to answer with the old figure whenever it is asked before
 the next request, the percentage has to come from `postTokens` on the event
 rather than from a re-read — in which case the reading stops being purely a
-pull, and `SessionUsage` needs to say where its figure came from.
+pull, and `SessionUsage` (`service.ts:366-368`) needs to say where its figure
+came from.

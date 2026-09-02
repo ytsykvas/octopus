@@ -30,19 +30,23 @@ records under one name means the second one's aliases are invisible — and this
 is what decides whether a message is intercepted or sent to the agent. If
 `usage` is ever the duplicated name, `/cost` stops reaching the card and prints
 the prose it was meant to replace instead; if `clear` is, the log survives a
-`/clear` that the agent honoured.
+`/reset` that the agent honoured. The plain spelling is safe either way:
+`isCommand` returns on `name === command` at `chats.ts:440` before it consults
+the list, so only the alias forms are lost.
 
 That second failure is silent, and it is the reason this is worth more than a
 console warning normally would be.
 
 ## Evidence
 
-Observed in a live session on 2026-08-28, in the dev server's console. The two
+Observed in a live session on 2026-08-28, in the dev server's console. The three
 places involved:
 
 - `src/renderer/src/components/chat/CommandMenu.tsx:47` — `key={command.name}`
-- `src/core/agent.ts:336-343` — `toAgentCommands`, a `map` with no dedupe
-- `src/core/chats.ts` — `isCommand`, `commands.find((candidate) => candidate.name === command)`
+- `src/core/agent.ts:302-309` — `toAgentCommands`, a `map` with no dedupe
+- `src/core/chats.ts:435-444` — `isCommand`, and at :442 the
+  `commands.find((candidate) => candidate.name === command)` that reads the
+  aliases off one match
 
 **Not established:** where the second `code-review` comes from. A plugin and a
 user command of the same name, a skill and a command, or the CLI reporting one

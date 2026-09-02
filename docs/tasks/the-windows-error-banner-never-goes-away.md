@@ -50,8 +50,8 @@ simply never specified.
 - `useProjects.ts:31`, `useWorkspaces.ts:58`, `useFileRevert.ts:35`,
   `useChatTabs.ts:148`, `RightPanel.tsx:176` — the `(message: string) => void`
   contract.
-- `src/renderer/src/App.tsx:626-628` — `onSelect` sets the selection and nothing
-  else.
+- `src/renderer/src/App.tsx:625-632` — `onSelect` sets the selection, clears
+  the workspace and opens the sidebar; none of the three clears the error.
 - `App.test.tsx:645` and `:824` assert the banner appears. No test asserts it can
   leave, and none asserts it should persist — so this is not documented intent.
   `docs/ui.md` mentions it twice and never says it is meant to be permanent.
@@ -77,7 +77,7 @@ Two constraints on the obvious fix:
    en, so a missing key is a compile error — plus a test, since coverage is
    100%-enforced and `App.test.tsx` currently only asserts the banner's arrival.
    Do not reuse `close: 'Close'` at `en.ts:251` or `:443`; both are section-scoped
-   to the PR pane and the terminal.
+   to the modal header and the PR pane.
 2. **Clearing on workspace/project switch alone is not sufficient.** The two
    direct writers — `updateConfig` at `:235` and `finishRequest` at `:477` — are
    not tied to a workspace at all, so a config failure raised with no workspace

@@ -29,9 +29,12 @@ fresh one — nothing on the pane says when it was read.
   neither.
 - `src/renderer/src/hooks/usePullRequestDetail.ts:107` — the next read is
   scheduled only when `settling(result.value)`.
-- `src/renderer/src/components/pr/PullRequestPanel.tsx` — `commitAndPush` calls
-  `detail.refresh()`, but a push made by the agent in its own worktree goes
-  through nothing that does.
+- `src/renderer/src/components/pr/PullRequestPanel.tsx:214-227` —
+  `commitAndPush` calls `detail.refresh()`, but a push made by the agent in its
+  own worktree goes through nothing that does.
+- `src/renderer/src/components/pr/PullRequestSummary.tsx:69-77` — **Read GitHub
+  again** (`en.ts:414`) is the button's `title` and `aria-label`, not text on
+  screen: it is the `RotateCw` icon beside the request number.
 
 ## What is already decided
 

@@ -8,13 +8,16 @@ The same sentence — a path must be relative, and must not climb out of the
 worktree with `..` — is written three times, in three modules, in three
 slightly different shapes:
 
-| Where                            | Shape                                            | On failure                                     |
-| -------------------------------- | ------------------------------------------------ | ---------------------------------------------- |
-| `carry.ts:73` (`carriedPaths`)   | a `.filter` over the parsed list                 | the line is dropped, silently and deliberately |
-| `store.ts:327` (`updateProject`) | an `if` on the env file                          | throws `StateConflictError`                    |
-| `revert.ts` (`insideWorktree`)   | an exported predicate, plus a zod schema over it | throws, and refuses at the IPC boundary        |
+| Where                             | Shape                                            | On failure                                     |
+| --------------------------------- | ------------------------------------------------ | ---------------------------------------------- |
+| `carry.ts:137` (`carriedFiles`)   | a `.filter` over the parsed list                 | the line is dropped, silently and deliberately |
+| `store.ts:467` (`updateProject`)  | an `if` on the env file                          | throws `StateConflictError`                    |
+| `revert.ts:52` (`insideWorktree`) | an exported predicate, plus a zod schema over it | throws, and refuses at the IPC boundary        |
 
-Each is correct today. Nothing keeps them in step.
+Each is correct lexically, and lexical is as far as any of them goes: none
+follows a symlink, so a carried destination and an env file can still land
+outside the worktree — `a-carried-file-can-land-outside-the-worktree.md` has the
+reproduction. Nothing keeps them in step.
 
 ## Why it matters
 
@@ -28,9 +31,12 @@ It is the third copy that makes this worth a note. Two were a coincidence.
 
 ## Evidence
 
-- `src/core/carry.ts:73` — `carriedPaths`, `isAbsolute` + `normalize().startsWith('..')`
-- `src/core/store.ts:327` — the same two calls, inline
-- `src/core/revert.ts` — `insideWorktree`, and `RevertPathSchema` built on it
+- `src/core/carry.ts:137` — `carriedFiles`, `isAbsolute` +
+  `normalize().startsWith('..')`, over the destination half of a line alone
+  (`:121-130` says why)
+- `src/core/store.ts:467` — the same two calls, inline
+- `src/core/revert.ts:52` — `insideWorktree`, and `RevertPathSchema` (`:63`)
+  built on it
 
 ## What is already decided
 
@@ -46,3 +52,11 @@ tested — imported by the other two. It has no dependencies, so it can live
 wherever it is least surprising; `git.ts` is the closest thing to a home for
 "facts about a worktree-relative path", and neither `carry.ts` nor `store.ts`
 imports it today, which is worth checking before assuming that is free.
+
+Two further sites in core answer the same question in a stronger shape and are
+not part of the duplication above: `fileInWorkspace`
+(`src/core/workspaces.ts:620-648`), a lexical `relative()` plus `realpath` on
+both sides, and the private `isInside` (`src/core/changeContext.ts:53-56`). The
+comment at `workspaces.ts:610-619` already says a third caller of that shape
+should move it into `paths.ts`. So the destination has to be settled first:
+whether this is one rule or two.

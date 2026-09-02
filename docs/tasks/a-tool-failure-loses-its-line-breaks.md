@@ -47,9 +47,9 @@ no in-app way to see the original structure at all.
   the sibling, with `whitespace-pre-wrap`; `:214-222` — the case that routes to
   one or the other.
 - `src/core/agent.ts:691-700`; `src/renderer/src/components/chat/toolFailure.ts:22`
-  with `toolFailure.test.ts:44-46`.
+  with `toolFailure.test.ts:43-47`.
 - `src/renderer/src/components/chat/Markdown.tsx:84-90` — the stated rule.
-- `src/renderer/src/styles.css:160-208` — the whole `@layer base`, no whitespace
+- `src/renderer/src/styles.css:160-210` — the whole `@layer base`, no whitespace
   rule.
 - `src/renderer/src/components/chat/ChatLog.tsx:325` — `wrap-anywhere`, the class
   already chosen in this file for exactly this wrapping problem.

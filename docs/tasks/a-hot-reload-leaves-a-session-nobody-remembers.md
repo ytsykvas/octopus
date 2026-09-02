@@ -14,9 +14,16 @@ gave. What is on screen is true again after ⌘R and after a renderer crash.
 
 A Vite HMR update is **not a navigation**. React Fast Refresh replaces the
 modules that changed and leaves the document alone, so nothing in `main` fires
-and nothing can. Edit `RightPanel.tsx` while a server runs and `useRunSequence`
-resets while the pty carries on: the header offers `Run`, the port is held, and
-pressing it starts a second server against the first.
+and nothing can. Edit `useRunSequence.ts` while a server runs — a module that
+exports only a hook is no Fast Refresh boundary, so the update invalidates
+upward into `RightPanel` — and the stage resets while the pty carries on: the
+Scripts tab offers `Run` again, the port is held, and pressing it starts a
+second server against the first.
+
+`abandon` (`useRunSequence.ts:110-117`) recovers a workspace stranded in
+`building` when its runner unmounts. It does nothing for this one: it acts only
+on `stage === 'building'`, and what is lost here is a `serving` stage whose pty
+is still alive.
 
 This is development only — a released build never hot-reloads — but development
 is where octopus is written, and it cost most of an evening the first time.
@@ -31,12 +38,12 @@ Terminal tab.
 
 ## Evidence
 
-- `src/main/index.ts` — `did-start-loading` is the only signal `main` gets, and
-  HMR does not produce one.
-- `src/renderer/src/hooks/useRunSequence.ts` — the stage lives in `useState`,
+- `src/main/index.ts:50` — `did-start-loading` is the only signal `main` gets,
+  and HMR does not produce one.
+- `src/renderer/src/hooks/useRunSequence.ts:70` — the stage lives in `useState`,
   which Fast Refresh resets when the file holding it changes.
-- `src/main/terminals.ts` — `disposeFor` can end a window's sessions; nothing
-  asks it to on an HMR update because nothing knows one happened.
+- `src/main/terminals.ts:176` — `disposeFor` can end a window's sessions;
+  nothing asks it to on an HMR update because nothing knows one happened.
 
 ## Sketch
 

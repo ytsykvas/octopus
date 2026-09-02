@@ -43,11 +43,12 @@ direction, surviving in the one row that kept its own rule.
 
 - `src/core/instructionSources.ts:150-159` — the `on()` helper; `:156` is the
   carry-list condition, applied after `present` and the source check have already
-  passed. `:136` — `present` is stat'd at `join(cwd, LOCAL_SETTINGS)`.
+  passed. `:136` — the path `join(cwd, LOCAL_SETTINGS)`, stat'd for `present` at
+  `:164`.
 - `src/core/instructionSources.ts:15-21` — the header still stating the retired
   premise.
 - `src/core/service.ts:2362` — `const cwd = workspace?.path ?? project.repoPath`;
-  `:2364-2372` — the same `cwd` handed to `instructionSources` with
+  `:2364-2371` — the same `cwd` handed to `instructionSources` with
   `sourcesIn(cwd, project)`.
 - `src/core/service.ts:1956` and `:1973` — the session started with those sources
   and `cwd: workspace.path`, the same directory the panel stats.
@@ -79,7 +80,7 @@ for every project row. The bug is only in the approved case.
 
 ## Sketch
 
-The same brittleness bites a file that **is** carried. `service.ts:2371` passes
+The same brittleness bites a file that **is** carried. `service.ts:2370` passes
 `carriedFiles(...).map((file) => file.path)`, and `carriedFiles` keeps the left
 side of a line as typed — trimmed only, never normalised. A carry list spelling
 it `./.claude/settings.local.json` copies the file correctly but fails
@@ -91,6 +92,6 @@ IPC answer with a hardcoded path, so it exercises the rendering, not the rule.
 `instructionSources.test.ts:195` is the only test asserting the rule and it
 asserts the old shape — it has to be rewritten (worktree case vs checkout
 fallback), not extended, or the change lands green against a test that still
-encodes the retired premise. `service.test.ts:1421-1455` is the right home for
+encodes the retired premise. `service.test.ts:1414-1456` is the right home for
 the end-to-end version, mirroring the existing "written into the worktree,
-because that is the directory a session runs in" test at `:1431-1443`.
+because that is the directory a session runs in" test at `:1433-1444`.

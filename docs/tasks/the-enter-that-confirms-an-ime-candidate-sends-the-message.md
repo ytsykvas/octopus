@@ -45,8 +45,12 @@ A grep across `src/` finds no `isComposing`, no `compositionstart` and no
   `:275-304` — `onChange` writes every composition update into `draft`, and
   `submit()` sends from that state.
 - `src/renderer/src/components/chat/PlanDialog.tsx:73-77`.
-- `src/renderer/src/App.tsx:340-392` — the only window-level keydown listener;
-  every branch requires `metaKey` or `ctrlKey`, so it does not intercept first.
+- `src/renderer/src/App.tsx:310-396` — the window-level keydown listener that
+  reads Enter at all. Every branch but the ⌥ one at `:327` requires `metaKey`
+  or `ctrlKey`, and that one returns for anything that takes text and
+  otherwise matches only `Digit1`–`Digit3` by `event.code`, so it does not
+  intercept first either. The one other window listener, `useDismiss.ts:37-42`,
+  reads Escape and nothing else.
 - `Composer.test.tsx` exercises only plain `{Enter}`, `{Shift>}{Enter}` and the
   suggestion list; the whole suite contains no composition event.
 
@@ -83,7 +87,7 @@ arrows and Enter belong to the candidate window while it is up.
 **Three more sites have the same unguarded Enter, and the rename one is the worst
 because it writes to disk:**
 
-- `NameEditor.tsx:59-63` — Enter commits a workspace rename, so a half-composed
+- `NameEditor.tsx:60-63` — Enter commits a workspace rename, so a half-composed
   name becomes the branch and directory slug. It also commits on blur, so the
   IME's own focus behaviour is a second path in.
 - `Combobox.tsx:84-88`.

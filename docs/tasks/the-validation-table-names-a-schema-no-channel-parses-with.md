@@ -25,7 +25,7 @@ docs now carry the only surviving trace of the pre-split spelling.
 Of the eight rows, six are wholly boundary-accurate. The other stale one,
 `account kind | AccountKindSchema`, names the right schema but not the right
 layer: `ipc.ts:182` passes `kind` through on a bare TypeScript annotation and
-`cliFor` (`accounts.ts:225`) does the `safeParse`. The value **is** rejected and
+`cliFor` (`accounts.ts:224`) does the `safeParse`. The value **is** rejected and
 the deeper parse is asserted by tests, so that one is doc placement against
 `docs/architecture.md:136` ("Validation happens in `main/ipc.ts`, not deeper"),
 not an unvalidated argument.
@@ -48,7 +48,7 @@ The `PermissionModeSchema` row reads as current API rather than as history.
 - `src/main/ipc.ts:28` and `:610` — `WorkingModeSchema.parse(mode)`.
 - `git 5507742` and `git a5c250b`; `docs/data.md:232-236`.
 - `src/main/ipc.ts:182`; `src/core/accounts.ts:224-229`;
-  `accounts.test.ts:177-182`, `:225`.
+  `accounts.test.ts:176-183`, `:224-226`.
 - `src/main/ipc.ts:140`, `:556` (`FilePathSchema`) and `:43`, `:497-499`
   (`RevertPathSchema`) — both absent from the table.
 

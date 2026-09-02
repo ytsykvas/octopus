@@ -64,7 +64,7 @@ this is medium rather than high. But it means leaving the review pane to review.
 
 **Reading the mode out of the unified diff is wrong on its own.** `attachHunks`
 is skipped entirely when nothing is drawable (`diff.ts:716-718`), and inside it a
-file not in `asked` is returned untouched (`:986`). A mode-only change is cheap
+file not in `asked` is returned untouched (`:985`). A mode-only change is cheap
 so it usually wins the budget race, but in a diff that has already spent
 `maxFiles` it is marked `tooLarge` and never gets a block. A mode carried only by
 the unified-diff parser would appear or vanish depending on how many other files
@@ -86,7 +86,7 @@ put a wrong line under it. The mode has to be read, not inferred.
 ## Sketch
 
 A `chmod(join(dir, 'x'), 0o755)` case drops straight in beside the symlink test
-at `diff.test.ts:742`, which already drives real git in a temp repo.
+at `diff.test.ts:747`, which already drives real git in a temp repo.
 
 The string is user-facing: a key in `en.ts` beside `renamedFrom` (`en.ts:501`)
 and its match in `uk.ts` (`uk.ts:425`). TypeScript will demand the second once

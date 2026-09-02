@@ -19,26 +19,38 @@ repository.
 
 ## Evidence
 
-- `src/renderer/src/components/RightPanel.tsx` — `scriptable`, and the comment
-  above it explaining why the filter is there.
-- `src/renderer/src/App.tsx` — `scriptPaths` is read for `selectedProjectId`
-  alone, which is what makes the filter necessary.
+- `src/renderer/src/components/RightPanel.tsx:432-442` — `scriptable`, and the
+  comment above it explaining why the filter is there. The reason it gives is
+  the stale one below, and is corrected along with the filter.
+- `src/renderer/src/App.tsx:757-758` and `:796` — `defaultBranch`,
+  `defaultEnvProfile` and `rootPath` are read off `selectedProject` alone and
+  handed to the pane as one set for every runner, which is what makes the
+  filter necessary.
+- `src/renderer/src/hooks/useWorkspaceScripts.ts:49-51` — the scripts, by
+  contrast, are already one answer per workspace.
 
 ## What is already decided
 
-The filter is not the problem and must not simply be dropped. A runner holds the
-**open** project's `setup.sh`, so one left standing from another project would
-offer to run this project's script in a directory that never asked for it — and
-`ScriptRunner` ends a run the moment its `scriptPath` goes null, so handing it a
-null while it runs kills it just as surely.
+The filter is not the problem and must not simply be dropped. The scripts are no
+longer what holds it in place: they are resolved in the worktree that supplies
+them, so a runner left standing already keeps its own. What is still the **open**
+project's is everything around them — `rootPath` reaches every runner as
+`$OCTOPUS_ROOT_PATH` and `defaultBranch` as `CONDUCTOR_DEFAULT_BRANCH`
+(`ScriptRunner.tsx:400-411`), and `defaultEnvProfile` is what the pane calls a
+workspace's env set when it has none of its own. A runner from another project
+would therefore build against a checkout and a base branch that are not its own
+— and `ScriptRunner` ends a run the moment its `script` goes null
+(`ScriptRunner.tsx:88`), so handing it a null while it runs kills it just as
+surely.
 
 ## Sketch
 
-Give the pane a script path per project rather than one pair for the open one:
-`App` reads `projects.scriptPaths` for each project instead of for the selected
-one, and `WorkspaceScripts` takes the pair belonging to each workspace's own
-project. The filter then disappears, because every runner has paths that are
-genuinely its own.
+Give the pane those three values per workspace rather than one set for the open
+project: `RightPanel` takes the `rootPath`, `defaultBranch` and
+`defaultEnvProfile` of each workspace's own project instead of
+`selectedProject`'s. The filter then disappears, because every runner has the
+values that are genuinely its own.
 
-Worth checking first how many projects a read costs — it is one IPC call each,
-made where a single call is made today, and it happens on every project change.
+Nothing new is read for it. The scripts already cost one IPC call per workspace
+on every list change, and the three values sit on the project records `App`
+holds in memory.

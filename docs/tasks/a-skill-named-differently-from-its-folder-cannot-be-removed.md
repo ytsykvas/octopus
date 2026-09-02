@@ -26,7 +26,8 @@ simply does nothing at all. Nothing is shown.
 
 **The variant that is real data loss:** nothing dedupes names inside one store. A
 hand-placed folder `alpha` whose document says `name: review`, beside a skill the
-app created in folder `review`, gives two rows both labelled `review`.
+app created in folder `review`, gives two rows both labelled `review`. The list
+keys a row by that name, so the two also collide as one React key.
 `refuseExisting` only ever probes `skillPath(dir, name)`, so it never notices.
 Edit on either row opens `review/SKILL.md`, Save writes into it, and Remove
 deletes the `review` folder — **the wrong skill disappears while the one the user
@@ -58,7 +59,8 @@ keeps reaching the agent.
 - `src/core/skills.ts:496-500` — `refuseExisting` only probes
   `skillPath(dir, name)`.
 - `src/renderer/src/components/settings/SkillsSection.tsx:74-77` — `open`
-  swallows a non-ok answer; `:157` and `:165` — both act on `skill.name`.
+  swallows a non-ok answer; `:157` and `:165` — both act on `skill.name`, and
+  `:135` keys the row by it.
 - `src/renderer/src/hooks/useSkillStore.ts:82-91` — `remove` clears the error on
   `ok`, then re-lists the surviving row.
 

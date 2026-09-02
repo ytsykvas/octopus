@@ -28,7 +28,7 @@ characters, a chat title at 60, an instruction body at 16,000, a repo-config
 project body at 8,000, an env profile body. For those the refusal is a normal
 outcome of ordinary use.
 
-`chats.ts:582-586` is explicit that its bound exists because "anything past this
+`chats.ts:580-586` is explicit that its bound exists because "anything past this
 is a pasted file, which belongs in the workspace where the agent can read it
 rather than in the conversation" — a statement about ordinary user behaviour. So
 the `docs/ipc.md` justification does not cover it.
@@ -40,21 +40,22 @@ names the limit in a way a reader can act on.
 
 ## Evidence
 
-- `src/main/result.ts:36-62` — `attempt`; the eight arms at `:41-48`, the
+- `src/main/result.ts:36-63` — `attempt`; the eight arms at `:41-48`, the
   uncoded fallthrough at `:61`.
-- `src/core/persist.ts:35-36` — `describeError` passes the message straight
+- `src/core/persist.ts:35-37` — `describeError` passes the message straight
   through. `:72-77` — **the project's own precedent that a raw `ZodError` is not
   presentable**: `readJsonFile` flattens
   `result.error.issues.map((issue) => issue.message).join('; ')` first. The IPC
   boundary does no such flattening.
 - `src/main/ipc.ts:601-603` — `chats:send`; `src/core/chats.ts:587` and `:595` —
   the two reachable chat caps.
-- `grep -rn "maxLength" src/renderer/src` — one hit, a token count in a test. No
-  input or textarea in the app is bounded.
-- `grep -rn "ZodError|prettifyError|treeifyError|flattenError" src docs .claude` —
-  no matches; nothing anywhere maps a zod failure onto a code.
-- `src/main/result.test.ts` covers the eight classes, a plain `Error`, a rejection
-  and a bare thrown string — never a `ZodError`, so nothing fixes this as intended.
+- `grep -rn "maxLength" src/renderer/src` — no hits. No input or textarea in the
+  app is bounded.
+- `grep -rn "ZodError|prettifyError|treeifyError|flattenError" src .claude` — no
+  matches; nothing anywhere maps a zod failure onto a code.
+- `src/main/result.test.ts` covers four of the eight classes, a plain `Error`, a
+  rejection and a bare thrown string — never a `ZodError`, so nothing fixes this
+  as intended.
 - `src/main/ipc.test.ts:1727-1737` asserts only `{ ok: false }`; contrast
   `:1701-1703`, whose comment states the project's rule that a refusal it knows
   how to explain must carry a code.
@@ -73,7 +74,7 @@ Importing `ZodError` in `src/main/result.ts` is allowed: it is main-process code
 and `ipc.ts` already imports `z` directly.
 
 **A second class is missing from the same list.** `InvalidFileError`
-(`src/core/persist.ts:19-26`) is not among the eight either — `grep -rn
+(`src/core/persist.ts:18-26`) is not among the eight either — `grep -rn
 InvalidFileError src/main/` returns nothing — so a corrupt `~/.octopus/state.json`
 or config also crosses with no code. Its message is at least a sentence, because
 `persist.ts:72-77` flattens by hand, but it is the same missing arm. Add it in the

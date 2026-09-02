@@ -21,7 +21,7 @@ renders "Щось пішло не так: [" followed by a multi-line JSON blob 
 diagnostic aimed at whoever wrote the schema, rendered where a sentence for the
 user goes.
 
-Not theoretical: `pullRequestShapes.ts:80-85` says the rollup union is
+Not theoretical: `pullRequestShapes.ts:74-85` says the rollup union is
 deliberately strict so a third `__typename` "would be a change worth failing on
 rather than quietly dropping". The module chooses to fail here, and the failure
 has no localised form.
@@ -46,7 +46,7 @@ a branch without one, so the header offers Create PR for a request that exists.
 ## Evidence
 
 - `src/core/pullRequests.ts:491,495,527` — the three bare `.parse` calls.
-- `src/core/pullRequests.ts:551-562` — `asked` and `parsed`, the only two
+- `src/core/pullRequests.ts:547-563` — `asked` and `parsed`, the only two
   failures given a code.
 - `src/core/pullRequests.ts:187-190` and `src/core/github.ts:209-212` — the
   sibling `safeParse` + coded throw for the identical class of failure.
@@ -55,11 +55,11 @@ a branch without one, so the header offers Create PR for a request that exists.
   `error.message`, which for a `ZodError` is the serialised issue array.
 - `src/renderer/src/hooks/useErrorMessage.ts:130-131`;
   `src/renderer/src/components/pr/PullRequestPanel.tsx:277`.
-- `src/core/pullRequests.test.ts:700-707` — "tells an unreadable answer from an
+- `src/core/pullRequests.test.ts:710-717` — "tells an unreadable answer from an
   unexpected one" asserts `code: 'listFailed'` for the unreadable half and only
   `rejects.toBeDefined()` for the unexpected one. The name asserts a distinction
   the code does not make.
-- `src/core/pullRequests.test.ts:710-715` and `:767-771` — both cover only
+- `src/core/pullRequests.test.ts:720-724` and `:777-781` — both cover only
   non-JSON, so neither the `:495` nor the `:527` parse has a wrong-shape test.
 
 ## What is already decided
@@ -85,6 +85,6 @@ Route the three reads through one helper — `safeParse`, and on failure
 `throw new GitHubError('listFailed', {}, …)` — the way the two older ones already
 do.
 
-Then tighten `pullRequests.test.ts:707` from `rejects.toBeDefined()` to
+Then tighten `pullRequests.test.ts:717` from `rejects.toBeDefined()` to
 `rejects.toMatchObject({ code: 'listFailed' })`, and add the missing wrong-shape
 cases for the threads read and for `readBranchRequests`.

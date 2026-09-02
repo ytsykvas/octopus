@@ -46,7 +46,7 @@ kind of thing a reader plans around.
   this comment and nothing else.
 - `src/core/conductorConfig.ts:185-186`; `docs/core.md:50`;
   `src/core/conductorConfig.ts:4-8` — the three claims.
-- `src/core/conductorConfig.test.ts:202-215` — the split is asserted with a
+- `src/core/conductorConfig.test.ts:203-215` — the split is asserted with a
   rationale about `copyFile` swallowing a glob, **a call these values never
   reach**: a test that passes for a reason the system does not have.
 - `src/core/scriptEnv.ts:136` — `CONDUCTOR_ROOT_PATH`, which is how an
@@ -57,7 +57,7 @@ kind of thing a reader plans around.
 
 **The carry list is deliberately not live** — `docs/repo-config.md:27` says so
 explicitly, in contrast to the scripts and instructions which are, and
-`docs/PROJECT.md:494,498` scope the live `.conductor` read to scripts and prompts
+`docs/PROJECT.md:494,534` scope the live `.conductor` read to scripts and prompts
 only. So feeding `carried` into `carryInto` contradicts a decision already
 written down, and it would silently start copying paths a `git pull` can change
 into a worktree — the class of thing `repoSource.ts`'s header argues has to be

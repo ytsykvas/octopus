@@ -10,8 +10,11 @@ a drawn tick from the tokens — and its comment says why: "`accent-color` was t
 cheap version and it showed: the platform paints its own shape and its own
 blue… the wrong blue on the dark theme."
 
-There are exactly six checkbox/radio inputs in the renderer. Three carry `choice`
-(`NewPullRequestForm.tsx:196`, `QuestionCard.tsx:178`, `:208`) and three do not.
+There are exactly six checkbox/radio inputs in the renderer, though a grep for
+`type="checkbox"` finds only four: QuestionCard's two are
+`type={question.multiSelect ? 'checkbox' : 'radio'}` (`QuestionCard.tsx:165`,
+`:201`). Three carry `choice` (`NewPullRequestForm.tsx:196`,
+`QuestionCard.tsx:178`, `:208`) and three do not.
 
 **They are not equally wrong**, and the difference decides the fix:
 
@@ -51,7 +54,7 @@ failure.
   white box lands on.
 - `color-scheme` appears nowhere in `src/`, nowhere in `index.html`, and nowhere
   in Tailwind v4's shipped `preflight.css` or `theme.css`.
-- `src/renderer/src/components/pr/PullRequestPanel.test.tsx:447-456` — the one
+- `src/renderer/src/components/pr/PullRequestPanel.test.tsx:450-457` — the one
   input that is styled has a test pinning `toHaveClass('choice')`; the three that
   are not have none.
 
@@ -63,7 +66,10 @@ The "Ready-made classes" line at `docs/ui.md:1347` lists `.panel`, `.row`,
 `.bubble-sent`, `.tab-selected` — no `.choice`. The same omission is in
 `.claude/skills/ui-component/SKILL.md:70-79`, the skill that loads automatically
 on every `src/renderer` change. Unless both lists gain the class, the next
-checkbox written repeats this exactly.
+checkbox written repeats this exactly. `Switch.tsx` was written since and says
+its colours are `.choice`'s exactly (`Switch.tsx:21-23`) — a `button` cannot
+take a class written for an input, so it repaints them by hand. That is a third
+place carrying this look while the class itself is in neither list.
 
 **A straight swap is wrong for `useConfirm`.** `.choice`'s checked fill is
 hardcoded `var(--accent)` with the tick in `var(--on-accent)`. Dropping `choice`
@@ -82,7 +88,8 @@ reconciling in the same change.
 
 ## Sketch
 
-`PullRequestPanel.test.tsx:447-456` is the worked example of the regression test,
-and its comment argues carefully why a class assertion earns its place for
-exactly this class — jsdom computes no layout, so nothing else catches it. Copy
-that shape rather than inventing one.
+`PullRequestPanel.test.tsx:450-457` is the worked example of the regression
+test. The argument for why a class assertion earns its place for exactly this
+class — jsdom computes no layout, so nothing else catches it — is at `:307-320`,
+which is not next to it: the comment sits above an unrelated test at `:326`.
+Copy that shape rather than inventing one.

@@ -5,13 +5,18 @@
 ## What happens
 
 `ChecksList` renders one span for two different facts: `{took ?? t(state.labelKey)}`.
-`duration` returns null only when one of the two stamps is null — and a GitHub
-Actions job is mapped with both always present, because a `CheckRun` only reaches
-a finished state through `status === 'COMPLETED'`, which carries a completion
-stamp.
+`duration` returns null when one of the two stamps is null, and also when the
+span between them is not finite or is negative — and a GitHub Actions job is
+mapped with both stamps present, because a `CheckRun` only reaches a finished
+state through `status === 'COMPLETED'`, which carries a completion stamp.
 
 So for every finished Actions check the duration wins and `passed` / `failed` /
 `skipped` is never drawn. The visible row reads `test  ✕  1m4s`.
+
+Two narrow escapes leave the word on screen: a completion stamp that arrives
+empty or as Go's zero time becomes null in `moment()`, and two stamps that came
+back out of order make the span negative. Neither happens to a run that finished
+normally.
 
 It is confined to Actions rows: `statusContext()` hardcodes `completedAt: null`,
 so `duration` returns null for every Commit Status API row and the word always
@@ -51,9 +56,9 @@ coverage stays at 100%.
 ## Evidence
 
 - `src/renderer/src/components/pr/ChecksList.tsx:89-94` — the comment and the JSX
-  that contradicts it; `:74` — `took`; `:11-14` — the docstring; `:102` — the
+  that contradicts it; `:74` — `took`; `:8-14` — the docstring; `:102` — the
   `aria-label`.
-- `src/core/pullRequestShapes.ts:161-169` and `:177,183`.
+- `src/core/pullRequestShapes.ts:141-143`, `:161-169` and `:177,183`.
 - `src/renderer/src/components/pr/time.ts:56-62` and `time.test.ts:34-64` —
   `duration` behaves exactly as specified; the fault is at the call site.
 - `src/renderer/src/components/pr/PullRequestPanel.test.tsx:550-577`, `:57-66`,

@@ -26,7 +26,7 @@ workspace's `.env`.
 
 ## Why it matters
 
-The deleted file is the only copy in existence — `docs/repo-config.md:62` is
+The deleted file is the only copy in existence — `docs/repo-config.md:162` is
 explicit that the env block "is never exported, never imported, and not
 represented in `.octopus/` even as a list of key names". One misclick on a button
 that asks nothing destroys a project's credentials.
@@ -39,6 +39,14 @@ workspace's env file, between our markers, until the next `prepare` overwrites i
 via `applyEnvOverrides`. A user who notices before the next Run can still read
 the values out of a worktree; after one Run they are gone from disk entirely.
 
+**Nobody can reach the button today.** Delete is drawn only when a project holds
+more than one set (`ProjectSettings.tsx:642`), and no second set can be created
+in the shipped app: `addProfile` asks for the name with `window.prompt`, which
+Electron replaced with a function that throws — see
+`a-new-set-of-variables-is-asked-for-with-a-dialog-electron-does-not-have.md`.
+The misclick becomes reachable the moment creation is fixed, which is why that
+note asks for the two to be sequenced together.
+
 ## Evidence
 
 - `src/renderer/src/components/ProjectSettings.tsx:342` — `dropProfile` calls
@@ -48,7 +56,7 @@ the values out of a worktree; after one Run they are gone from disk entirely.
 - `src/core/envProfiles.ts:214-220` — `rm(path, { force: true })`.
 - `src/core/service.ts:2234-2238` — the project's own default silently moves;
   `:2241` — pinned workspaces go to `null`.
-- `src/renderer/src/components/ProjectSettings.test.tsx:842` — "deletes the one
+- `src/renderer/src/components/ProjectSettings.test.tsx:832` — "deletes the one
   on screen" asserts `removeEnv` is called immediately, so it breaks the moment a
   confirm is added; the sibling at `:857` too.
 
@@ -71,10 +79,10 @@ exists to prevent. It is not being contradicted here.
 ## Sketch
 
 Route Delete through `useConfirm`. No plumbing from `App` is needed:
-`useConfirm` renders its own dialog next to the caller, and `SkillsSection.tsx:51`
+`useConfirm` renders its own dialog next to the caller, and `SkillsSection.tsx:52`
 already does exactly this inside this very modal.
 
-Both `ProjectSettings.test.tsx:842` and `:857` need the confirm driven, the way
+Both `ProjectSettings.test.tsx:832` and `:857` need the confirm driven, the way
 the skills tests do.
 
 If the message is to name how many workspaces are pinned — the useful half —

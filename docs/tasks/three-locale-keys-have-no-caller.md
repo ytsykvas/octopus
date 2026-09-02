@@ -42,7 +42,7 @@ hit.
 - `src/renderer/src/components/ProjectSettings.tsx:542`, `:663-664`.
 - `git 470b177`, `git ec37bb6`, `git 295bfc7`.
 - `docs/ui.md:1432` and `:1436` — the two rules.
-- `FileEditor.test.tsx:193-195` asserts the placeholder prop renders but passes
+- `FileEditor.test.tsx:192-196` asserts the placeholder prop renders but passes
   the literal itself, so it constrains nothing about `ProjectSettings`.
 
 ## What is already decided

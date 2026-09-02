@@ -5,7 +5,7 @@
 ## What happens
 
 `src/renderer/index.html:2` says `<html lang="uk">`, and it survives the build
-unchanged — `out/renderer/index.html:2` is byte-identical, and `main/index.ts:61`
+unchanged — `out/renderer/index.html:2` is byte-identical, and `main/index.ts:63`
 loads exactly that file.
 
 The interface inside it is English **by schema**, not by accident:
@@ -37,18 +37,18 @@ Low: nothing is lost or corrupted, and the fix is one attribute plus one effect.
 ## Evidence
 
 - `src/renderer/index.html:2`; `out/renderer/index.html:2`;
-  `src/main/index.ts:61`.
+  `src/main/index.ts:63`.
 - `src/renderer/src/i18n/index.ts:15` and `:24`; `src/core/config.ts:203` and
   `:301`, asserted at `config.test.ts:60` and `:112`.
 - `src/renderer/src/App.tsx:195-197` and `:223-227`.
-- `grep -rn documentElement src/` — six non-test hits, none a `lang` write; no
+- `grep -rn documentElement src/` — four non-test hits, none a `lang` write; no
   `i18n.on('languageChanged')` handler anywhere.
 - `git 9c6ebca`.
 
 ## What is already decided
 
 **The spellcheck rationale does not hold here — leave it out.**
-`src/main/index.ts:34-39` never sets `webPreferences.spellcheck`, and nothing
+`src/main/index.ts:35-40` never sets `webPreferences.spellcheck`, and nothing
 calls `session.setSpellCheckerLanguages`. Electron's spellchecker languages come
 from the session, defaulting to the system locale, **not** from the document's
 `lang`. Justify the fix on the screen-reader and `:lang()` grounds, which are
