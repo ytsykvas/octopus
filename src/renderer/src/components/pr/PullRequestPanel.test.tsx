@@ -537,6 +537,16 @@ describe('the pull request tab', () => {
 })
 
 describe('a pull request that exists', () => {
+  // A push from the terminal raises nothing the pane can hear, so the time of
+  // the last read is what tells a fresh answer from a stale one.
+  it('says when the checks were last read', async () => {
+    answer(view({ request: request() }))
+    answerDetail(detail())
+    renderPanel()
+
+    expect(await screen.findByText(/Read at \d/)).toBeInTheDocument()
+  })
+
   it('reads GitHub again when asked', async () => {
     const user = userEvent.setup()
     answer(view({ request: request() }))

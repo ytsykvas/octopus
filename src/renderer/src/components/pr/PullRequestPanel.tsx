@@ -265,6 +265,7 @@ export function PullRequestPanel({
           <PullRequestSummary
             request={request}
             detail={detail.detail}
+            readAt={detail.readAt}
             onRefresh={() => {
               refresh()
               detail.refresh()

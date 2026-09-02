@@ -3,6 +3,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import type { PullRequestCheck, PullRequestDetail } from '@core/pullRequestShapes.js'
 
+import { emitAgentEvent } from '../test/chat.js'
 import { held } from '../test/held.js'
 import { octopus } from '../test/octopus.js'
 import { usePullRequestDetail } from './usePullRequestDetail.js'
@@ -160,6 +161,125 @@ describe('waiting for something to settle', () => {
     await vi.advanceTimersByTimeAsync(20_000)
 
     expect(vi.mocked(octopus().workspaces.pullRequestDetail).mock.calls.length).toBeGreaterThan(1)
+  })
+
+  /*
+   * A check that has **failed** is not pending, so the poll stopped exactly
+   * when a fix was on its way — and an agent pushing that fix in its own
+   * worktree raised nothing this hook listened to. The diff pane already
+   * re-reads when a turn ends in the workspace; this is the same
+   * subscription, and the same settle.
+   */
+  it('looks again when a turn ends in this workspace', async () => {
+    vi.useFakeTimers()
+    answer(detail({ checks: [check('failed')] }))
+    renderHook(() => usePullRequestDetail(ANNA, 7, true))
+    await vi.advanceTimersByTimeAsync(0)
+    expect(octopus().workspaces.pullRequestDetail).toHaveBeenCalledTimes(1)
+
+    emitAgentEvent({ type: 'result', ok: true, durationMs: 1, costUsd: 0 } as never)
+    // The settle fires `refresh`, which is a state update: outside `act` the
+    // re-render that re-runs the reading effect is not flushed under fake
+    // timers, so the read would be counted a tick too early.
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(1_000)
+    })
+
+    expect(octopus().workspaces.pullRequestDetail).toHaveBeenCalledTimes(2)
+  })
+
+  // Any chat in the workspace writes to the same worktree; a turn ending in
+  // another workspace says nothing about this branch.
+  it('ignores a turn that ended in another workspace', async () => {
+    vi.useFakeTimers()
+    answer(detail({ checks: [check('failed')] }))
+    renderHook(() => usePullRequestDetail('planner/bob', 7, true))
+    await vi.advanceTimersByTimeAsync(0)
+
+    emitAgentEvent({ type: 'result', ok: true, durationMs: 1, costUsd: 0 } as never)
+    await vi.advanceTimersByTimeAsync(1_000)
+
+    expect(octopus().workspaces.pullRequestDetail).toHaveBeenCalledTimes(1)
+  })
+
+  // Only a turn ending says anything about the branch; what the agent said
+  // along the way does not, and a read per streamed line would be a poll in
+  // disguise.
+  it('ignores an event that is not the end of a turn', async () => {
+    vi.useFakeTimers()
+    answer(detail({ checks: [check('failed')] }))
+    renderHook(() => usePullRequestDetail(ANNA, 7, true))
+    await vi.advanceTimersByTimeAsync(0)
+
+    emitAgentEvent({ type: 'text', text: 'pushing now' } as never)
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(1_000)
+    })
+
+    expect(octopus().workspaces.pullRequestDetail).toHaveBeenCalledTimes(1)
+  })
+
+  // Two turns ending within the settle read once, not twice: the second
+  // arrival replaces the first timer rather than joining it.
+  it('reads once for two turns that end together', async () => {
+    vi.useFakeTimers()
+    answer(detail({ checks: [check('failed')] }))
+    renderHook(() => usePullRequestDetail(ANNA, 7, true))
+    await vi.advanceTimersByTimeAsync(0)
+
+    emitAgentEvent({ type: 'result', ok: true, durationMs: 1, costUsd: 0 } as never)
+    emitAgentEvent({ type: 'error', message: 'and then this' } as never)
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(1_000)
+    })
+
+    expect(octopus().workspaces.pullRequestDetail).toHaveBeenCalledTimes(2)
+  })
+
+  // Behind a hidden tab there is nobody to show it to, and the reading effect
+  // asks again when the tab comes back.
+  it('does not read for a turn that ended while the tab was hidden', async () => {
+    vi.useFakeTimers()
+    answer(detail({ checks: [check('failed')] }))
+    const { rerender } = renderHook(({ enabled }) => usePullRequestDetail(ANNA, 7, enabled), {
+      initialProps: { enabled: true }
+    })
+    await vi.advanceTimersByTimeAsync(0)
+    rerender({ enabled: false })
+
+    emitAgentEvent({ type: 'result', ok: true, durationMs: 1, costUsd: 0 } as never)
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(1_000)
+    })
+
+    expect(octopus().workspaces.pullRequestDetail).toHaveBeenCalledTimes(1)
+  })
+
+  // A settle still pending when the pane goes is dropped with it, not fired
+  // into a hook that no longer exists.
+  it('drops a pending re-read when it unmounts', async () => {
+    vi.useFakeTimers()
+    answer(detail({ checks: [check('failed')] }))
+    const { unmount } = renderHook(() => usePullRequestDetail(ANNA, 7, true))
+    await vi.advanceTimersByTimeAsync(0)
+
+    emitAgentEvent({ type: 'result', ok: true, durationMs: 1, costUsd: 0 } as never)
+    unmount()
+    await vi.advanceTimersByTimeAsync(1_000)
+
+    expect(octopus().workspaces.pullRequestDetail).toHaveBeenCalledTimes(1)
+  })
+
+  // A push from the built-in terminal raises no chat event, so the one thing
+  // that tells a fresh answer from a stale one is when it was read.
+  it('says when it last read', async () => {
+    answer(detail())
+    const { result } = renderHook(() => usePullRequestDetail(ANNA, 7, true))
+
+    await waitFor(() => {
+      expect(result.current.detail).not.toBeNull()
+    })
+    expect(result.current.readAt).toEqual(expect.any(String))
   })
 
   it('stops once everything has settled', async () => {

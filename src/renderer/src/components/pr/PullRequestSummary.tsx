@@ -43,13 +43,16 @@ const DECISIONS: Record<
 export function PullRequestSummary({
   request,
   detail,
+  readAt,
   onRefresh
 }: {
   readonly request: PullRequest
   readonly detail: PullRequestDetail | null
+  /** When the detail was last read; the one thing that dates a stale answer. */
+  readonly readAt: string | null
   readonly onRefresh: () => void
 }): React.JSX.Element {
-  const { t } = useTranslation()
+  const { t, i18n } = useTranslation()
 
   // The detail's copy wins where there is one: it is the fresher read, and it
   // is what notices a request somebody else merged or retitled.
@@ -65,6 +68,22 @@ export function PullRequestSummary({
         <p className="text-ink min-w-0 flex-1 leading-relaxed">
           {t(STATE_LABELS[state], { number: request.number })}
         </p>
+
+        {/* Beside the control that reads again, because that is the question
+            it answers. A push from the terminal raises nothing the pane can
+            hear, so without a time a stale answer reads as a fresh one. The
+            clock time rather than "3 minutes ago": no arithmetic, and nothing
+            has to re-render for it to stay true. */}
+        {readAt !== null && (
+          <span className="text-ink-faint shrink-0 text-[11px]">
+            {t('pullRequest.readAt', {
+              time: new Date(readAt).toLocaleTimeString(i18n.language, {
+                hour: '2-digit',
+                minute: '2-digit'
+              })
+            })}
+          </span>
+        )}
 
         <button
           type="button"

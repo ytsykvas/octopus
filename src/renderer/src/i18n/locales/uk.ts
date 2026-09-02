@@ -364,6 +364,7 @@ export const uk: Translation = {
       'git не ігнорує {{file}}, а octopus пише туди змінні цього воркспейса. Закомітивши й відправивши, ви надішлете їх на GitHub.',
 
     refresh: 'Перечитати з GitHub',
+    readAt: 'Прочитано о {{time}}',
     isDraft: 'Чернетка',
 
     checks: 'Перевірки',

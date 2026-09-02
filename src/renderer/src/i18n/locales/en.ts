@@ -423,6 +423,7 @@ export const en = {
       'git does not ignore {{file}}, and octopus writes this workspace’s variables into it. Committing and pushing would send them to GitHub.',
 
     refresh: 'Read GitHub again',
+    readAt: 'Read at {{time}}',
     isDraft: 'Draft',
 
     checks: 'Checks',
