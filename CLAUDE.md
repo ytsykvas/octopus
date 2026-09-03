@@ -130,6 +130,15 @@ added here is paid for in all of them:
   `vitest.config.ts` and `vitest.renderer.config.ts` share it. Size the renderer
   tests accordingly; only the files in `bootstrapOnly` are exempt.
 - Tests are written alongside the code. A bug is reproduced by a test first.
+- **A finding is not fixed until its test pins it and the docs it falsified are
+  true.** Both belong in the commit that fixes it, not in a pass afterwards —
+  and a pass afterwards found something every time it was run, which is how this
+  line was earned.
+- **Verify a guard by reverting it.** 100% coverage says the line ran, not that
+  anything would notice if it went. Six audits in a row found tests that were
+  green with the fix removed: an assertion made before React flushed, a count of
+  calls that held either way, a bench array required by a type and read by
+  nothing. Put the bug back; the suite must go red.
 - Comments explain **why**, not **what**.
 - Conventional Commits.
 - No non-null assertions (`!`) outside tests: `strictTypeChecked` forbids them,

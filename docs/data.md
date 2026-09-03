@@ -11,7 +11,7 @@ else joins a home directory by hand.
   chats/<chatId>.jsonl               one conversation each, append-only
   instructions/*.md                  seven prompts every project falls back to
   skills/                            an extra working-directory root: the skills every project gets
-    .claude/skills/<name>/SKILL.md   one skill, in Claude Code's own format
+    .claude/skills/<folder>/SKILL.md one skill, in Claude Code's own format
   projects/<projectId>/
     carry                            paths carried from the checkout into a workspace
     envs/                            named sets of variables, one written last into every workspace's .env
