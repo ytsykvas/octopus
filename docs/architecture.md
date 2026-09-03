@@ -28,8 +28,8 @@ daemon later — the same reason the layer exists at all.
 
 If a core operation needs a window, a dialog or a menu, the decision stays in
 core as a pure function and `main/` supplies the Electron part. `main/ipc.ts`
-is the worked example: it takes `IpcHost` — nine functions — rather than
-importing `ipcMain`, `dialog`, `BrowserWindow` and `nativeTheme`.
+is the worked example: it takes `IpcHost` — a named set of functions — rather
+than importing `ipcMain`, `dialog`, `BrowserWindow` and `nativeTheme`.
 
 ### The renderer may import types from core, but values only from safe modules
 

@@ -214,16 +214,15 @@ with zod before it goes anywhere.** TypeScript guarantees nothing across a
 process boundary: the renderer is a separate process that displays agent
 output, and a compromised or simply buggy one must not reach a command line.
 
-| Argument               | Schema                                                                                                                              |
-| ---------------------- | ----------------------------------------------------------------------------------------------------------------------------------- |
-| project patch          | `ProjectPatchSchema`                                                                                                                |
-| script kind, body      | `ScriptKindSchema`, `ScriptBodySchema`                                                                                              |
-| instruction kind, body | `InstructionKindSchema`, `InstructionBodySchema` — the project id is deliberately not narrowed, `null` being the installation's own |
-| terminal spec          | `TerminalSpecSchema`                                                                                                                |
-| account kind           | `AccountKindSchema`                                                                                                                 |
-| chat message           | `ChatMessageSchema` — bounded; it becomes a prompt                                                                                  |
-| permission mode        | `PermissionModeSchema`                                                                                                              |
-| permission answer      | `PermissionAnswerSchema`                                                                                                            |
+The schema each channel parses with is named in the tables above, beside the
+channel. There used to be a second, per-argument table here, and it is worth
+saying why it went rather than being corrected: it listed eight of some
+twenty-seven schemas with no "for example" on it, so it read as the boundary
+contract while being a sample — and one of its eight rows named
+`PermissionModeSchema`, which nothing in the repository ever calls `.parse` on.
+`chats:mode` parses with `WorkingModeSchema`, a schema the table never mentioned.
+A list that has to be kept in step with the code, next to the code that already
+says the same thing, only ever goes stale in one direction.
 
 Two related rules, both learned the hard way:
 
@@ -251,11 +250,34 @@ shown before it runs (see [repo-config.md](repo-config.md)).
 4. Add it to the stub in `src/renderer/src/test/octopus.ts`, which is typed as
    the real API, so omitting it is a compile error.
 
+### Adding a push stream
+
+A stream the main process pushes on is not a `handle` and none of the four steps
+above reaches it. It needs five, and the third is the one that was missing for
+six channels at once:
+
+1. Add the member to `IpcHost` in `main/ipc.ts` and call it from the service
+   listener that has the news.
+2. Add the sender to `src/main/broadcast.ts`, taking its windows as a parameter.
+3. **Assert the channel string in `src/main/broadcast.test.ts`.** This is the
+   half that catches a rename. It is not optional and it is not covered by
+   `ipc.test.ts`, which asserts that `registerIpc` called the host function —
+   a different fact from what string that function sends.
+4. Add the subscribe/unsubscribe pair to `preload/index.ts`, and assert its
+   channel by name in `preload/index.test.ts` — the second, independently
+   written copy is what makes a one-sided rename fail.
+5. Give it a paragraph in the stream section above, saying what moment it
+   describes that the other streams do not.
+
+Wiring it in `main/index.ts` is the only step with no test behind it, and that
+is deliberate: the file is on `bootstrapOnly` and no test can reach it. Nothing
+that decides anything belongs there.
+
 ## Why the Electron surface is injected
 
-`registerIpc` takes an `IpcHost` — `handle`, `showOpenDialog`, `windowFor`,
-`prefersDark`, `broadcastTheme`, `broadcastChatEvent`, `openPath` — instead of
-importing Electron. A test then supplies nine small functions rather than a
-framework, and
-the whole table can be exercised without a window. It is the same reasoning that
+`registerIpc` takes an `IpcHost` — a named set of functions, listed in
+`src/main/ipc.ts` — instead of importing Electron. A test then supplies those
+functions rather than a framework, and the whole table can be exercised without
+a window. Not enumerated here: the interface is the list, and a copy of it in
+prose was wrong within one commit of the last member being added. It is the same reasoning that
 keeps the core headless, applied to the process that talks to it.

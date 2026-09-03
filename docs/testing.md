@@ -35,10 +35,17 @@ truth.
 A single project with `environmentMatchGlobs` fails differently — `setupFiles`
 applies to every test, and the DOM setup breaks the core suite.
 
-Only bootstrap is excluded: `main/index.ts` and `renderer/src/main.tsx`, each a
-line that mounts something; the type-only `core/types.ts` and `env.d.ts`, which
-compile to nothing to cover; and the test helpers. The list is `bootstrapOnly`
-in `vitest.shared.ts`, shared by both configs so the two cannot disagree.
+Only bootstrap is excluded: `main/index.ts` and `renderer/src/main.tsx`, which
+compose the application out of the modules that are tested; the type-only
+`core/types.ts` and `env.d.ts`, which compile to nothing to cover; and the test
+helpers. The list is `bootstrapOnly` in `vitest.shared.ts`, shared by both
+configs so the two cannot disagree.
+
+**Nothing in an excluded file is reachable by a test**, which is a stronger
+statement than "untested" and the reason to keep them thin. Six channel names
+sat in `main/index.ts` and nowhere else, and a rename passed the whole gate; they
+live in `broadcast.ts` now, which takes its windows as a parameter. Anything in
+those two files with a decision in it belongs in a module beside them.
 
 ## The suite runs in one zone
 
@@ -247,8 +254,8 @@ no browser makes, and stops exercising the nesting the running app always has.
 ## Main and preload
 
 `registerIpc` takes its Electron surface as a parameter, so `ipc.test.ts`
-supplies nine small functions and drives every channel in the table without a
-window — `EXPECTED` in that file lists them and the suite asserts the count
+supplies the host as small functions and drives every channel in the table
+without a window — `EXPECTED` in that file lists them and the suite asserts the count
 against it, so a channel registered without a row there fails rather than
 slipping past.
 

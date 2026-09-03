@@ -78,9 +78,13 @@ export interface IpcEvent {
 /**
  * The parts of Electron this module needs.
  *
- * Named explicitly so a test can supply nine small functions instead of a
+ * Named explicitly so a test can supply small functions instead of a
  * framework, and so it is obvious at a glance how much of Electron the IPC
  * layer actually touches.
+ *
+ * Deliberately not counted, here or in the documents that describe it. Four
+ * places said nine while it held ten, all of them left behind by the one commit
+ * that added the tenth.
  */
 export interface IpcHost {
   readonly handle: (
