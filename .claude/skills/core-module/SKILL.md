@@ -114,15 +114,25 @@ export type Workspace = z.infer<typeof WorkspaceSchema>
 ## Uniqueness has a scope
 
 Before rejecting a value as a duplicate, ask **within what** it must be unique.
-Getting this wrong has produced three separate bugs here, all with the same
-shape: a name meaningful inside one project was checked against the whole app.
+Getting this wrong keeps producing bugs here, and they run both ways: a name
+meaningful inside one project checked against the whole app, and a name the
+agent treats as global checked inside one directory.
 
-| Value              | Unique within                               |
-| ------------------ | ------------------------------------------- |
-| workspace `name`   | its project                                 |
-| workspace `branch` | its project — branches live in a repository |
-| workspace `id`     | the whole app — it is the IPC key           |
-| directory path     | the filesystem                              |
+| Value              | Unique within                                                                       |
+| ------------------ | ----------------------------------------------------------------------------------- |
+| workspace `name`   | its project                                                                         |
+| workspace `branch` | its project — branches live in a repository                                         |
+| workspace `id`     | the whole app — it is the IPC key                                                   |
+| skill `name`       | everything the agent can see — both stores, and the checkout's own `.claude/skills` |
+| skill folder       | its store — it is a directory, and the app addresses a skill by it                  |
+| directory path     | the filesystem                                                                      |
+
+The skill rows are the pair worth reading together. `skillKey` is the bare name
+because the CLI dedupes on it — two skills sharing one are one skill to the
+agent — so the name is unique app-wide, while the folder is only unique inside
+its store and is what a read or a write is addressed by. Checking the name
+inside one store let a global `review` and a project `review` both exist, after
+which the switch on either row moved both.
 
 Two projects are two repositories: `octopus/anna` in each is two different
 branches, and treating that as a clash locks every project after the first out

@@ -426,10 +426,15 @@ function assertFits(text: string): void {
 export async function writeSkill(
   dir: string,
   folder: string,
-  content: SkillContent
+  content: SkillContent,
+  elsewhere: readonly string[] = []
 ): Promise<SkillEntry> {
   const path = skillPath(dir, folder)
   const existing = await readDocument(path)
+  // Only when this creates one. Saving an edit to a skill that already exists
+  // must not be refused by its own name, and `elsewhere` never holds this
+  // store's names anyway.
+  if (existing === null) await refuseExisting(dir, folder, elsewhere)
   // The name written into the document is the one it already had, not the
   // directory: a skill whose frontmatter names something else keeps saying so
   // after an edit, because that is the name the agent knows it by.
@@ -454,7 +459,8 @@ export async function writeSkill(
 export async function writeRawSkill(
   dir: string,
   folder: string,
-  text: string
+  text: string,
+  elsewhere: readonly string[] = []
 ): Promise<SkillEntry> {
   const path = skillPath(dir, folder)
 
@@ -485,6 +491,8 @@ export async function writeRawSkill(
    * file of its own.
    */
   const existing = await readDocument(path)
+  if (existing === null) await refuseExisting(dir, parsed.name, elsewhere)
+
   const current = existing === null || existing.name === '' ? folder : existing.name
 
   if (parsed.name !== current) {
@@ -543,18 +551,45 @@ function requireDocument(raw: string): ParsedSkill {
   return parsed
 }
 
-async function refuseExisting(dir: string, name: string): Promise<void> {
+/**
+ * Refuses a name that is already in use, in this store or beside it.
+ *
+ * `elsewhere` is the wider half and the reason this takes an argument at all.
+ * A skill is keyed by its bare name wherever it came from — `skillKey` says so,
+ * and it is right: measured against a live session, one `local-probe` in a
+ * store and another in the checkout came back as a single row, so a key telling
+ * them apart would describe something the CLI cannot. But the check was made
+ * against one directory, so a global `review` and a project `review` were both
+ * accepted and the switch on either row then moved both.
+ *
+ * The caller supplies the list because the scope is the caller's to know: this
+ * module knows about a directory, and which directories are in view is a
+ * question about stores.
+ */
+async function refuseExisting(
+  dir: string,
+  name: string,
+  elsewhere: readonly string[]
+): Promise<void> {
+  if (elsewhere.includes(name)) {
+    throw new SkillError('skillExists', { name }, `${name} is already here.`)
+  }
+
   if ((await readText(join(skillPath(dir, name), SKILL_FILE))) !== null) {
     throw new SkillError('skillExists', { name }, `${name} is already here.`)
   }
 }
 
 /** Imports a `SKILL.md` handed over as text — pasted, or downloaded. */
-export async function importFromText(dir: string, text: string): Promise<SkillEntry> {
+export async function importFromText(
+  dir: string,
+  text: string,
+  elsewhere: readonly string[] = []
+): Promise<SkillEntry> {
   const parsed = requireDocument(text)
   const name = requireName(parsed.name)
 
-  await refuseExisting(dir, name)
+  await refuseExisting(dir, name, elsewhere)
 
   return writeRawSkill(dir, name, text)
 }
@@ -600,7 +635,11 @@ async function inspectSource(source: string): Promise<void> {
   }
 }
 
-async function importDirectory(dir: string, source: string): Promise<SkillEntry> {
+async function importDirectory(
+  dir: string,
+  source: string,
+  elsewhere: readonly string[]
+): Promise<SkillEntry> {
   const raw = await readText(join(source, SKILL_FILE))
   if (raw === null) {
     throw new SkillError('skillFrontmatterMissing', {}, `The folder holds no ${SKILL_FILE}.`)
@@ -609,7 +648,7 @@ async function importDirectory(dir: string, source: string): Promise<SkillEntry>
   const parsed = requireDocument(raw)
   const name = requireName(parsed.name)
 
-  await refuseExisting(dir, name)
+  await refuseExisting(dir, name, elsewhere)
   await inspectSource(source)
   await mkdir(dir, { recursive: true })
 
@@ -627,15 +666,19 @@ async function importDirectory(dir: string, source: string): Promise<SkillEntry>
  * Both are offered because both are what a skill arrives as. One that carries
  * references or scripts is a folder; one copied out of a README is a file.
  */
-export async function importFromPath(dir: string, source: string): Promise<SkillEntry> {
+export async function importFromPath(
+  dir: string,
+  source: string,
+  elsewhere: readonly string[] = []
+): Promise<SkillEntry> {
   const info = await stat(source)
 
-  if (info.isDirectory()) return importDirectory(dir, source)
+  if (info.isDirectory()) return importDirectory(dir, source, elsewhere)
 
   // Read without a fallback, so a file the user picked and we cannot open
   // fails saying which file and why. A code of ours in its place would replace
   // "permission denied" with something vaguer.
-  return importFromText(dir, await readFile(source, 'utf8'))
+  return importFromText(dir, await readFile(source, 'utf8'), elsewhere)
 }
 
 type Fetch = typeof fetch
@@ -724,7 +767,8 @@ async function readCapped(response: Response): Promise<string> {
 export async function importFromUrl(
   dir: string,
   value: string,
-  download: Download
+  download: Download,
+  elsewhere: readonly string[] = []
 ): Promise<SkillEntry> {
   const url = httpsUrl(value)
   if (url === null) {
@@ -751,7 +795,7 @@ export async function importFromUrl(
       throw new SkillError('skillUrlRefused', { url: response.url }, 'The redirect left https.')
     }
 
-    return await importFromText(dir, await readCapped(response))
+    return await importFromText(dir, await readCapped(response), elsewhere)
   } finally {
     clearTimeout(timer)
   }

@@ -1931,6 +1931,29 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
     return readSkillsIn(skillsDirOf(storeRoot(store)))
   }
 
+  /**
+   * The names already in use in the store *beside* this one.
+   *
+   * A skill is keyed by its bare name wherever it came from, so a global
+   * `review` and a project `review` are one skill to the agent and two rows
+   * here — and the switch on either used to move both. Uniqueness was checked
+   * inside a single directory, which is the wrong scope for a key this wide.
+   *
+   * The other store only. The checkout's own `.claude/skills` is in the same
+   * scope and is not reachable from a `SkillStore`, which names no workspace;
+   * that half has a task file of its own.
+   */
+  async function namesBesideStore(store: SkillStore): Promise<string[]> {
+    const others =
+      store.kind === 'global'
+        ? state.projects.map((project) => projectSkillsRoot(project.id, dataRoot))
+        : [globalSkillsRoot(dataRoot)]
+
+    const listings = await Promise.all(others.map((root) => readSkillsIn(skillsDirOf(root))))
+
+    return listings.flat().map((skill) => skill.name)
+  }
+
   interface SessionSkills {
     /** Extra roots to hand the session, so it finds the stores' skills. */
     readonly roots: string[]
@@ -2655,10 +2678,11 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
 
     async saveStoredSkill(store, folder, save) {
       const dir = await writableStore(store)
+      const elsewhere = await namesBesideStore(store)
       const written =
         save.kind === 'form'
-          ? await writeSkill(dir, folder, save.content)
-          : await writeRawSkill(dir, folder, save.text)
+          ? await writeSkill(dir, folder, save.content, elsewhere)
+          : await writeRawSkill(dir, folder, save.text, elsewhere)
 
       await refreshRunningSkills()
 
@@ -2672,12 +2696,13 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
 
     async importStoredSkill(store, request) {
       const dir = await writableStore(store)
+      const elsewhere = await namesBesideStore(store)
       const imported =
         request.kind === 'path'
-          ? await importFromPath(dir, request.path)
+          ? await importFromPath(dir, request.path, elsewhere)
           : request.kind === 'text'
-            ? await importFromText(dir, request.text)
-            : await importFromUrl(dir, request.url, download)
+            ? await importFromText(dir, request.text, elsewhere)
+            : await importFromUrl(dir, request.url, download, elsewhere)
 
       await refreshRunningSkills()
 

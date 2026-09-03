@@ -6585,6 +6585,63 @@ describe('the agent chat', () => {
       await expect(service.listSkills({ kind: 'project', projectId })).resolves.toEqual([])
     })
 
+    /*
+     * A skill is keyed by its bare name wherever it came from — `skillKey` says
+     * so, and it is right: two `local-probe`s in different places came back
+     * from a live session as a single row. But uniqueness was checked inside
+     * one directory, so a global `review` and a project `review` were both
+     * accepted, and after that the switch on either row moved both.
+     */
+    it('refuses a name the store beside this one already uses', async () => {
+      const { service, projectId } = await withWorkspace()
+      await service.saveStoredSkill({ kind: 'global' }, 'review', {
+        kind: 'form',
+        content: { description: 'The global one.', body: '# Review\n' }
+      })
+
+      const refused = service.saveStoredSkill({ kind: 'project', projectId }, 'review', {
+        kind: 'form',
+        content: { description: 'The project one.', body: '# Review\n' }
+      })
+
+      await expect(refused).rejects.toMatchObject({ code: 'skillExists' })
+      await expect(service.listSkills({ kind: 'project', projectId })).resolves.toEqual([])
+    })
+
+    it('refuses an import of a name the other store already uses', async () => {
+      const { service, projectId } = await withWorkspace()
+      await service.saveStoredSkill({ kind: 'project', projectId }, 'review', {
+        kind: 'form',
+        content: { description: 'The project one.', body: '# Review\n' }
+      })
+
+      const refused = service.importStoredSkill(
+        { kind: 'global' },
+        { kind: 'text', text: DOCUMENT }
+      )
+
+      await expect(refused).rejects.toMatchObject({ code: 'skillExists' })
+    })
+
+    // Saving an edit is not creating one, and a skill must not be refused by
+    // its own name.
+    it('takes an edit to a skill that already exists', async () => {
+      const { service } = await withWorkspace()
+      await service.saveStoredSkill({ kind: 'global' }, 'review', {
+        kind: 'form',
+        content: { description: 'First.', body: '# Review\n' }
+      })
+
+      await service.saveStoredSkill({ kind: 'global' }, 'review', {
+        kind: 'form',
+        content: { description: 'Second.', body: '# Review\n' }
+      })
+
+      await expect(service.listSkills({ kind: 'global' })).resolves.toMatchObject([
+        { description: 'Second.' }
+      ])
+    })
+
     it('writes a skill the store then reads back', async () => {
       const { service } = await withWorkspace()
 
