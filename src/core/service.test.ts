@@ -6454,6 +6454,27 @@ describe('the agent chat', () => {
       return { workspaceId: workspace.id, chatId: chat.id }
     }
 
+    /*
+     * A fork adds a record like any other, and it is the writer most easily
+     * forgotten: the only one that starts by asking the agent, and the only one
+     * whose fixtures live here rather than beside the other four.
+     *
+     * It reaches `commitChats` through the same `addChatCapped` that `createChat`
+     * uses, so this asserts a shared line — worth a test all the same, because
+     * "same line today" is not a promise about tomorrow.
+     */
+    it('says the set of conversations changed', async () => {
+      const service = await forkingService(() => Promise.resolve({ sessionId: 'sess-forked' }))
+      const { workspaceId, chatId } = await started(service)
+
+      const changes: ChatsChangedEvent[] = []
+      service.onChatsChanged((event) => changes.push(event))
+
+      await service.forkChat(chatId)
+
+      expect(changes).toEqual([{ workspaceId }])
+    })
+
     it('asks the agent to fork, in the workspace’s own directory', async () => {
       const calls: { id: string; dir: string }[] = []
       const service = await forkingService((id, options) => {

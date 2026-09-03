@@ -494,10 +494,19 @@ every value the enum holds is something a conversation is doing.
 
 Both move in one `commit` (`commitChats`), because two would leave a moment in
 which the chats say one thing and the workspace derived from them says another —
-and that moment is when the file gets written. Each of the two streams fires
-only when its own value actually changed: a second conversation finishing does
-not move a workspace whose first is still running, and announcing it anyway
-would redraw the whole list for nothing.
+and that moment is when the file gets written. Every stream that leaves this
+funnel fires only when its own reading actually changed: a second conversation
+finishing does not move a workspace whose first is still running, and announcing
+it anyway would redraw the whole list for nothing.
+
+**Which conversations a workspace has leaves here too**, as `chats:changed`, and
+its reading is the ordered ids and titles — not the statuses. Every status move
+comes through this same funnel, so a reading that included them would tell every
+window to re-read its tab strip several times a turn, which is the reason the
+status stream is a status. Announced here rather than from the five writers that
+change the set — open, create, fork, rename, close — because a hand-kept list of
+call sites is what a sixth writer falls off; `openChat` and `renameChat` were
+routed through the funnel to reach it.
 
 `settleStatuses` follows the same shape on load: the conversations are put down
 first, and the workspaces derived from the settled list rather than settled

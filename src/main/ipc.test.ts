@@ -2054,6 +2054,25 @@ describe('the agent chat', () => {
       })
     })
   })
+
+  /*
+   * The wiring, which nothing asserted: the array existed on the bench because
+   * the interface would not compile without it, and no test ever read it. The
+   * `service.onChatsChanged(host.broadcastChatsChanged)` line could be deleted
+   * and the whole suite stayed green with the channel dead in the app.
+   *
+   * That the sender uses the right channel string is `broadcast.test.ts`'s job.
+   * This is the other half: that anything reaches the sender at all.
+   */
+  it('broadcasts a changed set of conversations to every window', async () => {
+    const projectId = await addProject()
+    const workspace = await createWorkspace(projectId)
+
+    await invoke('chats:open', workspace.id)
+    await invoke('chats:create', workspace.id)
+
+    expect(bench.chatsChangedEvents).toContainEqual({ workspaceId: workspace.id })
+  })
 })
 
 /** The chat id out of a successful `chats:open`. */
