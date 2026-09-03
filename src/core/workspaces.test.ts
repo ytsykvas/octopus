@@ -347,6 +347,43 @@ describe('createWorkspace', () => {
     expect(WORKSPACE_NAMES).toContain(workspace.name)
   })
 
+  /**
+   * Renames a workspace the way the service does — the branch moves with the
+   * label, and the directory deliberately does not.
+   */
+  async function rename(workspace: Workspace, to: string): Promise<void> {
+    const renamed = await renameWorkspace(workspace, project, to, exec)
+    state = {
+      ...state,
+      workspaces: state.workspaces.map((entry) =>
+        entry.id === workspace.id ? { ...entry, ...renamed } : entry
+      )
+    }
+  }
+
+  /*
+   * A rename moves the label and the branch and deliberately leaves the
+   * directory alone — `git worktree move` fails whenever a dev server or a
+   * terminal is inside, which for this app is the normal state.
+   *
+   * So the creation name was in neither taken source — not the record's `name`,
+   * which the rename changed, and not the branches, which moved with it — while
+   * its directory still held a live worktree. The pool handed it straight back:
+   * roughly one press in 256, which reads as a flaky app rather than a rule,
+   * and worse with every renamed workspace a project accumulates.
+   *
+   * The id is where the creation name survives: `<project>/<creation name>`,
+   * and a rename never changes an id.
+   */
+  it('does not hand back the name a renamed workspace still lives in', async () => {
+    const workspace = await create()
+    await rename(workspace, 'fix-auth')
+
+    const next = await createWorkspace(project, state, exec, { root, random: first })
+
+    expect(next.name).not.toBe(FIRST_NAME)
+  })
+
   it('refuses a directory that genuinely exists on disk', async () => {
     // Occupy the path the generator is made to pick.
     await mkdir(join(root, 'workspaces', 'planner', FIRST_NAME), { recursive: true })

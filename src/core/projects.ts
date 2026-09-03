@@ -21,7 +21,7 @@ import { basename, dirname, normalize } from 'node:path'
 import { CodedError } from './codedError.js'
 import { DEFAULT_ENV_FILE } from './envBlock.js'
 import { DEFAULT_PROFILE } from './envProfiles.js'
-import { projectDir, projectsDir } from './paths.js'
+import { projectDir, projectsDir, workspacesDir } from './paths.js'
 import { nextProjectColor } from './colors.js'
 import type { Project, State } from './store.js'
 import type { ProjectId } from './types.js'
@@ -228,5 +228,23 @@ export async function removeProjectData(projectId: ProjectId, root?: string): Pr
     )
   }
 
+  /*
+   * The worktrees' own root goes too.
+   *
+   * `removeProjectById` says in its comment that directories left behind "are
+   * invisible to the app but still occupy names, and adding the project back
+   * would collide with its own debris" — and nothing did it: this deleted
+   * `<root>/projects/<id>` and `<root>/workspaces/<id>` had no remover at all.
+   * Per-workspace removal is best-effort by design, so a worktree deleted from
+   * outside leaves its directory, and those never cleared themselves.
+   *
+   * Not checked a second time, and that is a conclusion rather than an
+   * omission: passing the check above proves `projectId` is a single path
+   * segment that is neither `.` nor `..`, since anything else changes the
+   * dirname or the basename of a path built by joining it. This path is joined
+   * from the same segment, so it has the same shape by the same proof — and a
+   * second `if` that cannot fail is a branch no test can reach.
+   */
   await rm(directory, { recursive: true, force: true })
+  await rm(workspacesDir(projectId, root), { recursive: true, force: true })
 }

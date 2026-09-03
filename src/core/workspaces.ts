@@ -196,11 +196,26 @@ export async function createWorkspace(
   const exists = options.exists ?? pathExists
   const fetchExec = options.fetchExec ?? exec
 
-  // Names are picked per project, so every project starts from the top of the
-  // pool: two projects may both have an `anna`.
+  /*
+   * Names are picked per project, so every project starts from the top of the
+   * pool: two projects may both have an `anna`.
+   *
+   * Three things per workspace, not one, and each is here for its own reason.
+   *
+   * The **current name** is the obvious one. The **creation name** is the
+   * directory: a rename moves the label and the branch and deliberately leaves
+   * the directory where it is, so without this the pool handed back a name
+   * whose folder still held a live worktree — one press in 256, and worse with
+   * every renamed workspace a project accumulates. It needs no field of its
+   * own: an id is `<project>/<creation name>` and a rename never changes one.
+   *
+   * Both go in as written. `nextWorkspaceName` is what compares them by slug,
+   * because that is the third thing a name has to be unique in and deciding it
+   * in two places is how the two halves would drift apart.
+   */
   const fromState = state.workspaces
     .filter((workspace) => workspace.projectId === project.id)
-    .map((workspace) => workspace.name)
+    .flatMap((workspace) => [workspace.name, workspace.id.slice(project.id.length + 1)])
 
   // A branch outlives the worktree it was made for — removal keeps it unless
   // asked otherwise — so the store alone would happily reuse a name git still

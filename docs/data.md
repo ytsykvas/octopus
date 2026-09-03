@@ -236,17 +236,34 @@ computed from both by `sessionMode` in `chats.ts`. No migration was written:
 the schema is a plain object, so zod drops the key it no longer knows, and both
 new fields default.
 
-Three identifiers, and confusing them has caused three separate bugs:
+Four identifiers, and confusing them keeps causing bugs:
 
-| Value              | Unique within                                                |
-| ------------------ | ------------------------------------------------------------ |
-| workspace `name`   | its project                                                  |
-| workspace `branch` | its project — branches live in a repository                  |
-| workspace `id`     | the whole application; it is the IPC key, `<project>/<name>` |
+| Value              | Unique within                                                         |
+| ------------------ | --------------------------------------------------------------------- |
+| workspace `name`   | its project                                                           |
+| workspace `slug`   | its project — it names a database, and is not injective               |
+| workspace `branch` | its project — branches live in a repository                           |
+| workspace `id`     | the whole application; it is the IPC key, `<project>/<creation name>` |
 
 Two projects are two repositories, so `octopus/anna` in each is two different
 branches. Treating that as a clash locked every project after the first out of
 the start of the name pool.
+
+**The id carries the name the workspace was created under**, not its current
+one: a rename changes the label and the branch and never the id. That is what
+makes the id the directory, and it is also the only record of the creation name
+anywhere — which the pool needs, or it hands back a name whose folder still
+holds a live worktree.
+
+**The slug is the odd one, because it is deliberately not injective.**
+`workspaceSlug` lowercases and turns every other character into `_`, so
+`fix-login` and `fix_login` are one `myapp_development_fix_login`: the second
+workspace's build loads a dump over the first's while its server runs, and the
+first's cleanup drops a database the second is using. Nothing fails. Its rules
+cannot be made unique — they mirror the `tr | sed | cut` pipelines in
+repositories' own scripts, and that byte-compatibility is what lets an env block
+and a shell script name one database — so `nextWorkspaceName` and the rename
+refuse the collision instead.
 
 ### The workspace directory never moves
 

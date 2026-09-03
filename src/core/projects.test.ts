@@ -241,6 +241,25 @@ describe('removeProjectData', () => {
     await expect(stat(join(root, 'projects', 'planner'))).rejects.toThrow()
   })
 
+  /*
+   * The worktrees' own root, which nothing removed.
+   *
+   * `removeProjectById` says in its own comment that directories left behind
+   * "are invisible to the app but still occupy names, and adding the project
+   * back would collide with its own debris". Per-workspace removal is
+   * best-effort by design — a worktree deleted from outside must not stop the
+   * project going — so those directories stayed, and nothing ever cleared them.
+   */
+  it('deletes the worktree directories too, not only the project data', async () => {
+    const worktree = join(root, 'workspaces', 'planner', 'anna')
+    await mkdir(worktree, { recursive: true })
+    await writeFile(join(worktree, 'README.md'), 'work\n', 'utf8')
+
+    await removeProjectData('planner', root)
+
+    await expect(stat(join(root, 'workspaces', 'planner'))).rejects.toThrow()
+  })
+
   it('is content with a project that kept nothing', async () => {
     await expect(removeProjectData('planner', root)).resolves.toBeUndefined()
   })
