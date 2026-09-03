@@ -99,11 +99,15 @@ function renderPanel(overrides: Partial<Props> = {}): {
     activeWorkspaceId: null,
     color: null,
     projectId: 'planner',
-    rootPath: '/Users/test/planner',
     scripts: new Map(),
     scriptFailures: new Map(),
     onScriptsChanged: vi.fn(),
-    defaultBranch: 'main',
+    // Per workspace, so a runner from another project keeps its own checkout.
+    projectFor: () => ({
+      rootPath: '/Users/test/planner',
+      defaultBranch: 'main',
+      envProfile: 'default'
+    }),
     defaultEnvProfile: 'default',
     onEditScripts: vi.fn(),
     onEditFiles: vi.fn(),
@@ -336,6 +340,46 @@ describe('RightPanel', () => {
     expect(screen.getByText(ownScript('setup').from)).toBeInTheDocument()
     // The half names the file it runs; the control that runs it is on the tab.
     expect(within(buildSection()).queryByRole('button', { name: 'Run' })).not.toBeInTheDocument()
+  })
+
+  /*
+   * The pane used to filter its list to the open project, and unmounting a
+   * runner is how a run ends — so a dev server in one project died the moment
+   * another was opened.
+   *
+   * The filter's reason was real: everything around the scripts reached every
+   * runner as the *open* project's, so a runner left standing would have built
+   * against a checkout that never asked for it. `projectFor` answers per
+   * workspace, so there is nothing left to share and nothing to unmount.
+   */
+  it('keeps a runner for a workspace of another project, with its own checkout', async () => {
+    const carol = workspaceView('carol', { id: 'ledger/carol', projectId: 'ledger' })
+    renderPanel({
+      workspaces: [anna, carol],
+      activeWorkspaceId: carol.id,
+      projectId: 'planner',
+      // Its own project's scripts, resolved in the worktree that supplies them.
+      scripts: new Map([...SCRIPTS, [carol.id, SCRIPTS.get(anna.id)!]]),
+      projectFor: (workspaceId) =>
+        workspaceId === carol.id
+          ? { rootPath: '/Users/test/ledger', defaultBranch: 'trunk', envProfile: 'default' }
+          : { rootPath: '/Users/test/planner', defaultBranch: 'main', envProfile: 'default' }
+    })
+
+    await userEvent.click(scriptsTab())
+
+    // Mounted at all, which the filter is what prevented.
+    expect(screen.getByText(`OCTOPUS_PORT=${String(carol.port)}`)).toBeInTheDocument()
+
+    await userEvent.click(runButton())
+
+    await waitFor(() => {
+      expect(octopus().terminal.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          env: expect.objectContaining({ OCTOPUS_ROOT_PATH: '/Users/test/ledger' })
+        })
+      )
+    })
   })
 
   it("shows the active workspace's port on the server tab", async () => {

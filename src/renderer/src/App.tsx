@@ -789,7 +789,31 @@ export function App(): React.JSX.Element {
             scripts={workspaceScripts.scripts}
             scriptFailures={workspaceScripts.failures}
             onScriptsChanged={workspaceScripts.refresh}
-            defaultBranch={shortBranchName(selectedProject?.baseBranch ?? '')}
+            /*
+             * Per workspace, from its own project's record.
+             *
+             * These reach every runner — as `$OCTOPUS_ROOT_PATH`, as
+             * `CONDUCTOR_DEFAULT_BRANCH`, and as the env set a workspace falls
+             * back to — and handing down the open project's would build one
+             * workspace against another's checkout. The pane used to filter its
+             * list to the open project because of that, which meant a dev
+             * server died the moment another project was opened.
+             *
+             * Nothing new is read: these sit on records `App` already holds.
+             */
+            projectFor={(workspaceId) => {
+              const owner = projects.all.find((project) =>
+                workspaces.flat.some(
+                  (workspace) => workspace.id === workspaceId && workspace.projectId === project.id
+                )
+              )
+
+              return {
+                rootPath: owner?.repoPath ?? '',
+                defaultBranch: shortBranchName(owner?.baseBranch ?? ''),
+                envProfile: owner?.envProfile ?? 'default'
+              }
+            }}
             defaultEnvProfile={selectedProject?.envProfile ?? 'default'}
             // No guard: the scripts belong to the open project, so the hint
             // that calls this exists only while there is one. With none, this
@@ -828,7 +852,6 @@ export function App(): React.JSX.Element {
             onError={setError}
             // The room the pane must leave alone. Folded away, the list takes
             // none of it — and the pane may have that room too.
-            rootPath={selectedProject?.repoPath ?? ''}
             leftWidth={TAB_STRIP_WIDTH + (sidebarOpen ? sidebarWidth : 0)}
           />
         )}

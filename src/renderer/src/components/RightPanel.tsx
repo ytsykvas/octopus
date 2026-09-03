@@ -122,7 +122,19 @@ interface RightPanelProps {
    */
   readonly projectId: string | null
   /** The open project's checkout, handed to every script it runs. */
-  readonly rootPath: string
+  /**
+   * The checkout and the base branch of a workspace's **own** project.
+   *
+   * A lookup rather than the open project's pair. Every runner in the pane
+   * needs its own — they reach a script as `$OCTOPUS_ROOT_PATH` and
+   * `CONDUCTOR_DEFAULT_BRANCH` — and it is what lets a run survive the project
+   * being left, since unmounting a runner is how a run ends.
+   */
+  readonly projectFor: (workspaceId: string) => {
+    rootPath: string
+    defaultBranch: string
+    envProfile: string
+  }
   /**
    * Which scripts run in each workspace, and whether the repository's are read.
    *
@@ -135,7 +147,6 @@ interface RightPanelProps {
   /** Re-reads the map, after an approval has changed the answer. */
   readonly onScriptsChanged: () => void
   /** The open project's base branch, for a script that reads it as Conductor's. */
-  readonly defaultBranch: string
   /** Which set of variables the open project uses, before the list is read. */
   readonly defaultEnvProfile: string
   readonly onEditScripts: () => void
@@ -181,11 +192,10 @@ export function RightPanel({
   activeWorkspaceId,
   color,
   projectId,
-  rootPath,
   scripts,
   scriptFailures,
   onScriptsChanged,
-  defaultBranch,
+  projectFor,
   defaultEnvProfile,
   onEditScripts,
   onEditFiles,
@@ -364,7 +374,12 @@ export function RightPanel({
     activeWorkspaceId === null ? undefined : scriptFailures.get(activeWorkspaceId)
 
   /** The set in force for a workspace: its own, or the project's. */
-  const profileOf = (workspace: WorkspaceView): string => workspace.envProfile ?? projectEnvProfile
+  /*
+   * The workspace's own set, or its **own** project's default — not the open
+   * project's, which is what `projectEnvProfile` holds for the picker below.
+   */
+  const profileOf = (workspace: WorkspaceView): string =>
+    workspace.envProfile ?? projectFor(workspace.id).envProfile
 
   const staleProfile =
     activeWorkspace !== null &&
@@ -431,16 +446,21 @@ export function RightPanel({
   const active = workspaces.find((workspace) => workspace.id === activeWorkspaceId) ?? null
 
   /*
-   * Only the open project's workspaces may be given its scripts.
+   * Every project's workspaces, not the open one's.
    *
-   * The list carries every project's, because a terminal belongs to a
-   * workspace whatever is on screen. A script does not: `scriptPaths` are this
-   * project's, so a runner left standing from another one would offer to run
-   * this project's `setup.sh` in a directory that never asked for it. Leaving
-   * a project therefore ends its runs — the same clean edge the terminals do
-   * not need, and written down as its own task.
+   * There used to be a filter here, and the reason it gave — that a runner from
+   * another project would be handed this project's scripts and its checkout —
+   * was true of everything the pane passed down as one value for whatever was
+   * on screen. Unmounting a runner is how a run ends, so the filter's real
+   * effect was that opening another project killed every dev server in the one
+   * being left.
+   *
+   * Nothing is shared now: the scripts are resolved in the worktree that
+   * supplies them, and `projectFor` answers the checkout, the base branch and
+   * the fallback env set of a workspace's own project. A runner has what is
+   * genuinely its, so it can keep running.
    */
-  const scriptable = workspaces.filter((workspace) => workspace.projectId === projectId)
+  const scriptable = workspaces
 
   // The ceiling moves with the window: shrinking it must not leave the pane
   // covering the centre, and growing it should make the extra room available.
@@ -928,8 +948,7 @@ export function RightPanel({
               kind="setup"
               scriptFor={(id) => scripts.get(id)?.scripts.setup ?? null}
               visible={tab === 'scripts'}
-              rootPath={rootPath}
-              defaultBranch={defaultBranch}
+              projectFor={projectFor}
               onOpenSettings={onEditScripts}
               tokenFor={(id) => sequence.runOf(id).build}
               stopTokenFor={(id) => sequence.runOf(id).stop}
@@ -959,8 +978,7 @@ export function RightPanel({
             kind="run"
             scriptFor={(id) => scripts.get(id)?.scripts.run ?? null}
             visible={tab === 'scripts'}
-            rootPath={rootPath}
-            defaultBranch={defaultBranch}
+            projectFor={projectFor}
             onOpenSettings={onEditScripts}
             tokenFor={(id) => sequence.runOf(id).server}
             stopTokenFor={(id) => sequence.runOf(id).stop}

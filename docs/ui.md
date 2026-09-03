@@ -595,6 +595,16 @@ called a mistake — and then a line saying nothing is listening there. Nothing 
 disabled and the link stays: §4 says the layer is thin, and being wrong about
 somebody's script must not block them.
 
+**A run outlives the project being left, and unmounting is the only thing that
+ends one.** The pane draws a runner for every workspace it is given, not the
+open project's — which it used to, and the effect was that a dev server in one
+project died the moment another was opened. The filter had a real reason: three
+things reached every runner as the open project's, `$OCTOPUS_ROOT_PATH`,
+`CONDUCTOR_DEFAULT_BRANCH` and the env set a workspace falls back to, so a
+runner left standing would have built against a checkout that never asked for
+it. They are answered per workspace now, from its own project's record, and
+nothing is shared for the filter to protect.
+
 A workspace whose directory has gone loses all of them, `Run` included.
 `WorkspaceScripts` drops a missing workspace, which unmounts its runner and
 disposes the session — so the server is already dead while the stage still says
