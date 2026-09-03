@@ -433,8 +433,21 @@ function isCommand(text: string, command: string, commands: readonly AgentComman
   const name = bareName(word)
   if (name === command) return true
 
-  const known = commands.find((candidate) => candidate.name === command)
-  return known?.aliases.some((alias) => bareName(alias) === name) ?? false
+  /*
+   * Every record with that name, not the first.
+   *
+   * The agent can report two commands under one name — seen live, twice for
+   * `code-review` — and this decides whether a message is intercepted or
+   * reaches the agent. Reading the aliases off one match made the other's
+   * invisible: `/reset` went to the agent while the log stood, claiming a
+   * history it no longer had.
+   *
+   * Whichever record a duplicate came from, its aliases are the user's, so
+   * they all count. The list is not ours to curate.
+   */
+  return commands
+    .filter((candidate) => candidate.name === command)
+    .some((candidate) => candidate.aliases.some((alias) => bareName(alias) === name))
 }
 
 /**

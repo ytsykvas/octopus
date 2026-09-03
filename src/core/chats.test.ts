@@ -324,6 +324,24 @@ describe('recognising the command that clears', () => {
     expect(isClearCommand('/reset', [{ ...clear, aliases: ['/reset'] }])).toBe(true)
   })
 
+  /*
+   * Two records under one name, seen live: the agent reported `code-review`
+   * twice. Reading the aliases off the first match made the second's invisible,
+   * and this decides whether a message is intercepted or sent to the agent — so
+   * `/reset` reached the agent while the log stood, claiming a history it no
+   * longer had.
+   *
+   * The plain spelling was never at risk: the name is matched before the list
+   * is consulted at all. Only the alias forms were lost.
+   */
+  it('reads the aliases off every record with that name, not the first', () => {
+    const first: AgentCommand = { ...clear, aliases: ['reset'] }
+    const second: AgentCommand = { ...clear, aliases: ['new'] }
+
+    expect(isClearCommand('/new', [first, second])).toBe(true)
+    expect(isClearCommand('/reset', [first, second])).toBe(true)
+  })
+
   it('does not mistake an alias of some other command for it', () => {
     expect(isClearCommand('/reset', [{ ...clear, name: 'usage' }])).toBe(false)
   })

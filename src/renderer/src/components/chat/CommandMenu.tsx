@@ -44,7 +44,11 @@ export function CommandMenu({
       <div ref={list} role="listbox" className="max-h-56 overflow-auto p-1">
         {commands.map((command, index) => (
           <button
-            key={command.name}
+            /* The name plus its place in the list the agent reported: two
+               commands can share a name, and React warned that rows sharing a
+               key may be duplicated or omitted — in a list whose highlight
+               Enter completes. */
+            key={`${command.name}-${String(index)}`}
             type="button"
             role="option"
             aria-selected={index === active}

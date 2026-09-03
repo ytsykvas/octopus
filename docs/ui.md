@@ -236,6 +236,15 @@ conversation away. Neither is dispatched: they go out as the text of an ordinary
 message, which is what a slash command is in this app, so the menu hands them to
 the same `onSend` the field uses.
 
+**A command name is not unique**, and both places that use one had assumed it
+was. The agent can report two under one name — seen live, twice for
+`code-review` — so the menu keys a row by its name _and_ its place in the list,
+and the alias lookup reads every record with that name rather than the first.
+The second is the one that mattered: it decides whether a message is intercepted
+or reaches the agent, so a duplicated `clear` meant `/reset` went out while the
+log stood, claiming a history the agent no longer had. Neither de-duplicates —
+octopus is a harness, and dropping one would hide a command somebody wrote.
+
 Two commands are noticed on the way past, both in `core/chats.ts`.
 `isClearCommand` only watches — the message still goes, and knowing it went lets
 the service drop the transcript when the reset comes back. `isUsageCommand`
