@@ -434,6 +434,60 @@ describe('Terminal', () => {
     })
   })
 
+  /*
+   * A session that never starts is a third outcome, and it had no way to say
+   * so: the error went onto the canvas and `sessionId` stayed null, so `onExit`
+   * could never fire — and `onExit` is the only route to the run sequence.
+   * The build half then reported busy for a process that does not exist, with
+   * Run disabled and no Stop drawn: the only ways out were leaving the project
+   * or restarting the app.
+   *
+   * Not reported through `onExit(null)`, which already means "a signal killed
+   * it" to this component's other consumer.
+   */
+  it('tells its owner when no session could be started', async () => {
+    const onFailed = vi.fn()
+    const onExit = vi.fn()
+    vi.mocked(window.octopus.terminal.create).mockResolvedValue({
+      ok: false,
+      error: 'spawn /bin/zsh ENOENT'
+    })
+
+    render(<Terminal cwd="/tmp/planner/anna" onExit={onExit} onFailed={onFailed} />)
+
+    await waitFor(() => {
+      expect(onFailed).toHaveBeenCalledWith('spawn /bin/zsh ENOENT')
+    })
+    expect(onExit).not.toHaveBeenCalled()
+  })
+
+  // One layer up from the branch above: the await had no try/catch at all, so a
+  // rejected `invoke` stranded the run identically and painted nothing.
+  it('tells its owner when the request itself fails', async () => {
+    const onFailed = vi.fn()
+    vi.mocked(window.octopus.terminal.create).mockRejectedValue(new Error('no handler registered'))
+
+    render(<Terminal cwd="/tmp/planner/anna" onFailed={onFailed} />)
+
+    await waitFor(() => {
+      expect(onFailed).toHaveBeenCalledWith(expect.stringContaining('no handler registered'))
+    })
+    expect(emulator().screen.join('')).toContain('no handler registered')
+  })
+
+  // A rejection is usually an Error and does not have to be. Whatever arrives,
+  // the reader gets a sentence rather than `[object Object]`.
+  it('says something useful when the failure is not an Error', async () => {
+    const onFailed = vi.fn()
+    vi.mocked(window.octopus.terminal.create).mockRejectedValue('the bridge went away')
+
+    render(<Terminal cwd="/tmp/planner/anna" onFailed={onFailed} />)
+
+    await waitFor(() => {
+      expect(onFailed).toHaveBeenCalledWith('the bridge went away')
+    })
+  })
+
   it('has nothing to dispose when the session never started', async () => {
     vi.mocked(window.octopus.terminal.create).mockResolvedValue({
       ok: false,

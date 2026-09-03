@@ -413,6 +413,25 @@ function Runner({
               setRunning(false)
               onOutcome?.(exitCode === 0)
             }}
+            /*
+             * The third door, and the one that was unguarded.
+             *
+             * `begin()` has already set this half running, and `onExit` is the
+             * only route to `onOutcome` — but a session that never started can
+             * never exit. The half reported busy for a process that does not
+             * exist, and `useRunSequence` is what moves a workspace off
+             * `building`: Run disabled, no Stop drawn, and nothing to press but
+             * leaving the project or restarting the app.
+             *
+             * Reported here rather than only on the canvas, because the build
+             * half is folded on every mount and the red text inside it is the
+             * sign nobody sees. `failed` is a stage the header draws.
+             */
+            onFailed={(reason) => {
+              setRunning(false)
+              setError(reason)
+              onOutcome?.(false)
+            }}
             onClosed={() => {
               // The port is free now, which is the whole reason the restart
               // waited. A stop in the meantime cleared the flag.

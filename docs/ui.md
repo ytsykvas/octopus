@@ -545,6 +545,18 @@ One control that is always there, and three that change with the run:
 | building        | `Building…`, disabled              |
 | serving         | open in browser, `Restart`, `Stop` |
 
+**Every way a half can end reports it, including the one where nothing starts.**
+`building` is left only by the sequence hearing that a half is finished, and the
+route to that is the session's exit — which a session that never started can
+never send. A create that failed used to write its reason onto the terminal's
+canvas and stop there, so the workspace reported `Building…` for the rest of the
+run with `Run` disabled, no `Stop` drawn, and nothing to press: the exits were
+leaving the project or restarting the application. `Terminal` has a third
+outcome for it now, distinct from an exit code, because `null` there already
+means a signal killed a process that did run. The reason is drawn in the header
+as well as on the canvas — the build half is folded on every mount, so the
+canvas is the one place a reader is not looking.
+
 The constant one is drawn first, ahead of everything that moves. It is the way
 to the scripts themselves — see the fold section below for why the header needs
 one at all — and a control that lands somewhere else because a server came up is

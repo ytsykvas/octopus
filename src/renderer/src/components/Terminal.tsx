@@ -48,6 +48,17 @@ interface TerminalProps {
    * gone and its port is free — which is what a restart has to wait for.
    */
   readonly onClosed?: () => void
+  /**
+   * The session never started, with the reason.
+   *
+   * A third outcome, and neither of the two above. `onExit` says a process ran
+   * and reported a code — `null` there already means a signal killed it, which
+   * `AuthTerminal` renders as such — and `onClosed` says a session that existed
+   * is gone. A create that failed produced no session at all, and reported
+   * nothing: the error went onto the canvas and whoever was waiting on this
+   * terminal waited for ever.
+   */
+  readonly onFailed?: (reason: string) => void
 }
 
 /**
@@ -66,16 +77,19 @@ export function Terminal({
   commandLine,
   env,
   onExit,
-  onClosed
+  onClosed,
+  onFailed
 }: TerminalProps): React.JSX.Element {
   const host = useRef<HTMLDivElement>(null)
   // Kept in a ref so the effect below never re-runs on a changed callback,
   // which would tear the session down mid-login.
   const exitHandler = useRef(onExit)
   const closedHandler = useRef(onClosed)
+  const failedHandler = useRef(onFailed)
 
   useEffect(() => {
     exitHandler.current = onExit
+    failedHandler.current = onFailed
     closedHandler.current = onClosed
   }, [onExit, onClosed])
 
@@ -136,17 +150,33 @@ export function Terminal({
     })
 
     void (async () => {
-      const result = await window.octopus.terminal.create({
-        cwd,
-        command: command ? [...command] : [],
-        commandLine: commandLine ?? '',
-        env: env ? { ...env } : {},
-        cols: term.cols,
-        rows: term.rows
-      })
+      /*
+       * Around the whole await, not only the `ok` check.
+       *
+       * A rejected `invoke` — a channel whose name drifted, main gone — strands
+       * whoever is waiting exactly as a refused create does, and paints
+       * nothing at all. Both roads lead to `onFailed`.
+       */
+      let result
+      try {
+        result = await window.octopus.terminal.create({
+          cwd,
+          command: command ? [...command] : [],
+          commandLine: commandLine ?? '',
+          env: env ? { ...env } : {},
+          cols: term.cols,
+          rows: term.rows
+        })
+      } catch (cause) {
+        const reason = cause instanceof Error ? cause.message : String(cause)
+        term.write(`\r\n\x1b[31m${reason}\x1b[0m\r\n`)
+        failedHandler.current?.(reason)
+        return
+      }
 
       if (!result.ok) {
         term.write(`\r\n\x1b[31m${result.error}\x1b[0m\r\n`)
+        failedHandler.current?.(result.error)
         return
       }
 

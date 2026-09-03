@@ -887,4 +887,39 @@ describe('ScriptRunner', () => {
     // A sequence waiting on this half would otherwise wait for ever.
     expect(onOutcome).toHaveBeenCalledWith(false)
   })
+
+  /*
+   * The third door, and the one that stranded the workspace.
+   *
+   * `prepare` succeeds and the run begins, so `begin()` has set this half
+   * running — and then the session never starts. `onExit` is the only route to
+   * `onOutcome` and it can never fire for a process that does not exist, so the
+   * half reported busy for ever: Run disabled, no Stop drawn, and nothing to
+   * press but leaving the project or restarting the app.
+   */
+  it('reports the half finished when its session never starts', async () => {
+    vi.mocked(octopus().terminal.create).mockResolvedValue({
+      ok: false,
+      error: 'spawn /bin/zsh ENOENT'
+    })
+    const onOutcome = vi.fn()
+
+    mountAndStart({
+      workspace: anna,
+      kind: 'setup',
+      script: SETUP_SCRIPT,
+      port: 3111,
+      rootPath: '/Users/test/planner',
+      defaultBranch: 'main',
+      onOpenSettings: vi.fn(),
+      onOutcome
+    })
+
+    await waitFor(() => {
+      expect(onOutcome).toHaveBeenCalledWith(false)
+    })
+    // Drawn in the header, outside the terminal — the build half is folded on
+    // every mount, so the red text on the canvas is the sign nobody sees.
+    expect(await screen.findByText(/spawn \/bin\/zsh ENOENT/)).toBeInTheDocument()
+  })
 })
