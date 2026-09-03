@@ -208,6 +208,15 @@ apart from the session for the same reason: the SDK's union has some forty
 variants and grows between releases, and a variant we do not draw maps to
 nothing rather than to a placeholder.
 
+**One message is parsed rather than read, and the reason generalises.**
+`compact_boundary` is declared with `compact_metadata`, `pre_tokens` and
+`post_tokens`; a live session sends `compactMetadata`, `preTokens` and
+`postTokens`, and four fields the declaration does not mention. Reading the
+typed shape yields `undefined` at runtime — an event of nulls that looks like it
+worked. So it goes through zod like any other external data, accepting both
+spellings, and a shape neither fits degrades the event to nulls instead of
+dropping it: the log's line is worth drawing on the boundary alone.
+
 ### What the types leave unsaid is measured, not guessed
 
 Two fields on the way in carry no unit in the SDK's types, and both were checked

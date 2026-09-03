@@ -188,6 +188,27 @@ export const AgentEventSchema = z.discriminatedUnion('type', [
   z.object({ type: z.literal('commands_changed'), commands: z.array(AgentCommandSchema) }),
 
   /**
+   * The agent replaced the older half of the conversation with a summary.
+   *
+   * Kept in the transcript rather than treated as ephemeral, and that is the
+   * point: read back a week later it still says where the agent's memory of
+   * this conversation thins out. `conversation_reset` is the same event with
+   * the memory wholly discarded instead of partly kept.
+   *
+   * Every field nullable. They come from metadata the SDK types one way and
+   * sends another, so a shape nothing recognises has to degrade the row rather
+   * than lose it — the reader's question is whether this was compacted, not by
+   * how much.
+   */
+  z.object({
+    type: z.literal('conversation_compacted'),
+    /** `auto` is the one nothing else on screen accounts for: nobody asked. */
+    trigger: z.enum(['manual', 'auto']).nullable(),
+    preTokens: z.number().nullable(),
+    postTokens: z.number().nullable()
+  }),
+
+  /**
    * What `/usage` was asked and answered.
    *
    * Kept in the transcript, unlike the rate limit two variants up, and the

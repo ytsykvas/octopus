@@ -63,6 +63,39 @@ export function useSessionUsage(chatId: string | null): SessionUsage {
     return onChatEvent((message) => {
       if (message.event.type === 'session_started' || message.event.type === 'result') {
         void refresh(chatId)
+        return
+      }
+
+      /*
+       * The one figure taken from an event rather than asked for.
+       *
+       * A compaction frees most of the window, and the reading went on showing
+       * what it showed before — measured live at 74k before and 16k after. The
+       * reading is the reason the command was run, so seeing it unmoved means
+       * running it again for another minute and another dollar.
+       *
+       * Taken rather than re-read because `postTokens` is what the CLI itself
+       * computed for the conversation it has just written: right whether or not
+       * `getContextUsage` has caught up, where a re-read would put the stale
+       * figure back if the CLI only updates on the next request. The next
+       * `result` re-reads as it always did.
+       */
+      if (message.event.type === 'conversation_compacted') {
+        const { postTokens } = message.event
+        if (postTokens === null) return
+
+        setUsage((current) =>
+          current.context === null
+            ? current
+            : {
+                ...current,
+                context: {
+                  ...current.context,
+                  usedTokens: postTokens,
+                  percentage: Math.round((postTokens / current.context.maxTokens) * 100)
+                }
+              }
+        )
       }
     }, chatId)
   }, [chatId, refresh])

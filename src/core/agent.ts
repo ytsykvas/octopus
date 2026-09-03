@@ -29,6 +29,7 @@ import type { AgentEvent } from './events.js'
 import { describeError } from './persist.js'
 import type { UsageReport } from './usage.js'
 import { toUsageReport } from './usage.js'
+import { z } from 'zod'
 
 /** The one function this module needs from the SDK. */
 export type QueryFn = (params: {
@@ -524,6 +525,47 @@ export function startSession(options: SessionOptions, hooks: SessionHooks): Agen
  * Message kinds we do not render map to nothing rather than to a placeholder:
  * the SDK's union has some forty variants and grows between releases.
  */
+/**
+ * What a compaction says about itself, read rather than trusted.
+ *
+ * `sdk.d.ts` declares `compact_metadata` with `pre_tokens` and `post_tokens`.
+ * A live session sends `compactMetadata` with `preTokens` and `postTokens`, and
+ * four fields the type does not mention — so reading the declared shape yields
+ * `undefined` and an event of nulls that looks like it worked. Measured against
+ * CLI 2.1.224; both spellings are accepted because either could be the one that
+ * survives.
+ *
+ * Nulls rather than nothing when neither fits. The boundary is worth drawing on
+ * its own: the reader's question is whether this conversation was compacted,
+ * not by how much.
+ */
+const CompactMetadataSchema = z
+  .object({
+    trigger: z.enum(['manual', 'auto']).nullish(),
+    preTokens: z.number().nullish(),
+    postTokens: z.number().nullish(),
+    pre_tokens: z.number().nullish(),
+    post_tokens: z.number().nullish()
+  })
+  .partial()
+
+function compactionFrom(message: object): AgentEvent {
+  const held = 'compactMetadata' in message ? message.compactMetadata : undefined
+  const declared = 'compact_metadata' in message ? message.compact_metadata : undefined
+  const parsed = CompactMetadataSchema.safeParse(held ?? declared)
+
+  if (!parsed.success) {
+    return { type: 'conversation_compacted', trigger: null, preTokens: null, postTokens: null }
+  }
+
+  return {
+    type: 'conversation_compacted',
+    trigger: parsed.data.trigger ?? null,
+    preTokens: parsed.data.preTokens ?? parsed.data.pre_tokens ?? null,
+    postTokens: parsed.data.postTokens ?? parsed.data.post_tokens ?? null
+  }
+}
+
 export function mapMessage(message: SDKMessage): AgentEvent[] {
   switch (message.type) {
     case 'system':
@@ -537,6 +579,9 @@ export function mapMessage(message: SDKMessage): AgentEvent[] {
 
         case 'commands_changed':
           return [{ type: 'commands_changed', commands: toAgentCommands(message.commands) }]
+
+        case 'compact_boundary':
+          return [compactionFrom(message)]
 
         // Every other system subtype, of which there are dozens and counting.
         default:

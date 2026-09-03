@@ -233,6 +233,86 @@ describe('mapping SDK messages', () => {
     expect(mapMessage(message)).toEqual([{ type: 'session_started', sessionId: 'sess-42' }])
   })
 
+  /*
+   * A compaction, in the shape a live session actually sends.
+   *
+   * `sdk.d.ts` declares `compact_metadata` with `pre_tokens` and `post_tokens`;
+   * the wire carries `compactMetadata` with `preTokens` and `postTokens`, plus
+   * fields the type does not mention. Reading the declared shape gives
+   * `undefined` and an event of nulls that looks like it worked, so this is
+   * parsed rather than read — and the camelCase spelling is the one measured
+   * against CLI 2.1.224.
+   */
+  it('maps a compaction sent under the names the wire uses', () => {
+    const message = {
+      type: 'system',
+      subtype: 'compact_boundary',
+      session_id: 'sess-42',
+      compactMetadata: {
+        trigger: 'manual',
+        preTokens: 73984,
+        postTokens: 16023,
+        cumulativeDroppedTokens: 57961,
+        durationMs: 65548
+      }
+    } as unknown as SDKMessage
+
+    expect(mapMessage(message)).toEqual([
+      { type: 'conversation_compacted', trigger: 'manual', preTokens: 73984, postTokens: 16023 }
+    ])
+  })
+
+  // And under the names the type declares, so an SDK that starts sending what
+  // it says it sends is not a regression.
+  it('maps a compaction sent under the names the type declares', () => {
+    const message = {
+      type: 'system',
+      subtype: 'compact_boundary',
+      session_id: 'sess-42',
+      compact_metadata: { trigger: 'auto', pre_tokens: 800, post_tokens: 120 }
+    } as unknown as SDKMessage
+
+    expect(mapMessage(message)).toEqual([
+      { type: 'conversation_compacted', trigger: 'auto', preTokens: 800, postTokens: 120 }
+    ])
+  })
+
+  /*
+   * The boundary is worth drawing on its own. The reader's question is whether
+   * this conversation was compacted, not by how much — so metadata in a shape
+   * nothing here recognises degrades the row rather than losing it.
+   */
+  /*
+   * The shape this is built to survive: metadata that arrives and names none of
+   * the fields either spelling expects, which is what a third rename would look
+   * like. The parse succeeds and every figure falls through to null, so the row
+   * still says the conversation was compacted.
+   */
+  it('keeps the compaction when its metadata is a shape neither spelling fits', () => {
+    const message = {
+      type: 'system',
+      subtype: 'compact_boundary',
+      session_id: 'sess-42',
+      compactMetadata: { durationMs: 65548, cumulativeDroppedTokens: 57961 }
+    } as unknown as SDKMessage
+
+    expect(mapMessage(message)).toEqual([
+      { type: 'conversation_compacted', trigger: null, preTokens: null, postTokens: null }
+    ])
+  })
+
+  it('keeps the compaction when its metadata says nothing it understands', () => {
+    const message = {
+      type: 'system',
+      subtype: 'compact_boundary',
+      session_id: 'sess-42'
+    } as unknown as SDKMessage
+
+    expect(mapMessage(message)).toEqual([
+      { type: 'conversation_compacted', trigger: null, preTokens: null, postTokens: null }
+    ])
+  })
+
   it('ignores system messages it has no use for', () => {
     const message = {
       type: 'system',

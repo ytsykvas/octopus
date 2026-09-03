@@ -84,6 +84,82 @@ describe('what the running session says about usage', () => {
     })
   })
 
+  /*
+   * A compaction is the one moment the figure is taken from the event rather
+   * than asked for.
+   *
+   * Measured live: 74k tokens before, 16k after, and the reading stayed where
+   * it was. The reading is the reason the command was run, so someone who
+   * compacts to make room and sees the same percentage runs it again — another
+   * minute and another dollar for nothing.
+   *
+   * `postTokens` is what the CLI itself computed for the conversation it has
+   * just written, so it is right whether or not `getContextUsage` has caught
+   * up — and a re-read would put the stale figure back if the CLI only updates
+   * on the next request, which is the question the note could not settle.
+   */
+  it('takes the figure from a compaction rather than asking again', async () => {
+    answering(READING)
+    const { result } = renderHook(() => useSessionUsage(CHAT))
+    await waitFor(() => {
+      expect(result.current.context?.usedTokens).toBe(48_000)
+    })
+
+    act(() => {
+      emit({
+        type: 'conversation_compacted',
+        trigger: 'manual',
+        preTokens: 73_984,
+        postTokens: 16_023
+      })
+    })
+
+    expect(result.current.context?.usedTokens).toBe(16_023)
+    expect(result.current.context?.percentage).toBe(8)
+    // The window and the model did not move, and neither did the round trip.
+    expect(result.current.context?.maxTokens).toBe(200_000)
+    expect(octopus().chats.usage).toHaveBeenCalledTimes(1)
+  })
+
+  // A compaction can arrive before any reading has: there is no window to
+  // measure the figure against, so it waits for the next turn like everything
+  // else the strip has nothing to say about.
+  it('claims nothing when a compaction arrives before the first reading', async () => {
+    answering({ context: null })
+    const { result } = renderHook(() => useSessionUsage(CHAT))
+    await waitFor(() => {
+      expect(octopus().chats.usage).toHaveBeenCalledTimes(1)
+    })
+
+    act(() => {
+      emit({
+        type: 'conversation_compacted',
+        trigger: 'auto',
+        preTokens: 73_984,
+        postTokens: 16_023
+      })
+    })
+
+    expect(result.current.context).toBeNull()
+  })
+
+  // Nothing to take, so nothing is claimed: the row in the log still says the
+  // conversation was compacted, and the reading waits for the next turn.
+  it('leaves the figure alone when a compaction says nothing about the size', async () => {
+    answering(READING)
+    const { result } = renderHook(() => useSessionUsage(CHAT))
+    await waitFor(() => {
+      expect(result.current.context?.usedTokens).toBe(48_000)
+    })
+
+    act(() => {
+      emit({ type: 'conversation_compacted', trigger: null, preTokens: null, postTokens: null })
+    })
+
+    expect(result.current.context?.usedTokens).toBe(48_000)
+    expect(octopus().chats.usage).toHaveBeenCalledTimes(1)
+  })
+
   // Every read is a round trip, and one of the two goes on to the network.
   it('ignores the events that say nothing about usage', async () => {
     answering({ context: null })

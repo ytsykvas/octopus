@@ -734,6 +734,48 @@ describe('what the log shows', () => {
     ).toBeVisible()
   })
 
+  /*
+   * The same event with the memory partly kept rather than wholly discarded.
+   *
+   * Without the row a compacted conversation reads as an intact one, and the
+   * two behave differently: "do what we agreed earlier" works in one and fails
+   * in the other, which looks like the agent ignoring an instruction.
+   */
+  it('marks where the conversation was summarised, and by how much', () => {
+    renderLog({
+      entries: [
+        fromAgent({ type: 'text', text: 'Renamed the module' }),
+        fromAgent({
+          type: 'conversation_compacted',
+          trigger: 'auto',
+          preTokens: 73984,
+          postTokens: 16023
+        })
+      ]
+    })
+
+    expect(screen.getByText(/summarised/)).toBeVisible()
+    // The same formatter the turn footer uses: `74k`, not `73,984`.
+    expect(screen.getByText(/74k/)).toBeVisible()
+  })
+
+  // The boundary is worth drawing on its own: metadata in a shape nothing here
+  // recognises degrades the row rather than losing it.
+  it('marks it even when the agent said nothing about the size', () => {
+    renderLog({
+      entries: [
+        fromAgent({
+          type: 'conversation_compacted',
+          trigger: null,
+          preTokens: null,
+          postTokens: null
+        })
+      ]
+    })
+
+    expect(screen.getByText(/summarised/)).toBeVisible()
+  })
+
   // The reset the user did ask for takes the whole log with it, so there is
   // nothing left for a line to sit in.
   it('says nothing about a reset that emptied the log', () => {

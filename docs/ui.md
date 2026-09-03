@@ -228,6 +228,17 @@ Two rules there are worth keeping:
   no percentage carries; `allowed_warning` gets none, since "close to the limit"
   is vaguer than "Week 84%" and the colour already says it.
 
+**A compaction moves the reading itself, not a request for it.** The figures on
+the strip are pulled — three times a turn, and never on a timer, since the pair
+costs about 700ms — but a compaction is the one moment the number is taken from
+the event. Measured live: 74k tokens before and 16k after, with the reading
+sitting where it was until the next message. That is the reading contradicting
+the thing it exists to justify, and someone who compacts to make room and sees
+no change runs it again for another minute and another dollar. The figure comes
+from the boundary's own `postTokens`, which is right whether or not the agent's
+own accounting has caught up, where asking again would put the stale number
+back. The log gains a line for the same event, beside the one `/clear` draws.
+
 **Clicking the context share opens the two commands that change it.** It is the
 one figure on the strip that can be acted on — the account's windows empty on a
 clock nobody here controls — and what acts on a full context window is

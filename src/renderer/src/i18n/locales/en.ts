@@ -596,6 +596,9 @@ export const en = {
     working: 'Working…',
     thinking: 'Thinking',
     memoryReset: 'The agent’s memory of this conversation starts again here',
+    compacted: 'The agent summarised everything above to make room',
+    compactedBy:
+      'The agent summarised everything above to make room \u2014 {{before}} became {{after}}',
 
     emptyTitle: 'Start the conversation',
     emptyBody:

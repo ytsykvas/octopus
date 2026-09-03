@@ -1,6 +1,7 @@
 import {
   Check,
   ChevronRight,
+  Archive,
   Eraser,
   Map,
   Pencil,
@@ -290,6 +291,9 @@ function AgentRow({
     // takes the whole log with it, so there is nothing left for it to sit in.
     case 'conversation_reset':
       return event.cleared ? null : <ResetRow />
+
+    case 'conversation_compacted':
+      return <CompactedRow preTokens={event.preTokens} postTokens={event.postTokens} />
 
     // Deltas never reach the log — they are drawn from the streaming buffer
     // and replaced by the completed block that follows.
@@ -782,6 +786,44 @@ function ResetRow(): React.JSX.Element {
     <p className="text-ink-faint border-line flex items-center gap-2 border-t pt-2 text-[11px]">
       <Eraser aria-hidden size={12} />
       {t('chat.memoryReset')}
+    </p>
+  )
+}
+
+/**
+ * The line where the agent's memory of this conversation thins out.
+ *
+ * `ResetRow`'s twin, and the same event with the memory partly kept rather than
+ * wholly discarded: everything above still happened and is still worth reading,
+ * but the agent holds a summary of it. Without the line a compacted
+ * conversation reads as an intact one, and "do what we agreed earlier" fails in
+ * a way that looks like the agent ignoring an instruction.
+ *
+ * Drawn for the compaction the user asked for as well as the automatic one. The
+ * CLI narrates only what it was asked, and the attic now offers `/compact` as a
+ * click rather than a command somebody has to know.
+ *
+ * The figures are drawn when they are there and the row stands without them:
+ * the reader's question is whether this was compacted, not by how much.
+ */
+function CompactedRow({
+  preTokens,
+  postTokens
+}: {
+  preTokens: number | null
+  postTokens: number | null
+}): React.JSX.Element {
+  const { t } = useTranslation()
+
+  return (
+    <p className="text-ink-faint border-line flex items-center gap-2 border-t pt-2 text-[11px]">
+      <Archive aria-hidden size={12} />
+      {preTokens === null || postTokens === null
+        ? t('chat.compacted')
+        : t('chat.compactedBy', {
+            before: formatTokens(preTokens),
+            after: formatTokens(postTokens)
+          })}
     </p>
   )
 }
