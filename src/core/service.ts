@@ -2867,7 +2867,15 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
       const workspace = requireWorkspace(workspaceId)
       const project = requireProject(workspace.projectId)
 
-      const renamed = await renameWorkspace(workspace, project, name, makeExec(project.repoPath))
+      const renamed = await renameWorkspace(
+        workspace,
+        project,
+        name,
+        makeExec(project.repoPath),
+        // The siblings, for the collision a branch cannot catch: two names can
+        // differ as branches and still name one database.
+        workspacesOfProject(state, workspace.projectId)
+      )
       await commit((current) => updateWorkspace(current, workspaceId, renamed))
     },
 

@@ -1048,6 +1048,8 @@ export const en = {
     branchUnmerged:
       '{{branch}} has commits that are not in the base branch. Remove it with the branch checkbox cleared, or merge it first.',
     branchExists: 'A branch named {{branch}} already exists.',
+    slugTaken:
+      'Another workspace, \u201c{{name}}\u201d, already names the database {{slug}}. Two workspaces sharing one write over each other\u2019s data. Choose a name that differs by more than a dash or a dot.',
     pathExists: '{{path}} already exists.',
     uncommittedChanges: '{{name}} has uncommitted changes.',
     nameEmpty: 'The name cannot be empty.',

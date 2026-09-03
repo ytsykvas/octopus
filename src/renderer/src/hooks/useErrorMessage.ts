@@ -90,6 +90,11 @@ export function useErrorMessage(): (failure: Failure) => string {
           return t('errors.branchUnmerged', { branch: failure.params?.branch ?? '' })
         case 'branchExists':
           return t('errors.branchExists', { branch: failure.params?.branch ?? '' })
+        case 'slugTaken':
+          return t('errors.slugTaken', {
+            name: failure.params?.name ?? '',
+            slug: failure.params?.slug ?? ''
+          })
         case 'pathExists':
           return t('errors.pathExists', { path: failure.params?.path ?? '' })
         case 'uncommittedChanges':

@@ -18,6 +18,7 @@ import { anyBranchExists, countAhead, type GitExec, reasonFrom, toSlug } from '.
 import { fetchRemote, resolveBase } from './remotes.js'
 import { nextWorkspaceName, type Random } from './names.js'
 import { workspacePath } from './paths.js'
+import { workspaceSlug } from './scriptEnv.js'
 import { firstFreeBlock, POOL_START } from './ports.js'
 import type { Project, State, Workspace } from './store.js'
 import {
@@ -48,6 +49,8 @@ export type WorkspaceErrorCode =
   | 'fetchFailed'
   /** The env file resolves outside the worktree, through a symbolic link. */
   | 'envPathEscapes'
+  /** Another workspace of this project already names the same database. */
+  | 'slugTaken'
 
 export class WorkspaceError extends CodedError<WorkspaceErrorCode> {
   override readonly name = 'WorkspaceError'
@@ -301,16 +304,37 @@ async function canonicalPath(exec: GitExec, branch: string, fallback: string): P
  *
  * The branch is what shows up in a pull request and in `git log`, so keeping
  * it aligned with the label is the point of the operation.
+ *
+ * `siblings` are the project's other workspaces, and they are here for the one
+ * collision a branch cannot catch. `toSlug` keeps `_` and `-` apart, so
+ * `fix-login` and `fix_login` are two branches — but `workspaceSlug` turns both
+ * into `fix_login`, and that is what names a database. Two workspaces sharing
+ * it write over each other's data with nothing failing anywhere.
  */
 export async function renameWorkspace(
   workspace: Workspace,
   project: Project,
   name: string,
-  exec: GitExec
+  exec: GitExec,
+  siblings: readonly Workspace[] = []
 ): Promise<{ name: string; branch: string }> {
   const trimmed = name.trim()
   if (trimmed === '') {
     throw new WorkspaceError('nameEmpty', {}, 'A workspace name cannot be empty.')
+  }
+
+  // Named rather than counted: "fix_login is taken" is confusing when the
+  // sidebar shows `fix-login`, which is the whole reason the two collide.
+  const slug = workspaceSlug(trimmed)
+  const clash = siblings.find(
+    (other) => other.id !== workspace.id && workspaceSlug(other.name) === slug
+  )
+  if (clash) {
+    throw new WorkspaceError(
+      'slugTaken',
+      { name: clash.name, slug },
+      `${clash.name} already names ${slug}.`
+    )
   }
 
   const branch = branchFor(project, trimmed)

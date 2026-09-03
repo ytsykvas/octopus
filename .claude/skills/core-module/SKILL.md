@@ -121,6 +121,7 @@ agent treats as global checked inside one directory.
 | Value              | Unique within                                                                       |
 | ------------------ | ----------------------------------------------------------------------------------- |
 | workspace `name`   | its project                                                                         |
+| workspace `slug`   | its project — it names a database, and is **not** injective                         |
 | workspace `branch` | its project — branches live in a repository                                         |
 | workspace `id`     | the whole app — it is the IPC key                                                   |
 | skill `name`       | everything the agent can see — both stores, and the checkout's own `.claude/skills` |

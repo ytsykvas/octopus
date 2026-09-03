@@ -73,6 +73,7 @@ const CODE_PARAMETERS: Record<CoreErrorCode, Interpolated> = {
   alreadyExists: { path: '/Users/someone/code/planner' },
   branchUnmerged: { branch: 'ytsykvas/anna' },
   branchExists: { branch: 'ytsykvas/anna' },
+  slugTaken: { name: 'fix-login', slug: 'fix_login' },
   pathExists: { path: '/tmp/planner/anna' },
   uncommittedChanges: { name: 'anna' },
   nameEmpty: null,

@@ -422,6 +422,49 @@ describe('createWorkspace', () => {
 })
 
 describe('renameWorkspace', () => {
+  /*
+   * The collision a branch cannot catch.
+   *
+   * `toSlug` keeps `_` and `-` apart, so `fix-login` and `fix_login` are two
+   * branches and git is content. `workspaceSlug` turns both into `fix_login`,
+   * and that is what names a database: the second workspace's build loads a
+   * dump over the first's while its server runs, and the first's cleanup drops
+   * one the second is using. Nothing fails.
+   *
+   * The slug's rules cannot be made unique — they mirror the `tr | sed | cut`
+   * pipelines in repositories' own scripts — so the rename is refused instead,
+   * naming which workspace it would collide with.
+   */
+  it("refuses a name that would name another workspace's database", async () => {
+    const first = await create()
+    const second = await createWorkspace(project, state, exec, { root, random: () => 0.5 })
+    state = { ...state, workspaces: [...state.workspaces, second] }
+    const renamed = await renameWorkspace(first, project, 'fix-login', exec, state.workspaces)
+    state = {
+      ...state,
+      workspaces: state.workspaces.map((entry) =>
+        entry.id === first.id ? { ...entry, ...renamed } : entry
+      )
+    }
+
+    const error = await renameWorkspace(second, project, 'fix_login', exec, state.workspaces).catch(
+      (cause: unknown) => cause
+    )
+
+    expect((error as WorkspaceError).code).toBe('slugTaken')
+    expect((error as WorkspaceError).params).toMatchObject({ name: 'fix-login' })
+  })
+
+  // Renaming a workspace to what it is already called is not a collision with
+  // itself.
+  it('does not refuse a workspace its own slug', async () => {
+    const workspace = await create()
+
+    await expect(
+      renameWorkspace(workspace, project, workspace.name, exec, [workspace])
+    ).resolves.toMatchObject({ name: workspace.name })
+  })
+
   it('renames the branch and returns the new label', async () => {
     const workspace = await create()
 
