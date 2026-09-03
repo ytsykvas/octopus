@@ -157,16 +157,15 @@ event }`. A **broadcast**, not a reply to whoever asked: events keep arriving
 long after the call that started them returned, and a second window on the same
 workspace should see the same conversation.
 
-**`workspaces:status`** is the second stream, carrying
-`{ workspaceId, status }` whenever a workspace starts working, stops, or blocks
+**`workspaces:status`** carries `{ workspaceId, status }` whenever a workspace starts working, stops, or blocks
 on a question. A stream rather than something the list re-reads for itself:
 re-reading asks git about every workspace of every project, several times a
 turn, to learn what the main process had already decided. It says nothing about
 a conversation, which is why it is not folded into the one above — the list that
 draws it is not looking at a chat.
 
-**`chats:status`** is the third, carrying `{ chatId, workspaceId, status }`.
-The twin of the one above, a level in: the tab strip draws a conversation while
+**`chats:status`** carries `{ chatId, workspaceId, status }`. The twin of the
+one above, a level in: the tab strip draws a conversation while
 the list draws its workspace, and the two move at different moments — a second
 conversation finishing leaves a workspace whose first is still running exactly
 where it was. It is not folded into `chats:event` either, because that stream
@@ -174,13 +173,28 @@ carries `AgentEvent`, which is the isolation boundary around the SDK and the
 shape written to the transcript — while half of these changes come from moments
 no agent message describes: an interrupt, an answered permission, a closed tab.
 
-**`usage:windows`** is the fourth, carrying the account's plan windows whenever
-the service learns they moved. Pushed rather than left to be asked for, and
+**`usage:windows`** carries the account's plan windows whenever the service
+learns they moved. Pushed rather than left to be asked for, and
 that is the whole of what stopped the block at the foot of the sidebar lagging:
 it used to watch for a finished turn and then read a cache the chat pane was
 still filling, so it drew the previous turn's figure on every turn.
 
-None of the four is a `handle`, so none is counted among the channels above.
+**`chats:changed`** carries `{ workspaceId }` when that workspace's set of
+conversations moves — one opened, created, forked, renamed or closed. Separate
+from `chats:status` rather than folded into it, and the separation is the whole
+design: a status moves several times a turn, so a window told to re-read its tab
+strip on each of them would be asking about conversations it already knows. It
+carries the workspace and nothing else, because the window has to be able to
+read the list anyway and a payload could disagree with what the read returns.
+
+Without it a second window on one workspace drew the strip that was true when it
+opened: a tab it never saw created, and one it kept drawing after the other
+window closed it.
+
+None of these is a `handle`, so none is counted among the channels above. They
+are not numbered here either — the ordinals said second, third and fourth until
+a fifth arrived, which is the same thing `docs/testing.md` records about counting
+in prose.
 
 Listing and opening are separate on purpose. A workspace nobody has spoken to
 should have no record and no transcript file, so the pane looks the chat up
