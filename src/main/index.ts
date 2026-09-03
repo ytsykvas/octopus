@@ -3,15 +3,16 @@ import { join } from 'node:path'
 import { app, BrowserWindow, dialog, ipcMain, Menu, nativeTheme, shell } from 'electron'
 
 import { describeError } from '../core/persist.js'
-import {
-  type ChatEvent,
-  type ChatStatusEvent,
-  createService,
-  type OctopusService,
-  type WorkspaceStatusEvent
-} from '../core/service.js'
+import { createService, type OctopusService } from '../core/service.js'
 import type { ThemeName } from '../core/types.js'
-import type { UsageWindows } from '../core/usage.js'
+import {
+  pushChatEvent,
+  pushChatStatus,
+  pushSettingsOpen,
+  pushTheme,
+  pushUsageWindows,
+  pushWorkspaceStatus
+} from './broadcast.js'
 import { registerIpc } from './ipc.js'
 import { applyLoginShellPath } from './loginPath.js'
 import { canvasColor, resolveTheme } from './theme.js'
@@ -83,7 +84,7 @@ function registerMenu(): void {
           label: 'Settings…',
           accelerator: 'CmdOrCtrl+,',
           click: () => {
-            BrowserWindow.getFocusedWindow()?.webContents.send('settings:open')
+            pushSettingsOpen(BrowserWindow.getFocusedWindow())
           }
         },
         { type: 'separator' },
@@ -104,37 +105,6 @@ function registerMenu(): void {
   Menu.setApplicationMenu(Menu.buildFromTemplate(template))
 }
 
-function broadcastTheme(theme: ThemeName): void {
-  for (const window of BrowserWindow.getAllWindows()) {
-    window.setBackgroundColor(canvasColor(theme))
-    window.webContents.send('theme:changed', theme)
-  }
-}
-
-function broadcastChatEvent(event: ChatEvent): void {
-  for (const window of BrowserWindow.getAllWindows()) {
-    window.webContents.send('chats:event', event)
-  }
-}
-
-function broadcastWorkspaceStatus(event: WorkspaceStatusEvent): void {
-  for (const window of BrowserWindow.getAllWindows()) {
-    window.webContents.send('workspaces:status', event)
-  }
-}
-
-function broadcastUsageWindows(windows: UsageWindows): void {
-  for (const window of BrowserWindow.getAllWindows()) {
-    window.webContents.send('usage:windows', windows)
-  }
-}
-
-function broadcastChatStatus(event: ChatStatusEvent): void {
-  for (const window of BrowserWindow.getAllWindows()) {
-    window.webContents.send('chats:status', event)
-  }
-}
-
 /**
  * Follows the OS appearance.
  *
@@ -144,7 +114,7 @@ function broadcastChatStatus(event: ChatStatusEvent): void {
 function watchSystemTheme(service: OctopusService): void {
   nativeTheme.on('updated', () => {
     if (service.getConfig().theme !== 'system') return
-    broadcastTheme(nativeTheme.shouldUseDarkColors ? 'dark' : 'light')
+    pushTheme(BrowserWindow.getAllWindows(), nativeTheme.shouldUseDarkColors ? 'dark' : 'light')
   })
 }
 
@@ -193,11 +163,23 @@ async function start(): Promise<void> {
     windowFor: (event) =>
       BrowserWindow.fromWebContents((event as Electron.IpcMainInvokeEvent).sender),
     prefersDark: () => nativeTheme.shouldUseDarkColors,
-    broadcastTheme,
-    broadcastChatEvent,
-    broadcastWorkspaceStatus,
-    broadcastUsageWindows,
-    broadcastChatStatus,
+    // Each one hands `broadcast.ts` the windows to reach. The channel names
+    // live there, where a test can name them; here is only the window list.
+    broadcastTheme: (theme) => {
+      pushTheme(BrowserWindow.getAllWindows(), theme)
+    },
+    broadcastChatEvent: (event) => {
+      pushChatEvent(BrowserWindow.getAllWindows(), event)
+    },
+    broadcastWorkspaceStatus: (event) => {
+      pushWorkspaceStatus(BrowserWindow.getAllWindows(), event)
+    },
+    broadcastUsageWindows: (windows) => {
+      pushUsageWindows(BrowserWindow.getAllWindows(), windows)
+    },
+    broadcastChatStatus: (event) => {
+      pushChatStatus(BrowserWindow.getAllWindows(), event)
+    },
     openPath: (path) => shell.openPath(path)
   })
   watchSystemTheme(service)

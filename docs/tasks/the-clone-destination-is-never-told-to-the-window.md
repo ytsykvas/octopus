@@ -40,8 +40,8 @@ can never be written back. Which is why this is low.
   directly rather than through the handler.
 - `src/main/ipc.ts:157-163` — `config:update` **does** broadcast after a write,
   the precedent this path bypasses; recorded at `docs/ipc.md:35`.
-- `src/main/index.ts:110,116,122,128,134` — the five push channels; none carries
-  the config. `src/preload/index.ts:79-83` — `get` and `update` only, no
+- `src/main/broadcast.ts` — every push channel there is; none carries the
+  config. They moved out of `main/index.ts` so their names could be asserted. `src/preload/index.ts:79-83` — `get` and `update` only, no
   subscription exists to carry one.
 - `src/renderer/src/App.tsx:199-211` — `config.get()` in a `[]`-deps effect, the
   only read; `:231-237` — the only other `setConfig`.
