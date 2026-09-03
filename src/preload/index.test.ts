@@ -438,6 +438,7 @@ describe('channel names', () => {
     'settings.onOpen',
     'chats.onEvent',
     'chats.onStatus',
+    'chats.onChanged',
     'chats.onUsageWindows',
     'workspaces.onStatus',
     'terminal.onData',
@@ -632,6 +633,24 @@ describe('the rest of the surface', () => {
 
     stop()
     expect(off).toHaveBeenCalledWith('chats:status', expect.any(Function))
+  })
+
+  // A fifth stream, because a conversation appearing or going is not a status:
+  // a second window on the same workspace has to redraw its strip.
+  it('chats.onChanged delivers the workspace and unsubscribes', () => {
+    const handler = vi.fn()
+    const stop = method('chats', 'onChanged')(handler as never) as () => void
+
+    const listener = on.mock.calls.find(([channel]) => channel === 'chats:changed')?.[1] as (
+      event: unknown,
+      payload: unknown
+    ) => void
+
+    listener({}, { workspaceId: 'planner/kyiv' })
+    expect(handler).toHaveBeenCalledWith({ workspaceId: 'planner/kyiv' })
+
+    stop()
+    expect(off).toHaveBeenCalledWith('chats:changed', expect.any(Function))
   })
 
   // A second stream, because the list that draws this is not looking at a chat.

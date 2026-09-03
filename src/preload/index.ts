@@ -4,6 +4,7 @@ import type { AccountKind, AccountsStatus, GitHubAccount } from '@core/accounts.
 import type { AgentCommand, AgentModel, Chat, EffortChoice, WorkingMode } from '@core/chats.js'
 import type {
   ChatEvent,
+  ChatsChangedEvent,
   ChatStatusEvent,
   PermissionAnswer,
   PermissionRequest,
@@ -310,6 +311,23 @@ const api = {
       ipcRenderer.on('chats:status', listener)
       return () => {
         ipcRenderer.off('chats:status', listener)
+      }
+    },
+
+    /**
+     * Which conversations a workspace has, when that set changes.
+     *
+     * The tab strip reads its list once per workspace, so without this a second
+     * window draws the strip that was true when it opened — a tab it never sees
+     * created, and one it keeps drawing after the other window closed it.
+     */
+    onChanged: (handler: (event: ChatsChangedEvent) => void): (() => void) => {
+      const listener = (_event: unknown, changed: ChatsChangedEvent): void => {
+        handler(changed)
+      }
+      ipcRenderer.on('chats:changed', listener)
+      return () => {
+        ipcRenderer.off('chats:changed', listener)
       }
     }
   },

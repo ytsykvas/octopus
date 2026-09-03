@@ -324,6 +324,22 @@ export interface ChatStatusEvent {
   readonly status: ChatStatus
 }
 
+/**
+ * The conversations of a workspace are not the set they were.
+ *
+ * One created, forked, renamed or closed — anything the tab strip draws. Not
+ * what any of them is *doing*, which is `ChatStatusEvent` and moves several
+ * times a turn: a window re-reading its list on every status move would ask
+ * about every conversation of a workspace for news it already has.
+ *
+ * Carries the workspace and nothing else. Sending the list would let the push
+ * and `listChats` disagree about shape, and the window has to be able to read
+ * the list anyway.
+ */
+export interface ChatsChangedEvent {
+  readonly workspaceId: string
+}
+
 /** What the user answered to a permission request. */
 export type PermissionAnswer = 'allow' | 'always' | 'deny'
 
@@ -860,6 +876,15 @@ export interface OctopusService {
   onUsageWindows(handler: (windows: UsageWindows) => void): () => void
   /** What each conversation is doing, as it changes. The tab strip draws this. */
   onChatStatus(handler: (event: ChatStatusEvent) => void): () => void
+  /**
+   * Which conversations a workspace has, when that set changes.
+   *
+   * The tab strip reads its list once when a workspace is selected, so without
+   * this a second window on the same workspace draws a strip that was true when
+   * it opened: a tab it never sees created, and one it goes on drawing after it
+   * is closed.
+   */
+  onChatsChanged(handler: (event: ChatsChangedEvent) => void): () => void
   /** Ends every live session. Called when the application quits. */
   closeChats(): Promise<void>
 }
@@ -912,6 +937,7 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
   const statusListeners = new Set<(event: WorkspaceStatusEvent) => void>()
   const usageListeners = new Set<(windows: UsageWindows) => void>()
   const chatStatusListeners = new Set<(event: ChatStatusEvent) => void>()
+  const chatsChangedListeners = new Set<(event: ChatsChangedEvent) => void>()
   const pending = new Map<string, PendingPermission>()
 
   /**
@@ -1366,8 +1392,24 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
    * turn, for something this process already knew. Announced only on a change,
    * or every unchanged commit would send an event describing nothing.
    */
+  /**
+   * The conversations of a workspace as the tab strip draws them.
+   *
+   * Ids and titles, in order, and deliberately **not** statuses. Every status
+   * move goes through `commitChats` too, so a reading that included them would
+   * announce the list as changed several times a turn — and the whole point of
+   * a second stream is that a window re-reads when the set moves rather than
+   * when a conversation does.
+   */
+  function membershipOf(current: State, workspaceId: string): string {
+    return chatsOfWorkspace(current, workspaceId)
+      .map((chat) => `${chat.id}\u0000${chat.title ?? ''}`)
+      .join('\u0001')
+  }
+
   function commitChats(workspaceId: string, change: (current: State) => State): Promise<void> {
     const before = state.workspaces.find((workspace) => workspace.id === workspaceId)
+    const members = membershipOf(state, workspaceId)
 
     return commit((current) => {
       const next = change(current)
@@ -1387,6 +1429,13 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
         )
       }
     }).then(() => {
+      // Before the status, because a window told the set moved re-reads it —
+      // and a status arriving first would be about a conversation it has not
+      // heard of yet.
+      if (membershipOf(state, workspaceId) !== members) {
+        for (const listener of chatsChangedListeners) listener({ workspaceId })
+      }
+
       const settled = state.workspaces.find((workspace) => workspace.id === workspaceId)
       if (!settled || settled.status === before?.status) return
       for (const listener of statusListeners) listener({ workspaceId, status: settled.status })
@@ -3063,7 +3112,11 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
       // the one it brought.
       let opened = chat
 
-      await commit((current) => {
+      // Through `commitChats`, so the window that did not open it hears about
+      // the one that did. The call that loses the race writes nothing, and the
+      // membership reading is what tells the two apart without a second branch
+      // here saying which happened.
+      await commitChats(workspaceId, (current) => {
         const [existing] = chatsOfWorkspace(current, workspaceId)
         if (!existing) return addChat(current, chat)
 
@@ -3146,7 +3199,10 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
       // what the strip will draw, and a name of three spaces draws as a gap
       // nothing explains.
       const trimmed = title.trim()
-      await commit((current) =>
+      // Through `commitChats` rather than a plain commit: the name is what the
+      // strip draws, so a second window on this workspace has to hear about it.
+      // The workspace's status cannot move on a rename, so nothing else fires.
+      await commitChats(requireChat(chatId).workspaceId, (current) =>
         updateChat(current, chatId, { title: trimmed === '' ? null : trimmed })
       )
     },
@@ -3529,6 +3585,11 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
     onChatStatus(handler) {
       chatStatusListeners.add(handler)
       return () => chatStatusListeners.delete(handler)
+    },
+
+    onChatsChanged(handler) {
+      chatsChangedListeners.add(handler)
+      return () => chatsChangedListeners.delete(handler)
     },
 
     async closeChats() {

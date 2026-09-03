@@ -80,7 +80,8 @@ export function installOctopusStub(): Api {
       refreshSubscription: vi.fn(() => ok({ kind: 'nowhereToAsk' as const })),
       onEvent: vi.fn(subscription),
       onUsageWindows: vi.fn(subscription),
-      onStatus: vi.fn(subscription)
+      onStatus: vi.fn(subscription),
+      onChanged: vi.fn(subscription)
     },
     workspaces: {
       onStatus: vi.fn(subscription),

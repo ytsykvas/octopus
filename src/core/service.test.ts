@@ -28,6 +28,7 @@ import { WORKSPACE_NAMES } from './names.js'
 import { ProjectValidationError } from './projects.js'
 import {
   type ChatEvent,
+  type ChatsChangedEvent,
   type ChatStatusEvent,
   createService,
   sameWindows,
@@ -6045,6 +6046,96 @@ describe('the agent chat', () => {
 
       return { service, workspaceId, first: first.id, second: second.id, statuses, workspaces }
     }
+
+    /*
+     * A second window on the same workspace reads its list once and then draws
+     * whatever was true when it opened: a tab it never sees created, and one it
+     * goes on drawing after the other window closed it.
+     *
+     * Announced from `commitChats` rather than from each writer. There are five
+     * of them — open, create, fork, rename, close — and a hand-kept list of call
+     * sites is what a sixth writer silently falls off.
+     */
+    describe('when the conversations of a workspace change', () => {
+      async function watching(): Promise<{
+        service: OctopusService
+        workspaceId: string
+        first: string
+        changes: ChatsChangedEvent[]
+      }> {
+        const { service, workspaceId } = await withWorkspace()
+        const first = await service.openChat(workspaceId)
+
+        const changes: ChatsChangedEvent[] = []
+        service.onChatsChanged((event) => changes.push(event))
+
+        return { service, workspaceId, first: first.id, changes }
+      }
+
+      it('says so when one is opened, created and closed', async () => {
+        const { service, workspaceId } = await withWorkspace()
+        const changes: ChatsChangedEvent[] = []
+        service.onChatsChanged((event) => changes.push(event))
+
+        const first = await service.openChat(workspaceId)
+        expect(changes).toEqual([{ workspaceId }])
+
+        const second = await service.createChat(workspaceId)
+        expect(changes).toHaveLength(2)
+
+        await service.closeChat(second.id)
+        expect(changes).toHaveLength(3)
+        expect(service.listChats(workspaceId).map((chat) => chat.id)).toEqual([first.id])
+      })
+
+      // The name is what the strip draws, so a window that did not rename it
+      // still has to redraw.
+      it('says so when one is renamed', async () => {
+        const { service, first, changes } = await watching()
+
+        await service.renameChat(first, 'the migration')
+
+        expect(changes).toHaveLength(1)
+      })
+
+      /*
+       * The assertion this whole design is for. A status moves several times a
+       * turn and goes through the same funnel, so a membership reading that
+       * included statuses would tell every window to re-read its list on every
+       * one of them — which is the reason the status stream stays a status.
+       */
+      it('says nothing when a conversation only changes what it is doing', async () => {
+        const { service, workspaceId, first, changes } = await watching()
+
+        await service.sendToChat(first, 'go')
+        // The status did move, so this is the funnel firing and the membership
+        // reading declining to — not the funnel never being reached.
+        expect(service.listChats(workspaceId)[0]?.status).toBe('running')
+
+        expect(changes).toEqual([])
+      })
+
+      // A second call opens nothing: the record is already there, so the set is
+      // where it was and there is nothing for a window to redraw.
+      it('says nothing when opening finds the conversation already there', async () => {
+        const { service, workspaceId, changes } = await watching()
+
+        await service.openChat(workspaceId)
+
+        expect(changes).toEqual([])
+      })
+
+      it('drops a subscriber that has gone', async () => {
+        const { service, workspaceId } = await watching()
+        const seen: ChatsChangedEvent[] = []
+        const stop = service.onChatsChanged((event) => seen.push(event))
+
+        stop()
+        await service.createChat(workspaceId)
+
+        expect(seen).toEqual([])
+      })
+    })
 
     // Every subscriber is dropped when its window closes; one left behind
     // would go on being handed events for a pane that no longer exists.

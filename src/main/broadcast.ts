@@ -68,6 +68,17 @@ export function pushChatStatus(targets: readonly PushTarget[], event: unknown): 
 }
 
 /**
+ * Which conversations a workspace has, when that set changes.
+ *
+ * Separate from `chats:status` on purpose: a status moves several times a turn
+ * and this does not, so a window re-reads its tab strip when the set moves
+ * rather than when a conversation does.
+ */
+export function pushChatsChanged(targets: readonly PushTarget[], event: unknown): void {
+  pushAll(targets, 'chats:changed', event)
+}
+
+/**
  * Opens Settings in the window the user is looking at.
  *
  * The one push that is not a broadcast, which is why it takes a single target

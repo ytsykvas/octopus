@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 
 import {
   pushChatEvent,
+  pushChatsChanged,
   pushChatStatus,
   pushSettingsOpen,
   pushTheme,
@@ -105,6 +106,15 @@ describe('what the main process pushes, and on which channel', () => {
     pushChatStatus([window], event)
 
     expect(window.sent).toEqual([['chats:status', event]])
+  })
+
+  it("announces that a workspace's conversations changed", () => {
+    const window = target()
+    const event = { workspaceId: 'planner/anna' }
+
+    pushChatsChanged([window], event)
+
+    expect(window.sent).toEqual([['chats:changed', event]])
   })
 
   // The one push that is not a broadcast: the menu opens Settings in the window

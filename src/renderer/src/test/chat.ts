@@ -103,6 +103,18 @@ export function emitChatStatus(
   })
 }
 
+/** Announces that a workspace's set of conversations moved, as the bridge does. */
+export function emitChatsChanged(workspaceId = 'planner/anna'): void {
+  const handlers = vi.mocked(octopus().chats.onChanged).mock.calls.map(([handler]) => handler)
+  refuseSilence(handlers.length, 'chats.onChanged')
+
+  act(() => {
+    for (const handler of handlers) {
+      handler({ workspaceId })
+    }
+  })
+}
+
 /**
  * Delivers an agent event to whatever subscribed, as main would.
  *

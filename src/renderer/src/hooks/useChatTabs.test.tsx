@@ -4,7 +4,7 @@ import { describe, expect, it, vi } from 'vitest'
 import type { Chat } from '@core/chats.js'
 
 import type { ConfirmRequest, ConfirmResult } from './useConfirm.js'
-import { chat, emitChatStatus, givenChats } from '../test/chat.js'
+import { chat, emitChatsChanged, emitChatStatus, givenChats } from '../test/chat.js'
 import { octopus } from '../test/octopus.js'
 import { type ChatTab, useChatTabs } from './useChatTabs.js'
 
@@ -79,6 +79,61 @@ describe('the conversations a workspace already has', () => {
       expect(result.current.tabs).toHaveLength(2)
     })
     expect(result.current.tabs.map((tab) => tab.id)).toEqual(['chat-1', 'chat-2'])
+  })
+
+  /*
+   * The failure as reported, and nothing below this level reproduces it: two
+   * windows on one workspace, one of them creating a conversation.
+   *
+   * The strip reads its list once per workspace, so the second window drew what
+   * was true when it opened — a tab it never saw created, and one it kept
+   * drawing after the other closed it. Pressing `+` there then failed against a
+   * cap it could not see.
+   */
+  it('redraws when another window changes the set of conversations', async () => {
+    givenChats([chat()])
+    const { result } = open()
+    await waitFor(() => {
+      expect(result.current.tabs).toHaveLength(1)
+    })
+
+    // What the other window did, seen only as a list that now reads differently.
+    givenChats([chat(), chat({ id: 'chat-2' })])
+    emitChatsChanged()
+
+    await waitFor(() => {
+      expect(result.current.tabs.map((tab) => tab.id)).toEqual(['chat-1', 'chat-2'])
+    })
+  })
+
+  it('stops drawing a conversation another window closed', async () => {
+    givenChats([chat(), chat({ id: 'chat-2' })])
+    const { result } = open()
+    await waitFor(() => {
+      expect(result.current.tabs).toHaveLength(2)
+    })
+
+    givenChats([chat()])
+    emitChatsChanged()
+
+    await waitFor(() => {
+      expect(result.current.tabs.map((tab) => tab.id)).toEqual(['chat-1'])
+    })
+  })
+
+  // Broadcast to every window and covering every workspace; this strip draws
+  // one, and re-reading for another's would replace its tabs with theirs.
+  it('ignores a change announced for another workspace', async () => {
+    givenChats([chat()])
+    const { result } = open()
+    await waitFor(() => {
+      expect(result.current.tabs).toHaveLength(1)
+    })
+
+    givenChats([chat(), chat({ id: 'chat-2' })])
+    emitChatsChanged('planner/bob')
+
+    expect(result.current.tabs).toHaveLength(1)
   })
 
   it('hands the list up so the workspace row can draw it', async () => {

@@ -46,6 +46,7 @@ import { SkillImportSchema, SkillSaveSchema } from '../core/skills.js'
 import { SkillNameSchema, SkillStoreSchema } from '../core/skillNames.js'
 import type {
   ChatEvent,
+  ChatsChangedEvent,
   ChatStatusEvent,
   OctopusService,
   WorkspaceStatusEvent
@@ -125,6 +126,14 @@ export interface IpcHost {
    * at moments the workspace's does not.
    */
   readonly broadcastChatStatus: (event: ChatStatusEvent) => void
+  /**
+   * Which conversations a workspace has, when that set changes.
+   *
+   * A fifth stream rather than a widening of the one above: a status moves
+   * several times a turn, and a window told to re-read its list on each of them
+   * would be asking about conversations it already knows.
+   */
+  readonly broadcastChatsChanged: (event: ChatsChangedEvent) => void
   /**
    * Hands a path to the system, which decides what opens it.
    *
@@ -569,6 +578,7 @@ export function registerIpc(
   service.onWorkspaceStatus(host.broadcastWorkspaceStatus)
   service.onUsageWindows(host.broadcastUsageWindows)
   service.onChatStatus(host.broadcastChatStatus)
+  service.onChatsChanged(host.broadcastChatsChanged)
 
   // Listing does not create, opening does. The distinction is what keeps a
   // workspace nobody has spoken to free of a record and a transcript file.

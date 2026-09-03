@@ -7,6 +7,7 @@ import { createService, type OctopusService } from '../core/service.js'
 import type { ThemeName } from '../core/types.js'
 import {
   pushChatEvent,
+  pushChatsChanged,
   pushChatStatus,
   pushSettingsOpen,
   pushTheme,
@@ -179,6 +180,9 @@ async function start(): Promise<void> {
     },
     broadcastChatStatus: (event) => {
       pushChatStatus(BrowserWindow.getAllWindows(), event)
+    },
+    broadcastChatsChanged: (event) => {
+      pushChatsChanged(BrowserWindow.getAllWindows(), event)
     },
     openPath: (path) => shell.openPath(path)
   })

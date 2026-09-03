@@ -20,7 +20,12 @@ import {
 import type { QueryFn } from '../core/agent.js'
 import type { RemoteRepository } from '../core/github.js'
 import { createService, type OctopusService, type ServiceOptions } from '../core/service.js'
-import type { ChatEvent, ChatStatusEvent, WorkspaceStatusEvent } from '../core/service.js'
+import type {
+  ChatEvent,
+  ChatsChangedEvent,
+  ChatStatusEvent,
+  WorkspaceStatusEvent
+} from '../core/service.js'
 import type { ThemeName, Workspace } from '../core/types.js'
 import type { UsageWindows } from '../core/usage.js'
 import { type IpcHost, registerIpc, type PickedDirectory } from './ipc.js'
@@ -55,6 +60,8 @@ interface Harness {
   readonly chatEvents: ChatEvent[]
   readonly statusEvents: WorkspaceStatusEvent[]
   readonly chatStatusEvents: ChatStatusEvent[]
+  /** Every announcement that a workspace's set of conversations moved. */
+  readonly chatsChangedEvents: ChatsChangedEvent[]
   /** Paths handed to the system, in order. */
   readonly opened: string[]
   picked: PickedDirectory
@@ -75,6 +82,7 @@ function harness(): Harness {
   const chatEvents: ChatEvent[] = []
   const statusEvents: WorkspaceStatusEvent[] = []
   const chatStatusEvents: ChatStatusEvent[] = []
+  const chatsChangedEvents: ChatsChangedEvent[] = []
   const opened: string[] = []
   const dialogOptions: OpenDialogOptions[] = []
   const usageBroadcasts: UsageWindows[] = []
@@ -85,6 +93,7 @@ function harness(): Harness {
     chatEvents,
     statusEvents,
     chatStatusEvents,
+    chatsChangedEvents,
     opened,
     dialogOptions,
     usageBroadcasts,
@@ -107,6 +116,7 @@ function harness(): Harness {
       broadcastWorkspaceStatus: (event) => statusEvents.push(event),
       broadcastUsageWindows: (windows) => usageBroadcasts.push(windows),
       broadcastChatStatus: (event) => chatStatusEvents.push(event),
+      broadcastChatsChanged: (event) => chatsChangedEvents.push(event),
       openPath: (path) => {
         opened.push(path)
         return Promise.resolve(state.openRefusal)

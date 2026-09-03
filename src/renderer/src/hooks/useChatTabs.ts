@@ -268,6 +268,25 @@ export function useChatTabs(
     }
   }, [workspaceId, load])
 
+  /*
+   * The set of conversations moved, in this workspace or another's.
+   *
+   * Re-read rather than patched: the announcement says the set changed, not
+   * how, and a tab created in the other window has a title and a status this
+   * one has never seen. `load` is the same read the workspace effect makes.
+   */
+  useEffect(
+    () =>
+      window.octopus.chats.onChanged((announced) => {
+        // Broadcast to every window and covering every workspace; this strip
+        // draws one.
+        if (announced.workspaceId !== shown.current) return
+
+        void load(announced.workspaceId, () => shown.current !== announced.workspaceId)
+      }),
+    [load]
+  )
+
   useEffect(
     () =>
       window.octopus.chats.onStatus((announced) => {
