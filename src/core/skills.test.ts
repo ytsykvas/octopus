@@ -61,9 +61,34 @@ describe('readSkillsIn', () => {
       {
         name: 'real-name',
         description: 'When asked to do the thing.',
+        folder: 'folder-name',
         path: join(root, 'folder-name')
       }
     ])
+  })
+
+  // The listing has always said which directory it found; nothing that wrote
+  // used it, and re-deriving one from the name reached a different place.
+  /*
+   * Two directories, one name — and that is why a name cannot address a row.
+   * The frontmatter is what the agent calls the skill, so the listing is right
+   * to report both as `review`; what nothing had was a way to say which of the
+   * two a click meant.
+   */
+  it('reports two directories that claim one name as two skills', async () => {
+    await place(root, 'alpha', document('review', 'The hand-placed one.'))
+    await place(root, 'review', document('review', 'The one the app made.'))
+
+    const found = await readSkillsIn(root)
+
+    expect(found.map((skill) => skill.name)).toEqual(['review', 'review'])
+    expect(found.map((skill) => skill.folder)).toEqual(['alpha', 'review'])
+  })
+
+  it('says which directory it found the skill in', async () => {
+    await place(root, 'folder-name', document('real-name', 'When asked to do the thing.'))
+
+    expect((await readSkillsIn(root))[0]?.folder).toBe('folder-name')
   })
 
   it('falls back to the directory when the frontmatter does not name the skill', async () => {
@@ -124,6 +149,7 @@ describe('readSkillsIn', () => {
         name: 'colons',
         description:
           'Use it when there is an artifact. Triggers on: access_denied, "is this a bug".',
+        folder: 'colons',
         path: join(root, 'colons')
       }
     ])
@@ -211,6 +237,15 @@ describe('readSkill', () => {
   it('refuses a name that would leave the store', async () => {
     expect((await refusal(() => readSkill(root, '../elsewhere'))).code).toBe('skillNameInvalid')
   })
+
+  // The listing falls back to the directory for a document that names nothing;
+  // opening one has to say the same thing, or the editor shows a blank name for
+  // a skill the panel lists under its folder.
+  it('falls back to the directory when the document names nothing', async () => {
+    await place(root, 'folder-name', '---\ndescription: No name here.\n---\n\nBody\n')
+
+    expect((await readSkill(root, 'folder-name')).name).toBe('folder-name')
+  })
 })
 
 describe('writeSkill', () => {
@@ -218,7 +253,12 @@ describe('writeSkill', () => {
     await writeSkill(root, 'review', { description: 'When reviewing.', body: '# Review\n' })
 
     expect(await readSkillsIn(root)).toEqual([
-      { name: 'review', description: 'When reviewing.', path: join(root, 'review') }
+      {
+        name: 'review',
+        description: 'When reviewing.',
+        folder: 'review',
+        path: join(root, 'review')
+      }
     ])
   })
 
@@ -330,6 +370,53 @@ describe('writeRawSkill', () => {
       'skillTooLarge'
     )
   })
+  /*
+   * The case the whole change is for: a folder placed by hand whose document
+   * names something else. Raw mode used to compare the document against the
+   * directory, so this save was refused and raw mode was the one place that
+   * could not edit such a skill at all.
+   */
+  it('takes a raw save into a folder whose document names something else', async () => {
+    await place(root, 'alpha', document('review', 'The hand-placed one.'))
+
+    const written = await writeRawSkill(root, 'alpha', document('review', 'Edited.'))
+
+    expect(written).toMatchObject({ name: 'review', folder: 'alpha' })
+    expect((await readSkillsIn(root))[0]).toMatchObject({ name: 'review', folder: 'alpha' })
+  })
+
+  // What that check was always guarding, and still does: the name is the key
+  // every stored answer uses, so moving it would leave all of them pointing at
+  // a skill that no longer answers to it. A rename is a migration.
+  it('refuses a raw save that would rename the skill', async () => {
+    await place(root, 'alpha', document('review', 'The hand-placed one.'))
+
+    const refused = await refusal(() => writeRawSkill(root, 'alpha', document('audit', 'x')))
+
+    expect(refused.code).toBe('skillNameMismatch')
+    expect(refused.params).toMatchObject({ name: 'review', found: 'audit' })
+  })
+
+  // Creating rather than editing: there is no document to compare against, so
+  // the directory is what the save must name. This is the shape `importFromText`
+  // uses, and the only one where the two agree by construction.
+  it('takes a raw save into a directory that does not exist yet', async () => {
+    const written = await writeRawSkill(root, 'fresh', document('fresh', 'Brand new.'))
+
+    expect(written).toMatchObject({ name: 'fresh', folder: 'fresh' })
+    expect((await readSkillsIn(root)).map((skill) => skill.folder)).toEqual(['fresh'])
+  })
+
+  // The same fallback the reader makes: a document that names nothing is filed
+  // under its directory, so that is what a raw save must not change it away
+  // from.
+  it('takes a raw save into a skill whose document named nothing', async () => {
+    await place(root, 'folder-name', '---\ndescription: No name here.\n---\n\nBody\n')
+
+    const written = await writeRawSkill(root, 'folder-name', document('folder-name', 'Named now.'))
+
+    expect(written).toMatchObject({ name: 'folder-name', folder: 'folder-name' })
+  })
 })
 
 describe('removeSkill', () => {
@@ -340,6 +427,32 @@ describe('removeSkill', () => {
     await removeSkill(root, 'review')
 
     expect(await readSkillsIn(root)).toEqual([])
+  })
+
+  /*
+   * The folder decides, not the name.
+   *
+   * A folder placed by hand whose document names something else is a supported
+   * route in — the store is documented as ordinary files — so two directories
+   * can carry one name. Every write used to resolve that name back to
+   * `join(dir, name)` rather than to the directory the listing found, and the
+   * renderer had only the name to send: Remove on the hand-placed row deleted
+   * the *other* skill, and the one aimed at stayed on screen.
+   */
+  it('takes the directory it was pointed at, not the one whose name it shares', async () => {
+    await place(root, 'alpha', document('review', 'The hand-placed one.'))
+    await place(root, 'review', document('review', 'The one the app made.'))
+
+    await removeSkill(root, 'alpha')
+
+    expect(await readSkillsIn(root)).toEqual([
+      {
+        name: 'review',
+        description: 'The one the app made.',
+        folder: 'review',
+        path: join(root, 'review')
+      }
+    ])
   })
 
   it('is quiet about a skill that is already gone', async () => {
@@ -376,6 +489,7 @@ describe('importFromText', () => {
     expect(entry).toEqual({
       name: 'pdf-forms',
       description: 'When filling a PDF.',
+      folder: 'pdf-forms',
       path: join(root, 'pdf-forms')
     })
   })

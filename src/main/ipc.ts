@@ -418,25 +418,25 @@ export function registerIpc(
     attempt(() => service.listSkills(SkillStoreSchema.parse(store)))
   )
 
-  host.handle('skills:read', (_event, store: unknown, name: unknown) =>
+  host.handle('skills:read', (_event, store: unknown, folder: unknown) =>
     attempt(() =>
-      service.readStoredSkill(SkillStoreSchema.parse(store), SkillNameSchema.parse(name))
+      service.readStoredSkill(SkillStoreSchema.parse(store), SkillNameSchema.parse(folder))
     )
   )
 
-  host.handle('skills:save', (_event, store: unknown, name: unknown, save: unknown) =>
+  host.handle('skills:save', (_event, store: unknown, folder: unknown, save: unknown) =>
     attempt(() =>
       service.saveStoredSkill(
         SkillStoreSchema.parse(store),
-        SkillNameSchema.parse(name),
+        SkillNameSchema.parse(folder),
         SkillSaveSchema.parse(save)
       )
     )
   )
 
-  host.handle('skills:remove', (_event, store: unknown, name: unknown) =>
+  host.handle('skills:remove', (_event, store: unknown, folder: unknown) =>
     attempt(() =>
-      service.removeStoredSkill(SkillStoreSchema.parse(store), SkillNameSchema.parse(name))
+      service.removeStoredSkill(SkillStoreSchema.parse(store), SkillNameSchema.parse(folder))
     )
   )
 

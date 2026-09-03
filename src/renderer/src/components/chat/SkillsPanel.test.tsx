@@ -11,6 +11,7 @@ function listing(overrides: Partial<SkillListing> = {}): SkillListing {
     key: 'octopus:review',
     name: 'review',
     description: 'When reviewing.',
+    folder: 'review',
     path: '/skills/review',
     scope: 'global',
     enabled: true,

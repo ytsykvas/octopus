@@ -9,8 +9,9 @@ export interface SkillStoreController {
   readonly skills: readonly SkillEntry[]
   /** The last failure in words, or null; cleared by the next attempt that works. */
   readonly error: string | null
-  readonly save: (name: string, save: SkillSave) => Promise<boolean>
-  readonly remove: (name: string) => Promise<void>
+  /** Both take the directory the listing found, which is what addresses a skill. */
+  readonly save: (folder: string, save: SkillSave) => Promise<boolean>
+  readonly remove: (folder: string) => Promise<void>
   readonly bring: (request: SkillImport) => Promise<boolean>
   readonly refresh: () => Promise<void>
 }
@@ -65,8 +66,8 @@ export function useSkillStore(store: SkillStore): SkillStoreController {
   }, [target, describeFailure])
 
   const save = useCallback(
-    async (name: string, request: SkillSave) => {
-      const written = await window.octopus.skills.save(target, name, request)
+    async (folder: string, request: SkillSave) => {
+      const written = await window.octopus.skills.save(target, folder, request)
       if (!written.ok) {
         setError(describeFailure(written))
         return false
@@ -80,8 +81,8 @@ export function useSkillStore(store: SkillStore): SkillStoreController {
   )
 
   const remove = useCallback(
-    async (name: string) => {
-      const removed = await window.octopus.skills.remove(target, name)
+    async (folder: string) => {
+      const removed = await window.octopus.skills.remove(target, folder)
       if (removed.ok) setError(null)
       else setError(describeFailure(removed))
 

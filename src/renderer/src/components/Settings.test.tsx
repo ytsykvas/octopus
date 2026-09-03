@@ -704,7 +704,9 @@ describe('the skills section', () => {
     const user = userEvent.setup()
     vi.mocked(octopus().skills.list).mockResolvedValue({
       ok: true,
-      value: [{ name: 'review', description: '', path: '/data/skills/skills/review' }]
+      value: [
+        { name: 'review', description: '', folder: 'review', path: '/data/skills/skills/review' }
+      ]
     })
     const props = await renderSettings()
 

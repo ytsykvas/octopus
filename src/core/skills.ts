@@ -69,8 +69,24 @@ export class SkillError extends CodedError<SkillErrorCode> {
 
 /** What a list needs to draw one row. */
 export interface SkillEntry {
+  /**
+   * What the agent calls the skill, from the frontmatter.
+   *
+   * Not an address. Two directories may claim one name — a folder placed by
+   * hand beside one the app wrote — and the agent treats them as one skill, so
+   * the listing reports both under it. Use `folder` to act on one.
+   */
   readonly name: string
   readonly description: string
+  /**
+   * The directory this was found in, relative to the store.
+   *
+   * What every read and write is addressed by. It used to be re-derived from
+   * `name`, which is the same string only for a skill the app itself created:
+   * anything else was edited, saved and deleted somewhere the listing had never
+   * looked, and where two rows shared a name it was the wrong one.
+   */
+  readonly folder: string
   /** The skill's own directory, so a caller can say where it landed. */
   readonly path: string
 }
@@ -317,6 +333,7 @@ export async function readSkillsIn(dir: string): Promise<SkillEntry[]> {
     found.push({
       name: parsed.name === '' ? entry.name : parsed.name,
       description: parsed.description,
+      folder: entry.name,
       path
     })
   }
@@ -325,15 +342,28 @@ export async function readSkillsIn(dir: string): Promise<SkillEntry[]> {
 }
 
 /** One skill, opened for editing. */
-export async function readSkill(dir: string, name: string): Promise<SkillDocument> {
-  const path = skillPath(dir, name)
+export async function readSkill(dir: string, folder: string): Promise<SkillDocument> {
+  const path = skillPath(dir, folder)
   const parsed = await readDocument(path)
 
   if (parsed === null) {
-    throw new SkillError('skillMissing', { name }, `${name} has no readable ${SKILL_FILE}.`)
+    throw new SkillError(
+      'skillMissing',
+      { name: folder },
+      `${folder} has no readable ${SKILL_FILE}.`
+    )
   }
 
-  return { name, description: parsed.description, body: parsed.body, raw: parsed.raw, path }
+  return {
+    // From the document, not from the directory: the editor shows what the
+    // agent calls it, and the two need not agree.
+    name: parsed.name === '' ? folder : parsed.name,
+    description: parsed.description,
+    body: parsed.body,
+    raw: parsed.raw,
+    folder,
+    path
+  }
 }
 
 /**
@@ -395,18 +425,22 @@ function assertFits(text: string): void {
 /** Writes what the form edited, keeping any frontmatter it does not know about. */
 export async function writeSkill(
   dir: string,
-  name: string,
+  folder: string,
   content: SkillContent
 ): Promise<SkillEntry> {
-  const path = skillPath(dir, name)
+  const path = skillPath(dir, folder)
   const existing = await readDocument(path)
+  // The name written into the document is the one it already had, not the
+  // directory: a skill whose frontmatter names something else keeps saying so
+  // after an edit, because that is the name the agent knows it by.
+  const name = existing === null || existing.name === '' ? folder : existing.name
   const raw = `---\n${frontmatterFor(existing === null ? null : existing.front, name, content.description).trimEnd()}\n---\n\n${content.body}`
 
   assertFits(raw)
   await mkdir(path, { recursive: true })
   await writeFile(join(path, SKILL_FILE), raw, 'utf8')
 
-  return { name, description: content.description, path }
+  return { name, description: content.description, folder, path }
 }
 
 /**
@@ -417,8 +451,12 @@ export async function writeSkill(
  * and every key stored against it — the default marks, each chat's overrides —
  * would point at the wrong one.
  */
-export async function writeRawSkill(dir: string, name: string, text: string): Promise<SkillEntry> {
-  const path = skillPath(dir, name)
+export async function writeRawSkill(
+  dir: string,
+  folder: string,
+  text: string
+): Promise<SkillEntry> {
+  const path = skillPath(dir, folder)
 
   assertFits(text)
 
@@ -431,22 +469,40 @@ export async function writeRawSkill(dir: string, name: string, text: string): Pr
     )
   }
 
-  if (parsed.name !== name) {
+  /*
+   * The save must not change which skill this is.
+   *
+   * Compared against the name the document already carries rather than against
+   * the directory, because those are the same string only for a skill the app
+   * created: a folder placed by hand naming something else is a supported way
+   * in, and refusing to save it would make raw mode the one place that cannot
+   * edit it.
+   *
+   * What stays refused is the rename, which is what this check was always for:
+   * every key stored against a skill — the default marks, each chat's overrides
+   * — is its name, and moving it here would leave all of them pointing at a
+   * skill that no longer answers to it. A rename is a migration and has a task
+   * file of its own.
+   */
+  const existing = await readDocument(path)
+  const current = existing === null || existing.name === '' ? folder : existing.name
+
+  if (parsed.name !== current) {
     throw new SkillError(
       'skillNameMismatch',
-      { name, found: parsed.name },
-      `The document names ${parsed.name}, not ${name}.`
+      { name: current, found: parsed.name },
+      `The document names ${parsed.name}, not ${current}.`
     )
   }
 
   await mkdir(path, { recursive: true })
   await writeFile(join(path, SKILL_FILE), text, 'utf8')
 
-  return { name, description: parsed.description, path }
+  return { name: parsed.name, description: parsed.description, folder, path }
 }
 
-export async function removeSkill(dir: string, name: string): Promise<void> {
-  await rm(skillPath(dir, name), { recursive: true, force: true })
+export async function removeSkill(dir: string, folder: string): Promise<void> {
+  await rm(skillPath(dir, folder), { recursive: true, force: true })
 }
 
 /**
@@ -560,7 +616,9 @@ async function importDirectory(dir: string, source: string): Promise<SkillEntry>
   const path = skillPath(dir, name)
   await cp(source, path, { recursive: true, errorOnExist: true, force: false })
 
-  return { name, description: parsed.description, path }
+  // The one place the two are the same by construction: an import creates the
+  // directory, and it creates it under the name the document claims.
+  return { name, description: parsed.description, folder: name, path }
 }
 
 /**

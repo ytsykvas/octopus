@@ -16,6 +16,7 @@ function listing(overrides: Partial<SkillListing> = {}): SkillListing {
     key: 'review',
     name: 'review',
     description: 'When reviewing.',
+    folder: 'review',
     path: '/skills/review',
     scope: 'global',
     enabled: true,

@@ -625,9 +625,16 @@ export interface OctopusService {
    */
   listRepositorySkills(workspaceId: string): Promise<SkillEntry[]>
   /** One of them, opened: the form's two fields and the raw document. */
-  readStoredSkill(store: SkillStore, name: string): Promise<SkillDocument>
-  saveStoredSkill(store: SkillStore, name: string, save: SkillSave): Promise<SkillEntry>
-  removeStoredSkill(store: SkillStore, name: string): Promise<void>
+  /**
+   * One skill of a store, addressed by the directory the listing found it in.
+   *
+   * A folder rather than a name: the two are the same string only for a skill
+   * the app itself created, and a name cannot address a row at all where two
+   * directories claim one.
+   */
+  readStoredSkill(store: SkillStore, folder: string): Promise<SkillDocument>
+  saveStoredSkill(store: SkillStore, folder: string, save: SkillSave): Promise<SkillEntry>
+  removeStoredSkill(store: SkillStore, folder: string): Promise<void>
   importStoredSkill(store: SkillStore, request: SkillImport): Promise<SkillEntry>
   /**
    * Every skill this conversation could use, and whether it is on.
@@ -2642,24 +2649,24 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
       return readSkillsIn(join(requireWorkspace(workspaceId).path, '.claude', 'skills'))
     },
 
-    async readStoredSkill(store, name) {
-      return readSkill(skillsDirOf(storeRoot(store)), name)
+    async readStoredSkill(store, folder) {
+      return readSkill(skillsDirOf(storeRoot(store)), folder)
     },
 
-    async saveStoredSkill(store, name, save) {
+    async saveStoredSkill(store, folder, save) {
       const dir = await writableStore(store)
       const written =
         save.kind === 'form'
-          ? await writeSkill(dir, name, save.content)
-          : await writeRawSkill(dir, name, save.text)
+          ? await writeSkill(dir, folder, save.content)
+          : await writeRawSkill(dir, folder, save.text)
 
       await refreshRunningSkills()
 
       return written
     },
 
-    async removeStoredSkill(store, name) {
-      await removeSkill(skillsDirOf(storeRoot(store)), name)
+    async removeStoredSkill(store, folder) {
+      await removeSkill(skillsDirOf(storeRoot(store)), folder)
       await refreshRunningSkills()
     },
 

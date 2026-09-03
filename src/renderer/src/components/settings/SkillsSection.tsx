@@ -71,12 +71,15 @@ export function SkillsSection({
     }
   }, [workspaceId])
 
-  const open = async (name: string): Promise<void> => {
-    const document = await window.octopus.skills.read(store, name)
+  // Addressed by the directory the listing found, not by the name on the row:
+  // two directories may claim one name, and the name then says nothing about
+  // which of them a click meant.
+  const open = async (folder: string): Promise<void> => {
+    const document = await window.octopus.skills.read(store, folder)
     if (document.ok) setEditing(document.value)
   }
 
-  const requestRemove = async (name: string): Promise<void> => {
+  const requestRemove = async (folder: string, name: string): Promise<void> => {
     const { confirmed } = await confirm({
       title: t('skills.removeTitle', { name }),
       message: t('skills.removeMessage'),
@@ -86,7 +89,7 @@ export function SkillsSection({
       destructive: true
     })
 
-    if (confirmed) await skills.remove(name)
+    if (confirmed) await skills.remove(folder)
   }
 
   const setDefault = (name: string, on: boolean): void => {
@@ -132,7 +135,7 @@ export function SkillsSection({
         ) : (
           <ul className="border-line divide-line divide-y rounded-[var(--radius-panel)] border">
             {skills.skills.map((skill) => (
-              <li key={skill.name} className="flex items-center gap-3 px-3 py-2">
+              <li key={skill.folder} className="flex items-center gap-3 px-3 py-2">
                 <Switch
                   checked={!disabledDefaults.includes(skillKey(skill.name))}
                   label={t('skills.onByDefault')}
@@ -154,7 +157,7 @@ export function SkillsSection({
                       id: 'edit',
                       label: t('skills.edit'),
                       onSelect: () => {
-                        void open(skill.name)
+                        void open(skill.folder)
                       }
                     },
                     {
@@ -162,7 +165,7 @@ export function SkillsSection({
                       label: t('skills.remove'),
                       destructive: true,
                       onSelect: () => {
-                        void requestRemove(skill.name)
+                        void requestRemove(skill.folder, skill.name)
                       }
                     }
                   ]}
@@ -194,7 +197,7 @@ export function SkillsSection({
           </p>
           <ul className="border-line divide-line divide-y rounded-[var(--radius-panel)] border">
             {carried.map((skill) => (
-              <li key={skill.name} className="flex items-center gap-3 px-3 py-2">
+              <li key={skill.folder} className="flex items-center gap-3 px-3 py-2">
                 <span className="min-w-0 flex-1">
                   <span className="text-ink block truncate">{skill.name}</span>
                   {skill.description !== '' && (

@@ -134,11 +134,22 @@ export function installOctopusStub(): Api {
     skills: {
       list: vi.fn(() => ok([])),
       read: vi.fn(() =>
-        ok({ name: 'review', description: '', body: '', raw: '', path: '/skills/review' })
+        ok({
+          name: 'review',
+          description: '',
+          folder: 'review',
+          body: '',
+          raw: '',
+          path: '/skills/review'
+        })
       ),
-      save: vi.fn(() => ok({ name: 'review', description: '', path: '/skills/review' })),
+      save: vi.fn(() =>
+        ok({ name: 'review', description: '', folder: 'review', path: '/skills/review' })
+      ),
       remove: vi.fn(() => ok(undefined)),
-      import: vi.fn(() => ok({ name: 'review', description: '', path: '/skills/review' })),
+      import: vi.fn(() =>
+        ok({ name: 'review', description: '', folder: 'review', path: '/skills/review' })
+      ),
       inRepository: vi.fn(() => ok([])),
       forChat: vi.fn(() => ok([])),
       forWorkspace: vi.fn(() => ok([])),

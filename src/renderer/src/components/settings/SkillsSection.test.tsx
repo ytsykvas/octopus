@@ -16,6 +16,7 @@ function entry(overrides: Partial<SkillEntry> = {}): SkillEntry {
   return {
     name: 'review',
     description: 'When reviewing.',
+    folder: 'review',
     path: '/data/skills/skills/review',
     ...overrides
   }
@@ -227,6 +228,7 @@ describe('writing a skill', () => {
       value: {
         name: 'review',
         description: 'When reviewing.',
+        folder: 'review',
         path: '/data/skills/skills/review',
         body: '# Review\n',
         raw: '---\nname: review\nallowed-tools: Read\n---\n\n# Review\n'

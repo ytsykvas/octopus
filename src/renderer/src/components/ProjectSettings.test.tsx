@@ -1306,7 +1306,9 @@ describe('the skills section', () => {
     const user = userEvent.setup()
     vi.mocked(octopus().skills.list).mockResolvedValue({
       ok: true,
-      value: [{ name: 'deploy', description: '', path: '/data/projects/planner/skills' }]
+      value: [
+        { name: 'deploy', description: '', folder: 'deploy', path: '/data/projects/planner/skills' }
+      ]
     })
     const props = await renderDialog()
 
@@ -1328,7 +1330,14 @@ describe('the skills section', () => {
     const user = userEvent.setup()
     vi.mocked(octopus().skills.inRepository).mockResolvedValue({
       ok: true,
-      value: [{ name: 'core-module', description: '', path: '/ws/kyiv/.claude/skills/core-module' }]
+      value: [
+        {
+          name: 'core-module',
+          description: '',
+          folder: 'core-module',
+          path: '/ws/kyiv/.claude/skills/core-module'
+        }
+      ]
     })
     await renderDialog({ workspaceId: 'planner/kyiv' })
 
