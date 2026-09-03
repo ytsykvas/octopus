@@ -390,7 +390,34 @@ describe('channel names', () => {
       () => method('skills', 'setForChat')('c' as never, 'k' as never, false as never),
       'skills:setForChat'
     ],
-    ['terminal.create', () => method('terminal', 'create')({} as never), 'terminal:create']
+    ['terminal.create', () => method('terminal', 'create')({} as never), 'terminal:create'],
+    [
+      'accounts.signOut',
+      () => method('accounts', 'signOut')('github' as never, null as never),
+      'accounts:signOut'
+    ],
+    [
+      'terminal.write',
+      () => method('terminal', 'write')('t' as never, 'x' as never),
+      'terminal:write'
+    ],
+    [
+      'terminal.resize',
+      () => method('terminal', 'resize')('t' as never, 80 as never, 24 as never),
+      'terminal:resize'
+    ],
+    ['terminal.dispose', () => method('terminal', 'dispose')('t' as never), 'terminal:dispose'],
+    [
+      'projects.saveInstruction',
+      () =>
+        method('projects', 'saveInstruction')('p' as never, 'pullRequest' as never, 'x' as never),
+      'instructions:save'
+    ],
+    [
+      'projects.addFromGitHub',
+      () => method('projects', 'addFromGitHub')({} as never),
+      'projects:addFromGitHub'
+    ]
   ]
 
   for (const [name, call, channel] of CALLS) {
@@ -492,33 +519,6 @@ describe('subscriptions', () => {
 })
 
 describe('the rest of the surface', () => {
-  // Every method is a channel name that must match main/ipc.ts. Calling each
-  // one is the only way to find a name that drifted.
-  const REMAINING: readonly [string, string, () => unknown][] = [
-    ['accounts', 'signOut', () => method('accounts', 'signOut')('github' as never, null as never)],
-    ['terminal', 'write', () => method('terminal', 'write')('t' as never, 'x' as never)],
-    [
-      'terminal',
-      'resize',
-      () => method('terminal', 'resize')('t' as never, 80 as never, 24 as never)
-    ],
-    ['terminal', 'dispose', () => method('terminal', 'dispose')('t' as never)],
-    [
-      'projects',
-      'saveInstruction',
-      () =>
-        method('projects', 'saveInstruction')('p' as never, 'pullRequest' as never, 'x' as never)
-    ],
-    ['projects', 'addFromGitHub', () => method('projects', 'addFromGitHub')({} as never)]
-  ]
-
-  for (const [groupName, name, call] of REMAINING) {
-    it(`${groupName}.${name} reaches main`, () => {
-      call()
-      expect(invoke).toHaveBeenCalled()
-    })
-  }
-
   // Sign-in is interactive, so the argv is built here and hosted in a terminal
   // rather than run behind the user's back.
   it('builds the sign-in command locally instead of calling main', () => {
