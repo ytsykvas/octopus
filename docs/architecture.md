@@ -74,14 +74,22 @@ never called from a test.
 `main/index.ts` is bootstrap: create the service, create the window, register
 the menu, hand Electron to the IPC layer. Everything with a decision in it was
 moved out, which is why `ipc.ts`, `result.ts`, `theme.ts` and `loginPath.ts`
-exist as separate files — a 357-line entry point could only be tested by mocking
-half of Electron.
+exist as separate files — an entry point that grew to hold them could only be
+tested by mocking half of Electron.
 
 `index.ts` is the one file the coverage threshold does not apply to
 (`bootstrapOnly` in `vitest.shared.ts`), which makes it the easiest place in the
 repository to hide an untested branch. `loginPath.ts` exists for that reason:
 repairing the process PATH is two effects and one condition, and left inline it
 would have been invisible to the gate rather than exempt from it on purpose.
+
+`broadcast.ts` exists for the same reason and the bill had already come in.
+Every channel the main process pushes on lived in `index.ts` and nowhere else,
+so renaming one passed the whole gate: unreachable by a test is stronger than
+untested, and there is no threshold to notice. It takes the windows to reach as
+a parameter — the seam `terminals.ts` uses — so a test fills them with objects
+that collect what was sent, and the channel names are asserted where they are
+written.
 
 `terminals.ts` is the one part of `main/` that owns something rather than
 forwarding it: pseudo-terminals are process resources bound to a window, which

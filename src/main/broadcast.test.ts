@@ -50,9 +50,25 @@ describe('what the main process pushes, and on which channel', () => {
 
     expect(first.sent).toEqual([['theme:changed', 'dark']])
     expect(second.sent).toEqual([['theme:changed', 'dark']])
-    // The window paints this before the renderer has drawn anything; without it
-    // a dark window flashes white on every switch.
-    expect(first.colours).toHaveLength(1)
+  })
+
+  /*
+   * The window paints this before the renderer has drawn anything, so without
+   * it a dark window flashes white on every switch.
+   *
+   * Asserted as two answers that differ rather than as one call having
+   * happened: a count of calls holds even with the theme ignored, which is what
+   * this test said at first.
+   */
+  it("paints each window's canvas for the theme it announces", () => {
+    const dark = target()
+    const light = target()
+
+    pushTheme([dark], 'dark')
+    pushTheme([light], 'light')
+
+    expect(dark.colours).toHaveLength(1)
+    expect(dark.colours[0]).not.toBe(light.colours[0])
   })
 
   it('announces a conversation event', () => {

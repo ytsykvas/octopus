@@ -420,6 +420,43 @@ describe('channel names', () => {
     ]
   ]
 
+  /*
+   * Every method on the bridge is either in the table above or named here.
+   *
+   * The table catches a name that drifted. This catches a method that never
+   * reached the table — which is the hole six channels sat in, and closing them
+   * by hand does nothing about the seventh. `ipc.test.ts` has had this half all
+   * along (`bench.handlers.size` against `EXPECTED.length`); this side had
+   * nothing.
+   *
+   * Exempt because they do not invoke: the subscription pairs go through
+   * `ipcRenderer.on`, whose channels are asserted one by one below, and
+   * `signInCommand` builds an argv locally on purpose.
+   */
+  const NOT_CALLS: readonly string[] = [
+    'theme.onChange',
+    'settings.onOpen',
+    'chats.onEvent',
+    'chats.onStatus',
+    'chats.onUsageWindows',
+    'workspaces.onStatus',
+    'terminal.onData',
+    'terminal.onExit',
+    'accounts.signInCommand'
+  ]
+
+  it('names every method on the bridge, in the table or in the exemptions', () => {
+    const exposed = Object.entries(api).flatMap(([groupName, group]) =>
+      Object.keys(group).map((name) => `${groupName}.${name}`)
+    )
+    const covered = new Set([...CALLS.map(([name]) => name), ...NOT_CALLS])
+
+    expect(exposed.filter((name) => !covered.has(name))).toEqual([])
+    // And nothing is exempted that has since gone, or the list outlives its
+    // reason the way the array this replaces did.
+    expect(NOT_CALLS.filter((name) => !exposed.includes(name))).toEqual([])
+  })
+
   for (const [name, call, channel] of CALLS) {
     it(`${name} talks to ${channel}`, () => {
       call()
