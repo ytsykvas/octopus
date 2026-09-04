@@ -9,15 +9,20 @@ import { type ChatNote, noteKey } from './attachments.js'
  * A diff note by the file and the lines it covers; a review remark by the
  * request and whoever wrote it. Both are the shortest thing that would let
  * somebody find it again.
+ *
+ * The side is on it for the same reason it is in the message: two notes at the
+ * same number on opposite sides are different notes, and this is the last
+ * moment before sending when saying so still lets somebody take one back.
  */
-function label(note: ChatNote): string {
+function label(note: ChatNote, oldSide: string): string {
   if (note.kind === 'diff') {
     const lines =
       note.endLine === note.line
         ? String(note.line)
         : `${String(note.line)}-${String(note.endLine)}`
+    const mark = note.side === 'old' ? ` ${oldSide}` : ''
 
-    return `${note.path.slice(note.path.lastIndexOf('/') + 1)}:${lines}`
+    return `${note.path.slice(note.path.lastIndexOf('/') + 1)}:${lines}${mark}`
   }
 
   const place = note.place === null ? null : note.place.slice(note.place.lastIndexOf('/') + 1)
@@ -61,7 +66,9 @@ export function ComposerAttachments({
           key={noteKey(note)}
           className="border-line bg-muted text-ink-soft flex max-w-full items-center gap-1 rounded-[var(--radius-control)] border px-1.5 py-0.5"
         >
-          <span className="text-ink-faint shrink-0 font-mono text-[11px]">{label(note)}</span>
+          <span className="text-ink-faint shrink-0 font-mono text-[11px]">
+            {label(note, t('diff.noteOldSideShort'))}
+          </span>
           <span className="min-w-0 truncate text-[11px]">{said(note)}</span>
           <button
             type="button"

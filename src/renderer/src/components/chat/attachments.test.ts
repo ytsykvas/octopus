@@ -5,7 +5,11 @@ import type { PullRequestQuote } from '../../hooks/usePullRequestQuotes.js'
 
 import { type ChatNote, mergeNotes, noteKey, withNotes } from './attachments.js'
 
-const INTROS = { diff: 'Review notes:', pullRequest: 'From the review:' }
+const INTROS = {
+  diff: 'Review notes:',
+  pullRequest: 'From the review:',
+  oldSide: '(as it was)'
+}
 
 const comment = (overrides: Partial<DiffComment> = {}): DiffComment => ({
   path: 'src/core/diff.ts',
@@ -76,6 +80,37 @@ describe('writing the notes into the message', () => {
   it('writes each note into the message, with the line it is about', () => {
     expect(withNotes('fix these', [note()], INTROS)).toBe(
       'Review notes:\n\nsrc/core/diff.ts:42\n> const b = 2\nThis should be 3.\n\nfix these'
+    )
+  })
+
+  /*
+   * The side is the difference between an address and a wrong address. A note
+   * on a removed line is numbered in the file **before** the change, and the
+   * pane knows that everywhere — `anchorOf` records it, `anchorKey` spells it,
+   * the aria-label says it — while this was the one place it reached the agent.
+   *
+   * The quote saves a distinctive line. For `}` or `return null` the number is
+   * the only thing telling two apart, and after a large deletion the two
+   * numberings have drifted by everything added above.
+   */
+  it('says when a note is about the file as it was', () => {
+    expect(withNotes('fix these', [note({ side: 'old' })], INTROS)).toBe(
+      'Review notes:\n\nsrc/core/diff.ts:42 (as it was)\n> const b = 2\nThis should be 3.\n\nfix these'
+    )
+  })
+
+  // And says nothing extra about the ordinary case, which is nearly all of
+  // them: `SplitRowView` prefers the right-hand line, so an old anchor is rare.
+  it('leaves a note about the file as it is unmarked', () => {
+    expect(withNotes('fix these', [note({ side: 'new' })], INTROS)).toBe(
+      'Review notes:\n\nsrc/core/diff.ts:42\n> const b = 2\nThis should be 3.\n\nfix these'
+    )
+  })
+
+  // A passage keeps both, so the range and the side are read together.
+  it('marks a passage on the old side as well as a single line', () => {
+    expect(withNotes('', [note({ side: 'old', line: 8, endLine: 11 })], INTROS)).toContain(
+      'src/core/diff.ts:8-11 (as it was)'
     )
   })
 

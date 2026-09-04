@@ -1278,7 +1278,18 @@ copied is what was read, the same trade-off the diff pane already takes.
 **A note against the code rides out with the next message.** It becomes text —
 the path, the lines, the code as it read when the note was written, then the
 remark — above whatever was typed, because nothing implicit reaches the agent
-(§4). The two sides of a diff are different lines even at the same number.
+(§4).
+
+**A note about the file as it was says so, and a bare number would be wrong
+without it.** The two sides of a diff are different lines even at the same
+number, so `path:812` on a removed line addresses the file **before** the
+change — code that is not there any more, and after a large deletion numbered
+differently from everything around it. The quote rescues a distinctive line;
+for `}` or `return null` the number is all there is. Translating the old number
+into a new one is not on offer and is why the side is recorded rather than
+resolved: a removed line has no line in the file as it now stands. The composer
+chip carries the same mark, that being the last moment somebody can take the
+note back.
 
 **A note covers a passage, not only a line.** The trigger in the gutter takes
 one line, and selecting code with the mouse takes as many as were dragged over:

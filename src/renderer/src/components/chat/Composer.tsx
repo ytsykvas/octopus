@@ -293,7 +293,8 @@ export function Composer({
     void (async () => {
       const message = withNotes(trimmed, notes, {
         diff: t('diff.commentIntro'),
-        pullRequest: t('pullRequest.quoteIntro')
+        pullRequest: t('pullRequest.quoteIntro'),
+        oldSide: t('diff.noteOldSide')
       })
 
       if (!(await onSend(message))) return

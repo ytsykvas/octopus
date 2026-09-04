@@ -44,6 +44,14 @@ export function mergeNotes(
 export interface NoteIntros {
   readonly diff: string
   readonly pullRequest: string
+  /**
+   * What marks a note about the file as it was, appended to its heading.
+   *
+   * Passed in rather than written here for the reason the two above are: this
+   * is text the user reads back in their own message, so it belongs in the
+   * locales.
+   */
+  readonly oldSide: string
 }
 
 /**
@@ -68,7 +76,9 @@ export function withNotes(text: string, notes: readonly ChatNote[], intros: Note
   // One introduction per kind that is present, rather than one per note: two
   // headings over a list of six is a shape, six is noise.
   const parts = [
-    ...(diff.length === 0 ? [] : [intros.diff, ...diff.map(fromDiff)]),
+    ...(diff.length === 0
+      ? []
+      : [intros.diff, ...diff.map((note) => fromDiff(note, intros.oldSide))]),
     ...(review.length === 0 ? [] : [intros.pullRequest, ...review.map(fromReview)]),
     // The typed message last, so the agent reads the notes and then what to do
     // with them — and an empty one leaves no trailing blank lines behind.
@@ -78,8 +88,28 @@ export function withNotes(text: string, notes: readonly ChatNote[], intros: Note
   return parts.filter((part) => part !== '').join('\n\n')
 }
 
-function fromDiff(note: { readonly kind: 'diff' } & DiffComment): string {
-  return `${note.path}:${lineRange(note)}\n${blockQuote(note.code)}\n${note.text}`
+/**
+ * A note as it reads in the message.
+ *
+ * The side is named, and a bare number would be wrong without it. The pane
+ * knows which file a note is about everywhere — `anchorOf` records it,
+ * `anchorKey` spells it, the aria-label says it — and this is the one place it
+ * reaches the agent. Dropped here, a remark on a removed line went out as
+ * `path:812` where 812 numbers the file **before** the change: an address that
+ * does not contain the code the remark is about.
+ *
+ * The quoted passage rescues a distinctive line. For `}`, `return null` or a
+ * closing tag the number is the only thing telling two apart, and after a large
+ * deletion the two numberings have drifted by everything added above.
+ *
+ * The old number is not translated into a new one, and cannot be: a removed
+ * line has no line in the file as it now stands, which is why the side is
+ * recorded rather than resolved.
+ */
+function fromDiff(note: { readonly kind: 'diff' } & DiffComment, oldSide: string): string {
+  const where = `${note.path}:${lineRange(note)}${note.side === 'old' ? ` ${oldSide}` : ''}`
+
+  return `${where}\n${blockQuote(note.code)}\n${note.text}`
 }
 
 /**

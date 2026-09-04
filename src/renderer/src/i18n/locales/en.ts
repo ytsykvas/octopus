@@ -563,7 +563,15 @@ export const en = {
     commentSave: 'Add',
     commentCancel: 'Cancel',
     commentRemove: 'Remove this note',
-    commentIntro: 'Review notes on the changes:'
+    commentIntro: 'Review notes on the changes:',
+    /* Appended to a note's heading in the message the agent reads. Without it
+       the number is an address in a file that no longer exists — and the pane
+       knows the side everywhere else, including the aria-label above. Worded
+       like `commentOld`, which says the same thing to a screen reader. */
+    noteOldSide: '(in the file as it was, before this change)',
+    /* The same on the composer chip, where there is room for two words and the
+       reader is deciding whether to take the note back. */
+    noteOldSideShort: '(as it was)'
   },
 
   chat: {

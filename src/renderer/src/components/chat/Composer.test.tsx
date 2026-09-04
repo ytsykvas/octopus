@@ -293,6 +293,24 @@ describe('review notes riding with the message', () => {
     expect(screen.getByText('diff.ts:42-50')).toBeInTheDocument()
   })
 
+  /*
+   * The last moment the omission is still correctable. Two notes at the same
+   * number on opposite sides are different notes, and without this they were
+   * identical chips — so somebody about to send could not tell which of the two
+   * they were about to take back.
+   */
+  it('says on the chip when a note is about the file as it was', () => {
+    renderComposer({ notes: [{ ...NOTE, side: 'old' as const }] })
+
+    expect(screen.getByText('diff.ts:42 (as it was)')).toBeInTheDocument()
+  })
+
+  it('leaves a chip about the file as it is unmarked', () => {
+    renderComposer({ notes: [{ ...NOTE, side: 'new' as const }] })
+
+    expect(screen.getByText('diff.ts:42')).toBeInTheDocument()
+  })
+
   /* A remark on the request as a whole has no file, so its chip is the request
      and the author and nothing more. */
   it('names a remark that is not about any file', () => {

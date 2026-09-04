@@ -478,7 +478,9 @@ export const uk: Translation = {
     commentSave: 'Додати',
     commentCancel: 'Скасувати',
     commentRemove: 'Прибрати цю нотатку',
-    commentIntro: 'Зауваження до змін:'
+    commentIntro: 'Зауваження до змін:',
+    noteOldSide: '(у файлі, яким він був до цієї зміни)',
+    noteOldSideShort: '(як було)'
   },
 
   chat: {
