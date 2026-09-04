@@ -2,10 +2,19 @@
  * A repository's Conductor configuration, as far as octopus can use it.
  *
  * Conductor is the tool octopus is modelled on, and a repository already set up
- * for it carries exactly what a project here needs: the three scripts, the list
- * of gitignored files a worktree has to be given, and prose for some of the
- * actions the pull request pane offers. A checkout that has one should not have
- * to be configured twice.
+ * for it carries much of what a project here needs: the three scripts, and
+ * prose for some of the actions the pull request pane offers. A checkout that
+ * has one should not have to be configured twice.
+ *
+ * **Not its `file_include_globs`.** That list was parsed here and read by
+ * nobody, while three documents said otherwise. Feeding it to `carryInto` is
+ * ruled out by a decision already written down — `docs/repo-config.md` keeps
+ * the carry list deliberately not live, and copying paths a `git pull` can
+ * change into a worktree is the class of thing `repoSource.ts` argues must be
+ * shown and approved — and its patterns cannot be followed at all, since
+ * `carryInto` hands each entry to `copyFile`. Showing what the repository
+ * declares is the honest version of the feature, and it is filed rather than
+ * half-built.
  *
  * **This module reads; it never writes.** Export still goes to `.octopus/`
  * alone (`repoConfig.ts`), so the promise in `SECURITY.md` about where this app
@@ -122,8 +131,6 @@ export interface ConductorScript {
 
 /** What octopus can use out of a repository's Conductor settings. */
 export interface ConductorConfig {
-  /** Every settings file that contributed, relative to the checkout. */
-  readonly files: readonly string[]
   /**
    * Which file the prompts came from; empty when there are none.
    *
@@ -133,17 +140,8 @@ export interface ConductorConfig {
    */
   readonly promptsPath: string
   readonly scripts: Readonly<Partial<Record<ScriptKind, ConductorScript>>>
-  /** Paths from `file_include_globs` that name a file rather than a pattern. */
-  readonly carried: readonly string[]
-  /** The patterns among them, which octopus cannot follow. See `carriedNote`. */
-  readonly patterns: readonly string[]
   readonly prompts: Readonly<Partial<Record<InstructionKind, string>>>
-  /** Named run entries that were not chosen, so nothing is dropped in silence. */
-  readonly otherRuns: readonly string[]
 }
-
-/** Metacharacters that make a line a pattern rather than a path. */
-const GLOB = /[*?[\]!]/
 
 /**
  * The command line a named run entry stands for.
@@ -181,13 +179,14 @@ function runsLocally(entry: RunEntry): boolean {
  *
  * octopus has one server script, so one has to be picked, and the rule is
  * Conductor's own reading of its fields: the one marked `default`, else the
- * first that this machine could run at all, else simply the first. The rest
- * are named in `otherRuns` and written into the script as comments, because a
- * choice nobody is told about is indistinguishable from a bug.
- */ function chooseRun(
-  entries: Record<string, RunEntry>,
-  path: string
-): { chosen: ConductorScript | null; others: string[] } {
+ * first that this machine could run at all, else simply the first.
+ *
+ * The rest are **dropped**, and that is worth saying rather than leaving to be
+ * discovered: this used to answer with them, and a comment here said they were
+ * "written into the script as comments" — which nothing did. A list nobody
+ * reads is not a way of telling anybody anything, so it went. Showing them is a
+ * feature with a surface to design, and `docs/tasks/` holds it.
+ */ function chooseRun(entries: Record<string, RunEntry>, path: string): ConductorScript | null {
   // The command is worked out once, here, and carried: asking again below left
   // a `null` arm that nothing could reach.
   const named = Object.entries(entries).flatMap(([name, entry]) => {
@@ -200,12 +199,9 @@ function runsLocally(entry: RunEntry): boolean {
     named.find(({ entry }) => runsLocally(entry)) ??
     named[0]
 
-  if (pick === undefined) return { chosen: null, others: [] }
+  if (pick === undefined) return null
 
-  return {
-    chosen: { command: pick.command, name: pick.name, path },
-    others: named.map(({ name }) => name).filter((name) => name !== pick.name)
-  }
+  return { command: pick.command, name: pick.name, path }
 }
 
 /** A file that contributed, and which top-level keys it supplied. */
@@ -348,13 +344,11 @@ function normalise(layers: readonly Layer[]): ConductorConfig {
     scripts.archive = { command: raw.archive, name: null, path: from }
   }
 
-  let otherRuns: readonly string[] = []
   if (typeof raw?.run === 'string') {
     if (raw.run !== '') scripts.run = { command: raw.run, name: null, path: from }
   } else if (raw?.run !== undefined) {
-    const { chosen, others } = chooseRun(raw.run, from)
+    const chosen = chooseRun(raw.run, from)
     if (chosen !== null) scripts.run = chosen
-    otherRuns = others
   }
 
   const promptsLayer = winner(layers, 'prompts')
@@ -366,21 +360,9 @@ function normalise(layers: readonly Layer[]): ConductorConfig {
     if (kind !== undefined && body.trim() !== '') prompts[kind] = body
   }
 
-  const globsLayer = winner(layers, 'file_include_globs')
-  const lines = (
-    parsed.find((layer) => layer.path === globsLayer?.path)?.value.file_include_globs ?? ''
-  )
-    .split('\n')
-    .map((line) => line.trim())
-    .filter((line) => line !== '' && !line.startsWith('#'))
-
   return {
-    files: layers.map((layer) => layer.path),
     promptsPath: promptsLayer !== null && Object.keys(prompts).length > 0 ? promptsLayer.path : '',
     scripts,
-    carried: lines.filter((line) => !GLOB.test(line)),
-    patterns: lines.filter((line) => GLOB.test(line)),
-    prompts,
-    otherRuns
+    prompts
   }
 }

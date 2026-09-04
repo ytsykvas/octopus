@@ -46,7 +46,6 @@ describe('readConductorConfig', () => {
 
     const from = join('.conductor', 'settings.toml')
     const config = await readConductorConfig(repo)
-    expect(config?.files).toEqual([from])
     expect(config?.scripts).toEqual({
       setup: { command: 'bash .conductor/setup.sh', name: null, path: from },
       run: { command: 'bin/rails server -b 0.0.0.0 -p $CONDUCTOR_PORT', name: null, path: from },
@@ -79,17 +78,15 @@ describe('readConductorConfig', () => {
     await put('.conductor/settings.local.toml', '[git]\narchive_on_merge = true\n')
 
     const config = await readConductorConfig(repo)
+    // The winning layer is named on the script itself, which is the only
+    // place a reader is sent — the module answered with the whole list of
+    // contributing files too, and nothing ever read it.
     expect(config?.scripts.setup?.path).toBe(join('.conductor', 'settings.toml'))
-    expect(config?.files).toEqual([
-      join('.conductor', 'settings.toml'),
-      join('.conductor', 'settings.local.toml')
-    ])
   })
 
   it('falls back to the legacy JSON only when there is no TOML', async () => {
     await put('conductor.json', JSON.stringify({ scripts: { setup: 'from json' } }))
     await expect(readConductorConfig(repo)).resolves.toMatchObject({
-      files: ['conductor.json'],
       scripts: { setup: { command: 'from json', name: null, path: 'conductor.json' } }
     })
 
@@ -154,8 +151,6 @@ describe('readConductorConfig', () => {
 
       const config = await readConductorConfig(repo)
       expect(config?.scripts.run?.name).toBe('two')
-      // Named rather than dropped: a choice nobody is told about reads as a bug.
-      expect(config?.otherRuns).toEqual(['one'])
     })
 
     it('skips an entry this machine could not run when nothing is marked default', async () => {
@@ -174,7 +169,6 @@ describe('readConductorConfig', () => {
 
       const config = await readConductorConfig(repo)
       expect(config?.scripts.run?.name).toBe('here')
-      expect(config?.otherRuns).toEqual(['cloud'])
     })
 
     it('takes the first when every entry belongs somewhere else', async () => {
@@ -195,31 +189,6 @@ describe('readConductorConfig', () => {
 
       const config = await readConductorConfig(repo)
       expect(config?.scripts.run).toBeUndefined()
-      expect(config?.otherRuns).toEqual([])
-    })
-  })
-
-  describe('files to carry', () => {
-    it('tells a path from a pattern', async () => {
-      // octopus copies literal paths. A glob handed to `copyFile` fails and the
-      // failure is swallowed, so the two have to be separated here or a file
-      // silently never arrives.
-      await put(
-        '.conductor/settings.toml',
-        'file_include_globs = """\n.env\n# a comment\nconfig/master.key\n.env*\ncerts/*.pem\n"""\n'
-      )
-
-      const config = await readConductorConfig(repo)
-      expect(config?.carried).toEqual(['.env', 'config/master.key'])
-      expect(config?.patterns).toEqual(['.env*', 'certs/*.pem'])
-    })
-
-    it('has nothing to carry when the setting is absent', async () => {
-      await put('.conductor/settings.toml', '[scripts]\nsetup = "x"\n')
-
-      const config = await readConductorConfig(repo)
-      expect(config?.carried).toEqual([])
-      expect(config?.patterns).toEqual([])
     })
   })
 
