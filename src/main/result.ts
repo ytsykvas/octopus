@@ -6,6 +6,8 @@
  * bridge, and getting it wrong means an error the UI cannot explain.
  */
 
+import { ZodError } from 'zod'
+
 import { isCoded } from '../core/codedError.js'
 import { describeError } from '../core/persist.js'
 
@@ -45,6 +47,32 @@ export async function attempt<T>(operation: () => Promise<T> | T): Promise<Resul
         ...(error.code === undefined ? {} : { code: error.code }),
         params: error.params
       }
+    }
+
+    /*
+     * A value the boundary refused, said in words rather than in JSON.
+     *
+     * Under zod 4 a `ZodError`'s `message` **is** `JSON.stringify(issues)`, so
+     * this fell to the uncoded fallback and the window pasted a multi-line
+     * array of `origin` / `code` / `maximum` objects into its generic frame.
+     *
+     * Most of the `.parse` sites here refuse values the interface cannot
+     * produce, and `docs/ipc.md` says plainly they exist for a buggy renderer
+     * rather than for a person. The handful somebody genuinely reaches by
+     * typing or pasting are the reason this arm exists: a chat message past
+     * 100,000 characters is an ordinary outcome of pasting a file, and the
+     * refusal has to name the limit.
+     *
+     * The issues are flattened the way `readJsonFile` already flattens them —
+     * the project's own precedent that a raw `ZodError` is not presentable.
+     * One code carrying the reason rather than one code per site: the sentence
+     * differs because the reason does, which is what a bare `invalidArgument`
+     * would have lost.
+     */
+    if (error instanceof ZodError) {
+      const reason = error.issues.map((issue) => issue.message).join('; ')
+
+      return { ok: false, error: reason, code: 'valueRefused', params: { reason } }
     }
 
     return { ok: false, error: describeError(error) }

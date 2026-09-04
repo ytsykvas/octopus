@@ -38,6 +38,13 @@ export function useErrorMessage(): (failure: Failure) => string {
           return t('errors.envFileEscapes', { path: failure.params?.path ?? '' })
         case 'envFileEmpty':
           return t('errors.envFileEmpty')
+        case 'valueRefused':
+          return t('errors.valueRefused', { reason: failure.params?.reason ?? '' })
+        case 'fileUnreadable':
+          return t('errors.fileUnreadable', {
+            path: failure.params?.path ?? '',
+            issues: failure.params?.issues ?? ''
+          })
         case 'notARepository':
           return t('errors.notARepository', { path: failure.params?.path ?? '' })
         case 'emptyRepository':

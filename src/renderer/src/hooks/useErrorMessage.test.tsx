@@ -5,6 +5,7 @@ import type { ChatErrorCode } from '@core/chats.js'
 import type { DiffErrorCode } from '@core/diff.js'
 import type { EnvProfileCode } from '@core/envProfiles.js'
 import type { GitHubErrorCode } from '@core/github.js'
+import type { InvalidFileCode } from '@core/persist.js'
 import type { ProjectValidationCode } from '@core/projects.js'
 import type { RepoConfigCode } from '@core/repoConfig.js'
 import type { SkillErrorCode } from '@core/skills.js'
@@ -32,6 +33,10 @@ type CoreErrorCode =
   | DiffErrorCode
   | EnvProfileCode
   | GitHubErrorCode
+  | InvalidFileCode
+  // Raised at the bridge rather than in core: `attempt` is where a `ZodError`
+  // becomes something the window can say.
+  | 'valueRefused'
   | ProjectValidationCode
   | RepoConfigCode
   | SkillErrorCode
@@ -58,6 +63,8 @@ const CODE_PARAMETERS: Record<CoreErrorCode, Interpolated> = {
   repoPathEmpty: null,
   envFileEscapes: { path: 'config/../../.env' },
   envFileEmpty: null,
+  valueRefused: { reason: 'Too big: expected string to have <=100000 characters' },
+  fileUnreadable: { path: '~/.octopus/state.json', issues: 'projects: expected array' },
   // Thrown while deleting a project's data, inside a `.catch` that swallows it:
   // the removal has already been committed by then, so this never reaches a
   // renderer and a message for it would be prose nobody can ever read.

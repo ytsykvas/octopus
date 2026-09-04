@@ -14,13 +14,30 @@ import { dirname } from 'node:path'
 
 import type { z } from 'zod'
 
-/** A file failed validation — data on disk is corrupt or from another version. */
-export class InvalidFileError extends Error {
+import { CodedError } from './codedError.js'
+
+/** The one code this class carries; its own union, like every other subclass. */
+export type InvalidFileCode = 'fileUnreadable'
+
+/**
+ * A file failed validation — data on disk is corrupt or from another version.
+ *
+ * Coded, so the window can say it in the reader's language. It reached the
+ * bridge as a bare `Error` and crossed with no code at all: the message is at
+ * least a sentence, because the issues are flattened below rather than left as
+ * zod's JSON, but a corrupt `state.json` still arrived as developer English
+ * inside the generic frame.
+ */
+export class InvalidFileError extends CodedError<InvalidFileCode> {
   constructor(
     readonly filePath: string,
     readonly issues: string
   ) {
-    super(`File ${filePath} has an unexpected structure: ${issues}`)
+    super(
+      'fileUnreadable',
+      { path: filePath, issues },
+      `File ${filePath} has an unexpected structure: ${issues}`
+    )
     this.name = 'InvalidFileError'
   }
 }

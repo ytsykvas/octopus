@@ -1051,6 +1051,15 @@ export const en = {
     envFileEscapes:
       '{{path}} is not inside the workspace. The variables are written into the worktree, so the file has to sit in it.',
     envFileEmpty: 'An env file name cannot be empty.',
+    /* The reason is zod's own sentence rather than one of ours: this frame
+       covers every bounded field, and the useful half — which limit was
+       exceeded — is what the issue already says. Before it, the whole of what
+       reached the window was `JSON.stringify(issues)`. */
+    valueRefused: 'That value was refused: {{reason}}',
+    /* A file on disk this app wrote and can no longer read: a corrupt
+       `state.json`, or one from a version that stored something else. Names
+       the file, because the reader may want to move it aside. */
+    fileUnreadable: '{{path}} could not be read: {{issues}}',
     notARepository: '{{path}} is not a git repository.',
     emptyRepository:
       '{{path}} has no commits yet. Make an initial commit — a worktree cannot be created without one.',

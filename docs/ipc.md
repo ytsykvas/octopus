@@ -228,6 +228,16 @@ with zod before it goes anywhere.** TypeScript guarantees nothing across a
 process boundary: the renderer is a separate process that displays agent
 output, and a compromised or simply buggy one must not reach a command line.
 
+**A refusal answers in words.** Most of these parses guard against a value the
+interface cannot produce, so nobody meets them — but a few bound something a
+person types or pastes, and a chat message past 100,000 characters is what
+pasting a file looks like rather than a broken renderer. Under zod 4 a
+`ZodError`'s `message` **is** `JSON.stringify(issues)`, so those crossed
+uncoded and the window pasted an array of `origin` / `code` / `maximum` objects
+into its generic frame. `attempt` now flattens the issues the way `readJsonFile`
+already did and sends `valueRefused` with the reason, which is one code rather
+than one per site: the sentence differs because the reason does.
+
 The schema each channel parses with is named in the tables above, beside the
 channel. There used to be a second, per-argument table here, and it is worth
 saying why it went rather than being corrected: it listed eight of some

@@ -869,6 +869,8 @@ export const uk: Translation = {
     envFileEscapes:
       '{{path}} — не всередині воркспейса. Змінні пишуться у ворктрі, тож файл має бути в ньому.',
     envFileEmpty: 'Імʼя env-файла не може бути порожнім.',
+    valueRefused: 'Значення відхилено: {{reason}}',
+    fileUnreadable: 'Не вдалося прочитати {{path}}: {{issues}}',
     notARepository: '{{path}} не є git-репозиторієм.',
     emptyRepository:
       'У {{path}} ще немає жодного коміту. Зробіть перший — без нього worktree створити неможливо.',
