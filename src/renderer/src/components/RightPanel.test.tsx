@@ -590,6 +590,55 @@ describe('RightPanel', () => {
       expect(panel.getByText('archive it')).toBeInTheDocument()
     })
 
+    /*
+     * The one thing the notice above cannot promise. A file's body **is** the
+     * program, so approving every byte of it approves what runs. A `.conductor`
+     * script is a command line — a pointer — and the file it points at is
+     * neither shown nor digested, so a `git pull` that rewrites that file
+     * leaves the digest identical and the approval standing.
+     *
+     * `SECURITY.md` names exactly this as the failure it holds `repoSource.ts`
+     * to, so the card has to stop claiming more than the check keeps.
+     */
+    it('says a command line is approved as a line, not as what it runs', async () => {
+      renderPanel({
+        workspaces: [anna],
+        activeWorkspaceId: anna.id,
+        scripts: scriptsFor({
+          approved: false,
+          scripts: {
+            setup: {
+              kind: 'setup',
+              source: 'repoConductor',
+              from: '.conductor/settings.toml',
+              run: { type: 'command', command: './scripts/boot.sh' },
+              contents: './scripts/boot.sh'
+            }
+          }
+        })
+      })
+      await userEvent.click(scriptsTab())
+
+      expect(await screen.findByText(/Approving it approves the line/)).toBeInTheDocument()
+    })
+
+    // And not on the ordinary case, which is exactly digested: a sentence drawn
+    // on every card is one nobody reads by the second repository.
+    it('says nothing of the sort when every script is a file', async () => {
+      renderPanel({
+        workspaces: [anna],
+        activeWorkspaceId: anna.id,
+        scripts: scriptsFor({
+          approved: false,
+          scripts: { setup: { ...ownScript('setup'), source: 'repoOctopus' } }
+        })
+      })
+      await userEvent.click(scriptsTab())
+
+      await screen.findByText(/This repository supplies/)
+      expect(screen.queryByText(/Approving it approves the line/)).not.toBeInTheDocument()
+    })
+
     it('keeps a long script from eating the tab, and lets it be read', async () => {
       /*
        * Both halves of one report: the panel filled the Scripts tab and the two

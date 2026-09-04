@@ -750,8 +750,10 @@ export function RightPanel({
         {/* Pinned above both halves rather than inside one, and never in a
             modal: this is the answer to "why is Run doing nothing", and it has
             to be readable at the moment somebody presses it. Every byte of what
-            would run is shown — an approval over a summary is an approval of
-            the summary. */}
+            the repository supplies is shown — an approval over a summary is an
+            approval of the summary. Where what it supplies is a command line,
+            that is the whole of what can be shown, and the notice below says
+            so: the file the line invokes is not read here and not digested. */}
         {/* Why Run is doing nothing, in the place Run is. A repository whose
             settings will not parse resolves to no scripts at all, and without
             this the pane disabled the button and said nothing. */}
@@ -764,6 +766,15 @@ export function RightPanel({
         {activeScripts !== undefined && !activeScripts.approved && activeWorkspaceId !== null && (
           <div className="border-line bg-muted/40 shrink-0 space-y-2 border-b px-3 py-2.5">
             <p className="text-ink-soft leading-relaxed">{t('scripts.repoNotice')}</p>
+
+            {/* Only where one of these is a command line, because only there is
+                the sentence above short of the truth: a file's body is the
+                program, and a line is a pointer at one this never reads. Drawn
+                on every card it would be noise on the ordinary
+                `.octopus/scripts/` case, which is exactly digested. */}
+            {suppliedScripts.some(({ scripts: supplied }) =>
+              supplied.some((script) => script.run.type === 'command')
+            ) && <p className="text-ink-soft leading-relaxed">{t('scripts.repoCommandNotice')}</p>}
 
             {/* Bounded, with a scroll of its own.
                 

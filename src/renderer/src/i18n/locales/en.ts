@@ -292,6 +292,14 @@ export const en = {
       'This repository\u2019s settings could not be read, so nothing here can run: {{reason}}',
     repoNotice:
       'This repository supplies the scripts below. Read them before they run \u2014 they arrive with a git pull, so what runs here is whatever the branch says.',
+    /* Shown only where a script is a command line rather than a file. A file's
+       body is the program, so approving what is shown approves what runs; a
+       line is a pointer, and the file it points at is neither shown nor
+       digested — so a later pull can change it without asking again. Said here
+       rather than left implied, because the sentence above would otherwise
+       promise more than the check can keep. */
+    repoCommandNotice:
+      'One of these is a command line, not a file. Approving it approves the line \u2014 not whatever the line goes on to run, which is not shown here and will not ask again if it changes.',
     repoApprove: 'Allow these',
     showEnv: "This workspace's env",
     noEnv:
