@@ -99,59 +99,65 @@ export function SkillEditor({
       <div className="space-y-4 p-4 text-[13px]">
         {showRaw ? (
           <Field label={t('skills.body')} hint={t('skills.rawHint')}>
-            <textarea
-              // `Field` draws its label as a paragraph rather than a `label`
-              // element — it is shared with rows that hold a grid of swatches,
-              // which no single control could be labelled by. So each control
-              // here names itself, which is also the only handle a test has.
-              aria-label={t('skills.body')}
-              value={raw}
-              onChange={(event) => {
-                setRaw(event.target.value)
-              }}
-              spellCheck={false}
-              className="input h-80 w-full resize-none font-mono text-[11px]"
-            />
+            {(id) => (
+              <textarea
+                id={id}
+                value={raw}
+                onChange={(event) => {
+                  setRaw(event.target.value)
+                }}
+                spellCheck={false}
+                className="input h-80 w-full resize-none font-mono text-[11px]"
+              />
+            )}
           </Field>
         ) : (
           <>
             <Field label={t('skills.name')} hint={t('skills.nameHint')}>
-              <input
-                aria-label={t('skills.name')}
-                value={name}
-                disabled={!creating}
-                onChange={(event) => {
-                  setName(event.target.value)
-                }}
-                spellCheck={false}
-                className="input w-full max-w-sm"
-              />
-              {nameProblem !== null && (
-                <p className="text-danger mt-1.5 text-[11px]">{nameProblem}</p>
+              {(id) => (
+                <>
+                  <input
+                    id={id}
+                    value={name}
+                    disabled={!creating}
+                    onChange={(event) => {
+                      setName(event.target.value)
+                    }}
+                    spellCheck={false}
+                    className="input w-full max-w-sm"
+                  />
+                  {nameProblem !== null && (
+                    <p className="text-danger mt-1.5 text-[11px]">{nameProblem}</p>
+                  )}
+                </>
               )}
             </Field>
 
             <Field label={t('skills.description')} hint={t('skills.descriptionHint')}>
-              <input
-                aria-label={t('skills.description')}
-                value={description}
-                onChange={(event) => {
-                  setDescription(event.target.value)
-                }}
-                className="input w-full"
-              />
+              {(id) => (
+                <input
+                  id={id}
+                  value={description}
+                  onChange={(event) => {
+                    setDescription(event.target.value)
+                  }}
+                  className="input w-full"
+                />
+              )}
             </Field>
 
             <Field label={t('skills.body')} hint={t('skills.bodyHint')}>
-              <textarea
-                aria-label={t('skills.body')}
-                value={body}
-                onChange={(event) => {
-                  setBody(event.target.value)
-                }}
-                spellCheck={false}
-                className="input h-56 w-full resize-none font-mono text-[11px]"
-              />
+              {(id) => (
+                <textarea
+                  id={id}
+                  value={body}
+                  onChange={(event) => {
+                    setBody(event.target.value)
+                  }}
+                  spellCheck={false}
+                  className="input h-56 w-full resize-none font-mono text-[11px]"
+                />
+              )}
             </Field>
           </>
         )}

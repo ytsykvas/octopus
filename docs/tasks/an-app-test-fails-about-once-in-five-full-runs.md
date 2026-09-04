@@ -241,6 +241,34 @@ suite's timing.
 The session also ran with the dev app up throughout, which is the condition the
 sightings above kept blaming.
 
+**A sighting with the message, at last, and it is not a timeout.** On
+2026-09-05 a `npm run check` failed `pullRequests.test.ts` ›
+`'refuses an answer that is not JSON'` with:
+
+    Error: ENOTEMPTY: directory not empty, rmdir
+      '/var/folders/…/T/octopus-pr-zANjA9/work/.git'
+
+The next identical run was green, 2198 for 2198. The change in flight was
+renderer-only and could not reach this file.
+
+That is a **teardown race**, not a deadline: `rm` of the temp checkout ran while
+something was still writing inside `.git`. It fits everything recorded above
+better than the timing theory the measurements ruled out — it explains why the
+slowest file by spawn count is the repeat victim, why two files can fail in one
+run on a busy machine and neither alone, why a clean CI runner sees it too, and
+why the assertion messages never explained anything: the failure is in `afterEach`,
+not in the test.
+
+What it does **not** explain is the renderer sightings, where no temp directory
+is removed. So this is either a second flake wearing the same clothes, or the
+shared cause is one level up — a process this suite spawns outliving the test
+that spawned it.
+
+Where to look first, now that there is something specific: every `git` this file
+runs goes through `execFile`, and a rejected one is not awaited anywhere the
+`finally` can see. A spawn whose promise is dropped keeps the child alive past
+the `rm`.
+
 ## What not to do
 
 Do not add a retry. A test that passes on the second attempt is a test that has

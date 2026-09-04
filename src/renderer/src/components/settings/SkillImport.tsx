@@ -115,50 +115,56 @@ export function SkillImport({ onImport, onClose }: SkillImportProps): React.JSX.
 
         {route === 'path' && (
           <Field label={t('skills.fromDisk')} hint={t('skills.fromDiskNote')}>
-            <div className="flex items-center gap-2">
-              <input
-                aria-label={t('skills.fromDisk')}
-                value={path}
-                readOnly
-                className="input min-w-0 flex-1 font-mono text-[11px]"
-              />
-              <Button
-                onClick={() => {
-                  void choose()
-                }}
-              >
-                {t('skills.choose')}
-              </Button>
-            </div>
+            {(id) => (
+              <div className="flex items-center gap-2">
+                <input
+                  id={id}
+                  value={path}
+                  readOnly
+                  className="input min-w-0 flex-1 font-mono text-[11px]"
+                />
+                <Button
+                  onClick={() => {
+                    void choose()
+                  }}
+                >
+                  {t('skills.choose')}
+                </Button>
+              </div>
+            )}
           </Field>
         )}
 
         {route === 'text' && (
           <Field label={t('skills.fromText')} hint={t('skills.fromTextNote')}>
-            <textarea
-              aria-label={t('skills.fromText')}
-              value={text}
-              onChange={(event) => {
-                setText(event.target.value)
-              }}
-              spellCheck={false}
-              className="input h-64 w-full resize-none font-mono text-[11px]"
-            />
+            {(id) => (
+              <textarea
+                id={id}
+                value={text}
+                onChange={(event) => {
+                  setText(event.target.value)
+                }}
+                spellCheck={false}
+                className="input h-64 w-full resize-none font-mono text-[11px]"
+              />
+            )}
           </Field>
         )}
 
         {route === 'url' && (
           <Field label={t('skills.url')} hint={t('skills.fromUrlNote')}>
-            <input
-              aria-label={t('skills.url')}
-              value={url}
-              onChange={(event) => {
-                setUrl(event.target.value)
-              }}
-              spellCheck={false}
-              placeholder="https://"
-              className="input w-full font-mono text-[11px]"
-            />
+            {(id) => (
+              <input
+                id={id}
+                value={url}
+                onChange={(event) => {
+                  setUrl(event.target.value)
+                }}
+                spellCheck={false}
+                placeholder="https://"
+                className="input w-full font-mono text-[11px]"
+              />
+            )}
           </Field>
         )}
       </div>

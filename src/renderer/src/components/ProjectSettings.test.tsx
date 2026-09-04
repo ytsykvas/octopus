@@ -1393,12 +1393,10 @@ describe('ProjectSettings', () => {
 
     await openSection(user, 'Env')
 
-    // Two boxes in this section now — the file it goes into, and the block.
-    const editors = await screen.findAllByRole('textbox')
-    expect(editors.filter((editor) => editor.tagName === 'TEXTAREA')).toHaveLength(1)
-    for (const editor of editors) {
-      if (editor.tagName === 'TEXTAREA') expect(editor).toHaveValue('')
-    }
+    // Asked for by name. There are two boxes in this section — the file it goes
+    // into, and the block — and telling them apart used to mean filtering on
+    // `tagName`, because `Field` drew its label as a paragraph tied to nothing.
+    expect(await screen.findByLabelText(/Variables in/)).toHaveValue('')
     expect(screen.queryByText(/permission denied/)).toBeNull()
   })
 

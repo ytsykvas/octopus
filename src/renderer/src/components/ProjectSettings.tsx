@@ -473,18 +473,21 @@ export function ProjectSettings({
           {section === 'general' && (
             <>
               <Field label={t('project.name')} hint={t('project.nameHint')}>
-                <input
-                  value={name}
-                  onChange={(event) => {
-                    setName(event.target.value)
-                  }}
-                  onBlur={commitName}
-                  onKeyDown={(event) => {
-                    if (event.key === 'Enter') event.currentTarget.blur()
-                    if (event.key === 'Escape') setName(project.name)
-                  }}
-                  className="input focus-ring max-w-sm"
-                />
+                {(id) => (
+                  <input
+                    id={id}
+                    value={name}
+                    onChange={(event) => {
+                      setName(event.target.value)
+                    }}
+                    onBlur={commitName}
+                    onKeyDown={(event) => {
+                      if (event.key === 'Enter') event.currentTarget.blur()
+                      if (event.key === 'Escape') setName(project.name)
+                    }}
+                    className="input focus-ring max-w-sm"
+                  />
+                )}
               </Field>
 
               <Field label={t('project.color')} hint={t('project.colorHint')}>
@@ -664,19 +667,22 @@ export function ProjectSettings({
                   `.env.local` and would ignore anything written beside it, so a
                   project on one had nowhere at all to put its variables. */}
               <Field label={t('project.envFile')} hint={t('project.envFileHint')}>
-                <input
-                  value={envFile}
-                  onChange={(event) => {
-                    setEnvFile(event.target.value)
-                  }}
-                  onBlur={commitEnvFile}
-                  onKeyDown={(event) => {
-                    if (event.key === 'Enter') event.currentTarget.blur()
-                    if (event.key === 'Escape') setEnvFile(project.envFile)
-                  }}
-                  spellCheck={false}
-                  className="input focus-ring max-w-sm font-mono"
-                />
+                {(id) => (
+                  <input
+                    id={id}
+                    value={envFile}
+                    onChange={(event) => {
+                      setEnvFile(event.target.value)
+                    }}
+                    onBlur={commitEnvFile}
+                    onKeyDown={(event) => {
+                      if (event.key === 'Enter') event.currentTarget.blur()
+                      if (event.key === 'Escape') setEnvFile(project.envFile)
+                    }}
+                    spellCheck={false}
+                    className="input focus-ring max-w-sm font-mono"
+                  />
+                )}
               </Field>
 
               {/* Which set. A checkout with a dev section and a production one

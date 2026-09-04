@@ -102,43 +102,42 @@ export function FileEditor({
 
   return (
     <Field label={label} hint={hint}>
-      {supersededBy !== undefined && <p className="text-warning mb-1.5">{supersededBy}</p>}
+      {(id) => (
+        <>
+          {supersededBy !== undefined && <p className="text-warning mb-1.5">{supersededBy}</p>}
 
-      <textarea
-        value={body}
-        spellCheck={false}
-        rows={rows}
-        readOnly={supersededBy !== undefined}
-        /* `Field` draws the label as a paragraph, which names nothing to a
-           screen reader. One editor to a section, that was merely thin; five
-           instruction editors one after another are five unnamed boxes, and the
-           only way to tell them apart is to see them. It is also the only handle
-           a test has on the right one. */
-        aria-label={label}
-        onChange={(event) => {
-          setBody(event.target.value)
-        }}
-        onBlur={commit}
-        placeholder={placeholder}
-        className={`focus-ring border-line bg-canvas w-full resize-y rounded-[var(--radius-control)] border px-2 py-1.5 font-mono text-[11px] leading-relaxed ${
-          supersededBy === undefined ? '' : 'text-ink-faint'
-        }`}
-      />
+          <textarea
+            id={id}
+            value={body}
+            spellCheck={false}
+            rows={rows}
+            readOnly={supersededBy !== undefined}
+            onChange={(event) => {
+              setBody(event.target.value)
+            }}
+            onBlur={commit}
+            placeholder={placeholder}
+            className={`focus-ring border-line bg-canvas w-full resize-y rounded-[var(--radius-control)] border px-2 py-1.5 font-mono text-[11px] leading-relaxed ${
+              supersededBy === undefined ? '' : 'text-ink-faint'
+            }`}
+          />
 
-      {/* Under the box rather than at the top of the dialog: the message is
-          about this text, and one of the four editors this component draws sits
-          in a window that has no error banner at all. */}
-      {refusal !== null && <p className="text-danger mt-1.5">{refusal}</p>}
+          {/* Under the box rather than at the top of the dialog: the message is
+              about this text, and one of the four editors this component draws
+              sits in a window that has no error banner at all. */}
+          {refusal !== null && <p className="text-danger mt-1.5">{refusal}</p>}
 
-      {problems.length > 0 && (
-        <ul className="text-warning mt-1.5 space-y-0.5">
-          {problems.map((problem, index) => (
-            // By position: one line can carry the same complaint twice — a
-            // variable misspelled the same way in two places — and identical
-            // strings collide as keys.
-            <li key={index}>{problem}</li>
-          ))}
-        </ul>
+          {problems.length > 0 && (
+            <ul className="text-warning mt-1.5 space-y-0.5">
+              {problems.map((problem, index) => (
+                // By position: one line can carry the same complaint twice — a
+                // variable misspelled the same way in two places — and
+                // identical strings collide as keys.
+                <li key={index}>{problem}</li>
+              ))}
+            </ul>
+          )}
+        </>
       )}
     </Field>
   )
