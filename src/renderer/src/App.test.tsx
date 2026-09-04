@@ -865,6 +865,28 @@ describe('App', () => {
     })
   })
 
+  /*
+   * A window learns of a write it did not make. It reads the config once on
+   * mount and otherwise replaces it only from its own update's reply, so a
+   * clone destination chosen in main's own dialog stayed unknown for the rest
+   * of the session — and with a second window open, so did every setting but
+   * the theme.
+   *
+   * Asserted through the language because that is what the window visibly
+   * redraws from; the channel carries the whole config either way.
+   */
+  it('follows a setting the main process writes later', async () => {
+    await openApp()
+    const push = vi.mocked(window.octopus.config.onChange).mock.calls.at(-1)?.[0]
+    if (!push) throw new Error('the window never subscribed to config changes')
+
+    act(() => {
+      push(config({ language: 'uk' }))
+    })
+
+    expect(await screen.findByText('Почніть з репозиторію')).toBeInTheDocument()
+  })
+
   it('remembers the width the workspace list was resized to', async () => {
     const user = await openApp()
     edges().list.focus()

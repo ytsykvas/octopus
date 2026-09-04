@@ -9,6 +9,7 @@ import {
   pushChatEvent,
   pushChatsChanged,
   pushChatStatus,
+  pushConfig,
   pushSettingsOpen,
   pushTheme,
   pushUsageWindows,
@@ -183,6 +184,9 @@ async function start(): Promise<void> {
     },
     broadcastChatsChanged: (event) => {
       pushChatsChanged(BrowserWindow.getAllWindows(), event)
+    },
+    broadcastConfig: (config) => {
+      pushConfig(BrowserWindow.getAllWindows(), config)
     },
     openPath: (path) => shell.openPath(path)
   })

@@ -18,6 +18,7 @@ import {
   signOut
 } from '../core/accounts.js'
 import type { QueryFn } from '../core/agent.js'
+import type { Config } from '../core/config.js'
 import type { RemoteRepository } from '../core/github.js'
 import { createService, type OctopusService, type ServiceOptions } from '../core/service.js'
 import type {
@@ -63,6 +64,8 @@ interface Harness {
   readonly chatStatusEvents: ChatStatusEvent[]
   /** Every announcement that a workspace's set of conversations moved. */
   readonly chatsChangedEvents: ChatsChangedEvent[]
+  /** Every config a write announced, so a window that made no call can learn. */
+  readonly configBroadcasts: Config[]
   /** Paths handed to the system, in order. */
   readonly opened: string[]
   picked: PickedDirectory
@@ -84,6 +87,7 @@ function harness(): Harness {
   const statusEvents: WorkspaceStatusEvent[] = []
   const chatStatusEvents: ChatStatusEvent[] = []
   const chatsChangedEvents: ChatsChangedEvent[] = []
+  const configBroadcasts: Config[] = []
   const opened: string[] = []
   const dialogOptions: OpenDialogOptions[] = []
   const usageBroadcasts: UsageWindows[] = []
@@ -95,6 +99,7 @@ function harness(): Harness {
     statusEvents,
     chatStatusEvents,
     chatsChangedEvents,
+    configBroadcasts,
     opened,
     dialogOptions,
     usageBroadcasts,
@@ -118,6 +123,7 @@ function harness(): Harness {
       broadcastUsageWindows: (windows) => usageBroadcasts.push(windows),
       broadcastChatStatus: (event) => chatStatusEvents.push(event),
       broadcastChatsChanged: (event) => chatsChangedEvents.push(event),
+      broadcastConfig: (config) => configBroadcasts.push(config),
       openPath: (path) => {
         opened.push(path)
         return Promise.resolve(state.openRefusal)
@@ -843,6 +849,25 @@ describe('directory pickers', () => {
       value: { name: 'planner' }
     })
     expect(cloning.getConfig().cloneDirectory).toBe(destination)
+    /*
+     * And the window is told, which is the half that was missing. Main's own
+     * dialog wrote through the service directly, so the renderer's copy stayed
+     * `''` for the rest of the session — and both places reporting where clones
+     * land went on saying the user would be asked, while every later clone was
+     * written somewhere without a prompt.
+     */
+    expect(bench.configBroadcasts.at(-1)).toMatchObject({ cloneDirectory: destination })
+  })
+
+  /*
+   * The other write, and the reason the announcement lives where the write is
+   * rather than at either handler: a second window has no other way to learn of
+   * a setting changed in the first.
+   */
+  it('tells every window when a setting is changed through the handler', async () => {
+    await invoke('config:update', { branchPrefix: 'ytsykvas' })
+
+    expect(bench.configBroadcasts.at(-1)).toMatchObject({ branchPrefix: 'ytsykvas' })
   })
 
   it('clones into the configured directory without asking', async () => {

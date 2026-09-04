@@ -135,6 +135,14 @@ export interface IpcHost {
    */
   readonly broadcastChatsChanged: (event: ChatsChangedEvent) => void
   /**
+   * The config as it now stands, to every window.
+   *
+   * A sixth stream because a window has no other way to learn of a write it did
+   * not make: it reads the config on mount and then only from its own update's
+   * reply.
+   */
+  readonly broadcastConfig: (config: Config) => void
+  /**
    * Hands a path to the system, which decides what opens it.
    *
    * Answers with an empty string on success and a reason otherwise — Electron's
@@ -153,6 +161,30 @@ export interface IpcHost {
 const FilePathSchema = z.string().min(1).max(4096)
 
 /**
+ * Writes the config and tells every window, from the one place that writes it.
+ *
+ * Both announcements live here rather than at the handler, and that is the
+ * point rather than tidiness: `resolveCloneDirectory` called the service
+ * directly, so a destination chosen in main's own dialog reached no window and
+ * skipped the theme push as well. The window then went on reporting "you will
+ * be asked where to clone" while every later clone of the session was written
+ * somewhere it had already been told about once and never showed. Any config
+ * write added in main from now on gets both by construction.
+ */
+async function writeConfig(
+  service: OctopusService,
+  host: IpcHost,
+  patch: Partial<Config>
+): Promise<Config> {
+  const updated = await service.updateConfig(patch)
+
+  host.broadcastTheme(resolveTheme(updated.theme, host.prefersDark()))
+  host.broadcastConfig(updated)
+
+  return updated
+}
+
+/**
  * Registers IPC handlers.
  *
  * They are deliberately one-liners: all logic lives in the core service and
@@ -168,11 +200,7 @@ export function registerIpc(
   host.handle('config:get', () => attempt(() => service.getConfig()))
 
   host.handle('config:update', (_event, patch: Partial<Config>) =>
-    attempt(async () => {
-      const updated = await service.updateConfig(patch)
-      host.broadcastTheme(resolveTheme(updated.theme, host.prefersDark()))
-      return updated
-    })
+    attempt(() => writeConfig(service, host, patch))
   )
 
   host.handle('projects:list', () => attempt(() => service.listProjects()))
@@ -776,6 +804,6 @@ async function resolveCloneDirectory(
   const [chosen] = picked.filePaths
   if (picked.canceled || chosen === undefined) return null
 
-  await service.updateConfig({ cloneDirectory: chosen })
+  await writeConfig(service, host, { cloneDirectory: chosen })
   return chosen
 }

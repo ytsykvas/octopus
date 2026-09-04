@@ -4,6 +4,7 @@ import {
   pushChatEvent,
   pushChatsChanged,
   pushChatStatus,
+  pushConfig,
   pushSettingsOpen,
   pushTheme,
   pushUsageWindows,
@@ -115,6 +116,17 @@ describe('what the main process pushes, and on which channel', () => {
     pushChatsChanged([window], event)
 
     expect(window.sent).toEqual([['chats:changed', event]])
+  })
+
+  // The one a window cannot learn any other way: it reads the config on mount
+  // and otherwise only from its own update's reply.
+  it('sends the config on its own channel', () => {
+    const window = target()
+    const config = { cloneDirectory: '/Users/x/code' }
+
+    pushConfig([window], config)
+
+    expect(window.sent).toEqual([['config:changed', config]])
   })
 
   // The one push that is not a broadcast: the menu opens Settings in the window

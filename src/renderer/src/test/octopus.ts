@@ -34,7 +34,8 @@ export function installOctopusStub(): Api {
     },
     config: {
       get: vi.fn(() => ok(defaultConfig())),
-      update: vi.fn((patch) => ok({ ...defaultConfig(), ...patch }))
+      update: vi.fn((patch) => ok({ ...defaultConfig(), ...patch })),
+      onChange: vi.fn(subscription)
     },
     accounts: {
       status: vi.fn(() => ok(disconnectedAccounts())),

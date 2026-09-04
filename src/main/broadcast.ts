@@ -79,6 +79,20 @@ export function pushChatsChanged(targets: readonly PushTarget[], event: unknown)
 }
 
 /**
+ * The config as it now stands, whenever main writes it.
+ *
+ * A window reads the config once on mount and otherwise replaces it only from
+ * its own `config:update` reply, so anything written anywhere else stayed
+ * unknown to it for the rest of the session — the clone destination chosen in
+ * main's own dialog most visibly, since the two places that report where clones
+ * land then went on saying the user would be asked. With two windows open it
+ * was every setting but the theme.
+ */
+export function pushConfig(targets: readonly PushTarget[], config: unknown): void {
+  pushAll(targets, 'config:changed', config)
+}
+
+/**
  * Opens Settings in the window the user is looking at.
  *
  * The one push that is not a broadcast, which is why it takes a single target

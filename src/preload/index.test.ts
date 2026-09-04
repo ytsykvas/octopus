@@ -435,6 +435,7 @@ describe('channel names', () => {
    */
   const NOT_CALLS: readonly string[] = [
     'theme.onChange',
+    'config.onChange',
     'settings.onOpen',
     'chats.onEvent',
     'chats.onStatus',
@@ -502,6 +503,23 @@ describe('subscriptions', () => {
 
     listener({}, 'dark')
     expect(handler).toHaveBeenCalledWith('dark')
+  })
+
+  // The channel a window has no other way to hear from: it reads the config on
+  // mount and otherwise only from its own update's reply.
+  it('config.onChange listens on its channel and stops when told', () => {
+    const handler = vi.fn()
+    const stop = method('config', 'onChange')(handler as never) as () => void
+
+    const listener = on.mock.calls.find(([channel]) => channel === 'config:changed')?.[1] as (
+      event: unknown,
+      config: unknown
+    ) => void
+    listener({}, { cloneDirectory: '/Users/x/code' })
+
+    expect(handler).toHaveBeenCalledWith({ cloneDirectory: '/Users/x/code' })
+    stop()
+    expect(off).toHaveBeenCalledWith('config:changed', expect.any(Function))
   })
 
   it('terminal.onData delivers the payload without the raw event', () => {

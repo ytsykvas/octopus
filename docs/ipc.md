@@ -28,11 +28,11 @@ The only channel outside this shape is `theme:get`, which cannot fail.
 
 ### Theme and config
 
-| Channel         | Arguments | Notes                                      |
-| --------------- | --------- | ------------------------------------------ |
-| `theme:get`     | —         | resolves `system` against the OS           |
-| `config:get`    | —         |                                            |
-| `config:update` | `patch`   | broadcasts `theme:changed` to every window |
+| Channel         | Arguments | Notes                                                           |
+| --------------- | --------- | --------------------------------------------------------------- |
+| `theme:get`     | —         | resolves `system` against the OS                                |
+| `config:get`    | —         |                                                                 |
+| `config:update` | `patch`   | broadcasts `theme:changed` and `config:changed` to every window |
 
 ### Projects
 
@@ -190,6 +190,21 @@ read the list anyway and a payload could disagree with what the read returns.
 Without it a second window on one workspace drew the strip that was true when it
 opened: a tab it never saw created, and one it kept drawing after the other
 window closed it.
+
+**`config:changed`** carries the whole config whenever main writes it. A window
+reads the config once on mount and otherwise replaces its copy only from its own
+`config:update` reply, so anything written anywhere else was unknown to it for
+the rest of the session. The visible case was the clone destination chosen in
+main's own dialog: `resolveCloneDirectory` called the service directly, so the
+window's copy stayed empty while the file on disk held a path — and both places
+reporting where clones land went on promising to ask, while every later clone of
+the session was written without a prompt to a directory named nowhere on screen.
+With a second window open it was every setting but the theme.
+
+**Both announcements are made where the config is written**, not at either
+handler. That is what the bug was: one write path skipped the handler and
+therefore skipped the push, and a second write added later would have skipped it
+the same way.
 
 None of these is a `handle`, so none is counted among the channels above. They
 are not numbered here either — the ordinals said second, third and fourth until

@@ -82,7 +82,24 @@ const api = {
     get: (): Promise<Result<Config>> => ipcRenderer.invoke('config:get') as Promise<Result<Config>>,
 
     update: (patch: Partial<Config>): Promise<Result<Config>> =>
-      ipcRenderer.invoke('config:update', patch) as Promise<Result<Config>>
+      ipcRenderer.invoke('config:update', patch) as Promise<Result<Config>>,
+
+    /**
+     * The config as it now stands, whenever main writes it.
+     *
+     * A window otherwise learns of a write only from its own reply, so a
+     * destination chosen in main's dialog — or any setting changed in a second
+     * window — stayed unknown for the rest of the session.
+     */
+    onChange: (handler: (config: Config) => void): (() => void) => {
+      const listener = (_event: unknown, config: Config): void => {
+        handler(config)
+      }
+      ipcRenderer.on('config:changed', listener)
+      return () => {
+        ipcRenderer.off('config:changed', listener)
+      }
+    }
   },
 
   accounts: {

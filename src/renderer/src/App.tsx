@@ -242,8 +242,19 @@ export function App(): React.JSX.Element {
       if (result.ok) setConfig(result.value)
     })()
 
+    /*
+     * And afterwards, whenever main writes it — which the window has no other
+     * way to learn. It reads once here and otherwise replaces this only from
+     * its own update's reply, so the clone destination chosen in main's own
+     * dialog stayed `''` for the session while the file on disk held a path,
+     * and the two places reporting where clones land both went on promising to
+     * ask. With a second window open it was every setting but the theme.
+     */
+    const unsubscribe = window.octopus.config.onChange(setConfig)
+
     return () => {
       controller.abort()
+      unsubscribe()
     }
   }, [])
 
