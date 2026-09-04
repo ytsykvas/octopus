@@ -1143,8 +1143,15 @@ describe('a question the agent asked', () => {
    * And it is not a step either. Counted as one, the fold would promise a row
    * that nothing inside it accounts for — the same reason a plan and an edit
    * are kept out of the count.
+   *
+   * **The disclosure is opened**, which this test used not to do. Asserting the
+   * summary alone stated the property and checked half of it: the count came
+   * from `isToolRow` while the body mapped every `tool_use`, so the fold said
+   * two steps and opened on three, the third reading `AskUserQuestion` with
+   * nothing beside it — the row the unfolded path returns null for.
    */
-  it('does not count as a step in a run of tool calls', () => {
+  it('does not count as a step in a run of tool calls, or appear when it opens', async () => {
+    const user = userEvent.setup()
     renderLog({
       entries: [
         fromAgent({ type: 'tool_use', toolUseId: 'c-1', name: 'Grep', input: { pattern: 'x' } }),
@@ -1153,7 +1160,11 @@ describe('a question the agent asked', () => {
       ]
     })
 
-    expect(screen.getByText('2 steps')).toBeInTheDocument()
+    await user.click(screen.getByText('2 steps'))
+
+    expect(screen.getByText('Grep')).toBeVisible()
+    expect(screen.getByText('Read')).toBeVisible()
+    expect(screen.queryByText('AskUserQuestion')).not.toBeInTheDocument()
   })
 
   /*

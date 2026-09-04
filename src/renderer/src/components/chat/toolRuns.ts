@@ -147,6 +147,34 @@ function drawsNothing(entry: ChatEntry): boolean {
   )
 }
 
+/** One row inside an opened run: the call, as `ToolCall` wants it. */
+export interface ToolRunRow {
+  readonly name: string
+  readonly input: unknown
+}
+
+/**
+ * The rows an opened run draws — which is also what its summary counts.
+ *
+ * One function for both, and that is the fix rather than tidiness. The summary
+ * filtered with `isToolRow` while the body mapped every `tool_use` in the
+ * block, so a run holding Grep, `AskUserQuestion` and Read said "2 steps" and
+ * opened on three. The third read `AskUserQuestion` with nothing beside it,
+ * none of `describeToolInput`'s fields appearing in a question's input — the
+ * very row the unfolded path returns null for, because drawn as a tool row it
+ * was the same question twice.
+ *
+ * Two rules over one block cannot be kept in step by remembering to; asking one
+ * question in one place is what makes them agree by construction.
+ */
+export function toolRunRows(entries: readonly ChatEntry[]): ToolRunRow[] {
+  return entries.flatMap((entry) =>
+    entry.role === 'agent' && entry.event.type === 'tool_use' && isToolRow(entry)
+      ? [{ name: entry.event.name, input: entry.event.input }]
+      : []
+  )
+}
+
 /**
  * How many tool calls a run holds — what its summary counts.
  *
@@ -154,7 +182,7 @@ function drawsNothing(entry: ChatEntry): boolean {
  * roughly double every figure shown.
  */
 export function toolCount(entries: readonly ChatEntry[]): number {
-  return entries.filter((entry) => isToolRow(entry)).length
+  return toolRunRows(entries).length
 }
 
 /**

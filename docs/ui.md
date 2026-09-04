@@ -286,6 +286,16 @@ stays in the open, since "1 step" costs more to read than the row it replaces,
 and a failure or anything the agent said breaks the run so it stays where it
 happened.
 
+**The count and the rows come from one function**, and that is a fix rather
+than a nicety. They were two readings of the same block — the summary filtering
+out plans, edits and the call that asks a question, the body drawing every tool
+call it found — so a run holding a search, a question and a read said "2 steps"
+and opened on three. The third read `AskUserQuestion` with nothing beside it,
+none of the fields the row draws appearing in a question's input, which is
+precisely why the unfolded path draws no row for one. The count on a fold is
+the only thing a reader has to decide whether to open it, so it has to be a
+promise about what is inside.
+
 **Text the agent produced keeps the line breaks it arrived with.** A stack
 trace, a compiler's three lines of context, a validation error listing the value
 it refused — every failure worth reading has newlines in it, and they are the

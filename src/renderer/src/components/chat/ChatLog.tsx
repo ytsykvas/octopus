@@ -26,7 +26,7 @@ import { formatTokens } from './format.js'
 import type { Change, ChangeLine } from './changeSummary.js'
 import { Markdown } from './Markdown.js'
 import { QuestionCard } from './QuestionCard.js'
-import { answersByRequest, groupToolRuns, planCalls, toolCount } from './toolRuns.js'
+import { answersByRequest, groupToolRuns, planCalls, toolCount, toolRunRows } from './toolRuns.js'
 import { readFailure } from './toolFailure.js'
 import { describeToolInput, readPlan } from './toolSummary.js'
 import { UsageCard } from './UsageCard.js'
@@ -387,12 +387,13 @@ function ToolRun({ entries }: { entries: readonly ChatEntry[] }): React.JSX.Elem
         {t('chat.toolSteps', { count: steps })}
       </summary>
 
+      {/* The same list the summary counted, not a second reading of the block:
+          asked twice, the two answers drifted and the fold promised two steps
+          and opened on three. */}
       <div className="border-line mt-1 flex flex-col gap-1 border-l pl-3">
-        {entries.map((entry, index) =>
-          entry.role === 'agent' && entry.event.type === 'tool_use' ? (
-            <ToolCall key={index} name={entry.event.name} input={entry.event.input} />
-          ) : null
-        )}
+        {toolRunRows(entries).map((row, index) => (
+          <ToolCall key={index} name={row.name} input={row.input} />
+        ))}
       </div>
     </details>
   )
