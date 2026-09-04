@@ -544,6 +544,19 @@ working-directory roots**, each a directory with a `.claude/skills` inside it,
 and the composer's panel turns any of them off for one conversation along with
 whatever the checkout's `.claude/skills` carries.
 
+**Both roots go over at session start whether or not either holds anything**,
+and both directories are created on the way. An empty store used to be left
+unmentioned, on the reasoning that a root widens what a session may reach and
+buys nothing when there is nothing in it. It buys the ability to fill it: the
+roots are handed over once, and the reload a write triggers re-scans only the
+directories the session already knows about — so a store that was empty when a
+conversation started stayed invisible to it for good, every skill written into
+it and not merely the first. That is the state of every fresh install, and the
+panel listed the new skill as available throughout, because it re-reads disk on
+every call. The one case where omitting a root is still right is a
+`settingSources` with no project layer, where the SDK reads no `.claude/skills`
+under any root.
+
 **A local plugin was the obvious answer and is the wrong one.** It was built
 that way first and measured against a live session: a plugin's skills load and
 appear in the listing, and `skillOverrides` does not touch them — not under the

@@ -25,6 +25,7 @@ import { ABANDONED, DENIED, type QueryFn, READ_ONLY_TOOLS } from './agent.js'
 import type { RemoteRepository } from './github.js'
 import { type GitOptions, gitIn } from './git.js'
 import { WORKSPACE_NAMES } from './names.js'
+import { skillsDirOf } from './paths.js'
 import { ProjectValidationError } from './projects.js'
 import {
   type ChatEvent,
@@ -6821,11 +6822,6 @@ describe('the agent chat', () => {
     })
 
     /*
-     * A switch over something the session would not load is a control with
-     * nothing behind it. Ours are unaffected: they arrive as a plugin, which is
-     * a launch option this setting does not filter.
-     */
-    /*
      * Listed whatever the Agent setting says, unlike the panel's own group: a
      * settings dialog is about files that are there either way and can be
      * taken a copy of, while the panel is about one conversation.
@@ -6870,6 +6866,16 @@ describe('the agent chat', () => {
       const chat = await service.openChat(workspaceId)
 
       await expect(service.skillsForChat(chat.id)).resolves.toEqual([])
+
+      /*
+       * And no root goes over either, which is the one case where omitting one
+       * is still right: with no project layer in `settingSources` the SDK reads
+       * no `.claude/skills` under any root, so a root there would widen what
+       * the session may reach and buy nothing at all. It is also what keeps
+       * `agent.ts`'s empty-list branch meaning something.
+       */
+      await service.sendToChat(chat.id, 'hello')
+      expect(agents[0]?.options().additionalDirectories).toBeUndefined()
     })
 
     /*
@@ -6943,7 +6949,10 @@ describe('the agent chat', () => {
       await service.sendToChat(chat.id, 'hello')
 
       const options = agents[0]?.options()
-      expect(options?.additionalDirectories).toEqual([join(dir, 'data', 'skills')])
+      expect(options?.additionalDirectories).toEqual([
+        join(dir, 'data', 'skills'),
+        join(dir, 'data', 'projects', 'planner', 'skills')
+      ])
       expect(options?.settings).toMatchObject({ skillOverrides: { review: 'off' } })
     })
 
@@ -6970,18 +6979,40 @@ describe('the agent chat', () => {
       expect(agents[0]?.options().settings).toMatchObject({
         skillOverrides: { 'xibo-bridge': 'off' }
       })
-      // And no store root goes with it: nothing of ours holds this skill, so a
-      // directory handed over for it would buy nothing.
-      expect(agents[0]?.options().additionalDirectories).toBeUndefined()
+      // Our own stores go over as they always do — this skill is not in either
+      // of them, and the deny-list is what keeps it out rather than the roots.
+      expect(agents[0]?.options().additionalDirectories).toEqual([
+        join(dir, 'data', 'skills'),
+        join(dir, 'data', 'projects', 'planner', 'skills')
+      ])
     })
 
-    it('mentions no store that has nothing in it', async () => {
-      const { service, workspaceId } = await withWorkspace()
+    /*
+     * Both stores go over even when both are empty, and this test is the one
+     * the bug was written into as an expectation.
+     *
+     * The roots are handed over **once**, at session start, and
+     * `reloadSkills` re-scans only the directories the session already knows
+     * about. A store omitted for being empty was therefore invisible to that
+     * conversation for its whole life — every skill later written into it, not
+     * merely the first — while the composer's panel listed it as available,
+     * because that path re-reads disk on every call. The state of every fresh
+     * install, and nothing on screen said a restart was needed.
+     */
+    it('hands over both stores while they are empty, so a skill written later arrives', async () => {
+      const { service, projectId, workspaceId } = await withWorkspace()
       const chat = await service.openChat(workspaceId)
 
       await service.sendToChat(chat.id, 'hello')
 
-      expect(agents[0]?.options().additionalDirectories).toBeUndefined()
+      const globalRoot = join(dir, 'data', 'skills')
+      const projectRoot = join(dir, 'data', 'projects', projectId, 'skills')
+      expect(agents[0]?.options().additionalDirectories).toEqual([globalRoot, projectRoot])
+
+      // And they exist, because `--add-dir` on a directory that is not there is
+      // at best untested — neither of ours exists until the first write.
+      await expect(stat(skillsDirOf(globalRoot))).resolves.toMatchObject({})
+      await expect(stat(skillsDirOf(projectRoot))).resolves.toMatchObject({})
     })
 
     /*
@@ -7044,6 +7075,11 @@ describe('the agent chat', () => {
      * for it: the session listed the directories when it started. Asserted by
      * counting the reloads rather than by the calls resolving — which they do
      * whether or not anything is told.
+     *
+     * Counting is only half, and the missing half is worth naming here because
+     * this test passed for months while the reload had nowhere to look: a root
+     * omitted at start-up is not one `reloadSkills` re-scans. That the roots go
+     * over at all is asserted by 'hands over both stores while they are empty'.
      */
     it('tells a running conversation to look at the directories again after a write', async () => {
       const { service, workspaceId } = await withWorkspace()

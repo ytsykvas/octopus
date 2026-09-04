@@ -10,7 +10,7 @@ else joins a home directory by hand.
   state.json                         projects, workspaces and chats
   chats/<chatId>.jsonl               one conversation each, append-only
   instructions/*.md                  seven prompts every project falls back to
-  skills/                            an extra working-directory root: the skills every project gets
+  skills/                            an extra working-directory root: the skills every project gets, made at the first message
     .claude/skills/<folder>/SKILL.md one skill, in Claude Code's own format
   projects/<projectId>/
     carry                            paths carried from the checkout into a workspace

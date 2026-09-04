@@ -2023,13 +2023,25 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
     }
 
     return {
-      // A store with nothing in it is left unmentioned. A root widens what the
-      // session may reach, and one handed over for an empty directory buys
-      // nothing to pay for that with.
-      roots: [
-        ...(ours.length > 0 ? [globalRoot] : []),
-        ...(theirs.length > 0 ? [projectRoot] : [])
-      ],
+      /*
+       * Both, whether or not either holds anything today.
+       *
+       * An empty store used to be left unmentioned — a root widens what the
+       * session may reach, and one handed over for an empty directory looked
+       * like a cost with nothing bought. It buys the ability to fill it. The
+       * roots are passed **once**, at session start, and `reloadSkills` only
+       * re-scans the directories the session already knows about, so a store
+       * that was empty then stayed invisible for the life of the conversation
+       * — every skill later written into it, not merely the first. That is the
+       * state of every fresh install, and the panel listed the new skill as
+       * available the whole time because it re-reads disk on every call.
+       *
+       * The `loaded` gate stays, and it is the one case where the old
+       * reasoning still holds: with no project layer in `settingSources` the
+       * SDK reads no `.claude/skills` under any root, so a root there really
+       * would buy nothing.
+       */
+      roots: loaded ? [globalRoot, projectRoot] : [],
       overrides,
       listing
     }
@@ -2117,6 +2129,12 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
       chat,
       settingSources
     )
+
+    // Before the roots are handed over, because `--add-dir` on a directory that
+    // is not there is at best untested — and until the first skill is written
+    // neither of ours exists. A write, so it lives here rather than in
+    // `sessionSkills`, which is also the read path behind the skills panel.
+    await Promise.all(skills.roots.map((root) => ensureStore(root)))
 
     const session = startSession(
       {
