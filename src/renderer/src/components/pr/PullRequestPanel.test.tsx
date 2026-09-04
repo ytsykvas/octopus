@@ -573,19 +573,23 @@ describe('a pull request that exists', () => {
     expect(octopus().workspaces.pullRequestDetail).toHaveBeenCalledWith(anna.id, 7)
   })
 
+  /*
+   * Rewritten rather than added to, because the shape it used to test could not
+   * happen. It built its failed row with `workflow: 'Lint'` and
+   * `completedAt: null` — but a non-null workflow means a `CheckRun`, and a
+   * `CheckRun` is only `failed` once `COMPLETED`, which carries a stamp. So the
+   * word was asserted on the one arrangement the mapper never produces, while
+   * every row that does ship drew a duration instead and nothing looked.
+   *
+   * `failing()` is a shape the mapper can produce, which is the whole point of
+   * using it here.
+   */
   it('draws each check with the word for its state, not only a colour', async () => {
     answer(view({ request: request() }))
     answerDetail(
       detail({
         checks: [
-          {
-            name: 'lint',
-            workflow: 'Lint',
-            state: 'failed',
-            url: 'https://github.com/o/p/runs/1',
-            startedAt: '2026-08-20T11:00:00Z',
-            completedAt: null
-          },
+          failing({ name: 'lint' }),
           {
             name: 'build',
             workflow: null,
@@ -602,6 +606,40 @@ describe('a pull request that exists', () => {
     expect(await screen.findByText('lint')).toBeInTheDocument()
     expect(screen.getByText('failed')).toBeInTheDocument()
     expect(screen.getByText('running')).toBeInTheDocument()
+  })
+
+  /*
+   * Both readings, because the duration was never asserted anywhere either —
+   * so a fix that dropped it to make room for the word would have gone
+   * unnoticed in the other direction.
+   */
+  it('says how long a finished check took, beside the word and not instead of it', async () => {
+    answer(view({ request: request() }))
+    answerDetail(detail({ checks: [failing({ name: 'lint' })] }))
+    renderPanel()
+
+    expect(await screen.findByText('2m0s')).toBeInTheDocument()
+    expect(screen.getByText('failed')).toBeInTheDocument()
+  })
+
+  // A check still running has no duration to show, and the row is then the word
+  // alone rather than the word and an empty column.
+  it('shows no duration for a check that has not finished', async () => {
+    answer(view({ request: request() }))
+    answerDetail(detail({ checks: [failing({ state: 'pending', completedAt: null })] }))
+    renderPanel()
+
+    expect(await screen.findByText('running')).toBeInTheDocument()
+    expect(screen.queryByText(/^\d+m\d+s$|^\d+s$/)).not.toBeInTheDocument()
+  })
+
+  // The link is what a screen reader lands on, and it carries the state too.
+  it('names the state on the link out to GitHub', async () => {
+    answer(view({ request: request() }))
+    answerDetail(detail({ checks: [failing({ name: 'lint' })] }))
+    renderPanel()
+
+    expect(await screen.findByRole('link', { name: 'lint — failed' })).toBeInTheDocument()
   })
 
   it('says so where the repository runs no checks', async () => {

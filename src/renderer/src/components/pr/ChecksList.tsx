@@ -86,11 +86,26 @@ export function ChecksList({
               {check.name}
             </span>
 
-            {/* The word carries the state for anything not looking at colour;
-                the duration is beside it because a check that took four minutes
-                and one that took four seconds are different kinds of check. */}
+            {/*
+              Two facts, so two spans. They shared one, and `took ?? word` meant
+              the word was never drawn for a finished Actions check: a `CheckRun`
+              reaches a finished state only through `COMPLETED`, which carries
+              both stamps, so the duration always won. The visible row read
+              `test ✕ 1m4s` — a red cross and a length of time as the whole of
+              what a failure said.
+
+              The duration goes first so the words line up in a column against
+              the link: last, they would each start wherever the duration
+              happened to end.
+            */}
+            {took !== null && (
+              <span className="text-ink-faint shrink-0 font-mono text-[11px] tabular-nums">
+                {took}
+              </span>
+            )}
+
             <span className="text-ink-faint shrink-0 font-mono text-[11px]">
-              {took ?? t(state.labelKey)}
+              {t(state.labelKey)}
             </span>
 
             {check.url !== null && (

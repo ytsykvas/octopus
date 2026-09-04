@@ -928,6 +928,14 @@ A colour reaches nobody using a screen reader, and it is also the only handle a
 test has on which state a row is in — the lesson the tab row above already
 carries.
 
+The word and the duration are **two spans**, and sharing one is how the promise
+above went unkept for every finished GitHub Actions check: `took ?? word` looks
+like a fallback and is not, because a `CheckRun` reaches a finished state only
+through `COMPLETED`, which carries both stamps. The duration therefore always
+won, and a failure read as a red cross and `1m4s`. The duration is drawn first
+so the words line up in a column against the link rather than each starting
+wherever the number happened to end.
+
 **Add to chat** puts a remark from the review into the composer rather than
 sending it. The reader has a question about it, and the question is the point.
 It rides the same strip as a note written on the diff, though the two are
