@@ -937,10 +937,21 @@ export function RightPanel({
 
           {/* `aria-hidden` beside the class, exactly as the tabs above do it:
               the class says nothing to a screen reader, and nothing at all
-              without a stylesheet — which is also the only handle a test has. */}
+              without a stylesheet — which is also the only handle a test has.
+
+              Folded to no height rather than to `display: none`, unlike the
+              tabs. This half starts folded on every mount, so `display: none`
+              was the ordinary case: `WorkspaceScripts` warns that a
+              display-hidden element measures zero, and the terminal inside was
+              sized from that box before a line of output was written — either
+              at xterm's 80×24 default, or floored at the addon's minimum of two
+              columns. Refitting when the pane opens is already wired and is not
+              enough on its own: the pty was created at the wrong width and the
+              program running in it has already wrapped its output to it, which
+              is exactly the mangled log somebody opens this pane to read. */}
           <div
             aria-hidden={!buildOpen}
-            className={buildOpen ? 'flex min-h-0 flex-1 flex-col' : 'hidden'}
+            className={buildOpen ? 'flex min-h-0 flex-1 flex-col' : 'h-0 shrink-0 overflow-hidden'}
           >
             <WorkspaceScripts
               workspaces={scriptable}

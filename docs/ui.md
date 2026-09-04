@@ -672,6 +672,17 @@ reader's next move is to open one. A file **already** in the worktree is never
 named: that is the ordinary case, and a notice that cried about it would teach
 the reader to skip the one that matters.
 
+**The folded build keeps its box.** It is hidden with height zero and
+`overflow: hidden` rather than with `display: none`, unlike the tab panes above
+— and the difference matters here because this half starts folded on every
+mount, so the hidden state is the ordinary one. A display-hidden element
+measures zero, and the terminal inside is sized from that measurement before a
+line of output is written: either left at xterm's 80×24 default, or floored at
+the fit addon's minimum of two columns. Refitting when the pane opens is already
+wired and cannot undo it, because the pty was created at that width and the
+program running in it has already wrapped its output to match. What is left is
+the unreadable fragments somebody opened the pane to read.
+
 **A build still cannot be stopped**, and that is the asymmetry rather than an
 omission. A server is started and stopped for as long as the work lasts; a build
 is run, read, and run again when something changed — and `Run` already ends the

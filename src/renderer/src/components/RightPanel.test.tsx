@@ -1816,6 +1816,29 @@ describe('RightPanel', () => {
     expect(buildBody()).toHaveAttribute('aria-hidden', 'true')
   })
 
+  /*
+   * Folded to no height, never to `display: none`. This half starts folded on
+   * every mount, so `display: none` was the ordinary case rather than the
+   * exception — and a display-hidden element measures zero, so the terminal
+   * inside it was sized from a box that is not the pane, before a line of
+   * output was written. Refitting on open cannot undo that: the pty was
+   * created at the wrong width and the program has already wrapped its output
+   * to it, which is the mangled log somebody opens this pane to read.
+   *
+   * jsdom has no layout, so the class is what can be asserted here — and it is
+   * also exactly the fix.
+   */
+  it('keeps the folded build measurable rather than removing its box', async () => {
+    const user = userEvent.setup()
+    renderPanel({ workspaces: [anna], activeWorkspaceId: anna.id, scripts: SCRIPTS })
+
+    await user.click(scriptsTab())
+
+    expect(buildBody()).toHaveAttribute('aria-hidden', 'true')
+    expect(buildBody()).not.toHaveClass('hidden')
+    expect(buildBody()).toHaveClass('h-0', 'overflow-hidden')
+  })
+
   it('brings the build back and folds it away again', async () => {
     const user = userEvent.setup()
     renderPanel({ workspaces: [anna], activeWorkspaceId: anna.id, scripts: SCRIPTS })
