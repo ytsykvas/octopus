@@ -49,8 +49,8 @@
   --diff-removed-bg: #fef2f2;
 
   /* Project identity. Spread around the wheel so neighbours in the tab strip
-     stay distinguishable, and dark enough that white text sits on them. */
-  --project-ink: #ffffff;
+     stay distinguishable, and dark enough to read as text on the surface —
+     which is how they are actually used, over a wash of themselves. */
   --project-blue: #2563eb;
   --project-sky: #0369a1;
   --project-cyan: #0e7490;
@@ -96,9 +96,7 @@
   --diff-added-bg: #101d15;
   --diff-removed-bg: #211318;
 
-  /* Lifted against the dark ground — the light values read as mud here. That
-     brightness is also why text on a filled tab goes dark rather than white. */
-  --project-ink: #0f1115;
+  /* Lifted against the dark ground — the light values read as mud here. */
   --project-blue: #60a5fa;
   --project-sky: #38bdf8;
   --project-cyan: #22d3ee;

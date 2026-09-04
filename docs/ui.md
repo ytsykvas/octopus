@@ -1325,8 +1325,11 @@ type check rather than leaving a hole in the strip.
 
 Two rules that are easy to get wrong:
 
-- **Text on a filled colour uses `--project-ink`**, not `#fff`. The dark theme
-  uses brighter values on purpose, where white is barely legible.
+- **There is no `project-` utility class.** No `--project-*` token is in
+  `@theme`, so `text-project-blue` compiles to nothing at all — no error, no
+  colour, and no Tailwind lint wired in to say so. Reach for the value the way
+  the rest of the code does: an arbitrary value like
+  `after:bg-[var(--project-color)]`, or an inline style.
 - **Measure contrast, do not judge it.** Five colours looked fine and sat
   between 3.3:1 and 4.1:1 against white — under the 4.5:1 body text needs.
 
