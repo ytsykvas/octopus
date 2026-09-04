@@ -161,6 +161,16 @@ function Runner({
   const [running, setRunning] = useState(false)
   const [error, setError] = useState<string | null>(null)
   /*
+   * Files the carry list names that this workspace still has not got.
+   *
+   * Beside `error` rather than folded into it, because the two are different
+   * answers: an error means the run did not start, and this means it did, one
+   * file short. Swallowing it was how a workspace came up unable to run with
+   * the first complaint coming from a script reading a variable that was never
+   * written — a script's fault to look at, and not one.
+   */
+  const [missing, setMissing] = useState<readonly string[]>([])
+  /*
    * The port this half is serving on.
    *
    * Held rather than taken from the prop each render: the prop is what the
@@ -281,6 +291,7 @@ function Runner({
       }
 
       setError(null)
+      setMissing(carried.value.missing)
       begin()
     })()
   }
@@ -382,6 +393,14 @@ function Runner({
           there is no output for this to belong to. */}
       {error !== null && (
         <p className="text-danger border-line shrink-0 border-b px-3 py-1.5">{error}</p>
+      )}
+
+      {/* Muted, because the run did start. The reader needs the file's name at
+          the moment the build in front of them goes looking for it. */}
+      {missing.length > 0 && (
+        <p className="text-ink-faint border-line shrink-0 border-b px-3 py-1.5">
+          {t('scripts.carryMissing', { files: missing.join(', ') })}
+        </p>
       )}
 
       {started ? (

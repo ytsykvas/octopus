@@ -532,7 +532,7 @@ describe('ScriptRunner', () => {
     })
     vi.mocked(octopus().workspaces.prepare).mockImplementation(() => {
       order.push('prepare')
-      return Promise.resolve({ ok: true, value: [] })
+      return Promise.resolve({ ok: true, value: { written: [], missing: [] } })
     })
 
     const { rerender } = mountAndStart({
@@ -708,7 +708,7 @@ describe('ScriptRunner', () => {
       () =>
         new Promise((resolve) => {
           release = () => {
-            resolve({ ok: true, value: [] })
+            resolve({ ok: true, value: { written: [], missing: [] } })
           }
         })
     )
@@ -830,7 +830,7 @@ describe('ScriptRunner', () => {
     })
     vi.mocked(octopus().workspaces.prepare).mockImplementation(() => {
       order.push('prepare')
-      return Promise.resolve({ ok: true, value: [] })
+      return Promise.resolve({ ok: true, value: { written: [], missing: [] } })
     })
 
     mountAndStart({
@@ -864,6 +864,57 @@ describe('ScriptRunner', () => {
 
   // Starting anyway would fail further in, complaining about whatever the
   // missing value fed rather than about the env.
+  /*
+   * The other half of the same question, and the opposite answer. A file the
+   * list named that the worktree has not got does **not** stop the run —
+   * plenty of builds do not need every carried file — but going ahead in
+   * silence is how a workspace comes up broken with the first complaint coming
+   * from a script reading a variable nobody ever wrote.
+   */
+  it('names a file it could not carry and runs anyway', async () => {
+    vi.mocked(octopus().workspaces.prepare).mockResolvedValue({
+      ok: true,
+      value: { written: ['.env'], missing: ['config/master.key'] }
+    })
+
+    mountAndStart({
+      workspace: anna,
+      kind: 'setup',
+      script: SETUP_SCRIPT,
+      port: 3111,
+      rootPath: '/Users/test/planner',
+      defaultBranch: 'main',
+      onOpenSettings: vi.fn()
+    })
+
+    expect(await screen.findByText(/config\/master\.key/)).toBeInTheDocument()
+    // The run itself went ahead: a notice that refused would be an error, and
+    // there is a separate answer for that.
+    await sessionsOpened(1)
+  })
+
+  // And says nothing at all when everything the list named arrived, so the
+  // line means something the moment it appears.
+  it('says nothing when the whole list was carried', async () => {
+    vi.mocked(octopus().workspaces.prepare).mockResolvedValue({
+      ok: true,
+      value: { written: ['.env'], missing: [] }
+    })
+
+    mountAndStart({
+      workspace: anna,
+      kind: 'setup',
+      script: SETUP_SCRIPT,
+      port: 3111,
+      rootPath: '/Users/test/planner',
+      defaultBranch: 'main',
+      onOpenSettings: vi.fn()
+    })
+    await sessionsOpened(1)
+
+    expect(screen.queryByText(/Not carried in/)).not.toBeInTheDocument()
+  })
+
   it('says so and starts nothing when the env cannot be written', async () => {
     vi.mocked(octopus().workspaces.prepare).mockResolvedValue({
       ok: false,

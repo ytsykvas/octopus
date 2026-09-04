@@ -1309,7 +1309,10 @@ describe('env overrides a project adds', () => {
     await expect(readFile(join(workspace.path, '.env'), 'utf8')).resolves.toContain('OVERRIDE=1')
 
     await writeFile(join(repo, '.env'), 'DATABASE_URL=postgres://real\n', 'utf8')
-    await expect(service.prepareWorkspace(workspace.id)).resolves.toEqual(['.env'])
+    await expect(service.prepareWorkspace(workspace.id)).resolves.toEqual({
+      written: ['.env'],
+      missing: []
+    })
 
     const contents = await readFile(join(workspace.path, '.env'), 'utf8')
     expect(contents).toContain('DATABASE_URL=postgres://real')
@@ -2120,14 +2123,23 @@ describe('files carried into a workspace', () => {
     )
   })
 
-  it('says which files it carried', async () => {
+  /*
+   * Both halves, because they are different answers. `.env` is already there
+   * from creation, so a second pass writes nothing and says nothing — while
+   * `not-there` is named every time, which is the whole point: a run that goes
+   * ahead without a file the list promised needs to say which one.
+   */
+  it('says what it carried and what it could not', async () => {
     const { id, repo } = await withProject()
     await writeFile(join(repo, '.env'), 'A=1\n', 'utf8')
     await service.saveProjectCarryList(id, '.env\nnot-there\n')
 
     const workspace = await service.createWorkspaceIn(id)
-    // Already carried at creation, so a second pass writes nothing.
-    await expect(service.prepareWorkspace(workspace.id)).resolves.toEqual([])
+
+    await expect(service.prepareWorkspace(workspace.id)).resolves.toEqual({
+      written: [],
+      missing: ['not-there']
+    })
   })
 
   // A workspace made before the list mentioned a file picks it up rather than
@@ -2139,7 +2151,10 @@ describe('files carried into a workspace', () => {
     await writeFile(join(repo, 'later.txt'), 'hello\n', 'utf8')
     await service.saveProjectCarryList(id, 'later.txt\n')
 
-    await expect(service.prepareWorkspace(workspace.id)).resolves.toEqual(['later.txt'])
+    await expect(service.prepareWorkspace(workspace.id)).resolves.toEqual({
+      written: ['later.txt'],
+      missing: []
+    })
     await expect(readFile(join(workspace.path, 'later.txt'), 'utf8')).resolves.toBe('hello\n')
   })
 
@@ -2151,7 +2166,10 @@ describe('files carried into a workspace', () => {
     const workspace = await service.createWorkspaceIn(id)
     await writeFile(join(workspace.path, '.env'), 'FROM=hand\n', 'utf8')
 
-    await expect(service.prepareWorkspace(workspace.id)).resolves.toEqual([])
+    await expect(service.prepareWorkspace(workspace.id)).resolves.toEqual({
+      written: [],
+      missing: []
+    })
     await expect(readFile(join(workspace.path, '.env'), 'utf8')).resolves.toBe('FROM=hand\n')
   })
 

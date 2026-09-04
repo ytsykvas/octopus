@@ -297,6 +297,11 @@ export const en = {
     noEnv:
       'This workspace has no env file yet. One appears when the project carries a file in or adds variables of its own.',
     editFiles: 'Files carried in…',
+    /* Named, not counted: the reader's next move is to look at that file, and
+       "2 files" gives them nowhere to look. Muted rather than an error — the
+       run did start, and this is why it may not finish. */
+    carryMissing:
+      'Not carried in, so the scripts run without them: {{files}}. Check the Files list \u2014 the source may have moved, or this checkout may never have had them.',
     /* The whole tab in one control: build, then serve. `Run` rather than
        `Build and start`, because the two steps are one intention — the second
        is only ever wanted after the first. */

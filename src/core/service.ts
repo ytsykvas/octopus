@@ -57,6 +57,7 @@ import {
   storedCarryList,
   writeCarryList
 } from './carry.js'
+import type { CarryReport } from './carry.js'
 import { applyEnvOverrides, discardIfOnlyBlock, removeEnvBlock, readWorkspaceEnv } from './env.js'
 import {
   createProfile,
@@ -572,7 +573,7 @@ export interface OctopusService {
    *
    * Answers with the files it copied; nothing is ever overwritten.
    */
-  prepareWorkspace(workspaceId: string): Promise<string[]>
+  prepareWorkspace(workspaceId: string): Promise<CarryReport>
 
   /**
    * Whether anything is listening on the port this workspace was given.
@@ -1815,10 +1816,10 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
    * workspace holds at this moment — which is why a run settles the port first
    * and prepares second.
    */
-  async function prepare(project: Project, workspace: Workspace): Promise<string[]> {
+  async function prepare(project: Project, workspace: Workspace): Promise<CarryReport> {
     await discardIfOnlyBlock(workspace.path, project.envFile)
 
-    const carried = await carryInto(project.id, project.repoPath, workspace.path, dataRoot)
+    const report = await carryInto(project.id, project.repoPath, workspace.path, dataRoot)
 
     await applyEnvOverrides(await readEffectiveEnv(project, workspace, dataRoot), {
       path: workspace.path,
@@ -1828,7 +1829,7 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
       port: workspace.port
     })
 
-    return carried
+    return report
   }
 
   /**

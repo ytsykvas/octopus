@@ -638,6 +638,18 @@ halves of it: the carried files, which never overwrite, so a file edited inside
 the worktree keeps what it has; then the block of typed overrides, appended
 below them.
 
+**A file the list named and the worktree has not got is a notice, not a
+refusal.** Muted, above the terminal, beside the error bar and deliberately not
+in it: an error means the run did not start, and this means it did, one file
+short — which plenty of builds survive. What it must not do is stay quiet. A
+project re-cloned from GitHub had neither `.env` nor `config/master.key` — both
+gitignored, so the clone never carried them — and the first complaint came from
+a setup script stopping on a variable nobody had written, which reads as the
+script's fault. The line names the files rather than counting them, because the
+reader's next move is to open one. A file **already** in the worktree is never
+named: that is the ordinary case, and a notice that cried about it would teach
+the reader to skip the one that matters.
+
 **A build still cannot be stopped**, and that is the asymmetry rather than an
 omission. A server is started and stopped for as long as the work lasts; a build
 is run, read, and run again when something changed — and `Run` already ends the

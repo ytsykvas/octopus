@@ -1029,7 +1029,7 @@ describe('scripts and instructions of a real project', () => {
     // has to stay harmless.
     await expect(invoke('workspace:prepare', workspace.id)).resolves.toEqual({
       ok: true,
-      value: []
+      value: { written: [], missing: [] }
     })
   })
 

@@ -190,26 +190,61 @@ function sourcePath(source: string | null, repoPath: string, path: string): stri
   return isAbsolute(expanded) ? expanded : join(repoPath, expanded)
 }
 
+/** What one pass of `carryInto` did, and what it could not do. */
+export interface CarryReport {
+  /** Destinations this call wrote. Absent from both lists means already there. */
+  readonly written: string[]
+  /**
+   * Destinations the list named that the worktree still does not have.
+   *
+   * Never a file that was already in place: that is the ordinary case and
+   * reporting it would train the reader to ignore the line.
+   */
+  readonly missing: string[]
+}
+
+/**
+ * Whether a failure means the worktree already has the file.
+ *
+ * `COPYFILE_EXCL` is how this refuses to overwrite, so `EEXIST` is the success
+ * of a second run rather than a failure. The narrowing is the one `persist.ts`
+ * and `git.ts` use — `unknown` questioned, never cast.
+ */
+function alreadyThere(error: unknown): boolean {
+  return typeof error === 'object' && error !== null && 'code' in error && error.code === 'EEXIST'
+}
+
 /**
  * Copies a project's carried files into a workspace.
  *
  * Never over a file the worktree already has — a tracked `.env.example`, or one
  * somebody edited in the workspace — which is what `COPYFILE_EXCL` says without
- * a check that could be raced. A file the checkout does not have is not an
- * error either: a list is written once and a project's needs change.
+ * a check that could be raced.
  *
- * Answers with the paths it actually wrote, so a caller can say what it did.
+ * A file the checkout has not got does not stop a workspace being prepared
+ * either: a list is written once and a project's needs change. **But it is not
+ * the same thing as one already in place, and treating the two alike is how a
+ * workspace comes up unable to run with nothing anywhere saying why.** That
+ * happened: a project re-cloned from GitHub had neither `.env` nor
+ * `config/master.key` — gitignored, so GitHub never had them — nothing was
+ * carried, nothing was said, and the first sign was a setup script stopping on
+ * a variable it could not read, which reads as a script's fault and is not.
+ *
+ * So the answer is both halves. A destination refused by `unlinkedInside`
+ * counts as missing too: the reasons differ, but the sentence the reader needs
+ * is the same one — the list names this file and your worktree has not got it.
  */
 export async function carryInto(
   projectId: ProjectId,
   repoPath: string,
   workspacePath: string,
   root?: string
-): Promise<string[]> {
+): Promise<CarryReport> {
   // Every destination here is relative and cannot climb out: `carriedFiles` is
   // what guarantees it, so nothing below has to check again.
   const list = carriedFiles(await readCarryList(projectId, root))
   const written: string[] = []
+  const missing: string[] = []
 
   for (const { path, from: source } of list) {
     const from = sourcePath(source, repoPath, path)
@@ -218,16 +253,19 @@ export async function carryInto(
     // Before the mkdir, which creates the intermediate directories itself — a
     // check after it cannot tell one git checked out from one this call just
     // made. Skipped rather than refused, like every other bad line here.
-    if (!(await unlinkedInside(workspacePath, path))) continue
+    if (!(await unlinkedInside(workspacePath, path))) {
+      missing.push(path)
+      continue
+    }
 
     try {
       await mkdir(dirname(to), { recursive: true })
       await copyFile(from, to, constants.COPYFILE_EXCL)
       written.push(path)
-    } catch {
-      // Already there, or the checkout does not have it. Both are ordinary.
+    } catch (error) {
+      if (!alreadyThere(error)) missing.push(path)
     }
   }
 
-  return written
+  return { written, missing }
 }

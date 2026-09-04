@@ -112,7 +112,7 @@ export function installOctopusStub(): Api {
       mergePullRequest: vi.fn(() => ok(undefined)),
       closePullRequest: vi.fn(() => ok(undefined)),
       instruction: vi.fn(() => ok('Describe what changed and why.')),
-      prepare: vi.fn(() => ok([])),
+      prepare: vi.fn(() => ok({ written: [], missing: [] })),
       env: vi.fn(() => ok('')),
       trust: vi.fn(() => ok({ approved: true, files: [] })),
       scripts: vi.fn(() => ok({ approved: true, scripts: {} })),

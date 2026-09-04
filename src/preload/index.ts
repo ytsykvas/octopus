@@ -38,6 +38,7 @@ import type { SkillStore } from '@core/skillNames.js'
 import type { InstructionSource } from '@core/instructionSources.js'
 import type { UsageWindows } from '@core/usage.js'
 import type { RepoConfigView, RepoItemId } from '@core/repoConfig.js'
+import type { CarryReport } from '@core/carry.js'
 import type { CapabilityFile } from '@core/repoTrust.js'
 import type { Project, ProjectPatch } from '@core/store.js'
 import type { ThemeName } from '@core/types.js'
@@ -457,10 +458,12 @@ const api = {
      *
      * Called before a run, so a workspace made before the list mentioned a file
      * picks it up instead of staying broken until it is recreated. Answers with
-     * the paths it wrote.
+     * what it wrote and what the list named that the worktree still has not
+     * got — the second half being the one a run needs, since a missing file is
+     * how a build fails while complaining about something else.
      */
-    prepare: (workspaceId: string): Promise<Result<string[]>> =>
-      ipcRenderer.invoke('workspace:prepare', workspaceId) as Promise<Result<string[]>>,
+    prepare: (workspaceId: string): Promise<Result<CarryReport>> =>
+      ipcRenderer.invoke('workspace:prepare', workspaceId) as Promise<Result<CarryReport>>,
 
     /** What this repository can grant itself, and whether it was approved. */
     trust: (

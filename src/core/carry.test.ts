@@ -132,7 +132,10 @@ describe('carryInto', () => {
     await writeFile(join(repo, '.env'), 'API_KEY=secret\n', 'utf8')
     await writeCarryList('planner', '.env\n', root)
 
-    await expect(carryInto('planner', repo, workspace, root)).resolves.toEqual(['.env'])
+    await expect(carryInto('planner', repo, workspace, root)).resolves.toEqual({
+      written: ['.env'],
+      missing: []
+    })
     await expect(readFile(join(workspace, '.env'), 'utf8')).resolves.toBe('API_KEY=secret\n')
   })
 
@@ -168,29 +171,58 @@ describe('carryInto', () => {
     await writeFile(join(repo, '.env'), 'FROM=checkout\n', 'utf8')
     await writeCarryList('planner', 'config/master.key\n.env\n', root)
 
-    const written = await carryInto('planner', repo, workspace, root)
+    const report = await carryInto('planner', repo, workspace, root)
 
-    expect(written).toEqual(['.env'])
+    // Named rather than dropped in silence. The reason differs from a source
+    // that is not there, but the sentence the reader needs is the same one.
+    expect(report).toEqual({ written: ['.env'], missing: ['config/master.key'] })
     await expect(readFile(join(outside, 'master.key'), 'utf8')).rejects.toThrow()
     await rm(outside, { recursive: true, force: true })
   })
 
+  /*
+   * And reports it as neither written nor missing. `COPYFILE_EXCL` throws
+   * `EEXIST` here, which is the success of a second run rather than a failure —
+   * a report that named this file would train the reader to ignore the line
+   * that matters.
+   */
   it('never writes over a file the workspace already has', async () => {
     await writeFile(join(repo, '.env'), 'FROM=checkout\n', 'utf8')
     await writeFile(join(workspace, '.env'), 'FROM=hand\n', 'utf8')
     await writeCarryList('planner', '.env\n', root)
 
-    await expect(carryInto('planner', repo, workspace, root)).resolves.toEqual([])
+    await expect(carryInto('planner', repo, workspace, root)).resolves.toEqual({
+      written: [],
+      missing: []
+    })
     await expect(readFile(join(workspace, '.env'), 'utf8')).resolves.toBe('FROM=hand\n')
   })
 
-  // A list is written once and a project's needs change; a path that has gone
-  // is not a reason to fail the workspace.
-  it('passes over a file the checkout does not have', async () => {
+  /*
+   * A list is written once and a project's needs change, so a path that has
+   * gone is not a reason to fail the workspace — but it is a reason to say so.
+   * Swallowed, it is how a workspace comes up unable to run and the first
+   * complaint arrives from a script reading a variable nobody wrote.
+   */
+  it('carries the rest and names the file the checkout does not have', async () => {
     await writeFile(join(repo, '.env'), 'A=1\n', 'utf8')
     await writeCarryList('planner', 'gone.txt\n.env\n', root)
 
-    await expect(carryInto('planner', repo, workspace, root)).resolves.toEqual(['.env'])
+    await expect(carryInto('planner', repo, workspace, root)).resolves.toEqual({
+      written: ['.env'],
+      missing: ['gone.txt']
+    })
+  })
+
+  // The same for a named source: a copy that has moved fails exactly as
+  // quietly as one that was never there, which is what this reports.
+  it('names a source that is not where the line says it is', async () => {
+    await writeCarryList('planner', `.env = ${join(repo, 'nowhere', '.env')}\n`, root)
+
+    await expect(carryInto('planner', repo, workspace, root)).resolves.toEqual({
+      written: [],
+      missing: ['.env']
+    })
   })
 
   /*
@@ -207,7 +239,10 @@ describe('carryInto', () => {
       await writeCarryList('planner', `.env = ${join(elsewhere, '.env')}\n`, root)
 
       // Nothing is written into `repo`: it stands for the fresh clone.
-      await expect(carryInto('planner', repo, workspace, root)).resolves.toEqual(['.env'])
+      await expect(carryInto('planner', repo, workspace, root)).resolves.toEqual({
+        written: ['.env'],
+        missing: []
+      })
 
       await expect(readFile(join(workspace, '.env'), 'utf8')).resolves.toBe(
         'API_KEY=from-the-other-checkout\n'
@@ -267,6 +302,9 @@ describe('carryInto', () => {
   it('carries nothing for a list that names nothing', async () => {
     await writeCarryList('planner', '# only a comment\n', root)
 
-    await expect(carryInto('planner', repo, workspace, root)).resolves.toEqual([])
+    await expect(carryInto('planner', repo, workspace, root)).resolves.toEqual({
+      written: [],
+      missing: []
+    })
   })
 })
