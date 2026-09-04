@@ -297,6 +297,18 @@ while the note against a plan ten lines below it did not. The pairing is
 words mid-character, and not `whitespace-pre`, which would take the scrolling
 log sideways.
 
+**Markdown carries the second half of that pairing itself.** The sent bubble was
+capped first and the agent's side was left to `Markdown`, which set neither — so
+the same pasted URL or line of minified JSON overflowed its paragraph one turn
+later, when the agent quoted it back. The pane it sits in is `overflow-auto`, so
+the overflow became a sideways scroll of the whole conversation and took every
+other row off-centre with it. `wrap-anywhere` goes on the prose blocks
+individually rather than on the wrapper: `overflow-wrap` is inherited, and a
+fenced block keeps its own horizontal scroll — `white-space: pre` wraps nowhere
+whatever this says, and breaking code at an arbitrary column would misrepresent
+it — while a table already scrolls inside its own box, so wrapping its cells
+instead would be a different design.
+
 **A turn's footer needs a turn.** One at the head of the log has nothing above
 it to close, and `/clear` used to leave exactly that: the transcript went with
 the reset and the command's own result landed a tick later, so an emptied
@@ -1246,8 +1258,22 @@ same misreading with a delay.
 The permission card is the strongest case rather than the diff pane. It is the
 one place somebody authorises a command to run against their working tree, and
 answering "Always allow" there writes the tool _name_ — so a misread line
-approves every future call of that tool, in every workspace. Text that goes
-through `Markdown` does not have this yet; `docs/tasks/` holds what is left.
+approves every future call of that tool, in every workspace.
+
+**Markdown has it too now, and the map is complete for that reason.**
+`<ReactMarkdown>` offers no hook for text nodes — `components` maps element
+types — so every entry that can hold text calls `shown` on its own direct
+string children, and an element child names its own text through its own entry.
+That works only if nothing text-bearing falls through, which is why `h5`, `h6`
+and `del` were added: the element set is bounded and knowable, being whatever
+`mdast-util-to-hast` emits for GFM with raw HTML off, so the map can be
+exhaustive and is. Those three had been reaching the document through the
+browser's own sizes, which is the very thing the map exists to prevent.
+
+The chip sits inside a heading, a table cell and a fenced block without
+breaking any of them, which was the open question. In a fenced block it changes
+what Copy puts on the clipboard — `CodeBlock` copies `textContent`, so what is
+copied is what was read, the same trade-off the diff pane already takes.
 
 **A note against the code rides out with the next message.** It becomes text —
 the path, the lines, the code as it read when the note was written, then the
