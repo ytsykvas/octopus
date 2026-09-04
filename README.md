@@ -81,9 +81,12 @@ machine needs no setting up. What it may never carry is a credential: variables
 stay on the machine, so a pull can change what runs and never what it runs
 against. A script arriving that way is shown before it runs.
 
-**Review and open a pull request.** The right pane shows the diff against the
-base branch, takes comments on it, and opens a PR through `gh` — with a
-description the agent writes to whatever instructions the project keeps.
+**Run the whole pull request from here.** The right pane shows the diff against
+the base branch, takes comments on it, and opens a PR through `gh` — with a
+description the agent writes to whatever instructions the project keeps. From
+there the same pane follows it: the checks and whether they are still running,
+the review verdict, the threads people left on the code, and merge, squash or
+rebase when it is ready.
 
 **The agent is the one you already have.** octopus loads the same settings
 Claude Code loads in a terminal: the project's `CLAUDE.md`, its `.claude/`
@@ -194,10 +197,10 @@ requires every locale to carry every key.
 
 ## Not there yet
 
-Notifications, a Monaco-based diff, Linux and Windows builds, and everything
-around a pull request past opening it — checks and review threads. Work already
-identified but not done is written down one file at a time in
-[docs/tasks/](docs/tasks/).
+Notifications, a Monaco-based diff, Linux and Windows builds, and replying to a
+review thread: a thread can be read in the right pane, but answering it still
+means going to GitHub. Work already identified but not done is written down one
+file at a time in [docs/tasks/](docs/tasks/).
 
 ## Contributing
 
