@@ -375,9 +375,12 @@ The flag goes out with the level in **one** call, at both moments it can move:
 `Options.settings` at start-up, and `applyFlagSettings` on a running session.
 That is not tidiness — `applyFlagSettings` shallow-merges top-level keys, so a
 flag sent after a level would replace it rather than join it. Both are always
-said, `false` included: `settingSources` is empty, so nothing else is loaded
-that could turn `ultracode` back off, and silence would leave the last session's
-answer standing.
+said, `false` included, and the reason is that same shallow merge rather than
+anything about what else is loaded: a key left out is a key left standing, so
+silence would keep the last session's answer. That used to be argued from
+`settingSources` being empty. It is not empty — the default loads `user`,
+`project` and `local`, so a settings file can carry the flag too, which is one
+more reason to state it outright instead of hoping nothing else does.
 
 ### A reset is not consent
 

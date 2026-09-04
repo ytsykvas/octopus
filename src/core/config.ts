@@ -47,9 +47,12 @@ const NEVER_STANDING: readonly string[] = [EXIT_PLAN_MODE, ASK_USER_QUESTION]
 /**
  * Which setting sources the agent is allowed to load.
  *
- * This is the key transparency switch (§4 docs/PROJECT.md): the default
- * `none` means nothing reaches the agent's context that we did not put
- * there deliberately.
+ * The default is `all` (§12.3 docs/PROJECT.md): octopus is a harness around
+ * Claude Code, not a filter on it, so the agent arrives knowing what the
+ * project and the user have written for it. The switch is still offered —
+ * nothing / `project` / `user + project + local` — for anyone who wants
+ * isolation; it is simply no longer what everybody gets. Version 2 of the
+ * config raises an install that was still on `none`.
  */
 export const SettingSourcesModeSchema = z.enum(['none', 'project', 'all'])
 export type SettingSourcesMode = z.infer<typeof SettingSourcesModeSchema>
@@ -389,8 +392,10 @@ export type SettingSourceName = 'user' | 'project' | 'local'
 /**
  * Maps the config mode onto the Agent SDK's `settingSources` value.
  *
- * The empty array is exactly what stops the SDK from quietly picking up
- * `CLAUDE.md` and user settings behind our back (§12.3).
+ * The empty array is what `none` has to become: it is the only value that
+ * stops the SDK loading `CLAUDE.md` and user settings. That is a mode on
+ * offer for someone who wants the agent isolated, not the app's posture —
+ * §12.3 explains why it stopped being the default.
  */
 export function toSdkSettingSources(mode: SettingSourcesMode): SettingSourceName[] {
   switch (mode) {
