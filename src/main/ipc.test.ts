@@ -26,7 +26,8 @@ import type {
   ChatStatusEvent,
   WorkspaceStatusEvent
 } from '../core/service.js'
-import type { ThemeName, Workspace } from '../core/types.js'
+import type { Workspace } from '../core/store.js'
+import type { ThemeName } from '../core/types.js'
 import type { UsageWindows } from '../core/usage.js'
 import { type IpcHost, registerIpc, type PickedDirectory } from './ipc.js'
 import type { Result } from './result.js'

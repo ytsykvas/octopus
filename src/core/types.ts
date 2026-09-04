@@ -1,5 +1,11 @@
 /**
- * Core domain types.
+ * The identifiers the whole application shares.
+ *
+ * Only identifiers: the records themselves are the zod inferences in
+ * `store.ts`, and they belong there because the schema is what validates them.
+ * Hand-written copies lived here once and drifted eight fields apart from the
+ * schema without anything noticing — a type-only module emits no code, so
+ * coverage could never have said so.
  *
  * This module deliberately has no imports — neither Electron nor Node.
  * Both the main process and the renderer are free to import it (§11.1).
@@ -16,35 +22,3 @@ export type WorkspaceId = string
 
 /** Chat identifier. Also the name of the file its transcript lives in. */
 export type ChatId = string
-
-/** Where a workspace sits in its lifecycle. */
-export type WorkspaceStatus = 'idle' | 'running' | 'waiting_permission' | 'error'
-
-export interface Project {
-  readonly id: ProjectId
-  readonly name: string
-  /** Absolute path to the main repository. */
-  readonly repoPath: string
-  /** Branch workspaces branch off from, and diffs are measured against. */
-  readonly baseBranch: string
-  /** Branch prefix, e.g. a GitHub username. */
-  readonly branchPrefix: string
-}
-
-export interface Workspace {
-  readonly id: WorkspaceId
-  readonly projectId: ProjectId
-  readonly name: string
-  readonly branch: string
-  /** Absolute path to the git worktree. */
-  readonly path: string
-  readonly status: WorkspaceStatus
-  /** Dev server port, derived deterministically from the id. */
-  readonly port: number
-  readonly createdAt: string
-  /**
-   * Reserved for future multi-user support; nothing writes it today.
-   * Always null for now — the shape simply does not assume a single user.
-   */
-  readonly ownerId: string | null
-}

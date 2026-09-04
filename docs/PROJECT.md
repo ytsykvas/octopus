@@ -646,22 +646,9 @@ Everything under one directory (Conductor spreads across `~/conductor` and `~/.c
 ```
 octopus/
   src/
-    core/
-      paths.ts       every path
-      persist.ts     atomic JSON with zod validation
-      config.ts      settings, setting-source switch, licensing hooks
-      store.ts       projects and workspaces, port assignment
-      types.ts       Workspace, Project, WorkspaceStatus, identifiers
-      events.ts      AgentEvent — the SDK's shapes stop here
-      git.ts         git operations
-      projects.ts    repository validation, project records
-      service.ts     core facade for the IPC layer
-      worktree.ts    worktree operations
-      agent.ts       Agent SDK, session lifecycle, event mapping
-      chats.ts       what a chat is
-      transcript.ts  chat history as append-only JSONL
-    main/index.ts    window + IPC
-    preload/index.ts contextBridge, typed API
+    core/          all logic, headless — no Electron, no React
+    main/          the window and the IPC bridge; no logic of its own
+    preload/       contextBridge, the typed API the window is handed
     renderer/
       src/
         assets/      the mascot, and an octopus per effort level
@@ -670,6 +657,23 @@ octopus/
         i18n/        localisation, en is the source of truth
         styles.css   design tokens
 ```
+
+**The modules inside `src/core/` are not listed here.** There are dozens and a
+new one arrives with most features, so a copy in this section is a copy that
+falls behind. [`docs/core.md`](core.md) carries them, a row each, and is
+maintained alongside the code.
+
+That is not tidying: the tree here used to name thirteen of them and describe
+`types.ts` as holding "Workspace, Project, WorkspaceStatus" long after the
+application's records had become the zod inferences in `store.ts`. A reader who
+followed it landed on hand-written interfaces eight fields out of date, one of
+which documented the dev-server port as a hash of the workspace id — the exact
+behaviour `docs/data.md` records as a bug that was fixed by allocating ports
+instead.
+
+The layer boundaries are §11.1. What each core module does is
+[`docs/core.md`](core.md); how the window is put together is
+[`docs/ui.md`](ui.md); what is written to disk is [`docs/data.md`](data.md).
 
 ---
 
