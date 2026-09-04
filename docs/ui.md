@@ -762,9 +762,19 @@ prop says, so writing them separately would have been two copies of a list that
 drift apart the first time either is touched. The switch on each row is about
 what a **new** conversation starts with; the panel in the composer is about the
 one in hand, and the two are deliberately different questions in different
-places. The project section additionally lists what the checkout carries,
-read-only with a single Copy action: those files belong to the repository, and
-editing them from here would be the app writing inside somebody's checkout.
+places. The project section additionally lists what the checkout carries, and
+those rows draw the line in the one place it actually falls: **the file is
+read-only, the decision to load it is not.** Editing the file from here would be
+the app writing inside somebody's checkout, so Copy is all that is offered for
+it — but whether the agent may reach for it is octopus's own record, so the same
+switch sits on these rows as on ours, and turning one off writes nothing into
+the repository.
+
+Without it the page was empty of controls in the ordinary case: most projects
+keep no skills of their own, so the two the agent would actually load were the
+two with nothing beside them. Nothing in core had to change for it — the
+deny-list `sessionSkills` builds already covers all three scopes, keyed by the
+bare name.
 
 `FileEditor` can carry `notes` — a function run against the text on every
 keystroke, whose answers appear under the box. The env block uses it; told on

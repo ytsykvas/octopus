@@ -964,11 +964,13 @@ export const en = {
     removeConfirm: 'Remove',
     removeCancel: 'Cancel',
 
-    /* The checkout's own, in the project section. Read-only here: they belong
-       to the repository, and editing them from a settings dialog would be
-       octopus writing inside somebody's checkout. */
+    /* The checkout's own, in the project section. The file is read-only here —
+       it belongs to the repository, and editing it from a settings dialog would
+       be octopus writing inside somebody's checkout — but whether the agent
+       loads it is ours to say, so the note has to offer both. */
     inRepository: 'In this repository',
-    inRepositoryNote: 'The agent already loads these. Copy one to use it everywhere.',
+    inRepositoryNote:
+      'The agent finds these in the checkout by itself. Switch one off to keep it out of new conversations here, or copy it to use in every project.',
     copyToGlobal: 'Copy to all projects',
 
     /* The editor. `name` is fixed once created: it is the directory, and every

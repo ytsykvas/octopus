@@ -471,6 +471,56 @@ describe("the checkout's own skills", () => {
     expect(onCopyToGlobal).toHaveBeenCalledExactlyOnceWith('/ws/x')
   })
 
+  /*
+   * The file is the repository's; whether the agent loads it is not. Switching
+   * one off writes nothing into the checkout — it names the skill in this
+   * project's own defaults, under the bare name, which is the key a session
+   * looks it up by whatever scope it came from.
+   *
+   * This is the case that prompted the control: a project whose own store is
+   * empty showed a Skills page where the only two skills the agent would load
+   * had nothing beside them.
+   */
+  it('switches one off for new conversations without touching the checkout', async () => {
+    vi.mocked(octopus().skills.inRepository).mockResolvedValue({
+      ok: true,
+      value: [entry({ name: 'xibo-bridge', description: 'From the checkout.', path: '/ws/x' })]
+    })
+    const { onDefaults } = await renderSection({ project: true, workspaceId: 'planner/kyiv' })
+
+    await waitFor(() => {
+      expect(screen.getByText('xibo-bridge')).toBeInTheDocument()
+    })
+
+    await userEvent.click(screen.getByRole('switch', { name: 'On by default' }))
+
+    expect(onDefaults).toHaveBeenCalledExactlyOnceWith(['xibo-bridge'])
+    expect(octopus().skills.save).not.toHaveBeenCalled()
+  })
+
+  // And the row shows the state it is in rather than always looking on, which
+  // is the half a switch that only ever writes would get away with.
+  it('draws one already switched off as off', async () => {
+    vi.mocked(octopus().skills.inRepository).mockResolvedValue({
+      ok: true,
+      value: [entry({ name: 'xibo-bridge', description: 'From the checkout.', path: '/ws/x' })]
+    })
+    await renderSection({
+      project: true,
+      workspaceId: 'planner/kyiv',
+      disabled: ['xibo-bridge']
+    })
+
+    await waitFor(() => {
+      expect(screen.getByText('xibo-bridge')).toBeInTheDocument()
+    })
+
+    expect(screen.getByRole('switch', { name: 'On by default' })).toHaveAttribute(
+      'aria-checked',
+      'false'
+    )
+  })
+
   it('asks nothing of a project with no workspace to read from', async () => {
     await renderSection({ project: true })
 

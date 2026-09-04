@@ -186,9 +186,11 @@ export function SkillsSection({
         )}
       </div>
 
-      {/* Read-only, and deliberately so: these belong to the repository, and
-          editing them from a settings dialog would be octopus writing inside
-          somebody's checkout. Copying is the one thing offered. */}
+      {/* The file is read-only, and deliberately so: it belongs to the
+          repository, and editing it from a settings dialog would be octopus
+          writing inside somebody's checkout. Whether the agent loads it is a
+          different question and ours to answer — the switch records that in
+          our own state and writes nothing into the checkout. */}
       {carried.length > 0 && onCopyToGlobal !== undefined && (
         <div>
           <p className="mb-1.5 font-medium">{t('skills.inRepository')}</p>
@@ -198,6 +200,13 @@ export function SkillsSection({
           <ul className="border-line divide-line divide-y rounded-[var(--radius-panel)] border">
             {carried.map((skill) => (
               <li key={skill.folder} className="flex items-center gap-3 px-3 py-2">
+                <Switch
+                  checked={!disabledDefaults.includes(skillKey(skill.name))}
+                  label={t('skills.onByDefault')}
+                  onChange={(on) => {
+                    setDefault(skill.name, on)
+                  }}
+                />
                 <span className="min-w-0 flex-1">
                   <span className="text-ink block truncate">{skill.name}</span>
                   {skill.description !== '' && (

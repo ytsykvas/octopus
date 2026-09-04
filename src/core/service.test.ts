@@ -6947,6 +6947,34 @@ describe('the agent chat', () => {
       expect(options?.settings).toMatchObject({ skillOverrides: { review: 'off' } })
     })
 
+    /*
+     * The guarantee behind the switch on a repository row in project settings.
+     * We never edit that file — it is the checkout's — so switching it off has
+     * to work entirely through the deny-list, and the key it goes in under is
+     * the bare name, the same one a store skill would use.
+     *
+     * Asserted at the session rather than at the listing, because a listing
+     * that says `enabled: false` while the SDK is handed nothing is exactly
+     * the failure a control with nothing behind it looks like.
+     */
+    it("keeps a checkout's own skill out of a session when the project turns it off", async () => {
+      const { service, projectId, workspaceId } = await withWorkspace()
+      const workspace = (await service.listWorkspaces(projectId))[0]
+      if (!workspace) throw new Error('no workspace')
+      await placeInRepo(workspace.path, 'xibo-bridge')
+      await service.updateProjectById(projectId, { disabledSkillDefaults: ['xibo-bridge'] })
+
+      const chat = await service.openChat(workspaceId)
+      await service.sendToChat(chat.id, 'hello')
+
+      expect(agents[0]?.options().settings).toMatchObject({
+        skillOverrides: { 'xibo-bridge': 'off' }
+      })
+      // And no store root goes with it: nothing of ours holds this skill, so a
+      // directory handed over for it would buy nothing.
+      expect(agents[0]?.options().additionalDirectories).toBeUndefined()
+    })
+
     it('mentions no store that has nothing in it', async () => {
       const { service, workspaceId } = await withWorkspace()
       const chat = await service.openChat(workspaceId)
