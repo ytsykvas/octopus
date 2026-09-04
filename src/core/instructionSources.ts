@@ -12,13 +12,16 @@
  * under the word "loaded" is how the panel came to be wrong in all three modes
  * at once.
  *
- * Read from the project's checkout, which is what the reader can open — but the
- * agent runs in a **worktree**, and the two differ in one place that matters:
- * `.claude/settings.local.json` is gitignored by Claude Code's own convention,
- * so no worktree has it unless the project's carry list names it. Reporting it
- * as loaded because the checkout has one was a systematic falsehood. `chats.ts`
- * already writes the rule down: which commands exist is a fact about a working
- * directory and the branch checked out in it.
+ * Asked about one directory, and **which** directory decides one of the rows.
+ * `.claude/settings.local.json` is gitignored by Claude Code's own convention.
+ * Read against a checkout, its presence says nothing about the worktree a
+ * session runs in — that copy arrives only by being carried, and reporting it
+ * as loaded because the checkout has one was a systematic falsehood. Read
+ * against the worktree itself, presence is the whole fact: the SDK is pointed
+ * at that directory and will read what is in it. `carried` is how the caller
+ * says which question it is asking. `chats.ts` already writes the rule down:
+ * which commands exist is a fact about a working directory and the branch
+ * checked out in it.
  *
  * The first step of the skills feature, too. Once this can say what a project
  * offers, switching individual pieces on and off is a change to the list rather
@@ -27,7 +30,7 @@
 
 import { readdir, stat } from 'node:fs/promises'
 import { homedir } from 'node:os'
-import { join } from 'node:path'
+import { join, normalize } from 'node:path'
 
 import type { SettingSourceName } from './config.js'
 
@@ -115,8 +118,14 @@ async function countIn(path: string, kind: 'files' | 'directories'): Promise<num
 /**
  * Everything the agent working in this directory may load.
  *
- * `carried` is the project's list of files copied into each workspace, which is
- * the only way a gitignored file reaches the directory a session runs in.
+ * `carried` says what `cwd` is. **`null` means it is the directory the session
+ * runs in**, so a gitignored file being there is the fact and needs no further
+ * evidence. An array means `cwd` is the project's checkout, and the array is
+ * the carry list — the only way such a file reaches the worktree from there.
+ *
+ * Compared normalised, because the list is typed by hand: `./.claude/…` names
+ * the same destination as `.claude/…`, is copied correctly by `join`, and
+ * would otherwise be reported as a file the worktree does not have.
  *
  * `home` is a parameter for the same reason it is one in `paths.ts`: a test that
  * needed the real home directory would be testing the machine it runs on.
@@ -124,7 +133,7 @@ async function countIn(path: string, kind: 'files' | 'directories'): Promise<num
 export async function instructionSources(
   cwd: string,
   sources: readonly SettingSourceName[],
-  carried: readonly string[] = [],
+  carried: readonly string[] | null = [],
   home: string = homedir()
 ): Promise<InstructionSource[]> {
   const claude = join(cwd, '.claude')
@@ -150,10 +159,12 @@ export async function instructionSources(
   const on = (id: InstructionSource['id'], present: boolean): boolean => {
     if (!present || !sources.includes(SOURCE_OF[id])) return false
 
-    // The one row the checkout cannot answer for. A worktree holds what git
-    // tracks, and this file is gitignored — so it reaches a workspace only by
-    // being on the carry list.
-    if (id === 'localSettings') return carried.includes(LOCAL_SETTINGS)
+    // The one row that depends on which directory was asked about. In the
+    // worktree itself presence is the answer; from the checkout the file is
+    // gitignored, so it reaches a workspace only by being on the carry list.
+    if (id === 'localSettings' && carried !== null) {
+      return carried.some((file) => normalize(file) === LOCAL_SETTINGS)
+    }
 
     return true
   }

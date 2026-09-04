@@ -16,7 +16,7 @@ let home: string
 async function source(
   id: InstructionSource['id'],
   sources: readonly SettingSourceName[] = ALL,
-  carried: readonly string[] = []
+  carried: readonly string[] | null = []
 ): Promise<InstructionSource> {
   const found = (await instructionSources(repo, sources, carried, home)).find(
     (entry) => entry.id === id
@@ -188,11 +188,12 @@ describe('what the agent will actually read', () => {
   })
 
   /*
-   * The one row a checkout cannot answer for. A worktree holds what git tracks
-   * and this file is gitignored, so it reaches a workspace only by being on the
-   * carry list — which is exactly what `.conductor` does for it by hand.
+   * Asked about the checkout, this row cannot be answered by a stat. A worktree
+   * holds what git tracks and this file is gitignored, so it reaches a
+   * workspace only by being on the carry list — which is exactly what
+   * `.conductor` does for it by hand.
    */
-  it('reads the local settings only when the carry list brings them', async () => {
+  it('reads the local settings of a checkout only when the carry list brings them', async () => {
     await writeFile(join(repo, '.claude', 'settings.local.json'), '{}', 'utf8')
 
     await expect(source('localSettings')).resolves.toMatchObject({
@@ -201,6 +202,41 @@ describe('what the agent will actually read', () => {
     })
     await expect(
       source('localSettings', ALL, ['.claude/settings.local.json'])
+    ).resolves.toMatchObject({ loaded: true })
+  })
+
+  /*
+   * Asked about the worktree itself, the same stat is the whole answer: the
+   * session is started in that directory, so the SDK reads what is in it
+   * however it got there. A workspace terminal answering "always allow" writes
+   * this file, and the panel reported it unread while the agent was reading it.
+   */
+  it('reads the local settings a worktree actually holds, carried or not', async () => {
+    await writeFile(join(repo, '.claude', 'settings.local.json'), '{}', 'utf8')
+
+    await expect(source('localSettings', ALL, null)).resolves.toMatchObject({
+      present: true,
+      loaded: true
+    })
+  })
+
+  it('claims nothing about a worktree that does not hold them', async () => {
+    await expect(source('localSettings', ALL, null)).resolves.toMatchObject({
+      present: false,
+      loaded: false
+    })
+  })
+
+  /*
+   * The list is typed by hand into a text box, so both spellings of the same
+   * destination occur. `carryInto` copies either one correctly; only this
+   * comparison could tell them apart, and it used to.
+   */
+  it('recognises a carry list that spells the destination with a leading dot-slash', async () => {
+    await writeFile(join(repo, '.claude', 'settings.local.json'), '{}', 'utf8')
+
+    await expect(
+      source('localSettings', ALL, ['./.claude/settings.local.json'])
     ).resolves.toMatchObject({ loaded: true })
   })
 

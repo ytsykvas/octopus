@@ -2513,10 +2513,22 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
       return instructionSources(
         cwd,
         await sourcesIn(cwd, project),
-        // The carry list, because it is what puts a gitignored file into a
-        // worktree. The destinations alone: this asks what the worktree ends up
-        // holding, not where any of it was read from.
-        carriedFiles(await readCarryList(project.id, dataRoot)).map((file) => file.path)
+        /*
+         * Null once a workspace is open, and that is not a shortcut: `cwd` is
+         * then the directory the session is started in, so a gitignored file
+         * sitting there is read whether or not the carry list put it there.
+         * A workspace terminal answering "always allow" writes that file, and
+         * the panel used to go on reporting it unread — a claim about a
+         * security state, wrong in the reassuring direction.
+         *
+         * Before a workspace is open there is only the checkout to look at,
+         * and there the carry list is the whole of the evidence: the
+         * destinations alone, since this asks what the worktree ends up
+         * holding rather than where any of it was read from.
+         */
+        workspace === null
+          ? carriedFiles(await readCarryList(project.id, dataRoot)).map((file) => file.path)
+          : null
       )
     },
 

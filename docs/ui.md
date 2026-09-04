@@ -731,6 +731,19 @@ second's name made the panel wrong in every `settingSources` mode at once. Its
 `notes` are keyed by position: one line can carry the same complaint twice, and
 identical strings collide as keys.
 
+**One row's answer depends on which directory the section asked about.**
+`.claude/settings.local.json` is gitignored by Claude Code's own convention, so
+seeing it in the **checkout** says nothing about the worktree a session runs in
+— there it arrives only by being carried, and the carry list is the evidence.
+Seeing it in the **worktree** is the whole fact: the session is started in that
+directory and the SDK reads what is in it. Since the section asks about the open
+workspace, the carry-list rule ran against a directory it was never written for,
+and a file the workspace genuinely held was reported unread. That file is in the
+trust digest — the user is asked to approve it precisely because it can
+pre-approve tools and declare hooks — so the panel was wrong about a security
+state in the reassuring direction, which is the same defect the workspace
+question fixed everywhere else.
+
 **Skills sit in both dialogs, and the section is one component.** The two
 differ only in reach — every project, or this one — which is what the store
 prop says, so writing them separately would have been two copies of a list that

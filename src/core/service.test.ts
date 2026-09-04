@@ -1444,6 +1444,58 @@ describe('env overrides a project adds', () => {
     expect(sources.find((entry) => entry.id === 'projectMemory')).toMatchObject({ loaded: true })
   })
 
+  /*
+   * The file the trust gate makes the user approve, because it can pre-approve
+   * tools and declare hooks. A workspace terminal answering "always allow"
+   * writes it, and the panel went on reporting it unread — a claim about a
+   * security state, wrong in the reassuring direction. Nothing carried it: that
+   * is the point, since the session is started in this very directory.
+   */
+  it('reports the local settings a worktree holds as read, with no carry list at all', async () => {
+    const { id } = await withProject()
+    const workspace = await service.createWorkspaceIn(id)
+    await mkdir(join(workspace.path, '.claude'), { recursive: true })
+    await writeFile(join(workspace.path, '.claude', 'settings.local.json'), '{}', 'utf8')
+    await service.approveWorkspaceSettings(workspace.id)
+
+    const sources = await service.projectInstructionSources(id, workspace.id)
+
+    expect(sources.find((entry) => entry.id === 'localSettings')).toMatchObject({
+      present: true,
+      loaded: true
+    })
+  })
+
+  /*
+   * The other half of the same rule, and the reason it is not simply deleted:
+   * before a workspace is open there is only the checkout to look at, and a
+   * file there reaches no worktree unless the carry list says so.
+   *
+   * Committed, so the worktree holds it too and both directories digest alike —
+   * otherwise the trust gate withholds `local` from the checkout whatever this
+   * rule says, and the assertion would hold for a reason that is not the rule.
+   */
+  it('keeps the carry-list rule for the checkout it was written for', async () => {
+    const { id, repo } = await withProject()
+    await mkdir(join(repo, '.claude'), { recursive: true })
+    await writeFile(join(repo, '.claude', 'settings.local.json'), '{}', 'utf8')
+    await run('git', ['add', '-A'], { cwd: repo })
+    await run('git', ['commit', '-q', '-m', 'local settings'], { cwd: repo })
+    const workspace = await service.createWorkspaceIn(id)
+    await service.approveWorkspaceSettings(workspace.id)
+
+    const sources = await service.projectInstructionSources(id, null)
+    expect(sources.find((entry) => entry.id === 'localSettings')).toMatchObject({
+      present: true,
+      loaded: false
+    })
+
+    await service.saveProjectCarryList(id, '.claude/settings.local.json\n')
+
+    const carried = await service.projectInstructionSources(id, null)
+    expect(carried.find((entry) => entry.id === 'localSettings')).toMatchObject({ loaded: true })
+  })
+
   it('falls back to the checkout when no workspace is open', async () => {
     const { id, repo } = await withProject()
     await writeFile(join(repo, 'CLAUDE.md'), '# rules\n', 'utf8')
