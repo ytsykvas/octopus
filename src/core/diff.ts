@@ -68,6 +68,21 @@ export interface FileDiff {
   readonly path: string
   /** Where it came from when it moved or was copied, otherwise null. */
   readonly oldPath: string | null
+  /**
+   * The two octal modes when they differ, otherwise null.
+   *
+   * Its own field because a unified diff cannot be trusted for it: the block
+   * for a permission change carries `old mode` / `new mode` and **no hunks at
+   * all**, so the parser flushed a file with nothing in it, and a mode change
+   * beside content changes put those two lines above `@@` where they were
+   * ignored outright. Either way the row drew as if nothing had happened.
+   *
+   * Read from `git diff --raw`, which reports it for every file whatever the
+   * drawing budget. Carrying it in the unified parser instead would make it
+   * appear or vanish with how many other files changed, and intermittent is
+   * worse than silent.
+   */
+  readonly mode: { readonly from: string; readonly to: string } | null
   readonly status: FileStatus
   readonly added: number
   readonly removed: number
@@ -380,6 +395,47 @@ export function parseNameStatus(output: string): NameStatusEntry[] {
   return entries
 }
 
+/** A file whose mode changed, as `git diff --raw` reports it. */
+export interface RawModeEntry {
+  readonly path: string
+  readonly from: string
+  readonly to: string
+}
+
+/**
+ * The files whose mode changed, from `git diff --raw -z`.
+ *
+ * `:100644 100755 <sha> <sha> M` in one NUL-terminated field, then the path in
+ * the next — the same record shape `parseNameStatus` walks, and the same rule
+ * about staying in step: a record whose letter says two paths follow consumes
+ * two, or every path after it is read as a record.
+ *
+ * Only the files that changed, so a caller can ask a map rather than compare.
+ */
+export function parseRawModes(output: string): RawModeEntry[] {
+  const fields = output.split('\0').filter((field) => field !== '')
+  const entries: RawModeEntry[] = []
+
+  for (let index = 0; index < fields.length; index++) {
+    // `:<old mode> <new mode> <old sha> <new sha> <letter>`, where the letter
+    // may carry a similarity score — `R100` — which is why only its first
+    // character is read.
+    const parts = at(fields, index).split(' ')
+    const from = at(parts, 0).slice(1)
+    const to = at(parts, 1)
+
+    const letter = at(parts, 4).charAt(0)
+    const moved = letter === 'R' || letter === 'C'
+    const first = at(fields, index + 1)
+    const second = moved ? at(fields, index + 2) : ''
+    index += moved ? 2 : 1
+
+    if (from !== to) entries.push({ path: moved ? second : first, from, to })
+  }
+
+  return entries
+}
+
 /** A file's block in a unified diff: its path, and the lines under it. */
 export interface ParsedFile {
   readonly path: string
@@ -671,13 +727,22 @@ export async function readWorkspaceDiff(
 
   const baseCommit = await mergeBase(exec, options.baseBranch)
 
-  const [numstat, nameStatus, untracked] = await Promise.all([
+  const [numstat, nameStatus, raw, untracked] = await Promise.all([
     exec([...RAW_PATHS, 'diff', '--numstat', '-z', ...DIFF_FLAGS, baseCommit]),
     exec([...RAW_PATHS, 'diff', '--name-status', '-z', ...DIFF_FLAGS, baseCommit]),
+    // The third, because neither of the two above reports a mode and the
+    // unified diff cannot be relied on for one: a permission change has no
+    // hunks, and one beside content changes sits above `@@` where the parser
+    // never looks. This is exact for every file whatever is drawn.
+    exec([...RAW_PATHS, 'diff', '--raw', '-z', ...DIFF_FLAGS, baseCommit]),
     exec(['ls-files', '--others', '--exclude-standard', '-z'])
   ])
 
-  const tracked = trackedFiles(parseNumstat(numstat), parseNameStatus(nameStatus))
+  const tracked = trackedFiles(
+    parseNumstat(numstat),
+    parseNameStatus(nameStatus),
+    parseRawModes(raw)
+  )
 
   // Tracked files are chosen first because git has already counted them, and
   // what they leave of the budget is what the untracked ones have to spend —
@@ -759,16 +824,22 @@ function splitNul(output: string): string[] {
 /** Joins what `--numstat` counted to what `--name-status` called it. */
 function trackedFiles(
   counts: readonly NumstatEntry[],
-  statuses: readonly NameStatusEntry[]
+  statuses: readonly NameStatusEntry[],
+  modes: readonly RawModeEntry[]
 ): FileDiff[] {
   const byPath = new Map(statuses.map((entry) => [entry.path, entry]))
+  const modeByPath = new Map(modes.map((entry) => [entry.path, entry]))
 
   return counts.map((entry) => {
     const status = byPath.get(entry.path)
+    const mode = modeByPath.get(entry.path)
 
     return {
       path: entry.path,
       oldPath: entry.oldPath,
+      // Only when it changed: `--raw` reports every file, and a record whose
+      // two modes agree is not news.
+      mode: mode ? { from: mode.from, to: mode.to } : null,
       // `--numstat` knows the counts and `--name-status` knows the kind; only
       // the pair says both. A file in one and not the other is not something
       // git produces, and `modified` is the honest reading if it ever does.
@@ -825,6 +896,8 @@ async function readUntracked(
   const base = {
     path,
     oldPath: null,
+    // A file git has never seen has no mode to have changed.
+    mode: null,
     status: 'untracked' as const,
     hunks: []
   }

@@ -121,6 +121,26 @@ interface DiffFileProps {
  * what `DiffPanel` goes to some trouble over. A handler rebuilt per render
  * would quietly turn this back into what it was.
  */
+/**
+ * What a change of mode says in words.
+ *
+ * The executable bit is named rather than spelled, because it is the one that
+ * matters here: `scripts.ts` and `repoConfig.ts` chmod to 0755 precisely so
+ * octopus can execute those files, and a script without the bit fails outright.
+ * Anything else — a file becoming a symlink, a gitlink — is rare enough that
+ * the two octal modes are the clearest thing to show, and it also makes a `T`
+ * row say what it changed into.
+ */
+function modeKey(mode: {
+  readonly from: string
+  readonly to: string
+}): 'diff.modeExecutable' | 'diff.modeNotExecutable' | 'diff.modeChanged' {
+  if (mode.from === '100644' && mode.to === '100755') return 'diff.modeExecutable'
+  if (mode.from === '100755' && mode.to === '100644') return 'diff.modeNotExecutable'
+
+  return 'diff.modeChanged'
+}
+
 export const DiffFile = memo(function DiffFile({
   file,
   collapsed,
@@ -266,6 +286,17 @@ export const DiffFile = memo(function DiffFile({
       {file.oldPath !== null && !collapsed && (
         <p className="text-ink-faint px-3 py-1 font-mono text-[11px]">
           {t('diff.renamedFrom', { path: file.oldPath })}
+        </p>
+      )}
+
+      {/* Beside the rename line and for the same reason: a permission change
+          has no lines by construction, so without this the row was a chevron,
+          an `M`, a path and a revert control — a live file that changed
+          nothing. It is drawn for a file with hunks too, where the counts and
+          the body otherwise made the row look completely explained. */}
+      {file.mode !== null && !collapsed && (
+        <p className="text-ink-faint px-3 py-1 font-mono text-[11px]">
+          {t(modeKey(file.mode), { from: file.mode.from, to: file.mode.to })}
         </p>
       )}
 

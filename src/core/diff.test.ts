@@ -10,7 +10,7 @@
  */
 
 import { execFile } from 'node:child_process'
-import { mkdtemp, readFile, rm, symlink, writeFile } from 'node:fs/promises'
+import { chmod, mkdtemp, readFile, rm, symlink, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { promisify } from 'node:util'
@@ -23,6 +23,7 @@ import {
   looksBinary,
   parseNameStatus,
   parseNumstat,
+  parseRawModes,
   parseUnifiedDiff,
   readWorkspaceDiff,
   unquotePath,
@@ -122,6 +123,41 @@ describe('unquotePath', () => {
   it('reassembles octal escapes as UTF-8 rather than as bytes', () => {
     // What `core.quotePath` leaves behind when it is not turned off.
     expect(unquotePath('"\\320\\272.txt"')).toBe('к.txt')
+  })
+})
+
+describe('parseRawModes', () => {
+  // The `-z` record shape `parseNameStatus` walks, one field for the metadata
+  // and one for the path.
+  it('reads the two modes of a file whose permissions changed', () => {
+    expect(parseRawModes(':100644 100755 7898192 7898192 M\0run.sh\0')).toEqual([
+      { path: 'run.sh', from: '100644', to: '100755' }
+    ])
+  })
+
+  // git reports every changed file, and one whose modes agree is not news.
+  it('says nothing about a file whose mode stayed the same', () => {
+    expect(parseRawModes(':100644 100644 6178079 6a91238 M\0other.txt\0')).toEqual([])
+  })
+
+  /*
+   * A rename consumes two paths, and the walk has to know that or every path
+   * after it is read as a record — the same rule `parseNameStatus` states. The
+   * letter carries a similarity score, so only its first character is the
+   * status.
+   */
+  it('takes the new path of a rename, and stays in step', () => {
+    const output =
+      ':100644 100755 aaa bbb R100\0old.sh\0new.sh\0:100644 100755 ccc ddd M\0after.sh\0'
+
+    expect(parseRawModes(output)).toEqual([
+      { path: 'new.sh', from: '100644', to: '100755' },
+      { path: 'after.sh', from: '100644', to: '100755' }
+    ])
+  })
+
+  it('answers with nothing when nothing changed', () => {
+    expect(parseRawModes('')).toEqual([])
   })
 })
 
@@ -756,6 +792,46 @@ describe('readWorkspaceDiff', () => {
   })
 
   /*
+   * The one change git renders with no hunks at all, so nothing in a unified
+   * diff could carry it: a permission change is `old mode` / `new mode` and
+   * three lines, and the row drew a chevron, an `M`, a path and a revert
+   * control — a live file that changed nothing.
+   *
+   * It matters here more than in most diff viewers, because octopus executes
+   * the scripts it chmods to 0755 and one without the bit fails outright.
+   */
+  it('reports a file that was only made executable', async () => {
+    await chmod(join(dir, 'a.txt'), 0o755)
+
+    const diff = await readDiff()
+
+    expect(diff.files[0]).toMatchObject({ path: 'a.txt', mode: { from: '100644', to: '100755' } })
+  })
+
+  /*
+   * And the worse half. With content changes too, the two mode lines sit above
+   * `@@` where the parser never looks, so the row drew its counts and a normal
+   * body and looked completely explained — nothing inviting a second look.
+   */
+  it('reports one made executable in the same breath as an edit', async () => {
+    await writeFile(join(dir, 'a.txt'), 'one\nTWO\nthree\n', 'utf8')
+    await chmod(join(dir, 'a.txt'), 0o755)
+
+    const diff = await readDiff()
+
+    expect(diff.files[0]?.mode).toEqual({ from: '100644', to: '100755' })
+    expect(diff.files[0]?.hunks).not.toHaveLength(0)
+  })
+
+  // An ordinary edit says nothing about modes, so the line means something the
+  // moment it appears.
+  it('says nothing about the mode of a file that only changed', async () => {
+    await writeFile(join(dir, 'a.txt'), 'one\nTWO\nthree\n', 'utf8')
+
+    await expect(readDiff()).resolves.toMatchObject({ files: [{ mode: null }] })
+  })
+
+  /*
    * `diff.mnemonicPrefix` is an ordinary thing to have in a global gitconfig,
    * and it renames the prefixes to `c/` and `w/`. Every path would then fail to
    * match the listing it is paired with, and every file in the pane would draw
@@ -1012,6 +1088,10 @@ describe('readWorkspaceDiff', () => {
       if (args[0] === 'merge-base') return Promise.resolve('abc123\n')
       if (args.includes('--numstat')) return Promise.resolve('1\t0\tghost.txt\0')
       if (args.includes('--name-status')) return Promise.resolve('M\0ghost.txt\0')
+      // Answered like the other two listings, or the rejection below lands on
+      // this read instead of on the one that draws the lines — which is the
+      // failure the test is actually about.
+      if (args.includes('--raw')) return Promise.resolve('')
       if (args[0] === 'ls-files') return Promise.resolve('')
       return Promise.reject(new GitError(args, 'fatal: bad object', '128'))
     }

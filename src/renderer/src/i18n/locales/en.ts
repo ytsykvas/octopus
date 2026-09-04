@@ -516,6 +516,17 @@ export const en = {
     split: 'Side by side',
     splitTooNarrow: 'The panel is too narrow to show two columns — drag it wider.',
     renamedFrom: 'moved from {{path}}',
+    /* A permission change draws no lines at all, so without a line of its own
+       the row read as a file that changed nothing — beside a revert control.
+       Named rather than spelled in octal, because this is the bit that matters
+       here: octopus executes the scripts it chmods to 0755, and one without it
+       fails outright. */
+    modeExecutable: 'made executable',
+    modeNotExecutable: 'no longer executable',
+    /* Anything else — a file becoming a symlink, a gitlink — is rare enough
+       that the two modes are the clearest thing to show, and this is also what
+       makes a `T` row say what it turned into. */
+    modeChanged: 'mode {{from}} \u2192 {{to}}',
     binary: 'Binary file — nothing to show.',
     tooLarge: 'Too large to draw here. Open the file to read it.',
     revert: 'Revert',

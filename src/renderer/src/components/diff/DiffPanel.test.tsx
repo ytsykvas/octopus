@@ -193,6 +193,52 @@ describe('DiffPanel', () => {
     expect(await screen.findByText('moved from src/a.ts')).toBeInTheDocument()
   })
 
+  /*
+   * A permission change has no lines by construction, so without this the row
+   * was a chevron, an `M`, a path and a revert control — a live file that
+   * changed nothing, which reads as more confusing than an empty row.
+   */
+  it('says a file was made executable, which draws no lines at all', async () => {
+    answer(
+      workspaceDiff([fileDiff('run.sh', { mode: { from: '100644', to: '100755' }, hunks: [] })])
+    )
+    renderPanel()
+
+    expect(await screen.findByText('made executable')).toBeInTheDocument()
+  })
+
+  // The other direction has its own words rather than two octal numbers, since
+  // this is the bit octopus itself depends on.
+  it('says when one stopped being executable', async () => {
+    answer(
+      workspaceDiff([fileDiff('run.sh', { mode: { from: '100755', to: '100644' }, hunks: [] })])
+    )
+    renderPanel()
+
+    expect(await screen.findByText('no longer executable')).toBeInTheDocument()
+  })
+
+  /*
+   * Anything else is spelled, which is also what stops a type change being
+   * reported as a bare `T`: 100644 to 120000 is a file becoming a symlink.
+   */
+  it('spells a mode change that is not about the executable bit', async () => {
+    answer(workspaceDiff([fileDiff('link', { mode: { from: '100644', to: '120000' }, hunks: [] })]))
+    renderPanel()
+
+    expect(await screen.findByText('mode 100644 \u2192 120000')).toBeInTheDocument()
+  })
+
+  // And an ordinary edit says nothing about modes, so the line means something
+  // the moment it appears.
+  it('says nothing about the mode of a file that only changed', async () => {
+    answer(workspaceDiff([fileDiff('src/a.ts')]))
+    renderPanel()
+
+    await screen.findByRole('button', { name: 'src/a.ts' })
+    expect(screen.queryByText(/^mode |executable/)).not.toBeInTheDocument()
+  })
+
   it('says a binary file has nothing to show', async () => {
     answer(workspaceDiff([fileDiff('logo.png', { omitted: 'binary', hunks: [] })]))
     renderPanel()

@@ -1191,6 +1191,21 @@ was for. Sticky needs the scroller to be the only thing hiding its overflow
 between it and the header; an intermediate `overflow` anywhere in between and
 the headers stop sticking with nothing to say they have.
 
+**A file with no lines still says what happened to it.** A rename has none by
+construction and carries "moved from" above the body; a permission change has
+none either, and used to draw a chevron, an `M`, a path and a revert control —
+a live, revertable file that changed nothing, which reads worse than an empty
+row. It now says "made executable", or spells the two octal modes for anything
+rarer, which is also what stops a type change being reported as a bare `T`.
+Drawn for a file with hunks too: a mode change beside content changes was the
+quieter half, since the counts and the body made that row look completely
+explained.
+
+That bit is load-bearing here rather than a curiosity. octopus chmods the
+scripts it runs to 0755 and one without it fails outright, so `.octopus/`
+scripts and `.claude/hooks/` are exactly the files an agent makes executable in
+this app — and the pane was blind to a class of change the app then acts on.
+
 **What is measured against what.** The left-hand side is the merge base of the
 project's base branch and the workspace's HEAD, and the right-hand side is the
 working tree — so committed, staged and unstaged work all show, while whatever

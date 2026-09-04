@@ -35,6 +35,7 @@ function file(overrides: Partial<FileDiff> = {}): FileDiff {
   return {
     path: 'src/core/git.ts',
     oldPath: null,
+    mode: null,
     status: 'modified',
     added: 1,
     removed: 1,

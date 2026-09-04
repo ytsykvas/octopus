@@ -4,13 +4,14 @@ import type { FileDiff, Hunk, WorkspaceDiff } from '@core/diff.js'
  * A file the pane can draw, with the awkward parts filled in.
  *
  * Written as one helper rather than a literal per test: a `FileDiff` carries
- * seven fields and only two of them are ever what a test is about, so spelling
+ * eight fields and only two of them are ever what a test is about, so spelling
  * out the rest each time buries the assertion in scaffolding.
  */
 export function fileDiff(path: string, overrides: Partial<FileDiff> = {}): FileDiff {
   return {
     path,
     oldPath: null,
+    mode: null,
     status: 'modified',
     added: 1,
     removed: 1,
