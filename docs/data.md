@@ -209,10 +209,19 @@ answer. Whether a skill is on is that map over the project's
 resolved answer instead would freeze it: a skill added, renamed or removed after
 the conversation started would be stuck at a copy of defaults that no longer
 exist, and a conversation nobody has opened the panel in would carry a record of
-every skill on the machine. It is keyed the way the agent names a skill —
-`octopus:review` for one of ours, bare for one the checkout supplies — because
-the CLI looks an override up by the qualified name and falls back to the bare
-one, so a bare key of ours would silence a repository skill sharing the name.
+every skill on the machine.
+
+**It is keyed by the bare name, whichever source the skill came from.** The keys
+were once qualified — `octopus:review` for one of ours — on the theory that the
+CLI resolves a qualified override first and falls back to the bare one, so a
+bare key of ours would silence a repository skill sharing the name. Measured
+against a live session it does not: a `local-probe` in the checkout and a
+`local-probe` in our own store came back as **one row**, so they are one skill
+as far as the CLI is concerned, and a key that told them apart would be
+describing a distinction the agent does not have. `skillKey` in
+[`skillNames.ts`](../src/core/skillNames.ts) is the one place that says so, and
+the consequence is worth knowing rather than discovering: switching either row
+off switches both.
 
 `knownCommands` is the same kind of thing as `knownModels` above, kept in a
 different place for a reason worth stating: which models an account may use is a

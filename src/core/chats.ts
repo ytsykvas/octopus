@@ -575,8 +575,9 @@ export const ChatSchema = z.object({
    * defaults instead of being stuck at a stale copy of the old ones — and a
    * conversation nobody has opened the panel in stores nothing at all.
    *
-   * Keyed by the name the agent knows the skill by: `octopus:review` for one
-   * of ours, bare for one the checkout supplies.
+   * Keyed by the bare name, whichever source the skill came from — the keys
+   * were qualified once, and a live session showed two skills of one name
+   * coming back as a single row. `skillKey` is the one place that says so.
    */
   skillOverrides: z.record(z.string(), z.boolean()).default({}),
   createdAt: z.iso.datetime()
