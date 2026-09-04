@@ -122,7 +122,7 @@ export function useConfirm(): Confirmation {
                   onChange={(event) => {
                     setChecked(event.target.checked)
                   }}
-                  className="focus-ring accent-danger"
+                  className="choice choice-danger focus-ring"
                 />
                 <span className="text-ink-soft">{request.checkbox.label}</span>
               </label>

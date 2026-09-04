@@ -17,7 +17,7 @@ const VARIANTS: Record<ButtonVariant, string> = {
   danger: 'bg-transparent text-danger border-transparent hover:bg-danger-bg',
   // Filled: for the primary action of a confirmation, where it must be the
   // thing the eye lands on.
-  destructive: 'bg-danger text-white border-transparent hover:brightness-110'
+  destructive: 'bg-danger text-on-accent border-transparent hover:brightness-110'
 }
 
 const SIZES: Record<ButtonSize, string> = {

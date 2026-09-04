@@ -207,7 +207,7 @@ export function RepoConfig({
             onChange={(event) => {
               onTrustChange(event.target.checked)
             }}
-            className="focus-ring mt-0.5"
+            className="choice focus-ring mt-0.5"
           />
           <span className="text-ink-soft leading-relaxed">{t('project.repoTrustHint')}</span>
         </label>
@@ -331,7 +331,7 @@ function Row({
           type="checkbox"
           checked={checked}
           onChange={onToggle}
-          className="focus-ring accent-accent"
+          className="choice focus-ring"
           aria-label={item.path}
         />
         <span className="text-ink flex-1 truncate font-mono text-[11px]">{item.path}</span>

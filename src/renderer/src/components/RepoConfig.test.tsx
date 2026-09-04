@@ -261,6 +261,30 @@ describe('RepoConfig', () => {
     expect(screen.getByRole('button', { name: 'Export' })).toBeEnabled()
   })
 
+  /*
+   * A class assertion, for the reason `PullRequestPanel.test.tsx` gives beside
+   * its own: the class is what makes the control exist. Without `.choice` the
+   * platform paints it — `accent-color` alone leaves the **unchecked** box a
+   * white square on the dark canvas, because there is no `color-scheme` opt-in
+   * anywhere, and it fixes neither the size nor the corner. jsdom computes no
+   * layout, so nothing else here could catch it.
+   */
+  it('paints its checkbox from the theme rather than leaving it to the platform', async () => {
+    offer({ items: [item('project', PROJECT, null, '{"baseBranch":"main"}')] })
+
+    render(
+      <RepoConfig
+        projectId="planner"
+        workspaceId={null}
+        trusted={false}
+        onTrustChange={vi.fn()}
+        onImported={vi.fn()}
+      />
+    )
+
+    expect(await screen.findByRole('checkbox', { name: PROJECT })).toHaveClass('choice')
+  })
+
   // Both lists are read again afterwards, so a file that has just been written
   // stops claiming the two sides differ.
   it('reads both sides again once something has moved', async () => {

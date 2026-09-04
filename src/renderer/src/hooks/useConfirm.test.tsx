@@ -192,6 +192,27 @@ describe('useConfirm', () => {
     expect(answer).toHaveBeenCalledWith({ confirmed: true, checked: true })
   })
 
+  /*
+   * A class assertion, for the reason `PullRequestPanel.test.tsx` gives beside
+   * its own: the class is what makes the control exist. Without `.choice` the
+   * platform paints it, and with no `color-scheme` opt-in Chromium's used
+   * scheme is light — so the box was a white square on the dark canvas, in the
+   * one dialog a reader is asked to look at carefully. jsdom computes no
+   * layout, so nothing else here could catch it.
+   *
+   * `choice-danger` rather than plain `.choice`: the tick sits above a
+   * destructive button and is coloured to match it, and a swap would have
+   * turned a deliberate red into the accent blue.
+   */
+  it('paints the checkbox from the theme, in the danger colour it is asking in', async () => {
+    await ask({ ...QUESTION, destructive: true, checkbox: { label: 'Also delete the branch' } })
+
+    expect(screen.getByRole('checkbox', { name: 'Also delete the branch' })).toHaveClass(
+      'choice',
+      'choice-danger'
+    )
+  })
+
   it('reports the checkbox as untouched when it was left alone', async () => {
     const { answer, user } = await ask({
       ...QUESTION,

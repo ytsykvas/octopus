@@ -74,6 +74,11 @@ over its own content.
 - `.project-tinted` / `.bubble-sent` / `.tab-selected` — where a project's
   colour turns into a surface;
 - `.input` — text field, and anything shaped like one;
+- `.choice` — **every** checkbox and radio, with `.choice-danger` for the tick
+  inside a destructive confirmation. Not optional and not replaceable by
+  `accent-color`: that colours the checked fill and leaves the empty box a
+  white square on the dark canvas. Three of six inputs were left without it
+  because this list did not name it;
 - `.section-label` — section heading (11px, weight 600, muted);
 - `.focus-ring` — visible keyboard focus;
 - `.titlebar-drag` — window drag region.

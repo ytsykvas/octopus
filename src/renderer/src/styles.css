@@ -340,6 +340,24 @@
     opacity: 0.55;
   }
 
+  /* The same control in the one place where the accent would say the wrong
+     thing: the tick inside a destructive confirmation — "also delete the
+     branch" — which is coloured to match the button it sits above. A modifier
+     rather than a swap, because dropping plain `.choice` there turns a
+     deliberate red into blue and removes a signal somebody chose. */
+  .choice-danger:hover:not(:disabled) {
+    border-color: var(--danger);
+  }
+
+  /* Only the fill and the border. The tick keeps `--on-accent` from the rule
+     above, which is white in both themes and means "ink on a saturated fill"
+     rather than anything about the accent in particular — a second token
+     holding the same value would be one more thing to keep in step. */
+  .choice-danger[type='checkbox']:checked {
+    border-color: var(--danger);
+    background-color: var(--danger);
+  }
+
   /* List row: highlighted on hover, stronger when selected. */
   .row {
     border-radius: var(--radius-control);

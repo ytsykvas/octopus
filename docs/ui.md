@@ -1607,9 +1607,18 @@ rather than as pixel art.
 
 ## Ready-made classes
 
-`.panel` · `.row` / `.row-selected` · `.input` · `.section-label` ·
-`.focus-ring` · `.titlebar-drag` · `.project-tinted` · `.bubble-sent` ·
-`.tab-selected`
+`.panel` · `.row` / `.row-selected` · `.input` · `.choice` / `.choice-danger` ·
+`.section-label` · `.focus-ring` · `.titlebar-drag` · `.project-tinted` ·
+`.bubble-sent` · `.tab-selected`
+
+**`.choice` goes on every checkbox and radio**, and being absent from this list
+is why three of the six were left painted by the platform for months. Without
+it the box is Chromium's own — its shape, its size, and on macOS the system
+highlight colour, whatever the user set that to. `accent-color` is not the
+cheap version of it either: it colours the **checked** fill and leaves the empty
+box a white square on the dark canvas, since nothing here opts into
+`color-scheme`. `.choice-danger` is the one modifier: the same control in the
+danger colour, for the tick inside a destructive confirmation.
 
 The last three are where a project's colour turns into a surface, and they are
 classes rather than inline styles on purpose: the component says _which_ project,

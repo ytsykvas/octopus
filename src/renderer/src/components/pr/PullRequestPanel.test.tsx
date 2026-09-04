@@ -305,20 +305,6 @@ describe('the pull request tab', () => {
   })
 
   /*
-   * A class assertion, which is normally the wrong thing to write — it tests a
-   * look rather than what a person can do.
-   *
-   * It earns its place here because the class is what makes this control exist:
-   * `.choice` is `appearance: none` plus the box and the tick painted by hand,
-   * and it was written for the input. Put on the label instead, it sized the
-   * label at 0.875rem and the words wrapped inside a square the size of a tick,
-   * overlapping the button below.
-   *
-   * Nothing else catches that. jsdom computes no layout, so the checkbox stayed
-   * reachable by its accessible name throughout — the test above passed against
-   * the broken form.
-   */
-  /*
    * The whole point of the empty state: pressing the button asks rather than
    * opens. A pull request is outside this window and awkward to take back, so
    * text nobody has read does not go out under their name.
@@ -447,6 +433,20 @@ describe('the pull request tab', () => {
     expect(screen.queryByLabelText('Title')).not.toBeInTheDocument()
   })
 
+  /*
+   * A class assertion, which is normally the wrong thing to write — it tests a
+   * look rather than what a person can do.
+   *
+   * It earns its place here because the class is what makes this control exist:
+   * `.choice` is `appearance: none` plus the box and the tick painted by hand,
+   * and it was written for the input. Put on the label instead, it sized the
+   * label at 0.875rem and the words wrapped inside a square the size of a tick,
+   * overlapping the button below.
+   *
+   * Nothing else catches that. jsdom computes no layout, so the checkbox stayed
+   * reachable by its accessible name throughout — the test beside it passed
+   * against the broken form.
+   */
   it('paints the checkbox on the input, where the class is defined', async () => {
     answer(view())
     renderPanel()
