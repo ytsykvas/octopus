@@ -1498,18 +1498,22 @@ describe('workspaces of a real project', () => {
   it('closes one by number, and refuses a number that is not one', async () => {
     const projectId = await addProject('closing')
     const asked: string[][] = []
+    // Answers the guard with whatever branch this workspace is on, so the
+    // channel is exercised rather than the refusal.
+    let branch = ''
     service = await useService({
       makeGh: () => (args) => {
         asked.push([...args])
-        return Promise.resolve('')
+        return Promise.resolve(args[1] === 'view' ? JSON.stringify({ headRefName: branch }) : '')
       }
     })
     const workspace = await createWorkspace(projectId)
+    branch = workspace.branch
 
     await expect(invoke('workspaces:closePullRequest', workspace.id, 7)).resolves.toMatchObject({
       ok: true
     })
-    expect(asked[0]).toEqual(['pr', 'close', '7'])
+    expect(asked[1]).toEqual(['pr', 'close', '7'])
 
     // The number becomes an argument to gh, so it is proved to be one here.
     await expect(
@@ -1520,22 +1524,54 @@ describe('workspaces of a real project', () => {
   it('merges by the method it is given, and refuses one it is not', async () => {
     const projectId = await addProject('merging')
     const asked: string[][] = []
+    let branch = ''
     service = await useService({
       makeGh: () => (args) => {
         asked.push([...args])
-        return Promise.resolve('')
+        return Promise.resolve(args[1] === 'view' ? JSON.stringify({ headRefName: branch }) : '')
+      }
+    })
+    const workspace = await createWorkspace(projectId)
+    branch = workspace.branch
+
+    await expect(
+      invoke('workspaces:mergePullRequest', workspace.id, 7, 'squash')
+    ).resolves.toMatchObject({ ok: true })
+    expect(asked[1]).toEqual(['pr', 'merge', '7', '--squash'])
+
+    await expect(
+      invoke('workspaces:mergePullRequest', workspace.id, 7, 'fast-forward')
+    ).resolves.toMatchObject({ ok: false })
+  })
+
+  /*
+   * The end of the guard, through the whole bridge: the service takes the
+   * branch off the workspace record rather than from the window, so a number
+   * belonging to another branch of the same repository is refused before `gh`
+   * is asked to merge anything.
+   *
+   * `gh pr merge 7` resolves 7 against the repository, not against the worktree
+   * it is standing in, and merging does not come back. The window used to be
+   * the only thing keeping the pair honest.
+   */
+  it('refuses a number that belongs to another branch of the repository', async () => {
+    const projectId = await addProject('mismatch')
+    const asked: string[][] = []
+    service = await useService({
+      makeGh: () => (args) => {
+        asked.push([...args])
+        return Promise.resolve(
+          args[1] === 'view' ? JSON.stringify({ headRefName: 'someone/else' }) : ''
+        )
       }
     })
     const workspace = await createWorkspace(projectId)
 
     await expect(
       invoke('workspaces:mergePullRequest', workspace.id, 7, 'squash')
-    ).resolves.toMatchObject({ ok: true })
-    expect(asked[0]).toEqual(['pr', 'merge', '7', '--squash'])
+    ).resolves.toMatchObject({ ok: false, code: 'requestNotOnBranch' })
 
-    await expect(
-      invoke('workspaces:mergePullRequest', workspace.id, 7, 'fast-forward')
-    ).resolves.toMatchObject({ ok: false })
+    expect(asked.map((call) => call[1])).toEqual(['view'])
   })
 
   it('answers with every branch of a project that has a request', async () => {

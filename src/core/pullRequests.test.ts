@@ -578,20 +578,23 @@ describe('committing an answer onto a request that exists', () => {
 
 describe('merging one', () => {
   it('merges by the method it was given', async () => {
-    const { gh, calls } = fakeGh({ merge: '' })
+    const { gh, calls } = fakeGh({ view: '{"headRefName":"octopus/anna"}', merge: '' })
 
-    await mergePullRequest(7, 'squash', gh)
+    await mergePullRequest(7, 'squash', 'octopus/anna', gh)
 
-    expect(calls[0]).toEqual(['pr', 'merge', '7', '--squash'])
+    expect(calls[1]).toEqual(['pr', 'merge', '7', '--squash'])
   })
 
   it('has a flag for each of the three ways', async () => {
-    const { gh, calls } = fakeGh({ merge: '' })
+    const { gh, calls } = fakeGh({ view: '{"headRefName":"octopus/anna"}', merge: '' })
 
-    await mergePullRequest(7, 'merge', gh)
-    await mergePullRequest(7, 'rebase', gh)
+    await mergePullRequest(7, 'merge', 'octopus/anna', gh)
+    await mergePullRequest(7, 'rebase', 'octopus/anna', gh)
 
-    expect(calls.map((call) => call[3])).toEqual(['--merge', '--rebase'])
+    expect(calls.filter((call) => call[1] === 'merge').map((call) => call[3])).toEqual([
+      '--merge',
+      '--rebase'
+    ])
   })
 
   /*
@@ -600,17 +603,70 @@ describe('merging one', () => {
    * caused itself.
    */
   it('leaves the branch alone', async () => {
-    const { gh, calls } = fakeGh({ merge: '' })
+    const { gh, calls } = fakeGh({ view: '{"headRefName":"octopus/anna"}', merge: '' })
 
-    await mergePullRequest(7, 'merge', gh)
+    await mergePullRequest(7, 'merge', 'octopus/anna', gh)
 
-    expect(calls[0]).not.toContain('--delete-branch')
+    expect(calls[1]).not.toContain('--delete-branch')
+  })
+
+  /*
+   * The guard, and the whole of it is the negative: `gh pr merge 7` resolves 7
+   * against the **repository**, not against the branch the working directory is
+   * on, so a number left over from another workspace would merge whatever it
+   * names. Merging does not come back.
+   *
+   * Asserting the throw alone would pass for a guard that refused after asking
+   * `gh` to merge, which is no guard at all — so the calls are what this reads.
+   */
+  it('refuses a number that belongs to another branch, without asking gh to merge', async () => {
+    const { gh, calls } = fakeGh({ view: '{"headRefName":"octopus/bo"}', merge: '' })
+
+    await expect(mergePullRequest(7, 'merge', 'octopus/anna', gh)).rejects.toMatchObject({
+      code: 'requestNotOnBranch',
+      params: { number: '7', head: 'octopus/bo', branch: 'octopus/anna' }
+    })
+
+    expect(calls.map((call) => call[1])).toEqual(['view'])
+  })
+
+  it('refuses to close one belonging to another branch too', async () => {
+    const { gh, calls } = fakeGh({ view: '{"headRefName":"octopus/bo"}', close: '' })
+
+    await expect(closePullRequest(7, 'octopus/anna', gh)).rejects.toMatchObject({
+      code: 'requestNotOnBranch'
+    })
+
+    expect(calls.map((call) => call[1])).toEqual(['view'])
+  })
+
+  // One field, not the fourteen `readPullRequestDetail` asks for — which would
+  // also cost a GraphQL round trip for threads nobody is about to read.
+  it('asks GitHub only which branch the request is on', async () => {
+    const { gh, calls } = fakeGh({ view: '{"headRefName":"octopus/anna"}', merge: '' })
+
+    await mergePullRequest(7, 'merge', 'octopus/anna', gh)
+
+    expect(calls[0]).toEqual(['pr', 'view', '7', '--json', 'headRefName'])
+  })
+
+  // An answer of the wrong shape is refused rather than compared against
+  // `undefined`, which would make every merge look like the wrong branch.
+  it('refuses an answer that does not say which branch it is', async () => {
+    const { gh } = fakeGh({ view: '{"headRefName":""}', merge: '' })
+
+    await expect(mergePullRequest(7, 'merge', 'octopus/anna', gh)).rejects.toMatchObject({
+      code: 'listFailed'
+    })
   })
 
   it('says GitHub would not merge rather than swallowing it', async () => {
-    const { gh } = fakeGh({ merge: new Error('not mergeable') })
+    const { gh } = fakeGh({
+      view: '{"headRefName":"octopus/anna"}',
+      merge: new Error('not mergeable')
+    })
 
-    await expect(mergePullRequest(7, 'merge', gh)).rejects.toMatchObject({
+    await expect(mergePullRequest(7, 'merge', 'octopus/anna', gh)).rejects.toMatchObject({
       code: 'mergeFailed',
       params: { number: '7' }
     })
@@ -619,11 +675,11 @@ describe('merging one', () => {
 
 describe('closing one', () => {
   it('closes by number', async () => {
-    const { gh, calls } = fakeGh({ close: '' })
+    const { gh, calls } = fakeGh({ view: '{"headRefName":"octopus/anna"}', close: '' })
 
-    await closePullRequest(7, gh)
+    await closePullRequest(7, 'octopus/anna', gh)
 
-    expect(calls[0]).toEqual(['pr', 'close', '7'])
+    expect(calls[1]).toEqual(['pr', 'close', '7'])
   })
 
   /*
@@ -632,19 +688,20 @@ describe('closing one', () => {
    * the workspace is removed, by somebody who was shown what it costs.
    */
   it('leaves the branch alone', async () => {
-    const { gh, calls } = fakeGh({ close: '' })
+    const { gh, calls } = fakeGh({ view: '{"headRefName":"octopus/anna"}', close: '' })
 
-    await closePullRequest(7, gh)
+    await closePullRequest(7, 'octopus/anna', gh)
 
-    expect(calls[0]).not.toContain('--delete-branch')
+    expect(calls[1]).not.toContain('--delete-branch')
   })
 
   it('carries what gh said about refusing', async () => {
     const { gh } = fakeGh({
+      view: '{"headRefName":"octopus/anna"}',
       close: Object.assign(new Error('failed'), { stderr: 'could not close: already merged' })
     })
 
-    await expect(closePullRequest(7, gh)).rejects.toMatchObject({
+    await expect(closePullRequest(7, 'octopus/anna', gh)).rejects.toMatchObject({
       code: 'closeFailed',
       params: { number: '7', reason: 'could not close: already merged' }
     })

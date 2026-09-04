@@ -76,6 +76,10 @@ export type GitHubErrorCode =
   | 'createFailed'
   | 'mergeFailed'
   | 'closeFailed'
+  // Refused before `gh` is asked to do anything: `gh` resolves a number against
+  // the repository rather than against the branch it is standing in, so a stale
+  // number would merge whatever it names.
+  | 'requestNotOnBranch'
   // Asking the agent to write the title and body is on the way to a pull
   // request too, and fails in the same place as far as the reader is concerned.
   | 'draftFailed'

@@ -885,6 +885,8 @@ export const uk: Translation = {
     nothingToCommit: 'Тут немає чого комітити.',
     commitFailed: 'Не вдалося зробити коміт. Git каже: {{reason}}',
     mergeFailed: 'GitHub не влив #{{number}}. Каже: {{reason}}',
+    requestNotOnBranch:
+      'Запит #{{number}} у гілці {{head}}, а не в {{branch}} цього воркспейсу. Нічого не зроблено.',
     closeFailed: 'GitHub не закрив #{{number}}. Каже: {{reason}}',
     alreadyExists: '{{path}} уже існує. Додайте його з диска.',
     branchUnmerged:

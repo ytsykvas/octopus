@@ -86,6 +86,12 @@ export function useErrorMessage(): (failure: Failure) => string {
             number: failure.params?.number ?? '',
             reason: failure.params?.reason ?? ''
           })
+        case 'requestNotOnBranch':
+          return t('errors.requestNotOnBranch', {
+            number: failure.params?.number ?? '',
+            head: failure.params?.head ?? '',
+            branch: failure.params?.branch ?? ''
+          })
         case 'branchUnmerged':
           return t('errors.branchUnmerged', { branch: failure.params?.branch ?? '' })
         case 'branchExists':

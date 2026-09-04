@@ -93,6 +93,7 @@ const CODE_PARAMETERS: Record<CoreErrorCode, Interpolated> = {
   pushFailed: { branch: 'octopus/anna', reason: 'rejected' },
   closeFailed: { number: '42', reason: 'already closed' },
   mergeFailed: { number: '42', reason: 'checks failing' },
+  requestNotOnBranch: { number: '42', head: 'octopus/bo', branch: 'octopus/anna' },
   repoConfigSymlink: { path: '.octopus/scripts/setup.sh' },
   repoConfigTooLarge: { path: '.octopus/carry' },
   repoConfigMalformed: { path: '.octopus/project.json' },

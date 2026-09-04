@@ -3122,12 +3122,12 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
 
     mergePullRequest(workspaceId, number, method) {
       const workspace = requireWorkspace(workspaceId)
-      return mergePullRequest(number, method, makeGh(workspace.path))
+      return mergePullRequest(number, method, workspace.branch, makeGh(workspace.path))
     },
 
     closePullRequest(workspaceId, number) {
       const workspace = requireWorkspace(workspaceId)
-      return closePullRequest(number, makeGh(workspace.path))
+      return closePullRequest(number, workspace.branch, makeGh(workspace.path))
     },
 
     readBranchRequests(projectId) {

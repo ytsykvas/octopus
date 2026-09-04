@@ -1053,6 +1053,11 @@ export const en = {
     nothingToCommit: 'There is nothing here to commit.',
     commitFailed: 'Could not commit the changes. Git said: {{reason}}',
     mergeFailed: 'GitHub would not merge #{{number}}. It said: {{reason}}',
+    /* Refused before `gh` was asked to do anything. Names both branches,
+       because the reader's question is which request the button was about — and
+       the number alone cannot answer it. */
+    requestNotOnBranch:
+      'Pull request #{{number}} is on {{head}}, not on this workspace\u2019s {{branch}}. Nothing was done.',
     closeFailed: 'GitHub would not close #{{number}}. It said: {{reason}}',
     alreadyExists: '{{path}} already exists. Add it from disk instead.',
     branchUnmerged:

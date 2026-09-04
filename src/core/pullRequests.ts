@@ -382,6 +382,42 @@ const MERGE_FLAGS: Record<MergeMethod, string> = {
   rebase: '--rebase'
 }
 
+/** What a one-field `gh pr view` answers when asked which branch a request is on. */
+const HeadRefSchema = z.object({ headRefName: z.string().min(1) })
+
+/**
+ * Refuses a number that belongs to some other branch of the same repository.
+ *
+ * `gh pr merge 7` resolves 7 against the **repository**, not against the branch
+ * the working directory happens to be on, so a stale number drawn beside one
+ * workspace merges whatever it names. The window was the only thing keeping the
+ * pair honest, and it did so by never drawing a mismatch — which it failed to
+ * do for one release, through a generation counter claimed after an await.
+ *
+ * Guarded where the act happens rather than where it is drawn, which is this
+ * codebase's habit for anything irreversible: `revertFile` refuses a path
+ * outside the worktree though the pane cannot produce one, and
+ * `RevertPathSchema` rejects at the boundary. One `gh` call, on something
+ * somebody does a few times a day, and merging does not come back.
+ *
+ * Its own one-field view rather than `readPullRequestDetail`, which asks for
+ * fourteen fields and then a GraphQL round trip for the threads.
+ */
+async function refuseAnotherBranch(number: number, branch: string, gh: GhExec): Promise<void> {
+  const { headRefName } = shaped(
+    HeadRefSchema,
+    parsed(await asked(() => gh(['pr', 'view', String(number), '--json', 'headRefName'])))
+  )
+
+  if (headRefName === branch) return
+
+  throw new GitHubError(
+    'requestNotOnBranch',
+    { number: String(number), branch, head: headRefName },
+    `Pull request #${String(number)} is on ${headRefName}, not ${branch}.`
+  )
+}
+
 /**
  * Merges the request.
  *
@@ -397,8 +433,11 @@ const MERGE_FLAGS: Record<MergeMethod, string> = {
 export async function mergePullRequest(
   number: number,
   method: MergeMethod,
+  branch: string,
   gh: GhExec
 ): Promise<void> {
+  await refuseAnotherBranch(number, branch, gh)
+
   try {
     await gh(['pr', 'merge', String(number), MERGE_FLAGS[method]])
   } catch (error) {
@@ -419,7 +458,9 @@ export async function mergePullRequest(
  *
  * Reversible on GitHub, which is why nothing here asks twice.
  */
-export async function closePullRequest(number: number, gh: GhExec): Promise<void> {
+export async function closePullRequest(number: number, branch: string, gh: GhExec): Promise<void> {
+  await refuseAnotherBranch(number, branch, gh)
+
   try {
     await gh(['pr', 'close', String(number)])
   } catch (error) {
