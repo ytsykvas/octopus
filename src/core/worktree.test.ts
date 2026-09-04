@@ -182,6 +182,32 @@ describe('addWorktree', () => {
     await expect(addWorktree(exec, join(dir, 'two'), 'ytsykvas/task', 'main')).rejects.toThrow()
   })
 
+  /*
+   * The hazard this closes, and it is invisible on a machine configured like
+   * the one it was found on.
+   *
+   * Every base with a remote resolves to a remote-tracking ref, and git's
+   * default `branch.autoSetupMerge` sets an upstream when a branch starts from
+   * one. Under stock `push.default=simple` a bare `git push` in the worktree —
+   * from the terminal, or from the agent, which runs git freely — is then
+   * refused, and the **first** thing git suggests is `git push origin
+   * HEAD:main`. Following that puts a workspace's work straight onto the base
+   * branch, which is the one outcome a worktree per task exists to prevent.
+   *
+   * Built on `addRemote` on purpose: from a local `main` no upstream is set
+   * either way, so the same assertion against the other fixture would pass
+   * before the fix and prove nothing.
+   */
+  it('starts the branch tracking nothing, even from a remote base', async () => {
+    await addRemote()
+
+    await addWorktree(exec, join(dir, 'wt'), 'ytsykvas/task', 'origin/main')
+
+    await expect(
+      exec(['rev-parse', '--abbrev-ref', '--symbolic-full-name', 'ytsykvas/task@{upstream}'])
+    ).rejects.toThrow()
+  })
+
   it('refuses a path that is already occupied', async () => {
     await addWorktree(exec, join(dir, 'wt'), 'ytsykvas/one', 'main')
     await expect(addWorktree(exec, join(dir, 'wt'), 'ytsykvas/two', 'main')).rejects.toThrow()

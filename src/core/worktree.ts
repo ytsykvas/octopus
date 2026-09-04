@@ -83,14 +83,37 @@ export async function listWorktrees(exec: GitExec): Promise<Worktree[]> {
   return parseWorktrees(await exec(['worktree', 'list', '--porcelain']))
 }
 
-/** Creates a worktree on a new branch started from `base`. */
+/**
+ * Creates a worktree on a new branch started from `base`.
+ *
+ * `--no-track`, and it is load-bearing. `base` is whatever `resolveBase`
+ * answered, which for any repository with a remote is a remote-tracking ref —
+ * and git's default `branch.autoSetupMerge` sets an upstream when a branch
+ * starts from one of those. Every workspace branch was therefore born tracking
+ * `origin/main`, which nothing here asked for and nothing here uses:
+ * `pullRequests.push` passes `-u origin <branch>` itself, and both
+ * `deleteBranch` call sites force, so `git branch -d`'s upstream-aware check is
+ * never reached.
+ *
+ * What it costs is worse than untidiness. Under stock `push.default=simple` a
+ * bare `git push` in the worktree is refused, and the **first** of the three
+ * things git then suggests is `git push origin HEAD:main` — which puts the
+ * workspace's work directly onto the project's base branch, the one outcome a
+ * worktree per task exists to prevent. A machine with `push.default=current`
+ * sees none of this, so it is easy to look for and conclude there is nothing
+ * here.
+ *
+ * One flag rather than `branch.autoSetupMerge=false`: teaching the app to write
+ * git config would be the first such write in `src/core`, and it would leak
+ * into the user's own work in that checkout.
+ */
 export async function addWorktree(
   exec: GitExec,
   path: string,
   branch: string,
   base: string
 ): Promise<void> {
-  await exec(['worktree', 'add', '-b', branch, path, base])
+  await exec(['worktree', 'add', '--no-track', '-b', branch, path, base])
 }
 
 /**

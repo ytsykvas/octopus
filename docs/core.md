@@ -156,6 +156,18 @@ project added from a local folder, and it is answered by the first command.
 back. A stale base is the whole failure being prevented, so producing the
 workspace anyway would defeat the point.
 
+**The branch that results tracks nothing, and `--no-track` is what makes sure
+of it.** Starting a branch from a remote-tracking ref is exactly the case git's
+default `branch.autoSetupMerge` sets an upstream for, so once every base
+resolved to `origin/…` every workspace branch was born tracking the project's
+base. Nothing reads that upstream — the pull-request path pushes with
+`-u origin <branch>` itself — but under stock `push.default=simple` a bare
+`git push` in the worktree is refused, and the first thing git suggests is
+`git push origin HEAD:main`. A hurried reader following the suggestion puts the
+workspace's work onto the base branch, which is what a worktree per task exists
+to prevent. It is invisible with `push.default=current`, so looking for it on
+the wrong machine finds nothing.
+
 The fetch is the only command in `src/core` that leaves the machine on purpose,
 and the only one given a deadline and an environment. `GIT_TERMINAL_PROMPT=0` is
 the load-bearing half: git spawned from Electron has no controlling terminal, so
