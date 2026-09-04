@@ -3033,11 +3033,11 @@ describe('the agent chat', () => {
   }
 
   /** A tool's answer travels in the user role — the SDK models it as given *to* the model. */
-  function toolResultMessage(id: string, ok: boolean): SDKMessage {
+  function toolResultMessage(id: string, ok: boolean, content = 'done'): SDKMessage {
     return {
       type: 'user',
       message: {
-        content: [{ type: 'tool_result', tool_use_id: id, is_error: !ok, content: 'done' }]
+        content: [{ type: 'tool_result', tool_use_id: id, is_error: !ok, content }]
       },
       parent_tool_use_id: null,
       uuid: 'u-result',
@@ -4922,6 +4922,65 @@ describe('the agent chat', () => {
         expect(events.some((entry) => entry.event.type === 'tool_result')).toBe(true)
       })
       expect(events.some((entry) => entry.event.type === 'change_context')).toBe(false)
+    })
+
+    /*
+     * Nothing can draw a successful result's content — `AgentRow` returns null
+     * when the call succeeded, and the fold renders only `tool_use` entries —
+     * so the transcript was carrying a `Read` of three thousand lines in full,
+     * to be parsed back on every open and dropped at render time.
+     *
+     * Both halves are asserted, because the fix is a distinction: the window
+     * still gets the whole event, and only what is written down is bounded.
+     */
+    it('writes only the head of a long tool result, and streams the whole of it', async () => {
+      const { service, workspaceId, events } = await withWorkspace()
+      const chat = await service.openChat(workspaceId)
+      await service.sendToChat(chat.id, 'read it')
+
+      agent().emit(toolCallMessage('c-1', 'Read', { file_path: '/a.ts' }))
+      agent().emit(toolResultMessage('c-1', true, 'x'.repeat(5000)))
+
+      await vi.waitFor(async () => {
+        await expect(service.chatHistory(chat.id)).resolves.toContainEqual(
+          expect.objectContaining({
+            role: 'agent',
+            event: {
+              type: 'tool_result',
+              toolUseId: 'c-1',
+              ok: true,
+              content: 'x'.repeat(2000),
+              truncated: true
+            }
+          })
+        )
+      })
+
+      expect(events).toContainEqual(
+        expect.objectContaining({
+          event: { type: 'tool_result', toolUseId: 'c-1', ok: true, content: 'x'.repeat(5000) }
+        })
+      )
+    })
+
+    // A failure keeps everything, because its content is the whole of what the
+    // failure says and the pane shortens it from the middle for reading.
+    it('writes the whole of a long failure', async () => {
+      const { service, workspaceId } = await withWorkspace()
+      const chat = await service.openChat(workspaceId)
+      await service.sendToChat(chat.id, 'read it')
+
+      agent().emit(toolCallMessage('c-1', 'Read', { file_path: '/a.ts' }))
+      agent().emit(toolResultMessage('c-1', false, 'x'.repeat(5000)))
+
+      await vi.waitFor(async () => {
+        await expect(service.chatHistory(chat.id)).resolves.toContainEqual(
+          expect.objectContaining({
+            role: 'agent',
+            event: { type: 'tool_result', toolUseId: 'c-1', ok: false, content: 'x'.repeat(5000) }
+          })
+        )
+      })
     })
 
     /*

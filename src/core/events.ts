@@ -68,7 +68,16 @@ export const AgentEventSchema = z.discriminatedUnion('type', [
     type: z.literal('tool_result'),
     toolUseId: z.string(),
     ok: z.boolean(),
-    content: z.string()
+    content: z.string(),
+    /**
+     * Whether `content` is only the head of what the tool actually said.
+     *
+     * A field rather than a trailing ellipsis in the text, because a later
+     * reader has to tell a cut output from one that happened to end that way.
+     * Only ever set on the transcript's copy — see `forTranscript` below; the
+     * live event carries the whole thing.
+     */
+    truncated: z.boolean().optional()
   }),
 
   /**
@@ -242,6 +251,44 @@ export type AgentEvent = Readonly<z.infer<typeof AgentEventSchema>>
  * later says nothing, and it would put a row in the log nobody asked for.
  * The command list is ephemeral on the same grounds.
  */
+/**
+ * How much of a successful tool result is worth writing down.
+ *
+ * Enough to recognise what came back and to make a head of a build log useful,
+ * and far short of a file. There is no right number; what there was before was
+ * no number at all.
+ */
+const KEPT_RESULT_CHARS = 2000
+
+/**
+ * The event as the transcript should keep it.
+ *
+ * The sibling of `isEphemeral`: that one says whether an event is written down
+ * at all, this one says how much of it. A successful tool result is the only
+ * thing they treat differently, and it is the only one that needed to be —
+ * nothing can draw its content today. `AgentRow` returns null when `ok`, and
+ * the fold renders only `tool_use` entries, so a `Read` of three thousand
+ * lines was written to disk in full, parsed back on every open, shipped over
+ * IPC and held in the window, to be dropped at render time. The transcript is
+ * append-only and never trimmed, so opening a conversation cost what the agent
+ * had **read** rather than what it said.
+ *
+ * Bounded rather than dropped, because the fold opens into the working-out and
+ * showing a call's output there is the obvious next thing to build. Dropping
+ * the field would spend that option to save the same bytes.
+ *
+ * **A failure keeps everything.** Its content is drawn, and is the whole of
+ * what a failure says; the pane shortens it from the middle for display, which
+ * is a choice about reading rather than about storage, and cutting the tail
+ * here would take the half that names the cause.
+ */
+export function forTranscript(event: AgentEvent): AgentEvent {
+  if (event.type !== 'tool_result' || !event.ok) return event
+  if (event.content.length <= KEPT_RESULT_CHARS) return event
+
+  return { ...event, content: event.content.slice(0, KEPT_RESULT_CHARS), truncated: true }
+}
+
 export function isEphemeral(event: AgentEvent): boolean {
   return (
     event.type === 'text_delta' ||

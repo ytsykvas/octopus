@@ -159,6 +159,9 @@ describe('every kind of event survives being written and read', () => {
     { type: 'thinking', text: 'weighing it up' },
     { type: 'tool_use', toolUseId: 'c-1', name: 'Edit', input: { file_path: '/a.ts' } },
     { type: 'tool_result', toolUseId: 'c-1', ok: true, content: 'done' },
+    // The cut mark has to survive the round trip too, or a fold that offered
+    // to show the rest would offer it on every result it read back.
+    { type: 'tool_result', toolUseId: 'c-2', ok: true, content: 'head', truncated: true },
     {
       type: 'change_context',
       toolUseId: 'c-1',

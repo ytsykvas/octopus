@@ -407,6 +407,24 @@ with full confidence and be wrong. It is re-learned from the first turn that run
 live child process, and once that process ends the next one rebuilds a context
 we never observed.
 
+**A successful tool result keeps only its head**, 2000 characters, marked
+`truncated` so a reader can tell a cut output from one that simply ended.
+Nothing can draw that content today — the log returns null for a call that
+succeeded, and the fold renders only the calls, not their answers — so a `Read`
+of three thousand lines, a `Bash` printing a build log and a `Grep` across the
+repository were each written whole, parsed back on every open, shipped over IPC
+and held in the window, to be dropped at render time. The transcript is
+append-only and never trimmed, so the cost of opening a conversation grew with
+everything the agent had **read** rather than with what it said.
+
+Bounded rather than dropped, deliberately: the fold opens into the working-out
+and showing a call's output there is the obvious next thing to build, so
+throwing the field away would spend that option to save the same bytes. **A
+failure keeps everything** — its content is the whole of what the failure says,
+and the pane shortening it from the middle is a decision about reading rather
+than about storage. And the bound is on the transcript alone: the live event
+reaching the window carries the lot.
+
 **The plan windows are the exception, and were not always.** They used to be
 cached beside the rate limit and go no further, on the reasoning above — a
 reading restored after a night would be drawn with full confidence and be

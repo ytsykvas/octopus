@@ -81,7 +81,7 @@ import {
   type SettingSourceName,
   toSdkSettingSources
 } from './config.js'
-import { type AgentEvent, isEphemeral } from './events.js'
+import { type AgentEvent, forTranscript, isEphemeral } from './events.js'
 import { cloneRepository, listRepositories, type RemoteRepository } from './github.js'
 import type { GitExec, GitOptions } from './git.js'
 import {
@@ -1540,7 +1540,7 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
       discard(chat)
       clearedTurns.add(chat.id)
     } else if (!isEphemeral(event) && !closesTheClearedTurn(chat, event)) {
-      record(chat, { role: 'agent', at: now(), event })
+      record(chat, { role: 'agent', at: now(), event: forTranscript(event) })
     }
 
     if (event.type === 'rate_limit') rateLimit = event

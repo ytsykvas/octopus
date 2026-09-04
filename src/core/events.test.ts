@@ -1,6 +1,59 @@
 import { describe, expect, it } from 'vitest'
 
-import { type AgentEvent, AgentEventSchema, isEphemeral, turnOutcome } from './events.js'
+import {
+  type AgentEvent,
+  AgentEventSchema,
+  forTranscript,
+  isEphemeral,
+  turnOutcome
+} from './events.js'
+
+describe('how much of it gets stored', () => {
+  const result = (overrides: Partial<Extract<AgentEvent, { type: 'tool_result' }>> = {}) =>
+    ({ type: 'tool_result', toolUseId: 'c-1', ok: true, content: 'done', ...overrides }) as const
+
+  /*
+   * Nothing can draw this. `AgentRow` returns null when the call succeeded and
+   * the fold renders only `tool_use` entries, so a `Read` of three thousand
+   * lines was written to disk whole, parsed back on every open and held in the
+   * window — to be dropped at render time. The transcript is append-only, so
+   * opening a conversation cost what the agent had read rather than what it
+   * said.
+   */
+  it('keeps only the head of a long result nothing can draw', () => {
+    const kept = forTranscript(result({ content: 'x'.repeat(5000) }))
+
+    expect(kept).toMatchObject({ truncated: true })
+    expect(kept.type === 'tool_result' && kept.content.length).toBe(2000)
+  })
+
+  // Under the bound it is the event itself, unmarked: a reader has to be able
+  // to tell a cut output from one that simply ended.
+  it('leaves a short one exactly as it was, and unmarked', () => {
+    expect(forTranscript(result())).toEqual(result())
+  })
+
+  /*
+   * A failure keeps everything, and this is the assertion that stops the rule
+   * being applied where it costs the reader something. Its content is drawn and
+   * is the whole of what the failure says — the pane shortens it from the
+   * middle, which is about reading rather than about storage, and cutting the
+   * tail here would take the half that names the cause.
+   */
+  it('keeps the whole of a failure however long it is', () => {
+    const failed = result({ ok: false, content: 'x'.repeat(5000) })
+
+    expect(forTranscript(failed)).toEqual(failed)
+  })
+
+  // Everything else passes through untouched; this is the sibling of
+  // `isEphemeral`, not a second filter.
+  it('leaves every other kind of event alone', () => {
+    const event: AgentEvent = { type: 'text', text: 'x'.repeat(5000) }
+
+    expect(forTranscript(event)).toBe(event)
+  })
+})
 
 describe('what gets stored', () => {
   // Deltas exist so text appears while it is being written. The complete block
