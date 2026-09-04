@@ -1415,6 +1415,23 @@ None of that reaches a screen reader, so whatever is chosen — a workspace row,
 project tab, a rail item — also carries `aria-current`. That attribute is the
 only handle a test has on selection as well: the rest of it is a class.
 
+**The root element also carries the language, and an effect keeps it there.**
+VoiceOver reads `lang` to choose a voice and its pronunciation rules, and
+`index.html` declared `uk` from the first scaffold commit — written when the
+project was Ukrainian and there was no other language — so the English default
+was spoken with Ukrainian phonetics for as long as it existed. Editing the file
+is the wrong half on its own, because the language is switchable at runtime: the
+attribute follows `i18n.language`, not `config.language`, since the config is
+what was asked for and i18next is what is on screen. `useTranslation` re-renders
+on `languageChanged`, so no listener is needed. The file starts at `en` so the
+paint before the config arrives agrees with `DEFAULT_LANGUAGE`; nothing in the
+suite loads that file, so only the effect is under test.
+
+This has nothing to do with spellchecking, which is worth saying because it
+reads like it should: `main/index.ts` never sets `webPreferences.spellcheck` and
+nothing calls `setSpellCheckerLanguages`, so Electron takes those languages from
+the session and the system locale rather than from the document.
+
 ### The one place colours are read as values
 
 xterm paints to a canvas, which no stylesheet reaches, so `Terminal` reads the

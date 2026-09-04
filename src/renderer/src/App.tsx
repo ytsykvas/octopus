@@ -215,6 +215,24 @@ export function App(): React.JSX.Element {
     document.documentElement.classList.toggle('dark', theme === 'dark')
   }, [theme])
 
+  /*
+   * The document's own language, which nothing wrote until now.
+   *
+   * `index.html` said `uk` from the first scaffold commit, when the project was
+   * written in Ukrainian and there was no other language — so the English
+   * default has been announcing itself as Ukrainian ever since. VoiceOver reads
+   * this attribute to choose a voice and its pronunciation rules, so the
+   * interface was spoken with the wrong phonetics, and `:lang()` was unusable.
+   *
+   * Driven by `i18n.language` rather than by `config.language`: the config is
+   * what was asked for and i18next is what is on screen, and `changeLanguage`
+   * settles a tick later. `useTranslation` re-renders on `languageChanged`, so
+   * this needs no listener of its own.
+   */
+  useEffect(() => {
+    document.documentElement.lang = i18n.language
+  }, [i18n.language])
+
   useEffect(() => {
     const controller = new AbortController()
 

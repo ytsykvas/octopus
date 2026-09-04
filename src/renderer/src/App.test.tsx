@@ -249,6 +249,9 @@ describe('App', () => {
     cleanup()
     await i18n.changeLanguage(DEFAULT_LANGUAGE)
     document.documentElement.classList.remove('dark')
+    // The same reasoning as the class beside it: an attribute left behind is a
+    // language the next test never asked for.
+    document.documentElement.lang = DEFAULT_LANGUAGE
   })
 
   it('points a first-time user at adding a repository', async () => {
@@ -826,6 +829,40 @@ describe('App', () => {
     await openApp()
 
     expect(await screen.findByText('Почніть з репозиторію')).toBeInTheDocument()
+  })
+
+  /*
+   * What VoiceOver reads to pick a voice and its pronunciation rules. The file
+   * said `uk` from the first scaffold commit, when the project was written in
+   * Ukrainian, so the English default was spoken with Ukrainian phonetics —
+   * and `:lang()` could not be used as a hook either.
+   */
+  it('declares the language it is actually showing', async () => {
+    // Started wrong on purpose, which is the state `index.html` shipped in.
+    // Asserting `en` on a document that already said `en` would pass with the
+    // effect deleted — the suite's own reset puts it there.
+    document.documentElement.lang = 'uk'
+
+    await openApp()
+
+    await waitFor(() => {
+      expect(document.documentElement).toHaveAttribute('lang', 'en')
+    })
+  })
+
+  // Both directions, because hardcoding the file to `en` would have looked
+  // like a fix and left the other half wrong: the language is switchable.
+  it('follows the language into Ukrainian and says so', async () => {
+    vi.mocked(window.octopus.config.get).mockResolvedValue({
+      ok: true,
+      value: config({ language: 'uk' })
+    })
+
+    await openApp()
+
+    await waitFor(() => {
+      expect(document.documentElement).toHaveAttribute('lang', 'uk')
+    })
   })
 
   it('remembers the width the workspace list was resized to', async () => {
