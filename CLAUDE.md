@@ -270,3 +270,15 @@ It is built through Node-API, so the binary is **not** tied to Electron's ABI â€
 the same file loads in plain Node and in Electron, verified in both. Do not
 reach for the ABI explanation when the terminal misbehaves; it is almost
 certainly something else.
+
+**The build cannot be dropped in favour of the shipped prebuilds, and the reason
+is not the ABI.** `node-pty` ships `prebuilds/darwin-arm64/`, and its resolver
+falls back to it â€” so removing `postinstall` looks like free speed. Measured:
+`pty.node` from the prebuild loads perfectly, and then `pty.fork` fails with
+`posix_spawnp failed`. The `spawn-helper` beside it is `-rw-r--r--` where the
+built one is `-rwxr-xr-x`; npm does not preserve the executable bit, and
+`chmod +x` on it makes the same spawn succeed. So the thing `postinstall` is
+really buying is a `spawn-helper` that can be executed.
+
+`posix_spawnp failed` is therefore the symptom that means "the build did not
+run", and the fix is the command above.
