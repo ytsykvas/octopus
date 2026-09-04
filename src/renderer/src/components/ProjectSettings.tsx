@@ -22,6 +22,9 @@ import type { ScriptsInWorkspace } from '@core/repoSource.js'
 import type { ScriptKind } from '@core/scripts.js'
 import type { Project, ProjectPatch } from '@core/store.js'
 
+import { isProfileName } from '@core/envProfileNames.js'
+
+import { useAskText } from '../hooks/useAskText.js'
 import { useConfirm } from '../hooks/useConfirm.js'
 import { useErrorMessage } from '../hooks/useErrorMessage.js'
 import { Button } from './Button.js'
@@ -187,6 +190,7 @@ export function ProjectSettings({
   // `showModal()` puts it in the top layer wherever in the tree it is written
   // — so a confirmation inside this dialog draws over it correctly.
   const { confirm, dialog: confirmDialog } = useConfirm()
+  const { ask, dialog: askDialog } = useAskText()
 
   const [section, setSection] = useState<SectionId>(initialSection ?? 'general')
   const [name, setName] = useState(project.name)
@@ -326,13 +330,29 @@ export function ProjectSettings({
   /**
    * Adds a set, empty or copied from the one on screen.
    *
-   * The name is asked for with `prompt`, which is the one dialog this app does
-   * not draw itself — a modal inside a modal for a single word is more
-   * machinery than the question deserves.
+   * A dialog of the app's own. It used to ask with `window.prompt`, on the
+   * reasoning that a modal inside a modal for one word is more machinery than
+   * the question deserves — and Electron replaces `prompt` at renderer
+   * start-up with a function that throws, so no dialog ever appeared, no call
+   * was made and no banner was shown. `env:create` is the only route to a
+   * second set, so every feature standing on one was unreachable in the built
+   * app: Duplicate, Delete, and the per-workspace entries in the Build header.
    */
   const addProfile = async (from: string | null): Promise<void> => {
-    const name = window.prompt(t('project.envProfileName'))?.trim()
-    if (name === undefined || name === '') return
+    const name = await ask({
+      title:
+        from === null
+          ? t('project.envProfileNewTitle')
+          : t('project.envProfileDuplicateTitle', { name: from }),
+      label: t('project.envProfileName'),
+      confirmLabel: t('project.envProfileNameConfirm'),
+      cancelLabel: t('project.envProfileNameCancel'),
+      // The same rule core applies, asked as it is typed: a round trip spent on
+      // a name the boundary will refuse says nothing that could not be said now.
+      valid: isProfileName,
+      invalid: t('project.envProfileNameInvalid')
+    })
+    if (name === null) return
 
     const done = await window.octopus.projects.createEnv(project.id, name, from)
     if (!done.ok) {
@@ -341,6 +361,37 @@ export function ProjectSettings({
     }
 
     // Opened on the one just made, which is what somebody who named it wants.
+    setProfile(name)
+    setProfilesRead((current) => current + 1)
+  }
+
+  /**
+   * Renames the set on screen.
+   *
+   * `env:rename` crossed the whole stack and no component called it — it was
+   * reachable only from the test double. It needed the same dialog as the
+   * creation above, so it was left dead when that one was, and wiring one
+   * without the other would have left the second hole open beside the mended
+   * one. Every workspace pointing at the old name moves with it, in core.
+   */
+  const renameProfile = async (): Promise<void> => {
+    const name = await ask({
+      title: t('project.envProfileRenameTitle', { name: profile }),
+      label: t('project.envProfileName'),
+      confirmLabel: t('project.envProfileRenameConfirm'),
+      cancelLabel: t('project.envProfileNameCancel'),
+      initial: profile,
+      valid: isProfileName,
+      invalid: t('project.envProfileNameInvalid')
+    })
+    if (name === null || name === profile) return
+
+    const done = await window.octopus.projects.renameEnv(project.id, profile, name)
+    if (!done.ok) {
+      setError(describeFailure(done))
+      return
+    }
+
     setProfile(name)
     setProfilesRead((current) => current + 1)
   }
@@ -665,6 +716,9 @@ export function ProjectSettings({
                   <Button onClick={() => void addProfile(profile)}>
                     {t('project.envProfileDuplicate')}
                   </Button>
+                  <Button onClick={() => void renameProfile()}>
+                    {t('project.envProfileRename')}
+                  </Button>
                   {profiles.length > 1 && (
                     <Button variant="destructive" onClick={() => void dropProfile()}>
                       {t('project.envProfileRemove')}
@@ -786,6 +840,7 @@ export function ProjectSettings({
         </div>
       </div>
       {confirmDialog}
+      {askDialog}
     </Modal>
   )
 }

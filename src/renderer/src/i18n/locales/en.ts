@@ -190,9 +190,23 @@ export const en = {
     envProfile: 'Set of variables',
     envProfileHint:
       'A project may keep several \u2014 a dev set and a production one, say \u2014 and each workspace uses one. Which is a choice made here rather than by commenting a block in and out of a file, where the last edit wins silently. They never travel to the repository: the repository decides what runs, this machine decides what it runs against.',
-    envProfileName: 'Name for the new set (lowercase letters, digits and dashes)',
+    /* The label on the field, which is the whole of the question. It used to be
+       the argument to `window.prompt` — a dialog Electron replaces with a
+       function that throws, so it was never seen. */
+    envProfileName: 'Name for the set (lowercase letters, digits and dashes)',
+    envProfileNewTitle: 'A new set of variables',
+    envProfileDuplicateTitle: 'A copy of \u201c{{name}}\u201d',
+    envProfileRenameTitle: 'Rename \u201c{{name}}\u201d',
+    envProfileNameConfirm: 'Create',
+    envProfileRenameConfirm: 'Rename',
+    envProfileNameCancel: 'Cancel',
+    /* Said as the name is typed rather than after the round trip, because the
+       rule is knowable here: the name becomes a filename. */
+    envProfileNameInvalid:
+      'Lowercase letters, digits and dashes only, starting with a letter or a digit.',
     envProfileNew: 'New',
     envProfileDuplicate: 'Duplicate',
+    envProfileRename: 'Rename',
     envProfileRemove: 'Delete',
     envProfileRemoveTitle: 'Delete \u201c{{name}}\u201d?',
     envProfileRemoveMessage:

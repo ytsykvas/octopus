@@ -776,57 +776,182 @@ describe('ProjectSettings', () => {
       expect(props.onUpdate).toHaveBeenCalledWith({ envProfile: 'prod' })
     })
 
+    /*
+     * Rewritten off `vi.spyOn(window, 'prompt')`, which is what hid the bug.
+     * Electron replaces `prompt` at renderer start-up with a function that
+     * throws — for every protocol this window loads, in dev and in the build —
+     * and jsdom supplies a stub that lets a spy install over it. So the four
+     * tests here were green and fully covered over a path that cannot run
+     * outside jsdom, while pressing `New` in the built app produced no dialog,
+     * no call and no banner.
+     */
+    async function name(user: ReturnType<typeof userEvent.setup>, text: string): Promise<void> {
+      await user.type(await screen.findByRole('textbox', { name: /Name for the set/ }), text)
+    }
+
     it('adds an empty one', async () => {
       const user = userEvent.setup()
-      const prompt = vi.spyOn(window, 'prompt').mockReturnValue('staging')
       await renderDialog()
       await openSection(user, 'Env')
 
       await user.click(await screen.findByRole('button', { name: 'New' }))
+      await name(user, 'staging')
+      await user.click(screen.getByRole('button', { name: 'Create' }))
 
       expect(window.octopus.projects.createEnv).toHaveBeenCalledWith('planner', 'staging', null)
-      prompt.mockRestore()
     })
 
+    // The only difference between the two buttons is the source, so that is
+    // what this asserts rather than the call happening at all.
     it('copies the one on screen', async () => {
       const user = userEvent.setup()
-      const prompt = vi.spyOn(window, 'prompt').mockReturnValue('staging')
       await renderDialog()
       await openSection(user, 'Env')
 
       await user.click(await screen.findByRole('button', { name: 'Duplicate' }))
+      await name(user, 'staging')
+      await user.click(screen.getByRole('button', { name: 'Create' }))
 
       expect(window.octopus.projects.createEnv).toHaveBeenCalledWith(
         'planner',
         'staging',
         'default'
       )
-      prompt.mockRestore()
     })
 
-    it('asks for a name and does nothing without one', async () => {
+    it('does nothing when the dialog is cancelled', async () => {
       const user = userEvent.setup()
-      const prompt = vi.spyOn(window, 'prompt').mockReturnValue('   ')
       await renderDialog()
       await openSection(user, 'Env')
 
       await user.click(await screen.findByRole('button', { name: 'New' }))
+      await user.click(screen.getByRole('button', { name: 'Cancel' }))
 
       expect(window.octopus.projects.createEnv).not.toHaveBeenCalled()
-      prompt.mockRestore()
+    })
+
+    /*
+     * The corner close is the same answer as Cancel, and the promise has to
+     * settle either way — one left hanging is a dialog that cannot be opened a
+     * second time, which is what the last assertion is for.
+     *
+     * Not driven with Escape: jsdom never fires a `<dialog>`'s `cancel` event,
+     * so the key would do nothing at all and the test would pass over a path it
+     * had not taken. Written that way first, and caught by coverage.
+     */
+    it('does nothing when the dialog is dismissed, and opens again after', async () => {
+      const user = userEvent.setup()
+      await renderDialog()
+      await openSection(user, 'Env')
+
+      await user.click(await screen.findByRole('button', { name: 'New' }))
+      const asking = within(await screen.findByRole('dialog', { name: /new set/i }))
+      await user.click(asking.getByRole('button', { name: 'Close' }))
+
+      expect(window.octopus.projects.createEnv).not.toHaveBeenCalled()
+      expect(screen.queryByRole('textbox', { name: /Name for the set/ })).not.toBeInTheDocument()
+
+      await user.click(screen.getByRole('button', { name: 'New' }))
+      expect(await screen.findByRole('textbox', { name: /Name for the set/ })).toBeInTheDocument()
+    })
+
+    // Enter sends, as it does everywhere else one line is asked for.
+    it('takes the name on Enter', async () => {
+      const user = userEvent.setup()
+      await renderDialog()
+      await openSection(user, 'Env')
+
+      await user.click(await screen.findByRole('button', { name: 'New' }))
+      await name(user, 'staging{Enter}')
+
+      expect(window.octopus.projects.createEnv).toHaveBeenCalledWith('planner', 'staging', null)
+    })
+
+    /*
+     * The name becomes a filename, and the rule is knowable here — so it is
+     * asked as the name is typed rather than after a round trip. Without the
+     * gate the validation would be decoration: the button would send `Prod` and
+     * the boundary would refuse it a moment later.
+     */
+    it('will not send a name the boundary would refuse', async () => {
+      const user = userEvent.setup()
+      await renderDialog()
+      await openSection(user, 'Env')
+
+      await user.click(await screen.findByRole('button', { name: 'New' }))
+      await name(user, 'Prod')
+
+      expect(screen.getByRole('button', { name: 'Create' })).toBeDisabled()
+      expect(screen.getByText(/Lowercase letters/)).toBeInTheDocument()
+      expect(window.octopus.projects.createEnv).not.toHaveBeenCalled()
     })
 
     it('says why one could not be added', async () => {
       vi.mocked(window.octopus.projects.createEnv).mockResolvedValue({ ok: false, error: 'taken' })
       const user = userEvent.setup()
-      const prompt = vi.spyOn(window, 'prompt').mockReturnValue('default')
       await renderDialog()
       await openSection(user, 'Env')
 
       await user.click(await screen.findByRole('button', { name: 'New' }))
+      await name(user, 'staging')
+      await user.click(screen.getByRole('button', { name: 'Create' }))
 
       expect(await screen.findByText(/taken/)).toBeInTheDocument()
-      prompt.mockRestore()
+    })
+
+    /*
+     * `env:rename` crossed the whole stack and no component called it — it was
+     * reachable only from the test double. It wanted the same dialog as the
+     * creation above, so it was left dead when that one was.
+     */
+    it('renames the one on screen, starting from the name it has', async () => {
+      const user = userEvent.setup()
+      await renderDialog()
+      await openSection(user, 'Env')
+
+      await user.click(await screen.findByRole('button', { name: 'Rename' }))
+
+      // Scoped to the asking dialog, by its own title: the section's button
+      // carries the same verb — right on both, ambiguous only to a query — and
+      // the settings modal is itself a `dialog` around all of it.
+      const asking = within(await screen.findByRole('dialog', { name: /Rename/ }))
+      const field = asking.getByRole('textbox', { name: /Name for the set/ })
+      expect(field).toHaveValue('default')
+
+      await user.clear(field)
+      await user.type(field, 'prod')
+      await user.click(asking.getByRole('button', { name: 'Rename' }))
+
+      expect(window.octopus.projects.renameEnv).toHaveBeenCalledWith('planner', 'default', 'prod')
+    })
+
+    it('says why one could not be renamed', async () => {
+      vi.mocked(window.octopus.projects.renameEnv).mockResolvedValue({ ok: false, error: 'taken' })
+      const user = userEvent.setup()
+      await renderDialog()
+      await openSection(user, 'Env')
+
+      await user.click(await screen.findByRole('button', { name: 'Rename' }))
+      const asking = within(await screen.findByRole('dialog', { name: /Rename/ }))
+      await user.clear(asking.getByRole('textbox', { name: /Name for the set/ }))
+      await user.type(asking.getByRole('textbox', { name: /Name for the set/ }), 'prod')
+      await user.click(asking.getByRole('button', { name: 'Rename' }))
+
+      expect(await screen.findByText(/taken/)).toBeInTheDocument()
+    })
+
+    // Nothing to do, and asking core to rename a set to its own name would be
+    // a refusal the reader could not act on.
+    it('does nothing when the name is left as it was', async () => {
+      const user = userEvent.setup()
+      await renderDialog()
+      await openSection(user, 'Env')
+
+      await user.click(await screen.findByRole('button', { name: 'Rename' }))
+      const asking = within(await screen.findByRole('dialog', { name: /Rename/ }))
+      await user.click(asking.getByRole('button', { name: 'Rename' }))
+
+      expect(window.octopus.projects.renameEnv).not.toHaveBeenCalled()
     })
 
     /*

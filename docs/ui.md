@@ -714,6 +714,26 @@ pane says the server is still holding the old values, because a header that
 changed silently would be the failure the whole feature exists to prevent,
 pointing the other way.
 
+**None of that could ever appear**, and it is worth recording why rather than
+leaving the fix looking cosmetic. A second set could only be made through one
+button, and that button asked for the name with `window.prompt` — which Electron
+replaces at renderer start-up with a function that throws, in dev and in the
+build alike. The throw was the first statement of an async function called as
+`void`, so it produced no dialog, no call and no banner: only a console line.
+Every project therefore held exactly the one set the migration created, and
+`Duplicate`, `Delete`, this menu and the resolved-name suffix on its trigger
+were all unreachable. Every test mocked `window.prompt`, and jsdom supplies a
+stub that lets a spy install, so the suite was green and fully covered over a
+path that cannot run outside jsdom.
+
+**So a name is asked for with a dialog the app draws**, `useAskText` — the
+sibling of `useConfirm`, which already states the rule the `prompt` comment was
+the one exception to: a native dialog cannot be styled and arrives as a visitor
+from another application. It refuses a name as it is typed, using the same rule
+core applies at the boundary, so a round trip is not spent on an answer already
+known to be wrong. Renaming a set goes through the same dialog — that channel
+crossed the whole stack and no component called it.
+
 The third is disabled with no workspace selected. It was not, and the dialog it
 asks for is rendered behind a workspace check — so the click was lost and the
 flag stayed armed, springing the dialog open by itself on the next workspace
@@ -1629,6 +1649,14 @@ removing a workspace offers to delete its branch, already marked, because a
 workspace is one task and the branch behind a finished one is finished too. That
 is the only shape a destructive default may take: on screen, in the dialog the
 user is already reading, and undone with one click before they confirm.
+
+`useAskText` is its sibling for one line of text, in the same `{ ask, dialog }`
+shape. It exists because `useConfirm` has no field and the one place that asked
+for a word used `window.prompt`, which Electron replaces with a function that
+throws — so **every dialog in this app is one the app draws**, with no
+exceptions left. The caller supplies the rule for what may be typed, and the
+confirm button is disabled while it says no: the point of asking in a field
+rather than a system box is being able to answer before the round trip.
 
 ## State
 
