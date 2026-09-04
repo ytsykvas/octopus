@@ -22,7 +22,7 @@ import {
 } from './chats.js'
 import { nextProjectColor, type ProjectColor, ProjectColorSchema } from './colors.js'
 import { DEFAULT_ENV_FILE } from './envBlock.js'
-import { DEFAULT_PROFILE, ProfileNameSchema } from './envProfiles.js'
+import { DEFAULT_PROFILE, ProfileNameSchema } from './envProfileNames.js'
 import { ProjectIconSchema } from './icons.js'
 
 export {

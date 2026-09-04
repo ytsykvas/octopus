@@ -59,9 +59,9 @@ import {
 } from './carry.js'
 import type { CarryReport } from './carry.js'
 import { applyEnvOverrides, discardIfOnlyBlock, removeEnvBlock, readWorkspaceEnv } from './env.js'
+import { DEFAULT_PROFILE } from './envProfileNames.js'
 import {
   createProfile,
-  DEFAULT_PROFILE,
   listProfiles,
   migrateEnvProfiles,
   readEffectiveEnv,

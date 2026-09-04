@@ -4,9 +4,9 @@ import { join } from 'node:path'
 
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 
+import { DEFAULT_PROFILE } from './envProfileNames.js'
 import {
   createProfile,
-  DEFAULT_PROFILE,
   effectiveProfile,
   listProfiles,
   migrateEnvProfiles,

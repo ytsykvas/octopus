@@ -29,7 +29,7 @@ import {
 } from '../core/chats.js'
 import { CarryListSchema } from '../core/carry.js'
 import { EnvBodySchema } from '../core/env.js'
-import { ProfileNameSchema } from '../core/envProfiles.js'
+import { ProfileNameSchema } from '../core/envProfileNames.js'
 import type { RemoteRepository } from '../core/github.js'
 import { InstructionBodySchema, InstructionKindSchema } from '../core/instructions.js'
 import {

@@ -20,7 +20,7 @@ import { basename, dirname, normalize } from 'node:path'
 
 import { CodedError } from './codedError.js'
 import { DEFAULT_ENV_FILE } from './envBlock.js'
-import { DEFAULT_PROFILE } from './envProfiles.js'
+import { DEFAULT_PROFILE } from './envProfileNames.js'
 import { projectDir, projectsDir, workspacesDir } from './paths.js'
 import { nextProjectColor } from './colors.js'
 import type { Project, State } from './store.js'

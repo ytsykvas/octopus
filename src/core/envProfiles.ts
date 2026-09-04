@@ -21,36 +21,12 @@
 import { readdir, readFile, rename, rm } from 'node:fs/promises'
 import { mkdir } from 'node:fs/promises'
 
-import { z } from 'zod'
-
 import { CodedError } from './codedError.js'
+import { DEFAULT_PROFILE, ProfileNameSchema } from './envProfileNames.js'
 import { projectEnv, projectEnvProfile, projectEnvsDir } from './paths.js'
 import { writeTextFile } from './persist.js'
 import type { Project, Workspace } from './store.js'
 import type { ProjectId } from './types.js'
-
-/**
- * The name a project's first set of variables is given.
- *
- * Chosen so `ProjectSchema.envProfile` can default to it: a project record
- * written before profiles existed then reads back pointing at exactly the file
- * the migration created, and no record needs migrating at all.
- */
-export const DEFAULT_PROFILE = 'default'
-
-/**
- * What a profile may be called.
- *
- * It becomes a filename, so this is a boundary rather than a label. Lowercase
- * is part of it because macOS filesystems are case-insensitive by default:
- * `Prod` and `prod` would be one file under two names in `state.json`, and
- * whichever the app wrote last would be what both resolved to.
- */
-export const ProfileNameSchema = z
-  .string()
-  .min(1)
-  .max(32)
-  .regex(/^[a-z0-9][a-z0-9-]*$/u)
 
 /** They carry credentials, so they are readable by their owner and nobody else. */
 const MODE = 0o600
