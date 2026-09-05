@@ -16,6 +16,15 @@ interface NameEditorProps {
   readonly onClear?: () => void
   /** Overridden where the field is not a whole row — the tab strip's is narrow. */
   readonly className?: string
+  /**
+   * The most characters the name may hold, where something bounds it.
+   *
+   * Passed in rather than fixed here: this field is shared by three things and
+   * only one of them has a cap. Where there is one, the field stopping is what
+   * every rename box does — the alternative is an ordinary keystroke coming
+   * back as a refusal from the far side of the bridge.
+   */
+  readonly maxLength?: number
 }
 
 /**
@@ -30,7 +39,8 @@ export function NameEditor({
   onCommit,
   onCancel,
   onClear,
-  className = 'input focus-ring'
+  className = 'input focus-ring',
+  maxLength
 }: NameEditorProps): React.JSX.Element {
   const { t } = useTranslation()
   const [draft, setDraft] = useState(initial)
@@ -50,6 +60,7 @@ export function NameEditor({
       type="text"
       autoFocus
       value={draft}
+      maxLength={maxLength}
       title={t('sidebar.renameHint')}
       spellCheck={false}
       onChange={(event) => {

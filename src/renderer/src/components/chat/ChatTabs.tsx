@@ -1,7 +1,7 @@
 import { GitBranchPlus, MoreHorizontal, Pencil, Plus, Trash2 } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 
-import { AGENT_NAMES } from '@core/chats.js'
+import { AGENT_NAMES, MAX_CHAT_TITLE } from '@core/chats.js'
 
 import type { ChatTab, ChatTabsController } from '../../hooks/useChatTabs.js'
 import { chatStatusLabel, chatStatusTone } from '../agentStatus.js'
@@ -139,6 +139,11 @@ function TabButton({
           // the field opens on what the tab says, which is what makes a small
           // correction a small edit rather than a retype.
           initial={named}
+          // The one cap in the app that bounds a name rather than a body, so
+          // the field carries it: past it the strip is holding a sentence, and
+          // learning that from a refusal a round trip later is worse than the
+          // box simply stopping.
+          maxLength={MAX_CHAT_TITLE}
           onCommit={(title) => void controller.rename(id, title)}
           // Emptying it is a request rather than a slip — the conversation goes
           // back to being named after its agent and its place.

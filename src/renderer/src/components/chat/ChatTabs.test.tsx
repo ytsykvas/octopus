@@ -4,6 +4,8 @@ import { describe, expect, it, vi } from 'vitest'
 
 import { chat } from '../../test/chat.js'
 import type { ChatTab, ChatTabsController } from '../../hooks/useChatTabs.js'
+import { MAX_CHAT_TITLE } from '@core/chats.js'
+
 import { ChatTabs } from './ChatTabs.js'
 
 function tab(overrides: Partial<ChatTab> = {}): ChatTab {
@@ -160,6 +162,22 @@ describe('renaming a conversation', () => {
     render(<ChatTabs tabs={controller({ editingKey: 'chat-1' })} />)
 
     expect(screen.getByRole('textbox')).toHaveValue('Claude 1')
+  })
+
+  /*
+   * The field carries the same bound the boundary parses with, and asserting
+   * them against one constant is what keeps them in step: bounded only at the
+   * far end, an ordinary keystroke came back as a refusal a round trip later,
+   * where every rename box in every application simply stops.
+   *
+   * jsdom does not enforce `maxLength` on a programmatic value, so this reads
+   * the attribute rather than typing 61 characters and asserting a length — a
+   * test that would pass whatever the attribute said.
+   */
+  it('bounds the field by the same number the boundary refuses past', () => {
+    render(<ChatTabs tabs={controller({ editingKey: 'chat-1' })} />)
+
+    expect(screen.getByRole('textbox')).toHaveAttribute('maxLength', String(MAX_CHAT_TITLE))
   })
 
   it('keeps what was typed', async () => {

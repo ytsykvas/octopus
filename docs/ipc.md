@@ -244,6 +244,14 @@ with zod before it goes anywhere.** TypeScript guarantees nothing across a
 process boundary: the renderer is a separate process that displays agent
 output, and a compromised or simply buggy one must not reach a command line.
 
+**A bound a person can reach is on the field as well.** The chat title is the
+one cap in the app that bounds a **name** rather than a body, and the field
+carries the same number the boundary parses with — bounded only at the far end,
+an ordinary keystroke came back as a refusal a round trip later. The bodies are
+deliberately not bounded that way: `maxLength` on a textarea truncates a paste
+in silence, and quietly keeping the first 100,000 characters of somebody's file
+is worse than refusing it.
+
 **A refusal answers in words.** Most of these parses guard against a value the
 interface cannot produce, so nobody meets them — but a few bound something a
 person types or pastes, and a chat message past 100,000 characters is what

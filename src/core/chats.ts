@@ -599,8 +599,16 @@ export const ChatMessageSchema = z.string().min(1).max(100_000)
  *
  * Bounded because it is drawn in a tab a few characters wide; past this the
  * strip is carrying a sentence. Empty is allowed and means the automatic name.
+ *
+ * The number is named so the field can carry it too. A bound only the boundary
+ * knows about turns an ordinary keystroke into a refusal a round trip later,
+ * where a field that simply stops is what every rename box does — and this is
+ * the one cap in the app that is a **name** rather than a body, which is why
+ * it is the one worth spending on the field. Truncating a pasted body would be
+ * worse than refusing it.
  */
-export const ChatTitleSchema = z.string().max(60)
+export const MAX_CHAT_TITLE = 60
+export const ChatTitleSchema = z.string().max(MAX_CHAT_TITLE)
 
 /** How the user may answer a permission request. */
 export const PermissionAnswerSchema = z.enum(['allow', 'always', 'deny'])
