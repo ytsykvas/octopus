@@ -291,6 +291,16 @@ export function PullRequestPanel({
                   }}
                   attached={attached}
                 />
+
+                {/* A truncation nobody wrote down is one somebody eventually
+                    debugs. Three ceilings sit behind this and none is worth
+                    raising — past them the pane needs a search box rather than
+                    a longer page — so what is owed is saying that what is here
+                    is not all there is. Only when a read came back full, or the
+                    line would be an apology on every request. */}
+                {detail.detail.capped && (
+                  <p className="text-ink-faint mt-2 leading-relaxed">{t('pullRequest.capped')}</p>
+                )}
               </Section>
 
               <PullRequestActions

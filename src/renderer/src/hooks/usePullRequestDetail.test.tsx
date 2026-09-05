@@ -21,6 +21,7 @@ function detail(overrides: Partial<PullRequestDetail> = {}): PullRequestDetail {
     decision: null,
     mergeable: 'mergeable',
     mergeState: 'clean',
+    capped: false,
     ...overrides
   }
 }

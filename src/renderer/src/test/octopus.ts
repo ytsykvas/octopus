@@ -295,7 +295,8 @@ function detailFixture(): PullRequestDetail {
     comments: [],
     decision: null,
     mergeable: 'mergeable',
-    mergeState: 'clean'
+    mergeState: 'clean',
+    capped: false
   }
 }
 

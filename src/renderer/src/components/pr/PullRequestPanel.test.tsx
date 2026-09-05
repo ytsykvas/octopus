@@ -44,6 +44,7 @@ function detail(overrides: Partial<PullRequestDetail> = {}): PullRequestDetail {
     decision: null,
     mergeable: 'mergeable',
     mergeState: 'clean',
+    capped: false,
     ...overrides
   }
 }
@@ -634,6 +635,30 @@ describe('a pull request that exists', () => {
   })
 
   // The link is what a screen reader lands on, and it carries the state too.
+  /*
+   * A truncation nobody wrote down is one somebody eventually debugs. Only when
+   * a read came back full, or the line is an apology on every request — that
+   * negative is the half that keeps it worth reading.
+   */
+  it('says so when GitHub had more to give than it was asked for', async () => {
+    answer(view({ request: request() }))
+    answerDetail(detail({ capped: true }))
+    renderPanel()
+
+    expect(
+      await screen.findByText(/may be older ones this pane is not showing/)
+    ).toBeInTheDocument()
+  })
+
+  it('says nothing of the sort when every read came back short', async () => {
+    answer(view({ request: request() }))
+    answerDetail(detail())
+    renderPanel()
+
+    await screen.findByText('Pull request #7 is open.')
+    expect(screen.queryByText(/not showing/)).not.toBeInTheDocument()
+  })
+
   it('names the state on the link out to GitHub', async () => {
     answer(view({ request: request() }))
     answerDetail(detail({ checks: [failing({ name: 'lint' })] }))

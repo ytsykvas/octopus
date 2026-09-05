@@ -316,7 +316,25 @@ export interface PullRequestDetail {
   readonly decision: ReviewDecision | null
   readonly mergeable: Mergeable
   readonly mergeState: MergeState
+  /**
+   * Whether one of the reads came back full, so what is drawn is not all there
+   * is.
+   *
+   * Three ceilings sit behind this, and none of them is ours to raise usefully:
+   * `gh pr view` sends at most a hundred comments and a hundred reviews, and
+   * the threads query asks for fifty with twenty replies each. Pagination is
+   * the wrong answer for the same reason `REPOSITORY_LIMIT` gives — past this
+   * the pane needs a search box rather than a longer page — so what is owed is
+   * to **say so**. A truncation nobody wrote down is one somebody eventually
+   * debugs.
+   */
+  readonly capped: boolean
 }
+
+/** The ceilings the two reads come back at, named where they are compared. */
+export const DETAIL_COMMENTS = 100
+export const DETAIL_THREADS = 50
+export const DETAIL_THREAD_REPLIES = 20
 
 const AuthorSchema = z.object({ login: z.string() }).nullish()
 
@@ -479,7 +497,17 @@ export function toPullRequestDetail(
     // mergeability asynchronously, so the first read after every push says
     // `UNKNOWN`, and refusing to merge on it refuses a request that is fine.
     mergeable: MERGEABLE[view.mergeable] ?? 'unknown',
-    mergeState: MERGE_STATES[view.mergeStateStatus] ?? 'unknown'
+    mergeState: MERGE_STATES[view.mergeStateStatus] ?? 'unknown',
+    // A read that came back at its ceiling is one that may have had more to
+    // give. Exactly at it rather than past it: these are the numbers asked for,
+    // so equality is the only signal there is.
+    capped:
+      view.comments.length >= DETAIL_COMMENTS ||
+      view.reviews.length >= DETAIL_COMMENTS ||
+      threads.data.node.reviewThreads.nodes.length >= DETAIL_THREADS ||
+      threads.data.node.reviewThreads.nodes.some(
+        (thread) => thread.comments.nodes.length >= DETAIL_THREAD_REPLIES
+      )
   }
 }
 

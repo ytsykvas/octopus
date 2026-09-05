@@ -391,6 +391,12 @@ export const en = {
   },
 
   pullRequest: {
+    /* One of the reads came back full. Said rather than paginated: past these
+       numbers the pane wants a search box, not a longer page — and a reader who
+       cannot find a remark they remember should learn why here rather than by
+       reasoning about it. */
+    capped:
+      'GitHub was asked for the most recent hundred comments and fifty threads, and answered with that many \u2014 so there may be older ones this pane is not showing. The request on GitHub has all of them.',
     noWorkspace: 'Select a workspace to open a pull request for it.',
     loading: 'Asking GitHub about this branch…',
     /* The branch is the whole subject: it is what a pull request is made of,

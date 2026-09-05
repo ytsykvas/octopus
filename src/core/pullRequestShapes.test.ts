@@ -11,7 +11,10 @@ import {
   type ThreadsPayload,
   ThreadsPayloadSchema,
   toBranchRequests,
-  toPullRequestDetail
+  toPullRequestDetail,
+  DETAIL_COMMENTS,
+  DETAIL_THREADS,
+  DETAIL_THREAD_REPLIES
 } from './pullRequestShapes.js'
 
 /*
@@ -80,6 +83,91 @@ function threads(...nodes: unknown[]): ThreadsPayload {
 }
 
 const NO_THREADS = threads()
+
+/** One issue comment, as many times over as a test needs. */
+function issues(count: number): Record<string, unknown>[] {
+  return Array.from({ length: count }, (_, index) => ({
+    id: `IC_${String(index)}`,
+    author: { login: 'olena' },
+    body: 'Looks right.',
+    createdAt: '2026-08-19T16:00:00Z',
+    url: 'https://github.com/o/p/pull/12#issuecomment-1'
+  }))
+}
+
+describe('a read that came back full', () => {
+  /*
+   * Three ceilings, none of them worth raising: past them the pane needs a
+   * search box rather than a longer page. What is owed is saying so, and a
+   * truncation nobody wrote down is one somebody eventually debugs.
+   */
+  it('says nothing was cut when every read came back short', () => {
+    expect(toPullRequestDetail(view({ comments: issues(3) }), NO_THREADS).capped).toBe(false)
+  })
+
+  it('says so when the comments came back at the ceiling', () => {
+    expect(
+      toPullRequestDetail(view({ comments: issues(DETAIL_COMMENTS) }), NO_THREADS).capped
+    ).toBe(true)
+  })
+
+  // The reviews are a second list under the same ceiling, and `gh` fills them
+  // independently — a request with a hundred reviews and three comments is cut.
+  it('says so when the reviews came back at the ceiling', () => {
+    const reviews = Array.from({ length: DETAIL_COMMENTS }, (_, index) => ({
+      id: `PRR_${String(index)}`,
+      author: { login: 'olena' },
+      body: '',
+      state: 'COMMENTED',
+      submittedAt: '2026-08-19T16:00:00Z',
+      url: 'https://github.com/o/p/pull/12#pullrequestreview-1'
+    }))
+
+    expect(toPullRequestDetail(view({ reviews }), NO_THREADS).capped).toBe(true)
+  })
+
+  it('says so when the threads came back at the ceiling', () => {
+    const full = threads(...Array.from({ length: DETAIL_THREADS }, () => thread(false)))
+
+    expect(toPullRequestDetail(view(), full).capped).toBe(true)
+  })
+
+  /*
+   * And when one thread came back full, which is the case that hides a reply
+   * rather than a whole conversation — a long argument on one line is exactly
+   * where the twentieth comment is the one worth reading.
+   */
+  it('says so when a single thread came back at its own ceiling', () => {
+    const long = ThreadsPayloadSchema.parse({
+      data: {
+        node: {
+          reviewThreads: {
+            nodes: [
+              {
+                isResolved: false,
+                comments: {
+                  nodes: Array.from({ length: DETAIL_THREAD_REPLIES }, (_, index) => ({
+                    id: `PRRC_${String(index)}`,
+                    author: { login: 'olena' },
+                    body: 'And another thing.',
+                    createdAt: '2026-08-19T16:53:18Z',
+                    url: 'https://github.com/o/p/pull/12#discussion_r1',
+                    diffHunk: '@@ -1 +1 @@',
+                    path: 'a.go',
+                    line: 1,
+                    isOutdated: false
+                  }))
+                }
+              }
+            ]
+          }
+        }
+      }
+    })
+
+    expect(toPullRequestDetail(view(), long).capped).toBe(true)
+  })
+})
 
 function checksOf(overrides: Record<string, unknown>): readonly PullRequestCheck[] {
   return toPullRequestDetail(view(overrides), NO_THREADS).checks
