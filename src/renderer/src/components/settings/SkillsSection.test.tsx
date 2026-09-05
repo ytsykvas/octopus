@@ -441,13 +441,38 @@ describe('removing a skill', () => {
 })
 
 describe('bringing one in', () => {
+  /*
+   * Two presses now: the first reads what would be written and shows it, the
+   * second writes. The routes differ in how much can be seen beforehand — a
+   * folder somebody picked they know, pasted text they can read, and a **link**
+   * shows nothing at all until it has been fetched, while what comes back is
+   * prose the agent will later follow.
+   */
+  it('names what it is about to write before writing it', async () => {
+    vi.mocked(octopus().skills.inspect).mockResolvedValue({
+      ok: true,
+      value: { name: 'pdf-forms', description: 'Fills PDF forms.', text: null }
+    })
+    vi.mocked(octopus().dialog.pickSkill).mockResolvedValue({ ok: true, value: '/tmp/pdf' })
+    await renderSection()
+
+    await userEvent.click(screen.getByRole('button', { name: 'Import…' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Choose…' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Read it' }))
+
+    expect(await screen.findByText('pdf-forms')).toBeInTheDocument()
+    expect(screen.getByText('Fills PDF forms.')).toBeInTheDocument()
+    expect(octopus().skills.import).not.toHaveBeenCalled()
+  })
+
   it('takes a folder chosen on disk', async () => {
     vi.mocked(octopus().dialog.pickSkill).mockResolvedValue({ ok: true, value: '/tmp/pdf' })
     await renderSection()
 
     await userEvent.click(screen.getByRole('button', { name: 'Import…' }))
     await userEvent.click(screen.getByRole('button', { name: 'Choose…' }))
-    await userEvent.click(screen.getByRole('button', { name: 'Import' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Read it' }))
+    await userEvent.click(await screen.findByRole('button', { name: 'Import' }))
 
     await waitFor(() => {
       expect(octopus().skills.import).toHaveBeenCalledWith(
@@ -464,7 +489,7 @@ describe('bringing one in', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Import…' }))
     await userEvent.click(screen.getByRole('button', { name: 'Choose…' }))
 
-    expect(screen.getByRole('button', { name: 'Import' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Read it' })).toBeDisabled()
   })
 
   it('takes a pasted document', async () => {
@@ -473,7 +498,8 @@ describe('bringing one in', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Import…' }))
     await userEvent.click(screen.getByRole('radio', { name: 'Paste' }))
     await userEvent.type(screen.getByRole('textbox'), 'hello')
-    await userEvent.click(screen.getByRole('button', { name: 'Import' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Read it' }))
+    await userEvent.click(await screen.findByRole('button', { name: 'Import' }))
 
     await waitFor(() => {
       expect(octopus().skills.import).toHaveBeenCalledWith(
@@ -483,24 +509,37 @@ describe('bringing one in', () => {
     })
   })
 
-  it('takes a link', async () => {
+  /*
+   * The address is fetched **once**. Inspecting and then importing would
+   * otherwise ask it twice, and the second answer need not be the first — while
+   * it is the first the reader agreed to. So the preview carries the document
+   * back and the write goes out as text.
+   */
+  it('imports the document it showed, rather than fetching the link again', async () => {
+    vi.mocked(octopus().skills.inspect).mockResolvedValue({
+      ok: true,
+      value: { name: 'review', description: 'Reviews code.', text: '---\nname: review\n---\n' }
+    })
     await renderSection()
 
     await userEvent.click(screen.getByRole('button', { name: 'Import…' }))
     await userEvent.click(screen.getByRole('radio', { name: 'From a link' }))
     await userEvent.type(screen.getByRole('textbox'), 'https://example.test/SKILL.md')
-    await userEvent.click(screen.getByRole('button', { name: 'Import' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Read it' }))
+    await userEvent.click(await screen.findByRole('button', { name: 'Import' }))
 
     await waitFor(() => {
       expect(octopus().skills.import).toHaveBeenCalledWith(
         { kind: 'global' },
-        { kind: 'url', url: 'https://example.test/SKILL.md' }
+        { kind: 'text', text: '---\nname: review\n---\n' }
       )
     })
   })
 
-  it('says why an import was refused, and stays open', async () => {
-    vi.mocked(octopus().skills.import).mockResolvedValue({
+  // Refused before the write, and about a name the reader has now seen rather
+  // than one they never did.
+  it('says why a document could not be read, and stays open', async () => {
+    vi.mocked(octopus().skills.inspect).mockResolvedValue({
       ok: false,
       error: 'raw',
       code: 'skillFrontmatterMissing'
@@ -510,11 +549,72 @@ describe('bringing one in', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Import…' }))
     await userEvent.click(screen.getByRole('radio', { name: 'Paste' }))
     await userEvent.type(screen.getByRole('textbox'), 'no frontmatter')
-    await userEvent.click(screen.getByRole('button', { name: 'Import' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Read it' }))
 
     await waitFor(() => {
       expect(screen.getByText(/needs frontmatter/)).toBeInTheDocument()
     })
+    expect(octopus().skills.import).not.toHaveBeenCalled()
+  })
+
+  /*
+   * The preview settles what the document says; the write can still be refused
+   * by something only the store knows — a name the other store took between the
+   * two presses. So the dialog stays open with the reason on it, rather than
+   * closing over a skill that never landed.
+   */
+  it('says why the write was refused, and stays open', async () => {
+    vi.mocked(octopus().skills.import).mockResolvedValue({
+      ok: false,
+      error: 'raw',
+      code: 'skillExists',
+      params: { name: 'review' }
+    })
+    await renderSection()
+
+    await userEvent.click(screen.getByRole('button', { name: 'Import…' }))
+    await userEvent.click(screen.getByRole('radio', { name: 'Paste' }))
+    await userEvent.type(screen.getByRole('textbox'), 'hello')
+    await userEvent.click(screen.getByRole('button', { name: 'Read it' }))
+    await userEvent.click(await screen.findByRole('button', { name: 'Import' }))
+
+    await waitFor(() => {
+      expect(screen.getByText(/already here/)).toBeInTheDocument()
+    })
+    expect(screen.getByRole('button', { name: 'Import' })).toBeInTheDocument()
+  })
+
+  // A skill that describes itself as nothing says so, rather than leaving a
+  // blank line where the one sentence about it should be.
+  it('says so when the document describes itself as nothing', async () => {
+    vi.mocked(octopus().skills.inspect).mockResolvedValue({
+      ok: true,
+      value: { name: 'review', description: '', text: null }
+    })
+    await renderSection()
+
+    await userEvent.click(screen.getByRole('button', { name: 'Import…' }))
+    await userEvent.click(screen.getByRole('radio', { name: 'Paste' }))
+    await userEvent.type(screen.getByRole('textbox'), 'hello')
+    await userEvent.click(screen.getByRole('button', { name: 'Read it' }))
+
+    expect(await screen.findByText('It describes itself as nothing.')).toBeInTheDocument()
+  })
+
+  // Changing the route makes what was read about something else, so the dialog
+  // goes back to asking.
+  it('forgets what it read when the route changes', async () => {
+    await renderSection()
+
+    await userEvent.click(screen.getByRole('button', { name: 'Import…' }))
+    await userEvent.click(screen.getByRole('radio', { name: 'Paste' }))
+    await userEvent.type(screen.getByRole('textbox'), 'hello')
+    await userEvent.click(screen.getByRole('button', { name: 'Read it' }))
+    await screen.findByRole('button', { name: 'Import' })
+
+    await userEvent.click(screen.getByRole('radio', { name: 'From a link' }))
+
+    expect(screen.getByRole('button', { name: 'Read it' })).toBeInTheDocument()
   })
 
   it('closes without importing anything', async () => {

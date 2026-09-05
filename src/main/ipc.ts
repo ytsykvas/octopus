@@ -482,6 +482,16 @@ export function registerIpc(
     )
   )
 
+  /*
+   * Reads what an import would write, and writes nothing. The one route worth
+   * the extra call is the link: an address shows nothing until it is fetched.
+   */
+  host.handle('skills:inspect', (_event, store: unknown, request: unknown) =>
+    attempt(() =>
+      service.inspectSkillImport(SkillStoreSchema.parse(store), SkillImportSchema.parse(request))
+    )
+  )
+
   host.handle('skills:import', (_event, store: unknown, request: unknown) =>
     attempt(() =>
       service.importStoredSkill(SkillStoreSchema.parse(store), SkillImportSchema.parse(request))

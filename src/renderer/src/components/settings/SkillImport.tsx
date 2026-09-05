@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
-import type { SkillImport as SkillImportRequest } from '@core/skills.js'
+import type { SkillImport as SkillImportRequest, SkillPreview } from '@core/skills.js'
 
 import { Button } from '../Button.js'
 import { Field } from '../Field.js'
@@ -9,6 +9,15 @@ import { Modal } from '../Modal.js'
 
 interface SkillImportProps {
   readonly onImport: (request: SkillImportRequest) => Promise<boolean>
+  /** What the import would write, read before anything is written. */
+  readonly onInspect: (request: SkillImportRequest) => Promise<SkillPreview | null>
+  /**
+   * The last refusal in words, from the store this writes into.
+   *
+   * Passed in rather than kept here because the modal covers the section's own
+   * banner: a refusal shown behind it is one nobody reads.
+   */
+  readonly error: string | null
   readonly onClose: () => void
 }
 
@@ -28,7 +37,12 @@ type Route = 'path' | 'text' | 'url'
  * second name here would be a way to file it under something the document does
  * not say.
  */
-export function SkillImport({ onImport, onClose }: SkillImportProps): React.JSX.Element {
+export function SkillImport({
+  onImport,
+  onInspect,
+  error,
+  onClose
+}: SkillImportProps): React.JSX.Element {
   const { t } = useTranslation()
 
   const [route, setRoute] = useState<Route>('path')
@@ -36,6 +50,16 @@ export function SkillImport({ onImport, onClose }: SkillImportProps): React.JSX.
   const [text, setText] = useState('')
   const [url, setUrl] = useState('')
   const [busy, setBusy] = useState(false)
+  /*
+   * What the import would write, read before it writes it.
+   *
+   * The three routes differ in how much can be seen beforehand. A folder
+   * somebody picked, they know; pasted text, they can read. A **link** they
+   * cannot — the only thing on screen is an address, and what comes back is
+   * prose the agent will later follow. Naming it first is the difference
+   * between importing a skill and importing a URL.
+   */
+  const [preview, setPreview] = useState<SkillPreview | null>(null)
 
   const routes: readonly { readonly id: Route; readonly label: string }[] = [
     { id: 'path', label: t('skills.fromDisk') },
@@ -62,9 +86,27 @@ export function SkillImport({ onImport, onClose }: SkillImportProps): React.JSX.
     if (picked.ok && picked.value !== null) setPath(picked.value)
   }
 
+  /** Reads what would be written, and shows it rather than writing it. */
+  const look = async (): Promise<void> => {
+    setBusy(true)
+    setPreview(await onInspect(request()))
+    setBusy(false)
+  }
+
   const submit = async (): Promise<void> => {
     setBusy(true)
-    const brought = await onImport(request())
+    /*
+     * The document that was previewed, for the one route that cannot be read
+     * twice: fetching the address again could answer differently, and it is the
+     * first answer the reader agreed to. The other two still carry their own
+     * request, because a folder is copied whole and text is already in hand.
+     */
+    const confirmed: SkillImportRequest =
+      preview?.text === null || preview?.text === undefined
+        ? request()
+        : { kind: 'text', text: preview.text }
+
+    const brought = await onImport(confirmed)
     setBusy(false)
     if (brought) onClose()
   }
@@ -77,19 +119,36 @@ export function SkillImport({ onImport, onClose }: SkillImportProps): React.JSX.
       footer={
         <>
           <Button onClick={onClose}>{t('skills.cancel')}</Button>
+          {/* Two steps, because the answer to "what am I importing" is not on
+              screen until it has been read. The second press is the one that
+              writes. */}
           <Button
             variant="accent"
             disabled={!ready || busy}
             onClick={() => {
-              void submit()
+              void (preview === null ? look() : submit())
             }}
           >
-            {t('skills.importAction')}
+            {preview === null ? t('skills.inspectAction') : t('skills.importAction')}
           </Button>
         </>
       }
     >
       <div className="space-y-4 p-4 text-[13px]">
+        {error !== null && <p className="text-danger">{error}</p>}
+
+        {/* What would be written, named. A document whose frontmatter gives a
+            name that cannot be a folder is refused here rather than after the
+            write, and about a name the reader has now seen. */}
+        {preview !== null && (
+          <div className="border-line bg-muted/40 space-y-1 rounded-[var(--radius-panel)] border px-3 py-2.5">
+            <p className="font-medium">{preview.name}</p>
+            <p className="text-ink-soft leading-relaxed">
+              {preview.description === '' ? t('skills.noDescription') : preview.description}
+            </p>
+          </div>
+        )}
+
         {/* A radio group rather than tabs: three answers to one question, one
             of them true at a time, and the panel underneath is what changes. */}
         <div role="radiogroup" aria-label={t('skills.importTitle')} className="flex gap-1">
@@ -101,6 +160,8 @@ export function SkillImport({ onImport, onClose }: SkillImportProps): React.JSX.
               aria-checked={route === item.id}
               onClick={() => {
                 setRoute(item.id)
+                // What was read was read about the other route.
+                setPreview(null)
               }}
               className={`focus-ring h-7 rounded-[var(--radius-control)] px-3 text-[12px] transition-colors ${
                 route === item.id

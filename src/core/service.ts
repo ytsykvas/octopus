@@ -124,6 +124,7 @@ import {
   ensureStore,
   importFromPath,
   importFromText,
+  inspectImport,
   importFromUrl,
   readSkill,
   readSkillsIn,
@@ -134,6 +135,7 @@ import {
   skillEnabled,
   type SkillImport,
   type SkillListing,
+  type SkillPreview,
   type SkillSave,
   writeRawSkill,
   writeSkill
@@ -645,6 +647,14 @@ export interface OctopusService {
    */
   renameStoredSkill(store: SkillStore, folder: string, to: string): Promise<SkillEntry>
   importStoredSkill(store: SkillStore, request: SkillImport): Promise<SkillEntry>
+  /**
+   * What an import would write, without writing it.
+   *
+   * The link is what this is for: a folder the user picked they know and pasted
+   * text they can read, while an address shows nothing until it has been
+   * fetched — and what comes back is prose the agent will later follow.
+   */
+  inspectSkillImport(store: SkillStore, request: SkillImport): Promise<SkillPreview>
   /**
    * Every skill this conversation could use, and whether it is on.
    *
@@ -2840,6 +2850,17 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
       await refreshRunningSkills()
 
       return imported
+    },
+
+    async inspectSkillImport(store, request) {
+      // The store's own directory, read rather than made: a preview must not
+      // create the folder for a skill nobody has agreed to yet.
+      return inspectImport(
+        skillsDirOf(storeRoot(store)),
+        request,
+        download,
+        await namesBesideStore(store)
+      )
     },
 
     async skillsForChat(chatId) {

@@ -1022,6 +1022,11 @@ export const en = {
     inRepositoryNote:
       'The agent finds these in the checkout by itself. Switch one off to keep it out of new conversations here, or copy it to use in every project.',
     copyToGlobal: 'Copy to all projects',
+    /* Two steps, because the answer to "what am I importing" is not on screen
+       until it has been read — and for a link the only thing on screen is an
+       address. The second press is the one that writes. */
+    inspectAction: 'Read it',
+    noDescription: 'It describes itself as nothing.',
 
     /* The editor. `name` is fixed once created: it is the directory, and every
        stored answer is keyed by it. */

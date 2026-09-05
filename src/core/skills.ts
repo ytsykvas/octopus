@@ -818,6 +818,17 @@ export async function importFromUrl(
     throw new SkillError('skillUrlRefused', { url: value }, 'Only https addresses are fetched.')
   }
 
+  return importFromText(dir, await fetched(url, value, download), elsewhere)
+}
+
+/**
+ * The document at an address, refused the moment it stops being one.
+ *
+ * Its own function because the preview reads the same address the same way —
+ * and because a link inspected and then imported must be fetched **once**: the
+ * second answer need not be the first, and the reader approved the first.
+ */
+async function fetched(url: URL, value: string, download: Download): Promise<string> {
   const controller = new AbortController()
   const timer = setTimeout(() => {
     controller.abort()
@@ -838,8 +849,84 @@ export async function importFromUrl(
       throw new SkillError('skillUrlRefused', { url: response.url }, 'The redirect left https.')
     }
 
-    return await importFromText(dir, await readCapped(response), elsewhere)
+    return await readCapped(response)
   } finally {
     clearTimeout(timer)
   }
+}
+
+/** What a preview says about a skill that has not been written yet. */
+export interface SkillPreview {
+  readonly name: string
+  readonly description: string
+  /**
+   * The document, for the one route whose source cannot be read twice.
+   *
+   * Null for a folder and for pasted text, where the caller still has what it
+   * handed over. A **link** is the case this field exists for: inspecting and
+   * then importing would otherwise fetch the address twice, and the second
+   * answer need not be the first.
+   */
+  readonly text: string | null
+}
+
+/**
+ * What an import would write, without writing it.
+ *
+ * The three routes differ in how much can be seen beforehand. A folder somebody
+ * picked, they know; pasted text, they can read. A **link** they cannot: the
+ * only thing on screen is an address, and what comes back is prose the agent
+ * will later follow. Naming it first is the difference between importing a
+ * skill and importing a URL.
+ *
+ * Every refusal the write makes is made here too — a name that cannot be a
+ * folder, a name already taken — so it arrives before the round trip rather
+ * than after it, and about a name the reader has now seen.
+ */
+export async function inspectImport(
+  dir: string,
+  request: SkillImport,
+  download: Download,
+  elsewhere: readonly string[] = []
+): Promise<SkillPreview> {
+  const text = request.kind === 'text' ? request.text : await sourceText(request, download)
+
+  const parsed = requireDocument(text)
+  const name = requireName(parsed.name)
+  await refuseExisting(dir, name, elsewhere)
+
+  return {
+    name,
+    description: parsed.description,
+    text: request.kind === 'url' ? text : null
+  }
+}
+
+/** The document behind a folder or a link, read the way the import reads it. */
+async function sourceText(
+  request: Extract<SkillImport, { kind: 'path' | 'url' }>,
+  download: Download
+): Promise<string> {
+  if (request.kind === 'url') {
+    const url = httpsUrl(request.url)
+    if (url === null) {
+      throw new SkillError(
+        'skillUrlRefused',
+        { url: request.url },
+        'Only https addresses are fetched.'
+      )
+    }
+
+    return fetched(url, request.url, download)
+  }
+
+  const info = await stat(request.path)
+  if (!info.isDirectory()) return readFile(request.path, 'utf8')
+
+  const raw = await readText(join(request.path, SKILL_FILE))
+  if (raw === null) {
+    throw new SkillError('skillFrontmatterMissing', {}, `The folder holds no ${SKILL_FILE}.`)
+  }
+
+  return raw
 }

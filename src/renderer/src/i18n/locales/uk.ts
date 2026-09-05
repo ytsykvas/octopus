@@ -822,6 +822,8 @@ export const uk: Translation = {
     inRepositoryNote:
       'Агент знаходить їх у клоні сам. Вимкніть, щоб скіл не потрапляв у нові розмови тут, або скопіюйте, щоб мати його в кожному проєкті.',
     copyToGlobal: 'Скопіювати для всіх проєктів',
+    inspectAction: 'Прочитати',
+    noDescription: 'Опису про себе не дає.',
 
     editorNew: 'Новий скіл',
     editorEdit: 'Редагування {{name}}',

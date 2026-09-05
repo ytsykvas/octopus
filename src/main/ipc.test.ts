@@ -336,6 +336,7 @@ describe('channel table', () => {
     'skills:save',
     'skills:remove',
     'skills:rename',
+    'skills:inspect',
     'skills:import',
     'skills:inRepository',
     'skills:forChat',
@@ -619,6 +620,23 @@ describe('skills', () => {
     await expect(invoke('skills:read', store, 'review')).resolves.toMatchObject({
       ok: true,
       value: { body: '# Review\n' }
+    })
+
+    /*
+     * Read without being written, which is the whole of what the channel is
+     * for: the reader sees what an import would land before it lands. Asserted
+     * against the store's own listing, because "wrote nothing" is the half a
+     * preview can get wrong invisibly.
+     */
+    await expect(
+      invoke('skills:inspect', store, {
+        kind: 'text',
+        text: '---\nname: ship\ndescription: Ships it.\n---\n\n# Ship\n'
+      })
+    ).resolves.toMatchObject({ ok: true, value: { name: 'ship', description: 'Ships it.' } })
+    await expect(invoke('skills:list', store)).resolves.toMatchObject({
+      ok: true,
+      value: [{ name: 'review' }]
     })
 
     // Renamed on the way past, because both names become directories and both

@@ -9,6 +9,7 @@ import {
   ensureStore,
   importFromPath,
   importFromText,
+  inspectImport,
   importFromUrl,
   readSkill,
   readSkillsIn,
@@ -690,6 +691,112 @@ describe('importFromPath', () => {
     expect((await refusal(() => importFromPath(join(root, 'store'), source))).code).toBe(
       'skillLinkRefused'
     )
+  })
+})
+
+describe('inspectImport', () => {
+  const download = (body: string): Download => ({
+    fetch: () => Promise.resolve(new Response(body, { status: 200 })),
+    timeoutMs: 100
+  })
+
+  /*
+   * The route this exists for. A folder somebody picked they know and pasted
+   * text they can read; an address shows nothing at all until it is fetched,
+   * and what comes back is prose the agent will later follow.
+   */
+  it('names what a link would write, and writes nothing', async () => {
+    const preview = await inspectImport(
+      root,
+      { kind: 'url', url: 'https://example.test/SKILL.md' },
+      download(document('pdf-forms', 'Fills PDF forms.'))
+    )
+
+    expect(preview).toMatchObject({ name: 'pdf-forms', description: 'Fills PDF forms.' })
+    await expect(readSkillsIn(root)).resolves.toEqual([])
+  })
+
+  // The document comes back with it, so importing what was previewed does not
+  // ask the address again — the second answer need not be the first.
+  it('carries the document back for a link, and not for the other two', async () => {
+    const fetched = await inspectImport(
+      root,
+      { kind: 'url', url: 'https://example.test/SKILL.md' },
+      download(document('review', 'Reviews.'))
+    )
+    expect(fetched.text).toContain('name: review')
+
+    const pasted = await inspectImport(
+      root,
+      { kind: 'text', text: document('review', 'Reviews.') },
+      download('')
+    )
+    expect(pasted.text).toBeNull()
+  })
+
+  it('reads a folder without copying it', async () => {
+    const source = await place(root, 'source', document('pdf-forms', 'Fills PDF forms.'))
+
+    await expect(
+      inspectImport(root, { kind: 'path', path: source }, download(''))
+    ).resolves.toMatchObject({ name: 'pdf-forms' })
+  })
+
+  it('reads a single file that is a skill', async () => {
+    const source = await place(root, 'source', document('pdf-forms', 'Fills PDF forms.'))
+
+    await expect(
+      inspectImport(root, { kind: 'path', path: join(source, 'SKILL.md') }, download(''))
+    ).resolves.toMatchObject({ name: 'pdf-forms' })
+  })
+
+  /*
+   * Every refusal the write makes, made here — so it arrives before the round
+   * trip and about a name the reader has now seen, rather than after it and
+   * about one they never did.
+   */
+  it('refuses a document with no frontmatter', async () => {
+    const refused = await refusal(() =>
+      inspectImport(root, { kind: 'text', text: 'no frontmatter' }, download(''))
+    )
+
+    expect(refused.code).toBe('skillFrontmatterMissing')
+  })
+
+  it('refuses a name that could not be a folder', async () => {
+    const refused = await refusal(() =>
+      inspectImport(root, { kind: 'text', text: document('Code Review', 'x') }, download(''))
+    )
+
+    expect(refused.code).toBe('skillNameInvalid')
+  })
+
+  it('refuses a name the store already holds', async () => {
+    await place(root, 'review', document('review', 'One.'))
+
+    const refused = await refusal(() =>
+      inspectImport(root, { kind: 'text', text: document('review', 'Two.') }, download(''))
+    )
+
+    expect(refused.code).toBe('skillExists')
+  })
+
+  it('refuses an address that is not https', async () => {
+    const refused = await refusal(() =>
+      inspectImport(root, { kind: 'url', url: 'http://example.test/SKILL.md' }, download(''))
+    )
+
+    expect(refused.code).toBe('skillUrlRefused')
+  })
+
+  it('refuses a folder with no SKILL.md in it', async () => {
+    await mkdir(join(root, 'empty'), { recursive: true })
+
+    const refused = await refusal(() =>
+      inspectImport(root, { kind: 'path', path: join(root, 'empty') }, download(''))
+    )
+
+    expect(refused.code).toBe('skillFrontmatterMissing')
   })
 })
 

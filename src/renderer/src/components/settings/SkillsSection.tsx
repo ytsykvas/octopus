@@ -153,7 +153,10 @@ export function SkillsSection({
           {store.kind === 'global' ? t('skills.globalNote') : t('skills.projectNote')}
         </p>
 
-        {skills.error !== null && <p className="text-danger mb-3">{skills.error}</p>}
+        {/* Not while the import dialog is open: it draws this message itself,
+            because a modal covers this line and a refusal shown behind one is a
+            refusal nobody reads. */}
+        {skills.error !== null && !importing && <p className="text-danger mb-3">{skills.error}</p>}
 
         {skills.skills.length === 0 ? (
           <p className="text-ink-faint">{t('skills.empty')}</p>
@@ -276,6 +279,8 @@ export function SkillsSection({
       {importing && (
         <SkillImport
           onImport={skills.bring}
+          onInspect={skills.inspect}
+          error={skills.error}
           onClose={() => {
             setImporting(false)
           }}

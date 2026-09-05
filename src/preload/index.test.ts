@@ -376,6 +376,15 @@ describe('channel names', () => {
       'skills:rename'
     ],
     [
+      'skills.inspect',
+      () =>
+        method('skills', 'inspect')(
+          { kind: 'global' } as never,
+          { kind: 'text', text: '' } as never
+        ),
+      'skills:inspect'
+    ],
+    [
       'skills.import',
       () =>
         method('skills', 'import')(

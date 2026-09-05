@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 
 import type { SkillStore } from '@core/skillNames.js'
-import type { SkillEntry, SkillImport, SkillSave } from '@core/skills.js'
+import type { SkillEntry, SkillImport, SkillPreview, SkillSave } from '@core/skills.js'
 
 import { useErrorMessage } from './useErrorMessage.js'
 
@@ -14,6 +14,8 @@ export interface SkillStoreController {
   readonly remove: (folder: string) => Promise<void>
   /** Gives one another name, moving every answer stored against it. */
   readonly rename: (folder: string, to: string) => Promise<boolean>
+  /** What an import would write, without writing it. */
+  readonly inspect: (request: SkillImport) => Promise<SkillPreview | null>
   readonly bring: (request: SkillImport) => Promise<boolean>
   readonly refresh: () => Promise<void>
 }
@@ -108,6 +110,20 @@ export function useSkillStore(store: SkillStore): SkillStoreController {
     [target, describeFailure, refresh]
   )
 
+  const inspect = useCallback(
+    async (request: SkillImport) => {
+      const seen = await window.octopus.skills.inspect(target, request)
+      if (!seen.ok) {
+        setError(describeFailure(seen))
+        return null
+      }
+
+      setError(null)
+      return seen.value
+    },
+    [target, describeFailure]
+  )
+
   const bring = useCallback(
     async (request: SkillImport) => {
       const imported = await window.octopus.skills.import(target, request)
@@ -123,5 +139,5 @@ export function useSkillStore(store: SkillStore): SkillStoreController {
     [target, describeFailure, refresh]
   )
 
-  return { skills, error, save, remove, rename, bring, refresh }
+  return { skills, error, save, remove, rename, inspect, bring, refresh }
 }
