@@ -1948,9 +1948,16 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
    * here — and the switch on either used to move both. Uniqueness was checked
    * inside a single directory, which is the wrong scope for a key this wide.
    *
-   * The other store only. The checkout's own `.claude/skills` is in the same
-   * scope and is not reachable from a `SkillStore`, which names no workspace;
-   * that half has a task file of its own.
+   * **All three sources**, which is what the scope of the key demands. The
+   * checkouts were the missing one: a `SkillStore` names no workspace, so this
+   * looked unreachable from here — but the worktrees are in `state`, and which
+   * of them share a session with this store is a question this function is the
+   * only place able to answer. A global skill meets every project's checkout; a
+   * project's meets only its own, which is the whole difference between the two
+   * arms below.
+   *
+   * Read on a write rather than kept: a listing is a `readdir` that never
+   * throws, and one taken at startup would be wrong the moment somebody pulled.
    */
   async function namesBesideStore(store: SkillStore): Promise<string[]> {
     const others =
@@ -1958,7 +1965,16 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
         ? state.projects.map((project) => projectSkillsRoot(project.id, dataRoot))
         : [globalSkillsRoot(dataRoot)]
 
-    const listings = await Promise.all(others.map((root) => readSkillsIn(skillsDirOf(root))))
+    const worktrees = (
+      store.kind === 'global'
+        ? state.workspaces
+        : state.workspaces.filter((workspace) => workspace.projectId === store.projectId)
+    ).map((workspace) => join(workspace.path, '.claude', 'skills'))
+
+    const listings = await Promise.all([
+      ...others.map((root) => readSkillsIn(skillsDirOf(root))),
+      ...worktrees.map((dir) => readSkillsIn(dir))
+    ])
 
     return listings.flat().map((skill) => skill.name)
   }

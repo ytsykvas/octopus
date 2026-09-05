@@ -6738,6 +6738,51 @@ describe('the agent chat', () => {
       await expect(service.listSkills({ kind: 'project', projectId })).resolves.toEqual([])
     })
 
+    /*
+     * The third source, and the last one in the namespace. A skill is keyed by
+     * its bare name wherever it came from — measured against a live session, a
+     * `local-probe` in a store and another in the checkout came back as one row
+     * — so a repository shipping `review` and a skill written here called
+     * `review` are two files for one skill, and the switch on either moves
+     * both. The panel draws all three side by side, so the collision was
+     * visible on screen while nothing prevented it.
+     */
+    it('refuses a name the checkout already ships', async () => {
+      const { service, projectId, workspaceId } = await withWorkspace()
+      const workspace = (await service.listWorkspaces(projectId))[0]
+      if (!workspace) throw new Error('no workspace')
+      await placeInRepo(workspace.path, 'review')
+      expect(workspaceId).not.toBe('')
+
+      const refused = service.saveStoredSkill({ kind: 'global' }, 'review', {
+        kind: 'form',
+        content: { description: 'Ours.', body: '# Review\n' }
+      })
+
+      await expect(refused).rejects.toMatchObject({ code: 'skillExists' })
+    })
+
+    /*
+     * A project's own store meets only its own project's checkouts. A global
+     * skill meets every project's, which is the difference the two arms make —
+     * asserted from the narrow side, because the wide one passes either way.
+     */
+    it('does not refuse a project skill for a name another project’s checkout ships', async () => {
+      const { service, projectId } = await withWorkspace()
+      const elsewhere = join(dir, 'elsewhere')
+      await initRepo(elsewhere)
+      const other = await service.addProjectFromPath(elsewhere)
+      const workspace = await service.createWorkspaceIn(other.id)
+      await placeInRepo(workspace.path, 'review')
+
+      await expect(
+        service.saveStoredSkill({ kind: 'project', projectId }, 'review', {
+          kind: 'form',
+          content: { description: 'Ours.', body: '# Review\n' }
+        })
+      ).resolves.toMatchObject({ name: 'review' })
+    })
+
     it('refuses an import of a name the other store already uses', async () => {
       const { service, projectId } = await withWorkspace()
       await service.saveStoredSkill({ kind: 'project', projectId }, 'review', {
