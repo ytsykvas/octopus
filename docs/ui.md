@@ -1002,6 +1002,21 @@ showing. A refused reply leaves what was typed where it is — the sentence took
 thought, and clearing it makes the reader write it twice to find out the second
 attempt fails too.
 
+**A merged request offers to remove its workspace.** §3 draws the lifecycle as
+ending in an archive, and that was the arrow the app did not draw: a merged
+workspace looked exactly like a working one in the list, so the list filled with
+finished work and the reader had to remember which of eight branches was done.
+
+Offered off the request's **state** rather than off the press that merged it,
+which is what makes it appear for a merge done from the header or in a browser
+too. And it offers rather than acts: a merge is somebody else's repository
+changing, removing a directory is this machine's work disappearing, and the two
+should not ride on one press. The flow behind the button is the sidebar's own,
+so it asks about uncommitted work and about the branch exactly as the list does.
+
+A **closed** request is not a finished one — it is reopened, or the branch is
+reworked and opened again — so only a merge draws this.
+
 **Resolve goes both ways.** Undoing one is a single click on GitHub, and a pane
 that can do a thing but not undo it sends the reader to the browser for the half
 it kept, which is the failure the whole tab exists to avoid.

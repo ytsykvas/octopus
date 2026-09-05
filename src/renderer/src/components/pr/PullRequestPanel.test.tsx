@@ -106,11 +106,13 @@ function renderPanel(
   onEditInstructions: ReturnType<typeof vi.fn>
   onError: ReturnType<typeof vi.fn>
   onRequestChanged: ReturnType<typeof vi.fn>
+  onRemoveWorkspace: ReturnType<typeof vi.fn>
   quotes: ReturnType<typeof quoteController>
 } {
   const onEditInstructions = vi.fn()
   const onError = vi.fn()
   const onRequestChanged = vi.fn()
+  const onRemoveWorkspace = vi.fn()
   const quotes = overrides.quotes ?? quoteController()
 
   render(
@@ -123,10 +125,11 @@ function renderPanel(
       onRequestChanged={onRequestChanged}
       onEditInstructions={onEditInstructions}
       onError={onError}
+      onRemoveWorkspace={onRemoveWorkspace}
     />
   )
 
-  return { onEditInstructions, onError, onRequestChanged, quotes }
+  return { onEditInstructions, onError, onRequestChanged, onRemoveWorkspace, quotes }
 }
 
 describe('the pull request tab', () => {
@@ -180,6 +183,7 @@ describe('the pull request tab', () => {
         quotes={quoteController()}
         envFile=".env"
         onRequestChanged={vi.fn()}
+        onRemoveWorkspace={vi.fn()}
         onEditInstructions={vi.fn()}
         onError={vi.fn()}
       />
@@ -886,6 +890,54 @@ describe('a pull request that exists', () => {
       expect(onError).toHaveBeenCalledWith(expect.stringContaining('Could not resolve to a node'))
     })
     expect(screen.getByRole('textbox', { name: 'Reply' })).toHaveValue('Kept.')
+  })
+
+  /*
+   * §3 draws the lifecycle as ending in an archive, and that arrow was the one
+   * the app did not draw: a merged workspace looked exactly like a working one,
+   * so the list filled with finished work.
+   */
+  it('offers to remove the workspace once the branch is merged', async () => {
+    const user = userEvent.setup()
+    answer(view({ request: request({ state: 'merged' }) }))
+    answerDetail(detail({ state: 'merged' }))
+    const { onRemoveWorkspace } = renderPanel()
+
+    await user.click(await screen.findByRole('button', { name: 'Remove workspace…' }))
+
+    expect(onRemoveWorkspace).toHaveBeenCalledWith(anna.id)
+  })
+
+  /* Offered off the request's state and not off the press that merged it, so a
+     merge from the header or in a browser reaches it too. Nothing here presses
+     Merge. */
+  it('offers it for a merge this pane did not perform', async () => {
+    answer(view({ request: request({ state: 'merged' }) }))
+    answerDetail(detail({ state: 'merged' }))
+    renderPanel()
+
+    expect(await screen.findByText(/This branch is merged/)).toBeInTheDocument()
+    expect(octopus().workspaces.mergePullRequest).not.toHaveBeenCalled()
+  })
+
+  it('does not offer it while the request is still open', async () => {
+    answer(view({ request: request() }))
+    answerDetail(detail())
+    renderPanel()
+
+    await screen.findByRole('button', { name: 'Merge' })
+    expect(screen.queryByRole('button', { name: 'Remove workspace…' })).not.toBeInTheDocument()
+  })
+
+  /* A closed request is not a finished one: it is reopened, or the branch is
+     reworked and opened again. Only a merge ends the workspace. */
+  it('does not offer it for a request that was closed rather than merged', async () => {
+    answer(view({ request: request({ state: 'closed' }) }))
+    answerDetail(detail({ state: 'closed' }))
+    renderPanel()
+
+    await screen.findByText('Pull request #7 was closed without merging.')
+    expect(screen.queryByRole('button', { name: 'Remove workspace…' })).not.toBeInTheDocument()
   })
 
   it('drops what was typed when the reply is cancelled', async () => {

@@ -48,6 +48,14 @@ interface PullRequestPanelProps {
   readonly onEditInstructions: () => void
   /** Says what went wrong where the window already says such things. */
   readonly onError: (message: string) => void
+  /**
+   * Removes a workspace, asking first — offered once its request is merged.
+   *
+   * By id rather than closed over the workspace above, so the caller needs no
+   * guard for the case where there is none: this pane returns early without
+   * one, and a check nothing can reach is a claim nothing tests.
+   */
+  readonly onRemoveWorkspace: (workspaceId: string) => void
 }
 
 /**
@@ -66,7 +74,8 @@ export function PullRequestPanel({
   envFile,
   onRequestChanged,
   onEditInstructions,
-  onError
+  onError,
+  onRemoveWorkspace
 }: PullRequestPanelProps): React.JSX.Element {
   const { t } = useTranslation()
   const describeFailure = useErrorMessage()
@@ -357,6 +366,9 @@ export function PullRequestPanel({
                   commitAndPush(t('pullRequest.answerCommit'))
                 }}
                 committing={committing}
+                onRemoveWorkspace={() => {
+                  onRemoveWorkspace(workspace.id)
+                }}
               />
             </>
           )}

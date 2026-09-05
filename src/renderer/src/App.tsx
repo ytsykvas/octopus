@@ -883,6 +883,7 @@ export function App(): React.JSX.Element {
             quotes={reviewQuotes}
             envFile={selectedProject?.envFile ?? DEFAULT_ENV_FILE}
             onRequestChanged={branchRequests.refresh}
+            onRemoveWorkspace={(id) => void workspaces.remove(id)}
             onError={setError}
             // The room the pane must leave alone. Folded away, the list takes
             // none of it — and the pane may have that room too.

@@ -126,6 +126,7 @@ function renderPanel(overrides: Partial<Props> = {}): {
     quotes: quoteController(),
     envFile: '.env',
     onRequestChanged: vi.fn(),
+    onRemoveWorkspace: vi.fn(),
     onError: vi.fn(),
     ...overrides
   }

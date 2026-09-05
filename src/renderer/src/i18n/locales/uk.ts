@@ -404,6 +404,8 @@ export const uk: Translation = {
     replyCancel: 'Скасувати',
     resolveThread: 'Розвʼязати',
     unresolveThread: 'Відкрити знову',
+    mergedDone: 'Гілку злито. Її робоча зона ще тут.',
+    removeWorkspace: 'Прибрати робочу зону…',
     verdictApproved: 'схвалив',
     verdictChangesRequested: 'просить змін',
     verdictCommented: 'прокоментував',

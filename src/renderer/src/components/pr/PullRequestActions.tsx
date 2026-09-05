@@ -85,6 +85,15 @@ interface PullRequestActionsProps {
   readonly closing: boolean
   readonly onCommitAndPush: () => void
   readonly committing: boolean
+  /**
+   * Removes the workspace, asking first — the sidebar's own flow.
+   *
+   * Offered off the request's **state** rather than off the press that merged
+   * it, which is what makes it appear for a merge done from the header or in a
+   * browser as well. §3 draws the lifecycle as ending in an archive, and this
+   * is the arrow the app was not drawing.
+   */
+  readonly onRemoveWorkspace: () => void
 }
 
 /**
@@ -106,7 +115,8 @@ export function PullRequestActions({
   onClose,
   closing,
   onCommitAndPush,
-  committing
+  committing,
+  onRemoveWorkspace
 }: PullRequestActionsProps): React.JSX.Element {
   const { t } = useTranslation()
 
@@ -176,6 +186,20 @@ export function PullRequestActions({
           />
         )}
       </div>
+
+      {/* A merge is somebody else's repository changing; removing a directory is
+          this machine's work disappearing. So this offers rather than acts, and
+          the flow behind it is the sidebar's, which asks about uncommitted work
+          and about the branch. */}
+      {detail.state === 'merged' && (
+        <div className="flex flex-col items-start gap-2">
+          <p className="text-ink-faint leading-relaxed">{t('pullRequest.mergedDone')}</p>
+
+          <Button size="sm" variant="quiet" onClick={onRemoveWorkspace}>
+            {t('pullRequest.removeWorkspace')}
+          </Button>
+        </div>
+      )}
 
       {open && (
         <div className="flex items-center gap-2">

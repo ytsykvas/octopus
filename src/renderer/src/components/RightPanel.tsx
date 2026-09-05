@@ -184,6 +184,8 @@ interface RightPanelProps {
   readonly envFile: string
   /** Tells the window a branch's pull request has changed, so the list re-marks. */
   readonly onRequestChanged: () => void
+  /** Removes a workspace, asking first — the sidebar's own flow, by id. */
+  readonly onRemoveWorkspace: (workspaceId: string) => void
   readonly onError: (message: string | null) => void
 }
 
@@ -214,6 +216,7 @@ export function RightPanel({
   quotes,
   envFile,
   onRequestChanged,
+  onRemoveWorkspace,
   onError
 }: RightPanelProps): React.JSX.Element {
   const { t, i18n } = useTranslation()
@@ -1036,6 +1039,7 @@ export function RightPanel({
           onRequestChanged={onRequestChanged}
           onEditInstructions={onEditInstructions}
           onError={onError}
+          onRemoveWorkspace={onRemoveWorkspace}
         />
       </div>
     </section>

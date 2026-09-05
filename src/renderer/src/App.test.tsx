@@ -1929,6 +1929,54 @@ describe('App', () => {
   })
 
   /*
+   * §3 ends the lifecycle in an archive, and the pane offering the removal is
+   * only half the arrow: the press has to reach the sidebar's own flow, which
+   * asks about uncommitted work and about the branch. Every unit test either
+   * side of this passed while the two were not joined.
+   */
+  it('removes a merged workspace through the same question the list asks', async () => {
+    givenTwoProjects()
+    vi.mocked(window.octopus.workspaces.pullRequest).mockResolvedValue({
+      ok: true,
+      value: {
+        request: {
+          number: 7,
+          state: 'merged',
+          title: 'Rename the thing',
+          url: 'https://github.com/o/p/pull/7'
+        },
+        pushed: true,
+        dirty: false,
+        ahead: 0,
+        base: 'main'
+      }
+    })
+    vi.mocked(window.octopus.workspaces.pullRequestDetail).mockResolvedValue({
+      ok: true,
+      value: {
+        state: 'merged',
+        title: 'Rename the thing',
+        url: 'https://github.com/o/p/pull/7',
+        draft: false,
+        checks: [],
+        comments: [],
+        decision: null,
+        mergeable: 'mergeable',
+        mergeState: 'clean',
+        capped: false
+      }
+    })
+    const user = await openApp()
+    await user.click(await screen.findByRole('button', { name: 'PL' }))
+    await user.click(screen.getByRole('button', { name: 'Pull request' }))
+    await user.click(await screen.findByText('anna'))
+
+    await user.click(await screen.findByRole('button', { name: 'Remove workspace…' }))
+
+    expect(await screen.findByText('Remove “anna”?')).toBeInTheDocument()
+  })
+
+  /*
    * Three clicks away otherwise: unfold the pane, find the tab, read it. The
    * button is beside the branch because that is what a request is made of.
    */

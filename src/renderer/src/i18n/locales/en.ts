@@ -494,6 +494,10 @@ export const en = {
     replyCancel: 'Cancel',
     resolveThread: 'Resolve',
     unresolveThread: 'Unresolve',
+    /* Offered off the request's state, not off the press that merged it — so it
+       is here for a merge done from the header or in a browser too. */
+    mergedDone: 'This branch is merged. Its workspace is still here.',
+    removeWorkspace: 'Remove workspace…',
     verdictApproved: 'approved',
     verdictChangesRequested: 'requested changes',
     verdictCommented: 'commented',
