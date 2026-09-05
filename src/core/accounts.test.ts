@@ -30,6 +30,26 @@ const CLAUDE_SIGNED_IN = JSON.stringify({
 
 const GITHUB_USER = JSON.stringify({ login: 'ytsykvas', name: 'Yurii Tsykvas', id: 1 })
 
+/** What `gh auth status --json hosts` answers, with the scopes it names. */
+function status(scopes: string | undefined): string {
+  return JSON.stringify({
+    hosts: { 'github.com': [{ state: 'success', active: true, login: 'ytsykvas', scopes }] }
+  })
+}
+
+/**
+ * A `gh` that answers both calls `checkGitHubAccount` makes.
+ *
+ * They are told apart by the first argument, which is all that separates
+ * `gh api user` from `gh auth status`.
+ */
+function gh(user: string, authStatus: string): CommandExec {
+  return (command, args) => {
+    if (command !== 'gh') return Promise.reject(new Error('not installed'))
+    return Promise.resolve(args.includes('api') ? user : authStatus)
+  }
+}
+
 describe('defaultExec', () => {
   // Uses `echo` rather than claude or gh: the point is that the executor
   // spawns a real process and returns its stdout, not that any particular
@@ -95,19 +115,89 @@ describe('checkClaudeAccount', () => {
 
 describe('checkGitHubAccount', () => {
   it('reports a signed-in account', async () => {
-    await expect(checkGitHubAccount(respondTo('gh', GITHUB_USER))).resolves.toEqual({
+    const exec = gh(GITHUB_USER, status('gist, read:org, repo, workflow'))
+
+    await expect(checkGitHubAccount(exec)).resolves.toEqual({
       connected: true,
       login: 'ytsykvas',
-      name: 'Yurii Tsykvas'
+      name: 'Yurii Tsykvas',
+      seesOrganisations: true
     })
   })
 
   it('handles an account without a display name', async () => {
     const payload = JSON.stringify({ login: 'ytsykvas', name: null })
-    await expect(checkGitHubAccount(respondTo('gh', payload))).resolves.toEqual({
+    await expect(checkGitHubAccount(gh(payload, status('repo')))).resolves.toEqual({
       connected: true,
       login: 'ytsykvas',
-      name: null
+      name: null,
+      seesOrganisations: false
+    })
+  })
+
+  /*
+   * The whole point of the scope check, and the one assertion that would let a
+   * wrong sentence onto the screen if it went: a token that names its scopes
+   * and does not hold this one cannot list organisations, and the picker says
+   * so.
+   */
+  it('reports that a token without read:org cannot see organisations', async () => {
+    const exec = gh(GITHUB_USER, status('gist, repo, workflow'))
+    await expect(checkGitHubAccount(exec)).resolves.toMatchObject({ seesOrganisations: false })
+  })
+
+  it('asks about the active account only, since a host can hold several', async () => {
+    const calls: string[][] = []
+    const exec: CommandExec = (_command, args) => {
+      calls.push([...args])
+      return Promise.resolve(args.includes('api') ? GITHUB_USER : status('repo'))
+    }
+
+    await checkGitHubAccount(exec)
+
+    const auth = calls.find((args) => args.includes('auth')) ?? []
+    expect(auth).toContain('--active')
+    expect(auth).toContain('github.com')
+  })
+
+  /*
+   * A fine-grained token holds no classic scopes and can still reach an
+   * organisation, so "none named" has to mean "we were not told" rather than
+   * "none". Reading it as none would put a confident wrong line under the
+   * repository list.
+   */
+  it('does not claim a token without named scopes is missing one', async () => {
+    for (const answer of [status(undefined), status(''), status('  ')]) {
+      await expect(checkGitHubAccount(gh(GITHUB_USER, answer))).resolves.toMatchObject({
+        seesOrganisations: null
+      })
+    }
+  })
+
+  it('says nothing about scopes when gh cannot answer for them', async () => {
+    const exec: CommandExec = (_command, args) =>
+      args.includes('api')
+        ? Promise.resolve(GITHUB_USER)
+        : Promise.reject(new Error('unknown flag: --json'))
+
+    await expect(checkGitHubAccount(exec)).resolves.toMatchObject({
+      connected: true,
+      seesOrganisations: null
+    })
+  })
+
+  it('says nothing about scopes when the status is not readable', async () => {
+    for (const answer of ['<html>', JSON.stringify({ hosts: 'none' }), JSON.stringify({})]) {
+      await expect(checkGitHubAccount(gh(GITHUB_USER, answer))).resolves.toMatchObject({
+        seesOrganisations: null
+      })
+    }
+  })
+
+  it('says nothing about scopes for a host gh reports no account on', async () => {
+    const answer = JSON.stringify({ hosts: { 'github.com': [] } })
+    await expect(checkGitHubAccount(gh(GITHUB_USER, answer))).resolves.toMatchObject({
+      seesOrganisations: null
     })
   })
 

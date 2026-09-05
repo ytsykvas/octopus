@@ -53,7 +53,12 @@ export const uk: Translation = {
     cloning: 'Клонуємо {{name}}…',
     cloneInto: 'Клонуємо в',
     cloneIntoUnset: 'Спитаємо, куди клонувати.',
-    connect: 'Підключити GitHub…'
+    connect: 'Підключити GitHub…',
+    capped:
+      'GitHub повернув стільки репозиторіїв, скільки в нього попросили, тож можуть бути й інші, яких тут немає.',
+    noOrganisations:
+      'Якщо в списку немає репозиторіїв організації — це тому, що підключений токен не бачить організацій. Щоб надати доступ:',
+    grantOrgScope: 'gh auth refresh -s read:org'
   },
 
   workspaces: {

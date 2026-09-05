@@ -2,7 +2,7 @@ import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { beforeAll, describe, expect, it, vi } from 'vitest'
 
-import type { RemoteRepository } from '@core/github.js'
+import type { RemoteRepository, RepositoryList } from '@core/github.js'
 import type { Project } from '@core/store.js'
 
 import type { Result } from '../../../preload/index.js'
@@ -60,7 +60,15 @@ function pending<T>(): { promise: Promise<T>; settle: (value: T) => void } {
 function offer(...repositories: readonly RemoteRepository[]): void {
   vi.mocked(window.octopus.projects.listRemote).mockResolvedValue({
     ok: true,
-    value: [...repositories]
+    value: { repositories: [...repositories], capped: false }
+  })
+}
+
+/** The same, from a walk that stopped at the limit. */
+function offerCapped(...repositories: readonly RemoteRepository[]): void {
+  vi.mocked(window.octopus.projects.listRemote).mockResolvedValue({
+    ok: true,
+    value: { repositories: [...repositories], capped: true }
   })
 }
 
@@ -86,6 +94,7 @@ async function renderPicker(overrides: Partial<PickerProps> = {}): Promise<Picke
     cloneDirectory: '',
     onCloneDirectoryChange: vi.fn(),
     onOpenSettings: vi.fn(),
+    seesOrganisations: true,
     ...overrides
   }
 
@@ -98,13 +107,13 @@ beforeAll(stubDialogElement)
 
 describe('RepositoryPicker', () => {
   it('says it is loading until the account answers', async () => {
-    const listing = pending<Result<RemoteRepository[]>>()
+    const listing = pending<Result<RepositoryList>>()
     vi.mocked(window.octopus.projects.listRemote).mockReturnValue(listing.promise)
     await renderPicker()
 
     expect(screen.getByText('Loading…')).toBeInTheDocument()
 
-    listing.settle({ ok: true, value: [repository()] })
+    listing.settle({ ok: true, value: { repositories: [repository()], capped: false } })
 
     expect(await screen.findByText('ytsykvas/planner')).toBeInTheDocument()
     expect(screen.queryByText('Loading…')).not.toBeInTheDocument()
@@ -478,7 +487,7 @@ describe('RepositoryPicker', () => {
   // `gh` can take a while, and the dialog is cancellable throughout. A listing
   // that lands afterwards belongs to a dialog that is no longer on screen.
   it('drops a listing that arrives after the dialog has been closed', async () => {
-    const listing = pending<Result<RemoteRepository[]>>()
+    const listing = pending<Result<RepositoryList>>()
     vi.mocked(window.octopus.projects.listRemote).mockReturnValue(listing.promise)
     const { unmount } = render(
       <RepositoryPicker
@@ -487,14 +496,83 @@ describe('RepositoryPicker', () => {
         cloneDirectory=""
         onCloneDirectoryChange={vi.fn()}
         onOpenSettings={vi.fn()}
+        seesOrganisations={true}
       />
     )
     await screen.findByRole('dialog')
 
     unmount()
-    listing.settle({ ok: true, value: [repository()] })
+    listing.settle({ ok: true, value: { repositories: [repository()], capped: false } })
     await listing.promise
 
     expect(screen.queryByText('ytsykvas/planner')).not.toBeInTheDocument()
+  })
+  /*
+   * Both notes answer "why is my repository not here", and both are only worth
+   * saying when they are true — a standing apology under every list would be
+   * noise, and a wrong one sends the reader after a problem they do not have.
+   * So each is tested with its negative beside it.
+   */
+  describe('why the list may be short', () => {
+    const CAP = /as many repositories as it was asked for/
+    const ORG = /cannot see organisations/
+
+    it('says so when GitHub answered with as much as it was asked for', async () => {
+      offerCapped(repository())
+      await renderPicker()
+      await screen.findByText('ytsykvas/planner')
+
+      expect(screen.getByText(CAP)).toBeInTheDocument()
+    })
+
+    it('says nothing about a cap on a list GitHub finished', async () => {
+      offer(repository())
+      await renderPicker()
+      await screen.findByText('ytsykvas/planner')
+
+      expect(screen.queryByText(CAP)).not.toBeInTheDocument()
+    })
+
+    it('names the missing scope and the command that grants it', async () => {
+      offer(repository())
+      await renderPicker({ seesOrganisations: false })
+      await screen.findByText('ytsykvas/planner')
+
+      expect(screen.getByText(ORG)).toBeInTheDocument()
+      expect(screen.getByText('gh auth refresh -s read:org')).toBeInTheDocument()
+    })
+
+    it('says nothing about scopes when the token has the one it needs', async () => {
+      offer(repository())
+      await renderPicker({ seesOrganisations: true })
+      await screen.findByText('ytsykvas/planner')
+
+      expect(screen.queryByText(ORG)).not.toBeInTheDocument()
+    })
+
+    // The case the whole `boolean | null` exists for: not being told is not
+    // the same as being told no, and only one of them is worth a sentence.
+    it('says nothing about scopes when it was never told what they are', async () => {
+      offer(repository())
+      await renderPicker({ seesOrganisations: null })
+      await screen.findByText('ytsykvas/planner')
+
+      expect(screen.queryByText(ORG)).not.toBeInTheDocument()
+    })
+
+    // A failed listing already carries its own explanation, and a second one
+    // under it would be a guess about a list that was never fetched.
+    it('says neither while the listing itself has failed', async () => {
+      vi.mocked(window.octopus.projects.listRemote).mockResolvedValue({
+        ok: false,
+        error: 'gh is not signed in',
+        code: 'notConnected'
+      })
+      await renderPicker({ seesOrganisations: false })
+      await screen.findByRole('button', { name: 'Connect GitHub…' })
+
+      expect(screen.queryByText(ORG)).not.toBeInTheDocument()
+      expect(screen.queryByText(CAP)).not.toBeInTheDocument()
+    })
   })
 })

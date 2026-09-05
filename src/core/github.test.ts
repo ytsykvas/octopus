@@ -74,8 +74,16 @@ function recording(...payloads: readonly string[]): {
 }
 
 describe('listRepositories', () => {
+  /** The offered repositories alone, for the tests that are about what is in them. */
+  async function listed(
+    ...args: Parameters<typeof listRepositories>
+  ): Promise<readonly RemoteRepository[]> {
+    const { repositories } = await listRepositories(...args)
+    return repositories
+  }
+
   it('returns the repositories gh reports', async () => {
-    const list = await listRepositories(succeeds(page([node()])))
+    const list = await listed(succeeds(page([node()])))
     expect(list).toHaveLength(1)
     expect(list[0]?.nameWithOwner).toBe('ytsykvas/planner')
   })
@@ -87,7 +95,7 @@ describe('listRepositories', () => {
       node({ name: 'old', updatedAt: '2020-01-01T00:00:00Z' })
     ])
 
-    const list = await listRepositories(succeeds(payload))
+    const list = await listed(succeeds(payload))
     expect(list.map((item) => item.name)).toEqual(['new', 'middle', 'old'])
   })
 
@@ -104,7 +112,7 @@ describe('listRepositories', () => {
       node()
     ])
 
-    const list = await listRepositories(succeeds(payload))
+    const list = await listed(succeeds(payload))
     expect(list.map((item) => item.nameWithOwner)).toContain('Hylab/planner')
   })
 
@@ -130,14 +138,14 @@ describe('listRepositories', () => {
       node({ name: 'maintained', viewerPermission: 'MAINTAIN' })
     ])
 
-    const list = await listRepositories(succeeds(payload))
+    const list = await listed(succeeds(payload))
     expect(list.map((item) => item.name)).toEqual(['writable', 'maintained'])
   })
 
   it('leaves out an archived repository, which cannot receive work', async () => {
     const payload = page([node({ name: 'retired', isArchived: true }), node({ name: 'live' })])
 
-    const list = await listRepositories(succeeds(payload))
+    const list = await listed(succeeds(payload))
     expect(list.map((item) => item.name)).toEqual(['live'])
   })
 
@@ -149,7 +157,7 @@ describe('listRepositories', () => {
       node({ name: 'mine' })
     ])
 
-    const list = await listRepositories(succeeds(payload))
+    const list = await listed(succeeds(payload))
     expect(list.map((item) => item.owner.login)).toEqual(['ytsykvas', 'Alpha', 'Zeta'])
   })
 
@@ -160,7 +168,7 @@ describe('listRepositories', () => {
       node({ name: 'older', nameWithOwner: 'Hylab/older', owner: { login: 'Hylab' } })
     ])
 
-    const list = await listRepositories(succeeds(payload))
+    const list = await listed(succeeds(payload))
     expect(list.map((item) => item.name)).toEqual(['mine', 'newer', 'older'])
   })
 
@@ -172,7 +180,7 @@ describe('listRepositories', () => {
       page([node({ name: 'second' })])
     )
 
-    const list = await listRepositories(exec)
+    const list = await listed(exec)
 
     expect(list.map((item) => item.name)).toEqual(['first', 'second'])
     expect(calls[0]?.join(' ')).not.toContain('after=')
@@ -208,7 +216,7 @@ describe('listRepositories', () => {
       page([node({ name: 'a' }), node({ name: 'b' })], { endCursor: 'cursor-1' })
     )
 
-    const list = await listRepositories(exec, 2)
+    const list = await listed(exec, 2)
 
     expect(list).toHaveLength(2)
     expect(calls).toHaveLength(1)
@@ -245,14 +253,44 @@ describe('listRepositories', () => {
       }
     ])
 
-    const list = await listRepositories(succeeds(payload))
+    const list = await listed(succeeds(payload))
     expect(list[0]?.name).toBe('bare')
+  })
+
+  it('says the answer was not capped when GitHub had nothing more to give', async () => {
+    const { capped } = await listRepositories(succeeds(page([node()])))
+    expect(capped).toBe(false)
+  })
+
+  it('says the answer was capped when the walk stopped at the limit', async () => {
+    const payload = page([node({ name: 'a' }), node({ name: 'b' })], { endCursor: 'cursor-1' })
+    const { capped } = await listRepositories(succeeds(payload), 2)
+
+    expect(capped).toBe(true)
+  })
+
+  /*
+   * Why `capped` is not the caller counting the list.
+   *
+   * The filtering above runs after the walk, so a fetch that took everything
+   * it was allowed can still hand back an empty list — and a length check
+   * would then call that answer complete, which is the one case where it most
+   * certainly is not.
+   */
+  it('says the answer was capped even when the filtering leaves nothing', async () => {
+    const payload = page([node({ isArchived: true }), node({ isArchived: true })], {
+      endCursor: 'cursor-1'
+    })
+    const list = await listRepositories(succeeds(payload), 2)
+
+    expect(list.repositories).toEqual([])
+    expect(list.capped).toBe(true)
   })
 
   // They decide what is offered and nothing beyond this module reads them, so
   // they have no business crossing IPC.
   it('does not hand the filtering fields on to the caller', async () => {
-    const list = await listRepositories(succeeds(page([node()])))
+    const list = await listed(succeeds(page([node()])))
 
     expect(list[0]).not.toHaveProperty('isArchived')
     expect(list[0]).not.toHaveProperty('viewerPermission')

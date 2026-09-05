@@ -15,7 +15,7 @@ const signedIn = (): AccountsStatus => ({
     subscriptionType: 'max',
     orgName: 'Acme'
   },
-  github: { connected: true, login: 'octo', name: 'Octo Cat' }
+  github: { connected: true, login: 'octo', name: 'Octo Cat', seesOrganisations: true }
 })
 
 const signedOut = (): AccountsStatus => ({
@@ -26,7 +26,7 @@ const signedOut = (): AccountsStatus => ({
     subscriptionType: null,
     orgName: null
   },
-  github: { connected: false, login: null, name: null }
+  github: { connected: false, login: null, name: null, seesOrganisations: null }
 })
 
 /** A promise the test settles by hand, so it can look at the state while it is pending. */

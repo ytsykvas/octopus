@@ -130,7 +130,10 @@ describe('GitHub projects', () => {
     const commandExec: CommandExec = () => Promise.resolve(reply)
     const withGitHub = await createService({ ...paths(dir), commandExec })
 
-    await expect(withGitHub.listRemoteRepositories()).resolves.toHaveLength(1)
+    await expect(withGitHub.listRemoteRepositories()).resolves.toMatchObject({
+      repositories: [expect.objectContaining({ nameWithOwner: expect.any(String) })],
+      capped: false
+    })
   })
 
   it('surfaces a GitHub failure rather than an empty list', async () => {
@@ -199,7 +202,10 @@ describe('GitHub projects', () => {
 
     try {
       const plain = await createService(paths(join(dir, 'plain')))
-      await expect(plain.listRemoteRepositories()).resolves.toEqual([repository])
+      await expect(plain.listRemoteRepositories()).resolves.toEqual({
+        repositories: [repository],
+        capped: false
+      })
     } finally {
       process.env.PATH = previousPath
     }

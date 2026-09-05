@@ -45,7 +45,7 @@ The only channel outside this shape is `theme:get`, which cannot fail.
 | `projects:remove`        | `id`          | runs each workspace's cleanup script, then deletes the workspaces, their branches, and the project's directory under the data root                     |
 | `projects:branches`      | `id`          | remote branches, ordered with main/master/develop first                                                                                                |
 | `projects:pullRequests`  | `id`          | every branch of the repository that has a request, in one call — the workspace list marks each row, and a read per row would be a network call per row |
-| `projects:listRemote`    | —             | what the account can push to, personal and organisation alike, through `gh api graphql`                                                                |
+| `projects:listRemote`    | —             | what the account can push to, personal and organisation alike, through `gh api graphql`, and whether the walk stopped at its limit                     |
 
 ### Scripts, carried files and instructions
 
@@ -230,13 +230,13 @@ Output flows the other way, on `terminal:data` and `terminal:exit`.
 
 ### Accounts and dialogs
 
-| Channel                | Arguments       | Notes                                                    |
-| ---------------------- | --------------- | -------------------------------------------------------- |
-| `accounts:status`      | —               | asks the `claude` and `gh` CLIs, for the Settings card   |
-| `accounts:github`      | —               | `gh` alone, on a short timeout: it sits behind a button  |
-| `accounts:signOut`     | `kind`, `login` | signing in is interactive and runs in a terminal instead |
-| `dialog:pickDirectory` | `title`         | `null` when cancelled                                    |
-| `dialog:pickSkill`     | `title`         | a file **or** a folder: a skill arrives as either        |
+| Channel                | Arguments       | Notes                                                                                                                                     |
+| ---------------------- | --------------- | ----------------------------------------------------------------------------------------------------------------------------------------- |
+| `accounts:status`      | —               | asks the `claude` and `gh` CLIs, for the Settings card                                                                                    |
+| `accounts:github`      | —               | `gh` alone, on a short timeout: it sits behind a button. Carries whether the token can list organisations, `null` when `gh` would not say |
+| `accounts:signOut`     | `kind`, `login` | signing in is interactive and runs in a terminal instead                                                                                  |
+| `dialog:pickDirectory` | `title`         | `null` when cancelled                                                                                                                     |
+| `dialog:pickSkill`     | `title`         | a file **or** a folder: a skill arrives as either                                                                                         |
 
 ## Validation
 

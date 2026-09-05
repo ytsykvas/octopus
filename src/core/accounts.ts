@@ -64,6 +64,24 @@ const GitHubUserSchema = z.object({
   name: z.string().nullable().optional()
 })
 
+/**
+ * Fields we use from `gh auth status --json hosts`.
+ *
+ * The prose form of the same command prints `Token scopes: 'gist', 'repo'`,
+ * and parsing that would break on the next release that reflows a line. The
+ * JSON form is a documented output format, so it is the one read here.
+ *
+ * Everything is optional because an older `gh` answers with fewer fields, and
+ * the caller treats a missing one as "we were not told" rather than as "there
+ * are none".
+ */
+const GitHubStatusSchema = z.object({
+  hosts: z.record(
+    z.string(),
+    z.array(z.object({ active: z.boolean().optional(), scopes: z.string().optional() }))
+  )
+})
+
 export interface ClaudeAccount {
   readonly connected: boolean
   readonly email: string | null
@@ -76,7 +94,31 @@ export interface GitHubAccount {
   readonly connected: boolean
   readonly login: string | null
   readonly name: string | null
+  /**
+   * Whether this token can see the account's organisations — `null` when we
+   * could not be told.
+   *
+   * The answer rather than the scope list it is read from, because the list is
+   * the only thing this would carry over IPC and nothing on the other side has
+   * a second use for it.
+   *
+   * `null` covers three cases deliberately: an older `gh` with no `--json` on
+   * `auth status`, a call that failed, and an answer naming no scopes at all —
+   * which is what a fine-grained token gives, and such a token can reach an
+   * organisation without holding a single classic scope. Reading any of those
+   * as `false` would put a confident wrong sentence on screen; `null` says
+   * nothing, which is the only honest answer to a question nobody answered.
+   */
+  readonly seesOrganisations: boolean | null
 }
+
+/**
+ * The scope an account needs before GitHub will name its organisations.
+ *
+ * Without it `gh` answers as though the account belonged to none, which looks
+ * exactly like belonging to none.
+ */
+const ORGANISATION_SCOPE = 'read:org'
 
 export interface AccountsStatus {
   readonly claude: ClaudeAccount
@@ -91,7 +133,12 @@ const DISCONNECTED_CLAUDE: ClaudeAccount = {
   orgName: null
 }
 
-const DISCONNECTED_GITHUB: GitHubAccount = { connected: false, login: null, name: null }
+const DISCONNECTED_GITHUB: GitHubAccount = {
+  connected: false,
+  login: null,
+  name: null,
+  seesOrganisations: null
+}
 
 /**
  * Reads the Claude account state.
@@ -127,14 +174,64 @@ export async function checkClaudeAccount(exec: CommandExec = defaultExec): Promi
   }
 }
 
-/** Reads the GitHub account state through `gh`. */
-export async function checkGitHubAccount(exec: CommandExec = defaultExec): Promise<GitHubAccount> {
+/**
+ * Reads the scopes on the token `gh` is signed in with.
+ *
+ * `null` for anything short of a clear answer — see `GitHubAccount.scopes` for
+ * why an empty result is not reported as an empty list.
+ */
+export async function readTokenScopes(exec: CommandExec = defaultExec): Promise<string[] | null> {
   let raw: string
   try {
-    raw = await exec('gh', ['api', 'user'])
+    // `--active` because a host can hold several accounts and only one of them
+    // is the token `gh api` will use; the hostname because everything else in
+    // this module is github.com only.
+    raw = await exec('gh', [
+      'auth',
+      'status',
+      '--active',
+      '--hostname',
+      'github.com',
+      '--json',
+      'hosts'
+    ])
   } catch {
-    return DISCONNECTED_GITHUB
+    return null
   }
+
+  let parsed: unknown
+  try {
+    parsed = JSON.parse(raw)
+  } catch {
+    return null
+  }
+
+  const result = GitHubStatusSchema.safeParse(parsed)
+  if (!result.success) return null
+
+  const [account] = Object.values(result.data.hosts).flat()
+  const scopes = (account?.scopes ?? '')
+    .split(',')
+    .map((scope) => scope.trim())
+    .filter((scope) => scope !== '')
+
+  return scopes.length > 0 ? scopes : null
+}
+
+/**
+ * Reads the GitHub account state through `gh`.
+ *
+ * The two calls run together rather than one after the other: the second is
+ * only ever read beside the first, and this check sits behind a button with a
+ * three-second budget that a second round trip would have spent twice.
+ */
+export async function checkGitHubAccount(exec: CommandExec = defaultExec): Promise<GitHubAccount> {
+  const [raw, scopes] = await Promise.all([
+    exec('gh', ['api', 'user']).catch(() => null),
+    readTokenScopes(exec)
+  ])
+
+  if (raw === null) return DISCONNECTED_GITHUB
 
   let parsed: unknown
   try {
@@ -149,7 +246,8 @@ export async function checkGitHubAccount(exec: CommandExec = defaultExec): Promi
   return {
     connected: true,
     login: result.data.login,
-    name: result.data.name ?? null
+    name: result.data.name ?? null,
+    seesOrganisations: scopes === null ? null : scopes.includes(ORGANISATION_SCOPE)
   }
 }
 

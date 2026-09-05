@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
-import type { RemoteRepository } from '@core/github.js'
+import type { RemoteRepository, RepositoryList } from '@core/github.js'
 
 import { useErrorMessage } from '../hooks/useErrorMessage.js'
 import { Button } from './Button.js'
@@ -21,6 +21,14 @@ interface RepositoryPickerProps {
    * out is how the dead end got here in the first place.
    */
   readonly onOpenSettings: () => void
+  /**
+   * Whether the signed-in token can list organisations, or `null` if unknown.
+   *
+   * Passed in rather than read here: the click that opens this modal has just
+   * checked the account, and asking `gh` a second time would be a round trip
+   * for an answer already in hand.
+   */
+  readonly seesOrganisations: boolean | null
 }
 
 /**
@@ -34,12 +42,13 @@ export function RepositoryPicker({
   onCancel,
   cloneDirectory,
   onCloneDirectoryChange,
-  onOpenSettings
+  onOpenSettings,
+  seesOrganisations
 }: RepositoryPickerProps): React.JSX.Element {
   const { t } = useTranslation()
   const describeFailure = useErrorMessage()
 
-  const [repositories, setRepositories] = useState<readonly RemoteRepository[] | null>(null)
+  const [listing, setListing] = useState<RepositoryList | null>(null)
   const [query, setQuery] = useState('')
   const [error, setError] = useState<string | null>(null)
   // Kept beside the message, which is already localised prose by the time it
@@ -56,9 +65,9 @@ export function RepositoryPicker({
       if (controller.signal.aborted) return
 
       if (result.ok) {
-        setRepositories(result.value)
+        setListing(result.value)
       } else {
-        setRepositories([])
+        setListing({ repositories: [], capped: false })
         setError(describeFailure(result))
         setDisconnected(result.code === 'notConnected')
       }
@@ -68,6 +77,8 @@ export function RepositoryPicker({
       controller.abort()
     }
   }, [describeFailure])
+
+  const repositories = listing?.repositories ?? null
 
   const matches = useMemo(() => {
     if (!repositories) return []
@@ -220,6 +231,25 @@ export function RepositoryPicker({
             </ul>
           </section>
         ))}
+
+        {/* Under the list rather than over it: both answer "why is my
+            repository not here", which is a question the reader only has once
+            they have looked. Neither hides anything — a list that is short for
+            one of these reasons is still a list of real repositories. */}
+        {repositories !== null &&
+          error === null &&
+          (listing?.capped === true || seesOrganisations === false) && (
+            <div className="border-line text-ink-faint mt-3 space-y-1.5 border-t px-2 pt-3">
+              {listing?.capped === true && <p>{t('repositories.capped')}</p>}
+
+              {seesOrganisations === false && (
+                <p>
+                  {t('repositories.noOrganisations')}{' '}
+                  <code className="text-ink-soft font-mono">{t('repositories.grantOrgScope')}</code>
+                </p>
+              )}
+            </div>
+          )}
       </div>
     </Modal>
   )

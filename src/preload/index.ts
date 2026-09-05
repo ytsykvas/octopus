@@ -22,7 +22,7 @@ import type { WorkspaceDiff } from '@core/diff.js'
 import type { MergeMethod, PullRequestDraft, PullRequestView } from '@core/pullRequests.js'
 import type { DraftedPullRequest } from '@core/pullRequestDraft.js'
 import type { BranchRequest, PullRequestDetail } from '@core/pullRequestShapes.js'
-import type { RemoteRepository } from '@core/github.js'
+import type { RemoteRepository, RepositoryList } from '@core/github.js'
 import type { Workspace } from '@core/store.js'
 import type { RemoveOptions, WorkspaceView } from '@core/workspaces.js'
 import type { InstructionKind } from '@core/instructions.js'
@@ -741,8 +741,8 @@ const api = {
       ipcRenderer.invoke('projects:remove', projectId) as Promise<Result<void>>,
 
     /** Repositories of the signed-in GitHub account. */
-    listRemote: (): Promise<Result<RemoteRepository[]>> =>
-      ipcRenderer.invoke('projects:listRemote') as Promise<Result<RemoteRepository[]>>,
+    listRemote: (): Promise<Result<RepositoryList>> =>
+      ipcRenderer.invoke('projects:listRemote') as Promise<Result<RepositoryList>>,
 
     /** Clones a repository and adds it. `null` means the destination prompt was cancelled. */
     addFromGitHub: (repository: RemoteRepository): Promise<Result<Project | null>> =>

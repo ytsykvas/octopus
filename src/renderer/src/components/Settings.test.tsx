@@ -422,7 +422,9 @@ describe('Settings', () => {
   })
 
   it('reports the GitHub account the tools say is connected', async () => {
-    reportAccounts({ github: { connected: true, login: 'ytsykvas', name: 'Yurii Tsykvas' } })
+    reportAccounts({
+      github: { connected: true, login: 'ytsykvas', name: 'Yurii Tsykvas', seesOrganisations: true }
+    })
     const user = userEvent.setup()
     await renderSettings()
 
@@ -596,7 +598,9 @@ describe('Settings', () => {
 
     // A GitHub account need not have a display name set.
     it('shows a connected account that has no display name', async () => {
-      reportAccounts({ github: { connected: true, login: 'ytsykvas', name: null } })
+      reportAccounts({
+        github: { connected: true, login: 'ytsykvas', name: null, seesOrganisations: true }
+      })
 
       const user = userEvent.setup()
       await renderSettings()
@@ -606,7 +610,9 @@ describe('Settings', () => {
     })
 
     it('shows the login once the account is connected', async () => {
-      reportAccounts({ github: { connected: true, login: 'ytsykvas', name: 'Yurii' } })
+      reportAccounts({
+        github: { connected: true, login: 'ytsykvas', name: 'Yurii', seesOrganisations: true }
+      })
 
       const user = userEvent.setup()
       await renderSettings()
@@ -631,7 +637,9 @@ describe('Settings', () => {
     // A sign-out that fails leaves the account connected, and saying nothing
     // would look like it worked.
     it('reports a failed sign-out', async () => {
-      reportAccounts({ github: { connected: true, login: 'ytsykvas', name: null } })
+      reportAccounts({
+        github: { connected: true, login: 'ytsykvas', name: null, seesOrganisations: true }
+      })
       vi.mocked(window.octopus.accounts.signOut).mockResolvedValue({
         ok: false,
         error: 'gh refused'
@@ -647,7 +655,9 @@ describe('Settings', () => {
     })
 
     it('signs out of GitHub, then re-reads the accounts', async () => {
-      reportAccounts({ github: { connected: true, login: 'ytsykvas', name: 'Yurii' } })
+      reportAccounts({
+        github: { connected: true, login: 'ytsykvas', name: 'Yurii', seesOrganisations: true }
+      })
       vi.mocked(window.octopus.accounts.signOut).mockResolvedValue({ ok: true, value: true })
 
       const user = userEvent.setup()

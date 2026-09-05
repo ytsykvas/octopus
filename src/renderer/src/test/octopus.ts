@@ -168,7 +168,7 @@ export function installOctopusStub(): Api {
       add: vi.fn(() => ok(null)),
       update: vi.fn(() => ok(undefined)),
       remove: vi.fn(() => ok(undefined)),
-      listRemote: vi.fn(() => ok([])),
+      listRemote: vi.fn(() => ok({ repositories: [], capped: false })),
       addFromGitHub: vi.fn(() => ok(null)),
       branches: vi.fn(() => ok(['origin/main'])),
       pullRequests: vi.fn(() => ok([])),
@@ -263,7 +263,7 @@ export function disconnectedAccounts(): AccountsStatus {
       subscriptionType: null,
       orgName: null
     },
-    github: { connected: false, login: null, name: null }
+    github: { connected: false, login: null, name: null, seesOrganisations: null }
   }
 }
 

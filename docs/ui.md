@@ -1587,6 +1587,22 @@ It offers only repositories the account can **push to**. octopus works by
 pushing a branch and opening a pull request from it, so a repository that can
 only be read looks like a working choice right up until the first push fails.
 
+**A list that is short says why, under itself.** Two ordinary things shorten it
+without producing an error, and neither used to leave a trace: the walk stopping
+at its limit, and a token without `read:org`, which makes GitHub answer as
+though the account belonged to no organisation at all. So a footnote below the
+rows names whichever applies, and the scope one carries the command that grants
+it. Under the list rather than over it, because it answers "why is my repository
+not here" — a question the reader only has after looking.
+
+Neither hides anything: the repositories that _are_ listed are real, and
+somebody adding one of them has no use for a dialog that refuses. And neither
+line is a standing apology — each appears only when it is true, and being unable
+to tell is a third case that says nothing. `gh` reports no scopes at all for a
+fine-grained token, which can reach an organisation regardless, so reading
+silence as "the scope is missing" would put a confident wrong sentence under a
+list that is perfectly complete.
+
 The same goes for a message that names somewhere else. "Check the account in
 Settings" stood in the repository picker for a while with no way to reach
 Settings, which leaves the reader to close the dialog and go hunting. If a

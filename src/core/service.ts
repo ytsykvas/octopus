@@ -82,7 +82,12 @@ import {
   toSdkSettingSources
 } from './config.js'
 import { type AgentEvent, forTranscript, isEphemeral } from './events.js'
-import { cloneRepository, listRepositories, type RemoteRepository } from './github.js'
+import {
+  cloneRepository,
+  listRepositories,
+  type RemoteRepository,
+  type RepositoryList
+} from './github.js'
 import type { GitExec, GitOptions } from './git.js'
 import {
   commitAndPush,
@@ -442,7 +447,7 @@ export interface OctopusService {
   addProjectFromPath(path: string): Promise<Project>
   /** Clones a GitHub repository into `destination`, then adds it as a project. */
   addProjectFromGitHub(repository: RemoteRepository, destination: string): Promise<Project>
-  listRemoteRepositories(): Promise<RemoteRepository[]>
+  listRemoteRepositories(): Promise<RepositoryList>
   updateProjectById(projectId: string, patch: ProjectPatch): Promise<void>
   removeProjectById(projectId: string): Promise<void>
   /** Branches the project's repository offers as a base, remotes included. */

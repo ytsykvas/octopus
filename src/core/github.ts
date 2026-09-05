@@ -33,6 +33,18 @@ const RemoteRepositorySchema = z.object({
 export type RemoteRepository = z.infer<typeof RemoteRepositorySchema>
 
 /**
+ * The offered repositories and whether the walk stopped at the limit.
+ *
+ * `capped` is decided here rather than by measuring the list, because the two
+ * differ: the filtering below drops archived and read-only repositories, so a
+ * fetch that hit the limit can still hand back far fewer than it asked for.
+ */
+export interface RepositoryList {
+  readonly repositories: readonly RemoteRepository[]
+  readonly capped: boolean
+}
+
+/**
  * What GitHub returns, before the two fields that only decide what is offered.
  *
  * Kept off `RemoteRepository` so neither crosses IPC: they answer "should this
@@ -148,7 +160,7 @@ const REPOSITORIES_QUERY = `query($first: Int!, $after: String) {
 export async function listRepositories(
   exec: CommandExec = defaultExec,
   limit: number = REPOSITORY_LIMIT
-): Promise<RemoteRepository[]> {
+): Promise<RepositoryList> {
   const nodes: z.infer<typeof RepositoryNodeSchema>[] = []
   let login = ''
   let cursor: string | null = null
@@ -176,7 +188,10 @@ export async function listRepositories(
   // `RepositoryPageSchema`, which validates them against a schema extending
   // this one, so all this does is drop the two fields the page carries and a
   // repository does not. It cannot fail on an answer from GitHub.
-  return sortByOwner(offered, login).map((node) => RemoteRepositorySchema.parse(node))
+  return {
+    repositories: sortByOwner(offered, login).map((node) => RemoteRepositorySchema.parse(node)),
+    capped: nodes.length >= limit
+  }
 }
 
 /** One page of the query, validated. */

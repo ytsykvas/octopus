@@ -51,7 +51,15 @@ export const en = {
     cloning: 'Cloning {{name}}…',
     cloneInto: 'Cloning into',
     cloneIntoUnset: 'You will be asked where to clone.',
-    connect: 'Connect GitHub…'
+    connect: 'Connect GitHub…',
+    /* No number in either: the limit and the scope name both live in the code,
+       and a figure repeated in prose is one that goes stale without anything
+       failing. */
+    capped:
+      'GitHub answered with as many repositories as it was asked for, so there may be more it is not showing.',
+    noOrganisations:
+      'An organisation missing from this list is missing because the signed-in token cannot see organisations. To grant it:',
+    grantOrgScope: 'gh auth refresh -s read:org'
   },
 
   workspaces: {

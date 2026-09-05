@@ -92,6 +92,9 @@ export function App(): React.JSX.Element {
   // preference for the current session rather than a setting.
   const [sidebarOpen, setSidebarOpen] = useState(true)
   const [pickingRepository, setPickingRepository] = useState(false)
+  /* Read off the same check that decides whether the picker opens at all, and
+     kept only for as long as it is open — see `addFromGitHub`. */
+  const [seesOrganisations, setSeesOrganisations] = useState<boolean | null>(null)
   // Every control that reaches the check is disabled while it runs, which is
   // also what stops a second one starting: React flushes a click's state update
   // before the next click is delivered, so the button is already dead by then.
@@ -344,8 +347,10 @@ export function App(): React.JSX.Element {
       // A failed check and a signed-out account are one case here. `gh` missing,
       // `gh` signed out and a reply that does not parse all arrive as
       // `connected: false`, and Settings is where every one of them is fixed.
-      if (result.ok && result.value.connected) setPickingRepository(true)
-      else setSettingsSection('git')
+      if (result.ok && result.value.connected) {
+        setSeesOrganisations(result.value.seesOrganisations)
+        setPickingRepository(true)
+      } else setSettingsSection('git')
     } finally {
       setCheckingGitHub(false)
     }
@@ -927,6 +932,7 @@ export function App(): React.JSX.Element {
 
       {pickingRepository && (
         <RepositoryPicker
+          seesOrganisations={seesOrganisations}
           cloneDirectory={config?.cloneDirectory ?? ''}
           onCloneDirectoryChange={(cloneDirectory) => void updateConfig({ cloneDirectory })}
           onPicked={() => {

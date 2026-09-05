@@ -17,7 +17,7 @@ const status = (claude: Partial<AccountsStatus['claude']> = {}): AccountsStatus 
     orgName: null,
     ...claude
   },
-  github: { connected: false, login: null, name: null }
+  github: { connected: false, login: null, name: null, seesOrganisations: null }
 })
 
 const signedIn = (): AccountsStatus =>

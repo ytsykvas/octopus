@@ -263,7 +263,7 @@ const CONNECTED: AccountsStatus = {
     subscriptionType: 'max',
     orgName: null
   },
-  github: { connected: false, login: null, name: null }
+  github: { connected: false, login: null, name: null, seesOrganisations: null }
 }
 
 beforeEach(async () => {
@@ -271,9 +271,12 @@ beforeEach(async () => {
   service = await createService(servicePaths(dir))
 
   vi.mocked(checkAccounts).mockReset().mockResolvedValue(CONNECTED)
-  vi.mocked(checkGitHubAccount)
-    .mockReset()
-    .mockResolvedValue({ connected: true, login: 'ytsykvas', name: 'Yurii' })
+  vi.mocked(checkGitHubAccount).mockReset().mockResolvedValue({
+    connected: true,
+    login: 'ytsykvas',
+    name: 'Yurii',
+    seesOrganisations: true
+  })
   vi.mocked(signOut).mockReset().mockResolvedValue(true)
 
   bench = harness()
@@ -1021,7 +1024,7 @@ describe('reads that forward to the service', () => {
 
     await expect(invoke('projects:listRemote')).resolves.toMatchObject({
       ok: true,
-      value: [{ nameWithOwner: 'ytsykvas/planner' }]
+      value: { repositories: [{ nameWithOwner: 'ytsykvas/planner' }], capped: false }
     })
   })
 })
@@ -1757,7 +1760,7 @@ describe('accounts', () => {
   it('asks about GitHub without starting the Claude CLI', async () => {
     await expect(invoke('accounts:github')).resolves.toEqual({
       ok: true,
-      value: { connected: true, login: 'ytsykvas', name: 'Yurii' }
+      value: { connected: true, login: 'ytsykvas', name: 'Yurii', seesOrganisations: true }
     })
     expect(vi.mocked(checkAccounts)).not.toHaveBeenCalled()
   })

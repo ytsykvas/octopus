@@ -216,7 +216,7 @@ function edges(): { readonly list: HTMLElement; readonly panel: HTMLElement } {
 function givenGitHubConnected(): void {
   vi.mocked(window.octopus.accounts.github).mockResolvedValue({
     ok: true,
-    value: { connected: true, login: 'ytsykvas', name: 'Yurii' }
+    value: { connected: true, login: 'ytsykvas', name: 'Yurii', seesOrganisations: true }
   })
 }
 
@@ -1225,7 +1225,7 @@ describe('App', () => {
     const user = await openApp()
     vi.mocked(window.octopus.projects.listRemote).mockResolvedValue({
       ok: true,
-      value: [LEDGER_REPOSITORY]
+      value: { repositories: [LEDGER_REPOSITORY], capped: false }
     })
 
     const picker = await openRepositoryPicker(user)
@@ -1233,11 +1233,35 @@ describe('App', () => {
     expect(within(picker).getByText('someone/ledger')).toBeInTheDocument()
   })
 
+  /*
+   * The check that opens the picker is also the only thing that knows what the
+   * token can see, and the picker has no way to ask again. Without this the
+   * answer is read, dropped, and the note under the list never appears — with
+   * every unit test still green, because each side works on its own.
+   */
+  it('carries what the account check said about scopes into the picker', async () => {
+    const user = await openApp()
+    vi.mocked(window.octopus.accounts.github).mockResolvedValue({
+      ok: true,
+      value: { connected: true, login: 'ytsykvas', name: 'Yurii', seesOrganisations: false }
+    })
+    vi.mocked(window.octopus.projects.listRemote).mockResolvedValue({
+      ok: true,
+      value: { repositories: [LEDGER_REPOSITORY], capped: false }
+    })
+
+    await user.click(screen.getByRole('button', { name: 'Add repository' }))
+    await user.click(screen.getByRole('menuitem', { name: /From GitHub/ }))
+    const picker = await screen.findByRole('dialog', { name: 'Add from GitHub' })
+
+    expect(within(picker).getByText(/cannot see organisations/)).toBeInTheDocument()
+  })
+
   it('opens the GitHub picker from the empty centre when the account is connected', async () => {
     givenGitHubConnected()
     vi.mocked(window.octopus.projects.listRemote).mockResolvedValue({
       ok: true,
-      value: [LEDGER_REPOSITORY]
+      value: { repositories: [LEDGER_REPOSITORY], capped: false }
     })
     const user = await openApp()
     await screen.findByText('Start with a repository')
@@ -1359,7 +1383,7 @@ describe('App', () => {
   it('closes the GitHub picker and lists the repository it cloned', async () => {
     vi.mocked(window.octopus.projects.listRemote).mockResolvedValue({
       ok: true,
-      value: [LEDGER_REPOSITORY]
+      value: { repositories: [LEDGER_REPOSITORY], capped: false }
     })
     vi.mocked(window.octopus.projects.addFromGitHub).mockResolvedValue({
       ok: true,
@@ -1646,7 +1670,7 @@ describe('App', () => {
     givenTwoProjects()
     vi.mocked(window.octopus.projects.listRemote).mockResolvedValue({
       ok: true,
-      value: [LEDGER_REPOSITORY]
+      value: { repositories: [LEDGER_REPOSITORY], capped: false }
     })
     vi.mocked(window.octopus.projects.addFromGitHub).mockResolvedValue({ ok: true, value: LEDGER })
     const user = await openApp()
