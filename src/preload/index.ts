@@ -465,7 +465,14 @@ const api = {
     setEnvProfile: (workspaceId: string, name: string | null): Promise<Result<void>> =>
       ipcRenderer.invoke('workspaces:envProfile', workspaceId, name) as Promise<Result<void>>,
 
-    /** The instruction this workspace would send: its project's, or the global one. */
+    /**
+     * The instruction this workspace would send.
+     *
+     * Three layers, not two: the **repository's** own — `.octopus/instructions`
+     * or Conductor's `[prompts]` — then the project's copy, then the
+     * installation's. The first is a fact about the branch in front of you
+     * rather than a setting, which is why it wins.
+     */
     instruction: (workspaceId: string, kind: InstructionKind): Promise<Result<string>> =>
       ipcRenderer.invoke('instructions:effective', workspaceId, kind) as Promise<Result<string>>,
 

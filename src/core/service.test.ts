@@ -624,6 +624,71 @@ describe('workspaces', () => {
     expect(asked).toContain(workspace.branch)
   })
 
+  /*
+   * The one place the app writes a description **itself**, and it read a chain
+   * one layer short: `effectiveInstruction` directly, so the project's copy and
+   * the installation's were consulted and the repository's own was not. A
+   * checkout supplying `.octopus/instructions/pull-request.md` was therefore
+   * obeyed by the pane and by all six prepared prompts, and ignored here — with
+   * nothing saying so.
+   */
+  it("takes the repository's own pull request instruction into the draft", async () => {
+    const repo = join(dir, 'planner')
+    await initRepo(repo)
+
+    /*
+     * Committed before the workspace exists, and that is the whole of what
+     * makes this test say anything. Written into the worktree instead it is an
+     * untracked file, so its text reaches the prompt through the **diff** — and
+     * the assertion below then holds whether or not the instruction was read at
+     * all. Written that way first, and the mutation caught it.
+     */
+    await mkdir(join(repo, '.octopus', 'instructions'), { recursive: true })
+    await writeFile(
+      join(repo, '.octopus', 'instructions', 'pull-request.md'),
+      'Say it in Ukrainian.\n',
+      'utf8'
+    )
+    await run('git', ['add', '-A'], { cwd: repo })
+    await run('git', ['commit', '-q', '-m', 'instructions'], { cwd: repo })
+
+    let asked = ''
+    const service = await createService({
+      ...paths(dir),
+      query: ((params: { prompt: AsyncIterable<{ message: { content: unknown } }> }) => {
+        void (async () => {
+          for await (const message of params.prompt) {
+            if (typeof message.message.content === 'string') asked += message.message.content
+          }
+        })()
+        return {
+          // eslint-disable-next-line @typescript-eslint/require-await
+          async *[Symbol.asyncIterator]() {
+            yield {
+              type: 'assistant',
+              message: {
+                content: [
+                  {
+                    type: 'text',
+                    text: '<<<OCTOPUS_TITLE>>>\nT\n<<<OCTOPUS_BODY>>>\nB\n<<<OCTOPUS_COMMIT>>>\nC'
+                  }
+                ]
+              }
+            }
+          }
+        }
+      }) as unknown as QueryFn
+    })
+    const project = await service.addProjectFromPath(repo)
+    const workspace = await service.createWorkspaceIn(project.id)
+
+    await writeFile(join(workspace.path, 'draft.txt'), 'work\n', 'utf8')
+
+    await service.draftPullRequest(workspace.id)
+
+    expect(asked).toContain('Say it in Ukrainian.')
+  })
+
   it('says a workspace that changed nothing changed nothing', async () => {
     const { service, projectId } = await withProject()
     const workspace = await service.createWorkspaceIn(projectId)

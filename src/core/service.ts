@@ -1924,6 +1924,27 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
     return configured.filter((source) => source === 'user')
   }
 
+  /**
+   * The instruction this workspace would actually send.
+   *
+   * Three layers, repository first: a worktree carrying
+   * `.octopus/instructions/<kind>.md`, or Conductor's `[prompts]`, wins over
+   * the project's own copy and the installation's. Not gated the way a script
+   * is — this text goes into the log as a visible message, read before it does
+   * anything, so a dialog in front of every one would be friction for no gain.
+   *
+   * Taking the workspace rather than its id is what lets the draft share it:
+   * that path has the record in hand already, and it used to call
+   * `effectiveInstruction` directly — one layer short, so a repository
+   * supplying its own pull-request instruction was obeyed everywhere except in
+   * the one place the app writes a description itself.
+   */
+  async function instructionFor(workspace: Workspace, kind: InstructionKind): Promise<string> {
+    const supplied = await repoInstruction(kind, workspace.path)
+
+    return supplied?.body ?? effectiveInstruction(kind, workspace.projectId, dataRoot)
+  }
+
   /** Where a store's files sit; a path, so reading one creates nothing. */
   function storeRoot(store: SkillStore): string {
     return store.kind === 'global'
@@ -2728,14 +2749,7 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
     },
 
     async readEffectiveInstruction(workspaceId, kind) {
-      const workspace = requireWorkspace(workspaceId)
-
-      // The repository first, as with the scripts. Not gated, though: this text
-      // goes into the log as a visible message, where it is read before it does
-      // anything — a dialog in front of every one would be friction for no gain.
-      const supplied = await repoInstruction(kind, workspace.path)
-
-      return supplied?.body ?? effectiveInstruction(kind, workspace.projectId, dataRoot)
+      return instructionFor(requireWorkspace(workspaceId), kind)
     },
 
     // Both `async` although neither awaits anything of its own: `storeRoot`
@@ -3175,8 +3189,12 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
           root: workspace.path
         }),
         changeCount(workspace, makeExec),
-        effectiveInstruction('pullRequest', workspace.projectId, dataRoot),
-        effectiveInstruction('commitMessage', workspace.projectId, dataRoot)
+        // The same chain the pane reads and the prepared prompts send. These
+        // two called `effectiveInstruction` directly and so skipped the
+        // repository's own — the one layer that is a fact about the branch in
+        // front of you rather than a setting.
+        instructionFor(workspace, 'pullRequest'),
+        instructionFor(workspace, 'commitMessage')
       ])
 
       return draftPullRequest(
