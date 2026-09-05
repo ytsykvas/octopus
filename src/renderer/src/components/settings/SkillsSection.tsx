@@ -2,9 +2,10 @@ import { Plus } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
-import { type SkillStore, skillKey } from '@core/skillNames.js'
+import { isSkillName, type SkillStore, skillKey } from '@core/skillNames.js'
 import type { SkillDocument, SkillEntry } from '@core/skills.js'
 
+import { useAskText } from '../../hooks/useAskText.js'
 import { useConfirm } from '../../hooks/useConfirm.js'
 import { useSkillStore } from '../../hooks/useSkillStore.js'
 import { Button } from '../Button.js'
@@ -50,6 +51,7 @@ export function SkillsSection({
   const { t } = useTranslation()
   const skills = useSkillStore(store)
   const { confirm, dialog } = useConfirm()
+  const { ask, dialog: askDialog } = useAskText()
 
   const [editing, setEditing] = useState<SkillDocument | null>(null)
   const [creating, setCreating] = useState(false)
@@ -77,6 +79,29 @@ export function SkillsSection({
   const open = async (folder: string): Promise<void> => {
     const document = await window.octopus.skills.read(store, folder)
     if (document.ok) setEditing(document.value)
+  }
+
+  /*
+   * A menu action rather than the editor's name field, which stays disabled.
+   * Editing the name inline would read as one more edit, and this is a
+   * migration: the name is the directory *and* the key three stored answers
+   * use, so core moves them together.
+   */
+  const requestRename = async (folder: string, name: string): Promise<void> => {
+    const to = await ask({
+      title: t('skills.renameTitle', { name }),
+      label: t('skills.renameLabel'),
+      confirmLabel: t('skills.renameConfirm'),
+      cancelLabel: t('skills.renameCancel'),
+      initial: name,
+      // The rule core applies, asked as it is typed: the name becomes a
+      // directory, so a round trip spent on one it will refuse says nothing
+      // that could not be said here.
+      valid: isSkillName,
+      invalid: t('skills.renameInvalid')
+    })
+
+    if (to !== null && to !== name) await skills.rename(folder, to)
   }
 
   const requestRemove = async (folder: string, name: string): Promise<void> => {
@@ -158,6 +183,13 @@ export function SkillsSection({
                       label: t('skills.edit'),
                       onSelect: () => {
                         void open(skill.folder)
+                      }
+                    },
+                    {
+                      id: 'rename',
+                      label: t('skills.rename'),
+                      onSelect: () => {
+                        void requestRename(skill.folder, skill.name)
                       }
                     },
                     {
@@ -251,6 +283,7 @@ export function SkillsSection({
       )}
 
       {dialog}
+      {askDialog}
     </div>
   )
 }

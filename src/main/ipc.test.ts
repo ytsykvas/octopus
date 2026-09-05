@@ -335,6 +335,7 @@ describe('channel table', () => {
     'skills:read',
     'skills:save',
     'skills:remove',
+    'skills:rename',
     'skills:import',
     'skills:inRepository',
     'skills:forChat',
@@ -620,7 +621,17 @@ describe('skills', () => {
       value: { body: '# Review\n' }
     })
 
-    await expect(invoke('skills:remove', store, 'review')).resolves.toMatchObject({ ok: true })
+    // Renamed on the way past, because both names become directories and both
+    // are parsed here for that reason.
+    await expect(invoke('skills:rename', store, 'review', 'reviewer')).resolves.toMatchObject({
+      ok: true,
+      value: { name: 'reviewer', folder: 'reviewer' }
+    })
+    await expect(invoke('skills:rename', store, 'reviewer', '..')).resolves.toMatchObject({
+      ok: false
+    })
+
+    await expect(invoke('skills:remove', store, 'reviewer')).resolves.toMatchObject({ ok: true })
     await expect(invoke('skills:list', store)).resolves.toMatchObject({ ok: true, value: [] })
   })
 

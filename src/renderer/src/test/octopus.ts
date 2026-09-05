@@ -148,6 +148,9 @@ export function installOctopusStub(): Api {
         ok({ name: 'review', description: '', folder: 'review', path: '/skills/review' })
       ),
       remove: vi.fn(() => ok(undefined)),
+      rename: vi.fn(() =>
+        ok({ name: 'reviewer', description: '', folder: 'reviewer', path: '/skills/reviewer' })
+      ),
       import: vi.fn(() =>
         ok({ name: 'review', description: '', folder: 'review', path: '/skills/review' })
       ),

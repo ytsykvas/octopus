@@ -6973,6 +6973,73 @@ describe('the agent chat', () => {
       )
     })
 
+    /*
+     * The whole of why a rename is a migration rather than an edit. The name is
+     * the key three stored answers use, and `skillEnabled` reads a key no list
+     * mentions as **on** — so a rename that moved only the directory would look
+     * like it worked and quietly switch the skill back on everywhere somebody
+     * had turned it off.
+     */
+    it('moves every answer stored against a skill when it is renamed', async () => {
+      const { service, projectId, workspaceId } = await withWorkspace()
+      await service.saveStoredSkill({ kind: 'global' }, 'review', { kind: 'raw', text: DOCUMENT })
+      await service.updateConfig({ disabledSkillDefaults: ['review'] })
+      await service.updateProjectById(projectId, { disabledSkillDefaults: ['review'] })
+
+      const chat = await service.openChat(workspaceId)
+      await service.setChatSkill(chat.id, 'review', true)
+
+      await service.renameStoredSkill({ kind: 'global' }, 'review', 'reviewer')
+
+      expect(service.getConfig().disabledSkillDefaults).toEqual(['reviewer'])
+      expect(service.listProjects()[0]?.disabledSkillDefaults).toEqual(['reviewer'])
+      expect(service.listChats(workspaceId)[0]?.skillOverrides).toEqual({ reviewer: true })
+    })
+
+    // And the skill is still off by default afterwards, which is the property
+    // the three moves exist for rather than the moves themselves.
+    it('keeps a renamed skill switched off where it was switched off', async () => {
+      const { service, projectId, workspaceId } = await withWorkspace()
+      await service.saveStoredSkill({ kind: 'global' }, 'review', { kind: 'raw', text: DOCUMENT })
+      await service.updateProjectById(projectId, { disabledSkillDefaults: ['review'] })
+
+      await service.renameStoredSkill({ kind: 'global' }, 'review', 'reviewer')
+
+      await expect(service.skillsForWorkspace(workspaceId)).resolves.toMatchObject([
+        { key: 'reviewer', enabled: false }
+      ])
+    })
+
+    // The same for a conversation's own answers, which are a record rather than
+    // a list: an override about another skill keeps its key and its value.
+    it('leaves a conversation\u2019s answer about another skill alone', async () => {
+      const { service, workspaceId } = await withWorkspace()
+      await service.saveStoredSkill({ kind: 'global' }, 'review', { kind: 'raw', text: DOCUMENT })
+
+      const chat = await service.openChat(workspaceId)
+      await service.setChatSkill(chat.id, 'review', false)
+      await service.setChatSkill(chat.id, 'ship', true)
+
+      await service.renameStoredSkill({ kind: 'global' }, 'review', 'reviewer')
+
+      expect(service.listChats(workspaceId)[0]?.skillOverrides).toEqual({
+        reviewer: false,
+        ship: true
+      })
+    })
+
+    // Untouched lists are left as they are: a rename must not rewrite an answer
+    // about some other skill on its way past.
+    it('leaves answers about other skills alone', async () => {
+      const { service, projectId } = await withWorkspace()
+      await service.saveStoredSkill({ kind: 'global' }, 'review', { kind: 'raw', text: DOCUMENT })
+      await service.updateProjectById(projectId, { disabledSkillDefaults: ['ship', 'review'] })
+
+      await service.renameStoredSkill({ kind: 'global' }, 'review', 'reviewer')
+
+      expect(service.listProjects()[0]?.disabledSkillDefaults).toEqual(['ship', 'reviewer'])
+    })
+
     it('reads the two default lists, narrowest last', async () => {
       const { service, projectId, workspaceId } = await withWorkspace()
       await service.saveStoredSkill({ kind: 'global' }, 'review', { kind: 'raw', text: DOCUMENT })

@@ -543,6 +543,16 @@ const api = {
     remove: (store: SkillStore, name: string): Promise<Result<void>> =>
       ipcRenderer.invoke('skills:remove', store, name) as Promise<Result<void>>,
 
+    /**
+     * Gives one another name, moving every answer stored against it.
+     *
+     * A migration rather than an edit: the name is the directory and the key
+     * three stored things use, so a rename that moved only the folder would
+     * switch the skill back on wherever it had been turned off.
+     */
+    rename: (store: SkillStore, folder: string, to: string): Promise<Result<SkillEntry>> =>
+      ipcRenderer.invoke('skills:rename', store, folder, to) as Promise<Result<SkillEntry>>,
+
     /** Brings in a skill written elsewhere: on disk, pasted, or downloaded. */
     import: (store: SkillStore, request: SkillImport): Promise<Result<SkillEntry>> =>
       ipcRenderer.invoke('skills:import', store, request) as Promise<Result<SkillEntry>>,

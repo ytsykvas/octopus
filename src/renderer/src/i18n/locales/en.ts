@@ -998,6 +998,15 @@ export const en = {
        at all to anyone not looking at it. */
     rowActions: 'What to do with {{name}}',
     edit: 'Edit',
+    rename: 'Rename',
+    /* A migration rather than an edit, which is why the editor's name field is
+       disabled and this is a menu action: the name is the directory and the key
+       three stored answers use, so core moves them together. */
+    renameTitle: 'Rename \u201c{{name}}\u201d',
+    renameLabel: 'New name (lowercase letters, digits and dashes)',
+    renameConfirm: 'Rename',
+    renameCancel: 'Cancel',
+    renameInvalid: 'Lowercase letters, digits and dashes only, starting with a letter or a digit.',
     remove: 'Remove',
     removeTitle: 'Remove {{name}}?',
     removeMessage: 'The skill and everything in its folder are deleted.',

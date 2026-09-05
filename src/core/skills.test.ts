@@ -13,6 +13,7 @@ import {
   readSkill,
   readSkillsIn,
   removeSkill,
+  renameSkill,
   SkillError,
   skillEnabled,
   writeRawSkill,
@@ -461,6 +462,88 @@ describe('removeSkill', () => {
 
   it('refuses a name that would delete something else', async () => {
     expect((await refusal(() => removeSkill(root, '..'))).code).toBe('skillNameInvalid')
+  })
+})
+
+describe('renameSkill', () => {
+  /*
+   * The name **is** the directory, so this moves it — and the frontmatter with
+   * it, or the file claims to be a skill the store has filed under another
+   * name, which is the drift `writeRawSkill` refuses.
+   */
+  it('moves the directory and the name inside it together', async () => {
+    await place(root, 'review', document('review', 'Reviews code.', '# How\n'))
+
+    await expect(renameSkill(root, 'review', 'reviewer')).resolves.toMatchObject({
+      name: 'reviewer',
+      folder: 'reviewer'
+    })
+
+    const raw = await readFile(join(root, 'reviewer', 'SKILL.md'), 'utf8')
+    expect(raw).toContain('name: reviewer')
+    expect(raw).toContain('# How')
+    await expect(readFile(join(root, 'review', 'SKILL.md'), 'utf8')).rejects.toThrow()
+  })
+
+  // Everything else in the frontmatter is copied through, the way an edit does:
+  // a rename is not an invitation to tidy away an `allowed-tools` beside it.
+  it('keeps the rest of the frontmatter', async () => {
+    await place(
+      root,
+      'review',
+      '---\nname: review\ndescription: Reviews code.\nallowed-tools: Read\n---\n\nBody\n'
+    )
+
+    await renameSkill(root, 'review', 'reviewer')
+
+    expect(await readFile(join(root, 'reviewer', 'SKILL.md'), 'utf8')).toContain(
+      'allowed-tools: Read'
+    )
+  })
+
+  /*
+   * Refused before anything moves, and that is what makes the ordering safe
+   * rather than a rollback: with the new name proved free, what is left to fail
+   * is exotic.
+   */
+  it('refuses a name the store already has, leaving both alone', async () => {
+    await place(root, 'review', document('review', 'One.'))
+    await place(root, 'reviewer', document('reviewer', 'Two.'))
+
+    expect((await refusal(() => renameSkill(root, 'review', 'reviewer'))).code).toBe('skillExists')
+    await expect(readFile(join(root, 'review', 'SKILL.md'), 'utf8')).resolves.toContain('One.')
+  })
+
+  // A skill is keyed by its bare name wherever it came from, so the other store
+  // is in the same namespace and its names are refused here too.
+  it('refuses a name the other store has', async () => {
+    await place(root, 'review', document('review', 'One.'))
+
+    expect((await refusal(() => renameSkill(root, 'review', 'ship', ['ship']))).code).toBe(
+      'skillExists'
+    )
+  })
+
+  it('refuses a name that could not be a directory', async () => {
+    await place(root, 'review', document('review', 'One.'))
+
+    expect((await refusal(() => renameSkill(root, 'review', '..'))).code).toBe('skillNameInvalid')
+  })
+
+  /*
+   * Renaming to the name it already has is not a collision with itself, and it
+   * is not a no-op either: it rewrites the frontmatter to match the directory,
+   * which repairs a skill whose two names had drifted.
+   */
+  it('takes the name it already has, and makes the document agree', async () => {
+    await place(root, 'review', document('other', 'Reviews code.'))
+
+    await expect(renameSkill(root, 'review', 'review')).resolves.toMatchObject({ name: 'review' })
+    expect(await readFile(join(root, 'review', 'SKILL.md'), 'utf8')).toContain('name: review')
+  })
+
+  it('says so when there is nothing there to rename', async () => {
+    expect((await refusal(() => renameSkill(root, 'absent', 'present'))).code).toBe('skillMissing')
   })
 })
 

@@ -128,6 +128,7 @@ import {
   readSkill,
   readSkillsIn,
   removeSkill,
+  renameSkill,
   type SkillDocument,
   type SkillEntry,
   skillEnabled,
@@ -636,6 +637,13 @@ export interface OctopusService {
   readStoredSkill(store: SkillStore, folder: string): Promise<SkillDocument>
   saveStoredSkill(store: SkillStore, folder: string, save: SkillSave): Promise<SkillEntry>
   removeStoredSkill(store: SkillStore, folder: string): Promise<void>
+  /**
+   * Gives a skill another name, and moves every answer stored against it.
+   *
+   * A migration rather than an edit, which is why the editor's name field is
+   * disabled: the name is the directory *and* the key three stored things use.
+   */
+  renameStoredSkill(store: SkillStore, folder: string, to: string): Promise<SkillEntry>
   importStoredSkill(store: SkillStore, request: SkillImport): Promise<SkillEntry>
   /**
    * Every skill this conversation could use, and whether it is on.
@@ -2203,6 +2211,28 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
     return session
   }
 
+  /** The same list with one key renamed, or the list itself when it has none. */
+  function renamedIn(keys: readonly string[], from: string, to: string): string[] {
+    return keys.map((key) => (key === from ? to : key))
+  }
+
+  /**
+   * The same overrides with one key renamed.
+   *
+   * Rebuilt rather than patched, because deleting a key from a record and
+   * adding another is two writes over a value `commit` takes whole — and the
+   * order of the rest is what the panel draws.
+   */
+  function renamedOverride(
+    overrides: Readonly<Record<string, boolean>>,
+    from: string,
+    to: string
+  ): Record<string, boolean> {
+    return Object.fromEntries(
+      Object.entries(overrides).map(([key, on]) => [key === from ? to : key, on])
+    )
+  }
+
   async function addFromPath(path: string): Promise<Project> {
     const project = await createProject(path, config.branchPrefix, state, makeExec)
     await commit((current) => addProject(current, project))
@@ -2723,6 +2753,48 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
     async removeStoredSkill(store, folder) {
       await removeSkill(skillsDirOf(storeRoot(store)), folder)
       await refreshRunningSkills()
+    },
+
+    async renameStoredSkill(store, folder, to) {
+      const dir = await writableStore(store)
+      const renamed = await renameSkill(dir, folder, to, await namesBesideStore(store))
+
+      /*
+       * The key moves with the directory, everywhere it is stored, or the
+       * rename only looks like it worked: `skillEnabled` reads a key no list
+       * mentions as **on**, so a skill somebody had switched off would come
+       * back on under its new name, in every conversation at once.
+       *
+       * Three homes, and they are not one write. The installation's list is in
+       * the config file; the project lists and every chat's overrides are in
+       * `state.json`, which `commit` writes whole. The config goes first so
+       * that a failure leaves the narrower answers stale rather than the
+       * broadest one.
+       */
+      const from = skillKey(folder)
+      const key = skillKey(to)
+
+      if (config.disabledSkillDefaults.includes(from)) {
+        await applyConfig({
+          disabledSkillDefaults: renamedIn(config.disabledSkillDefaults, from, key)
+        })
+      }
+
+      await commit((current) => ({
+        ...current,
+        projects: current.projects.map((project) => ({
+          ...project,
+          disabledSkillDefaults: renamedIn(project.disabledSkillDefaults, from, key)
+        })),
+        chats: current.chats.map((chat) => ({
+          ...chat,
+          skillOverrides: renamedOverride(chat.skillOverrides, from, key)
+        }))
+      }))
+
+      await refreshRunningSkills()
+
+      return renamed
     },
 
     async importStoredSkill(store, request) {

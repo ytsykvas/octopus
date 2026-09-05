@@ -468,6 +468,20 @@ export function registerIpc(
     )
   )
 
+  /*
+   * Both names are parsed with the same schema, and the second one has to be:
+   * it becomes a directory, and the folder it moves to is joined onto a path.
+   */
+  host.handle('skills:rename', (_event, store: unknown, folder: unknown, to: unknown) =>
+    attempt(() =>
+      service.renameStoredSkill(
+        SkillStoreSchema.parse(store),
+        SkillNameSchema.parse(folder),
+        SkillNameSchema.parse(to)
+      )
+    )
+  )
+
   host.handle('skills:import', (_event, store: unknown, request: unknown) =>
     attempt(() =>
       service.importStoredSkill(SkillStoreSchema.parse(store), SkillImportSchema.parse(request))

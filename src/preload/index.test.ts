@@ -366,6 +366,16 @@ describe('channel names', () => {
       'skills:remove'
     ],
     [
+      'skills.rename',
+      () =>
+        method('skills', 'rename')(
+          { kind: 'global' } as never,
+          'review' as never,
+          'reviewer' as never
+        ),
+      'skills:rename'
+    ],
+    [
       'skills.import',
       () =>
         method('skills', 'import')(

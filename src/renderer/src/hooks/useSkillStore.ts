@@ -12,6 +12,8 @@ export interface SkillStoreController {
   /** Both take the directory the listing found, which is what addresses a skill. */
   readonly save: (folder: string, save: SkillSave) => Promise<boolean>
   readonly remove: (folder: string) => Promise<void>
+  /** Gives one another name, moving every answer stored against it. */
+  readonly rename: (folder: string, to: string) => Promise<boolean>
   readonly bring: (request: SkillImport) => Promise<boolean>
   readonly refresh: () => Promise<void>
 }
@@ -91,6 +93,21 @@ export function useSkillStore(store: SkillStore): SkillStoreController {
     [target, describeFailure, refresh]
   )
 
+  const rename = useCallback(
+    async (folder: string, to: string) => {
+      const renamed = await window.octopus.skills.rename(target, folder, to)
+      if (!renamed.ok) {
+        setError(describeFailure(renamed))
+        return false
+      }
+
+      setError(null)
+      await refresh()
+      return true
+    },
+    [target, describeFailure, refresh]
+  )
+
   const bring = useCallback(
     async (request: SkillImport) => {
       const imported = await window.octopus.skills.import(target, request)
@@ -106,5 +123,5 @@ export function useSkillStore(store: SkillStore): SkillStoreController {
     [target, describeFailure, refresh]
   )
 
-  return { skills, error, save, remove, bring, refresh }
+  return { skills, error, save, remove, rename, bring, refresh }
 }

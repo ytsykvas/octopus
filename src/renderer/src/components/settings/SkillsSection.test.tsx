@@ -275,9 +275,12 @@ describe('writing a skill', () => {
     expect(screen.getByLabelText('Name')).toBeInTheDocument()
   })
 
-  // The name is the folder and the key every stored answer uses, so renaming is
-  // a migration rather than an edit.
-  it('will not rename a skill that already exists', async () => {
+  /*
+   * The name is the folder and the key every stored answer uses, so renaming is
+   * a migration rather than an edit — which is why the field stays disabled and
+   * the rename is its own action, where core can move the keys with it.
+   */
+  it('will not rename a skill from the editor, where only the folder would move', async () => {
     holding([entry()])
     await renderSection()
 
@@ -285,6 +288,56 @@ describe('writing a skill', () => {
     await userEvent.click(screen.getByRole('menuitem', { name: 'Edit' }))
 
     expect(screen.getByLabelText('Name')).toBeDisabled()
+  })
+
+  it('renames one from its own action, starting at the name it has', async () => {
+    holding([entry()])
+    await renderSection()
+
+    await userEvent.click(screen.getByRole('button', { name: 'What to do with review' }))
+    await userEvent.click(screen.getByRole('menuitem', { name: 'Rename' }))
+
+    const field = await screen.findByRole('textbox', { name: /New name/ })
+    expect(field).toHaveValue('review')
+
+    await userEvent.clear(field)
+    await userEvent.type(field, 'reviewer')
+    await userEvent.click(screen.getByRole('button', { name: 'Rename' }))
+
+    expect(octopus().skills.rename).toHaveBeenCalledWith({ kind: 'global' }, 'review', 'reviewer')
+  })
+
+  /*
+   * Asked as it is typed, with the rule core applies at the boundary: the name
+   * becomes a directory, so a round trip spent on one core will refuse says
+   * nothing that could not be said here.
+   */
+  it('will not send a name that could not be a directory', async () => {
+    holding([entry()])
+    await renderSection()
+
+    await userEvent.click(screen.getByRole('button', { name: 'What to do with review' }))
+    await userEvent.click(screen.getByRole('menuitem', { name: 'Rename' }))
+
+    const field = await screen.findByRole('textbox', { name: /New name/ })
+    await userEvent.clear(field)
+    await userEvent.type(field, 'Reviewer')
+
+    expect(screen.getByRole('button', { name: 'Rename' })).toBeDisabled()
+    expect(octopus().skills.rename).not.toHaveBeenCalled()
+  })
+
+  // Nothing to migrate, and asking core to rename a skill to its own name would
+  // be a refusal the reader could not act on.
+  it('does nothing when the name is left as it was', async () => {
+    holding([entry()])
+    await renderSection()
+
+    await userEvent.click(screen.getByRole('button', { name: 'What to do with review' }))
+    await userEvent.click(screen.getByRole('menuitem', { name: 'Rename' }))
+    await userEvent.click(await screen.findByRole('button', { name: 'Rename' }))
+
+    expect(octopus().skills.rename).not.toHaveBeenCalled()
   })
 
   // A skill deleted from outside the app between the list and the click. No
@@ -358,6 +411,31 @@ describe('removing a skill', () => {
 
     await waitFor(() => {
       expect(screen.getByText(/no longer there/)).toBeInTheDocument()
+    })
+  })
+
+  // The name is checked as it is typed against the rule core applies to a
+  // directory — but core also refuses one the *other* store holds, which this
+  // side cannot know, so the refusal still has to reach the reader.
+  it('says why a rename was refused', async () => {
+    holding([entry()])
+    vi.mocked(octopus().skills.rename).mockResolvedValue({
+      ok: false,
+      error: 'raw',
+      code: 'skillExists',
+      params: { name: 'reviewer' }
+    })
+    await renderSection()
+
+    await userEvent.click(screen.getByRole('button', { name: 'What to do with review' }))
+    await userEvent.click(screen.getByRole('menuitem', { name: 'Rename' }))
+    const field = await screen.findByRole('textbox', { name: /New name/ })
+    await userEvent.clear(field)
+    await userEvent.type(field, 'reviewer')
+    await userEvent.click(screen.getByRole('button', { name: 'Rename' }))
+
+    await waitFor(() => {
+      expect(screen.getByText(/reviewer/)).toBeInTheDocument()
     })
   })
 })

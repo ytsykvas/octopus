@@ -24,7 +24,7 @@
  * octopus makes inside a repository still holds.
  */
 
-import { cp, mkdir, readdir, readFile, rm, stat, writeFile } from 'node:fs/promises'
+import { cp, mkdir, readdir, readFile, rename, rm, stat, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 
 import { type Document, parseDocument, stringify } from 'yaml'
@@ -511,6 +511,49 @@ export async function writeRawSkill(
 
 export async function removeSkill(dir: string, folder: string): Promise<void> {
   await rm(skillPath(dir, folder), { recursive: true, force: true })
+}
+
+/**
+ * Gives a skill another name — the directory and the frontmatter together.
+ *
+ * The name **is** the directory, and it is also the key three stored answers
+ * use: the installation's default list, the project's own, and every chat's
+ * overrides. So this is a migration rather than an edit, which is why the
+ * editor's name field is disabled and why it was left out rather than
+ * half-done: a rename that moved the folder and left the keys behind would look
+ * like it worked and quietly switch the skill back on everywhere it had been
+ * turned off, because `skillEnabled` reads a key no list mentions as on. The
+ * caller moves the keys; `service.renameStoredSkill` is the only one there is.
+ *
+ * The collision check runs **before** anything moves, and that is what makes
+ * the ordering safe rather than a rollback: with the new name proved free, what
+ * is left to fail is exotic, and the alternative — writing the records first —
+ * fails the same way round.
+ */
+export async function renameSkill(
+  dir: string,
+  folder: string,
+  to: string,
+  elsewhere: readonly string[] = []
+): Promise<SkillEntry> {
+  const from = skillPath(dir, folder)
+  const path = skillPath(dir, to)
+
+  const existing = await readDocument(from)
+  if (existing === null) {
+    throw new SkillError('skillMissing', { name: folder }, `${folder} is not here.`)
+  }
+
+  if (to !== folder) await refuseExisting(dir, to, elsewhere)
+
+  await rename(from, path)
+
+  // The frontmatter follows the directory, or the file claims to be a skill the
+  // store has filed under another name — the drift `writeRawSkill` refuses.
+  const raw = `---\n${frontmatterFor(existing.front, to, existing.description).trimEnd()}\n---\n\n${existing.body}`
+  await writeFile(join(path, SKILL_FILE), raw, 'utf8')
+
+  return { name: to, description: existing.description, folder: to, path }
 }
 
 /**
