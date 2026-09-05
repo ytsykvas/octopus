@@ -32,6 +32,7 @@ import { Combobox } from './Combobox.js'
 import { Field } from './Field.js'
 import { Modal } from './Modal.js'
 import { ProjectGlyph } from './ProjectGlyph.js'
+import { DeclaredFiles } from './DeclaredFiles.js'
 import { SectionRail } from './SectionRail.js'
 import { FileEditor } from './FileEditor.js'
 import { InstructionEditors } from './InstructionEditors.js'
@@ -195,6 +196,9 @@ export function ProjectSettings({
   const [section, setSection] = useState<SectionId>(initialSection ?? 'general')
   const [name, setName] = useState(project.name)
   const [envFile, setEnvFile] = useState(project.envFile)
+  /* Bumped when the declaration block appends to the carry list, so the box
+     above it stops showing the text from before the append. */
+  const [carryRevision, setCarryRevision] = useState(0)
   /**
    * Whether git would keep the env file out of a commit.
    *
@@ -644,17 +648,27 @@ export function ProjectSettings({
               lead to genuinely differs: one file is run, the others are
               copied. */}
           {section === 'files' && (
-            <FileEditor
-              label={t('project.files')}
-              hint={t('project.filesHint')}
-              placeholder={'.env\nconfig/master.key'}
-              rows={12}
-              read={async () => {
-                const result = await window.octopus.projects.readCarryList(project.id)
-                return result.ok ? result.value : null
-              }}
-              save={(contents) => window.octopus.projects.saveCarryList(project.id, contents)}
-            />
+            <>
+              <FileEditor
+                label={t('project.files')}
+                hint={t('project.filesHint')}
+                placeholder={'.env\nconfig/master.key'}
+                rows={12}
+                reloadKey={carryRevision}
+                read={async () => {
+                  const result = await window.octopus.projects.readCarryList(project.id)
+                  return result.ok ? result.value : null
+                }}
+                save={(contents) => window.octopus.projects.saveCarryList(project.id, contents)}
+              />
+
+              <DeclaredFiles
+                projectId={project.id}
+                onAdded={() => {
+                  setCarryRevision((count) => count + 1)
+                }}
+              />
+            </>
           )}
 
           {/* Variables rather than files, and the answer for a project cloned

@@ -282,6 +282,10 @@ export function registerIpc(
     attempt(() => service.saveProjectCarryList(projectId, CarryListSchema.parse(contents)))
   )
 
+  host.handle('carry:declared', (_event, projectId: string) =>
+    attempt(() => service.declaredCarryFiles(projectId))
+  )
+
   host.handle('workspace:env', (_event, workspaceId: string) =>
     attempt(() => service.readWorkspaceEnv(workspaceId))
   )

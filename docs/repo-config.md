@@ -266,6 +266,22 @@ for a Rails app — translates almost line for line.
 | `[prompts]`, one text for every action            | `.octopus/instructions/`, one file per action — and Conductor's own are read |
 | dev values appended to `.env` inside `setup.sh`   | the env block — and it stays out of the repository                           |
 
+**A repository that declares its files and nothing else is told so.** Project
+settings shows what `.conductor` declares under the carry list, marks the
+entries the list already names, marks the patterns octopus will not follow —
+`carryInto` copies named files, so a glob in the list names a file that does not
+exist — and offers to copy the rest across in one press. Shown and offered
+rather than acted on: the carry list stays not live for the reason above, and
+copying paths a `git pull` can change into a worktree is exactly what has to be
+approved rather than assumed.
+
+That covers the case neither row of the table does. An unconverted checkout
+keeps the `cp` at the top of its Conductor `setup.sh` and the files arrive
+anyway; a converted one has been through this table. The residue is a repository
+that declares through `file_include_globs` **alone**, opened here without
+converting — where the files never arrived and nothing said the repository had
+asked for them.
+
 Two differences worth knowing before copying a `setup.sh` across.
 
 **The first line of a Conductor setup script is usually a `cp` of the

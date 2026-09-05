@@ -6,15 +6,14 @@
  * prose for some of the actions the pull request pane offers. A checkout that
  * has one should not have to be configured twice.
  *
- * **Not its `file_include_globs`.** That list was parsed here and read by
- * nobody, while three documents said otherwise. Feeding it to `carryInto` is
- * ruled out by a decision already written down — `docs/repo-config.md` keeps
- * the carry list deliberately not live, and copying paths a `git pull` can
- * change into a worktree is the class of thing `repoSource.ts` argues must be
- * shown and approved — and its patterns cannot be followed at all, since
- * `carryInto` hands each entry to `copyFile`. Showing what the repository
- * declares is the honest version of the feature, and it is filed rather than
- * half-built.
+ * **Its `file_include_globs` is read and shown, never followed.** Feeding it to
+ * `carryInto` is ruled out by a decision already written down —
+ * `docs/repo-config.md` keeps the carry list deliberately not live, and copying
+ * paths a `git pull` can change into a worktree is the class of thing
+ * `repoSource.ts` argues must be shown and approved — and its patterns could
+ * not be followed anyway, since `carryInto` hands each entry to `copyFile`. So
+ * what this parse is for is telling the reader what the repository declares,
+ * beside the list that decides what actually travels.
  *
  * **This module reads; it never writes.** Export still goes to `.octopus/`
  * alone (`repoConfig.ts`), so the promise in `SECURITY.md` about where this app
@@ -129,6 +128,21 @@ export interface ConductorScript {
   readonly path: string
 }
 
+/**
+ * One path a repository declares under `file_include_globs`.
+ *
+ * `pattern` is the honest half. `carryInto` copies literal paths, so a glob
+ * added to the carry list names a file that does not exist — and whatever draws
+ * this has to say so rather than implying the entry would be honoured.
+ */
+export interface DeclaredFile {
+  readonly glob: string
+  readonly pattern: boolean
+}
+
+/** Anything in a glob that `copyFile` cannot be given as a filename. */
+const GLOB_CHARACTERS = /[*?[\]{}]/u
+
 /** What octopus can use out of a repository's Conductor settings. */
 export interface ConductorConfig {
   /**
@@ -141,6 +155,10 @@ export interface ConductorConfig {
   readonly promptsPath: string
   readonly scripts: Readonly<Partial<Record<ScriptKind, ConductorScript>>>
   readonly prompts: Readonly<Partial<Record<InstructionKind, string>>>
+  /** What the repository says its workspaces need, in declaration order. */
+  readonly files: readonly DeclaredFile[]
+  /** Which file declared them; empty when none did, as `promptsPath` is. */
+  readonly filesPath: string
 }
 
 /**
@@ -318,6 +336,21 @@ function winner(layers: readonly Layer[], key: string): Layer | null {
 }
 
 /** The validated files turned into what the rest of the app asks for. */
+/**
+ * The globs a repository declares, one per line.
+ *
+ * Conductor writes this as one string with newlines in it, and comments in it
+ * the way the carry list has them — so it is split the same way
+ * `carriedFiles` splits its own, and for the same reason.
+ */
+function declaredFiles(raw: string | undefined): DeclaredFile[] {
+  return (raw ?? '')
+    .split('\n')
+    .map((line) => line.trim())
+    .filter((line) => line !== '' && !line.startsWith('#'))
+    .map((glob) => ({ glob, pattern: GLOB_CHARACTERS.test(glob) }))
+}
+
 function normalise(layers: readonly Layer[]): ConductorConfig {
   const parsed = layers.map((layer) => {
     const result = SettingsSchema.safeParse(layer.value)
@@ -360,9 +393,16 @@ function normalise(layers: readonly Layer[]): ConductorConfig {
     if (kind !== undefined && body.trim() !== '') prompts[kind] = body
   }
 
+  const filesLayer = winner(layers, 'file_include_globs')
+  const files = declaredFiles(
+    parsed.find((layer) => layer.path === filesLayer?.path)?.value.file_include_globs
+  )
+
   return {
     promptsPath: promptsLayer !== null && Object.keys(prompts).length > 0 ? promptsLayer.path : '',
     scripts,
-    prompts
+    prompts,
+    files,
+    filesPath: filesLayer !== null && files.length > 0 ? filesLayer.path : ''
   }
 }

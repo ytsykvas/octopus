@@ -6,6 +6,7 @@ import type {
   ChatEvent,
   ChatsChangedEvent,
   ChatStatusEvent,
+  DeclaredCarryFiles,
   PermissionAnswer,
   PermissionRequest,
   RateLimit,
@@ -671,6 +672,13 @@ const api = {
 
     saveCarryList: (projectId: string, contents: string): Promise<Result<void>> =>
       ipcRenderer.invoke('carry:save', projectId, contents) as Promise<Result<void>>,
+
+    /**
+     * What the checkout's `.conductor` declares it needs, beside what the list
+     * above actually carries. Null where nothing declares anything.
+     */
+    declaredCarryFiles: (projectId: string): Promise<Result<DeclaredCarryFiles | null>> =>
+      ipcRenderer.invoke('carry:declared', projectId) as Promise<Result<DeclaredCarryFiles | null>>,
 
     /** The named sets of variables this project holds, and its default. */
     envProfiles: (

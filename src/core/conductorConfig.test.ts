@@ -230,6 +230,74 @@ describe('readConductorConfig', () => {
     })
   })
 
+  describe('the files a repository declares', () => {
+    /*
+     * Read and shown, never followed. A repository that declares its gitignored
+     * files through `file_include_globs` alone — no `cp` in its setup script,
+     * never converted — comes up here unable to run, and the declaration was on
+     * disk the whole time with nothing saying so.
+     */
+    it('reads the declared list, one path per line', async () => {
+      await put(
+        '.conductor/settings.toml',
+        ['file_include_globs = """', '.env', 'config/master.key', '"""'].join('\n')
+      )
+
+      const config = await readConductorConfig(repo)
+
+      expect(config?.files).toEqual([
+        { glob: '.env', pattern: false },
+        { glob: 'config/master.key', pattern: false }
+      ])
+      expect(config?.filesPath).toBe('.conductor/settings.toml')
+    })
+
+    /* `carryInto` hands each entry to `copyFile`, so a glob names a file that
+       does not exist. Marked rather than dropped: the declaration is real and
+       the reader should know octopus will not act on it. */
+    it('marks an entry a pattern rather than pretending it would be copied', async () => {
+      await put(
+        '.conductor/settings.toml',
+        ['file_include_globs = """', '.env', 'config/*.key', 'certs/**', 'a[0-9].pem', '"""'].join(
+          '\n'
+        )
+      )
+
+      const config = await readConductorConfig(repo)
+
+      expect(config?.files.map((file) => file.pattern)).toEqual([false, true, true, true])
+    })
+
+    it('drops comments and blank lines, as the carry list does', async () => {
+      await put(
+        '.conductor/settings.toml',
+        ['file_include_globs = """', '# what a workspace needs', '', '  .env  ', '"""'].join('\n')
+      )
+
+      await expect(readConductorConfig(repo)).resolves.toMatchObject({
+        files: [{ glob: '.env', pattern: false }]
+      })
+    })
+
+    it('says nothing where the repository declares nothing', async () => {
+      await put('.conductor/settings.toml', '[scripts]\nsetup = "make"')
+
+      await expect(readConductorConfig(repo)).resolves.toMatchObject({ files: [], filesPath: '' })
+    })
+
+    // The merge is per top-level key, so the machine-local file replaces the
+    // committed list rather than adding to it — as it does for the scripts.
+    it('takes the list from the file that wins the key', async () => {
+      await put('.conductor/settings.toml', 'file_include_globs = """\n.env\n"""')
+      await put('.conductor/settings.local.toml', 'file_include_globs = """\n.env.local\n"""')
+
+      const config = await readConductorConfig(repo)
+
+      expect(config?.files).toEqual([{ glob: '.env.local', pattern: false }])
+      expect(config?.filesPath).toBe('.conductor/settings.local.toml')
+    })
+  })
+
   describe('refusing what it should not read', () => {
     it('names the file that could not be parsed', async () => {
       await put('.conductor/settings.toml', 'scripts = [[[')

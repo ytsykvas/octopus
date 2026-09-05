@@ -310,6 +310,7 @@ describe('channel table', () => {
     'scripts:paths',
     'carry:read',
     'carry:save',
+    'carry:declared',
     'repoConfig:read',
     'repoConfig:import',
     'repoConfig:export',
@@ -1307,6 +1308,27 @@ describe('scripts and instructions of a real project', () => {
     await expect(invoke('carry:read', projectId)).resolves.toMatchObject({
       ok: true,
       value: expect.stringContaining('.env')
+    })
+  })
+
+  it('answers with what the checkout declares, beside what the list carries', async () => {
+    const projectId = await addProject('declaring')
+    await mkdir(join(dir, 'declaring', '.conductor'), { recursive: true })
+    await writeFile(
+      join(dir, 'declaring', '.conductor', 'settings.toml'),
+      'file_include_globs = """\n.env\nconfig/*.key\n"""\n',
+      'utf8'
+    )
+
+    await expect(invoke('carry:declared', projectId)).resolves.toEqual({
+      ok: true,
+      value: {
+        path: '.conductor/settings.toml',
+        files: [
+          { glob: '.env', pattern: false, carried: true },
+          { glob: 'config/*.key', pattern: true, carried: false }
+        ]
+      }
     })
   })
 

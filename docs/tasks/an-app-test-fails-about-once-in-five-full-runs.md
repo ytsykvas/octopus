@@ -269,6 +269,28 @@ runs goes through `execFile`, and a rejected one is not awaited anywhere the
 `finally` can see. A spawn whose promise is dropped keeps the child alive past
 the `rm`.
 
+## A third file, and a cause that was ours
+
+**2026-09-06.** `service.test.ts` failed twice in one run, both times in
+`afterEach`:
+
+    Error: ENOTEMPTY: directory not empty, rmdir
+      '/var/folders/…/T/octopus-service-CNgRaz'
+
+Both were tests written minutes earlier, and both did the same thing: raise a
+permission request with `agent().ask(...)` and never answer it. An open request
+is a turn held open — `canUseTool` blocks on a promise — so the transcript write
+behind it was still going when the directory was removed.
+
+Answering the request at the end of each made both stop failing. That is the
+first sighting with a cause anybody could point at, and it is the same shape as
+the `pullRequests.test.ts` one: **work still running when `rm` starts**, not a
+deadline.
+
+It does not close the note. The `⌘T` sighting has no unanswered request in it,
+and the renderer ones have no directory. But it does say what to look for in
+those: something the test starts and nothing waits for.
+
 ## What not to do
 
 Do not add a retry. A test that passes on the second attempt is a test that has

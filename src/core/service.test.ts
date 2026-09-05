@@ -2176,6 +2176,66 @@ describe('files carried into a workspace', () => {
     await expect(service.readProjectCarryList(id)).resolves.toBe('.env\nconfig/master.key\n')
   })
 
+  describe('what the repository declares', () => {
+    async function declaring(globs: readonly string[]): Promise<string> {
+      const { id, repo } = await withProject()
+      await mkdir(join(repo, '.conductor'), { recursive: true })
+      await writeFile(
+        join(repo, '.conductor', 'settings.toml'),
+        `file_include_globs = """\n${globs.join('\n')}\n"""\n`,
+        'utf8'
+      )
+      return id
+    }
+
+    it('answers with nothing where the checkout declares nothing', async () => {
+      const { id } = await withProject()
+      await expect(service.declaredCarryFiles(id)).resolves.toBeNull()
+    })
+
+    /* The reconciliation, and it runs one way only: what the list already names
+       is settled, and what it names beyond the declaration is nobody's problem
+       — the list is the thing that decides. */
+    it('says which declarations the carry list already names', async () => {
+      const id = await declaring(['.env', 'config/master.key'])
+      await service.saveProjectCarryList(id, '.env\n')
+
+      await expect(service.declaredCarryFiles(id)).resolves.toEqual({
+        path: '.conductor/settings.toml',
+        files: [
+          { glob: '.env', pattern: false, carried: true },
+          { glob: 'config/master.key', pattern: false, carried: false }
+        ]
+      })
+    })
+
+    // The left side of `a = b` is the path, so a declaration matching it is
+    // carried however the line was written.
+    it('counts a declaration carried from another checkout as carried', async () => {
+      const id = await declaring(['.env'])
+      await service.saveProjectCarryList(id, '.env = /elsewhere/planner/.env\n')
+
+      await expect(service.declaredCarryFiles(id)).resolves.toMatchObject({
+        files: [{ glob: '.env', carried: true }]
+      })
+    })
+
+    /* Settings a workspace half-wrote should not take a settings screen down:
+       this is a courtesy beside a list that works without it, which is the same
+       reasoning `cleanupFor` gives for swallowing the same failure. */
+    it('answers with nothing rather than throwing on settings it cannot read', async () => {
+      const { id, repo } = await withProject()
+      await mkdir(join(repo, '.conductor'), { recursive: true })
+      await writeFile(join(repo, '.conductor', 'settings.toml'), 'file_include_globs = [[[', 'utf8')
+
+      await expect(service.declaredCarryFiles(id)).resolves.toBeNull()
+    })
+
+    it('refuses a project it does not have', async () => {
+      await expect(service.declaredCarryFiles('missing')).rejects.toThrow()
+    })
+  })
+
   /*
    * The whole point: a worktree holds what git tracks and nothing else, so a
    * gitignored secret is missing from every fresh one.
@@ -4675,17 +4735,23 @@ describe('the agent chat', () => {
       const chat = await service.openChat(workspaceId)
       await service.sendToChat(chat.id, 'edit it')
 
-      void agent().ask(
+      const decision = agent().ask(
         'Edit',
         { file_path: '/w/.claude/skills/demo/SKILL.md' },
         'Claude requested permissions to write to it, but you have not granted it yet.'
       )
-      await waitForRequest(events)
+      const requestId = await waitForRequest(events)
 
       const request = events.find((entry) => entry.event.type === 'permission_request')
       expect(request?.event).toMatchObject({
         reason: 'Claude requested permissions to write to it, but you have not granted it yet.'
       })
+
+      // Answered rather than left hanging. An open request is a turn held open,
+      // and the transcript write behind it then races the teardown that removes
+      // the directory it is being written into.
+      await service.answerPermission(requestId, 'deny')
+      await decision
     })
 
     /* Absent rather than empty, so the card has nothing to draw where the
@@ -4695,11 +4761,14 @@ describe('the agent chat', () => {
       const chat = await service.openChat(workspaceId)
       await service.sendToChat(chat.id, 'edit it')
 
-      void agent().ask('Edit', { file_path: '/a.rb' })
-      await waitForRequest(events)
+      const decision = agent().ask('Edit', { file_path: '/a.rb' })
+      const requestId = await waitForRequest(events)
 
       const request = events.find((entry) => entry.event.type === 'permission_request')
       expect(request?.event).not.toHaveProperty('reason')
+
+      await service.answerPermission(requestId, 'deny')
+      await decision
     })
 
     it('says so when the user declines', async () => {

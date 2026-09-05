@@ -189,6 +189,20 @@ export const en = {
     files: 'Files carried into a workspace',
     filesHint:
       'One path per line, relative to the repository. A worktree holds what git tracks and nothing else, so gitignored files — an .env, a config/master.key — have to be brought. Copied at creation and again before a run; a file already there is never overwritten. Add “= /somewhere/else/.env” to take one from another checkout instead — which is the answer for a project cloned from GitHub, where the checkout has no gitignored file to give. Those sources stay on this machine and are left out of the copy in the repository.',
+    /* What the repository declares, beside the list that decides. Shown, never
+       followed — copying paths a git pull can change into a worktree is the
+       class of thing that has to be approved rather than assumed. */
+    declaredFiles: 'Declared by the repository',
+    declaredFilesHint:
+      '{{path}} lists the files this repository says its workspaces need. octopus does not act on that list — the one above is what actually travels — but it can copy the entries across.',
+    declaredCarried: 'already listed',
+    declaredPattern: 'a pattern — octopus copies named files only',
+    /* All four forms in both locales, as `changedFiles` has them: the key set
+       is shared, and English needing only two does not shrink it. */
+    declaredAdd_one: 'Add {{count}} entry to the list above',
+    declaredAdd_few: 'Add {{count}} entries to the list above',
+    declaredAdd_many: 'Add {{count}} entries to the list above',
+    declaredAdd_other: 'Add {{count}} entries to the list above',
     archiveScript: 'Cleanup script',
     archiveScriptHint:
       'Runs when a workspace is removed, in its directory, while it still exists. Use it to take back what the build script gave out — a database or a container named after the workspace. Nothing it does can stop the removal. Saved as archive.sh.',

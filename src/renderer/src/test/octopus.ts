@@ -182,6 +182,9 @@ export function installOctopusStub(): Api {
       exportRepoConfig: vi.fn(() => ok([])),
       readCarryList: vi.fn(() => ok('.env\n')),
       saveCarryList: vi.fn(() => ok(undefined)),
+      // Nothing declared, which is every repository that was not set up for
+      // Conductor — so the block draws nothing unless a test asks for it.
+      declaredCarryFiles: vi.fn(() => ok(null)),
       scripts: vi.fn(() => ok({ approved: true, scripts: {} })),
       envProfiles: vi.fn(() => ok({ profiles: ['default'], projectDefault: 'default' })),
       readEnv: vi.fn(() => ok('')),

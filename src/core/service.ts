@@ -59,6 +59,7 @@ import {
   writeCarryList
 } from './carry.js'
 import type { CarryReport } from './carry.js'
+import { type ConductorConfig, type DeclaredFile, readConductorConfig } from './conductorConfig.js'
 import { applyEnvOverrides, discardIfOnlyBlock, removeEnvBlock, readWorkspaceEnv } from './env.js'
 import { DEFAULT_PROFILE } from './envProfileNames.js'
 import {
@@ -441,6 +442,19 @@ interface PendingPermission {
   readonly workspaceId: string
 }
 
+/**
+ * A `.conductor` declaration, reconciled against the carry list beside it.
+ *
+ * `carried` is the reconciliation and it runs one way only: a declaration the
+ * list already names is settled, and a list entry the declaration does not
+ * mention is nobody's problem — the list is the thing that decides.
+ */
+export interface DeclaredCarryFiles {
+  /** The settings file that declared them, relative to the checkout. */
+  readonly path: string
+  readonly files: readonly (DeclaredFile & { readonly carried: boolean })[]
+}
+
 export interface OctopusService {
   getConfig(): Config
   updateConfig(
@@ -493,6 +507,14 @@ export interface OctopusService {
   /** Which of the checkout's files travel into a workspace, one path per line. */
   readProjectCarryList(projectId: string): Promise<string>
   saveProjectCarryList(projectId: string, contents: string): Promise<void>
+  /**
+   * What the checkout's `.conductor` says its workspaces need.
+   *
+   * Read and shown, never followed — see `conductorConfig.ts`. Answers `null`
+   * where there is no such declaration, which is every repository that was not
+   * set up for Conductor and most of the ones that were.
+   */
+  declaredCarryFiles(projectId: string): Promise<DeclaredCarryFiles | null>
   /**
    * The named sets of variables a project holds, and which it uses by default.
    *
@@ -2432,6 +2454,35 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
     async saveProjectCarryList(projectId, contents) {
       requireProject(projectId)
       await writeCarryList(projectId, contents, dataRoot)
+    },
+
+    async declaredCarryFiles(projectId) {
+      const project = requireProject(projectId)
+
+      /* Unreadable settings answer `null` rather than throwing, as `cleanupFor`
+         does and for the same reason: this is a courtesy beside a list that
+         works without it, and a half-written TOML in a checkout should not take
+         a settings screen down with it. */
+      let conductor: ConductorConfig | null
+      try {
+        conductor = await readConductorConfig(project.repoPath)
+      } catch {
+        return null
+      }
+
+      if (conductor === null || conductor.files.length === 0) return null
+
+      // Compared against the list's own reading of itself rather than against
+      // its raw text: the left side of `a = b` is the path, and a declaration
+      // matching that is already carried however the line was written.
+      const carried = new Set(
+        carriedFiles(await readCarryList(projectId, dataRoot)).map((file) => file.path)
+      )
+
+      return {
+        path: conductor.filesPath,
+        files: conductor.files.map((file) => ({ ...file, carried: carried.has(file.glob) }))
+      }
     },
 
     async listEnvProfiles(projectId) {
