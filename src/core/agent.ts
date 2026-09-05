@@ -96,6 +96,18 @@ export interface SessionOptions {
 export interface PermissionAsk {
   readonly toolName: string
   readonly input: unknown
+  /**
+   * The bridge's own explanation of why this request was raised.
+   *
+   * The third argument to `canUseTool`, which this used to declare only two of.
+   * Without it a request that looks identical to fifty silent ones has nothing
+   * to say for itself: measured against a live session, 59 edits under
+   * `acceptEdits` passed without a word and the sixtieth — a file under
+   * `.claude/` — was asked about, because the CLI guards the agent's own
+   * instructions separately. It says so in this field, and the mode looked
+   * broken until it was read.
+   */
+  readonly reason?: string
 }
 
 /**
@@ -393,8 +405,15 @@ export function startSession(options: SessionOptions, hooks: SessionHooks): Agen
       // What makes text appear while it is being written rather than in one
       // block at the end of a turn.
       includePartialMessages: true,
-      canUseTool: async (toolName, toolInput) => {
-        const outcome = await hooks.askPermission({ toolName, input: toolInput })
+      canUseTool: async (toolName, toolInput, { decisionReason }) => {
+        const outcome = await hooks.askPermission({
+          toolName,
+          input: toolInput,
+          // Spread rather than assigned: `exactOptionalPropertyTypes` tells an
+          // absent field apart from one set to `undefined`, and the SDK sends
+          // no reason for most requests.
+          ...(decisionReason !== undefined && { reason: decisionReason })
+        })
         if (!outcome.allow) return { behavior: 'deny', message: outcome.message }
 
         return {

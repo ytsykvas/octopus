@@ -11,6 +11,7 @@ import {
   type AgentSession,
   DENIED,
   mapMessage,
+  type PermissionAsk,
   type PermissionOutcome,
   READ_ONLY_TOOLS,
   type SessionOptions,
@@ -54,7 +55,10 @@ interface FakeQuery {
 function fakeAgent(
   overrides: Partial<SessionOptions> = {},
   hooks: {
-    askPermission?: (name: string) => Promise<PermissionOutcome>
+    /* The whole ask, not just the tool name. Narrowing it here is what let
+       the third argument to `canUseTool` go unnoticed: a double that drops a
+       field cannot fail when the code drops it too. */
+    askPermission?: (ask: PermissionAsk) => Promise<PermissionOutcome>
     models?: ModelInfo[]
     commands?: SlashCommand[]
   } = {}
@@ -167,8 +171,8 @@ function fakeAgent(
         return conversation
       },
       onEvent: (event) => events.push(event),
-      askPermission: ({ toolName }) =>
-        hooks.askPermission?.(toolName) ?? Promise.resolve({ allow: true } as const)
+      askPermission: (ask) =>
+        hooks.askPermission?.(ask) ?? Promise.resolve({ allow: true } as const)
     }
   )
 
@@ -1021,14 +1025,87 @@ describe('a session that will not close', () => {
 })
 
 describe('permissions', () => {
+  /**
+   * Calls the SDK's `canUseTool` the way the SDK does — with all three
+   * arguments.
+   *
+   * The third is the one this used to leave out on both sides, which is how a
+   * field the bridge sends went unread for as long as it did.
+   */
   function permissionCall(
     agent: FakeQuery
-  ): (name: string, input: Record<string, unknown>) => Promise<unknown> {
+  ): (
+    name: string,
+    input: Record<string, unknown>,
+    options?: { decisionReason?: string }
+  ) => Promise<unknown> {
     const canUseTool = agent.options().canUseTool
     if (typeof canUseTool !== 'function') throw new Error('canUseTool was not passed to the SDK')
 
-    return canUseTool as (name: string, input: Record<string, unknown>) => Promise<unknown>
+    const call = canUseTool as (
+      name: string,
+      input: Record<string, unknown>,
+      options: { signal: AbortSignal; decisionReason?: string }
+    ) => Promise<unknown>
+
+    return (name, input, options = {}) =>
+      call(name, input, { signal: new AbortController().signal, ...options })
   }
+
+  /*
+   * The whole of the first half of the finding.
+   *
+   * Measured against a live session: 59 edits under `acceptEdits` went through
+   * without a word, and the sixtieth — `.claude/skills/…/SKILL.md` — was asked
+   * about, because the CLI guards the agent's own instructions separately. It
+   * says exactly that in this field, which nothing read, so the mode looked
+   * broken and nothing on screen could say otherwise.
+   */
+  it('passes the bridge\u2019s explanation on to whoever answers', async () => {
+    const asked: unknown[] = []
+    const { agent } = fakeAgent(
+      {},
+      {
+        askPermission: (ask) => {
+          asked.push(ask)
+          return Promise.resolve({ allow: true })
+        }
+      }
+    )
+
+    await permissionCall(agent)(
+      'Edit',
+      { file_path: '/w/.claude/skills/demo/SKILL.md' },
+      { decisionReason: 'Claude requested permissions to write to it.' }
+    )
+
+    expect(asked).toEqual([
+      {
+        toolName: 'Edit',
+        input: { file_path: '/w/.claude/skills/demo/SKILL.md' },
+        reason: 'Claude requested permissions to write to it.'
+      }
+    ])
+  })
+
+  /* Absent rather than `undefined`: `exactOptionalPropertyTypes` tells the two
+     apart, and most requests come with nothing to explain. */
+  it('carries no reason where the bridge sent none', async () => {
+    const asked: unknown[] = []
+    const { agent } = fakeAgent(
+      {},
+      {
+        askPermission: (ask) => {
+          asked.push(ask)
+          return Promise.resolve({ allow: true })
+        }
+      }
+    )
+
+    await permissionCall(agent)('Edit', { file_path: '/a.rb' })
+
+    expect(asked).toEqual([{ toolName: 'Edit', input: { file_path: '/a.rb' } }])
+  })
 
   it('allows a tool the user approved, keeping the arguments', async () => {
     const { agent } = fakeAgent({}, { askPermission: () => Promise.resolve({ allow: true }) })
@@ -1148,7 +1225,7 @@ describe('permissions', () => {
 
     await permissionCall(agent)('Write', { file_path: '/b.rb' })
 
-    expect(asked).toHaveBeenCalledWith('Write')
+    expect(asked).toHaveBeenCalledWith({ toolName: 'Write', input: { file_path: '/b.rb' } })
   })
 })
 

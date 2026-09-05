@@ -101,7 +101,16 @@ export const AgentEventSchema = z.discriminatedUnion('type', [
     type: z.literal('permission_request'),
     requestId: z.string(),
     toolName: z.string(),
-    input: ToolInputSchema
+    input: ToolInputSchema,
+    /**
+     * Why the bridge raised it, where the bridge says.
+     *
+     * Optional because it is: the SDK sends one for a request with something
+     * particular behind it — a file under `.claude/`, a path outside the
+     * allowed directories — and nothing for a request the mode explains on its
+     * own. Optional also keeps every transcript written before this readable.
+     */
+    reason: z.string().optional()
   }),
 
   /**

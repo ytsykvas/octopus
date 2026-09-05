@@ -47,7 +47,7 @@ const session = query({
     resume: workspace.sessionId ?? undefined,
     settingSources: ['user', 'project', 'local'],
     systemPrompt: { type: 'preset', preset: 'claude_code' },
-    canUseTool: async (toolName, input) => {
+    canUseTool: async (toolName, input, { decisionReason }) => {
       /* our own permission dialog */
     }
   }
@@ -175,6 +175,22 @@ and a session that quietly kept the last one's answer is a state nobody chose.
 `canUseTool` fires only when the decision is not already covered by
 `allowedTools` or settings. That is where our own dialog belongs — the point
 at which the UI shows the user what the agent wants to do.
+
+**It takes three arguments, and the third is the one worth having.** It carries
+`decisionReason` — the bridge's own sentence saying why this request was raised —
+along with `suggestions`, `blockedPath` and `title`. Declaring only two
+parameters is legal TypeScript and silently throws all of it away, which is how
+the card came to say "the agent wants to use Edit" over a path and nothing else.
+
+That mattered more than it sounds. Measured against a live session: 59 edits
+under `acceptEdits` went through without a word, and the sixtieth —
+`.claude/skills/…/SKILL.md` — was asked about, because the CLI guards the agent's
+own instructions separately. It says so in `decisionReason`. Without it the mode
+looks broken and nothing on screen can say otherwise.
+
+A test double that flattens the hook hides this as thoroughly as the code does:
+`agent.test.ts`'s fake narrowed `askPermission` to the tool name, so no test
+could have failed when the field went unread. **Fakes take the whole argument.**
 
 Do not make `bypassPermissions` the default: transparency beats convenience (§4).
 

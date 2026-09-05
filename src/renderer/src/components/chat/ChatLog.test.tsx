@@ -830,6 +830,35 @@ describe('a permission request', () => {
     expect(screen.getByText('rm -rf build')).toBeInTheDocument()
   })
 
+  /*
+   * The one sentence that tells this request from fifty silent ones. Measured
+   * against a live session: under `acceptEdits` an ordinary edit passes without
+   * a word and a file inside `.claude/` is asked about, because the CLI guards
+   * the agent's own instructions separately — and the mode looked broken until
+   * this line was drawn.
+   */
+  it('says why it is asking, when the bridge says', () => {
+    const explained = fromAgent({
+      type: 'permission_request',
+      requestId: 'r-2',
+      toolName: 'Edit',
+      input: { file_path: '/w/.claude/skills/demo/SKILL.md' },
+      reason: 'Claude requested permissions to write to it, but you have not granted it yet.'
+    })
+    renderLog({ entries: [explained], pendingRequestId: 'r-2' })
+
+    expect(screen.getByText(/but you have not granted it yet/)).toBeInTheDocument()
+  })
+
+  /* Most requests have nothing particular behind them, and a card with an empty
+     line under the path would read as a sentence that failed to load. */
+  it('draws no explanation where the bridge sent none', () => {
+    renderLog({ entries: [request], pendingRequestId: 'r-1' })
+
+    expect(screen.getByText('The agent wants to use Bash')).toBeInTheDocument()
+    expect(screen.queryByText(/granted/)).not.toBeInTheDocument()
+  })
+
   it('offers all three answers', async () => {
     const user = userEvent.setup()
     const { onAnswer } = renderLog({ entries: [request], pendingRequestId: 'r-1' })

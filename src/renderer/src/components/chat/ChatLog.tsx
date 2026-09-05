@@ -257,6 +257,7 @@ function AgentRow({
         <PermissionCard
           toolName={event.toolName}
           input={event.input}
+          reason={event.reason ?? null}
           // A request read back from the transcript is history: the session it
           // belonged to answered it long ago, and offering buttons would let
           // the user answer a question nobody is waiting on.
@@ -643,11 +644,14 @@ function PlanNote({ content }: { content: string }): React.JSX.Element {
 function PermissionCard({
   toolName,
   input,
+  reason,
   answerable,
   onAnswer
 }: {
   toolName: string
   input: unknown
+  /** The bridge's explanation, where it sent one. Null is the ordinary case. */
+  reason: string | null
   answerable: boolean
   onAnswer: (answer: PermissionAnswer) => void
 }): React.JSX.Element {
@@ -674,6 +678,19 @@ function PermissionCard({
           {shown(target)}
         </p>
       )}
+
+      {/* The one sentence that explains an otherwise identical-looking request:
+          under `acceptEdits` a file inside `.claude/` is asked about while
+          fifty ordinary edits are not, because the CLI guards the agent's own
+          instructions separately — and until this was drawn the mode simply
+          looked broken.
+
+          Left in the bridge's own words rather than translated or replaced by
+          our own sentence: it names a specific path and a specific rule, and
+          the alternative is silence. The heading above stays ours, though the
+          SDK offers a `title` of its own — that one says what the tool name and
+          the path already say, in English, in a window that is not. */}
+      {reason !== null && <p className="text-ink-soft mt-1.5 leading-relaxed">{reason}</p>}
 
       {answerable ? (
         <div className="mt-2.5 flex gap-2">

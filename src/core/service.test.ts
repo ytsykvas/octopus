@@ -2904,7 +2904,7 @@ describe('the agent chat', () => {
     readonly emit: (message: SDKMessage) => void
     readonly finish: (error?: Error) => void
     /** Calls the SDK's `canUseTool`, which is what blocks on our dialog. */
-    readonly ask: (toolName: string, input?: unknown) => Promise<unknown>
+    readonly ask: (toolName: string, input?: unknown, decisionReason?: string) => Promise<unknown>
     readonly sent: string[]
     readonly interrupted: () => number
     readonly closed: () => number
@@ -3025,10 +3025,22 @@ describe('the agent chat', () => {
           done = true
           push()
         },
-        ask: (toolName, input = {}) => {
+        ask: (toolName, input = {}, decisionReason) => {
           const canUseTool = options.canUseTool
           if (typeof canUseTool !== 'function') throw new Error('no canUseTool')
-          return (canUseTool as (name: string, input: unknown) => Promise<unknown>)(toolName, input)
+          // All three arguments, as the SDK passes them. The third is where the
+          // bridge explains itself, and leaving it out of the fake is how it
+          // went unread for as long as it did.
+          return (
+            canUseTool as (
+              name: string,
+              input: unknown,
+              options: { signal: AbortSignal; decisionReason?: string }
+            ) => Promise<unknown>
+          )(toolName, input, {
+            signal: new AbortController().signal,
+            ...(decisionReason !== undefined && { decisionReason })
+          })
         },
         interrupted: () => interrupted,
         closed: () => closed,
@@ -4650,6 +4662,44 @@ describe('the agent chat', () => {
       await service.answerPermission(request.event.requestId, 'allow')
 
       await expect(decision).resolves.toMatchObject({ behavior: 'allow' })
+    })
+
+    /*
+     * The sentence that explains an otherwise identical-looking request. Under
+     * `acceptEdits` a file inside `.claude/` is asked about while fifty
+     * ordinary edits are not, and until this was carried the mode simply looked
+     * broken.
+     */
+    it('carries the bridge\u2019s explanation to the card', async () => {
+      const { service, workspaceId, events } = await withWorkspace()
+      const chat = await service.openChat(workspaceId)
+      await service.sendToChat(chat.id, 'edit it')
+
+      void agent().ask(
+        'Edit',
+        { file_path: '/w/.claude/skills/demo/SKILL.md' },
+        'Claude requested permissions to write to it, but you have not granted it yet.'
+      )
+      await waitForRequest(events)
+
+      const request = events.find((entry) => entry.event.type === 'permission_request')
+      expect(request?.event).toMatchObject({
+        reason: 'Claude requested permissions to write to it, but you have not granted it yet.'
+      })
+    })
+
+    /* Absent rather than empty, so the card has nothing to draw where the
+       bridge had nothing to say. */
+    it('carries no explanation where the bridge sent none', async () => {
+      const { service, workspaceId, events } = await withWorkspace()
+      const chat = await service.openChat(workspaceId)
+      await service.sendToChat(chat.id, 'edit it')
+
+      void agent().ask('Edit', { file_path: '/a.rb' })
+      await waitForRequest(events)
+
+      const request = events.find((entry) => entry.event.type === 'permission_request')
+      expect(request?.event).not.toHaveProperty('reason')
     })
 
     it('says so when the user declines', async () => {

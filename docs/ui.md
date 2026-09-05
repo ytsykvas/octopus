@@ -1355,6 +1355,19 @@ or anything else the DOM types as text — a tooltip is laid out by the same
 algorithm as the row it hangs off, so leaving the raw string there would be the
 same misreading with a delay.
 
+**The card says why it is asking, where the bridge says.** `canUseTool`'s third
+argument carries `decisionReason`, and until it was read a request that looked
+identical to fifty silent ones had no explanation at all: under `acceptEdits`
+an ordinary edit passes without a word and a file inside `.claude/` is asked
+about, because the CLI guards the agent's own instructions separately. The mode
+looked broken and nothing on screen could say otherwise.
+
+Drawn in the bridge's own words rather than translated or replaced by ours: it
+names a specific path and a specific rule, and the alternative is silence. The
+heading stays ours, though the SDK offers a `title` and says to prefer it — that
+sentence says what the tool name and the path above it already say, in English,
+in a window that is not.
+
 The permission card is the strongest case rather than the diff pane. It is the
 one place somebody authorises a command to run against their working tree, and
 answering "Always allow" there writes the tool _name_ — so a misread line

@@ -20,6 +20,7 @@ import {
   type AgentSession,
   type ContextUsage,
   DENIED,
+  type PermissionAsk,
   type PermissionOutcome,
   type QueryFn,
   READ_ONLY_TOOLS,
@@ -1695,13 +1696,18 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
    */
   async function askPermission(
     chat: Chat,
-    toolName: string,
-    input: unknown
+    { toolName, input, reason }: PermissionAsk
   ): Promise<PermissionOutcome> {
     if (config.alwaysAllowedTools.includes(toolName)) return { allow: true }
 
     const requestId = uuid()
-    handleEvent(chat, { type: 'permission_request', requestId, toolName, input })
+    handleEvent(chat, {
+      type: 'permission_request',
+      requestId,
+      toolName,
+      input,
+      ...(reason !== undefined && { reason })
+    })
 
     return new Promise<PermissionOutcome>((resolve) => {
       pending.set(requestId, {
@@ -2235,7 +2241,7 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
           // session id written after the first turn would not be in it.
           handleEvent(findChat(state, chat.id) ?? chat, event)
         },
-        askPermission: ({ toolName, input }) => askPermission(chat, toolName, input)
+        askPermission: (ask) => askPermission(chat, ask)
       }
     )
 
