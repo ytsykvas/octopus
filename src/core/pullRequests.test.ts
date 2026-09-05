@@ -19,7 +19,11 @@ import {
   NewPullRequestSchema,
   readBranchRequests,
   readPullRequest,
-  readPullRequestDetail
+  readPullRequestDetail,
+  replyToReviewThread,
+  ReplyBodySchema,
+  setReviewThreadResolved,
+  ThreadIdSchema
 } from './pullRequests.js'
 
 const run = promisify(execFile)
@@ -705,6 +709,107 @@ describe('closing one', () => {
       code: 'closeFailed',
       params: { number: '7', reason: 'could not close: already merged' }
     })
+  })
+})
+
+describe('answering one review thread', () => {
+  const THREAD = 'PRRT_kwDODKw3uc5bqLtn'
+
+  it('sends the reply to the thread it belongs to', async () => {
+    const { gh, calls } = fakeGh({ graphql: '{}' })
+
+    await replyToReviewThread(THREAD, 'Left as it is because the caller owns it.', gh)
+
+    const [args = []] = calls
+    expect(args.join(' ')).toContain('addPullRequestReviewThreadReply')
+    expect(args).toContain(`id=${THREAD}`)
+    expect(args).toContain('body=Left as it is because the caller owns it.')
+  })
+
+  /*
+   * `-f` and not `-F` for both.
+   *
+   * `-F` reads a leading `@` as a file to send and a bare number as a number,
+   * and a review answer is regularly one of those: `@olena` is how a reviewer
+   * is addressed on GitHub, and `42` is an answer to "how many?".
+   */
+  it('sends the body as a plain string, so an @mention is not read as a file', async () => {
+    const { gh, calls } = fakeGh({ graphql: '{}' })
+
+    await replyToReviewThread(THREAD, '@olena 42', gh)
+
+    const [args = []] = calls
+    const at = args.indexOf('body=@olena 42')
+    expect(args[at - 1]).toBe('-f')
+  })
+
+  it('refuses an empty reply without asking GitHub', async () => {
+    const { gh, calls } = fakeGh({ graphql: '{}' })
+
+    await expect(replyToReviewThread(THREAD, '   ', gh)).rejects.toMatchObject({
+      code: 'replyFailed'
+    })
+    expect(calls).toEqual([])
+  })
+
+  it('carries what gh said about refusing a reply', async () => {
+    const { gh } = fakeGh({
+      graphql: Object.assign(new Error('failed'), { stderr: 'Could not resolve to a node' })
+    })
+
+    await expect(replyToReviewThread(THREAD, 'Fixed.', gh)).rejects.toMatchObject({
+      code: 'replyFailed',
+      params: { reason: 'Could not resolve to a node' }
+    })
+  })
+
+  it('settles a thread', async () => {
+    const { gh, calls } = fakeGh({ graphql: '{}' })
+
+    await setReviewThreadResolved(THREAD, true, gh)
+
+    const [args = []] = calls
+    expect(args.join(' ')).toContain('resolveReviewThread(')
+    expect(args).toContain(`id=${THREAD}`)
+  })
+
+  /*
+   * Both directions, and the second is not decoration: resolving is one click
+   * to undo on GitHub, and a pane that can do a thing but not undo it sends the
+   * reader to the browser for the half it kept.
+   */
+  it('puts a settled thread back', async () => {
+    const { gh, calls } = fakeGh({ graphql: '{}' })
+
+    await setReviewThreadResolved(THREAD, false, gh)
+
+    expect((calls[0] ?? []).join(' ')).toContain('unresolveReviewThread(')
+  })
+
+  it('carries what gh said about refusing to change a thread', async () => {
+    const { gh } = fakeGh({
+      graphql: Object.assign(new Error('failed'), { stderr: 'Resource not accessible' })
+    })
+
+    await expect(setReviewThreadResolved(THREAD, true, gh)).rejects.toMatchObject({
+      code: 'resolveFailed',
+      params: { reason: 'Resource not accessible' }
+    })
+  })
+
+  /* Both become arguments to `gh`, and the renderer having read them from us is
+     not a reason to believe them coming back (§11.3). */
+  it('accepts a node id and refuses anything that is not one', () => {
+    expect(ThreadIdSchema.safeParse(THREAD).success).toBe(true)
+    expect(ThreadIdSchema.safeParse('PRRT_1;rm -rf /').success).toBe(false)
+    expect(ThreadIdSchema.safeParse('').success).toBe(false)
+    expect(ThreadIdSchema.safeParse('a'.repeat(201)).success).toBe(false)
+  })
+
+  it('bounds a reply the way GitHub bounds a comment', () => {
+    expect(ReplyBodySchema.safeParse('').success).toBe(false)
+    expect(ReplyBodySchema.safeParse('a'.repeat(65_536)).success).toBe(true)
+    expect(ReplyBodySchema.safeParse('a'.repeat(65_537)).success).toBe(false)
   })
 })
 

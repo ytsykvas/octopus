@@ -451,6 +451,29 @@ const api = {
         Result<void>
       >,
 
+    /** Answers one review thread. The caller reads the request again. */
+    replyToReviewThread: (
+      workspaceId: string,
+      threadId: string,
+      body: string
+    ): Promise<Result<void>> =>
+      ipcRenderer.invoke('workspaces:replyToReviewThread', workspaceId, threadId, body) as Promise<
+        Result<void>
+      >,
+
+    /** Marks a thread settled, or puts it back. */
+    setReviewThreadResolved: (
+      workspaceId: string,
+      threadId: string,
+      resolved: boolean
+    ): Promise<Result<void>> =>
+      ipcRenderer.invoke(
+        'workspaces:resolveReviewThread',
+        workspaceId,
+        threadId,
+        resolved
+      ) as Promise<Result<void>>,
+
     /**
      * Which script runs for each kind here, from where, and whether the ones
      * the repository supplies have been read.

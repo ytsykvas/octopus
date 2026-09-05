@@ -372,6 +372,22 @@ export const PullRequestNumberSchema = z.number().int().positive()
 /** A commit message on its own, bounded like the one inside a request draft. */
 export const CommitMessageSchema = z.string().min(1).max(2_000)
 
+/**
+ * A review thread's node id, as the renderer sends it back.
+ *
+ * Node ids are base64url over an opaque payload, so the character set is the
+ * whole check there is to make — and it is worth making, because this becomes
+ * an argument to `gh`.
+ */
+export const ThreadIdSchema = z
+  .string()
+  .min(1)
+  .max(200)
+  .regex(/^[A-Za-z0-9_=-]+$/u)
+
+/** A reply to a review thread. GitHub's own ceiling on a comment body. */
+export const ReplyBodySchema = z.string().min(1).max(65_536)
+
 /** How the commits land on the base branch. */
 export const MergeMethodSchema = z.enum(['merge', 'squash', 'rebase'])
 export type MergeMethod = z.infer<typeof MergeMethodSchema>
@@ -504,6 +520,7 @@ const THREADS_QUERY = `query($id: ID!) {
     ... on PullRequest {
       reviewThreads(first: 50) {
         nodes {
+          id
           isResolved
           isOutdated
           path
@@ -515,6 +532,96 @@ const THREADS_QUERY = `query($id: ID!) {
       }
     }
   }
+}`
+
+/**
+ * Answers one review thread.
+ *
+ * A reply rather than a comment on the request: half of answering a review is
+ * saying why something was left as it is, and that sentence only means anything
+ * beside the note it answers. GitHub keeps the two apart and so does this.
+ *
+ * The body is checked here rather than only at the button, because it arrives
+ * over IPC where the button's state guarantees nothing (§11.3). An empty reply
+ * is refused as a failure to reply and not quietly dropped: it is a press that
+ * the reader expects to have posted something.
+ */
+export async function replyToReviewThread(
+  threadId: string,
+  body: string,
+  gh: GhExec
+): Promise<void> {
+  if (body.trim() === '') {
+    throw new GitHubError('replyFailed', { reason: 'empty' }, 'A reply cannot be empty.')
+  }
+
+  try {
+    await gh([
+      'api',
+      'graphql',
+      '-f',
+      `query=${REPLY_MUTATION}`,
+      // `-f` throughout and not `-F`: the second reads a leading `@` as a file
+      // to send and a bare number as a number, and neither of these is either —
+      // one is an opaque id and the other is whatever the reviewer typed,
+      // `@someone` and `42` included.
+      '-f',
+      `id=${threadId}`,
+      '-f',
+      `body=${body}`
+    ])
+  } catch (error) {
+    throw new GitHubError(
+      'replyFailed',
+      { reason: reasonFrom(error) },
+      'GitHub would not post the reply.'
+    )
+  }
+}
+
+/**
+ * Marks a thread settled, or puts it back.
+ *
+ * Both directions rather than only the first. Resolving is undone on GitHub in
+ * one click, and a pane that can do a thing but not undo it sends the reader to
+ * the browser for the half it kept — which is the failure this whole tab exists
+ * to avoid.
+ */
+export async function setReviewThreadResolved(
+  threadId: string,
+  resolved: boolean,
+  gh: GhExec
+): Promise<void> {
+  try {
+    await gh([
+      'api',
+      'graphql',
+      '-f',
+      `query=${resolved ? RESOLVE_MUTATION : UNRESOLVE_MUTATION}`,
+      '-f',
+      `id=${threadId}`
+    ])
+  } catch (error) {
+    throw new GitHubError(
+      'resolveFailed',
+      { reason: reasonFrom(error) },
+      'GitHub would not change the thread.'
+    )
+  }
+}
+
+const REPLY_MUTATION = `mutation($id: ID!, $body: String!) {
+  addPullRequestReviewThreadReply(input: { pullRequestReviewThreadId: $id, body: $body }) {
+    comment { id }
+  }
+}`
+
+const RESOLVE_MUTATION = `mutation($id: ID!) {
+  resolveReviewThread(input: { threadId: $id }) { thread { isResolved } }
+}`
+
+const UNRESOLVE_MUTATION = `mutation($id: ID!) {
+  unresolveReviewThread(input: { threadId: $id }) { thread { isResolved } }
 }`
 
 /**

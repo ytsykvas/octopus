@@ -260,6 +260,8 @@ export type PullRequestComment =
   | (CommentBase & { readonly kind: 'review'; readonly verdict: ReviewVerdict })
   | (CommentBase & {
       readonly kind: 'inline'
+      /** The thread this note belongs to — what a reply and a resolve are sent to. */
+      readonly threadId: string
       readonly path: string
       /** Null once the diff has moved past it — the note is outdated. */
       readonly line: number | null
@@ -390,6 +392,10 @@ export const ThreadsPayloadSchema = z.object({
       reviewThreads: z.object({
         nodes: z.array(
           z.object({
+            /* The handle both writes take. A reply and a resolve are addressed
+               to the thread rather than to a comment in it, so this is the one
+               field that has to survive as far as the pane. */
+            id: z.string(),
             isResolved: z.boolean(),
             comments: z.object({
               nodes: z.array(
@@ -466,6 +472,7 @@ function comments(view: DetailPayload, threads: ThreadsPayload): PullRequestComm
     thread.comments.nodes.map((comment) => ({
       kind: 'inline' as const,
       id: comment.id,
+      threadId: thread.id,
       author: comment.author?.login ?? null,
       body: comment.body,
       createdAt: comment.createdAt,

@@ -88,6 +88,10 @@ export type GitHubErrorCode =
   | 'createFailed'
   | 'mergeFailed'
   | 'closeFailed'
+  // Answering a review, which is the other half of reading one: saying why
+  // something was left as it is has no home in a commit.
+  | 'replyFailed'
+  | 'resolveFailed'
   // Refused before `gh` is asked to do anything: `gh` resolves a number against
   // the repository rather than against the branch it is standing in, so a stale
   // number would merge whatever it names.

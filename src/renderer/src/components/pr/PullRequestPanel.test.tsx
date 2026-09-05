@@ -73,6 +73,7 @@ function inline(overrides: Partial<InlineComment> = {}): InlineComment {
   return {
     kind: 'inline' as const,
     id: 'PRRC_1',
+    threadId: 'PRRT_1',
     author: 'olena',
     body: 'Why the second case?',
     createdAt: '2026-08-20T11:00:00Z',
@@ -820,6 +821,183 @@ describe('a pull request that exists', () => {
       })
     )
     expect(octopus().chats.send).not.toHaveBeenCalled()
+  })
+
+  /*
+   * Half of answering a review is saying why something was left as it is, and
+   * that sentence fits in a reply and nowhere in a commit. Before this the
+   * reader read the thread here and opened a browser to write one line.
+   */
+  it('answers a thread and reads the request again', async () => {
+    const user = userEvent.setup()
+    answer(view({ request: request() }))
+    answerDetail(detail({ comments: [inline()] }))
+    renderPanel()
+
+    await user.click(await screen.findByRole('button', { name: 'Reply' }))
+    await user.type(screen.getByRole('textbox', { name: 'Reply' }), 'The caller owns it.')
+    await user.click(screen.getByRole('button', { name: 'Send' }))
+
+    await waitFor(() => {
+      expect(octopus().workspaces.replyToReviewThread).toHaveBeenCalledWith(
+        anna.id,
+        'PRRT_1',
+        'The caller owns it.'
+      )
+    })
+    // Read again rather than drawn from here: GitHub decides what a comment
+    // ends up looking like.
+    await waitFor(() => {
+      expect(octopus().workspaces.pullRequestDetail).toHaveBeenCalledTimes(2)
+    })
+  })
+
+  it('will not send an empty reply', async () => {
+    const user = userEvent.setup()
+    answer(view({ request: request() }))
+    answerDetail(detail({ comments: [inline()] }))
+    renderPanel()
+
+    await user.click(await screen.findByRole('button', { name: 'Reply' }))
+    await user.type(screen.getByRole('textbox', { name: 'Reply' }), '   ')
+
+    expect(screen.getByRole('button', { name: 'Send' })).toBeDisabled()
+  })
+
+  /* The sentence took thought. Clearing it on a failure makes the reader write
+     it a second time to find out the second attempt fails too. */
+  it('keeps what was typed when GitHub refuses the reply', async () => {
+    const user = userEvent.setup()
+    answer(view({ request: request() }))
+    answerDetail(detail({ comments: [inline()] }))
+    vi.mocked(octopus().workspaces.replyToReviewThread).mockResolvedValue({
+      ok: false,
+      error: 'gh failed',
+      code: 'replyFailed',
+      params: { reason: 'Could not resolve to a node' }
+    })
+    const { onError } = renderPanel()
+
+    await user.click(await screen.findByRole('button', { name: 'Reply' }))
+    await user.type(screen.getByRole('textbox', { name: 'Reply' }), 'Kept.')
+    await user.click(screen.getByRole('button', { name: 'Send' }))
+
+    await waitFor(() => {
+      expect(onError).toHaveBeenCalledWith(expect.stringContaining('Could not resolve to a node'))
+    })
+    expect(screen.getByRole('textbox', { name: 'Reply' })).toHaveValue('Kept.')
+  })
+
+  it('drops what was typed when the reply is cancelled', async () => {
+    const user = userEvent.setup()
+    answer(view({ request: request() }))
+    answerDetail(detail({ comments: [inline()] }))
+    renderPanel()
+
+    await user.click(await screen.findByRole('button', { name: 'Reply' }))
+    await user.type(screen.getByRole('textbox', { name: 'Reply' }), 'Never mind.')
+    await user.click(screen.getByRole('button', { name: 'Cancel' }))
+
+    expect(screen.queryByRole('textbox', { name: 'Reply' })).not.toBeInTheDocument()
+    expect(octopus().workspaces.replyToReviewThread).not.toHaveBeenCalled()
+
+    // Reopened empty rather than holding what was abandoned.
+    await user.click(screen.getByRole('button', { name: 'Reply' }))
+    expect(screen.getByRole('textbox', { name: 'Reply' })).toHaveValue('')
+  })
+
+  it('says so when GitHub refuses to change a thread', async () => {
+    const user = userEvent.setup()
+    answer(view({ request: request() }))
+    answerDetail(detail({ comments: [inline()] }))
+    vi.mocked(octopus().workspaces.setReviewThreadResolved).mockResolvedValue({
+      ok: false,
+      error: 'gh failed',
+      code: 'resolveFailed',
+      params: { reason: 'Resource not accessible' }
+    })
+    const { onError } = renderPanel()
+
+    await user.click(await screen.findByRole('button', { name: 'Resolve' }))
+
+    await waitFor(() => {
+      expect(onError).toHaveBeenCalledWith(expect.stringContaining('Resource not accessible'))
+    })
+  })
+
+  it('settles a thread from here', async () => {
+    const user = userEvent.setup()
+    answer(view({ request: request() }))
+    answerDetail(detail({ comments: [inline()] }))
+    renderPanel()
+
+    await user.click(await screen.findByRole('button', { name: 'Resolve' }))
+
+    await waitFor(() => {
+      expect(octopus().workspaces.setReviewThreadResolved).toHaveBeenCalledWith(
+        anna.id,
+        'PRRT_1',
+        true
+      )
+    })
+  })
+
+  /* Both directions: resolving is one click to undo on GitHub, and a pane that
+     can do a thing but not undo it sends the reader to the browser anyway. */
+  it('puts a settled thread back', async () => {
+    const user = userEvent.setup()
+    answer(view({ request: request() }))
+    answerDetail(detail({ comments: [inline({ resolved: true })] }))
+    renderPanel()
+
+    await user.click(await screen.findByRole('button', { name: 'Unresolve' }))
+
+    await waitFor(() => {
+      expect(octopus().workspaces.setReviewThreadResolved).toHaveBeenCalledWith(
+        anna.id,
+        'PRRT_1',
+        false
+      )
+    })
+  })
+
+  /*
+   * The three kinds are drawn as one list in time order, so a thread's notes
+   * are scattered through it. `Resolve` repeated down a thread reads as three
+   * separate things to settle, and a reply box in the middle of one reads as
+   * though it would land there.
+   */
+  it('offers the controls once per thread, on its last note', async () => {
+    answer(view({ request: request() }))
+    answerDetail(
+      detail({
+        comments: [
+          inline({ id: 'PRRC_1', createdAt: '2026-08-20T11:00:00Z' }),
+          inline({ id: 'PRRC_2', createdAt: '2026-08-20T12:00:00Z' })
+        ]
+      })
+    )
+    renderPanel()
+
+    await screen.findAllByText(/const a = 1/)
+    expect(screen.getAllByRole('button', { name: 'Reply' })).toHaveLength(1)
+    expect(screen.getAllByRole('button', { name: 'Resolve' })).toHaveLength(1)
+  })
+
+  it('offers them for each thread when there are several', async () => {
+    answer(view({ request: request() }))
+    answerDetail(
+      detail({
+        comments: [
+          inline({ id: 'PRRC_1', threadId: 'PRRT_1' }),
+          inline({ id: 'PRRC_2', threadId: 'PRRT_2' })
+        ]
+      })
+    )
+    renderPanel()
+
+    await screen.findAllByText(/const a = 1/)
+    expect(screen.getAllByRole('button', { name: 'Reply' })).toHaveLength(2)
   })
 
   it('does not offer the same remark twice', async () => {

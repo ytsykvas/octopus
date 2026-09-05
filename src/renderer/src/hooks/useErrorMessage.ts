@@ -88,6 +88,10 @@ export function useErrorMessage(): (failure: Failure) => string {
             number: failure.params?.number ?? '',
             reason: failure.params?.reason ?? ''
           })
+        case 'replyFailed':
+          return t('errors.replyFailed', { reason: failure.params?.reason ?? '' })
+        case 'resolveFailed':
+          return t('errors.resolveFailed', { reason: failure.params?.reason ?? '' })
         case 'mergeFailed':
           return t('errors.mergeFailed', {
             number: failure.params?.number ?? '',

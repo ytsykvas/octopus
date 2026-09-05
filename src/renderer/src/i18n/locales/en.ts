@@ -484,6 +484,16 @@ export const en = {
        has a question about it, and the question is the point. */
     addToChat: 'Add to chat',
     resolved: 'resolved',
+    /* Answering a review is the other half of reading one: saying why something
+       was left as it is fits in a sentence and nowhere in a commit. Offered on
+       the last note of a thread, since that is where a reply lands. */
+    reply: 'Reply',
+    replyPlaceholder: 'Answer this thread…',
+    replySend: 'Send',
+    replying: 'Sending…',
+    replyCancel: 'Cancel',
+    resolveThread: 'Resolve',
+    unresolveThread: 'Unresolve',
     verdictApproved: 'approved',
     verdictChangesRequested: 'requested changes',
     verdictCommented: 'commented',
@@ -1137,6 +1147,10 @@ export const en = {
     requestNotOnBranch:
       'Pull request #{{number}} is on {{head}}, not on this workspace\u2019s {{branch}}. Nothing was done.',
     closeFailed: 'GitHub would not close #{{number}}. It said: {{reason}}',
+    /* No number on either: a reply and a resolve are addressed to a thread, and
+       the thread is what the reader is looking at when one of them fails. */
+    replyFailed: 'GitHub would not post the reply. It said: {{reason}}',
+    resolveFailed: 'GitHub would not change the thread. It said: {{reason}}',
     alreadyExists: '{{path}} already exists. Add it from disk instead.',
     branchUnmerged:
       '{{branch}} has commits that are not in the base branch. Remove it with the branch checkbox cleared, or merge it first.',

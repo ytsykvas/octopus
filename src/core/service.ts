@@ -97,6 +97,8 @@ import {
   type MergeMethod,
   closePullRequest,
   mergePullRequest,
+  replyToReviewThread,
+  setReviewThreadResolved,
   type NewPullRequest,
   type PullRequestView,
   readBranchRequests,
@@ -742,6 +744,17 @@ export interface OctopusService {
 
   /** Closes it without merging. The branch is left alone. */
   closePullRequest(workspaceId: string, number: number): Promise<void>
+
+  /**
+   * Answers one review thread.
+   *
+   * The other half of reading a review: saying why something was left as it is
+   * fits in a sentence and nowhere in a commit.
+   */
+  replyToReviewThread(workspaceId: string, threadId: string, body: string): Promise<void>
+
+  /** Marks a thread settled, or puts it back. */
+  setReviewThreadResolved(workspaceId: string, threadId: string, resolved: boolean): Promise<void>
 
   /**
    * Every branch of a project that has a request, in one call.
@@ -3260,6 +3273,20 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
     closePullRequest(workspaceId, number) {
       const workspace = requireWorkspace(workspaceId)
       return closePullRequest(number, workspace.branch, makeGh(workspace.path))
+    },
+
+    /* No branch check on either of these, unlike merge and close. Those take a
+       number, which `gh` resolves against the repository — so a stale one names
+       whatever request now holds it. A thread id names one thread and nothing
+       else, whichever workspace it is sent from. */
+    replyToReviewThread(workspaceId, threadId, body) {
+      const workspace = requireWorkspace(workspaceId)
+      return replyToReviewThread(threadId, body, makeGh(workspace.path))
+    },
+
+    setReviewThreadResolved(workspaceId, threadId, resolved) {
+      const workspace = requireWorkspace(workspaceId)
+      return setReviewThreadResolved(threadId, resolved, makeGh(workspace.path))
     },
 
     readBranchRequests(projectId) {

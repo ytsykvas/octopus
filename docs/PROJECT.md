@@ -696,7 +696,7 @@ Monaco diff, notifications, workspace archiving, Linux builds, and signing and n
 
 The whole of the pull request came in ahead of this list, and it is worth saying why rather than quietly deleting the line: §3 calls a branch and a pull request the unit of integration, and a workspace whose branch had no way out of the app was only half of that. Opening one arrived first; the checks, the review threads and merging followed, because a request the app can open and then cannot read is a loop that still ends in a browser.
 
-What is not here and is not planned: replying to a review thread from octopus, and anything about a request other people's branches have.
+Replying to a review thread was on this list and is not any more, and the reason it moved is the same one: a request the app can read and cannot answer ends in a browser exactly where reading it stopped. Answering one, and settling or reopening the thread, are `gh api graphql` writes beside the other commands. What is still not here and not planned is anything about a request other people's branches have.
 
 The terminal moved into scope early: account sign-in needs an interactive session, and sending the user to Terminal.app for it broke the sense that this window is where the work happens. The same component will fill the right pane's Terminal tab.
 

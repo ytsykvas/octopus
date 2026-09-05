@@ -985,6 +985,27 @@ and a union with a member it can never hold would put an unreachable guard in
 each of those places. `attachments.ts` is where they become one list, in
 `ChatSession`, which is already the layer that turns a controller into a prop.
 
+**A review thread is answered here**, on the last note of the thread. Half of
+answering a review is saying why something was left as it is, and that sentence
+fits in a reply and nowhere in a commit — before this the reader read the thread
+in octopus and opened a browser to write one line.
+
+On the **last** note and not on each, because the three kinds of comment are one
+list in time order and a thread's notes are scattered through it: `Resolve`
+repeated down a thread reads as three separate things to settle, and a reply box
+in the middle of one reads as though it would land there.
+
+The reply is sent and then the request is **read again** rather than added to
+what is on screen: GitHub decides what a comment ends up looking like, and a
+pane drawing its own guess is a pane that can disagree with the request it is
+showing. A refused reply leaves what was typed where it is — the sentence took
+thought, and clearing it makes the reader write it twice to find out the second
+attempt fails too.
+
+**Resolve goes both ways.** Undoing one is a single click on GitHub, and a pane
+that can do a thing but not undo it sends the reader to the browser for the half
+it kept, which is the failure the whole tab exists to avoid.
+
 **The prepared messages** — fix the checks, answer the review, review it, review
 it with several subagents, resolve the conflicts — each send the project's
 instruction plus a line naming the request. Drawn twice rather than once around a

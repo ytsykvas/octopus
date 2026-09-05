@@ -36,7 +36,9 @@ import {
   CommitMessageSchema,
   MergeMethodSchema,
   NewPullRequestSchema,
-  PullRequestNumberSchema
+  PullRequestNumberSchema,
+  ReplyBodySchema,
+  ThreadIdSchema
 } from '../core/pullRequests.js'
 import { QuestionAnswerSchema } from '../core/questions.js'
 import { RepoItemIdsSchema } from '../core/repoConfig.js'
@@ -607,6 +609,33 @@ export function registerIpc(
 
   host.handle('workspaces:closePullRequest', (_event, workspaceId: string, number: unknown) =>
     attempt(() => service.closePullRequest(workspaceId, PullRequestNumberSchema.parse(number)))
+  )
+
+  // Both become arguments to `gh` the same way a number does, so both are
+  // proved rather than trusted — the renderer read them from us, and types are
+  // gone by the time they cross back.
+  host.handle(
+    'workspaces:replyToReviewThread',
+    (_event, workspaceId: string, threadId: unknown, body: unknown) =>
+      attempt(() =>
+        service.replyToReviewThread(
+          workspaceId,
+          ThreadIdSchema.parse(threadId),
+          ReplyBodySchema.parse(body)
+        )
+      )
+  )
+
+  host.handle(
+    'workspaces:resolveReviewThread',
+    (_event, workspaceId: string, threadId: unknown, resolved: unknown) =>
+      attempt(() =>
+        service.setReviewThreadResolved(
+          workspaceId,
+          ThreadIdSchema.parse(threadId),
+          z.boolean().parse(resolved)
+        )
+      )
   )
 
   host.handle('projects:pullRequests', (_event, projectId: string) =>

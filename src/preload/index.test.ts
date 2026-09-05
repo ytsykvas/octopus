@@ -268,6 +268,22 @@ describe('channel names', () => {
       'workspaces:mergePullRequest'
     ],
     [
+      'workspaces.replyToReviewThread',
+      () =>
+        method('workspaces', 'replyToReviewThread')('w' as never, 'PRRT_1' as never, 'ok' as never),
+      'workspaces:replyToReviewThread'
+    ],
+    [
+      'workspaces.setReviewThreadResolved',
+      () =>
+        method('workspaces', 'setReviewThreadResolved')(
+          'w' as never,
+          'PRRT_1' as never,
+          true as never
+        ),
+      'workspaces:resolveReviewThread'
+    ],
+    [
       'workspaces.instruction',
       () => method('workspaces', 'instruction')('w' as never, 'pullRequest' as never),
       'instructions:effective'

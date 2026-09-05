@@ -144,6 +144,7 @@ describe('a read that came back full', () => {
           reviewThreads: {
             nodes: [
               {
+                id: 'PRRT_long',
                 isResolved: false,
                 comments: {
                   nodes: Array.from({ length: DETAIL_THREAD_REPLIES }, (_, index) => ({
@@ -186,6 +187,7 @@ function thread(
   comment: Record<string, unknown> = {}
 ): Record<string, unknown> {
   return {
+    id: 'PRRT_kwDODKw3uc5bqLtn',
     isResolved,
     comments: {
       nodes: [
@@ -519,6 +521,7 @@ describe('what people said on a pull request', () => {
       {
         kind: 'inline',
         id: 'PRRC_kwDODKw3uc7jZJ2P',
+        threadId: 'PRRT_kwDODKw3uc5bqLtn',
         author: 'copilot-pull-request-reviewer',
         body: 'Add a Go doc comment for this exported constant group.',
         createdAt: '2026-08-19T16:53:18Z',
@@ -529,6 +532,17 @@ describe('what people said on a pull request', () => {
         resolved: false
       }
     ])
+  })
+
+  /*
+   * A reply and a resolve are addressed to the thread, not to a comment in it,
+   * so this is the field both writes are carried by. Without it the pane can
+   * draw a review and answer none of it.
+   */
+  it('carries the thread a note belongs to, which is what a reply is sent to', () => {
+    const [comment] = commentsOf({}, threads(thread(false)))
+
+    expect(comment?.kind === 'inline' && comment.threadId).toBe('PRRT_kwDODKw3uc5bqLtn')
   })
 
   it('carries whether the thread it belongs to has been settled', () => {

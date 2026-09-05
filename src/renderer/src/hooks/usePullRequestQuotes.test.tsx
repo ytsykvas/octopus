@@ -22,6 +22,7 @@ describe('what a comment becomes on its way to the composer', () => {
   it('names the file and the line of an inline note', () => {
     const comment: PullRequestComment = {
       kind: 'inline',
+      threadId: 'PRRT_1',
       id: 'PRRC_1',
       author: 'olena',
       body: 'Why the second case?',
@@ -41,6 +42,7 @@ describe('what a comment becomes on its way to the composer', () => {
   it('names the file alone for a note that has gone out of date', () => {
     const comment: PullRequestComment = {
       kind: 'inline',
+      threadId: 'PRRT_1',
       id: 'PRRC_1',
       author: null,
       body: 'still worth reading',

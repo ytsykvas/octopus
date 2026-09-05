@@ -360,6 +360,8 @@ describe('channel table', () => {
     'workspaces:pullRequestDetail',
     'workspaces:mergePullRequest',
     'workspaces:closePullRequest',
+    'workspaces:replyToReviewThread',
+    'workspaces:resolveReviewThread',
     'files:open',
     'chats:list',
     'chats:open',
@@ -1576,6 +1578,56 @@ describe('workspaces of a real project', () => {
     await expect(
       invoke('workspaces:closePullRequest', workspace.id, 'seven')
     ).resolves.toMatchObject({ ok: false })
+  })
+
+  it('answers a review thread, and refuses an id that is not a node id', async () => {
+    const projectId = await addProject('replying')
+    const asked: string[][] = []
+    service = await useService({
+      makeGh: () => (args) => {
+        asked.push([...args])
+        return Promise.resolve('{}')
+      }
+    })
+    const workspace = await createWorkspace(projectId)
+
+    await expect(
+      invoke('workspaces:replyToReviewThread', workspace.id, 'PRRT_kwDO1', 'Left as it is.')
+    ).resolves.toMatchObject({ ok: true })
+    expect((asked[0] ?? []).join(' ')).toContain('addPullRequestReviewThreadReply')
+
+    // Both become arguments to `gh`, so both are proved here rather than
+    // trusted because the renderer read them from us.
+    await expect(
+      invoke('workspaces:replyToReviewThread', workspace.id, 'PRRT_1;id', 'Left as it is.')
+    ).resolves.toMatchObject({ ok: false })
+    await expect(
+      invoke('workspaces:replyToReviewThread', workspace.id, 'PRRT_kwDO1', '')
+    ).resolves.toMatchObject({ ok: false })
+    expect(asked).toHaveLength(1)
+  })
+
+  it('settles a thread and puts it back, and refuses a state that is not one', async () => {
+    const projectId = await addProject('resolving')
+    const asked: string[][] = []
+    service = await useService({
+      makeGh: () => (args) => {
+        asked.push([...args])
+        return Promise.resolve('{}')
+      }
+    })
+    const workspace = await createWorkspace(projectId)
+
+    await invoke('workspaces:resolveReviewThread', workspace.id, 'PRRT_kwDO1', true)
+    await invoke('workspaces:resolveReviewThread', workspace.id, 'PRRT_kwDO1', false)
+
+    expect((asked[0] ?? []).join(' ')).toContain('resolveReviewThread(')
+    expect((asked[1] ?? []).join(' ')).toContain('unresolveReviewThread(')
+
+    await expect(
+      invoke('workspaces:resolveReviewThread', workspace.id, 'PRRT_kwDO1', 'yes')
+    ).resolves.toMatchObject({ ok: false })
+    expect(asked).toHaveLength(2)
   })
 
   it('merges by the method it is given, and refuses one it is not', async () => {

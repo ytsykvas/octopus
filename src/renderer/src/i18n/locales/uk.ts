@@ -397,6 +397,13 @@ export const uk: Translation = {
     reviewNone: 'Поки ніхто нічого не сказав.',
     addToChat: 'Додати в чат',
     resolved: 'розвʼязано',
+    reply: 'Відповісти',
+    replyPlaceholder: 'Відповідь на цю гілку…',
+    replySend: 'Надіслати',
+    replying: 'Надсилаємо…',
+    replyCancel: 'Скасувати',
+    resolveThread: 'Розвʼязати',
+    unresolveThread: 'Відкрити знову',
     verdictApproved: 'схвалив',
     verdictChangesRequested: 'просить змін',
     verdictCommented: 'прокоментував',
@@ -919,6 +926,8 @@ export const uk: Translation = {
     requestNotOnBranch:
       'Запит #{{number}} у гілці {{head}}, а не в {{branch}} цього воркспейсу. Нічого не зроблено.',
     closeFailed: 'GitHub не закрив #{{number}}. Каже: {{reason}}',
+    replyFailed: 'GitHub не опублікував відповідь. Каже: {{reason}}',
+    resolveFailed: 'GitHub не змінив стан гілки. Каже: {{reason}}',
     alreadyExists: '{{path}} уже існує. Додайте його з диска.',
     branchUnmerged:
       '{{branch}} має коміти, яких немає в базовій гілці. Зніміть прапорець видалення гілки або спершу злийте її.',

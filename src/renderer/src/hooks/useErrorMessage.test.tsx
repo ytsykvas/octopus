@@ -99,6 +99,8 @@ const CODE_PARAMETERS: Record<CoreErrorCode, Interpolated> = {
   draftFailed: { reason: 'the agent gave up' },
   pushFailed: { branch: 'octopus/anna', reason: 'rejected' },
   closeFailed: { number: '42', reason: 'already closed' },
+  replyFailed: { reason: 'empty' },
+  resolveFailed: { reason: 'not found' },
   mergeFailed: { number: '42', reason: 'checks failing' },
   requestNotOnBranch: { number: '42', head: 'octopus/bo', branch: 'octopus/anna' },
   repoConfigSymlink: { path: '.octopus/scripts/setup.sh' },

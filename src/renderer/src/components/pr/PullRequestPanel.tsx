@@ -290,6 +290,32 @@ export function PullRequestPanel({
                     quotes.add(toQuote(comment, request.number))
                   }}
                   attached={attached}
+                  onReply={async (threadId, body) => {
+                    const result = await window.octopus.workspaces.replyToReviewThread(
+                      workspace.id,
+                      threadId,
+                      body
+                    )
+                    if (!result.ok) {
+                      report(result)
+                      return false
+                    }
+                    // Read again rather than adding the reply to what is on
+                    // screen: GitHub decides what a comment ends up looking
+                    // like, and a pane that draws its own guess is a pane that
+                    // can disagree with the request it is showing.
+                    detail.refresh()
+                    return true
+                  }}
+                  onSetResolved={async (threadId, resolved) => {
+                    const result = await window.octopus.workspaces.setReviewThreadResolved(
+                      workspace.id,
+                      threadId,
+                      resolved
+                    )
+                    if (!result.ok) report(result)
+                    else detail.refresh()
+                  }}
                 />
 
                 {/* A truncation nobody wrote down is one somebody eventually
