@@ -194,10 +194,17 @@ export const UsageLimitSchema = z.object({
    * renderer's question, and core has no business owning a colour. What core
    * owns is that the word came from the account rather than from a threshold
    * this app picked.
+   *
+   * **Defaulted, because this is stored.** `state.json` keeps the last reading
+   * so the sidebar has something to draw before the agent answers, and a
+   * reading written before this field existed must still load — `StateSchema`
+   * says a field that can be absent needs a default, not a version bump. Added
+   * without one, these two stopped the whole file parsing and the app would not
+   * start.
    */
-  severity: z.string().nullable(),
+  severity: z.string().nullable().default(null),
   /** Whether this is the window actually binding right now, per the server. */
-  binding: z.boolean()
+  binding: z.boolean().default(false)
 })
 
 const UsageShareSchema = z.object({ name: z.string(), pct: z.number() })

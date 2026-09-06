@@ -723,6 +723,35 @@ describe('the remembered model list', () => {
   })
 
   /*
+   * The reading the sidebar draws before the agent answers is stored, so every
+   * field on a window is a stored field — which is easy to forget, because the
+   * rest of `usage.ts` describes a live response.
+   *
+   * Added without defaults, `severity` and `binding` stopped the whole file
+   * parsing: six errors for three windows, and octopus would not start at all.
+   * This is the shape a real `state.json` held.
+   */
+  it('loads a usage reading written before the account was asked what it thought', async () => {
+    const before = {
+      ...withProject,
+      chats: [],
+      usageWindows: {
+        limits: [
+          { key: 'five_hour', label: null, utilization: 50, resetsAt: '2026-09-06T19:00:00Z' },
+          { key: 'seven_day', label: null, utilization: 4, resetsAt: null }
+        ],
+        limitsApply: true,
+        readAt: '2026-09-06T11:00:00.000Z'
+      }
+    }
+    await writeFile(file, JSON.stringify(before), 'utf8')
+
+    const state = await loadState(file)
+
+    expect(state.usageWindows?.limits[0]).toMatchObject({ severity: null, binding: false })
+  })
+
+  /*
    * And a chat written while "the agent decides" was a choice, which is the
    * harder half: the field is present holding null, so no default answers for
    * it. The whole file would fail to load without the schema normalising it.

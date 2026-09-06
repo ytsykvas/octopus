@@ -135,6 +135,14 @@ added here is paid for in all of them:
   from `docs/tasks/`, and the push. The first three belong in the commit that
   fixes it, not in a pass afterwards — and a pass afterwards found something
   every time it was run, which is how this line was earned.
+- **A field added to anything under `StateSchema` needs a default.** The reader
+  throws on a mismatch rather than falling back, so a record written before the
+  field must still load — and `state.json` holds more than it looks: the last
+  usage reading is in there, so every field of a _window_ is a stored field
+  while the module around it describes a live response. Two added without
+  defaults stopped the whole file parsing and the app would not open at all.
+  The test that catches it is one line in `store.test.ts`: write the older
+  shape, load it.
 - **Verify a guard by reverting it.** 100% coverage says the line ran, not that
   anything would notice if it went. Six audits in a row found tests that were
   green with the fix removed: an assertion made before React flushed, a count of
