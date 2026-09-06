@@ -597,6 +597,29 @@ does with a new workspace is these two steps in this order, and the second only
 makes sense after the first — two buttons made the reader supply the ordering
 every time.
 
+**A half says what it is running, and the sequence takes it back.** The sequence
+above both halves holds only which step is owed; the halves hold the processes.
+A Vite hot update is not a navigation — React Fast Refresh replaces the modules
+that changed and leaves the document alone, so nothing in `main` fires and no
+terminal is unmounted — but editing a module the sequence is reached through
+remakes **its** state while the pty carries on. The tab then offered `Run` over
+a server that was already serving, and pressing it started a second one.
+
+So each half announces whether it is running, and the sequence promotes itself
+to match. One direction only: a half that is running is a fact, while a half
+that is not says nothing about whether the sequence is between steps — the build
+reports itself idle exactly when the server is about to take over.
+
+The announcement fires on the **listener** as well as on the half's own state,
+which is the whole of how this works. After a hot update `running` never
+changed; the only sign that anything forgot is a listener that is not the one
+from before. That is why the panel wraps its two in `useCallback` over `adopt`
+rather than over the sequence, which is rebuilt every render.
+
+This is a development-only failure — a released build never hot-reloads — but
+development is where octopus is written, and it cost most of an evening the
+first time.
+
 **The port is settled by `Run`, before the build.** The build half prepares the
 workspace too, and `prepare` writes the env block with whatever port the
 workspace holds at that moment — so a port settled by the _server_ half

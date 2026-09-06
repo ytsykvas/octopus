@@ -47,6 +47,22 @@ export interface RunSequence {
   readonly restart: (workspaceId: string) => void
   /** Ends whatever is running here. */
   readonly stop: (workspaceId: string) => void
+  /**
+   * A half is running something the sequence does not know about.
+   *
+   * The sequence lives above both halves and holds nothing but which step is
+   * owed; the halves hold the processes. A Vite hot update is not a navigation,
+   * so nothing in `main` fires and no terminal is disposed — but editing a
+   * module this hook is reached through resets **this** state while the pty
+   * carries on. The tab then offered `Run` over a server that was already
+   * serving, and pressing it started a second one.
+   *
+   * One direction only. A half that is running is a fact; a half that is not
+   * says nothing about whether the sequence is between steps, and demoting on
+   * that would end a build the moment its own runner reported idle before the
+   * server took over. Stopping and finishing are what move it back.
+   */
+  readonly adopt: (kind: ScriptKind, workspaceId: string, running: boolean) => void
   /** The runner that was building has gone; the workspace is not building. */
   readonly abandon: (workspaceId: string) => void
   /** A half's script ended, and whether it ended well. */
@@ -116,6 +132,20 @@ export function useRunSequence(): RunSequence {
     })
   }, [])
 
+  const adopt = useCallback((kind: ScriptKind, workspaceId: string, running: boolean) => {
+    if (!running) return
+
+    setRuns((current) => {
+      const run = current[workspaceId] ?? IDLE
+      const stage = kind === 'run' ? 'serving' : 'building'
+      if (run.stage === stage) return current
+
+      // The tokens are not bumped. They are what *starts* a half, and this one
+      // is already going — bumping would restart the thing being recovered.
+      return { ...current, [workspaceId]: { ...run, stage } }
+    })
+  }, [])
+
   const stop = useCallback((workspaceId: string) => {
     setRuns((current) => {
       const run = current[workspaceId]
@@ -155,5 +185,5 @@ export function useRunSequence(): RunSequence {
     [runs]
   )
 
-  return { runOf, start, restart, stop, abandon, finished }
+  return { runOf, start, restart, stop, adopt, abandon, finished }
 }

@@ -274,4 +274,87 @@ describe('a runner that goes mid-build', () => {
 
     expect(result.current.runOf('nobody').stage).toBe('idle')
   })
+  describe('recovering a run the sequence lost', () => {
+    /*
+     * A Vite hot update is not a navigation: React Fast Refresh replaces the
+     * modules that changed and leaves the document alone, so no terminal is
+     * unmounted and nothing in `main` fires. Editing a module this hook is
+     * reached through resets **this** state while the pty carries on — the tab
+     * then offered `Run` over a server already serving, and pressing it started
+     * a second one against the first.
+     */
+    it('takes a server the halves say is running', () => {
+      const { result } = renderHook(() => useRunSequence())
+
+      act(() => {
+        result.current.adopt('run', 'anna', true)
+      })
+
+      expect(result.current.runOf('anna').stage).toBe('serving')
+    })
+
+    it('takes a build the halves say is running', () => {
+      const { result } = renderHook(() => useRunSequence())
+
+      act(() => {
+        result.current.adopt('setup', 'anna', true)
+      })
+
+      expect(result.current.runOf('anna').stage).toBe('building')
+    })
+
+    /*
+     * The tokens are what *start* a half, and the half being recovered is
+     * already going. Bumping one would restart the very thing this is putting
+     * back on the board.
+     */
+    it('starts nothing while it recovers', () => {
+      const { result } = renderHook(() => useRunSequence())
+
+      act(() => {
+        result.current.adopt('run', 'anna', true)
+      })
+
+      expect(result.current.runOf('anna')).toEqual({
+        stage: 'serving',
+        build: 0,
+        server: 0,
+        stop: 0
+      })
+    })
+
+    /*
+     * One direction only. A half that is not running says nothing about whether
+     * the sequence is between steps — the build half reports itself idle the
+     * moment its process exits, which is exactly when the server is about to
+     * take over.
+     */
+    it('leaves a sequence alone when a half reports nothing running', () => {
+      const { result } = renderHook(() => useRunSequence())
+
+      act(() => {
+        result.current.start('anna', true)
+      })
+      act(() => {
+        result.current.adopt('run', 'anna', false)
+      })
+
+      expect(result.current.runOf('anna').stage).toBe('building')
+    })
+
+    it('says nothing new about a half already where it belongs', () => {
+      const { result } = renderHook(() => useRunSequence())
+
+      act(() => {
+        result.current.start('anna', false)
+      })
+      const before = result.current.runOf('anna')
+
+      act(() => {
+        result.current.adopt('run', 'anna', true)
+      })
+
+      expect(result.current.runOf('anna')).toBe(before)
+    })
+  })
 })

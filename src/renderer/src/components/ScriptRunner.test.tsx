@@ -973,4 +973,64 @@ describe('ScriptRunner', () => {
     // every mount, so the red text on the canvas is the sign nobody sees.
     expect(await screen.findByText(/spawn \/bin\/zsh ENOENT/)).toBeInTheDocument()
   })
+  describe('saying what is running', () => {
+    const props = {
+      workspace: anna,
+      kind: 'run' as const,
+      script: RUN_SCRIPT,
+      port: 3111,
+      rootPath: '/Users/test/planner',
+      defaultBranch: 'main',
+      onOpenSettings: vi.fn(),
+      onOutcome: vi.fn()
+    }
+
+    it('says so when a run begins and when it ends', async () => {
+      const onRunning = vi.fn()
+
+      mountAndStart({ ...props, onRunning })
+
+      await waitFor(() => {
+        expect(onRunning).toHaveBeenLastCalledWith(true)
+      })
+
+      processExits(sessionId(1))
+      await waitFor(() => {
+        expect(onRunning).toHaveBeenLastCalledWith(false)
+      })
+    })
+
+    /*
+     * The recovery this exists for, and the reason a ref would be the wrong
+     * shape. A Vite hot update remakes the sequence above without unmounting
+     * this half, so `running` never changes — the only sign that anything
+     * forgot is a listener that is not the one from before, and the half has to
+     * answer it.
+     */
+    it('says so again to a listener it has not spoken to', async () => {
+      const first = vi.fn()
+      const { rerender } = mountAndStart({ ...props, onRunning: first })
+
+      // Waited for, or the swap happens before the run begins and the new
+      // listener hears the ordinary announcement rather than a repeated one.
+      await waitFor(() => {
+        expect(first).toHaveBeenLastCalledWith(true)
+      })
+
+      const remade = vi.fn()
+      rerender({ onRunning: remade })
+
+      await waitFor(() => {
+        expect(remade).toHaveBeenCalledWith(true)
+      })
+    })
+
+    it('says nothing to a half nobody is listening to', async () => {
+      mountAndStart(props)
+
+      await waitFor(() => {
+        expect(octopus().terminal.create).toHaveBeenCalled()
+      })
+    })
+  })
 })

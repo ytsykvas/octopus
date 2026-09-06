@@ -57,6 +57,8 @@ interface WorkspaceScriptsProps {
   readonly onPort?: (workspace: WorkspaceView, port: number) => void
   /** A runner that was still going has unmounted. */
   readonly onGone?: (workspaceId: string) => void
+  /** Whether a half has something running, whenever that changes. */
+  readonly onRunning?: (workspaceId: string, running: boolean) => void
 }
 
 /**
@@ -85,6 +87,7 @@ export function WorkspaceScripts({
   stopTokenFor,
   onOutcome,
   onPort,
+  onRunning,
   onGone
 }: WorkspaceScriptsProps): React.JSX.Element {
   const [openedIds, setOpenedIds] = useState<readonly string[]>([])
@@ -153,6 +156,9 @@ export function WorkspaceScripts({
             }}
             onGone={() => {
               onGone?.(workspace.id)
+            }}
+            onRunning={(running) => {
+              onRunning?.(workspace.id, running)
             }}
             startToken={tokenFor(workspace.id)}
             stopToken={stopTokenFor(workspace.id)}

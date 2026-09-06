@@ -7,7 +7,7 @@ import {
   RotateCw,
   Square
 } from 'lucide-react'
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import type { ProjectColor } from '@core/colors.js'
@@ -265,6 +265,34 @@ export function RightPanel({
   // One button that takes a workspace from a bare checkout to a running
   // server. It lives above both halves because neither half can see the other.
   const sequence = useRunSequence()
+
+  /*
+   * The sequence lives above both halves and holds nothing but which step is
+   * owed; the halves hold the processes. A Vite hot update remakes this state
+   * without unmounting a terminal, so the tab offered `Run` over a server that
+   * was already serving — and pressing it started a second one.
+   *
+   * Stable on purpose, and taken out of the sequence rather than read off it:
+   * `sequence` is rebuilt every render while `adopt` is not, and that identity
+   * **is** the signal. A half announces on the listener as well as on its own
+   * state, so a sequence that has just been remade is told what is running
+   * without anything having to notice that it forgot.
+   */
+  const { adopt } = sequence
+
+  const adoptServer = useCallback(
+    (id: string, running: boolean) => {
+      adopt('run', id, running)
+    },
+    [adopt]
+  )
+
+  const adoptBuild = useCallback(
+    (id: string, running: boolean) => {
+      adopt('setup', id, running)
+    },
+    [adopt]
+  )
   const activeRun = sequence.runOf(activeWorkspaceId)
   // The build is the step that takes the time, and a second press during it
   // would start it over rather than do anything anybody meant.
@@ -1020,6 +1048,7 @@ export function RightPanel({
               onGone={(id) => {
                 sequence.abandon(id)
               }}
+              onRunning={adoptBuild}
             />
           </div>
         </section>
@@ -1044,6 +1073,7 @@ export function RightPanel({
             onOutcome={(id, ok) => {
               sequence.finished('run', id, ok)
             }}
+            onRunning={adoptServer}
             onPort={(workspace, settled) => {
               setSettledPorts((current) => ({ ...current, [workspace.id]: settled }))
 

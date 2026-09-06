@@ -44,6 +44,14 @@ interface ScriptRunnerProps {
    */
   readonly onGone?: () => void
   /**
+   * Whether this half has something running, whenever that changes.
+   *
+   * Announced upward because the sequence above both halves can lose its place
+   * while the process carries on — a Vite hot update resets state without
+   * unmounting a terminal. The half is the one that knows.
+   */
+  readonly onRunning?: (running: boolean) => void
+  /**
    * Bumped by the Run button to ask this half to start; 0 means never.
    *
    * A number rather than a callback handed upwards: the sequence must be able
@@ -75,6 +83,7 @@ export function ScriptRunner({
   onOpenSettings,
   onPort,
   onGone,
+  onRunning,
   startToken = 0,
   stopToken = 0,
   onOutcome
@@ -106,6 +115,7 @@ export function ScriptRunner({
       defaultBranch={defaultBranch}
       onPort={onPort}
       onGone={onGone}
+      onRunning={onRunning}
       startToken={startToken}
       stopToken={stopToken}
       onOutcome={onOutcome}
@@ -122,6 +132,7 @@ interface RunnerProps {
   readonly defaultBranch: string
   readonly onPort: ((port: number) => void) | undefined
   readonly onGone: (() => void) | undefined
+  readonly onRunning: ((running: boolean) => void) | undefined
   readonly startToken: number
   readonly stopToken: number
   readonly onOutcome: ((ok: boolean) => void) | undefined
@@ -144,6 +155,7 @@ function Runner({
   defaultBranch,
   onPort,
   onGone,
+  onRunning,
   startToken,
   stopToken,
   onOutcome
@@ -190,6 +202,25 @@ function Runner({
   useEffect(() => {
     stillRunning.current = running
   }, [running])
+
+  /*
+   * Announced on the listener as well as on the state, which is the whole of
+   * how a lost sequence is recovered.
+   *
+   * A ref would be the obvious shape and is the wrong one here. A hot update
+   * remakes the sequence above without unmounting this half, so `running` never
+   * changes and a ref-held listener would never be told — the thing that forgot
+   * is the thing that has to ask, and the only sign of it is a listener that is
+   * not the one from before.
+   *
+   * Which is why the callers wrap theirs in `useCallback`: rebuilt every
+   * render, this would fire on each one. Idempotent if it did — the sequence
+   * ignores an announcement matching where it already is — but a `useEffect`
+   * per render is not a thing to leave lying about.
+   */
+  useEffect(() => {
+    onRunning?.(running)
+  }, [running, onRunning])
 
   useEffect(
     () => () => {
