@@ -20,7 +20,17 @@ function renderPicker(
 ): ReturnType<typeof vi.fn> {
   const onChange = vi.fn()
 
-  render(<EffortPicker value="medium" onChange={onChange} model={OPUS} {...overrides} />)
+  render(
+    <EffortPicker
+      value="medium"
+      onChange={onChange}
+      planValue={null}
+      onPlanChange={vi.fn()}
+      planMode={false}
+      model={OPUS}
+      {...overrides}
+    />
+  )
 
   return onChange
 }
@@ -77,7 +87,16 @@ describe('the effort chip', () => {
   // marker rather than name the level the panel was opened on.
   it('changes the picture with the choice', async () => {
     const user = userEvent.setup()
-    const { rerender } = render(<EffortPicker value="low" onChange={vi.fn()} model={OPUS} />)
+    const { rerender } = render(
+      <EffortPicker
+        value="low"
+        onChange={vi.fn()}
+        planValue={null}
+        onPlanChange={vi.fn()}
+        planMode={false}
+        model={OPUS}
+      />
+    )
 
     await user.click(chip())
     expect(screen.getByRole('dialog').querySelector('img')).toHaveAttribute(
@@ -85,7 +104,16 @@ describe('the effort chip', () => {
       expect.stringContaining('low')
     )
 
-    rerender(<EffortPicker value="ultracode" onChange={vi.fn()} model={OPUS} />)
+    rerender(
+      <EffortPicker
+        value="ultracode"
+        onChange={vi.fn()}
+        planValue={null}
+        onPlanChange={vi.fn()}
+        planMode={false}
+        model={OPUS}
+      />
+    )
 
     expect(screen.getByRole('dialog').querySelector('img')).toHaveAttribute(
       'src',
@@ -282,5 +310,125 @@ describe('how long the scale is', () => {
 
     expect(ticks()).toBe('LowUltracodexhigh + workflows')
     expect(scale()).toHaveAttribute('aria-valuetext', 'Ultracode')
+  })
+  /*
+   * Two tabs over one scale, rather than the second marker the note that asked
+   * for this leaned towards: the scale is one `role="slider"` with one handle,
+   * and two handles is the range pattern — which these two are not, since
+   * planning may sit either side of the work.
+   */
+  it('sets the working level from the first tab and the planning one from the second', async () => {
+    const user = userEvent.setup()
+    const onPlanChange = vi.fn()
+    const onChange = vi.fn()
+    render(
+      <EffortPicker
+        value="medium"
+        onChange={onChange}
+        planValue={null}
+        onPlanChange={onPlanChange}
+        planMode={false}
+        model={OPUS}
+      />
+    )
+    await user.click(chip())
+
+    await user.click(screen.getByRole('tab', { name: /Planning/ }))
+    await user.click(screen.getByText('Maximum'))
+
+    expect(onPlanChange).toHaveBeenCalledWith('max')
+    expect(onChange).not.toHaveBeenCalled()
+  })
+
+  /* The half that is not on screen still says what it is set to, which is most
+     of why the pair is here rather than one scale that silently sets whichever
+     job is running. */
+  it('names each half on its own tab', async () => {
+    const user = userEvent.setup()
+    renderPicker({ value: 'low', planValue: 'max' })
+
+    await user.click(chip())
+
+    expect(screen.getByRole('tab', { name: /Writing code/ })).toHaveTextContent('Low')
+    expect(screen.getByRole('tab', { name: /Planning/ })).toHaveTextContent('Maximum')
+  })
+
+  it('goes back to the working half from the planning one', async () => {
+    const user = userEvent.setup()
+    const onChange = vi.fn()
+    render(
+      <EffortPicker
+        value="medium"
+        onChange={onChange}
+        planValue="max"
+        onPlanChange={vi.fn()}
+        planMode
+        model={OPUS}
+      />
+    )
+    await user.click(chip())
+
+    await user.click(screen.getByRole('tab', { name: /Writing code/ }))
+    await user.click(screen.getByText('Low'))
+
+    expect(onChange).toHaveBeenCalledWith('low')
+  })
+
+  it('says the planning half follows the work when there is no split', async () => {
+    const user = userEvent.setup()
+    renderPicker({ planValue: null })
+
+    await user.click(chip())
+
+    expect(screen.getByRole('tab', { name: /Planning/ })).toHaveTextContent('Same as writing code')
+  })
+
+  // It opens on the half that is actually running, so the picture above is the
+  // one the chip named.
+  it('opens on the half that is running', async () => {
+    const user = userEvent.setup()
+    renderPicker({ value: 'low', planValue: 'max', planMode: true })
+
+    await user.click(chip())
+
+    expect(screen.getByRole('tab', { name: /Planning/ })).toHaveAttribute('aria-selected', 'true')
+    expect(screen.getByRole('dialog').querySelector('img')).toHaveAttribute(
+      'src',
+      expect.stringContaining('max')
+    )
+  })
+
+  /* The chip names what the next message will run at, which is the planning
+     level while planning — not the working one it used to name whatever was
+     happening. */
+  it('names the level actually in force on the chip', () => {
+    renderPicker({ value: 'low', planValue: 'max', planMode: true })
+
+    expect(chip()).toHaveTextContent('Maximum')
+  })
+
+  // A split is the exception, so undoing it has to be a click rather than a
+  // hunt for which tick was there before.
+  it('offers the way back to one level, and only where it means something', async () => {
+    const user = userEvent.setup()
+    const onPlanChange = vi.fn()
+    render(
+      <EffortPicker
+        value="medium"
+        onChange={vi.fn()}
+        planValue="max"
+        onPlanChange={onPlanChange}
+        planMode={false}
+        model={OPUS}
+      />
+    )
+    await user.click(chip())
+
+    expect(screen.queryByRole('button', { name: 'Use the same as writing code' })).toBeNull()
+
+    await user.click(screen.getByRole('tab', { name: /Planning/ }))
+    await user.click(screen.getByRole('button', { name: 'Use the same as writing code' }))
+
+    expect(onPlanChange).toHaveBeenCalledWith(null)
   })
 })

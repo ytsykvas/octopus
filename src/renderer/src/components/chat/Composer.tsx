@@ -45,6 +45,9 @@ interface ComposerProps {
   /** How much thinking the next message asks for; always answered. */
   readonly effort: EffortChoice
   readonly onEffort: (effort: EffortChoice) => void
+  /** The effort planning runs at; null means the one above does both. */
+  readonly planEffort: EffortChoice | null
+  readonly onPlanEffort: (effort: EffortChoice | null) => void
   /**
    * The model this conversation writes code with; null leaves it to the agent.
    *
@@ -147,6 +150,8 @@ export function Composer({
   onPlanMode,
   effort,
   onEffort,
+  planEffort,
+  onPlanEffort,
   model,
   onModel,
   planModel,
@@ -423,7 +428,14 @@ export function Composer({
             display={modelLabel}
           />
 
-          <EffortPicker value={effort} onChange={onEffort} model={modelInForce} />
+          <EffortPicker
+            value={effort}
+            onChange={onEffort}
+            planValue={planEffort}
+            onPlanChange={onPlanEffort}
+            planMode={planMode}
+            model={modelInForce}
+          />
 
           {/* Last of the three, and the only one that is not a menu. Model and
               effort are two halves of one question — which brain, and how hard

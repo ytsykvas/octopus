@@ -884,6 +884,24 @@ describe('the permission mode', () => {
     expect(octopus().chats.setModel).not.toHaveBeenCalled()
   })
 
+  /* The other half of the same judgement: which brain plans, and how hard it
+     thinks while it does. */
+  it('sends the planning effort the scale was set to', async () => {
+    const user = userEvent.setup()
+    givenChat()
+    await openLoadedChat()
+    await screen.findByRole('button', { name: 'Effort' })
+
+    await user.click(screen.getByRole('button', { name: 'Effort' }))
+    await user.click(screen.getByRole('tab', { name: /Planning/ }))
+    await user.click(screen.getByText('Maximum'))
+
+    await waitFor(() => {
+      expect(octopus().chats.setPlanEffort).toHaveBeenCalledWith(CHAT_ID, 'max')
+    })
+    expect(octopus().chats.setEffort).not.toHaveBeenCalled()
+  })
+
   it('keeps the old model on screen when the change failed', async () => {
     const user = userEvent.setup()
     vi.mocked(octopus().chats.models).mockResolvedValue({

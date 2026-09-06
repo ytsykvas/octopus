@@ -20,6 +20,7 @@ export function chat(overrides: Partial<Chat> = {}): Chat {
     sessionId: null,
     model: null,
     planModel: null,
+    planEffort: null,
     effort: 'medium',
     workingMode: 'default',
     planMode: false,

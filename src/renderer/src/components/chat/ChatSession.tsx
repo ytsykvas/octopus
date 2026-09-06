@@ -115,6 +115,9 @@ export function ChatSession({
   const record = chat.chat
   const workingMode = record?.workingMode ?? defaultWorkingMode
   const effort = record?.effort ?? defaultEffort
+  /* Null until a conversation says otherwise, which is most of them: there is
+     no application-wide effort for planning and there should not be. */
+  const planEffort = record?.planEffort ?? null
   // Both models, as stored. `Composer` works out which of them the next message
   // will run with; the record holds two settings, not a state.
   const model = record === null ? defaultModel : record.model
@@ -230,6 +233,8 @@ export function ChatSession({
         onPlanMode={(planning) => void chat.setPlanMode(planning)}
         effort={effort}
         onEffort={(level) => void chat.setEffort(level)}
+        planEffort={planEffort}
+        onPlanEffort={(level) => void chat.setPlanEffort(level)}
         model={model}
         onModel={(chosen) => void chat.setModel(chosen)}
         planModel={planModel}

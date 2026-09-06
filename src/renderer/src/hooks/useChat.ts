@@ -56,6 +56,7 @@ export interface ChatController {
   readonly setWorkingMode: (mode: WorkingMode) => Promise<void>
   readonly setPlanMode: (planning: boolean) => Promise<void>
   readonly setEffort: (effort: EffortChoice) => Promise<void>
+  readonly setPlanEffort: (effort: EffortChoice | null) => Promise<void>
   readonly setModel: (model: string | null) => Promise<void>
   readonly setPlanModel: (model: string | null) => Promise<void>
   /**
@@ -453,6 +454,12 @@ export function useChat(
     [change]
   )
 
+  const setPlanEffort = useCallback(
+    (planEffort: EffortChoice | null) =>
+      change({ planEffort }, (chatId) => window.octopus.chats.setPlanEffort(chatId, planEffort)),
+    [change]
+  )
+
   /*
    * Working, by either account.
    *
@@ -487,6 +494,7 @@ export function useChat(
     setEffort,
     setModel,
     setPlanModel,
+    setPlanEffort,
     ensure: ensureChat
   }
 }

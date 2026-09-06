@@ -35,6 +35,7 @@ import {
   DEFAULT_AGENT,
   DEFAULT_EFFORT,
   type EffortChoice,
+  effortInForce,
   EXIT_PLAN_MODE,
   forkChat as forkChatRecord,
   isClearCommand,
@@ -844,8 +845,10 @@ export interface OctopusService {
   setChatWorkingMode(chatId: string, mode: WorkingMode): Promise<void>
   /** Turns planning on or off for the chat. */
   setChatPlanMode(chatId: string, planning: boolean): Promise<void>
-  /** Sets how much thinking the chat asks for. */
+  /** Sets how much thinking the chat asks for while it works. */
   setChatEffort(chatId: string, effort: EffortChoice): Promise<void>
+  /** Sets the effort the chat plans at; null means the one above does both. */
+  setChatPlanEffort(chatId: string, effort: EffortChoice | null): Promise<void>
   /** Sets the model the chat writes code with; null returns the choice to the agent. */
   setChatModel(chatId: string, model: string | null): Promise<void>
   /** Sets the model the chat plans with; null means the one above does both. */
@@ -1787,6 +1790,7 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
    */
   async function applyMode(chatId: string, patch: Partial<Chat>): Promise<void> {
     const before = sessionModel(requireChat(chatId))
+    const beforeEffort = effortInForce(requireChat(chatId))
     await commit((current) => updateChat(current, chatId, patch))
 
     // Applied to the running session too, so the choice takes effect on the
@@ -1795,6 +1799,7 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
     // of them is in the patch.
     await sessions.get(chatId)?.setPermissionMode(sessionMode(requireChat(chatId)))
     await pushModel(chatId, before)
+    await pushEffort(chatId, beforeEffort)
   }
 
   /**
@@ -1814,6 +1819,20 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
     if (wanted === before) return
 
     await sessions.get(chatId)?.setModel(wanted)
+  }
+
+  /**
+   * The same for effort, at the same two moments and with the same guard.
+   *
+   * A conversation whose two jobs share an effort runs that one whatever the
+   * toggles do, so nothing is ever pushed at it — byte for byte the behaviour
+   * there was before a conversation could hold two.
+   */
+  async function pushEffort(chatId: string, before: EffortChoice): Promise<void> {
+    const wanted = effortInForce(requireChat(chatId))
+    if (wanted === before) return
+
+    await sessions.get(chatId)?.setEffort(wanted)
   }
 
   /**
@@ -2244,7 +2263,7 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
         settingSources,
         permissionMode: sessionMode(chat),
         model: sessionModel(chat),
-        effort: chat.effort,
+        effort: effortInForce(chat),
         // The read-only set, and nothing else. A name here is approved by the
         // SDK before `canUseTool` is consulted, which is what that set wants
         // and exactly what the user's own answers must not have: one handed
@@ -3604,7 +3623,7 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
       const running = sessions.get(chatId)
       if (running) {
         await running.setPermissionMode(sessionMode(chat))
-        await running.setEffort(chat.effort)
+        await running.setEffort(effortInForce(chat))
       }
 
       const session = running ?? (await startFor(chat, workspace, await sourcesFor(workspace)))
@@ -3668,9 +3687,19 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
     },
 
     async setChatEffort(chatId, effort) {
-      requireChat(chatId)
+      const before = effortInForce(requireChat(chatId))
       await commit((current) => updateChat(current, chatId, { effort }))
-      await sessions.get(chatId)?.setEffort(effort)
+      // Through the same guard as the two toggles: while planning is on and a
+      // plan effort is set, changing the working one moves nothing that is
+      // running, and pushing it would drop the session to the wrong level
+      // mid-plan.
+      await pushEffort(chatId, before)
+    },
+
+    async setChatPlanEffort(chatId, effort) {
+      const before = effortInForce(requireChat(chatId))
+      await commit((current) => updateChat(current, chatId, { planEffort: effort }))
+      await pushEffort(chatId, before)
     },
 
     async setChatModel(chatId, model) {
@@ -3768,6 +3797,7 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
       // the work the plan describes can actually begin.
       if (leaving) {
         const before = sessionModel(requireChat(request.chatId))
+        const beforeEffort = effortInForce(requireChat(request.chatId))
         await commit((current) => updateChat(current, request.chatId, { planMode: false }))
 
         // The model leaves planning with the record. Before the reply, never
@@ -3776,6 +3806,10 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
         // that wrote the plan. The reply carries a mode and has no field for a
         // model, so this is the closest to riding along that there is.
         await pushModel(request.chatId, before)
+        // Effort leaves planning with the model, and for the same reason: the
+        // reply is what releases the tool call, so anything sent after it
+        // reaches a session already editing files at the level the plan wanted.
+        await pushEffort(request.chatId, beforeEffort)
       }
 
       const chat = findChat(state, request.chatId)

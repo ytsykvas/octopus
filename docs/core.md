@@ -389,6 +389,31 @@ plan it goes out **before** the permission reply resolves — the reply is what
 releases the tool call, and there is no `updatedModel` to ride along with the
 mode the way `updatedPermissions` carries it.
 
+### Two efforts, and one of them folded into two
+
+A conversation holds a pair here as well: `effort` for writing the code and
+`planEffort` for planning, folded by `effortInForce`. The argument is the model
+pair's word for word and arguably harder — somebody who has one model think an
+approach through and another carry it out wants **more** thinking in the first
+half and less in the second, which is one judgement of which half used to be
+expressible. It also costs money in the direction nobody wants: effort left
+where planning needed it is what every file edit after the plan is paid for.
+
+Two cases rather than `sessionModel`'s three. There is no "the agent's own
+default" here, because effort is always a level and `null` can mean nothing but
+"no split".
+
+`pushEffort` is `pushModel`'s twin, at the same two moments and with the same
+guard: a conversation whose two jobs share an effort is never pushed at, so
+`/effort` given to one still stands for its turn. It also runs on the two
+setters, which the model pair does not need — setting the working level while a
+plan is being made must move nothing, and the guard is what says so.
+
+`planEffort` starts null and is never copied from the settings: there is no
+application-wide effort for planning, and there should not be. It does come
+along on a fork, unlike `planMode` — it is a statement about how this task
+should be approached, and a fork is another go at the same one.
+
 ### One effort, folded into two
 
 `sessionEffort` is the third of these folds, and the odd one: the two answers it

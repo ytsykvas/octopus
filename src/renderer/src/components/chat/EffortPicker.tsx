@@ -1,7 +1,8 @@
 import { Gauge } from 'lucide-react'
+import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
-import { type AgentModel, EFFORT_LEVELS, type EffortChoice } from '@core/chats.js'
+import { type AgentModel, EFFORT_LEVELS, type EffortChoice, effortInForce } from '@core/chats.js'
 
 import { useAnchoredPanel } from '../../hooks/useAnchoredPanel.js'
 import artHigh from '../../assets/effort/high.png'
@@ -13,9 +14,14 @@ import artXhigh from '../../assets/effort/xhigh.png'
 import { ComposerChip } from './ComposerChip.js'
 
 interface EffortPickerProps {
-  /** What this conversation asks for; always answered. */
+  /** What this conversation asks for while it works; always answered. */
   readonly value: EffortChoice
   readonly onChange: (value: EffortChoice) => void
+  /** What it asks for while planning, or null for "the same as the work". */
+  readonly planValue: EffortChoice | null
+  readonly onPlanChange: (value: EffortChoice | null) => void
+  /** Whether planning is on, which decides which half the chip is naming. */
+  readonly planMode: boolean
   /**
    * The model the next message will run on, which decides the scale's length.
    *
@@ -112,12 +118,37 @@ export function effortChoicesFor(
  * The octopus above the scale is the point of opening it at all. Six pictures
  * for six choices, and the one thing here that is recognised rather than read.
  */
-export function EffortPicker({ value, onChange, model }: EffortPickerProps): React.JSX.Element {
+export function EffortPicker({
+  value,
+  onChange,
+  planValue,
+  onPlanChange,
+  planMode,
+  model
+}: EffortPickerProps): React.JSX.Element {
   const { t } = useTranslation()
   const { open, position, container, toggle } = useAnchoredPanel()
 
-  const choices = effortChoicesFor(model, value)
-  const current = choices.indexOf(value)
+  /*
+   * Which half the panel is setting.
+   *
+   * A pair of tabs over one scale, rather than the second marker the note that
+   * asked for this leaned towards. The scale is one `role="slider"` with one
+   * handle, and two handles on it is the range pattern — which these two are
+   * not: planning may sit either side of the work, and `aria-valuenow` has room
+   * for one answer. Two scales was the other option and is what the panel
+   * argues against: two octopuses in a window that argues for calm.
+   *
+   * It opens on the half that is actually running, so the picture above is the
+   * one the chip named.
+   */
+  const [tab, setTab] = useState<'code' | 'plan'>(planMode ? 'plan' : 'code')
+
+  const shown = tab === 'plan' ? (planValue ?? value) : value
+  const inForce = effortInForce({ planMode, effort: value, planEffort: planValue })
+
+  const choices = effortChoicesFor(model, shown)
+  const current = choices.indexOf(shown)
 
   const unsupported = model?.supportsEffort === false
 
@@ -126,14 +157,17 @@ export function EffortPicker({ value, onChange, model }: EffortPickerProps): Rea
   // change to the level already in force.
   const move = (to: number): void => {
     const choice = choices[to]
-    if (choice !== undefined && choice !== value) onChange(choice)
+    if (choice === undefined || choice === shown) return
+
+    if (tab === 'plan') onPlanChange(choice)
+    else onChange(choice)
   }
 
   return (
     <div ref={container} className="contents">
       <ComposerChip
         label={t('chat.effort')}
-        value={t(LABELS[value])}
+        value={t(LABELS[inForce])}
         open={open}
         popup="dialog"
         icon={<Gauge aria-hidden size={12} />}
@@ -155,6 +189,28 @@ export function EffortPicker({ value, onChange, model }: EffortPickerProps): Rea
           style={{ top: position.top, left: position.left, width: PANEL_WIDTH }}
           className="border-line bg-canvas fixed z-50 rounded-[var(--radius-panel)] border p-4 shadow-[var(--shadow-pop)]"
         >
+          {/* Two tabs over one scale. Which job you are setting is the only
+              thing that differs between them, so it is a word rather than a
+              second copy of the control. */}
+          <div role="tablist" aria-label={t('chat.effortJob')} className="mb-3 flex gap-1">
+            <JobTab
+              label={t('chat.effortWhileWorking')}
+              note={t(LABELS[value])}
+              selected={tab === 'code'}
+              onSelect={() => {
+                setTab('code')
+              }}
+            />
+            <JobTab
+              label={t('chat.effortWhilePlanning')}
+              note={planValue === null ? t('chat.effortSameAsWork') : t(LABELS[planValue])}
+              selected={tab === 'plan'}
+              onSelect={() => {
+                setTab('plan')
+              }}
+            />
+          </div>
+
           {/* A fixed box rather than a fitted one. The six pictures are not one
               shape — a square hatching egg, a wide excavator — and sized to
               their own edges they would resize the panel as the marker moved. */}
@@ -169,7 +225,7 @@ export function EffortPicker({ value, onChange, model }: EffortPickerProps): Rea
               // 512: a pixel drawing enlarged past its grid goes soft in exactly
               // the way the drawing was made to avoid. Growing the box past this
               // means regenerating the files, not changing the number.
-              src={ART[value]}
+              src={ART[shown]}
               alt=""
               aria-hidden
               className="max-h-60 max-w-96 object-contain"
@@ -192,7 +248,7 @@ export function EffortPicker({ value, onChange, model }: EffortPickerProps): Rea
             aria-valuemin={0}
             aria-valuemax={choices.length - 1}
             aria-valuenow={current}
-            aria-valuetext={t(LABELS[value])}
+            aria-valuetext={t(LABELS[shown])}
             onKeyDown={(event) => {
               const step = { ArrowLeft: -1, ArrowRight: 1 }[event.key]
               if (step !== undefined) {
@@ -241,9 +297,61 @@ export function EffortPicker({ value, onChange, model }: EffortPickerProps): Rea
               )
             )}
           </div>
+
+          {/* The way back, and only where it means something. A split is the
+              exception — most conversations want one level — so undoing it has
+              to be a click and not a hunt for which tick was there before. */}
+          {tab === 'plan' && (
+            <button
+              type="button"
+              disabled={planValue === null}
+              onClick={() => {
+                onPlanChange(null)
+              }}
+              className="focus-ring text-ink-faint hover:text-ink mt-1 rounded-[var(--radius-control)] disabled:opacity-40 disabled:hover:text-ink-faint"
+            >
+              {t('chat.effortMatchWork')}
+            </button>
+          )}
         </div>
       )}
     </div>
+  )
+}
+
+/**
+ * One of the two jobs, as a tab over the scale.
+ *
+ * It carries the level underneath its own name, so the half that is not on
+ * screen still says what it is set to — which is most of why the pair is here
+ * rather than one scale that silently sets whichever job is running.
+ */
+function JobTab({
+  label,
+  note,
+  selected,
+  onSelect
+}: {
+  label: string
+  note: string
+  selected: boolean
+  onSelect: () => void
+}): React.JSX.Element {
+  return (
+    <button
+      type="button"
+      role="tab"
+      aria-selected={selected}
+      onClick={onSelect}
+      className={`focus-ring flex-1 rounded-[var(--radius-control)] border px-2.5 py-1.5 text-left transition-colors ${
+        selected
+          ? 'border-accent bg-accent-bg text-ink'
+          : 'border-line text-ink-faint hover:text-ink'
+      }`}
+    >
+      <span className="block font-medium">{label}</span>
+      <span className="text-ink-faint block">{note}</span>
+    </button>
   )
 }
 

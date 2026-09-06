@@ -780,6 +780,15 @@ export const en = {
     effortUltracodeNote: 'xhigh + workflows',
     effortUnsupported: 'This model does not take an effort setting.',
     effortScale: 'Thinking effort',
+    /* Two jobs over one scale. Somebody who has one model think an approach
+       through and another carry it out wants more thinking in the first half
+       and less in the second — one judgement, and half of it used to be
+       unsayable. */
+    effortJob: 'Which job',
+    effortWhileWorking: 'Writing code',
+    effortWhilePlanning: 'Planning',
+    effortSameAsWork: 'Same as writing code',
+    effortMatchWork: 'Use the same as writing code',
     /* The ends of the scale rather than labels for its halves: what is being
        traded is the interesting part, and neither end is the good one. */
     effortFaster: 'Faster',

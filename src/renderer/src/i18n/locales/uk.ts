@@ -594,6 +594,11 @@ export const uk: Translation = {
     effortUltracodeNote: 'xhigh + workflows',
     effortUnsupported: 'Ця модель не приймає налаштування зусилля.',
     effortScale: 'Зусилля на роздуми',
+    effortJob: 'Для чого',
+    effortWhileWorking: 'Написання коду',
+    effortWhilePlanning: 'Планування',
+    effortSameAsWork: 'Як для коду',
+    effortMatchWork: 'Так само, як для коду',
     effortFaster: 'Швидше',
     effortSmarter: 'Розумніше',
 

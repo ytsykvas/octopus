@@ -376,6 +376,7 @@ describe('channel table', () => {
     'chats:mode',
     'chats:planMode',
     'chats:effort',
+    'chats:planEffort',
     'chats:model',
     'chats:planModel',
     'chats:models',
@@ -2029,6 +2030,29 @@ describe('the agent chat', () => {
     await expect(invoke('chats:effort', chatIdOf(opened), 'ultracode')).resolves.toEqual({
       ok: true,
       value: undefined
+    })
+  })
+
+  /* Null **is** a value on the planning channel, unlike the working one: it is
+     how the picker says "the same as the work", which is what most
+     conversations want and where every one of them starts. */
+  it('accepts a planning effort or none at all, and nothing else', async () => {
+    const projectId = await addProject()
+    const workspace = await createWorkspace(projectId)
+    const opened = await invoke('chats:open', workspace.id)
+
+    await expect(invoke('chats:planEffort', chatIdOf(opened), 'max')).resolves.toEqual({
+      ok: true,
+      value: undefined
+    })
+
+    await expect(invoke('chats:planEffort', chatIdOf(opened), null)).resolves.toEqual({
+      ok: true,
+      value: undefined
+    })
+
+    await expect(invoke('chats:planEffort', chatIdOf(opened), 'ludicrous')).resolves.toMatchObject({
+      ok: false
     })
   })
 

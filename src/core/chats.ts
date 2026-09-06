@@ -138,6 +138,30 @@ export function sessionModel(chat: {
 }
 
 /**
+ * Which effort a conversation is running at, planning or not.
+ *
+ * `sessionModel`'s twin, and the argument for it is the same one word for word
+ * — arguably harder. Somebody who has Opus think an approach through and Sonnet
+ * carry it out wants **more** thinking in the first half and less in the
+ * second, which is one judgement of which half used to be expressible.
+ *
+ * It also costs money in the direction nobody wants: without the split, effort
+ * left where planning needed it is what every file edit after the plan is paid
+ * for.
+ *
+ * Two cases rather than `sessionModel`'s three: there is no "the agent's own
+ * default" here, because effort is always a level and `null` can mean nothing
+ * but "no split".
+ */
+export function effortInForce(chat: {
+  planMode: boolean
+  effort: EffortChoice
+  planEffort: EffortChoice | null
+}): EffortChoice {
+  return chat.planMode && chat.planEffort !== null ? chat.planEffort : chat.effort
+}
+
+/**
  * The tool the agent calls to hand a finished plan back.
  *
  * Named here rather than in `agent.ts` because the renderer needs it too, and
@@ -529,6 +553,17 @@ export const ChatSchema = z.object({
    */
   planModel: z.string().min(1).nullable().default(null),
   /**
+   * The effort planning runs at, or null for "the same as the work".
+   *
+   * `planModel`'s twin and defaulted the same way, for the same reason: a
+   * conversation that has never opened this panel behaves exactly as it did
+   * before the field existed.
+   *
+   * `ultracode` is a choice here like any other. It is a decision about one
+   * task, and planning is where a task is decided.
+   */
+  planEffort: EffortChoiceSchema.nullable().default(null),
+  /**
    * How much thinking this conversation asks for; always answered.
    *
    * Wider than the settings' own field, which stays a plain level: `ultracode`
@@ -654,6 +689,10 @@ export function newChat(workspaceId: string, options: NewChatOptions): Chat {
     model: options.model,
     planModel: options.planModel,
     effort: options.effort,
+    // Null rather than copied from the settings: there is no application-wide
+    // "effort for planning", and there should not be — the split is a decision
+    // about one conversation's one task.
+    planEffort: null,
     workingMode: options.workingMode,
     // Never planning to begin with. Planning is a decision taken about a
     // particular task, in the composer, once there is a task to plan.
@@ -708,6 +747,9 @@ export function forkChat(source: Chat, options: ForkChatOptions): Chat {
     sessionId: options.sessionId,
     model: source.model,
     planModel: source.planModel,
+    // The split comes along, unlike `planMode`. It is a statement about how
+    // this task should be approached, and a fork is another go at the same one.
+    planEffort: source.planEffort,
     effort: source.effort,
     workingMode: source.workingMode,
     planMode: false,

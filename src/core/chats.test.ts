@@ -9,6 +9,7 @@ import {
   ChatError,
   DEFAULT_MODEL,
   defaultAgentModel,
+  effortInForce,
   EffortChoiceSchema,
   EffortSchema,
   findAgentModel,
@@ -36,6 +37,7 @@ describe('a new chat', () => {
     effort: 'medium' as const,
     model: null,
     planModel: null,
+    planEffort: null,
     createdAt: '2026-08-11T09:00:00.000Z'
   }
 
@@ -51,6 +53,7 @@ describe('a new chat', () => {
       sessionId: null,
       model: null,
       planModel: null,
+      planEffort: null,
       effort: 'medium',
       workingMode: 'default',
       planMode: false,
@@ -670,6 +673,34 @@ describe('what a conversation may be doing', () => {
   })
 })
 
+describe('which effort a conversation is running at', () => {
+  const chat = { effort: 'medium' as const, planEffort: null, planMode: false }
+
+  /*
+   * The argument for the model split word for word, and arguably harder:
+   * somebody who has Opus think an approach through and Sonnet carry it out
+   * wants more thinking in the first half and less in the second. It also costs
+   * money in the direction nobody wants — effort left where planning needed it
+   * is what every file edit after the plan is paid for.
+   */
+  it('runs the planning level while planning and the working one otherwise', () => {
+    expect(effortInForce(chat)).toBe('medium')
+    expect(effortInForce({ ...chat, planEffort: 'max' })).toBe('medium')
+    expect(effortInForce({ ...chat, planEffort: 'max', planMode: true })).toBe('max')
+  })
+
+  /* Null is the only thing it can mean — unlike `planModel`, where a third case
+     says "the agent's own default". Effort is always a level. */
+  it('runs the working level while planning with no split', () => {
+    expect(effortInForce({ ...chat, planMode: true })).toBe('medium')
+  })
+
+  // A decision about one task, and planning is where a task is decided.
+  it('lets planning ask for a fleet', () => {
+    expect(effortInForce({ ...chat, planEffort: 'ultracode', planMode: true })).toBe('ultracode')
+  })
+})
+
 describe('a conversation continuing another', () => {
   const source: Chat = {
     id: 'chat-1',
@@ -680,6 +711,7 @@ describe('a conversation continuing another', () => {
     sessionId: 'session-old',
     model: 'opus',
     planModel: 'sonnet',
+    planEffort: 'xhigh',
     effort: 'high',
     workingMode: 'acceptEdits',
     planMode: true,

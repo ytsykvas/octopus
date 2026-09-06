@@ -5761,6 +5761,84 @@ describe('the agent chat', () => {
       ])
     })
 
+    /*
+     * The whole of the split, and the reason it exists: the level planning
+     * needed is what every file edit after the plan was paid for.
+     */
+    it('drops to the working effort the moment a plan is approved', async () => {
+      const { service, workspaceId, events } = await withWorkspace()
+      const chat = await service.openChat(workspaceId)
+      await service.setChatEffort(chat.id, 'low')
+      await service.setChatPlanEffort(chat.id, 'max')
+      await service.setChatPlanMode(chat.id, true)
+      await service.sendToChat(chat.id, 'plan it')
+
+      const decision = agent().ask('ExitPlanMode', { plan: 'do the thing' })
+      const requestId = await waitForRequest(events)
+      await service.answerPermission(requestId, 'allow')
+      await decision
+
+      expect(agent().flagSettings().at(-1)).toEqual({
+        effortLevel: 'low',
+        ultracode: false,
+        enableWorkflows: false,
+        skillOverrides: {}
+      })
+    })
+
+    it('raises to the planning effort when planning is turned on', async () => {
+      const { service, workspaceId } = await withWorkspace()
+      const chat = await service.openChat(workspaceId)
+      await service.setChatEffort(chat.id, 'low')
+      await service.setChatPlanEffort(chat.id, 'max')
+      await service.sendToChat(chat.id, 'work')
+
+      await service.setChatPlanMode(chat.id, true)
+
+      expect(agent().flagSettings().at(-1)).toMatchObject({ effortLevel: 'max' })
+    })
+
+    /* The guard `pushModel` exists for, in its own words: a conversation whose
+       two jobs share an effort runs that one whatever the toggles do, so
+       nothing is ever pushed at it. */
+    it('pushes nothing at a conversation with no split', async () => {
+      const { service, workspaceId } = await withWorkspace()
+      const chat = await service.openChat(workspaceId)
+      await service.sendToChat(chat.id, 'work')
+
+      await service.setChatPlanMode(chat.id, true)
+
+      expect(agent().flagSettings()).toEqual([])
+    })
+
+    it('starts a planning session at the effort chosen for planning', async () => {
+      const { service, workspaceId } = await withWorkspace()
+      const chat = await service.openChat(workspaceId)
+      await service.setChatEffort(chat.id, 'low')
+      await service.setChatPlanEffort(chat.id, 'xhigh')
+      await service.setChatPlanMode(chat.id, true)
+
+      await service.sendToChat(chat.id, 'plan it')
+
+      expect(agent().options().effort).toBe('xhigh')
+    })
+
+    /* Setting the working level while a plan is being made moves nothing that
+       is running: the session is at the planning level, and pushing here would
+       drop it mid-plan. */
+    it('leaves a planning session alone when the working effort changes', async () => {
+      const { service, workspaceId } = await withWorkspace()
+      const chat = await service.openChat(workspaceId)
+      await service.setChatPlanEffort(chat.id, 'max')
+      await service.setChatPlanMode(chat.id, true)
+      await service.sendToChat(chat.id, 'plan it')
+
+      await service.setChatEffort(chat.id, 'low')
+
+      expect(service.listChats(workspaceId)[0]?.effort).toBe('low')
+      expect(agent().flagSettings()).toEqual([])
+    })
+
     it('starts the next session with the effort the chat is now on', async () => {
       const { service, workspaceId } = await withWorkspace()
       const chat = await service.openChat(workspaceId)

@@ -323,6 +323,11 @@ describe('channel names', () => {
       'chats:effort'
     ],
     [
+      'chats.setPlanEffort',
+      () => method('chats', 'setPlanEffort')('c' as never, 'high' as never),
+      'chats:planEffort'
+    ],
+    [
       'chats.setModel',
       () => method('chats', 'setModel')('c' as never, 'claude-opus-5' as never),
       'chats:model'
