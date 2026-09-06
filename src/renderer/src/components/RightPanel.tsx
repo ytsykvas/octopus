@@ -346,10 +346,44 @@ export function RightPanel({
     building
       ? undefined
       : (): void => {
-          // Skipping a build nobody wrote rather than waiting for it: §4 says
-          // no step is mandatory, and the half is showing an invitation to
-          // write one rather than a runner that could answer.
-          sequence.start(activeWorkspace.id, activeScripts.scripts.setup !== undefined)
+          void (async () => {
+            /*
+             * The port is settled here, before the build, rather than by the
+             * server half after it.
+             *
+             * The build prepares the workspace too, and `prepare` writes the
+             * env block with whatever port the workspace holds at that moment.
+             * Settled afterwards, a port that had to move left the build
+             * holding the number it moved away from — and a bundler reading
+             * `VITE_*` or `NEXT_PUBLIC_*` at build time bakes that in, so the
+             * pages served on the new port point at the old one.
+             *
+             * Asking here is safe for the reason the button above gives: `Run`
+             * is not offered while a server is up, so nothing of ours can be
+             * listening, and anything answering belongs to somebody else. That
+             * is the precondition `ports.ts` states in words, kept by the shape
+             * of the header rather than by a flag.
+             *
+             * The server half settles again on its way in, which is what covers
+             * a port taken during the build — rarer than the case this fixes,
+             * and there the choice is a stale bundle or a server that cannot
+             * bind at all.
+             */
+            const settled = await window.octopus.workspaces.port(activeWorkspace.id)
+            if (!settled.ok) {
+              onError(describeFailure(settled))
+              return
+            }
+
+            // Nothing is recorded here. `ensureWorkspacePort` commits the port
+            // to the workspace, which is what the build then prepares with, and
+            // the server half announces where it actually ended up — this only
+            // has to happen before the build, not to be remembered.
+            // Skipping a build nobody wrote rather than waiting for it: §4 says
+            // no step is mandatory, and the half is showing an invitation to
+            // write one rather than a runner that could answer.
+            sequence.start(activeWorkspace.id, activeScripts.scripts.setup !== undefined)
+          })()
         }
 
   /**

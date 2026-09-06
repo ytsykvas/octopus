@@ -597,6 +597,22 @@ does with a new workspace is these two steps in this order, and the second only
 makes sense after the first — two buttons made the reader supply the ordering
 every time.
 
+**The port is settled by `Run`, before the build.** The build half prepares the
+workspace too, and `prepare` writes the env block with whatever port the
+workspace holds at that moment — so a port settled by the _server_ half
+afterwards left the build holding the number it had just moved away from. A
+bundler that reads `VITE_*` or `NEXT_PUBLIC_*` at build time bakes that in, and
+the pages served on the new port then point at the old one. Narrow, needing the
+port to move on the same run as a build, and silent when it happens.
+
+Asking there is safe for the reason the header already gives: `Run` is not
+offered while a server is up. So nothing of ours can be listening, and anything
+answering on the port belongs to somebody else — the precondition `ports.ts`
+states in words, kept by the shape of the header rather than by a flag. The
+server half still settles on its way in, which covers a port taken _during_ the
+build; that is rarer, and there the choice is a stale bundle or a server that
+cannot bind at all.
+
 A failed build stops it there and says so. A server started on top of a broken
 build fails in a way that points at the server rather than at the build that
 actually broke. A project with no build script skips straight to serving: §4

@@ -432,7 +432,8 @@ export function registerIpc(
   )
 
   // Asked before a run, and only while nothing of this workspace is alive —
-  // which is what lets it treat anything on the port as somebody else's.
+  // which is what lets it treat anything on the port as somebody else's. The
+  // header is what keeps that true: `Run` is not offered while a server is up.
   host.handle('workspaces:port', (_event, workspaceId: string) =>
     attempt(() => service.ensureWorkspacePort(workspaceId))
   )

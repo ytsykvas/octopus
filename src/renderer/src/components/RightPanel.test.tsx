@@ -1974,4 +1974,64 @@ describe('RightPanel', () => {
       [ownScript('run').from]
     ])
   })
+
+  describe('the port a run is built for', () => {
+    /*
+     * The build prepares the workspace too, and `prepare` writes the env block
+     * with whatever port the workspace holds at that moment. Settled by the
+     * server half afterwards, a port that moved left the build holding the number
+     * it moved away from — and a bundler reading `VITE_*` or `NEXT_PUBLIC_*` at
+     * build time bakes that in, so the pages served on the new port point at the
+     * old one.
+     */
+    it('settles before the build rather than after it', async () => {
+      renderPanel({ workspaces: [anna], activeWorkspaceId: anna.id, scripts: SCRIPTS })
+      await userEvent.click(scriptsTab())
+
+      await userEvent.click(screen.getByRole('button', { name: 'Run' }))
+
+      await waitFor(() => {
+        expect(window.octopus.workspaces.port).toHaveBeenCalledWith(anna.id)
+      })
+      // Before anything is built: the first session is the build's.
+      expect(window.octopus.workspaces.port).toHaveBeenCalledOnce()
+    })
+
+    /*
+     * `Run` is not offered while a server is up — the header says so, and that is
+     * what keeps the question answerable: nothing of ours can be listening, so
+     * anything answering on the port belongs to somebody else.
+     */
+    it('does not offer a run while one is serving', async () => {
+      renderPanel({ workspaces: [anna], activeWorkspaceId: anna.id, scripts: SCRIPTS })
+      await userEvent.click(scriptsTab())
+      await userEvent.click(screen.getByRole('button', { name: 'Run' }))
+      await sessionsOpened(1)
+      processExits(1)
+      await sessionsOpened(2)
+
+      expect(screen.queryByRole('button', { name: 'Run' })).not.toBeInTheDocument()
+    })
+
+    it('says so when the port cannot be settled, and starts nothing', async () => {
+      vi.mocked(window.octopus.workspaces.port).mockResolvedValue({
+        ok: false,
+        error: 'no ports left',
+        code: 'workspaceMissing'
+      })
+      const { props } = renderPanel({
+        workspaces: [anna],
+        activeWorkspaceId: anna.id,
+        scripts: SCRIPTS
+      })
+      await userEvent.click(scriptsTab())
+
+      await userEvent.click(screen.getByRole('button', { name: 'Run' }))
+
+      await waitFor(() => {
+        expect(props.onError).toHaveBeenCalledWith(expect.any(String))
+      })
+      expect(screen.getByRole('button', { name: 'Run' })).toBeEnabled()
+    })
+  })
 })
