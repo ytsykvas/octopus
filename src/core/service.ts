@@ -18,6 +18,7 @@ import { type CommandExec, defaultExec } from './accounts.js'
 import {
   ABANDONED,
   type AgentSession,
+  type AgentSkill,
   type ContextUsage,
   DENIED,
   type PermissionAsk,
@@ -2121,7 +2122,21 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
     // to can be answered for as well — before the first message there is no
     // record, and the two default lists are then the whole answer.
     chat: { readonly skillOverrides: Readonly<Record<string, boolean>> },
-    settingSources: readonly SettingSourceName[]
+    settingSources: readonly SettingSourceName[],
+    /**
+     * What a running session says it actually holds, where there is one.
+     *
+     * The panel used to read as a list of what this conversation may reach for
+     * and be a list of what **octopus can see** — a different claim, and the
+     * difference is invisible until somebody wonders why a skill they can see
+     * the agent using is not on it. Claude Code's own bundled skills, the
+     * user's `~/.claude/skills` and a plugin's are none of them in a directory
+     * we look at.
+     *
+     * Empty before the first message, which is honest rather than a gap: the
+     * list exists only once a session does.
+     */
+    held: readonly AgentSkill[] = []
   ): Promise<SessionSkills> {
     const globalRoot = globalSkillsRoot(dataRoot)
     const projectRoot = projectSkillsRoot(project.id, dataRoot)
@@ -2152,6 +2167,33 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
       ...theirs.map((skill) => row('project', skill)),
       ...carried.map((skill) => row('repository', skill))
     ]
+
+    /*
+     * Everything the session holds that the three directories do not account
+     * for.
+     *
+     * One way only. A directory entry missing from the session's list is not a
+     * problem to draw: a skill with `paths:` in its frontmatter is offered only
+     * where the work touches those paths and is legitimately absent — measured,
+     * `core-module` and `ui-component` are, while the seven beside them are
+     * not.
+     */
+    const accounted = new Set(listing.map((item) => item.key))
+
+    for (const skill of held) {
+      if (accounted.has(skill.name)) continue
+      accounted.add(skill.name)
+
+      listing.push({
+        name: skill.name,
+        description: skill.description,
+        // The key the CLI knows it by, which is what `skillOverrides` names —
+        // a bare name for an ordinary skill, `plugin:skill` for a plugin's.
+        key: skill.name,
+        scope: 'session',
+        enabled: skillEnabled(skill.name, defaults, chat.skillOverrides)
+      })
+    }
 
     const overrides: Record<string, 'off'> = {}
     for (const item of listing) {
@@ -2981,7 +3023,19 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
         requireProject(workspace.projectId),
         workspace,
         chat,
-        await sourcesFor(workspace)
+        await sourcesFor(workspace),
+        /* The panel is the one place this is worth a control request: it is
+           opened by somebody about to read it, and there is nothing else to
+           ask — no message reports the list.
+
+           Swallowed, because a session that will not answer is a fourth group
+           missing rather than a panel that fails. A closed transport is the
+           ordinary way that happens, and the three groups above it are read
+           from disk and still true. */
+        (await sessions
+          .get(chatId)
+          ?.refreshSkills()
+          .catch(() => [])) ?? []
       )
 
       return listing
@@ -3016,7 +3070,11 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
           requireProject(workspace.projectId),
           workspace,
           { ...chat, skillOverrides },
-          await sourcesFor(workspace)
+          await sourcesFor(workspace),
+          // Asked here as well as on the read: the deny-list is built from the
+          // listing, so a skill the directories do not account for would be
+          // switched off in the record and left on in the session.
+          await session.refreshSkills().catch(() => [])
         )
 
         await session.setSkills(overrides)

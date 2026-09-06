@@ -32,16 +32,23 @@ interface SkillsPanelProps {
 /**
  * Which skills this conversation may reach for.
  *
- * Three groups, and they are three because the answer to "where did this come
+ * Four groups, and they are four because the answer to "where did this come
  * from" changes what can be done about it: the first two are octopus's own
- * stores and are edited in settings, while the third is what the checkout
- * carries and is read-only here. A group with nothing in it is not drawn —
- * most projects have no skills of their own, and an empty heading is a
- * promise the interface is not keeping.
+ * stores and are edited in settings, the third is what the checkout carries and
+ * is read-only here, and the fourth is everything the agent holds that octopus
+ * never looked for — Claude Code's own bundled skills, the user's
+ * `~/.claude/skills`, a plugin's. A group with nothing in it is not drawn —
+ * most projects have no skills of their own, and an empty heading is a promise
+ * the interface is not keeping.
  *
  * The third group is also absent when the Agent setting would not load it,
  * which is decided in core: a switch over something the session never reads
- * would be a control with nothing behind it.
+ * would be a control with nothing behind it. The fourth is absent until a
+ * session exists to be asked, which is honest rather than a gap: before the
+ * first message there is nothing that could answer.
+ *
+ * The switch works on all four. `skillOverrides` names a skill by the key the
+ * CLI knows it by, and that is what the fourth group carries.
  */
 export function SkillsPanel({
   skills,
@@ -55,7 +62,8 @@ export function SkillsPanel({
   const groups: readonly { readonly scope: SkillScope; readonly heading: string }[] = [
     { scope: 'global', heading: t('chat.skillsGlobal') },
     { scope: 'project', heading: t('chat.skillsProject') },
-    { scope: 'repository', heading: t('chat.skillsRepository') }
+    { scope: 'repository', heading: t('chat.skillsRepository') },
+    { scope: 'session', heading: t('chat.skillsSession') }
   ]
 
   const shown = groups

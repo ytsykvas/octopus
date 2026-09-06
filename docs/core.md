@@ -640,6 +640,41 @@ Self-correcting rather than a second thing to remember — the turn always ends 
 a `result`, which writes `idle` or `error`, and `settleStatuses` clears a
 `running` left by a crash.
 
+### The skills panel lists what the session holds, not what we can see
+
+Three of its four groups are directories octopus reads. The fourth is the
+session's own answer, and without it the panel read as a list of what a
+conversation may reach for while being a list of what **octopus can see** — a
+different claim, and the difference is invisible until somebody wonders why a
+skill they can watch the agent using is not on it. Claude Code's bundled skills,
+the user's `~/.claude/skills` and a plugin's are none of them in a directory we
+look at.
+
+`refreshSkills` is the reading, and it already existed: it calls the SDK's
+`reloadSkills` and used to throw the answer away. Measured against a live
+session, standing in a temporary directory with no project skills at all, that
+answer carried `dataviz`, `code-review`, `commit-commands:commit` and a dozen
+more. `supportedCommands()` was the obvious call and is the wrong one — it mixes
+skills with built-in commands and `SlashCommand` says nothing about which is
+which, 53 entries against `reloadSkills`' 25 in the same checkout.
+
+**The reconciliation runs one way only.** Extras the directories do not account
+for become the fourth group; a directory entry the session does not list is not
+a problem to draw, because a skill with `paths:` in its frontmatter is offered
+only where the work touches those paths and is legitimately absent. Measured:
+`core-module` and `ui-component` are missing from the list while the seven
+beside them are in it.
+
+The switch works on all four, because `skillOverrides` names a skill by the key
+the CLI knows it by and that is what the fourth group carries — a bare name
+ordinarily, `plugin:skill` for a plugin's. The list is asked for on the write as
+well as the read: the deny-list is built from the listing, so a skill missing
+from it would be switched off in the record and left on in the session.
+
+A session that will not answer costs the fourth group and nothing else. The
+three above it are read from disk and still true, and a closed transport is the
+ordinary way that happens.
+
 ### A question nobody can answer is withdrawn
 
 `canUseTool` blocks the agent on a promise, so an open permission request is a

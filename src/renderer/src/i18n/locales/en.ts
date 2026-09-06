@@ -736,6 +736,10 @@ export const en = {
     skillsGlobal: 'Everywhere',
     skillsProject: 'This project',
     skillsRepository: 'From this repository',
+    /* Everything the agent holds that octopus never looked for — Claude Code's
+       own, the user's `~/.claude/skills`, a plugin's. Named for where they come
+       from rather than for what they are, like the three above it. */
+    skillsSession: 'From Claude Code',
     /* Said once at the foot of the panel, because a switch that looks like a
        lock is worse than no switch. The SDK's own words for this mechanism are
        "a context filter, not a sandbox". */

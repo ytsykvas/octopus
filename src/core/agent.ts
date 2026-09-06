@@ -93,6 +93,19 @@ export interface SessionOptions {
 }
 
 /** What the agent wants to do, as handed to whoever decides. */
+/**
+ * One skill a running session holds, as it names it.
+ *
+ * Ours rather than the SDK's `SlashCommand`, and narrower: the two fields the
+ * panel draws. The SDK's own doc calls `name` "Skill name (without the leading
+ * slash)", which is the key `skillOverrides` is written under — a bare name for
+ * an ordinary skill, `plugin:skill` for a plugin's.
+ */
+export interface AgentSkill {
+  readonly name: string
+  readonly description: string
+}
+
 export interface PermissionAsk {
   readonly toolName: string
   readonly input: unknown
@@ -167,8 +180,22 @@ export interface AgentSession {
   setModel: (model: string | null) => Promise<void>
   /** Replaces the set of skills withheld from this conversation, mid-turn. */
   setSkills: (skillOverrides: Readonly<Record<string, 'off'>>) => Promise<void>
-  /** Re-reads the skill directories, for one written while this was running. */
-  refreshSkills: () => Promise<void>
+  /**
+   * Re-reads the skill directories and answers with everything the session has.
+   *
+   * The answer is the point as much as the re-read is. It is the only reading
+   * of what the agent actually holds — Claude Code's bundled skills, the user's
+   * `~/.claude/skills` and a plugin's are all in it, and none of them is in a
+   * directory octopus looks at. Measured against a live session: standing in a
+   * temporary directory with no project skills at all, it came back with
+   * `dataviz`, `code-review`, `commit-commands:commit` and a dozen more.
+   *
+   * `supportedCommands()` is the wrong call for this and was the obvious one:
+   * it mixes skills with built-in commands and `SlashCommand` says nothing
+   * about which is which — 53 entries against this call's 25 in the same
+   * checkout.
+   */
+  refreshSkills: () => Promise<AgentSkill[]>
   /** What this account may use, as the agent reported when the session began. */
   models: () => Promise<AgentModel[]>
   /** The slash commands this session offers, agent's own and the project's. */
@@ -519,7 +546,9 @@ export function startSession(options: SessionOptions, hooks: SessionHooks): Agen
       // For a skill written while this conversation was open. Without it the
       // session goes on listing what the directories held when it started, and
       // the panel would show a skill the agent cannot see.
-      await conversation.reloadSkills()
+      const { skills } = await conversation.reloadSkills()
+
+      return skills.map((skill) => ({ name: skill.name, description: skill.description }))
     },
 
     close() {

@@ -569,6 +569,7 @@ export const uk: Translation = {
     skillsGlobal: 'Скрізь',
     skillsProject: 'Цей проєкт',
     skillsRepository: 'З цього репозиторію',
+    skillsSession: 'Від Claude Code',
     skillsNote: 'Вимкнений скіл не потрапляє в список агента. Файли залишаються на диску.',
     skillsEmpty: 'Скілів поки немає.',
     skillsEmptyNote: 'Додайте скіл у налаштуваннях — і він з’явиться тут у кожній розмові.',

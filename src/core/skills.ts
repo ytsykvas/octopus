@@ -133,7 +133,18 @@ export const SkillImportSchema = z.discriminatedUnion('kind', [
 export type SkillImport = z.infer<typeof SkillImportSchema>
 
 /** One row of the panel: a skill, where it came from, and whether it is on. */
-export interface SkillListing extends SkillEntry {
+/**
+ * One row of the composer's skills panel.
+ *
+ * Not a `SkillEntry` with fields added, which it used to be: a skill the
+ * session holds and octopus never wrote has no folder and no path, and the
+ * panel reads neither — it needs a name, a description, the key an answer is
+ * stored under, and whether it is on. The Settings screens address a skill by
+ * its folder and read `SkillEntry` for exactly that reason.
+ */
+export interface SkillListing {
+  readonly name: string
+  readonly description: string
   /** The name the agent knows it by, and the key every stored answer uses. */
   readonly key: string
   readonly scope: SkillScope

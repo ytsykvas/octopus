@@ -15,8 +15,14 @@ import { z } from 'zod'
  * The first two are ours and can be written to. `repository` is what the
  * checkout carries in its own `.claude/skills`: the agent loads it without us,
  * we can switch it off for a conversation, and we never edit it.
+ *
+ * `session` is everything else the agent holds and octopus never looked for —
+ * Claude Code's own bundled skills, the user's `~/.claude/skills`, a plugin's.
+ * They have no directory here, which is what makes them a scope of their own
+ * rather than a fourth place to read: the session is asked, and the answer is
+ * whatever it did not come from us.
  */
-export const SkillScopeSchema = z.enum(['global', 'project', 'repository'])
+export const SkillScopeSchema = z.enum(['global', 'project', 'repository', 'session'])
 export type SkillScope = z.infer<typeof SkillScopeSchema>
 
 /**

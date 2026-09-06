@@ -7226,6 +7226,112 @@ describe('the agent chat', () => {
     })
 
     /*
+     * The panel read as a list of what this conversation may reach for and was
+     * a list of what **octopus can see** — a different claim, and the
+     * difference is invisible until somebody wonders why a skill they can see
+     * the agent using is not on it. Claude Code's own bundled skills, the
+     * user's `~/.claude/skills` and a plugin's are none of them in a directory
+     * we look at.
+     */
+    it('lists what the session holds and the directories do not account for', async () => {
+      const { service, workspaceId } = await withWorkspace()
+      skillReload = () =>
+        Promise.resolve({
+          skills: [
+            { name: 'dataviz', description: 'Charts.', argumentHint: '' },
+            { name: 'commit-commands:commit', description: 'Commit.', argumentHint: '' }
+          ]
+        })
+
+      const chat = await service.openChat(workspaceId)
+      await service.sendToChat(chat.id, 'work')
+
+      await expect(service.skillsForChat(chat.id)).resolves.toMatchObject([
+        { key: 'dataviz', scope: 'session', enabled: true },
+        // A plugin's key is `plugin:skill`, which is what the CLI knows it by
+        // and therefore what an override has to name.
+        { key: 'commit-commands:commit', scope: 'session', enabled: true }
+      ])
+    })
+
+    /* One way only. A skill the session does not list is not missing: one with
+       `paths:` in its frontmatter is offered where the work touches those paths
+       and is legitimately absent, and drawing that as a problem would be wrong
+       about every path-scoped skill in the repository. */
+    it('does not list a skill twice when the session names one we wrote', async () => {
+      const { service, workspaceId } = await withWorkspace()
+      await service.saveStoredSkill({ kind: 'global' }, 'review', { kind: 'raw', text: DOCUMENT })
+      skillReload = () =>
+        Promise.resolve({ skills: [{ name: 'review', description: 'Ours.', argumentHint: '' }] })
+
+      const chat = await service.openChat(workspaceId)
+      await service.sendToChat(chat.id, 'work')
+
+      await expect(service.skillsForChat(chat.id)).resolves.toMatchObject([
+        { key: 'review', scope: 'global' }
+      ])
+    })
+
+    /* Before the first message there is nothing that could answer, which is
+       honest rather than a gap. */
+    it('has no fourth group before a session exists to be asked', async () => {
+      const { service, workspaceId } = await withWorkspace()
+      skillReload = () =>
+        Promise.resolve({ skills: [{ name: 'dataviz', description: 'Charts.', argumentHint: '' }] })
+
+      const chat = await service.openChat(workspaceId)
+
+      await expect(service.skillsForChat(chat.id)).resolves.toEqual([])
+    })
+
+    /* A session that will not answer is a fourth group missing, not a panel
+       that fails: the three above it are read from disk and still true. */
+    it('draws the rest when the session will not say what it holds', async () => {
+      const { service, workspaceId } = await withWorkspace()
+      await service.saveStoredSkill({ kind: 'global' }, 'review', { kind: 'raw', text: DOCUMENT })
+
+      const chat = await service.openChat(workspaceId)
+      await service.sendToChat(chat.id, 'work')
+      skillReload = () => Promise.reject(new Error('the transport is closed'))
+
+      await expect(service.skillsForChat(chat.id)).resolves.toMatchObject([
+        { key: 'review', scope: 'global' }
+      ])
+    })
+
+    /* A switch over the fourth group is not decoration: `skillOverrides` names
+       a skill by the key the CLI knows it by, and that is what these carry. */
+    it('switches off a skill it did not write', async () => {
+      const { service, workspaceId } = await withWorkspace()
+      skillReload = () =>
+        Promise.resolve({ skills: [{ name: 'dataviz', description: 'Charts.', argumentHint: '' }] })
+
+      const chat = await service.openChat(workspaceId)
+      await service.sendToChat(chat.id, 'work')
+      await service.setChatSkill(chat.id, 'dataviz', false)
+
+      expect((await service.skillsForChat(chat.id))[0]?.enabled).toBe(false)
+      expect(agent().flagSettings().at(-1)).toMatchObject({
+        skillOverrides: { dataviz: 'off' }
+      })
+    })
+
+    /* The same swallow as the read, on the write: a session that cannot say
+       what it holds still takes the overrides for everything we do know. */
+    it('still switches off what it wrote when the session will not answer', async () => {
+      const { service, workspaceId } = await withWorkspace()
+      await service.saveStoredSkill({ kind: 'global' }, 'review', { kind: 'raw', text: DOCUMENT })
+
+      const chat = await service.openChat(workspaceId)
+      await service.sendToChat(chat.id, 'work')
+      skillReload = () => Promise.reject(new Error('the transport is closed'))
+
+      await service.setChatSkill(chat.id, 'review', false)
+
+      expect(agent().flagSettings().at(-1)).toMatchObject({ skillOverrides: { review: 'off' } })
+    })
+
+    /*
      * Listed whatever the Agent setting says, unlike the panel's own group: a
      * settings dialog is about files that are there either way and can be
      * taken a copy of, while the panel is about one conversation.
