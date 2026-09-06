@@ -136,8 +136,12 @@ export function SubscriptionLimits({ subscription }: SubscriptionLimitsProps): R
                 title={title}
               >
                 <div className="mb-1 flex items-baseline justify-between gap-2 text-[11px]">
-                  <span className="text-ink-faint">{label}</span>
-                  <span className={usageTone(share)}>
+                  {/* Two hundred pixels for the whole row, so the mark is on
+                      the name rather than a word of its own. */}
+                  <span className="text-ink-faint truncate">
+                    {window.binding ? t('limits.binding', { name: label }) : label}
+                  </span>
+                  <span className={`shrink-0 ${usageTone(share, window.severity)}`}>
                     {share}%{at !== null && <span className="text-ink-faint">{` · ${at}`}</span>}
                   </span>
                 </div>
@@ -146,6 +150,7 @@ export function SubscriptionLimits({ subscription }: SubscriptionLimitsProps): R
                   kind="limit"
                   label={t('limits.reading', { name: label, percentage: share })}
                   percentage={window.utilization}
+                  severity={window.severity}
                 />
               </div>
             )

@@ -8,8 +8,22 @@ import { useSubscriptionUsage } from './useSubscriptionUsage.js'
 
 const READING: UsageWindows = {
   limits: [
-    { key: 'five_hour', label: null, utilization: 31, resetsAt: '2026-08-11T19:50:00.000Z' },
-    { key: 'seven_day', label: null, utilization: 84, resetsAt: '2026-08-14T04:00:00.000Z' }
+    {
+      key: 'five_hour',
+      label: null,
+      utilization: 31,
+      resetsAt: '2026-08-11T19:50:00.000Z',
+      severity: null,
+      binding: false
+    },
+    {
+      key: 'seven_day',
+      label: null,
+      utilization: 84,
+      resetsAt: '2026-08-14T04:00:00.000Z',
+      severity: null,
+      binding: false
+    }
   ],
   limitsApply: true,
   readAt: '2026-08-11T16:00:00.000Z'

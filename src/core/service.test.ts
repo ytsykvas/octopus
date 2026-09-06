@@ -2875,7 +2875,7 @@ describe('whether two account readings say the same thing', () => {
     key: UsageLimit['key'],
     utilization: number,
     resetsAt: string | null = null
-  ): UsageLimit => ({ key, label: null, utilization, resetsAt })
+  ): UsageLimit => ({ key, label: null, utilization, resetsAt, severity: null, binding: false })
 
   const reading = (limits: UsageLimit[], readAt = 'a'): UsageWindows => ({
     limits,

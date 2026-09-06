@@ -123,6 +123,9 @@ export const en = {
     /* The server names this one itself — `Fable`, and whatever follows it. */
     windowModel: '1w {{name}}',
     reading: '{{name}} window, {{percentage}}% used',
+    /* The window the account says is actually binding. On the name here, since
+       the row has two hundred pixels for the whole of it. */
+    binding: '{{name}} · now',
     /* The hover half of the pair: the row says when the window comes back, the
        tooltip says how long that is from now. */
     resets: 'resets in {{time}}',
@@ -863,6 +866,9 @@ export const en = {
     windowModel: 'Current week ({{name}})',
     windowModelScoped: 'Current week (per model)',
     reading: '{{name}} — {{percentage}}% used',
+    /* A word of its own here, where there is room: the card draws every window
+       at equal weight and left the reader to work out which one decides. */
+    binding: 'binding now',
     resets: 'resets {{at}}',
 
     extra: 'Extra usage',

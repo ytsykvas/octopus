@@ -41,9 +41,10 @@ function window(
   key: UsageLimit['key'],
   utilization: number,
   resetsAt: string | null = null,
-  label: string | null = null
+  label: string | null = null,
+  { severity = null, binding = false }: { severity?: string | null; binding?: boolean } = {}
 ): UsageLimit {
-  return { key, label, utilization, resetsAt }
+  return { key, label, utilization, resetsAt, severity, binding }
 }
 
 /** A reading of exactly these windows. */
@@ -286,5 +287,40 @@ describe('the account block', () => {
     const row = screen.getByTitle(/out of date/i)
     expect(row).toHaveClass('opacity-40')
     expect(row).toHaveTextContent(/100%$/)
+  })
+  /* Two hundred pixels for the whole row, so the mark rides on the name rather
+     than taking a column of its own. */
+  it('marks the window the account says is binding', () => {
+    render(
+      <SubscriptionLimits
+        subscription={controller({
+          usage: reading([window('five_hour', 31, null, null, { binding: true })])
+        })}
+      />
+    )
+
+    expect(screen.getByText('5h \u00b7 now')).toBeInTheDocument()
+  })
+
+  it('leaves an ordinary window\u2019s name alone', () => {
+    render(
+      <SubscriptionLimits
+        subscription={controller({ usage: reading([window('five_hour', 31)]) })}
+      />
+    )
+
+    expect(screen.getByText('5h')).toBeInTheDocument()
+  })
+
+  it('takes the account\u2019s word over its own thresholds', () => {
+    render(
+      <SubscriptionLimits
+        subscription={controller({
+          usage: reading([window('five_hour', 95, null, null, { severity: 'normal' })])
+        })}
+      />
+    )
+
+    expect(screen.getByText(/95%/)).toHaveClass('text-ink-faint')
   })
 })

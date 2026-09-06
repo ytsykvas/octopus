@@ -206,6 +206,10 @@ describe('reading the /usage response', () => {
     })
   })
 
+  /* A window with no reset time cannot be joined to `limits[]`, which is the
+     same answer as an account that sends no `limits` at all. */
+  const UNJOINED = { resetsAt: null, severity: null, binding: false } as const
+
   it('draws the windows it can name and drops the ones it cannot', () => {
     // `nimbus_quill` came back with a share of its own, not a null, so the
     // allowlist is the only thing keeping that codename off the card.
@@ -214,19 +218,29 @@ describe('reading the /usage response', () => {
         key: 'five_hour',
         label: null,
         utilization: 50,
-        resetsAt: '2026-08-27T19:09:59.812143+00:00'
+        resetsAt: '2026-08-27T19:09:59.812143+00:00',
+        // The `session` entry of `limits[]` carries the same reset time to the
+        // microsecond, which is what joins the two readings of one window.
+        severity: 'normal',
+        binding: true
       },
       {
         key: 'seven_day',
         label: null,
         utilization: 4,
-        resetsAt: '2026-09-02T21:59:59.812171+00:00'
+        resetsAt: '2026-09-02T21:59:59.812171+00:00',
+        // No entry of `limits[]` shares this reset time — the `weekly_scoped`
+        // one is 357 microseconds away and is a different window.
+        severity: null,
+        binding: false
       },
       {
         key: MODEL_SCOPED,
         label: 'Fable',
         utilization: 5,
-        resetsAt: '2026-09-02T21:59:59.812528+00:00'
+        resetsAt: '2026-09-02T21:59:59.812528+00:00',
+        severity: 'normal',
+        binding: false
       }
     ])
   })
@@ -247,11 +261,11 @@ describe('reading the /usage response', () => {
     })
 
     expect(toUsageReport(all)?.limits).toEqual([
-      { key: 'five_hour', label: null, utilization: 1, resetsAt: null },
-      { key: 'seven_day', label: null, utilization: 2, resetsAt: null },
-      { key: 'seven_day_opus', label: null, utilization: 3, resetsAt: null },
-      { key: 'seven_day_sonnet', label: null, utilization: 4, resetsAt: null },
-      { key: 'seven_day_oauth_apps', label: null, utilization: 5, resetsAt: null }
+      { key: 'five_hour', label: null, utilization: 1, ...UNJOINED },
+      { key: 'seven_day', label: null, utilization: 2, ...UNJOINED },
+      { key: 'seven_day_opus', label: null, utilization: 3, ...UNJOINED },
+      { key: 'seven_day_sonnet', label: null, utilization: 4, ...UNJOINED },
+      { key: 'seven_day_oauth_apps', label: null, utilization: 5, ...UNJOINED }
     ])
   })
 
@@ -264,7 +278,76 @@ describe('reading the /usage response', () => {
     })
 
     expect(toUsageReport(unheld)?.limits).toEqual([
-      { key: MODEL_SCOPED, label: 'Fable', utilization: 5, resetsAt: null }
+      { key: MODEL_SCOPED, label: 'Fable', utilization: 5, ...UNJOINED }
+    ])
+  })
+
+  /*
+   * The app recomputes severity from thresholds it chose — amber at 60%, red at
+   * 80% — and the server is not guessing. Two surfaces used to disagree with
+   * the account about when a figure was worth worrying over, quietly, and in
+   * the direction of crying wolf.
+   */
+  it('carries the account\u2019s own judgement of a window', () => {
+    const judged = withLimits({
+      five_hour: { utilization: 90, resets_at: '2026-08-27T19:00:00+00:00' },
+      limits: [
+        {
+          kind: 'session',
+          severity: 'normal',
+          is_active: true,
+          resets_at: '2026-08-27T19:00:00+00:00'
+        }
+      ]
+    })
+
+    expect(toUsageReport(judged)?.limits).toEqual([
+      {
+        key: 'five_hour',
+        label: null,
+        utilization: 90,
+        resetsAt: '2026-08-27T19:00:00+00:00',
+        severity: 'normal',
+        binding: true
+      }
+    ])
+  })
+
+  /*
+   * By reset time and not by `kind`. The two vocabularies do not line up —
+   * `session` for `five_hour`, `weekly_scoped` for a model's week — and the
+   * timestamps do, exactly. A window whose entry is a different window gets
+   * nothing, which is the answer that matters: a severity attached to the wrong
+   * row is worse than none.
+   */
+  it('joins a judgement only to the window it is actually about', () => {
+    const mismatched = withLimits({
+      five_hour: { utilization: 90, resets_at: '2026-08-27T19:00:00+00:00' },
+      limits: [
+        { kind: 'weekly', severity: 'normal', is_active: true, resets_at: '2026-09-02T21:00:00Z' }
+      ]
+    })
+
+    expect(toUsageReport(mismatched)?.limits).toEqual([
+      {
+        key: 'five_hour',
+        label: null,
+        utilization: 90,
+        resetsAt: '2026-08-27T19:00:00+00:00',
+        severity: null,
+        binding: false
+      }
+    ])
+  })
+
+  it('says nothing about a window with no reset time to join on', () => {
+    const unjoinable = withLimits({
+      five_hour: { utilization: 90, resets_at: null },
+      limits: [{ kind: 'session', severity: 'normal', is_active: true, resets_at: null }]
+    })
+
+    expect(toUsageReport(unjoinable)?.limits).toEqual([
+      { key: 'five_hour', label: null, utilization: 90, ...UNJOINED }
     ])
   })
 

@@ -37,10 +37,35 @@ const PRESSING = 80
  * natural boundary and is not: measured against a live session it sits at
  * 96.7% of the window, which is long past the point where knowing helps.
  */
-export function usageLevel(percentage: number): 'calm' | 'noticeable' | 'pressing' {
+export function usageLevel(
+  percentage: number,
+  severity?: string | null
+): 'calm' | 'noticeable' | 'pressing' {
+  const said = severity === null || severity === undefined ? undefined : SEVERITIES[severity]
+  if (said !== undefined) return said
+
   if (percentage >= PRESSING) return 'pressing'
   if (percentage >= NOTICEABLE) return 'noticeable'
   return 'calm'
+}
+
+/**
+ * The server's own vocabulary for a reading, where we know the word.
+ *
+ * The thresholds above are guesses; this is not, and the account is the thing
+ * that decides when a plan window is worth worrying about. So a word we
+ * recognise wins, and a word we do not falls back — adding a row here is the
+ * whole of what it takes when a new one is observed.
+ *
+ * **`normal` is the only row because it is the only one measured.** A captured
+ * `/usage` response carries it and nothing else, and inventing `warning` and
+ * `critical` beside it would be this app guessing again in a table whose entire
+ * purpose is to stop it. The asymmetry that leaves is deliberate and is the
+ * right way round: the server can talk us down from a colour our thresholds
+ * chose, and cannot raise one on a word nobody has seen.
+ */
+const SEVERITIES: Record<string, 'calm' | 'noticeable' | 'pressing' | undefined> = {
+  normal: 'calm'
 }
 
 const TONES = {
@@ -60,8 +85,11 @@ const FILLS = {
 } as const
 
 /** The colour a share is written in as it fills. */
-export function usageTone(percentage: number): (typeof TONES)[keyof typeof TONES] {
-  return TONES[usageLevel(percentage)]
+export function usageTone(
+  percentage: number,
+  severity?: string | null
+): (typeof TONES)[keyof typeof TONES] {
+  return TONES[usageLevel(percentage, severity)]
 }
 
 /**
@@ -72,8 +100,11 @@ export function usageTone(percentage: number): (typeof TONES)[keyof typeof TONES
  * block *is* the reading, and a bar drawn in the ink colour beside a number
  * drawn in red would be the two disagreeing.
  */
-export function usageFill(percentage: number): (typeof FILLS)[keyof typeof FILLS] {
-  return FILLS[usageLevel(percentage)]
+export function usageFill(
+  percentage: number,
+  severity?: string | null
+): (typeof FILLS)[keyof typeof FILLS] {
+  return FILLS[usageLevel(percentage, severity)]
 }
 
 /**

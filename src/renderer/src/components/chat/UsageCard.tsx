@@ -91,13 +91,20 @@ function Limit({ limit }: { limit: UsageLimit }): React.JSX.Element {
     <div className="flex flex-col gap-1">
       <div className="flex items-baseline justify-between gap-3">
         <span className="text-ink">{name}</span>
-        <span className={usageTone(percentage)}>{percentage}%</span>
+
+        {/* Marked rather than moved to the top. An account has three of these
+            and the reader learns where each sits; reordering the list to say
+            "this one" costs them that, and a word costs nothing. */}
+        {limit.binding && <span className="text-ink-faint">{t('usage.binding')}</span>}
+
+        <span className={`ml-auto ${usageTone(percentage, limit.severity)}`}>{percentage}%</span>
       </div>
 
       <UsageBar
         kind="limit"
         label={t('usage.reading', { name, percentage })}
         percentage={limit.utilization}
+        severity={limit.severity}
       />
 
       {at !== null && (

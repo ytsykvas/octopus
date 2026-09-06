@@ -34,9 +34,18 @@ function report(overrides: Partial<UsageReport> = {}): UsageReport {
         key: 'five_hour',
         label: null,
         utilization: 32,
-        resetsAt: '2026-08-27T19:10:00+03:00'
+        resetsAt: '2026-08-27T19:10:00+03:00',
+        severity: null,
+        binding: false
       },
-      { key: 'model_scoped', label: 'Fable', utilization: 7, resetsAt: null }
+      {
+        key: 'model_scoped',
+        label: 'Fable',
+        utilization: 7,
+        resetsAt: null,
+        severity: null,
+        binding: false
+      }
     ],
     extraUsage: null,
     contributing: {
@@ -124,7 +133,16 @@ describe('the card /usage draws', () => {
   // reset since must not still promise a moment in the past.
   it('drops a reset that has already happened', () => {
     const stale = report({
-      limits: [{ key: 'five_hour', label: null, utilization: 32, resetsAt: '2026-08-27T09:00:00Z' }]
+      limits: [
+        {
+          key: 'five_hour',
+          label: null,
+          utilization: 32,
+          resetsAt: '2026-08-27T09:00:00Z',
+          severity: null,
+          binding: false
+        }
+      ]
     })
     render(<UsageCard report={stale} />)
 
@@ -294,12 +312,54 @@ describe('the card /usage draws', () => {
   it('has a name of its own for every window it can be given', () => {
     const every = report({
       limits: [
-        { key: 'five_hour', label: null, utilization: 1, resetsAt: null },
-        { key: 'seven_day', label: null, utilization: 2, resetsAt: null },
-        { key: 'seven_day_opus', label: null, utilization: 3, resetsAt: null },
-        { key: 'seven_day_sonnet', label: null, utilization: 4, resetsAt: null },
-        { key: 'seven_day_oauth_apps', label: null, utilization: 5, resetsAt: null },
-        { key: 'model_scoped', label: 'Fable', utilization: 6, resetsAt: null }
+        {
+          key: 'five_hour',
+          label: null,
+          utilization: 1,
+          resetsAt: null,
+          severity: null,
+          binding: false
+        },
+        {
+          key: 'seven_day',
+          label: null,
+          utilization: 2,
+          resetsAt: null,
+          severity: null,
+          binding: false
+        },
+        {
+          key: 'seven_day_opus',
+          label: null,
+          utilization: 3,
+          resetsAt: null,
+          severity: null,
+          binding: false
+        },
+        {
+          key: 'seven_day_sonnet',
+          label: null,
+          utilization: 4,
+          resetsAt: null,
+          severity: null,
+          binding: false
+        },
+        {
+          key: 'seven_day_oauth_apps',
+          label: null,
+          utilization: 5,
+          resetsAt: null,
+          severity: null,
+          binding: false
+        },
+        {
+          key: 'model_scoped',
+          label: 'Fable',
+          utilization: 6,
+          resetsAt: null,
+          severity: null,
+          binding: false
+        }
       ],
       contributing: null
     })
@@ -317,5 +377,93 @@ describe('the card /usage draws', () => {
       'Current week (connected apps) — 5% used',
       'Current week (Fable) — 6% used'
     ])
+  })
+  /*
+   * Three windows drawn at equal weight left the reader to work out which one
+   * would stop the next turn. The server already knows, and says so.
+   */
+  it('marks the window the account says is binding', () => {
+    render(
+      <UsageCard
+        report={report({
+          limits: [
+            {
+              key: 'five_hour',
+              label: null,
+              utilization: 32,
+              resetsAt: null,
+              severity: null,
+              binding: true
+            },
+            {
+              key: 'seven_day',
+              label: null,
+              utilization: 4,
+              resetsAt: null,
+              severity: null,
+              binding: false
+            }
+          ]
+        })}
+      />
+    )
+
+    expect(screen.getAllByText('binding now')).toHaveLength(1)
+  })
+
+  /* Marked rather than moved: an account has three of these and the reader
+     learns where each sits. */
+  it('leaves the windows in the order they were given', () => {
+    render(
+      <UsageCard
+        report={report({
+          limits: [
+            {
+              key: 'five_hour',
+              label: null,
+              utilization: 32,
+              resetsAt: null,
+              severity: null,
+              binding: false
+            },
+            {
+              key: 'seven_day',
+              label: null,
+              utilization: 4,
+              resetsAt: null,
+              severity: null,
+              binding: true
+            }
+          ]
+        })}
+      />
+    )
+
+    const names = screen.getAllByText(/Current session|Current week \(all models\)/)
+    expect(names.map((node) => node.textContent)).toEqual([
+      'Current session',
+      'Current week (all models)'
+    ])
+  })
+
+  it('takes the account\u2019s word over its own thresholds', () => {
+    render(
+      <UsageCard
+        report={report({
+          limits: [
+            {
+              key: 'five_hour',
+              label: null,
+              utilization: 95,
+              resetsAt: null,
+              severity: 'normal',
+              binding: false
+            }
+          ]
+        })}
+      />
+    )
+
+    expect(screen.getByText('95%')).toHaveClass('text-ink-faint')
   })
 })

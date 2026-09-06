@@ -1242,7 +1242,16 @@ describe('the answer to /usage', () => {
     },
     subscriptionType: 'max',
     limitsApply: true,
-    limits: [{ key: 'five_hour' as const, label: null, utilization: 32, resetsAt: null }],
+    limits: [
+      {
+        key: 'five_hour' as const,
+        label: null,
+        utilization: 32,
+        resetsAt: null,
+        severity: null,
+        binding: false
+      }
+    ],
     extraUsage: null,
     contributing: null
   }

@@ -107,6 +107,7 @@ export const uk: Translation = {
     windowModelScoped: '1 тиж на модель',
     windowModel: '1 тиж {{name}}',
     reading: 'Вікно {{name}}, використано {{percentage}}%',
+    binding: '{{name}} · зараз',
     resets: 'скинеться через {{time}}',
     hours: 'г',
     minutes: 'хв',
@@ -671,6 +672,7 @@ export const uk: Translation = {
     windowModel: 'Поточний тиждень ({{name}})',
     windowModelScoped: 'Поточний тиждень (за моделлю)',
     reading: '{{name}} — використано {{percentage}}%',
+    binding: 'діє зараз',
     resets: 'скидання {{at}}',
 
     extra: 'Додаткове використання',

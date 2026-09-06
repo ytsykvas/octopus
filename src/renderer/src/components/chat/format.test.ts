@@ -104,6 +104,27 @@ describe('how full is worth noticing', () => {
     expect(usageLevel(60)).toBe('noticeable')
     expect(usageLevel(80)).toBe('pressing')
   })
+
+  /*
+   * The thresholds above are guesses; the account is not guessing. Two
+   * surfaces used to disagree with it about when a figure was worth worrying
+   * over, in the direction of crying wolf.
+   */
+  it('lets the account talk it down from a colour the thresholds chose', () => {
+    expect(usageLevel(95, 'normal')).toBe('calm')
+    expect(usageTone(95, 'normal')).toBe('text-ink-faint')
+    expect(usageFill(95, 'normal')).toBe('bg-success')
+  })
+
+  /* And cannot raise one on a word nobody has seen. `normal` is the only row in
+     the table because it is the only value measured, so anything else falls
+     back to the thresholds rather than being read as an alarm. */
+  it('falls back to its own reading for a word it does not know', () => {
+    expect(usageLevel(95, 'catastrophic')).toBe('pressing')
+    expect(usageLevel(10, 'catastrophic')).toBe('calm')
+    expect(usageLevel(95, null)).toBe('pressing')
+    expect(usageLevel(95)).toBe('pressing')
+  })
 })
 
 describe('a span of time', () => {

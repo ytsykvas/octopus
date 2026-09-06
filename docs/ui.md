@@ -1174,6 +1174,29 @@ number wearing a colour — so the figure beside it stays `ink-faint`. The
 thresholds come from `usageLevel`, the single place they are read, so this and
 the `/usage` card cannot turn colour at different points.
 
+**The account can talk it down from a colour, and cannot raise one.** Those
+thresholds are guesses; `rate_limits.limits[]` carries the server's own
+`severity` for each window, and the server is not guessing. So a severity we
+recognise wins over the threshold, and the only one we recognise is `normal` —
+because it is the only value a captured response has ever carried, and
+inventing `warning` and `critical` beside it would be this app guessing again in
+the very table meant to stop it. The asymmetry is the right way round: an
+account saying a window is fine at 95% quiets a red that nothing else would have
+withdrawn, while a word nobody has seen cannot invent an alarm.
+
+**And the binding window is marked, not moved.** The same array says which
+window is the one actually stopping the next turn. Three drawn at equal weight
+left the reader to work it out; reordering the list to answer would cost them
+the positions they have learned, and a word costs nothing. The card has room for
+one of its own; the sidebar row has two hundred pixels for everything, so there
+the mark rides on the name.
+
+The two readings are joined by **reset time**, not by name. The vocabularies do
+not line up — `session` for `five_hour`, `weekly_scoped` for a model's week —
+and the timestamps do, to the microsecond, on a captured response. A window
+whose entry is a different window gets nothing, which is the answer that
+matters: a severity attached to the wrong row is worse than none at all.
+
 **A run belongs to its workspace**, the way a terminal does, so there is a
 runner per workspace and several can serve at once — which is what the unique
 port is for. It is the open project's workspaces that get one: the script paths

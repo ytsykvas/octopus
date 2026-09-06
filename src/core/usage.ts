@@ -60,7 +60,31 @@ const ModelScopedSchema = z.looseObject({
   resets_at: z.string().nullable().default(null)
 })
 
+/**
+ * One entry of `rate_limits.limits[]`, which says the same windows over again
+ * in a second vocabulary — and says two things nothing else does.
+ *
+ * `severity` is the **server's** judgement of how bad a reading is, against
+ * this app's own thresholds, which are guesses. `is_active` says which window
+ * is the one actually binding, which the card otherwise draws at equal weight
+ * and leaves the reader to work out.
+ *
+ * Joined to the windows above by `resets_at` rather than by `kind`. The names
+ * do not line up — `session` for `five_hour`, `weekly_scoped` for a model's
+ * week — and guessing that mapping would be a claim about an undeclared field.
+ * The timestamps do line up, exactly, to the microsecond: measured on a
+ * captured response, `five_hour.resets_at` and the `session` entry's are the
+ * same string, while `seven_day` and the `weekly_scoped` entry differ — which
+ * is right, because they are different windows.
+ */
+const LimitEntrySchema = z.looseObject({
+  resets_at: z.string().nullish(),
+  severity: z.string().nullish(),
+  is_active: z.boolean().nullish()
+})
+
 const RateLimitsSchema = z.looseObject({
+  limits: z.array(LimitEntrySchema).nullish(),
   five_hour: WindowSchema.nullish(),
   seven_day: WindowSchema.nullish(),
   seven_day_opus: WindowSchema.nullish(),
@@ -162,7 +186,18 @@ export const UsageLimitSchema = z.object({
   label: z.string().nullable(),
   /** Share of the window used, 0–100. */
   utilization: z.number(),
-  resetsAt: z.string().nullable()
+  resetsAt: z.string().nullable(),
+  /**
+   * The server's own judgement of this reading, verbatim, or null.
+   *
+   * Carried rather than mapped here: what a severity *looks like* is the
+   * renderer's question, and core has no business owning a colour. What core
+   * owns is that the word came from the account rather than from a threshold
+   * this app picked.
+   */
+  severity: z.string().nullable(),
+  /** Whether this is the window actually binding right now, per the server. */
+  binding: z.boolean()
 })
 
 const UsageShareSchema = z.object({ name: z.string(), pct: z.number() })
@@ -244,6 +279,19 @@ type Response = z.infer<typeof UsageResponseSchema>
 
 /** Every window the card will draw, named ones first, in a fixed order. */
 function toLimits(limits: NonNullable<Response['rate_limits']>): UsageLimit[] {
+  /* By reset time, for the reason `LimitEntrySchema` gives. A window with no
+     reset time is unjoinable and simply gets nothing, which is the same answer
+     as an account that sends no `limits` at all. */
+  const said = new Map<string, z.infer<typeof LimitEntrySchema>>()
+  for (const entry of limits.limits ?? []) {
+    if (entry.resets_at != null) said.set(entry.resets_at, entry)
+  }
+
+  const judged = (resetsAt: string | null): { severity: string | null; binding: boolean } => {
+    const entry = resetsAt === null ? undefined : said.get(resetsAt)
+    return { severity: entry?.severity ?? null, binding: entry?.is_active === true }
+  }
+
   const named = [
     limits.five_hour,
     limits.seven_day,
@@ -259,7 +307,13 @@ function toLimits(limits: NonNullable<Response['rate_limits']>): UsageLimit[] {
     // A window with no share is one the account does not have. The SDK sends
     // the key with a null utilization rather than leaving it out.
     if (window?.utilization == null) continue
-    drawn.push({ key, label: null, utilization: window.utilization, resetsAt: window.resets_at })
+    drawn.push({
+      key,
+      label: null,
+      utilization: window.utilization,
+      resetsAt: window.resets_at,
+      ...judged(window.resets_at)
+    })
   }
 
   for (const window of limits.model_scoped ?? []) {
@@ -268,7 +322,8 @@ function toLimits(limits: NonNullable<Response['rate_limits']>): UsageLimit[] {
       key: MODEL_SCOPED,
       label: window.display_name,
       utilization: window.utilization,
-      resetsAt: window.resets_at
+      resetsAt: window.resets_at,
+      ...judged(window.resets_at)
     })
   }
 

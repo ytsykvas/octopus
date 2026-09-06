@@ -34,11 +34,18 @@ interface Props {
    * be the interface raising an alarm about a fact.
    */
   readonly kind: 'limit' | 'share'
+  /**
+   * The server's own judgement of this reading, where it sent one.
+   *
+   * Only a plan window has one — a share of a context window or of a skill's
+   * time is nobody's judgement but ours.
+   */
+  readonly severity?: string | null
 }
 
-export function UsageBar({ percentage, label, kind }: Props): React.JSX.Element {
+export function UsageBar({ percentage, label, kind, severity }: Props): React.JSX.Element {
   const width = Math.min(100, Math.max(0, percentage))
-  const fill = kind === 'limit' ? usageFill(width) : 'bg-line-strong'
+  const fill = kind === 'limit' ? usageFill(width, severity) : 'bg-line-strong'
 
   return (
     <div

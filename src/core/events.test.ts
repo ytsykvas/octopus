@@ -172,8 +172,22 @@ describe('the event schema', () => {
         subscriptionType: 'max',
         limitsApply: true,
         limits: [
-          { key: 'five_hour', label: null, utilization: 50, resetsAt: '2026-08-27T19:09:59Z' },
-          { key: 'model_scoped', label: 'Fable', utilization: 5, resetsAt: null }
+          {
+            key: 'five_hour',
+            label: null,
+            utilization: 50,
+            resetsAt: '2026-08-27T19:09:59Z',
+            severity: 'normal',
+            binding: true
+          },
+          {
+            key: 'model_scoped',
+            label: 'Fable',
+            utilization: 5,
+            resetsAt: null,
+            severity: null,
+            binding: false
+          }
         ],
         extraUsage: { monthlyLimit: 50, usedCredits: 12.5, utilization: 25 },
         contributing: {
