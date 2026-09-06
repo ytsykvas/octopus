@@ -25,11 +25,13 @@ import {
   parseNumstat,
   parseRawModes,
   parseUnifiedDiff,
+  MAX_CONTEXT_BYTES,
+  readWholeFileSides,
   readWorkspaceDiff,
   unquotePath,
   untrackedHunk
 } from './diff.js'
-import { type GitExec, GitError, gitIn } from './git.js'
+import { type GitExec, GitError, gitIn, OUTPUT_TOO_LARGE } from './git.js'
 
 const run = promisify(execFile)
 
@@ -595,6 +597,112 @@ describe('untrackedHunk', () => {
     expect(untrackedHunk('\n')?.lines).toEqual([
       { kind: 'added', text: '', oldNumber: null, newNumber: 1, noNewline: false }
     ])
+  })
+})
+
+describe('readWholeFileSides', () => {
+  const sides = (): ReturnType<typeof readWholeFileSides> =>
+    readWholeFileSides(exec, { baseBranch: 'main' })
+
+  /*
+   * The whole point. A construct opened in the lines *between* two hunks is
+   * invisible to a highlighter reading the hunks joined end to end, and the
+   * hunk after it comes out coloured as though the construct were not open —
+   * most likely in exactly the files worth reading closely.
+   */
+  it('answers with each side of a file complete, not only its hunks', async () => {
+    const twenty = Array.from({ length: 20 }, (_, index) => `line ${String(index + 1)}`)
+    // On the base branch, for the reason the fixture gives: a file created on
+    // the workspace's own branch is an addition, and an addition has no old
+    // side to be incomplete.
+    await run('git', ['checkout', '-q', 'main'], { cwd: dir })
+    await writeFile(join(dir, 'long.txt'), `${twenty.join('\n')}\n`, 'utf8')
+    await commit('long file')
+    await run('git', ['checkout', '-q', 'work'], { cwd: dir })
+    // Merged, so the merge base is the commit that has it: without this the
+    // file is on `main` alone and gone from this worktree.
+    await run('git', ['merge', '-q', 'main'], { cwd: dir })
+    await writeFile(
+      join(dir, 'long.txt'),
+      `${['CHANGED', ...twenty.slice(1, 19), 'ALSO CHANGED'].join('\n')}\n`,
+      'utf8'
+    )
+
+    const answer = await sides()
+
+    // Two hunks, fourteen lines apart, so the drawn diff has a gap in it and
+    // this does not.
+    expect(answer.get('long.txt')?.current.split('\n')).toHaveLength(20)
+    expect(answer.get('long.txt')?.old.split('\n')).toEqual(twenty)
+  })
+
+  it('answers with both sides of an ordinary change', async () => {
+    await writeFile(join(dir, 'a.txt'), 'one\nTWO\nthree\n', 'utf8')
+
+    const answer = await sides()
+
+    expect(answer.get('a.txt')).toEqual({
+      old: 'one\ntwo\nthree',
+      current: 'one\nTWO\nthree'
+    })
+  })
+
+  /* Their diff is the whole file as additions already, so the hunks the pane
+     holds are the complete document and there is nothing to add. */
+  it('says nothing about an untracked file', async () => {
+    await writeFile(join(dir, 'new.txt'), 'new\n', 'utf8')
+
+    await expect(sides()).resolves.toEqual(new Map())
+  })
+
+  it('says nothing about a binary file', async () => {
+    await writeFile(join(dir, 'blob.bin'), Buffer.from([0x00, 0x01, 0x02, 0x00]))
+    await run('git', ['add', 'blob.bin'], { cwd: dir })
+
+    const answer = await sides()
+
+    expect(answer.has('blob.bin')).toBe(false)
+  })
+
+  /*
+   * Colouring is a courtesy. A review of fifty files should not spend megabytes
+   * over IPC on it, and past the cap the highlighter goes back to reading the
+   * hunks alone — which is what it read before any of this existed.
+   */
+  it('answers with nothing rather than carrying more than the cap', async () => {
+    const big = `${'x'.repeat(100)}\n`.repeat(MAX_CONTEXT_BYTES / 100)
+    await run('git', ['checkout', '-q', 'main'], { cwd: dir })
+    await writeFile(join(dir, 'huge.txt'), big, 'utf8')
+    await commit('huge')
+    await run('git', ['checkout', '-q', 'work'], { cwd: dir })
+    await run('git', ['merge', '-q', 'main'], { cwd: dir })
+    await writeFile(join(dir, 'huge.txt'), `changed\n${big}`, 'utf8')
+
+    await expect(sides()).resolves.toEqual(new Map())
+  })
+
+  it('has nothing to say about a workspace that changed nothing', async () => {
+    await expect(sides()).resolves.toEqual(new Map())
+  })
+
+  /* The same answer as the cap, by the other route: git itself refusing to
+     write that much down a pipe. */
+  it('answers with nothing when git will not print the diff', async () => {
+    const refusing: GitExec = async (args) =>
+      args.includes('-U100000')
+        ? Promise.reject(new GitError(args, 'too much', OUTPUT_TOO_LARGE))
+        : exec(args)
+
+    await expect(readWholeFileSides(refusing, { baseBranch: 'main' })).resolves.toEqual(new Map())
+  })
+
+  // Any other failure is a failure. A diff nobody can colour is a courtesy
+  // withdrawn; git being broken is not.
+  it('lets any other git failure through', async () => {
+    const broken: GitExec = async (args) =>
+      args.includes('-U100000') ? Promise.reject(new Error('git is gone')) : exec(args)
+
+    await expect(readWholeFileSides(broken, { baseBranch: 'main' })).rejects.toThrow('git is gone')
   })
 })
 

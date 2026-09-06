@@ -1378,10 +1378,27 @@ why, and the view falls back to one column without touching what was asked for.
 
 **Syntax colours arrive after the diff does.** A side of a file is tokenised
 whole rather than line by line, or a block comment is coloured wrongly from its
-second line on. The hunks are joined end to end, so a construct opened in the gap
-between two of them is still invisible. Nothing waits for a grammar: an
-unhighlighted line is drawn in `--ink`, and a highlighter that never starts costs
-the reader only the colours.
+second line on. Nothing waits for a grammar: an unhighlighted line is drawn in
+`--ink`, and a highlighter that never starts costs the reader only the colours.
+
+**And the whole side means the whole file, not the hunks joined up.** Joining
+them left a construct opened in the gap between two hunks invisible, so the hunk
+after it was coloured as though the construct were not open — most likely in
+exactly the files worth reading closely: a hunk in the middle of a long
+function, three lines of context either side, and everything that gave those
+lines their meaning left out.
+
+The sides come from one `git diff` with the context turned up past any file's
+length, read beside the diff itself. Measured: that costs the same 42ms as the
+`-U3` the pane draws from — the cost of a diff is walking the trees, not
+printing context — where a `git show` per file cost twelve times as much,
+because each is a process. Past a megabyte the answer is empty and the colours
+go back to the hunks, which is what they read before: colouring is a courtesy,
+and a review of fifty files should not spend that over IPC on it.
+
+Tokens then line up with lines **by number** rather than by walking, which is
+the whole difference: the tokens describe every line of the file and the hunks
+describe some of them, so there is no shared walk to keep in step.
 
 **Files over 500 changed lines start collapsed**, and what the core left undrawn
 is said in the header rather than quietly appearing unchanged.

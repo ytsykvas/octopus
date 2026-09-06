@@ -2155,6 +2155,38 @@ describe('removing a project', () => {
   })
 })
 
+describe('the sides a diff is coloured from', () => {
+  /*
+   * Read beside the diff rather than after it: the two describe one tree, and a
+   * pane holding a diff from one moment and sides from another would colour
+   * lines by numbers that had moved.
+   */
+  async function withChange(): Promise<{ service: OctopusService; workspaceId: string }> {
+    const repo = join(dir, 'planner')
+    await initRepo(repo)
+    const service = await createService(paths(dir))
+    const project = await service.addProjectFromPath(repo)
+    const workspace = await service.createWorkspaceIn(project.id)
+
+    await writeFile(join(workspace.path, 'README.md'), '# changed\n', 'utf8')
+    return { service, workspaceId: workspace.id }
+  }
+
+  it('answers with both whole sides of a changed file', async () => {
+    const { service, workspaceId } = await withChange()
+
+    await expect(service.readWorkspaceFileSides(workspaceId)).resolves.toMatchObject({
+      'README.md': { current: '# changed' }
+    })
+  })
+
+  it('refuses a workspace it does not have', async () => {
+    const { service } = await withChange()
+
+    await expect(service.readWorkspaceFileSides('missing')).rejects.toThrow()
+  })
+})
+
 describe('files carried into a workspace', () => {
   async function withProject(): Promise<{ id: string; repo: string }> {
     const repo = join(dir, 'planner')

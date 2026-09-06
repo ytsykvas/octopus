@@ -73,10 +73,10 @@ export function DiffPanel({
 }: DiffPanelProps): React.JSX.Element {
   const { t } = useTranslation()
   const describeFailure = useErrorMessage()
-  const { diff, loading, error, refresh } = useWorkspaceDiff(workspace?.id ?? null, visible)
+  const { diff, sides, loading, error, refresh } = useWorkspaceDiff(workspace?.id ?? null, visible)
   // Measured only once there is a diff on screen: the sample lives in that
   // tree, and an element in a hidden subtree measures zero.
-  const tokens = useHighlighting(diff)
+  const tokens = useHighlighting(diff, sides)
   const { threshold, sample } = useSplitThreshold(visible && (diff?.files.length ?? 0) > 0)
 
   /*

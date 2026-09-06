@@ -92,6 +92,9 @@ export function installOctopusStub(): Api {
       rename: vi.fn(() => ok(undefined)),
       remove: vi.fn(() => ok(undefined)),
       hasChanges: vi.fn(() => ok(false)),
+      // Empty, which is the answer for a workspace with nothing in it and the
+      // cue to colour from the hunks alone.
+      fileSides: vi.fn(() => ok({})),
       diff: vi.fn(() => ok(emptyDiff())),
       revertFile: vi.fn(() => ok(undefined)),
       // A branch with commits and no pull request — the state the pane offers

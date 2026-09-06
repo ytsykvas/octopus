@@ -19,7 +19,7 @@ import type { QuestionAnswer } from '@core/questions.js'
 import type { ChatEntry } from '@core/transcript.js'
 import type { TerminalExit, TerminalOutput, TerminalSpec } from '@core/terminal.js'
 import type { Config } from '@core/config.js'
-import type { WorkspaceDiff } from '@core/diff.js'
+import type { FileSides, WorkspaceDiff } from '@core/diff.js'
 import type { MergeMethod, PullRequestDraft, PullRequestView } from '@core/pullRequests.js'
 import type { DraftedPullRequest } from '@core/pullRequestDraft.js'
 import type { BranchRequest, PullRequestDetail } from '@core/pullRequestShapes.js'
@@ -394,6 +394,17 @@ const api = {
     /** Everything the workspace changed since it left the project's base branch. */
     diff: (workspaceId: string): Promise<Result<WorkspaceDiff>> =>
       ipcRenderer.invoke('workspaces:diff', workspaceId) as Promise<Result<WorkspaceDiff>>,
+
+    /**
+     * The same files' two sides, whole, for colouring them.
+     *
+     * Empty where the answer would be too large — the caller then colours from
+     * the hunks alone, which is what it did before this existed.
+     */
+    fileSides: (workspaceId: string): Promise<Result<Record<string, FileSides>>> =>
+      ipcRenderer.invoke('workspaces:fileSides', workspaceId) as Promise<
+        Result<Record<string, FileSides>>
+      >,
 
     /**
      * Puts one file back to the state the workspace branched from.

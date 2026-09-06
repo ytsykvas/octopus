@@ -299,6 +299,41 @@ describe('what a workspace has changed', () => {
 
     expect(result.current.diff?.files[0]?.path).toBe('bob.ts')
   })
+  /* Read beside the diff and from the same answer, so the two cannot describe
+     different trees — a pane holding one from each moment would colour lines by
+     numbers that had moved. */
+  it('carries the sides a file is coloured from beside the diff', async () => {
+    answering(workspaceDiff([fileDiff('a.ts')]))
+    vi.mocked(octopus().workspaces.fileSides).mockResolvedValue({
+      ok: true,
+      value: { 'a.ts': { old: 'was', current: 'is' } }
+    })
+
+    const { result } = renderHook(() => useWorkspaceDiff(WORKSPACE, true))
+
+    await waitFor(() => {
+      expect(result.current.sides).toEqual({ 'a.ts': { old: 'was', current: 'is' } })
+    })
+  })
+
+  /* A failure here is not one: colouring is a courtesy, and the diff is what
+     the pane is for. The highlighter falls back to the hunks. */
+  it('draws the diff anyway when the sides could not be read', async () => {
+    answering(workspaceDiff([fileDiff('a.ts')]))
+    vi.mocked(octopus().workspaces.fileSides).mockResolvedValue({
+      ok: false,
+      error: 'git failed',
+      code: 'gitFailed'
+    })
+
+    const { result } = renderHook(() => useWorkspaceDiff(WORKSPACE, true))
+
+    await waitFor(() => {
+      expect(result.current.diff?.files).toHaveLength(1)
+    })
+    expect(result.current.sides).toEqual({})
+    expect(result.current.error).toBeNull()
+  })
 })
 
 /** A read that has not answered yet, so a test can decide when it does. */

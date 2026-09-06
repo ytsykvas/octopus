@@ -47,7 +47,12 @@ import {
   type WorkingMode
 } from './chats.js'
 import { type EditTarget, readChangeContext, readEditTarget } from './changeContext.js'
-import { readWorkspaceDiff, type WorkspaceDiff } from './diff.js'
+import {
+  type FileSides,
+  readWholeFileSides,
+  readWorkspaceDiff,
+  type WorkspaceDiff
+} from './diff.js'
 import { revertFile } from './revert.js'
 import { draftPullRequest, type DraftedPullRequest } from './pullRequestDraft.js'
 import { isListening, settlePort } from './ports.js'
@@ -715,6 +720,17 @@ export interface OctopusService {
   workspaceHasChanges(workspaceId: string): Promise<boolean>
   /** Everything the workspace changed since it left the project's base branch. */
   readWorkspaceChanges(workspaceId: string): Promise<WorkspaceDiff>
+  /**
+   * Every changed file's two sides, complete, for colouring them.
+   *
+   * Apart from the diff rather than folded into it: the pane draws the moment
+   * the diff arrives and the colours land after, so a payload only the
+   * highlighter reads should not be on the path that draws.
+   *
+   * Empty where the answer would be too large, which is the highlighter's cue
+   * to go back to reading the hunks alone.
+   */
+  readWorkspaceFileSides(workspaceId: string): Promise<Record<string, FileSides>>
   /**
    * Puts one file back to the state the workspace branched from.
    *
@@ -3240,6 +3256,20 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
     async workspaceHasChanges(workspaceId) {
       const workspace = requireWorkspace(workspaceId)
       return (await changeCount(workspace, makeExec)) > 0
+    },
+
+    async readWorkspaceFileSides(workspaceId) {
+      const workspace = requireWorkspace(workspaceId)
+      const project = requireProject(workspace.projectId)
+
+      const sides = await readWholeFileSides(makeExec(workspace.path), {
+        baseBranch: await baseRefOf(project)
+      })
+
+      // A record rather than the Map it is built as: this crosses IPC, where
+      // structured cloning keeps a Map and the preload's own types would then
+      // be the only place saying so.
+      return Object.fromEntries(sides)
     },
 
     async readWorkspaceChanges(workspaceId) {

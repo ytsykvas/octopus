@@ -1,12 +1,22 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 
-import type { WorkspaceDiff } from '@core/diff.js'
+import type { FileSides, WorkspaceDiff } from '@core/diff.js'
 
 import { useErrorMessage } from './useErrorMessage.js'
 import { onChatEvent } from './chatEvents.js'
 
 export interface WorkspaceDiffController {
   readonly diff: WorkspaceDiff | null
+  /**
+   * Each changed file's two sides, whole, for colouring them.
+   *
+   * Read beside the diff rather than after it: the two describe one tree and a
+   * pane holding a diff from one moment and sides from another would colour
+   * lines by numbers that had moved. Empty is an ordinary answer — a workspace
+   * with nothing in it, or a change too large to carry — and means the colours
+   * come from the hunks alone.
+   */
+  readonly sides: Readonly<Record<string, FileSides>>
   /** Nothing has been read yet, so there is nothing to draw and no failure. */
   readonly loading: boolean
   readonly error: string | null
@@ -21,6 +31,9 @@ export interface WorkspaceDiffController {
  * time the eye reaches it.
  */
 const SETTLE_MS = 300
+
+/** Shared so an empty answer stays the same object and colours nothing twice. */
+const NO_SIDES: Readonly<Record<string, FileSides>> = {}
 
 /**
  * What a workspace has changed, kept in step with the agent.
@@ -37,6 +50,7 @@ export function useWorkspaceDiff(
   const describeFailure = useErrorMessage()
 
   const [diff, setDiff] = useState<WorkspaceDiff | null>(null)
+  const [sides, setSides] = useState<Readonly<Record<string, FileSides>>>(NO_SIDES)
   const [error, setError] = useState<string | null>(null)
 
   /*
@@ -51,6 +65,7 @@ export function useWorkspaceDiff(
   if (workspaceId !== shownId) {
     setShownId(workspaceId)
     setDiff(null)
+    setSides(NO_SIDES)
     setError(null)
   }
 
@@ -72,27 +87,48 @@ export function useWorkspaceDiff(
   const pending = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   const apply = useCallback(
-    (result: Awaited<ReturnType<typeof window.octopus.workspaces.diff>>, attempt: number) => {
+    (
+      result: Awaited<ReturnType<typeof window.octopus.workspaces.diff>>,
+      whole: Awaited<ReturnType<typeof window.octopus.workspaces.fileSides>>,
+      attempt: number
+    ) => {
       // Another workspace was opened while git was reading. Its own read has
       // started already, and writing this reply now would overwrite it.
       if (attempt !== generation.current) return
 
       if (result.ok) {
         setDiff(result.value)
+        // A failure here is not one: the colours fall back to the hunks, and
+        // the diff is what the pane is for.
+        setSides(whole.ok ? whole.value : NO_SIDES)
         setError(null)
         return
       }
 
       setDiff(null)
+      setSides(NO_SIDES)
       setError(describeFailure(result))
     },
     [describeFailure]
   )
 
+  /* Both at once. The sides are a fifth git call beside the diff's four, all
+     parallel, so asking for them costs no wall clock — and it is the only
+     arrangement where the two cannot describe different trees. */
+  const read = (
+    id: string
+  ): Promise<
+    [
+      Awaited<ReturnType<typeof window.octopus.workspaces.diff>>,
+      Awaited<ReturnType<typeof window.octopus.workspaces.fileSides>>
+    ]
+  > => Promise.all([window.octopus.workspaces.diff(id), window.octopus.workspaces.fileSides(id)])
+
   const load = useCallback(
     async (id: string) => {
       const attempt = ++generation.current
-      apply(await window.octopus.workspaces.diff(id), attempt)
+      const [result, whole] = await read(id)
+      apply(result, whole, attempt)
     },
     [apply]
   )
@@ -112,8 +148,8 @@ export function useWorkspaceDiff(
     const attempt = ++generation.current
 
     void (async () => {
-      const result = await window.octopus.workspaces.diff(workspaceId)
-      if (!controller.signal.aborted) apply(result, attempt)
+      const [result, whole] = await read(workspaceId)
+      if (!controller.signal.aborted) apply(result, whole, attempt)
     })()
 
     return () => {
@@ -146,5 +182,11 @@ export function useWorkspaceDiff(
     }
   }, [workspaceId, enabled, load])
 
-  return { diff, loading: diff === null && error === null && workspaceId !== null, error, refresh }
+  return {
+    diff,
+    sides,
+    loading: diff === null && error === null && workspaceId !== null,
+    error,
+    refresh
+  }
 }

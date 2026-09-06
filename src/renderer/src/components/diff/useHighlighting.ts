@@ -1,10 +1,10 @@
 import { useEffect, useState } from 'react'
 
-import type { DiffLine, WorkspaceDiff } from '@core/diff.js'
+import type { DiffLine, FileSides, WorkspaceDiff } from '@core/diff.js'
 
 import { highlight, type Token } from './highlight.js'
 import { languageFor } from './language.js'
-import { assignTokens, sideTexts } from './sides.js'
+import { assignTokens, assignWholeTokens, sideTexts } from './sides.js'
 
 export type Highlighting = ReadonlyMap<DiffLine, readonly Token[]>
 
@@ -51,7 +51,24 @@ function drawableAsCode(
  * change never holds a frame. The core has already bounded how much can arrive
  * here, so there is no second budget to keep.
  */
-export function useHighlighting(diff: WorkspaceDiff | null): HighlightingByFile {
+export function useHighlighting(
+  diff: WorkspaceDiff | null,
+  /**
+   * Each file's two sides whole, where they could be had.
+   *
+   * A construct opened in the lines *between* two hunks is invisible to a
+   * highlighter reading the hunks joined end to end, so the hunk after it comes
+   * out coloured as though the construct were not open — most likely in exactly
+   * the files worth reading closely, where a hunk sits in the middle of a long
+   * function. A file missing from here is coloured the old way.
+   *
+   * Must keep its identity between reads, and does: it is state in
+   * `useWorkspaceDiff`, set once beside the diff from the same answer. A caller
+   * passing a fresh object each render would re-colour every file on every
+   * render, which is the redraw the map above exists to avoid.
+   */
+  sides: Readonly<Record<string, FileSides>>
+): HighlightingByFile {
   const [tokens, setTokens] = useState<HighlightingByFile>(NOTHING)
 
   useEffect(() => {
@@ -69,7 +86,8 @@ export function useHighlighting(diff: WorkspaceDiff | null): HighlightingByFile 
         if (language === null || file.hunks.length === 0) continue
         if (!drawableAsCode(file.hunks)) continue
 
-        const { old, current } = sideTexts(file.hunks)
+        const whole = sides[file.path]
+        const { old, current } = whole ?? sideTexts(file.hunks)
         const [oldTokens, currentTokens] = await Promise.all([
           old === '' ? Promise.resolve(null) : highlight(language, old),
           current === '' ? Promise.resolve(null) : highlight(language, current)
@@ -79,7 +97,15 @@ export function useHighlighting(diff: WorkspaceDiff | null): HighlightingByFile 
         // the diff can have been replaced while this was running.
         if (controller.signal.aborted) return
 
-        collected.set(file.path, assignTokens(file.hunks, oldTokens, currentTokens))
+        // Two ways of lining tokens up with lines, because the two readings are
+        // different documents: whole sides are indexed by the line's own
+        // number, joined hunks by walking them in step with the join.
+        collected.set(
+          file.path,
+          whole
+            ? assignWholeTokens(file.hunks, oldTokens, currentTokens)
+            : assignTokens(file.hunks, oldTokens, currentTokens)
+        )
 
         // A fresh outer map each time: React compares by identity, and mutating
         // the one already on screen would colour nothing until the next file.
@@ -92,7 +118,7 @@ export function useHighlighting(diff: WorkspaceDiff | null): HighlightingByFile 
     return () => {
       controller.abort()
     }
-  }, [diff])
+  }, [diff, sides])
 
   return tokens
 }

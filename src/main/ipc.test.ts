@@ -353,6 +353,7 @@ describe('channel table', () => {
     'workspaces:remove',
     'workspaces:hasChanges',
     'workspaces:diff',
+    'workspaces:fileSides',
     'workspaces:revertFile',
     'workspaces:pullRequest',
     'workspaces:createPullRequest',
@@ -1409,6 +1410,20 @@ describe('workspaces of a real project', () => {
     await expect(invoke('workspaces:diff', workspace.id)).resolves.toMatchObject({
       ok: true,
       value: { added: 1, files: [{ path: 'draft.txt', status: 'untracked' }] }
+    })
+  })
+
+  /* Beside the diff and not folded into it: the pane draws the moment the diff
+     arrives and the colours land after, so a payload only the highlighter reads
+     should not be on the path that draws. */
+  it('carries the sides a file is coloured from across', async () => {
+    const projectId = await addProject()
+    const workspace = await createWorkspace(projectId)
+    await writeFile(join(workspace.path, 'README.md'), '# changed\n', 'utf8')
+
+    await expect(invoke('workspaces:fileSides', workspace.id)).resolves.toMatchObject({
+      ok: true,
+      value: { 'README.md': { current: '# changed' } }
     })
   })
 

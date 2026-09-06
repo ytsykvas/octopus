@@ -11,9 +11,9 @@ import type { Token } from './highlight.js'
  * constructs turn up.
  *
  * The hunks are joined end to end, so a construct opened in the lines between
- * two of them is invisible here and the hunk after it can be mis-coloured.
- * Reading the whole file from disk would fix that and cost a read and a full
- * tokenising per file; the limit is the same one every hunk-based viewer has.
+ * two of them is invisible here and the hunk after it can be mis-coloured. That
+ * is the fallback rather than the rule now: `readWholeFileSides` answers with
+ * both sides complete, and this is what colours a file too large for it.
  */
 export interface Sides {
   readonly old: string
@@ -63,6 +63,45 @@ export function assignTokens(
 
       if (line.kind !== 'added') oldRow++
       if (line.kind !== 'removed') currentRow++
+    }
+  }
+
+  return tokens
+}
+
+/**
+ * The same, from tokens covering the whole of each side.
+ *
+ * By line number rather than by walking, which is the whole difference: the
+ * tokens describe every line of the file and the hunks describe some of them,
+ * so there is no shared walk to keep in step — a `DiffLine` says which row of
+ * which side it is, and that is the index.
+ *
+ * 1-based, as git counts, hence the subtraction. A line whose number falls
+ * outside the tokens is absent rather than wrong: it means the two readings
+ * disagree about the file, which happens if it changed between them, and a
+ * plain line is the right answer to that.
+ */
+export function assignWholeTokens(
+  hunks: readonly Hunk[],
+  oldTokens: readonly (readonly Token[])[] | null,
+  currentTokens: readonly (readonly Token[])[] | null
+): ReadonlyMap<DiffLine, readonly Token[]> {
+  const tokens = new Map<DiffLine, readonly Token[]>()
+
+  for (const hunk of hunks) {
+    for (const line of hunk.lines) {
+      const removed = line.kind === 'removed'
+      const number = removed ? line.oldNumber : line.newNumber
+
+      /* Unreachable: a removed line always has its old number and every other
+         kind has its new one — that is what the two nulls mean. The guard is
+         here because the type says both can be absent. */
+      /* v8 ignore next */
+      if (number === null) continue
+
+      const found = (removed ? oldTokens : currentTokens)?.[number - 1]
+      if (found) tokens.set(line, found)
     }
   }
 

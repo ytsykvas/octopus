@@ -57,3 +57,29 @@ settled before starting:
   service's own tests point at `mkdtemp` directories under `/var/folders/...`
   which come close. Whatever is chosen has to survive the test suite, not only
   `~/.octopus`.
+
+## The third obstacle, which is the expensive one
+
+**2026-09-06.** Looked at while working through these notes, and the reason this
+one was left: the two questions above have answers, and a third question the
+note does not raise does not.
+
+Both of the above are settled by **a unix socket outside the data root, named
+after it**. Bind it; on `EADDRINUSE`, try to connect — a live holder accepts and
+we quit, a stale one refuses with `ECONNREFUSED` and we unlink and rebind. That
+is the classic algorithm and it cannot lock anybody out, which was the fear
+worth having. The path goes in `os.tmpdir()` as `octopus-<hash of root>.sock`,
+which is about 80 characters under `/var/folders/…/T/` and well inside 104 — and
+being outside the root is right rather than a compromise, since what is locked
+is the root and the lock is not part of it.
+
+What is not settled: **nothing releases it.** `createService` has no counterpart
+— there is a `closeChats`, and no `close`. So a claim taken at creation is held
+for the life of the process with no defined moment to give it back, and the
+suite makes 49 services. A socket dies with its process, so production is
+survivable; the tests are not, because two services on one root inside one
+process would be the second one refused.
+
+So the shape of the work is: give the service a `close`, thread it through
+`main`'s lifecycle and 49 call sites, **then** the lock is ten lines on top. The
+lock is not the job; the lifecycle is.

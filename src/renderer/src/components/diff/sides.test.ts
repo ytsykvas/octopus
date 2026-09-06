@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest'
 import type { DiffLine, Hunk } from '@core/diff.js'
 
 import type { Token } from './highlight.js'
-import { assignTokens, sideTexts } from './sides.js'
+import { assignTokens, assignWholeTokens, sideTexts } from './sides.js'
 
 const line = (kind: DiffLine['kind'], text: string): DiffLine => ({
   kind,
@@ -113,5 +113,75 @@ describe('assignTokens', () => {
     ])
 
     expect(tokens.has(second)).toBe(false)
+  })
+})
+
+describe('assignWholeTokens', () => {
+  /** A line that sits at a given row of each side, as git numbers them. */
+  const at = (
+    kind: DiffLine['kind'],
+    text: string,
+    oldNumber: number,
+    newNumber: number
+  ): DiffLine => ({
+    kind,
+    text,
+    oldNumber: kind === 'added' ? null : oldNumber,
+    newNumber: kind === 'removed' ? null : newNumber,
+    noNewline: false
+  })
+
+  /*
+   * By line number rather than by walking, which is the whole difference from
+   * `assignTokens`: these tokens describe every line of the file and the hunks
+   * describe some of them, so there is no shared walk to keep in step.
+   */
+  it('takes a line\u2019s colours from its own row of the whole file', () => {
+    const context = at('context', 'kept', 40, 40)
+    const removed = at('removed', 'gone', 41, 0)
+
+    const tokens = assignWholeTokens(
+      [
+        {
+          oldStart: 40,
+          oldLines: 2,
+          newStart: 40,
+          newLines: 1,
+          heading: '',
+          lines: [context, removed]
+        }
+      ],
+      Array.from({ length: 41 }, (_, index) => [token(`old ${String(index + 1)}`, '#111')]),
+      Array.from({ length: 40 }, (_, index) => [token(`new ${String(index + 1)}`, '#333')])
+    )
+
+    expect(tokens.get(context)?.[0]?.text).toBe('new 40')
+    expect(tokens.get(removed)?.[0]?.text).toBe('old 41')
+  })
+
+  /* The two readings disagreeing about a file — it changed between them — is a
+     plain line rather than a wrong one. */
+  it('leaves a line whose row is past the tokens plain', () => {
+    const line = at('context', 'kept', 99, 99)
+
+    const tokens = assignWholeTokens(
+      [{ oldStart: 99, oldLines: 1, newStart: 99, newLines: 1, heading: '', lines: [line] }],
+      [[token('one', '#111')]],
+      [[token('one', '#333')]]
+    )
+
+    expect(tokens.has(line)).toBe(false)
+  })
+
+  it('has nothing to give when neither side was coloured', () => {
+    const line = at('context', 'kept', 1, 1)
+
+    expect(
+      assignWholeTokens(
+        [{ oldStart: 1, oldLines: 1, newStart: 1, newLines: 1, heading: '', lines: [line] }],
+        null,
+        null
+      ).size
+    ).toBe(0)
   })
 })

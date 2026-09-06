@@ -558,6 +558,10 @@ export function registerIpc(
     attempt(() => service.readWorkspaceChanges(workspaceId))
   )
 
+  host.handle('workspaces:fileSides', (_event, workspaceId: string) =>
+    attempt(() => service.readWorkspaceFileSides(workspaceId))
+  )
+
   // Both paths are parsed rather than trusted: one becomes a git argument and,
   // for a file nobody added, a file to delete.
   host.handle(
