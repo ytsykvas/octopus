@@ -8,6 +8,8 @@ import { randomUUID } from 'node:crypto'
 
 import { z } from 'zod'
 
+import { StandingPermissionSchema } from './standingPermissions.js'
+
 import {
   DEFAULT_EFFORT,
   type Effort,
@@ -164,21 +166,28 @@ export const ConfigSchema = z.object({
   planModel: z.string().min(1).nullable().default(null),
 
   /**
-   * Tools the user has answered "always" for.
+   * What the user has answered "always" for, and how narrow each answer is.
    *
    * Kept here rather than inside the SDK's own permission rules, because
    * `settingSources` may well be `none` — in which case the SDK has nowhere to
    * write them, and the answer would be forgotten the moment the session ends.
    * A list in the config is also a list the user can read and shorten (§4).
    *
+   * An entry used to be a bare tool name, so answering "always" about one file
+   * under `.claude/` granted every `Edit` in every workspace. It is a rule now,
+   * carrying the place the question was about — see `standingPermissions.ts`.
+   * A bare name is still read, and still means the whole tool, which is exactly
+   * what it always meant: a normalisation rather than a version bump, which is
+   * the convention `StateSchema` states.
+   *
    * Filtered rather than merely validated, and the schema is used on the way
    * out as well as in, so a config holding one of these is cleaned the next
    * time it is written.
    */
   alwaysAllowedTools: z
-    .array(z.string())
+    .array(StandingPermissionSchema)
     .default([])
-    .transform((tools) => tools.filter((tool) => !NEVER_STANDING.includes(tool))),
+    .transform((rules) => rules.filter((rule) => !NEVER_STANDING.includes(rule.toolName))),
 
   /**
    * Skills that are off in every new conversation, by the key the agent knows

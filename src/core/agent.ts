@@ -14,6 +14,7 @@
 import type {
   ModelInfo,
   Options,
+  PermissionUpdate,
   Query,
   SDKAssistantMessage,
   SDKMessage,
@@ -121,6 +122,15 @@ export interface PermissionAsk {
    * broken until it was read.
    */
   readonly reason?: string
+  /**
+   * The narrow rule the bridge says this question was actually about.
+   *
+   * `{ toolName: 'Edit', ruleContent: '/w/.claude/skills/demo/**' }` for a
+   * question about one file there. "Always allow" used to store the tool name
+   * alone, which granted an order of magnitude more than was asked — this is
+   * what it stores instead.
+   */
+  readonly suggestions?: readonly PermissionUpdate[]
 }
 
 /**
@@ -138,6 +148,14 @@ export type PermissionOutcome =
   | {
       readonly allow: true
       readonly setMode?: PermissionMode
+      /**
+       * Rules the session should keep, for an answer of "always".
+       *
+       * The SDK's own suggestion, handed straight back: it names the narrow
+       * thing the question was about, and reconstructing that here would be
+       * this application guessing at a rule the bridge already wrote.
+       */
+      readonly standing?: readonly PermissionUpdate[]
       /**
        * The tool's own arguments, changed by whoever answered.
        *
@@ -161,6 +179,16 @@ export type PermissionOutcome =
 function asToolInput(input: unknown): Record<string, unknown> | null {
   if (typeof input !== 'object' || input === null || Array.isArray(input)) return null
   return { ...input }
+}
+
+/** What an approval asks the SDK to remember, if anything. */
+function updates(outcome: Extract<PermissionOutcome, { allow: true }>): PermissionUpdate[] {
+  return [
+    ...(outcome.setMode === undefined
+      ? []
+      : [{ type: 'setMode' as const, mode: outcome.setMode, destination: 'session' as const }]),
+    ...(outcome.standing ?? [])
+  ]
 }
 
 export interface SessionHooks {
@@ -432,14 +460,15 @@ export function startSession(options: SessionOptions, hooks: SessionHooks): Agen
       // What makes text appear while it is being written rather than in one
       // block at the end of a turn.
       includePartialMessages: true,
-      canUseTool: async (toolName, toolInput, { decisionReason }) => {
+      canUseTool: async (toolName, toolInput, { decisionReason, suggestions }) => {
         const outcome = await hooks.askPermission({
           toolName,
           input: toolInput,
           // Spread rather than assigned: `exactOptionalPropertyTypes` tells an
           // absent field apart from one set to `undefined`, and the SDK sends
           // no reason for most requests.
-          ...(decisionReason !== undefined && { reason: decisionReason })
+          ...(decisionReason !== undefined && { reason: decisionReason }),
+          ...(suggestions !== undefined && { suggestions })
         })
         if (!outcome.allow) return { behavior: 'deny', message: outcome.message }
 
@@ -454,11 +483,18 @@ export function startSession(options: SessionOptions, hooks: SessionHooks): Agen
           // reply is what releases the tool call, so anything sent separately
           // races the work it was meant to govern. Verified against a live
           // session — without this the very next edit asks again.
-          ...(outcome.setMode !== undefined && {
-            updatedPermissions: [
-              { type: 'setMode', mode: outcome.setMode, destination: 'session' } as const
-            ]
-          })
+          /*
+           * Both, and they are not alternatives: approving a plan changes the
+           * mode, answering "always" adds a rule, and a turn can do one or the
+           * other. Sent on this reply for the reason the mode is — it is what
+           * releases the tool call, so anything sent separately races the work
+           * it was meant to govern.
+           *
+           * The rule goes to the **session** as well as to our config: without
+           * it the very next call asks again, since the SDK knows nothing about
+           * a list we keep ourselves.
+           */
+          ...(updates(outcome).length > 0 && { updatedPermissions: updates(outcome) })
         }
       }
     }

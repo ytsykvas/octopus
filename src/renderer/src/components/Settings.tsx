@@ -18,6 +18,7 @@ import type {
   SettingSourcesMode,
   ThemePreference
 } from '@core/config.js'
+import { type StandingPermission, standingKey } from '@core/standingPermissions.js'
 
 import { useModels } from '../hooks/useModels.js'
 import { InstructionEditors } from './InstructionEditors.js'
@@ -420,11 +421,20 @@ function DefaultModels({
  * quietly changes what every future session may do without asking. Listing it
  * here is what makes that answer something the user can take back (§4).
  */
+/**
+ * A row per standing answer, not per tool.
+ *
+ * An entry used to be a bare tool name, so this list read `Edit` for an answer
+ * that was given about one file — an approval an order of magnitude wider than
+ * the question asked, and a list that could not say so. A row now names the
+ * place the answer was about when there is one, which is what makes it
+ * revocable in the sense §4 means: the reader can see what they granted.
+ */
 function AlwaysAllowed({
   tools,
   onChange
 }: {
-  tools: readonly string[]
+  tools: readonly StandingPermission[]
   onChange: (patch: Partial<Config>) => Promise<void>
 }): React.JSX.Element {
   const { t } = useTranslation()
@@ -436,18 +446,29 @@ function AlwaysAllowed({
           <p className="text-ink-faint">{t('settings.alwaysAllowedEmpty')}</p>
         ) : (
           <ul className="max-w-lg space-y-1">
-            {tools.map((tool) => (
+            {tools.map((rule) => (
               <li
-                key={tool}
+                key={standingKey(rule)}
                 className="border-line flex items-center justify-between gap-3 rounded-[var(--radius-control)] border px-3 py-1.5"
               >
-                <span className="font-mono text-[11px]">{tool}</span>
+                <span className="min-w-0">
+                  <span className="font-mono text-[11px]">{rule.toolName}</span>
+                  {/* The place under the tool rather than beside it: a path is
+                      long, and a row that truncates the tool name to fit one
+                      stops saying which permission it is. */}
+                  <span className="text-ink-faint block truncate font-mono text-[11px]">
+                    {rule.ruleContent ?? t('settings.alwaysAllowedEverywhere')}
+                  </span>
+                </span>
                 <Button
                   variant="danger"
                   size="sm"
+                  className="shrink-0"
                   onClick={() =>
                     void onChange({
-                      alwaysAllowedTools: tools.filter((existing) => existing !== tool)
+                      alwaysAllowedTools: tools.filter(
+                        (existing) => standingKey(existing) !== standingKey(rule)
+                      )
                     })
                   }
                 >

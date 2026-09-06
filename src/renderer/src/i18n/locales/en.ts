@@ -1020,6 +1020,10 @@ export const en = {
     alwaysAllowedHint:
       'Tools you have waved through. They are never asked about again, in any workspace, until removed here.',
     alwaysAllowedEmpty: 'Nothing yet.',
+    /* Under the tool name, where a rule names no place. An answer given before
+       rules existed granted the tool outright, and the row has to say so
+       rather than look like a narrow one. */
+    alwaysAllowedEverywhere: 'anywhere',
     alwaysAllowedRemove: 'Ask again',
 
     accountsHint:

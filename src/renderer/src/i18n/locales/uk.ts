@@ -802,6 +802,7 @@ export const uk: Translation = {
     alwaysAllowedHint:
       'Інструменти, які ви пропустили назавжди. Про них більше не питають у жодному воркспейсі, доки не приберете їх тут.',
     alwaysAllowedEmpty: 'Поки що порожньо.',
+    alwaysAllowedEverywhere: 'будь-де',
     alwaysAllowedRemove: 'Питати знову',
 
     accountsHint:

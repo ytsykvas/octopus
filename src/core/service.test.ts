@@ -17,7 +17,13 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { promisify } from 'node:util'
 
-import type { ModelInfo, Query, SDKMessage, SlashCommand } from '@anthropic-ai/claude-agent-sdk'
+import type {
+  ModelInfo,
+  PermissionUpdate,
+  Query,
+  SDKMessage,
+  SlashCommand
+} from '@anthropic-ai/claude-agent-sdk'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import type { CommandExec } from './accounts.js'
@@ -3014,7 +3020,12 @@ describe('the agent chat', () => {
     readonly emit: (message: SDKMessage) => void
     readonly finish: (error?: Error) => void
     /** Calls the SDK's `canUseTool`, which is what blocks on our dialog. */
-    readonly ask: (toolName: string, input?: unknown, decisionReason?: string) => Promise<unknown>
+    readonly ask: (
+      toolName: string,
+      input?: unknown,
+      decisionReason?: string,
+      suggestions?: readonly PermissionUpdate[]
+    ) => Promise<unknown>
     readonly sent: string[]
     readonly interrupted: () => number
     readonly closed: () => number
@@ -3135,7 +3146,7 @@ describe('the agent chat', () => {
           done = true
           push()
         },
-        ask: (toolName, input = {}, decisionReason) => {
+        ask: (toolName, input = {}, decisionReason, suggestions) => {
           const canUseTool = options.canUseTool
           if (typeof canUseTool !== 'function') throw new Error('no canUseTool')
           // All three arguments, as the SDK passes them. The third is where the
@@ -3145,11 +3156,16 @@ describe('the agent chat', () => {
             canUseTool as (
               name: string,
               input: unknown,
-              options: { signal: AbortSignal; decisionReason?: string }
+              options: {
+                signal: AbortSignal
+                decisionReason?: string
+                suggestions?: readonly PermissionUpdate[]
+              }
             ) => Promise<unknown>
           )(toolName, input, {
             signal: new AbortController().signal,
-            ...(decisionReason !== undefined && { decisionReason })
+            ...(decisionReason !== undefined && { decisionReason }),
+            ...(suggestions !== undefined && { suggestions })
           })
         },
         interrupted: () => interrupted,
@@ -4860,15 +4876,158 @@ describe('the agent chat', () => {
       const requestId = await waitForRequest(events)
       await service.answerPermission(requestId, 'always')
 
-      expect(service.getConfig().alwaysAllowedTools).toEqual(['Edit'])
+      expect(service.getConfig().alwaysAllowedTools).toEqual([
+        { toolName: 'Edit', ruleContent: null }
+      ])
 
       // The second call must not ask at all.
       await expect(agent().ask('Edit')).resolves.toMatchObject({ behavior: 'allow' })
     })
 
+    /*
+     * The finding this closes. "Always allow" wrote the tool **name**, so
+     * answering it about one file under `.claude/` granted every `Edit` in
+     * every workspace from then on — an approval an order of magnitude wider
+     * than the question asked, and the kind that gets granted once and
+     * regretted quietly.
+     */
+    it('stores the narrow rule the bridge named, not the tool it used', async () => {
+      const { service, workspaceId, events } = await withWorkspace()
+      const chat = await service.openChat(workspaceId)
+      await service.sendToChat(chat.id, 'edit it')
+
+      void agent().ask('Edit', { file_path: '/w/.claude/skills/demo/SKILL.md' }, undefined, [
+        {
+          type: 'addRules',
+          behavior: 'allow',
+          destination: 'session',
+          rules: [{ toolName: 'Edit', ruleContent: '/w/.claude/skills/**' }]
+        }
+      ])
+      const requestId = await waitForRequest(events)
+      await service.answerPermission(requestId, 'always')
+
+      expect(service.getConfig().alwaysAllowedTools).toEqual([
+        { toolName: 'Edit', ruleContent: '/w/.claude/skills/**' }
+      ])
+    })
+
+    /* And the rule is honoured where it applies and nowhere else — which is the
+       half that would be missing if the config held it and nothing read it. */
+    it('waves through the place it was granted and asks about anywhere else', async () => {
+      const { service, workspaceId, events } = await withWorkspace()
+      await service.updateConfig({
+        alwaysAllowedTools: [{ toolName: 'Edit', ruleContent: '/w/docs/**' }]
+      })
+      const chat = await service.openChat(workspaceId)
+      await service.sendToChat(chat.id, 'edit it')
+
+      await expect(agent().ask('Edit', { file_path: '/w/docs/ui.md' })).resolves.toMatchObject({
+        behavior: 'allow'
+      })
+      expect(events.some((entry) => entry.event.type === 'permission_request')).toBe(false)
+
+      void agent().ask('Edit', { file_path: '/w/src/core/service.ts' })
+      await waitForRequest(events)
+    })
+
+    /* A suggestion that is not an allow-rule, or is about another tool, is not
+       an answer to this question — so the fallback stands and the whole tool is
+       granted, which is what the user pressed. */
+    it('ignores a suggestion that is not about this call', async () => {
+      const { service, workspaceId, events } = await withWorkspace()
+      const chat = await service.openChat(workspaceId)
+      await service.sendToChat(chat.id, 'edit it')
+
+      void agent().ask('Edit', { file_path: '/w/a.ts' }, undefined, [
+        { type: 'setMode', mode: 'acceptEdits', destination: 'session' },
+        {
+          type: 'addRules',
+          behavior: 'deny',
+          destination: 'session',
+          rules: [{ toolName: 'Edit', ruleContent: '/w/**' }]
+        },
+        {
+          type: 'addRules',
+          behavior: 'allow',
+          destination: 'session',
+          rules: [{ toolName: 'Write', ruleContent: '/w/**' }]
+        }
+      ])
+      const requestId = await waitForRequest(events)
+      await service.answerPermission(requestId, 'always')
+
+      expect(service.getConfig().alwaysAllowedTools).toEqual([
+        { toolName: 'Edit', ruleContent: null }
+      ])
+    })
+
+    /* A rule the bridge sent without a place is the whole tool, which is what
+       the field being absent means. */
+    it('reads a suggestion with no place as the whole tool', async () => {
+      const { service, workspaceId, events } = await withWorkspace()
+      const chat = await service.openChat(workspaceId)
+      await service.sendToChat(chat.id, 'edit it')
+
+      void agent().ask('Edit', { file_path: '/w/a.ts' }, undefined, [
+        {
+          type: 'addRules',
+          behavior: 'allow',
+          destination: 'session',
+          rules: [{ toolName: 'Edit' }]
+        }
+      ])
+      const requestId = await waitForRequest(events)
+      await service.answerPermission(requestId, 'always')
+
+      expect(service.getConfig().alwaysAllowedTools).toEqual([
+        { toolName: 'Edit', ruleContent: null }
+      ])
+    })
+
+    /* An older CLI sends no suggestion, and a question about nothing in
+       particular has none to send. The whole tool is what every answer of
+       "always" meant before any of this. */
+    it('falls back to the whole tool where the bridge suggested nothing', async () => {
+      const { service, workspaceId, events } = await withWorkspace()
+      const chat = await service.openChat(workspaceId)
+      await service.sendToChat(chat.id, 'run it')
+
+      void agent().ask('Bash', { command: 'ls' })
+      const requestId = await waitForRequest(events)
+      await service.answerPermission(requestId, 'always')
+
+      expect(service.getConfig().alwaysAllowedTools).toEqual([
+        { toolName: 'Bash', ruleContent: null }
+      ])
+    })
+
+    /* Without this the very next call asks again: the SDK knows nothing about a
+       list octopus keeps itself, and the reply that releases the tool call is
+       the only place a rule can ride along. */
+    it('tells the running session the rule as well as the config', async () => {
+      const { service, workspaceId, events } = await withWorkspace()
+      const chat = await service.openChat(workspaceId)
+      await service.sendToChat(chat.id, 'edit it')
+
+      const suggestion = {
+        type: 'addRules' as const,
+        behavior: 'allow' as const,
+        destination: 'session' as const,
+        rules: [{ toolName: 'Edit', ruleContent: '/w/docs/**' }]
+      }
+      const decision = agent().ask('Edit', { file_path: '/w/docs/ui.md' }, undefined, [suggestion])
+      const requestId = await waitForRequest(events)
+      await service.answerPermission(requestId, 'always')
+
+      await expect(decision).resolves.toMatchObject({ updatedPermissions: [suggestion] })
+    })
+
     it('does not list a tool twice however often it is waved through', async () => {
       const { service, workspaceId, events } = await withWorkspace()
-      await service.updateConfig({ alwaysAllowedTools: ['Edit'] })
+      await service.updateConfig({
+        alwaysAllowedTools: [{ toolName: 'Edit', ruleContent: null }]
+      })
       const chat = await service.openChat(workspaceId)
       await service.sendToChat(chat.id, 'edit it')
 
@@ -4880,7 +5039,10 @@ describe('the agent chat', () => {
       const requestId = await waitForRequest(events)
       await service.answerPermission(requestId, 'always')
 
-      expect(service.getConfig().alwaysAllowedTools).toEqual(['Edit', 'Write'])
+      expect(service.getConfig().alwaysAllowedTools).toEqual([
+        { toolName: 'Edit', ruleContent: null },
+        { toolName: 'Write', ruleContent: null }
+      ])
     })
 
     /*
@@ -5389,7 +5551,9 @@ describe('the agent chat', () => {
      */
     it('pre-approves the read-only tools and nothing else', async () => {
       const { service, workspaceId } = await withWorkspace()
-      await service.updateConfig({ alwaysAllowedTools: ['Bash'] })
+      await service.updateConfig({
+        alwaysAllowedTools: [{ toolName: 'Bash', ruleContent: null }]
+      })
       const chat = await service.openChat(workspaceId)
 
       await service.sendToChat(chat.id, 'work')

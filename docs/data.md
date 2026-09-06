@@ -54,7 +54,7 @@ Validated by `ConfigSchema` in [`config.ts`](../src/core/config.ts).
 | `workingMode`                     | what a new chat may do before asking; planning is not one of them                                                                                                                      |
 | `effort`                          | how much thinking a new chat asks for; `medium` unless changed. Five levels, never `ultracode` — see below                                                                             |
 | `model`, `planModel`              | the pair a new chat starts on — which model writes the code, which one plans                                                                                                           |
-| `alwaysAllowedTools`              | tools the user answered "always" for, listed so they can be undone                                                                                                                     |
+| `alwaysAllowedTools`              | what the user answered "always" for — a tool and, where the bridge named one, the place the question was about. Listed so each can be undone                                           |
 | `disabledSkillDefaults`           | skills off in every new conversation, by the key the agent knows them by. A list of what is **off**, so empty means every skill is available — how Claude Code treats one it discovers |
 | `theme`, `language`               | appearance                                                                                                                                                                             |
 | `rightPanelWidth`, `sidebarWidth` | pane widths in pixels, as last dragged — resizing the **window** moves the right pane without rewriting this                                                                           |
@@ -69,12 +69,36 @@ was approved before anything was drawn: no dialog, no record that planning had
 ended, and the toggle still lit over an agent editing files. It went unnoticed
 for a day. `NEVER_STANDING` in `config.ts` is what strips it.
 
+**An entry is a rule, not a tool name.** It used to be the name alone, so
+answering "always" about one file under `.claude/` granted every `Edit` in every
+workspace from then on — an approval an order of magnitude wider than the
+question asked, and the kind that gets granted once and regretted quietly. The
+narrow rule comes from the SDK's own suggestion, in the third argument to
+`canUseTool`, so nothing here guesses at what the question was about.
+
+A bare name is still read and still means the whole tool, which is exactly what
+it always meant: a normalisation rather than a version bump, the convention
+`StateSchema` states.
+
+**The match is deliberately narrower than the rule.** `ruleContent` is a glob,
+and a matcher that reads one loosely grants more than the person answering
+agreed to — the failure this replaces. So only a wildcard opening a path segment
+is read: `/w/docs/**` says "under `/w/docs`" and nothing else has to be
+understood. `/w/src/comp*.ts` is not read at all, because truncating it to its
+parent would grant the whole of `/w/src`. A call the rule cannot decide is one
+the user is asked about again, which costs a click and grants nothing.
+
 The list is **not** passed to the SDK. It was, alongside the read-only tools,
 and that made it unrevokable: a name the SDK holds is approved before
 `canUseTool` is consulted, so unticking a tool in Settings reached only the
 sessions that had not started yet, while the one on screen kept running the
 tool. `askPermission` consults the list itself now, on every call, against the
 config as it stands at that moment.
+
+The rule does go to the **session**, on the reply that releases the tool call —
+without it the very next call asks the same question, since the SDK knows
+nothing about a list octopus keeps itself. That is a copy the session forgets
+when it ends; the config is the one that lasts and the one Settings can undo.
 
 **Every new field carries `.default()`** — here, in `StateSchema` and in
 `ChatSchema` alike. `readJsonFile` throws on a mismatch rather than falling

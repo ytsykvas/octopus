@@ -384,7 +384,14 @@ describe('Settings', () => {
   // session may do. Listing it here is what makes it something to take back.
   it('lists the tools answered "always" and takes one back', async () => {
     const user = userEvent.setup()
-    const props = await renderSettings({ config: config({ alwaysAllowedTools: ['Edit', 'Bash'] }) })
+    const props = await renderSettings({
+      config: config({
+        alwaysAllowedTools: [
+          { toolName: 'Edit', ruleContent: null },
+          { toolName: 'Bash', ruleContent: null }
+        ]
+      })
+    })
 
     await openSection(user, 'Agent')
     expect(screen.getByText('Edit')).toBeInTheDocument()
@@ -393,7 +400,55 @@ describe('Settings', () => {
     if (!first) throw new Error('no way to take an answer back')
     await user.click(first)
 
-    expect(props.onChange).toHaveBeenCalledExactlyOnceWith({ alwaysAllowedTools: ['Bash'] })
+    expect(props.onChange).toHaveBeenCalledExactlyOnceWith({
+      alwaysAllowedTools: [{ toolName: 'Bash', ruleContent: null }]
+    })
+  })
+
+  /*
+   * The finding this closes. An entry used to be a bare tool name, so a list
+   * showing `Edit` said nothing about an answer that had been given about one
+   * file — an approval an order of magnitude wider than the question asked, and
+   * a list that could not say so.
+   */
+  it('says where a standing answer applies, and where it applies everywhere', async () => {
+    const user = userEvent.setup()
+    await renderSettings({
+      config: config({
+        alwaysAllowedTools: [
+          { toolName: 'Edit', ruleContent: '/w/.claude/skills/**' },
+          { toolName: 'Bash', ruleContent: null }
+        ]
+      })
+    })
+
+    await openSection(user, 'Agent')
+
+    expect(screen.getByText('/w/.claude/skills/**')).toBeInTheDocument()
+    expect(screen.getByText('anywhere')).toBeInTheDocument()
+  })
+
+  /* Two rules for one tool are two rows, and taking one back leaves the other:
+     they are different answers about different places. */
+  it('takes back one rule of a tool without the other', async () => {
+    const user = userEvent.setup()
+    const props = await renderSettings({
+      config: config({
+        alwaysAllowedTools: [
+          { toolName: 'Edit', ruleContent: '/w/docs/**' },
+          { toolName: 'Edit', ruleContent: '/w/src/**' }
+        ]
+      })
+    })
+
+    await openSection(user, 'Agent')
+    const [first] = screen.getAllByRole('button', { name: 'Ask again' })
+    if (!first) throw new Error('no way to take an answer back')
+    await user.click(first)
+
+    expect(props.onChange).toHaveBeenCalledExactlyOnceWith({
+      alwaysAllowedTools: [{ toolName: 'Edit', ruleContent: '/w/src/**' }]
+    })
   })
 
   it('signs off the About section with the mascot', async () => {

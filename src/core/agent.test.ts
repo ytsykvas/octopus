@@ -1,5 +1,6 @@
 import type {
   ModelInfo,
+  PermissionUpdate,
   Query,
   SDKMessage,
   SDKUserMessage,
@@ -1121,7 +1122,7 @@ describe('permissions', () => {
   ): (
     name: string,
     input: Record<string, unknown>,
-    options?: { decisionReason?: string }
+    options?: { decisionReason?: string; suggestions?: readonly PermissionUpdate[] }
   ) => Promise<unknown> {
     const canUseTool = agent.options().canUseTool
     if (typeof canUseTool !== 'function') throw new Error('canUseTool was not passed to the SDK')
@@ -1129,7 +1130,11 @@ describe('permissions', () => {
     const call = canUseTool as (
       name: string,
       input: Record<string, unknown>,
-      options: { signal: AbortSignal; decisionReason?: string }
+      options: {
+        signal: AbortSignal
+        decisionReason?: string
+        suggestions?: readonly PermissionUpdate[]
+      }
     ) => Promise<unknown>
 
     return (name, input, options = {}) =>
@@ -1189,6 +1194,77 @@ describe('permissions', () => {
     await permissionCall(agent)('Edit', { file_path: '/a.rb' })
 
     expect(asked).toEqual([{ toolName: 'Edit', input: { file_path: '/a.rb' } }])
+  })
+
+  /* The narrow rule the bridge named, handed straight back: without it the very
+     next call asks the same question, since the SDK knows nothing about the
+     list octopus keeps itself. */
+  it('sends a standing rule back on the reply that releases the call', async () => {
+    const rule = {
+      type: 'addRules' as const,
+      behavior: 'allow' as const,
+      destination: 'session' as const,
+      rules: [{ toolName: 'Edit', ruleContent: '/w/docs/**' }]
+    }
+    const { agent } = fakeAgent(
+      {},
+      { askPermission: () => Promise.resolve({ allow: true, standing: [rule] }) }
+    )
+
+    await expect(permissionCall(agent)('Edit', { file_path: '/w/docs/a.md' })).resolves.toEqual({
+      behavior: 'allow',
+      updatedInput: { file_path: '/w/docs/a.md' },
+      updatedPermissions: [rule]
+    })
+  })
+
+  /* Both on one reply, because a turn can approve a plan and answer "always"
+     and the reply is the only thing that releases the tool call. */
+  it('sends a mode and a rule together', async () => {
+    const rule = {
+      type: 'addRules' as const,
+      behavior: 'allow' as const,
+      destination: 'session' as const,
+      rules: [{ toolName: 'Edit' }]
+    }
+    const { agent } = fakeAgent(
+      {},
+      {
+        askPermission: () =>
+          Promise.resolve({ allow: true, setMode: 'acceptEdits' as const, standing: [rule] })
+      }
+    )
+
+    const answer = await permissionCall(agent)('Edit', {})
+
+    expect(answer).toMatchObject({
+      updatedPermissions: [{ type: 'setMode', mode: 'acceptEdits', destination: 'session' }, rule]
+    })
+  })
+
+  it('passes the suggestion on to whoever answers', async () => {
+    const asked: unknown[] = []
+    const rule = {
+      type: 'addRules' as const,
+      behavior: 'allow' as const,
+      destination: 'session' as const,
+      rules: [{ toolName: 'Edit', ruleContent: '/w/docs/**' }]
+    }
+    const { agent } = fakeAgent(
+      {},
+      {
+        askPermission: (ask) => {
+          asked.push(ask)
+          return Promise.resolve({ allow: true })
+        }
+      }
+    )
+
+    await permissionCall(agent)('Edit', { file_path: '/w/docs/a.md' }, { suggestions: [rule] })
+
+    expect(asked).toEqual([
+      { toolName: 'Edit', input: { file_path: '/w/docs/a.md' }, suggestions: [rule] }
+    ])
   })
 
   it('allows a tool the user approved, keeping the arguments', async () => {

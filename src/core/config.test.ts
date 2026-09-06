@@ -240,8 +240,12 @@ describe('saveConfig', () => {
 describe('standing approvals', () => {
   const withTools = (tools: string[]): Config => ({
     ...createDefaultConfig('ytsykvas', NOW, () => UUID),
-    alwaysAllowedTools: tools
+    alwaysAllowedTools: tools.map((toolName) => ({ toolName, ruleContent: null }))
   })
+
+  /** The stored shape, for asserting on what a list came back holding. */
+  const rules = (...tools: string[]): { toolName: string; ruleContent: null }[] =>
+    tools.map((toolName) => ({ toolName, ruleContent: null }))
 
   it('strips the plan tool from a config that already holds it', async () => {
     await writeFile(
@@ -254,7 +258,7 @@ describe('standing approvals', () => {
     )
 
     await expect(loadConfig(file)).resolves.toMatchObject({
-      alwaysAllowedTools: ['Bash', 'Monitor']
+      alwaysAllowedTools: rules('Bash', 'Monitor')
     })
   })
 
@@ -264,7 +268,7 @@ describe('standing approvals', () => {
     await saveConfig(withTools(['ExitPlanMode', 'Bash']), file)
 
     const written: unknown = JSON.parse(await readFile(file, 'utf8'))
-    expect(written).toMatchObject({ alwaysAllowedTools: ['Bash'] })
+    expect(written).toMatchObject({ alwaysAllowedTools: rules('Bash') })
   })
 
   /*
@@ -278,7 +282,7 @@ describe('standing approvals', () => {
     await saveConfig(withTools(['Bash', 'AskUserQuestion', 'Monitor']), file)
 
     await expect(loadConfig(file)).resolves.toMatchObject({
-      alwaysAllowedTools: ['Bash', 'Monitor']
+      alwaysAllowedTools: rules('Bash', 'Monitor')
     })
   })
 
@@ -298,14 +302,14 @@ describe('standing approvals', () => {
       'utf8'
     )
 
-    await expect(loadConfig(file)).resolves.toMatchObject({ alwaysAllowedTools: ['Bash'] })
+    await expect(loadConfig(file)).resolves.toMatchObject({ alwaysAllowedTools: rules('Bash') })
   })
 
   it('leaves every other standing approval alone', async () => {
     await saveConfig(withTools(['Bash', 'Monitor']), file)
 
     await expect(loadConfig(file)).resolves.toMatchObject({
-      alwaysAllowedTools: ['Bash', 'Monitor']
+      alwaysAllowedTools: rules('Bash', 'Monitor')
     })
   })
 })

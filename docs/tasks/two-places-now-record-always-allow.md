@@ -24,6 +24,19 @@ capability files are unapproved, so the repository's own
 `.claude/settings.local.json` is not loaded at all until the trust digest is
 approved.
 
+## What has been decided since
+
+**2026-09-06.** The width half landed: an entry is a rule now, carrying the
+place the question was about, and `always-allow-is-far-wider-than-the-question-asked.md`
+is gone. The choice made there was **keep the config as the home**, so of the
+three below the second is the one to build — the first is ruled out and the
+third was only ever a description of today.
+
+What is left is one direction of flow: octopus does not read
+`.claude/settings.local.json`, so an "always" given in a terminal is honoured by
+the session (the SDK approves it before `canUseTool`) and is invisible here —
+it cannot be shown and it cannot be taken back.
+
 Three ways out:
 
 - **Write to `.claude/settings.local.json`**, as the CLI does. One home, shared

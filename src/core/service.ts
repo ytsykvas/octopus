@@ -65,7 +65,10 @@ import {
   storedCarryList,
   writeCarryList
 } from './carry.js'
+import type { PermissionUpdate } from '@anthropic-ai/claude-agent-sdk'
+
 import { writePastedImage } from './attachments.js'
+import { allowedStanding, type StandingPermission, withStanding } from './standingPermissions.js'
 import type { CarryReport } from './carry.js'
 import { type ConductorConfig, type DeclaredFile, readConductorConfig } from './conductorConfig.js'
 import { applyEnvOverrides, discardIfOnlyBlock, removeEnvBlock, readWorkspaceEnv } from './env.js'
@@ -446,9 +449,31 @@ interface PendingPermission {
   readonly toolName: string
   /** Kept so the question can be asked again, not merely answered. */
   readonly input: unknown
+  /** The narrow rule the bridge named, for an answer of "always". */
+  readonly suggestions?: readonly PermissionUpdate[]
   /** Which conversation is blocked — approving a plan reads its mode back. */
   readonly chatId: string
   readonly workspaceId: string
+}
+
+/**
+ * The rule an answer of "always" grants.
+ *
+ * The bridge's own suggestion where there is one — it names the narrow thing
+ * the question was about, and reconstructing that here would be this
+ * application guessing at a rule the SDK already wrote. Where there is none, an
+ * older CLI or a question about nothing in particular, the whole tool: which is
+ * what every answer of "always" meant before any of this.
+ */
+function standingFrom(request: PendingPermission): StandingPermission {
+  for (const update of request.suggestions ?? []) {
+    if (update.type !== 'addRules' || update.behavior !== 'allow') continue
+
+    const [rule] = update.rules.filter((entry) => entry.toolName === request.toolName)
+    if (rule) return { toolName: rule.toolName, ruleContent: rule.ruleContent ?? null }
+  }
+
+  return { toolName: request.toolName, ruleContent: null }
 }
 
 /**
@@ -1750,9 +1775,12 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
    */
   async function askPermission(
     chat: Chat,
-    { toolName, input, reason }: PermissionAsk
+    { toolName, input, reason, suggestions }: PermissionAsk
   ): Promise<PermissionOutcome> {
-    if (config.alwaysAllowedTools.includes(toolName)) return { allow: true }
+    // Read on every call, against the config as it stands at that moment: a
+    // name handed to `allowedTools` at session start could not be taken back
+    // until the session ended, which is what made unticking one do nothing.
+    if (allowedStanding(config.alwaysAllowedTools, toolName, input)) return { allow: true }
 
     const requestId = uuid()
     handleEvent(chat, {
@@ -1768,6 +1796,9 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
         resolve,
         toolName,
         input,
+        // Kept with the question so the answer can store the narrow rule the
+        // bridge named, rather than this application guessing at one.
+        ...(suggestions !== undefined && { suggestions }),
         chatId: chat.id,
         workspaceId: chat.workspaceId
       })
@@ -3905,9 +3936,18 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
       // would all stop happening at once.
       const leaving = request.toolName === EXIT_PLAN_MODE
 
-      if (answer === 'always' && !leaving) {
+      /*
+       * The rule the question was about, not the tool it used.
+       *
+       * `standingFrom` reads the bridge's own suggestion; with none — an older
+       * CLI, or a question about nothing in particular — it falls back to the
+       * whole tool, which is what every answer meant before this.
+       */
+      const granted = answer === 'always' && !leaving ? standingFrom(request) : null
+
+      if (granted) {
         await applyConfig({
-          alwaysAllowedTools: [...new Set([...config.alwaysAllowedTools, request.toolName])]
+          alwaysAllowedTools: withStanding(config.alwaysAllowedTools, granted)
         })
       }
 
@@ -3941,7 +3981,16 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
       pending.delete(requestId)
       request.resolve({
         allow: true,
-        ...(leaving && chat && { setMode: chat.workingMode })
+        ...(leaving && chat && { setMode: chat.workingMode }),
+        /*
+         * The rule goes to the session as well as to the config, and it has to
+         * ride this reply: the SDK knows nothing about a list octopus keeps
+         * itself, so without it the very next call asks the same question. The
+         * bridge's own suggestion is handed straight back rather than rebuilt —
+         * it named the narrow thing, and rebuilding it here would be this
+         * application guessing at a rule the SDK already wrote.
+         */
+        ...(granted && request.suggestions && { standing: request.suggestions })
       })
       await setChatStatus(request.chatId, 'running')
     },
