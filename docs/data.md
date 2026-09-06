@@ -135,8 +135,25 @@ branch survive on disk, invisible to the app that made them.
 So `src/main/index.ts` takes Electron's single-instance lock before the app is
 ready. A second launch quits and brings the window already open forward, and
 never builds a service at all. The lock is keyed on Electron's userData
-directory rather than on `~/.octopus`, so a build whose userData differs is not
-covered by it — the residue is written down in `docs/tasks/`.
+directory rather than on `~/.octopus`, and those are not the same scope: two
+builds resolving that name differently each take their own and both start.
+
+**So the data root has a lock of its own**, keyed on `~/.octopus` itself and
+taken in `main` before the service is built — losing it must mean never having
+opened `state.json` at all. It is a unix socket in `os.tmpdir()`, named after a
+hash of the root: outside what it locks, because the lock is not part of it, and
+short enough for the 104 characters a socket name may have.
+
+A socket rather than a pid file, and that is the whole design. A pid file left
+by a crash locks the user out of their own data until they find and delete it,
+and a pid can be reused by something else entirely. A socket cannot be stale in
+a way that refuses anybody: bind, and if the address is taken, **connect** to
+it — a live holder accepts, a dead one's socket refuses, and the refused one is
+removed and rebound. Nothing has to decide whether a process is alive by looking
+at a number.
+
+It is also the layer a CLI or a daemon would get for free, having no Electron
+and therefore no lock at all.
 
 Editing these files from outside while the app runs is the same hazard reached
 another way: the app keeps its own copy in memory and will happily write over

@@ -4965,8 +4965,13 @@ describe('the agent chat', () => {
       })
       expect(events.some((entry) => entry.event.type === 'permission_request')).toBe(false)
 
-      void agent().ask('Edit', { file_path: '/w/src/core/service.ts' })
-      await waitForRequest(events)
+      const asked = agent().ask('Edit', { file_path: '/w/src/core/service.ts' })
+      const requestId = await waitForRequest(events)
+
+      // Answered rather than left hanging: an open request is a turn held open,
+      // and the transcript write behind it then races the teardown.
+      await service.answerPermission(requestId, 'deny')
+      await asked
     })
 
     /* A suggestion that is not an allow-rule, or is about another tool, is not

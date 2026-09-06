@@ -287,6 +287,13 @@ first sighting with a cause anybody could point at, and it is the same shape as
 the `pullRequests.test.ts` one: **work still running when `rm` starts**, not a
 deadline.
 
+**And again, the same week.** A test written for the standing-permission work
+raised a request and never answered it, and `service.test.ts` failed in
+`afterEach` exactly as before. Twice is a pattern rather than a slip: **a test
+that raises a permission request answers it**, unless leaving it open is the
+thing being tested. The cost of forgetting is not a failure in that test — it is
+a failure in whichever test the runner tore down next.
+
 It does not close the note. The `⌘T` sighting has no unanswered request in it,
 and the renderer ones have no directory. But it does say what to look for in
 those: something the test starts and nothing waits for.

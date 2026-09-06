@@ -3,6 +3,8 @@ import { join } from 'node:path'
 import { app, BrowserWindow, dialog, ipcMain, Menu, nativeTheme, shell } from 'electron'
 
 import { describeError } from '../core/persist.js'
+import { claimDataRoot } from '../core/dataLock.js'
+import { rootDir } from '../core/paths.js'
 import { createService, type OctopusService } from '../core/service.js'
 import type { ThemeName } from '../core/types.js'
 import {
@@ -133,6 +135,39 @@ async function start(): Promise<void> {
   // missing at once. Before the service exists, so the first git call already
   // sees the repaired value.
   await applyLoginShellPath()
+
+  /*
+   * The data root, not Electron's directory.
+   *
+   * `requestSingleInstanceLock` above is keyed on **userData**, which is not
+   * the scope two copies actually share: two builds resolving that name
+   * differently each take their own and both start, then both write
+   * `state.json` whole and the last one wins. This is keyed on `~/.octopus`
+   * itself, so it holds however the build is named — and it is what a CLI or a
+   * daemon, having no Electron, would rely on alone.
+   *
+   * Before the service, because the service reads the root as it is built:
+   * losing here must mean never having opened the file at all.
+   */
+  const lock = await claimDataRoot(rootDir())
+
+  if (!lock) {
+    dialog.showErrorBox(
+      'octopus is already running',
+      'Another copy of octopus is using ~/.octopus. Two copies overwrite each ' +
+        "other's projects and conversations, so this one will not start.\n\n" +
+        'Quit the other one and try again.'
+    )
+    app.quit()
+    return
+  }
+
+  // Released on the way out as well as by the process ending: a socket dies
+  // with its process either way, and unlinking the file is what spares the next
+  // start a probe.
+  app.on('will-quit', () => {
+    void lock.release()
+  })
 
   let service: OctopusService
 
