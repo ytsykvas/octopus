@@ -12,6 +12,7 @@ else joins a home directory by hand.
   instructions/*.md                  seven prompts every project falls back to
   skills/                            an extra working-directory root: the skills every project gets, made at the first message
     .claude/skills/<folder>/SKILL.md one skill, in Claude Code's own format
+  attachments/                       pasted images, and another root — nothing else attached is ever copied here
   projects/<projectId>/
     carry                            paths carried from the checkout into a workspace
     envs/                            named sets of variables, one written last into every workspace's .env

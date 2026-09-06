@@ -52,6 +52,8 @@ export interface NoteIntros {
    * locales.
    */
   readonly oldSide: string
+  /** What the attached paths are introduced by. */
+  readonly files: string
 }
 
 /**
@@ -67,8 +69,20 @@ export interface NoteIntros {
  * line number on its own would point at whatever now sits there. The same is
  * true of a review comment, which is why GitHub's own hunk travels with it.
  */
-export function withNotes(text: string, notes: readonly ChatNote[], intros: NoteIntros): string {
-  if (notes.length === 0) return text
+export function withNotes(
+  text: string,
+  notes: readonly ChatNote[],
+  intros: NoteIntros,
+  /**
+   * Paths of the files attached, which the message names rather than carries.
+   *
+   * The whole of an attachment. Nothing is copied anywhere: the agent is told
+   * where a file is and reads it, which is §4's rule in its plainest form and
+   * what makes the message the user reads back the whole of what was sent.
+   */
+  files: readonly string[] = []
+): string {
+  if (notes.length === 0 && files.length === 0) return text
 
   const diff = notes.filter((note) => note.kind === 'diff')
   const review = notes.filter((note) => note.kind === 'pullRequest')
@@ -76,6 +90,9 @@ export function withNotes(text: string, notes: readonly ChatNote[], intros: Note
   // One introduction per kind that is present, rather than one per note: two
   // headings over a list of six is a shape, six is noise.
   const parts = [
+    // Files first, and the notes after them: an attachment is usually what the
+    // message is about, while a note is a remark on work already there.
+    ...(files.length === 0 ? [] : [intros.files, ...files]),
     ...(diff.length === 0
       ? []
       : [intros.diff, ...diff.map((note) => fromDiff(note, intros.oldSide))]),

@@ -88,6 +88,10 @@ export function useErrorMessage(): (failure: Failure) => string {
             number: failure.params?.number ?? '',
             reason: failure.params?.reason ?? ''
           })
+        case 'attachmentTooLarge':
+          return t('errors.attachmentTooLarge', { limit: failure.params?.limit ?? '' })
+        case 'attachmentType':
+          return t('errors.attachmentType', { type: failure.params?.type ?? '' })
         case 'replyFailed':
           return t('errors.replyFailed', { reason: failure.params?.reason ?? '' })
         case 'resolveFailed':

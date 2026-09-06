@@ -1,6 +1,7 @@
 import { renderHook } from '@testing-library/react'
 import { describe, expect, it } from 'vitest'
 
+import type { AttachmentErrorCode } from '@core/attachments.js'
 import type { ChatErrorCode } from '@core/chats.js'
 import type { DiffErrorCode } from '@core/diff.js'
 import type { EnvProfileCode } from '@core/envProfiles.js'
@@ -29,6 +30,7 @@ import { useErrorMessage } from './useErrorMessage.js'
  * is listed; the test proves the hook says something other than the fallback.
  */
 type CoreErrorCode =
+  | AttachmentErrorCode
   | ChatErrorCode
   | DiffErrorCode
   | EnvProfileCode
@@ -54,6 +56,8 @@ type CoreErrorCode =
 type Interpolated = Readonly<Record<string, string>> | null | 'internal'
 
 const CODE_PARAMETERS: Record<CoreErrorCode, Interpolated> = {
+  attachmentTooLarge: { limit: '12' },
+  attachmentType: { type: 'application/x-sh' },
   envProfileExists: { name: 'prod' },
   envProfileMissing: { name: 'prod' },
   envProfileName: { name: 'Prod' },

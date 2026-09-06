@@ -1,4 +1,4 @@
-import { contextBridge, ipcRenderer } from 'electron'
+import { contextBridge, ipcRenderer, webUtils } from 'electron'
 
 import type { AccountKind, AccountsStatus, GitHubAccount } from '@core/accounts.js'
 import type { AgentCommand, AgentModel, Chat, EffortChoice, WorkingMode } from '@core/chats.js'
@@ -565,6 +565,28 @@ const api = {
       ipcRenderer.invoke('files:open', workspaceId, path) as Promise<Result<void>>
   },
 
+  attachments: {
+    /**
+     * Writes a pasted image and answers with its path.
+     *
+     * The one attachment that is stored: a dragged or chosen file keeps its own
+     * path, and a clipboard has a picture rather than a file.
+     */
+    paste: (type: string, bytes: Uint8Array): Promise<Result<string>> =>
+      ipcRenderer.invoke('attachments:paste', type, bytes) as Promise<Result<string>>,
+
+    /**
+     * Where a dropped file actually is.
+     *
+     * A `File` in the renderer stopped carrying a path years ago, and
+     * `webUtils` is the replacement — it has to be called on this side of the
+     * bridge, which is the whole reason this is a method rather than something
+     * the window works out for itself. Empty for anything that never was a file
+     * on disk, which is what a drag from a browser gives.
+     */
+    pathFor: (file: File): string => webUtils.getPathForFile(file)
+  },
+
   dialog: {
     /** Opens a directory picker; `null` means the user cancelled. */
     pickDirectory: (title: string): Promise<Result<string | null>> =>
@@ -572,7 +594,11 @@ const api = {
 
     /** The same for a skill, which may be a folder or a lone `SKILL.md`. */
     pickSkill: (title: string): Promise<Result<string | null>> =>
-      ipcRenderer.invoke('dialog:pickSkill', title) as Promise<Result<string | null>>
+      ipcRenderer.invoke('dialog:pickSkill', title) as Promise<Result<string | null>>,
+
+    /** Files to attach. Empty when the dialog was cancelled, which is a choice. */
+    pickFiles: (title: string): Promise<Result<string[]>> =>
+      ipcRenderer.invoke('dialog:pickFiles', title) as Promise<Result<string[]>>
   },
 
   skills: {

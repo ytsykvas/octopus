@@ -574,8 +574,10 @@ export const uk: Translation = {
     skillsEmpty: 'Скілів поки немає.',
     skillsEmptyNote: 'Додайте скіл у налаштуваннях — і він з’явиться тут у кожній розмові.',
     skillsSettings: 'Відкрити налаштування',
-    attach: 'Прикріпити',
-    attachSoon: 'Прикріплення ще не працює.',
+    attach: 'Прикріпити файли',
+    attachRemove: 'Прибрати цей файл',
+    attachIntro: 'Файли, на які я показую:',
+    attachDrop: 'Відпустіть, щоб прикріпити',
 
     model: 'Модель',
     modelDefault: 'Модель за замовчуванням',
@@ -950,6 +952,8 @@ export const uk: Translation = {
       'Запит #{{number}} у гілці {{head}}, а не в {{branch}} цього воркспейсу. Нічого не зроблено.',
     closeFailed: 'GitHub не закрив #{{number}}. Каже: {{reason}}',
     replyFailed: 'GitHub не опублікував відповідь. Каже: {{reason}}',
+    attachmentTooLarge: 'Це зображення більше за {{limit}} МБ. Збережіть його й прикріпіть файлом.',
+    attachmentType: 'octopus не вміє прикріпляти {{type}}. Збережіть це файлом і прикріпіть.',
     resolveFailed: 'GitHub не змінив стан гілки. Каже: {{reason}}',
     alreadyExists: '{{path}} уже існує. Додайте його з диска.',
     branchUnmerged:

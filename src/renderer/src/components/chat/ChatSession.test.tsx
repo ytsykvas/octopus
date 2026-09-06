@@ -884,6 +884,57 @@ describe('the permission mode', () => {
     expect(octopus().chats.setModel).not.toHaveBeenCalled()
   })
 
+  /*
+   * The paperclip is the visible one of three ways in. What goes out is the
+   * file's **path** — nothing is copied anywhere, which is §4's rule that
+   * nothing implicit reaches the agent in the plainest form it takes.
+   */
+  it('attaches a chosen file and names its path in the message', async () => {
+    const user = userEvent.setup()
+    vi.mocked(octopus().dialog.pickFiles).mockResolvedValue({
+      ok: true,
+      value: ['/a/shot.png']
+    })
+    givenChat()
+    await openLoadedChat()
+
+    await user.click(await screen.findByRole('button', { name: 'Attach files' }))
+    expect(await screen.findByText('shot.png')).toBeInTheDocument()
+
+    await user.type(screen.getByRole('textbox'), 'have a look')
+    await user.click(screen.getByRole('button', { name: 'Send' }))
+
+    await waitFor(() => {
+      expect(octopus().chats.send).toHaveBeenCalledWith(
+        CHAT_ID,
+        'Files I am pointing you at:\n\n/a/shot.png\n\nhave a look'
+      )
+    })
+  })
+
+  /* A refused paste is news about the message being written, so it goes in the
+     conversation's own banner rather than a second one beside it. */
+  it('says so in the conversation when an attachment is refused', async () => {
+    vi.mocked(octopus().attachments.paste).mockResolvedValue({
+      ok: false,
+      error: 'too large',
+      code: 'attachmentTooLarge',
+      params: { limit: '12' }
+    })
+    givenChat()
+    await openLoadedChat()
+
+    const image = new File(['x'], 'shot.png', { type: 'image/png' })
+    fireEvent.paste(screen.getByRole('textbox'), {
+      clipboardData: {
+        items: [{ kind: 'file', type: 'image/png', getAsFile: () => image }],
+        getData: () => ''
+      }
+    })
+
+    expect(await screen.findByText(/over 12 MB/)).toBeInTheDocument()
+  })
+
   /* The other half of the same judgement: which brain plans, and how hard it
      thinks while it does. */
   it('sends the planning effort the scale was set to', async () => {

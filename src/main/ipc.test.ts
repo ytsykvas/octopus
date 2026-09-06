@@ -19,6 +19,7 @@ import {
 } from '../core/accounts.js'
 import type { QueryFn } from '../core/agent.js'
 import type { Config } from '../core/config.js'
+import { MAX_PASTE_BYTES } from '../core/attachments.js'
 import type { RemoteRepository } from '../core/github.js'
 import { createService, type OctopusService, type ServiceOptions } from '../core/service.js'
 import type {
@@ -347,6 +348,8 @@ describe('channel table', () => {
     'skills:forWorkspace',
     'skills:setForChat',
     'dialog:pickSkill',
+    'dialog:pickFiles',
+    'attachments:paste',
     'workspaces:list',
     'workspaces:create',
     'workspaces:rename',
@@ -1411,6 +1414,62 @@ describe('workspaces of a real project', () => {
       ok: true,
       value: { added: 1, files: [{ path: 'draft.txt', status: 'untracked' }] }
     })
+  })
+
+  /* Files rather than a directory, and several at once. Cancelling adds
+     nothing, which is a choice rather than a failure. */
+  it('answers with the files that were chosen, and with none when cancelled', async () => {
+    await expect(invoke('dialog:pickFiles', 'Attach files')).resolves.toEqual({
+      ok: true,
+      value: []
+    })
+
+    bench.picked = { canceled: false, filePaths: ['/a/one.png', '/b/two.log'] }
+
+    await expect(invoke('dialog:pickFiles', 'Attach files')).resolves.toEqual({
+      ok: true,
+      value: ['/a/one.png', '/b/two.log']
+    })
+  })
+
+  // The window can be gone by the time the call lands; the dialog then opens
+  // unparented rather than the call failing.
+  it('still opens the file picker when the window has closed', async () => {
+    bench.window = null
+    bench.picked = { canceled: false, filePaths: ['/a/one.png'] }
+
+    await expect(invoke('dialog:pickFiles', 'Attach files')).resolves.toEqual({
+      ok: true,
+      value: ['/a/one.png']
+    })
+  })
+
+  /*
+   * The one attachment octopus writes. A file dragged in or chosen from disk
+   * keeps its own path; a clipboard carries a picture rather than a file.
+   *
+   * The type decides a filename, so it is checked against an allowlist rather
+   * than trusted — this channel is the boundary, and the renderer having read
+   * the contract is not a reason to believe it.
+   */
+  it('writes a pasted image and refuses one it cannot name', async () => {
+    const written = await invoke('attachments:paste', 'image/png', Uint8Array.from([1, 2, 3]))
+
+    expect(written).toMatchObject({ ok: true, value: expect.stringContaining('.png') })
+
+    await expect(
+      invoke('attachments:paste', 'application/x-sh', Uint8Array.from([1]))
+    ).resolves.toMatchObject({ ok: false, code: 'attachmentType' })
+  })
+
+  it('refuses bytes that are not bytes, and more of them than the cap allows', async () => {
+    await expect(invoke('attachments:paste', 'image/png', 'not bytes')).resolves.toMatchObject({
+      ok: false
+    })
+
+    await expect(
+      invoke('attachments:paste', 'image/png', new Uint8Array(MAX_PASTE_BYTES + 1))
+    ).resolves.toMatchObject({ ok: false })
   })
 
   /* Beside the diff and not folded into it: the pane draws the moment the diff

@@ -749,8 +749,14 @@ export const en = {
     skillsSettings: 'Open settings',
     /* A control with nothing behind it yet, and it says so rather than
        swallowing the click. */
-    attach: 'Attach',
-    attachSoon: 'Attachments are not wired up yet.',
+    attach: 'Attach files',
+    attachRemove: 'Take this file back',
+    /* What the message says above the paths. The agent is told where the files
+       are, not handed copies of them — §4's rule that nothing implicit reaches
+       it, in the plainest form it takes. */
+    attachIntro: 'Files I am pointing you at:',
+    /* Shown over the composer while something is being dragged onto it. */
+    attachDrop: 'Drop to attach',
 
     model: 'Model',
     /* The default row's name, for a catalogue that has not arrived yet and so
@@ -1194,6 +1200,10 @@ export const en = {
     /* No number on either: a reply and a resolve are addressed to a thread, and
        the thread is what the reader is looking at when one of them fails. */
     replyFailed: 'GitHub would not post the reply. It said: {{reason}}',
+    /* A paste, always: a file chosen or dragged in is never copied, so its size
+       and its type are somebody else's business. */
+    attachmentTooLarge: 'That image is over {{limit}} MB. Save it and attach the file instead.',
+    attachmentType: 'octopus cannot attach a {{type}}. Save it and attach the file instead.',
     resolveFailed: 'GitHub would not change the thread. It said: {{reason}}',
     alreadyExists: '{{path}} already exists. Add it from disk instead.',
     branchUnmerged:

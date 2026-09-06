@@ -41,11 +41,13 @@ function renderAttic(
   onToggleSkill: ReturnType<typeof vi.fn>
   onRefreshSkills: ReturnType<typeof vi.fn>
   onOpenSettings: ReturnType<typeof vi.fn>
+  onAttach: ReturnType<typeof vi.fn>
 } {
   const onSend = vi.fn()
   const onToggleSkill = vi.fn()
   const onRefreshSkills = vi.fn()
   const onOpenSettings = vi.fn()
+  const onAttach = vi.fn()
 
   render(
     <ComposerAttic
@@ -56,10 +58,11 @@ function renderAttic(
       onToggleSkill={onToggleSkill}
       onRefreshSkills={onRefreshSkills}
       onOpenSettings={onOpenSettings}
+      onAttach={onAttach}
     />
   )
 
-  return { onSend, onToggleSkill, onRefreshSkills, onOpenSettings }
+  return { onSend, onToggleSkill, onRefreshSkills, onOpenSettings, onAttach }
 }
 
 describe('what the next message is up against', () => {
@@ -301,14 +304,14 @@ describe('the controls on the right', () => {
     expect(onToggleSkill).toHaveBeenCalledExactlyOnceWith('octopus:review', false)
   })
 
-  /*
-   * A control that looks live and does nothing is read as a bug in the app.
-   * One that is plainly not ready is read as a plan, so it says so and refuses
-   * the click rather than swallowing it.
-   */
-  it('shows the paperclip as something not wired up yet', () => {
-    renderAttic()
+  /* The visible one of three ways in: a file is more often dragged onto the
+     composer or pasted into it, and neither of those can be seen. */
+  it('opens the file dialog from the paperclip', async () => {
+    const user = userEvent.setup()
+    const { onAttach } = renderAttic()
 
-    expect(screen.getByRole('button', { name: 'Attach' })).toBeDisabled()
+    await user.click(screen.getByRole('button', { name: 'Attach files' }))
+
+    expect(onAttach).toHaveBeenCalledOnce()
   })
 })

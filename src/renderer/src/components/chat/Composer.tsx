@@ -49,6 +49,21 @@ interface ComposerProps {
   readonly planEffort: EffortChoice | null
   readonly onPlanEffort: (effort: EffortChoice | null) => void
   /**
+   * Paths the next message will name.
+   *
+   * Never copies of the files. What goes out is where they are, which is the
+   * plainest form §4's rule that nothing implicit reaches the agent can take —
+   * and what the chips above the field make checkable before it is sent.
+   */
+  readonly files: readonly string[]
+  readonly onRemoveFile: (path: string) => void
+  /** The paperclip. One of three ways in, and the only visible one. */
+  readonly onAttachFiles: () => void
+  /** Files dropped on the composer, whose paths the window cannot read itself. */
+  readonly onDropFiles: (files: readonly File[]) => void
+  /** An image pasted into the field, which has no path until one is made. */
+  readonly onPasteImage: (image: Blob) => void
+  /**
    * The model this conversation writes code with; null leaves it to the agent.
    *
    * Both halves arrive as they are stored, and which of them is *in force* is
@@ -152,6 +167,11 @@ export function Composer({
   onEffort,
   planEffort,
   onPlanEffort,
+  files,
+  onRemoveFile,
+  onAttachFiles,
+  onDropFiles,
+  onPasteImage,
   model,
   onModel,
   planModel,
@@ -219,6 +239,9 @@ export function Composer({
    * dismissing is about this moment, not about the word.
    */
   const [dismissed, setDismissed] = useState(false)
+  /* Only so the frame can say a drop would land. Nothing else reads it, and it
+     is cleared by the drop as well as by leaving. */
+  const [dragging, setDragging] = useState(false)
 
   /*
    * Which of the conversation's two models the next message will run with.
@@ -296,11 +319,17 @@ export function Composer({
      * disk, which left nowhere at all to get it back from.
      */
     void (async () => {
-      const message = withNotes(trimmed, notes, {
-        diff: t('diff.commentIntro'),
-        pullRequest: t('pullRequest.quoteIntro'),
-        oldSide: t('diff.noteOldSide')
-      })
+      const message = withNotes(
+        trimmed,
+        notes,
+        {
+          diff: t('diff.commentIntro'),
+          pullRequest: t('pullRequest.quoteIntro'),
+          oldSide: t('diff.noteOldSide'),
+          files: t('chat.attachIntro')
+        },
+        files
+      )
 
       if (!(await onSend(message))) return
 
@@ -330,9 +359,33 @@ export function Composer({
       {/* `relative` so the suggestion list can hang off the top of the whole
           block rather than off the field: it opens upwards, and anchoring it
           to the textarea would put it over the text being typed. */}
+      {/* The whole box takes a drop, not the field alone. Aiming at a textarea
+          that is two lines tall is a worse target than the frame around it, and
+          a drop that lands a pixel outside would do the browser's own thing —
+          navigate the window to the file. */}
       <div
         ref={field}
-        className="border-line bg-surface focus-within:border-line-strong relative mx-auto flex w-full max-w-6xl flex-col rounded-[var(--radius-panel)] border transition-colors"
+        onDragOver={(event) => {
+          // Both, and neither is optional: without `preventDefault` the drop
+          // never fires, and without `dropEffect` the cursor says "no".
+          event.preventDefault()
+          event.dataTransfer.dropEffect = 'copy'
+          setDragging(true)
+        }}
+        onDragLeave={(event) => {
+          // Only when the pointer has left the box itself. Dragging over a
+          // child fires `dragleave` for the parent, so a strip that flickered
+          // as the cursor crossed the attic would be the naive version.
+          if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setDragging(false)
+        }}
+        onDrop={(event) => {
+          event.preventDefault()
+          setDragging(false)
+          onDropFiles([...event.dataTransfer.files])
+        }}
+        className={`bg-surface focus-within:border-line-strong relative mx-auto flex w-full max-w-6xl flex-col rounded-[var(--radius-panel)] border transition-colors ${
+          dragging ? 'border-accent' : 'border-line'
+        }`}
       >
         {suggesting && (
           <CommandMenu commands={matches} active={active} onActive={setActive} onPick={complete} />
@@ -349,9 +402,15 @@ export function Composer({
           onToggleSkill={onToggleSkill}
           onRefreshSkills={onRefreshSkills}
           onOpenSettings={onOpenSettings}
+          onAttach={onAttachFiles}
         />
 
-        <ComposerAttachments notes={notes} onRemove={onRemoveNote} />
+        <ComposerAttachments
+          notes={notes}
+          onRemove={onRemoveNote}
+          files={files}
+          onRemoveFile={onRemoveFile}
+        />
 
         <textarea
           value={draft}
@@ -363,6 +422,22 @@ export function Composer({
             // has moved what sits at each index.
             setDismissed(false)
             setActive(0)
+          }}
+          onPaste={(event) => {
+            /* A screenshot on the clipboard is a picture, not a file, so this
+               is the one attachment octopus has to write. Text pastes are
+               untouched: an image item is what distinguishes the two, and a
+               paste that has both — copying a cell out of a spreadsheet gives
+               a picture beside the text — is the text the user meant. */
+            const [image] = [...event.clipboardData.items]
+              .filter((item) => item.kind === 'file' && item.type.startsWith('image/'))
+              .map((item) => item.getAsFile())
+              .filter((file) => file !== null)
+
+            if (image && event.clipboardData.getData('text') === '') {
+              event.preventDefault()
+              onPasteImage(image)
+            }
           }}
           onKeyDown={(event) => {
             // The list gets first refusal on the keys it uses, because it is

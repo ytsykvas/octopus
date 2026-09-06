@@ -193,10 +193,39 @@ a seeded flag would stay stuck on.
 
 **The composer has an attic**, a strip above the field mirroring the settings
 footer below it: how full this conversation's context window is on the left, and
-on the right the skills it may reach for, a paperclip, and a refusal when the
+on the right the skills it may reach for, the paperclip, and a refusal when the
 account has one. The reading is one step fainter than the pickers underneath,
 which are clicked where it is mostly read — mostly, because it is also the way
 out of what it reports.
+
+**A file is attached by pointing at it, not by copying it.** The paperclip is
+live now, and it is one of three ways in: a file can be dragged onto the
+composer or, for a screenshot, pasted straight into the field. What goes out is
+the file's **path**, written into the message beside the review notes — §4's
+rule that nothing implicit reaches the agent, in the plainest form it takes, and
+what makes the message the sender reads back the whole of what was sent.
+
+Nothing is copied anywhere, which is the decision the rest follows from. A copy
+would put a second version of somebody's file somewhere they did not put it, and
+it would go stale the moment they edited the original. The chip above the field
+names the file and holds the whole path on hover; taking it back before sending
+is a click.
+
+The **paste** is the one exception and cannot be anything else, since a
+clipboard carries a picture rather than a file. That one is written under
+`~/.octopus/attachments/`, and that directory goes to every session as a root of
+its own — so a pasted screenshot is read without a permission prompt, while a
+file pointed at from somewhere else is a file outside the project and the agent
+asks about it, which is right. A paste that also carries text is left alone:
+copying a cell out of a spreadsheet puts a picture on the clipboard beside the
+text, and the text is what was meant.
+
+The **drop target is the whole box**, not the field. A textarea two lines tall
+is a worse target than the frame around it, and a drop that lands a pixel
+outside would do the browser's own thing — navigate the window to the file. The
+frame says so while something is over it, and keeps saying so as the pointer
+crosses the attic: `dragleave` fires for the parent when a child is entered, so
+the naive version flickers.
 
 It used to be one figure in the chat header, and it was almost always blank.
 Measured against a live session, `rate_limit_event` usually carries no

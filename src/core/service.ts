@@ -65,6 +65,7 @@ import {
   storedCarryList,
   writeCarryList
 } from './carry.js'
+import { writePastedImage } from './attachments.js'
 import type { CarryReport } from './carry.js'
 import { type ConductorConfig, type DeclaredFile, readConductorConfig } from './conductorConfig.js'
 import { applyEnvOverrides, discardIfOnlyBlock, removeEnvBlock, readWorkspaceEnv } from './env.js'
@@ -127,6 +128,7 @@ import {
   writeInstruction
 } from './instructions.js'
 import {
+  attachmentsDir,
   configFile,
   globalSkillsRoot,
   projectSkillsRoot,
@@ -510,6 +512,16 @@ export interface OctopusService {
    * best answer available — it is what every worktree is cut from.
    */
   projectScripts(projectId: string, workspaceId: string | null): Promise<ScriptsInWorkspace>
+
+  /**
+   * Writes a pasted image and answers with its path.
+   *
+   * The one attachment octopus stores. A file dragged onto the composer or
+   * chosen from disk keeps its own path and is never copied — the message
+   * carries the path — but a clipboard holds a picture rather than a file, so
+   * a paste has no path until one is made.
+   */
+  writePastedAttachment(type: string, bytes: Uint8Array): Promise<string>
 
   /** Which of the checkout's files travel into a workspace, one path per line. */
   readProjectCarryList(projectId: string): Promise<string>
@@ -2308,11 +2320,27 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
       settingSources
     )
 
+    /*
+     * Where a pasted image is written, handed over as a root of its own.
+     *
+     * A file dragged in or chosen from disk keeps its own path and is never
+     * copied, so the agent asks before reading it — which is right, since it is
+     * a file outside the project. A pasted screenshot is the common case and
+     * has no path until we make one, and it would be a poor bargain to make one
+     * inside our own data directory and then ask permission to read it.
+     *
+     * Passed whether or not anything has been pasted yet, for the reason an
+     * empty skill store is: roots go over once, at session start, so a
+     * directory withheld for being empty is one this conversation can never
+     * reach.
+     */
+    const attachments = attachmentsDir(dataRoot)
+
     // Before the roots are handed over, because `--add-dir` on a directory that
     // is not there is at best untested — and until the first skill is written
     // neither of ours exists. A write, so it lives here rather than in
     // `sessionSkills`, which is also the read path behind the skills panel.
-    await Promise.all(skills.roots.map((root) => ensureStore(root)))
+    await Promise.all([...skills.roots, attachments].map((root) => ensureStore(root)))
 
     const session = startSession(
       {
@@ -2330,7 +2358,7 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
         // already doing. `askPermission` consults `alwaysAllowedTools` itself,
         // on every call, against the config as it stands at that moment.
         allowedTools: [...READ_ONLY_TOOLS],
-        additionalDirectories: skills.roots,
+        additionalDirectories: [...skills.roots, attachments],
         skillOverrides: skills.overrides
       },
       {
@@ -2521,6 +2549,10 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
         run: await resolve('run'),
         archive: await resolve('archive')
       }
+    },
+
+    async writePastedAttachment(type, bytes) {
+      return writePastedImage(type, bytes, new Date(), dataRoot)
     },
 
     async readProjectCarryList(projectId) {

@@ -8,7 +8,8 @@ import { type ChatNote, mergeNotes, noteKey, withNotes } from './attachments.js'
 const INTROS = {
   diff: 'Review notes:',
   pullRequest: 'From the review:',
-  oldSide: '(as it was)'
+  oldSide: '(as it was)',
+  files: 'Files I am pointing you at:'
 }
 
 const comment = (overrides: Partial<DiffComment> = {}): DiffComment => ({
@@ -186,5 +187,30 @@ describe('writing a remark from the review into the message', () => {
     expect(message.split('From the review:')).toHaveLength(2)
     // Both of the diff's notes are above the review, whatever order they came in.
     expect(message.indexOf('src/core/diff.ts:9')).toBeLessThan(message.indexOf('#812'))
+  })
+  /*
+   * The whole of an attachment is its path. Nothing is copied anywhere: the
+   * agent is told where a file is and reads it, which is §4's rule in the
+   * plainest form it takes — and it makes the message the user can read back
+   * the whole of what was sent.
+   */
+  it('names the attached files in the message', () => {
+    const message = withNotes('have a look', [], INTROS, ['/a/shot.png', '/b/server.log'])
+
+    expect(message).toBe(
+      'Files I am pointing you at:\n\n/a/shot.png\n\n/b/server.log\n\nhave a look'
+    )
+  })
+
+  /* An attachment is usually what the message is about, while a note is a
+     remark on work already there. */
+  it('puts the files before the notes', () => {
+    const message = withNotes('and this', [note()], INTROS, ['/a/shot.png'])
+
+    expect(message.indexOf('/a/shot.png')).toBeLessThan(message.indexOf(INTROS.diff))
+  })
+
+  it('leaves a message with neither exactly as it was typed', () => {
+    expect(withNotes('rerun the tests', [], INTROS, [])).toBe('rerun the tests')
   })
 })

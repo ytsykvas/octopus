@@ -1,10 +1,11 @@
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import type { Chat, Effort, WorkingMode } from '@core/chats.js'
 import type { WorkspaceView } from '@core/workspaces.js'
 
 import { Placeholder } from '../Placeholder.js'
+import { useAttachments } from '../../hooks/useAttachments.js'
 import { useChat } from '../../hooks/useChat.js'
 import type { ChatTab } from '../../hooks/useChatTabs.js'
 import type { DiffCommentController } from '../../hooks/useDiffComments.js'
@@ -93,6 +94,12 @@ export function ChatSession({
   onOpenSkillSettings
 }: ChatSessionProps): React.JSX.Element {
   const { t } = useTranslation()
+
+  /* An attachment that could not be taken — a paste too large, a dialog that
+     failed — shown in the conversation's own banner rather than a second one:
+     it is the same kind of news about the same message. */
+  const [attachmentError, setAttachmentError] = useState<string | null>(null)
+  const attachments = useAttachments(setAttachmentError)
   const describeFailure = useErrorMessage()
   const chat = useChat(tab.record, workspace.id, tab.status, describeFailure, onOpened)
   const rateLimit = useRateLimit()
@@ -159,10 +166,10 @@ export function ChatSession({
         }}
         className="min-h-0 flex-1 overflow-auto"
       >
-        {chat.error !== null && (
+        {(chat.error ?? attachmentError) !== null && (
           <div className="mx-auto w-full max-w-6xl px-6 pt-5">
             <p className="bg-danger-bg text-danger border-danger/25 rounded-[var(--radius-control)] border px-3 py-2">
-              {chat.error}
+              {chat.error ?? attachmentError}
             </p>
           </div>
         )}
@@ -265,6 +272,18 @@ export function ChatSession({
         onNotesSent={() => {
           comments.clear()
           quotes.clear()
+          attachments.clear()
+        }}
+        files={attachments.files}
+        onRemoveFile={attachments.remove}
+        onAttachFiles={() => {
+          setAttachmentError(null)
+          void attachments.choose(t('chat.attach'))
+        }}
+        onDropFiles={attachments.drop}
+        onPasteImage={(image) => {
+          setAttachmentError(null)
+          void attachments.paste(image)
         }}
       />
     </div>

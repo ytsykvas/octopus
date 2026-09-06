@@ -41,6 +41,24 @@ export function stateTempFile(root: string = rootDir()): string {
 }
 
 /** Where every project's own directory sits: `~/.octopus/projects`. */
+/**
+ * Where an image pasted into the composer is written.
+ *
+ * The one attachment octopus has to store. A file dragged in or chosen from
+ * disk keeps its own path and is never copied — the message carries the path,
+ * and copying would put a second copy of somebody's file somewhere they did not
+ * put it. A pasted image has no path to carry, because macOS puts a picture on
+ * the clipboard rather than a file, so this is where it becomes one.
+ *
+ * Under `~/.octopus` rather than in a temporary directory, and that is what
+ * makes it worth handing to a session as a root: it is ours, it is stable for
+ * the life of the app, and a screenshot the agent is about to be asked about
+ * should not vanish because the system tidied `/tmp` mid-conversation.
+ */
+export function attachmentsDir(root: string = rootDir()): string {
+  return join(root, 'attachments')
+}
+
 export function projectsDir(root: string = rootDir()): string {
   return join(root, 'projects')
 }

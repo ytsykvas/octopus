@@ -36,6 +36,8 @@ interface ComposerAtticProps {
   readonly onRefreshSkills: () => void
   /** Where the panel sends someone who has no skills to switch yet. */
   readonly onOpenSettings: () => void
+  /** Opens the file dialog. The paperclip is the visible way in of three. */
+  readonly onAttach: () => void
 }
 
 /**
@@ -76,7 +78,8 @@ export function ComposerAttic({
   skills,
   onToggleSkill,
   onRefreshSkills,
-  onOpenSettings
+  onOpenSettings,
+  onAttach
 }: ComposerAtticProps): React.JSX.Element {
   const { t } = useTranslation()
   // Owned here rather than threaded down from `App`, where the shared one
@@ -215,15 +218,16 @@ export function ComposerAttic({
             onOpenSettings={onOpenSettings}
           />
 
-          {/* No behaviour yet, and it says so rather than swallowing a click.
-              A control that looks live and does nothing is read as a bug in
-              the app; one that is plainly not ready yet is read as a plan. */}
+          {/* One of three ways in, and the least used: a file is more often
+              dragged onto the composer or pasted into it. It is here because it
+              is the only one that is visible — the other two have to be
+              guessed at, and this says the guess would be right. */}
           <button
             type="button"
-            disabled
+            onClick={onAttach}
             aria-label={t('chat.attach')}
-            title={t('chat.attachSoon')}
-            className="text-ink-faint -my-0.5 inline-flex items-center rounded-[var(--radius-control)] px-1 py-0.5 opacity-50"
+            title={t('chat.attach')}
+            className="focus-ring text-ink-faint hover:text-ink -my-0.5 inline-flex items-center rounded-[var(--radius-control)] px-1 py-0.5"
           >
             <Paperclip aria-hidden size={12} />
           </button>

@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, within } from '@testing-library/react'
+import { createEvent, fireEvent, render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
@@ -20,6 +20,9 @@ function renderComposer(overrides: Partial<ComposerProps> = {}): {
   onEffort: ReturnType<typeof vi.fn>
   onModel: ReturnType<typeof vi.fn>
   onPlanModel: ReturnType<typeof vi.fn>
+  onRemoveFile: ReturnType<typeof vi.fn>
+  onDropFiles: ReturnType<typeof vi.fn>
+  onPasteImage: ReturnType<typeof vi.fn>
   rerender: (next: Partial<ComposerProps>) => void
 } {
   // Answers that the message went, which is what the composer clears on. A
@@ -32,6 +35,9 @@ function renderComposer(overrides: Partial<ComposerProps> = {}): {
   const onModel = vi.fn()
   const onPlanMode = vi.fn()
   const onPlanModel = vi.fn()
+  const onRemoveFile = vi.fn()
+  const onDropFiles = vi.fn()
+  const onPasteImage = vi.fn()
 
   const composer = (props: Partial<ComposerProps>): React.JSX.Element => (
     <Composer
@@ -46,6 +52,11 @@ function renderComposer(overrides: Partial<ComposerProps> = {}): {
       onEffort={onEffort}
       planEffort={null}
       onPlanEffort={vi.fn()}
+      files={[]}
+      onRemoveFile={onRemoveFile}
+      onAttachFiles={vi.fn()}
+      onDropFiles={onDropFiles}
+      onPasteImage={onPasteImage}
       model={null}
       onModel={onModel}
       planModel={null}
@@ -78,6 +89,9 @@ function renderComposer(overrides: Partial<ComposerProps> = {}): {
     onEffort,
     onModel,
     onPlanModel,
+    onRemoveFile,
+    onDropFiles,
+    onPasteImage,
     // For the settings that have to be watched *changing* — the chip follows
     // the mode, and a second `render` would mount a second composer instead.
     rerender: (next) => {
@@ -127,6 +141,13 @@ const CATALOGUE: AgentModel[] = [
 ]
 
 const field = (): HTMLElement => screen.getByRole('textbox')
+
+/** A `dragleave` that says where the pointer went, which `fireEvent` cannot. */
+function leaving(from: HTMLElement, to: Node): Event {
+  const event = createEvent.dragLeave(from)
+  Object.defineProperty(event, 'relatedTarget', { value: to })
+  return event
+}
 
 // Named by the control plus its value, since it has no menu to open and the
 // value is the only word on it.
@@ -1044,5 +1065,111 @@ describe('the model the session is running', () => {
     renderComposer({ models: [], model: null, activeModel: 'claude-brand-new-1' })
 
     expect(modelButton()).toHaveTextContent('claude-brand-new-1')
+  })
+  /*
+   * Three ways in, and the paperclip is the only visible one. A file is more
+   * often dragged onto the composer or pasted into it, and neither of those can
+   * be seen — the paperclip is there to say the guess would be right.
+   */
+  /* Without `preventDefault` on the dragover the drop never fires at all, and
+     without `dropEffect` the cursor says "no" over a target that would take it. */
+  it('says a drop would land while something is over it', () => {
+    renderComposer()
+    const box = field().closest('div') as HTMLElement
+    const transfer = { files: [], types: ['Files'], dropEffect: 'none' }
+
+    fireEvent.dragOver(box, { dataTransfer: transfer })
+
+    expect(transfer.dropEffect).toBe('copy')
+    expect(box.className).toContain('border-accent')
+  })
+
+  /* Dragging over a child fires `dragleave` for the parent, so the naive
+     version flickers as the cursor crosses the attic. */
+  it('keeps saying so while the pointer crosses a child', () => {
+    renderComposer()
+    const box = field().closest('div') as HTMLElement
+
+    fireEvent.dragOver(box, { dataTransfer: { files: [], types: ['Files'] } })
+
+    // `relatedTarget` is a read-only accessor on the event, so it is defined
+    // onto one built by hand rather than passed to `fireEvent`.
+    fireEvent(box, leaving(box, field()))
+    expect(box.className).toContain('border-accent')
+
+    fireEvent(box, leaving(box, document.body))
+    expect(box.className).not.toContain('border-accent')
+  })
+
+  it('takes a file dropped anywhere on the composer', () => {
+    const { onDropFiles } = renderComposer()
+    const file = new File(['x'], 'shot.png', { type: 'image/png' })
+
+    fireEvent.drop(field().closest('div') as HTMLElement, {
+      dataTransfer: { files: [file], types: ['Files'] }
+    })
+
+    expect(onDropFiles).toHaveBeenCalledWith([file])
+  })
+
+  /* A clipboard carries a picture rather than a file, so this is the one
+     attachment that has no path until octopus makes one. */
+  it('takes an image pasted into the field', () => {
+    const { onPasteImage } = renderComposer()
+    const image = new File(['x'], 'shot.png', { type: 'image/png' })
+
+    fireEvent.paste(field(), {
+      clipboardData: {
+        items: [{ kind: 'file', type: 'image/png', getAsFile: () => image }],
+        getData: () => ''
+      }
+    })
+
+    expect(onPasteImage).toHaveBeenCalledWith(image)
+  })
+
+  /* Copying a cell out of a spreadsheet puts a picture on the clipboard beside
+     the text, and the text is what was meant. */
+  it('leaves a paste that carries text alone', () => {
+    const { onPasteImage } = renderComposer()
+
+    fireEvent.paste(field(), {
+      clipboardData: {
+        items: [{ kind: 'file', type: 'image/png', getAsFile: () => new File(['x'], 'cell.png') }],
+        getData: () => '1\t2'
+      }
+    })
+
+    expect(onPasteImage).not.toHaveBeenCalled()
+  })
+
+  it('leaves an ordinary text paste alone', () => {
+    const { onPasteImage } = renderComposer()
+
+    fireEvent.paste(field(), { clipboardData: { items: [], getData: () => 'hello' } })
+
+    expect(onPasteImage).not.toHaveBeenCalled()
+  })
+
+  /* What goes out is where the files are, not copies of them: §4's rule that
+     nothing implicit reaches the agent, in the plainest form it takes. */
+  it('names the attached files in the message it sends', async () => {
+    const user = userEvent.setup()
+    const { onSend } = renderComposer({ files: ['/a/shot.png'] })
+
+    await user.type(field(), 'have a look')
+    await user.click(screen.getByRole('button', { name: 'Send' }))
+
+    expect(onSend).toHaveBeenCalledWith('Files I am pointing you at:\n\n/a/shot.png\n\nhave a look')
+  })
+
+  it('shows an attached file, and takes it back', async () => {
+    const user = userEvent.setup()
+    const { onRemoveFile } = renderComposer({ files: ['/a/shot.png'] })
+
+    expect(screen.getByText('shot.png')).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: 'Take this file back' }))
+
+    expect(onRemoveFile).toHaveBeenCalledWith('/a/shot.png')
   })
 })

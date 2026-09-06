@@ -134,9 +134,17 @@ export function installOctopusStub(): Api {
     files: {
       open: vi.fn(() => ok(undefined))
     },
+    attachments: {
+      paste: vi.fn(() => ok('/tmp/paste.png')),
+      // A dropped file's real path. Empty for anything that never was a file on
+      // disk, which is what a drag out of a browser gives.
+      pathFor: vi.fn((file: File) => `/dropped/${file.name}`)
+    },
+
     dialog: {
       pickDirectory: vi.fn(() => ok(null)),
-      pickSkill: vi.fn(() => ok(null))
+      pickSkill: vi.fn(() => ok(null)),
+      pickFiles: vi.fn(() => ok([]))
     },
     skills: {
       list: vi.fn(() => ok([])),

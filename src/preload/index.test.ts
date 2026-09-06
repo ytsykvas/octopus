@@ -30,6 +30,9 @@ vi.mock('electron', () => ({
     off: (...args: unknown[]): void => {
       off(...args)
     }
+  },
+  webUtils: {
+    getPathForFile: (file: File): string => `/dropped/${file.name}`
   }
 }))
 
@@ -66,6 +69,7 @@ describe('the exposed bridge', () => {
   it('groups its methods rather than flattening everything', () => {
     expect(Object.keys(api).sort()).toEqual([
       'accounts',
+      'attachments',
       'chats',
       'config',
       'dialog',
@@ -375,6 +379,12 @@ describe('channel names', () => {
       'dialog:pickDirectory'
     ],
     ['dialog.pickSkill', () => method('dialog', 'pickSkill')('t' as never), 'dialog:pickSkill'],
+    ['dialog.pickFiles', () => method('dialog', 'pickFiles')('t' as never), 'dialog:pickFiles'],
+    [
+      'attachments.paste',
+      () => method('attachments', 'paste')('image/png' as never, new Uint8Array() as never),
+      'attachments:paste'
+    ],
     ['skills.list', () => method('skills', 'list')({ kind: 'global' } as never), 'skills:list'],
     [
       'skills.read',
@@ -480,8 +490,10 @@ describe('channel names', () => {
    * nothing.
    *
    * Exempt because they do not invoke: the subscription pairs go through
-   * `ipcRenderer.on`, whose channels are asserted one by one below, and
-   * `signInCommand` builds an argv locally on purpose.
+   * `ipcRenderer.on`, whose channels are asserted one by one below,
+   * `signInCommand` builds an argv locally on purpose, and `pathFor` answers
+   * from `webUtils` on this side of the bridge — which is the whole reason it
+   * is a method here rather than something the window works out itself.
    */
   const NOT_CALLS: readonly string[] = [
     'theme.onChange',
@@ -494,7 +506,8 @@ describe('channel names', () => {
     'workspaces.onStatus',
     'terminal.onData',
     'terminal.onExit',
-    'accounts.signInCommand'
+    'accounts.signInCommand',
+    'attachments.pathFor'
   ]
 
   it('names every method on the bridge, in the table or in the exemptions', () => {
@@ -737,5 +750,20 @@ describe('the rest of the surface', () => {
 
     stop()
     expect(off).toHaveBeenCalledWith('workspaces:status', expect.any(Function))
+  })
+})
+
+/*
+ * The one method on the bridge that answers rather than invoking.
+ *
+ * A `File` in the renderer stopped carrying a path years ago, and `webUtils` is
+ * the replacement — it has to be called on this side, which is the whole reason
+ * this is a method here rather than something the window works out itself.
+ */
+describe('where a dropped file actually is', () => {
+  it('answers from webUtils rather than from the file', () => {
+    const pathFor = api.attachments?.pathFor as ((file: File) => string) | undefined
+
+    expect(pathFor?.(new File(['x'], 'shot.png'))).toBe('/dropped/shot.png')
   })
 })

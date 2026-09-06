@@ -2155,6 +2155,24 @@ describe('removing a project', () => {
   })
 })
 
+describe('a pasted image', () => {
+  /* The one attachment octopus stores. A file dragged onto the composer or
+     chosen from disk keeps its own path and is never copied — the message
+     carries the path — but a clipboard holds a picture rather than a file. */
+  it('writes it under the data root and answers with where it landed', async () => {
+    const path = await service.writePastedAttachment('image/png', Uint8Array.from([1, 2, 3]))
+
+    expect(path.startsWith(join(dir, 'data', 'attachments'))).toBe(true)
+    await expect(readFile(path)).resolves.toEqual(Buffer.from([1, 2, 3]))
+  })
+
+  it('refuses a type it cannot name a file after', async () => {
+    await expect(
+      service.writePastedAttachment('application/x-sh', Uint8Array.from([1]))
+    ).rejects.toMatchObject({ code: 'attachmentType' })
+  })
+})
+
 describe('the sides a diff is coloured from', () => {
   /*
    * Read beside the diff rather than after it: the two describe one tree, and a
@@ -7378,14 +7396,19 @@ describe('the agent chat', () => {
       await expect(service.skillsForChat(chat.id)).resolves.toEqual([])
 
       /*
-       * And no root goes over either, which is the one case where omitting one
-       * is still right: with no project layer in `settingSources` the SDK reads
-       * no `.claude/skills` under any root, so a root there would widen what
-       * the session may reach and buy nothing at all. It is also what keeps
-       * `agent.ts`'s empty-list branch meaning something.
+       * And neither **store** goes over, which is the one case where omitting
+       * one is still right: with no project layer in `settingSources` the SDK
+       * reads no `.claude/skills` under any root, so a root there would widen
+       * what the session may reach and buy nothing at all.
+       *
+       * The attachments directory is not in that boat and goes over anyway. It
+       * has nothing to do with `settingSources` — nobody reads a `.claude`
+       * under it — and what it buys is a pasted screenshot the agent can read
+       * without asking. "Load nothing" is a statement about instructions, not
+       * about the files a message points at.
        */
       await service.sendToChat(chat.id, 'hello')
-      expect(agents[0]?.options().additionalDirectories).toBeUndefined()
+      expect(agents[0]?.options().additionalDirectories).toEqual([join(dir, 'data', 'attachments')])
     })
 
     /*
@@ -7528,7 +7551,8 @@ describe('the agent chat', () => {
       const options = agents[0]?.options()
       expect(options?.additionalDirectories).toEqual([
         join(dir, 'data', 'skills'),
-        join(dir, 'data', 'projects', 'planner', 'skills')
+        join(dir, 'data', 'projects', 'planner', 'skills'),
+        join(dir, 'data', 'attachments')
       ])
       expect(options?.settings).toMatchObject({ skillOverrides: { review: 'off' } })
     })
@@ -7560,7 +7584,8 @@ describe('the agent chat', () => {
       // of them, and the deny-list is what keeps it out rather than the roots.
       expect(agents[0]?.options().additionalDirectories).toEqual([
         join(dir, 'data', 'skills'),
-        join(dir, 'data', 'projects', 'planner', 'skills')
+        join(dir, 'data', 'projects', 'planner', 'skills'),
+        join(dir, 'data', 'attachments')
       ])
     })
 
@@ -7584,7 +7609,11 @@ describe('the agent chat', () => {
 
       const globalRoot = join(dir, 'data', 'skills')
       const projectRoot = join(dir, 'data', 'projects', projectId, 'skills')
-      expect(agents[0]?.options().additionalDirectories).toEqual([globalRoot, projectRoot])
+      expect(agents[0]?.options().additionalDirectories).toEqual([
+        globalRoot,
+        projectRoot,
+        join(dir, 'data', 'attachments')
+      ])
 
       // And they exist, because `--add-dir` on a directory that is not there is
       // at best untested — neither of ours exists until the first write.

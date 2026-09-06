@@ -40,6 +40,7 @@ import {
   ReplyBodySchema,
   ThreadIdSchema
 } from '../core/pullRequests.js'
+import { MAX_PASTE_BYTES } from '../core/attachments.js'
 import { QuestionAnswerSchema } from '../core/questions.js'
 import { RepoItemIdsSchema } from '../core/repoConfig.js'
 import { RevertPathSchema } from '../core/revert.js'
@@ -192,6 +193,18 @@ async function writeConfig(
  * They are deliberately one-liners: all logic lives in the core service and
  * this layer only forwards calls (§11.1).
  */
+/**
+ * The bytes of a pasted image, as they arrive over IPC.
+ *
+ * `instanceof` rather than a shape check: structured cloning preserves a
+ * `Uint8Array`, and anything else on this channel is a caller that has not
+ * read the contract. The length is bounded here as well as in core — this one
+ * is about what crosses the bridge, and core's is about what is written.
+ */
+const PastedBytesSchema = z
+  .instanceof(Uint8Array)
+  .refine((bytes) => bytes.byteLength <= MAX_PASTE_BYTES)
+
 export function registerIpc(
   service: OctopusService,
   terminals: TerminalManager,
@@ -807,6 +820,34 @@ export function registerIpc(
     const [chosen] = picked.filePaths
     return { ok: true, value: picked.canceled ? null : (chosen ?? null) }
   })
+
+  /* Files rather than a directory, and several at once. The dialog is
+     Electron's, so it lives here beside the other two. */
+  host.handle('dialog:pickFiles', async (event, title: string) => {
+    const window = host.windowFor(event)
+    const picked = await host.showOpenDialog(
+      { title, properties: ['openFile', 'multiSelections'] },
+      window ?? undefined
+    )
+
+    return { ok: true, value: picked.canceled ? [] : picked.filePaths }
+  })
+
+  /*
+   * The one attachment octopus writes.
+   *
+   * A file dragged in or chosen from disk keeps its own path; a clipboard
+   * carries a picture rather than a file, so a pasted image has no path until
+   * one is made here.
+   *
+   * The bytes arrive as a `Uint8Array` over structured cloning. The type is
+   * checked against an allowlist in core, because it decides a filename.
+   */
+  host.handle('attachments:paste', (_event, type: unknown, bytes: unknown) =>
+    attempt(() =>
+      service.writePastedAttachment(z.string().max(100).parse(type), PastedBytesSchema.parse(bytes))
+    )
+  )
 
   // Inside `attempt`, not before it: resolving the destination writes the
   // choice to the config, and a failed write would otherwise reject across IPC
