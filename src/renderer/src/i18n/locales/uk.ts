@@ -232,6 +232,12 @@ export const uk: Translation = {
     sources: 'Що агент бере сам',
     sourcesHint:
       'Октопус завантажує ті самі налаштування, що й Claude Code у терміналі, тож агент приходить, уже знаючи все, що цей репозиторій і ця машина для нього написали. Нічого з цього октопус не надсилає.',
+    permissions: 'Що ці налаштування дозволяють і забороняють',
+    permissionsHint:
+      'Правила, на які Claude Code відповідає сам, ще до того, як octopus щось спитає. Тут їх видно, а змінюють у файлі, який їх тримає — два з трьох лежать у репозиторії, і запис octopus туди скинув би проєкт у несхвалений стан.',
+    permissionAllow: 'дозволяє',
+    permissionDeny: 'забороняє',
+    permissionAsk: 'питає',
     sourceProjectMemory: 'CLAUDE.md цього репозиторію',
     sourceProjectSettings: '.claude/settings.json',
     sourceLocalSettings: '.claude/settings.local.json',

@@ -100,6 +100,30 @@ export function withStanding(
   return already ? [...permissions] : [...permissions, added]
 }
 
+/**
+ * Reads a rule as Claude Code writes it: `Edit(/w/docs/**)`, or `Edit` alone.
+ *
+ * The inverse of `standingKey`, and the one place that form is understood.
+ * Null for anything that is not a rule — a settings file is somebody else's,
+ * and a line nobody can read is dropped rather than guessed at.
+ */
+export function parseStandingRule(text: string): StandingPermission | null {
+  const match = /^([A-Za-z_][\w-]*)(?:\((.*)\))?$/u.exec(text.trim())
+  if (!match) return null
+
+  const [, toolName, ruleContent] = match
+
+  /* Unreachable: the first group is not optional, so a match always has one.
+     The guard is here because an indexed read is `T | undefined`. */
+  /* v8 ignore next */
+  if (toolName === undefined) return null
+
+  return {
+    toolName,
+    ruleContent: ruleContent === undefined || ruleContent === '' ? null : ruleContent
+  }
+}
+
 /** What a standing answer is stored and shown under; unique across the list. */
 export function standingKey(permission: StandingPermission): string {
   return permission.ruleContent === null

@@ -295,6 +295,10 @@ export function registerIpc(
     attempt(() => service.saveProjectCarryList(projectId, CarryListSchema.parse(contents)))
   )
 
+  host.handle('permissions:cli', (_event, projectId: string) =>
+    attempt(() => service.readCliPermissions(projectId))
+  )
+
   host.handle('carry:declared', (_event, projectId: string) =>
     attempt(() => service.declaredCarryFiles(projectId))
   )

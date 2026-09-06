@@ -68,6 +68,7 @@ import {
 import type { PermissionUpdate } from '@anthropic-ai/claude-agent-sdk'
 
 import { writePastedImage } from './attachments.js'
+import { type CliPermission, readCliPermissions } from './cliPermissions.js'
 import { allowedStanding, type StandingPermission, withStanding } from './standingPermissions.js'
 import type { CarryReport } from './carry.js'
 import { type ConductorConfig, type DeclaredFile, readConductorConfig } from './conductorConfig.js'
@@ -551,6 +552,15 @@ export interface OctopusService {
   /** Which of the checkout's files travel into a workspace, one path per line. */
   readProjectCarryList(projectId: string): Promise<string>
   saveProjectCarryList(projectId: string, contents: string): Promise<void>
+  /**
+   * What Claude Code's own settings allow and refuse for this project.
+   *
+   * Read and shown, never written: two of the three files are inside the
+   * checkout, and one of them is in `repoTrust.ts`'s list — writing to it would
+   * change the worktree's trust digest and put the project back to unapproved.
+   */
+  readCliPermissions(projectId: string): Promise<CliPermission[]>
+
   /**
    * What the checkout's `.conductor` says its workspaces need.
    *
@@ -2594,6 +2604,10 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
     async saveProjectCarryList(projectId, contents) {
       requireProject(projectId)
       await writeCarryList(projectId, contents, dataRoot)
+    },
+
+    async readCliPermissions(projectId) {
+      return readCliPermissions(requireProject(projectId).repoPath)
     },
 
     async declaredCarryFiles(projectId) {

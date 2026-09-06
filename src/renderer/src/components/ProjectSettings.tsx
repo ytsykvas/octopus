@@ -32,6 +32,7 @@ import { Combobox } from './Combobox.js'
 import { Field } from './Field.js'
 import { Modal } from './Modal.js'
 import { ProjectGlyph } from './ProjectGlyph.js'
+import { AgentPermissions } from './AgentPermissions.js'
 import { DeclaredFiles } from './DeclaredFiles.js'
 import { SectionRail } from './SectionRail.js'
 import { FileEditor } from './FileEditor.js'
@@ -831,6 +832,8 @@ export function ProjectSettings({
                   ))}
                 </ul>
               </Field>
+
+              <AgentPermissions projectId={project.id} />
 
               <InstructionEditors projectId={project.id} />
             </>

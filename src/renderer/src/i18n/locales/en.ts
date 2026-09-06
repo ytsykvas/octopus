@@ -260,6 +260,16 @@ export const en = {
     sources: 'What the agent picks up on its own',
     sourcesHint:
       'octopus loads the same settings as Claude Code in a terminal, so the agent arrives knowing what this repository and this machine have written for it. None of it is sent by octopus.',
+    /* The permission rules inside those same files. A rule there is honoured
+       before octopus is consulted at all, so a question that stopped being
+       asked — or a command that stopped running — had no explanation anywhere
+       in the interface until this. */
+    permissions: 'What those settings allow and refuse',
+    permissionsHint:
+      'Rules Claude Code answers by itself, before octopus asks anything. Shown here, changed in the file that holds them — two of the three are inside the repository, and octopus editing one would put the project back to unapproved.',
+    permissionAllow: 'allows',
+    permissionDeny: 'refuses',
+    permissionAsk: 'asks',
     sourceProjectMemory: 'CLAUDE.md in this repository',
     sourceProjectSettings: '.claude/settings.json',
     sourceLocalSettings: '.claude/settings.local.json',

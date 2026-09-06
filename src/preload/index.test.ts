@@ -132,6 +132,11 @@ describe('channel names', () => {
       'carry:save'
     ],
     [
+      'projects.cliPermissions',
+      () => method('projects', 'cliPermissions')('p' as never),
+      'permissions:cli'
+    ],
+    [
       'projects.declaredCarryFiles',
       () => method('projects', 'declaredCarryFiles')('p' as never),
       'carry:declared'

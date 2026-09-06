@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest'
 import {
   allowedStanding,
   covers,
+  parseStandingRule,
   StandingPermissionSchema,
   standingKey,
   withStanding
@@ -162,5 +163,45 @@ describe('what a standing answer is known by', () => {
   it('names the tool, and the place when there is one', () => {
     expect(standingKey(whole('Edit'))).toBe('Edit')
     expect(standingKey(narrow('Edit', '/w/docs/**'))).toBe('Edit(/w/docs/**)')
+  })
+})
+
+describe('reading a rule as Claude Code writes it', () => {
+  it('reads a tool with the place it is about', () => {
+    expect(parseStandingRule('Bash(npm run:*)')).toEqual({
+      toolName: 'Bash',
+      ruleContent: 'npm run:*'
+    })
+  })
+
+  it('reads a tool on its own as the whole tool', () => {
+    expect(parseStandingRule('Edit')).toEqual({ toolName: 'Edit', ruleContent: null })
+    expect(parseStandingRule('  Edit  ')).toEqual({ toolName: 'Edit', ruleContent: null })
+    expect(parseStandingRule('Edit()')).toEqual({ toolName: 'Edit', ruleContent: null })
+  })
+
+  it('keeps the brackets a rule content of its own contains', () => {
+    expect(parseStandingRule('Read(./a(1).ts)')).toEqual({
+      toolName: 'Read',
+      ruleContent: './a(1).ts'
+    })
+  })
+
+  /* A settings file is somebody else's, and a line nobody can read is dropped
+     rather than guessed at. */
+  it('reads nothing out of what is not a rule', () => {
+    expect(parseStandingRule('')).toBeNull()
+    expect(parseStandingRule('(no tool)')).toBeNull()
+    expect(parseStandingRule('1Tool(x)')).toBeNull()
+    expect(parseStandingRule('Edit(unclosed')).toBeNull()
+  })
+
+  /* It is the inverse of the key, which is what lets one list hold rules that
+     came from either side. */
+  it('is the inverse of what a rule is known by', () => {
+    for (const text of ['Edit', 'Bash(npm run:*)', 'Read(./.env)']) {
+      const rule = parseStandingRule(text)
+      expect(rule && standingKey(rule)).toBe(text)
+    }
   })
 })

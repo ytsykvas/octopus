@@ -19,6 +19,7 @@ import type { QuestionAnswer } from '@core/questions.js'
 import type { ChatEntry } from '@core/transcript.js'
 import type { TerminalExit, TerminalOutput, TerminalSpec } from '@core/terminal.js'
 import type { Config } from '@core/config.js'
+import type { CliPermission } from '@core/cliPermissions.js'
 import type { FileSides, WorkspaceDiff } from '@core/diff.js'
 import type { MergeMethod, PullRequestDraft, PullRequestView } from '@core/pullRequests.js'
 import type { DraftedPullRequest } from '@core/pullRequestDraft.js'
@@ -713,6 +714,15 @@ const api = {
 
     saveCarryList: (projectId: string, contents: string): Promise<Result<void>> =>
       ipcRenderer.invoke('carry:save', projectId, contents) as Promise<Result<void>>,
+
+    /**
+     * What Claude Code's own settings allow and refuse for this project.
+     *
+     * Shown, never written: two of the three files are inside the checkout, and
+     * editing one changes the worktree's trust digest.
+     */
+    cliPermissions: (projectId: string): Promise<Result<CliPermission[]>> =>
+      ipcRenderer.invoke('permissions:cli', projectId) as Promise<Result<CliPermission[]>>,
 
     /**
      * What the checkout's `.conductor` declares it needs, beside what the list

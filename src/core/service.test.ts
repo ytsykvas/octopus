@@ -2161,6 +2161,44 @@ describe('removing a project', () => {
   })
 })
 
+describe('what Claude Code’s own settings allow', () => {
+  /*
+   * A rule in these files is honoured — the SDK approves a matching call before
+   * `canUseTool` is consulted — and octopus could neither see it nor say it was
+   * there, so a question that stopped being asked had no explanation.
+   */
+  it('reads the rules out of the checkout', async () => {
+    const repo = join(dir, 'planner')
+    await initRepo(repo)
+    await mkdir(join(repo, '.claude'), { recursive: true })
+    await writeFile(
+      join(repo, '.claude', 'settings.json'),
+      JSON.stringify({ permissions: { allow: ['Bash(npm run:*)'], deny: ['Read(./.env)'] } }),
+      'utf8'
+    )
+    const project = await service.addProjectFromPath(repo)
+
+    await expect(service.readCliPermissions(project.id)).resolves.toEqual([
+      {
+        scope: 'project',
+        verdict: 'deny',
+        rule: { toolName: 'Read', ruleContent: './.env' },
+        from: '.claude/settings.json'
+      },
+      {
+        scope: 'project',
+        verdict: 'allow',
+        rule: { toolName: 'Bash', ruleContent: 'npm run:*' },
+        from: '.claude/settings.json'
+      }
+    ])
+  })
+
+  it('refuses a project it does not have', async () => {
+    await expect(service.readCliPermissions('missing')).rejects.toThrow()
+  })
+})
+
 describe('a pasted image', () => {
   /* The one attachment octopus stores. A file dragged onto the composer or
      chosen from disk keeps its own path and is never copied — the message

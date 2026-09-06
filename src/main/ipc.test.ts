@@ -312,6 +312,7 @@ describe('channel table', () => {
     'carry:read',
     'carry:save',
     'carry:declared',
+    'permissions:cli',
     'repoConfig:read',
     'repoConfig:import',
     'repoConfig:export',
@@ -1470,6 +1471,30 @@ describe('workspaces of a real project', () => {
     await expect(
       invoke('attachments:paste', 'image/png', new Uint8Array(MAX_PASTE_BYTES + 1))
     ).resolves.toMatchObject({ ok: false })
+  })
+
+  /* Read and shown, never written: two of the three files are inside the
+     checkout, and one is in the trust digest. */
+  it('carries what Claude Code’s own settings allow across', async () => {
+    const projectId = await addProject('permitted')
+    await mkdir(join(dir, 'permitted', '.claude'), { recursive: true })
+    await writeFile(
+      join(dir, 'permitted', '.claude', 'settings.json'),
+      JSON.stringify({ permissions: { deny: ['Read(./.env)'] } }),
+      'utf8'
+    )
+
+    await expect(invoke('permissions:cli', projectId)).resolves.toEqual({
+      ok: true,
+      value: [
+        {
+          scope: 'project',
+          verdict: 'deny',
+          rule: { toolName: 'Read', ruleContent: './.env' },
+          from: '.claude/settings.json'
+        }
+      ]
+    })
   })
 
   /* Beside the diff and not folded into it: the pane draws the moment the diff

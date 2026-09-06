@@ -1730,6 +1730,27 @@ telling a first-time user to add a repository in the left panel while having
 room for the button that adds one — an empty pane is usually a pane with space
 for the way out of it.
 
+**Project settings says what Claude Code's own settings allow and refuse**,
+beside the instruction sources and for the same reason: this is what the agent
+picks up on its own, and until it was drawn the interface could not say it
+existed. A rule in those files is honoured before octopus is consulted at all —
+the SDK approves a matching call ahead of `canUseTool` — so a question that
+stopped being asked had no explanation anywhere, and a refusal that stopped a
+command had none either.
+
+Measured, and it moved the feature: the note that asked for this expected the
+rules in `.claude/settings.local.json`, and on a real checkout that file carries
+none. The substantial lists — thirteen allows and four **denies** — are in the
+committed `.claude/settings.json`, and the user's own file carries a
+`defaultMode` and nothing else. So all three are read and every row names the
+file it came from, which is where the change has to be made.
+
+**Shown, never edited.** `.claude/settings.local.json` is one of the files the
+worktree's trust digest is taken over, so writing to it would put the project
+back to unapproved and empty the skill listing with it. A refusal is drawn
+first and in the danger tone: a reader looking for why something will not run
+needs it before a list of what will.
+
 **The repository picker groups by owner**, the account's own repositories first
 and then each organisation. Before organisations reached this dialog the list
 was one flat run of names; with a work organisation in it the list is several
