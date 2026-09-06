@@ -197,6 +197,37 @@ export const AgentEventSchema = z.discriminatedUnion('type', [
   z.object({ type: z.literal('conversation_reset'), cleared: z.boolean() }),
 
   /**
+   * A model refused, and the turn was retried on another one.
+   *
+   * Kept in the transcript rather than treated as ephemeral. It is the one
+   * change of model that is neither the user's decision nor the agent's, and
+   * without a line the reader sees the chip name a different model
+   * mid-conversation with nothing accounting for it — or, worse, sees a turn
+   * that reads as normal with an odd answer.
+   *
+   * `scope` is the difference between two sentences and not a detail:
+   * `session` means the swap outlives the turn and the chip has moved, while
+   * `local` means only a subagent, a side question or a background fork fell
+   * back and the session model is unchanged.
+   *
+   * `direction` is not carried. The SDK still types it as
+   * `retry | revert | sticky` and emits only `retry`, keeping the other two
+   * for consumer compatibility — so there is one shape to draw, and a field
+   * whose every value is the same value says nothing.
+   *
+   * `explanation` is the model's own prose about the refusal, to display and
+   * never to parse, and absent more often than not.
+   */
+  z.object({
+    type: z.literal('model_refusal_fallback'),
+    originalModel: z.string(),
+    fallbackModel: z.string(),
+    scope: z.enum(['session', 'local']),
+    category: z.string().nullable(),
+    explanation: z.string().nullable()
+  }),
+
+  /**
    * The list of slash commands changed mid-session.
    *
    * Ephemeral for the same reason as a rate limit: it describes what the agent

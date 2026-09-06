@@ -52,3 +52,27 @@ Take `refusal_fallback_prompt` first, since it is the only kind that exists:
 declare it, render it as a card in the log beside the question card, and answer
 `{behavior: 'cancelled'}` for anything unrecognised — which is what the protocol
 requires of a host that does not know a kind.
+
+## Read before starting: the payload is undeclared
+
+**2026-09-06.** Checked while the refusal-fallback _line_ was being built, and
+this is the reason that landed and this did not.
+
+`UserDialogRequest.payload` is `Record<string, unknown>` and
+`UserDialogResult.result` is `unknown`; the SDK says "each `dialogKind` defines
+its own payload and result shape; the protocol transports both opaquely", and
+**nothing in `sdk.d.ts` declares either shape for `refusal_fallback_prompt`**.
+Searched: the string appears only in prose, in `supportedDialogKinds`'
+documentation and in the `model_refusal_fallback` message's.
+
+That makes declaring the kind actively worse than not declaring it. The CLI
+fails closed today and the flow degrades to the classic refusal error; declare
+it and we must answer, and the only answer we can be sure of is `cancelled` —
+which produces the same degraded behaviour, having first shown the user a
+question we cannot act on.
+
+So this needs the payload shape observed on a live session before anything is
+built, and provoking a refusal to obtain it is not something to do casually.
+**MCP elicitation is the tractable half** — `onElicitation` has a declared
+schema for its form (`sdk.d.ts:577-605`) and a declared result, and it is
+reachable today through any cloned repository carrying an `.mcp.json`.

@@ -1167,6 +1167,23 @@ fact.** `formatResetAt` answers nothing for a moment that has gone, which is the
 whole of how staleness is told here — there is no second clock. A stale 95%
 drawn in red would be the sidebar raising an alarm about something that is over.
 
+**A refusal that swapped the model gets a line**, in the same quiet register as
+the compaction and reset lines and for the same reason: something happened to
+the conversation that nobody in it asked for, and the turn above reads as an
+ordinary one without it.
+
+Two sentences, not one. A `session` swap outlives the turn and the composer's
+chip has already moved, so the line is what explains a chip that changed on its
+own; a `local` one was a subagent or a side question and the chip has not moved,
+where saying "the rest of this conversation" would send the reader after a
+change that is not there.
+
+The refusal's own words go underneath when there are any, drawn exactly as
+given: the SDK calls that field "unstable human prose — display only, never
+parse", so it is shown and nothing is read out of it. Absent more often than
+not, and an empty line under the sentence would read as prose that failed to
+load.
+
 **The bar is green while there is room**, `warning` from 60% and `danger` from
 80%. It is the one place a calm reading is coloured at all: a bar is a block of
 colour by design and has room to say "fine", where a number in green would be a

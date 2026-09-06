@@ -6,6 +6,7 @@ import {
   Map,
   Pencil,
   Play,
+  Repeat,
   ShieldAlert,
   TriangleAlert,
   Wrench
@@ -295,6 +296,9 @@ function AgentRow({
 
     case 'conversation_compacted':
       return <CompactedRow preTokens={event.preTokens} postTokens={event.postTokens} />
+
+    case 'model_refusal_fallback':
+      return <RefusalFallbackRow event={event} />
 
     // Deltas never reach the log — they are drawn from the streaming buffer
     // and replaced by the completed block that follows.
@@ -843,6 +847,47 @@ function CompactedRow({
             after: formatTokens(postTokens)
           })}
     </p>
+  )
+}
+
+/**
+ * The line where a model refused and another one took the turn.
+ *
+ * In the same quiet register as the compaction and reset lines, and for the
+ * same reason: something happened to the conversation that nobody in it asked
+ * for, and the turn above reads as an ordinary one without it.
+ *
+ * Two sentences rather than one. A `session` swap outlives the turn and the
+ * model chip has already moved to the new name, so the line is what explains a
+ * chip that changed on its own; a `local` one was a subagent or a side question
+ * and the chip has not moved, where saying "the model changed" would send the
+ * reader looking for a change that is not there.
+ *
+ * The explanation is the model's own prose and is drawn as given — the SDK
+ * calls it "unstable human prose — display only, never parse", so it is shown
+ * and nothing is read out of it.
+ */
+function RefusalFallbackRow({
+  event
+}: {
+  event: Extract<AgentEvent, { type: 'model_refusal_fallback' }>
+}): React.JSX.Element {
+  const { t } = useTranslation()
+
+  return (
+    <div className="text-ink-faint border-line border-t pt-2 text-[11px]">
+      <p className="flex items-center gap-2">
+        <Repeat aria-hidden size={12} />
+        {t(event.scope === 'session' ? 'chat.refusalSwapped' : 'chat.refusalSwappedLocally', {
+          from: event.originalModel,
+          to: event.fallbackModel
+        })}
+      </p>
+
+      {event.explanation !== null && event.explanation.trim() !== '' && (
+        <p className="mt-1 pl-5 leading-relaxed">{event.explanation}</p>
+      )}
+    </div>
   )
 }
 

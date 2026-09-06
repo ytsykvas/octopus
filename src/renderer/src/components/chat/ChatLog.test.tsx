@@ -776,6 +776,91 @@ describe('what the log shows', () => {
     expect(screen.getByText(/summarised/)).toBeVisible()
   })
 
+  /*
+   * A model changing itself mid-conversation is the one change neither the user
+   * nor the agent chose, and the composer's chip moves on its own to show it.
+   * Without this line the turn above reads as an ordinary one with an odd
+   * answer.
+   */
+  it('says which model took a turn the first one declined', () => {
+    renderLog({
+      entries: [
+        fromAgent({
+          type: 'model_refusal_fallback',
+          originalModel: 'claude-opus-5',
+          fallbackModel: 'claude-sonnet-5',
+          scope: 'session',
+          category: 'cyber',
+          explanation: null
+        })
+      ]
+    })
+
+    expect(screen.getByText(/claude-opus-5 declined this turn/)).toBeVisible()
+    expect(screen.getByText(/the rest of this conversation/)).toBeVisible()
+  })
+
+  /* A subagent or a side question fell back and the session model is unchanged,
+     so the chip has not moved — saying "the rest of this conversation" there
+     would send the reader after a change that is not there. */
+  it('keeps a local swap apart from one that outlives the turn', () => {
+    renderLog({
+      entries: [
+        fromAgent({
+          type: 'model_refusal_fallback',
+          originalModel: 'claude-opus-5',
+          fallbackModel: 'claude-sonnet-5',
+          scope: 'local',
+          category: null,
+          explanation: null
+        })
+      ]
+    })
+
+    expect(screen.getByText(/declined part of this turn/)).toBeVisible()
+    expect(screen.queryByText(/the rest of this conversation/)).not.toBeInTheDocument()
+  })
+
+  /* Shown as given. The SDK calls it "unstable human prose — display only,
+     never parse", so nothing here reads anything out of it. */
+  it('shows the refusal\u2019s own words when there are any', () => {
+    renderLog({
+      entries: [
+        fromAgent({
+          type: 'model_refusal_fallback',
+          originalModel: 'claude-opus-5',
+          fallbackModel: 'claude-sonnet-5',
+          scope: 'session',
+          category: 'cyber',
+          explanation: 'The request looked like credential harvesting.'
+        })
+      ]
+    })
+
+    expect(screen.getByText('The request looked like credential harvesting.')).toBeVisible()
+  })
+
+  // Absent more often than not, and an empty line under the sentence would
+  // read as prose that failed to load.
+  it('draws no second line where the refusal said nothing', () => {
+    renderLog({
+      entries: [
+        fromAgent({
+          type: 'model_refusal_fallback',
+          originalModel: 'claude-opus-5',
+          fallbackModel: 'claude-sonnet-5',
+          scope: 'session',
+          category: null,
+          explanation: '   '
+        })
+      ]
+    })
+
+    expect(
+      screen.getByText(/claude-opus-5 declined this turn/).parentElement?.children
+    ).toHaveLength(1)
+  })
+
   // The reset the user did ask for takes the whole log with it, so there is
   // nothing left for a line to sit in.
   it('says nothing about a reset that emptied the log', () => {

@@ -691,6 +691,13 @@ export const en = {
     compactedBy:
       'The agent summarised everything above to make room \u2014 {{before}} became {{after}}',
 
+    /* The one change of model nobody in the conversation asked for. Two
+       sentences because the two scopes are two different facts: a session swap
+       has already moved the chip, and a local one has not. */
+    refusalSwapped:
+      '{{from}} declined this turn, so {{to}} took it \u2014 and the rest of this conversation',
+    refusalSwappedLocally: '{{from}} declined part of this turn, so {{to}} answered that part',
+
     emptyTitle: 'Start the conversation',
     emptyBody:
       'The first message starts an agent session in this worktree. The branch already exists.',

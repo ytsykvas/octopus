@@ -230,6 +230,23 @@ worked. So it goes through zod like any other external data, accepting both
 spellings, and a shape neither fits degrades the event to nulls instead of
 dropping it: the log's line is worth drawing on the boundary alone.
 
+**A model that refuses is announced, and the announcement is drawn.**
+`model_refusal_fallback` is the one change of model that is neither the user's
+decision nor the agent's: the primary model ends the stream with
+`stop_reason: "refusal"` and the CLI retries the turn on another one. It used to
+land in the `default` arm with the other three dozen subtypes, so the composer's
+chip moved to a different model mid-conversation with nothing accounting for it.
+
+`scope` is the difference between two sentences: `session` means the swap
+outlives the turn and the chip has moved, `local` means only a subagent, a side
+question or a background fork fell back. Absent from older CLIs, where it reads
+as `session` — the SDK says so, and it is the conservative way round, since the
+other would describe a lasting swap as a passing one.
+
+`direction` is not carried. It still types as `retry | revert | sticky` and only
+`retry` is emitted, the other two kept for consumer compatibility — a field
+whose every value is the same value says nothing.
+
 ### What the types leave unsaid is measured, not guessed
 
 Two fields on the way in carry no unit in the SDK's types, and both were checked

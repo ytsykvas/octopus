@@ -247,6 +247,90 @@ describe('mapping SDK messages', () => {
    * parsed rather than read — and the camelCase spelling is the one measured
    * against CLI 2.1.224.
    */
+  /*
+   * The one change of model that is neither the user's decision nor the
+   * agent's. Without the event the reader sees the composer's chip name a
+   * different model mid-conversation with nothing accounting for it — or a turn
+   * that reads as ordinary with an odd answer.
+   */
+  it('maps a refusal that swapped the model for the session', () => {
+    const message = {
+      type: 'system',
+      subtype: 'model_refusal_fallback',
+      trigger: 'refusal',
+      direction: 'retry',
+      scope: 'session',
+      original_model: 'claude-opus-5',
+      fallback_model: 'claude-sonnet-5',
+      api_refusal_category: 'cyber',
+      api_refusal_explanation: 'The request looked like credential harvesting.',
+      request_id: null,
+      content: '',
+      session_id: 'sess-42'
+    } as unknown as SDKMessage
+
+    expect(mapMessage(message)).toEqual([
+      {
+        type: 'model_refusal_fallback',
+        originalModel: 'claude-opus-5',
+        fallbackModel: 'claude-sonnet-5',
+        scope: 'session',
+        category: 'cyber',
+        explanation: 'The request looked like credential harvesting.'
+      }
+    ])
+  })
+
+  /* A subagent, a side question or a background fork. The session model is
+     unchanged there, so the chip has not moved and the two do not want the
+     same sentence. */
+  it('keeps a local swap apart from one that outlives the turn', () => {
+    const message = {
+      type: 'system',
+      subtype: 'model_refusal_fallback',
+      trigger: 'refusal',
+      direction: 'retry',
+      scope: 'local',
+      original_model: 'claude-opus-5',
+      fallback_model: 'claude-sonnet-5',
+      request_id: null,
+      content: '',
+      session_id: 'sess-42'
+    } as unknown as SDKMessage
+
+    expect(mapMessage(message)).toEqual([
+      {
+        type: 'model_refusal_fallback',
+        originalModel: 'claude-opus-5',
+        fallbackModel: 'claude-sonnet-5',
+        scope: 'local',
+        category: null,
+        explanation: null
+      }
+    ])
+  })
+
+  /* An older CLI sends no scope, and the SDK says to read that as `session`.
+     It is also the conservative reading: the other way round would describe a
+     swap that outlives the turn as a local one. */
+  it('reads a missing scope as one that outlives the turn', () => {
+    const message = {
+      type: 'system',
+      subtype: 'model_refusal_fallback',
+      trigger: 'refusal',
+      direction: 'retry',
+      original_model: 'claude-opus-5',
+      fallback_model: 'claude-sonnet-5',
+      request_id: null,
+      content: '',
+      session_id: 'sess-42'
+    } as unknown as SDKMessage
+
+    expect(mapMessage(message)).toEqual([
+      expect.objectContaining({ type: 'model_refusal_fallback', scope: 'session' })
+    ])
+  })
+
   it('maps a compaction sent under the names the wire uses', () => {
     const message = {
       type: 'system',

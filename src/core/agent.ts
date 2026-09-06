@@ -602,6 +602,22 @@ export function mapMessage(message: SDKMessage): AgentEvent[] {
         case 'compact_boundary':
           return [compactionFrom(message)]
 
+        /* The one change of model nobody chose. `scope` is absent from older
+           CLIs and means `session` there, which is the reading that says the
+           chip has moved — the conservative one to assume, since the other
+           would leave a swap that outlives the turn described as local. */
+        case 'model_refusal_fallback':
+          return [
+            {
+              type: 'model_refusal_fallback',
+              originalModel: message.original_model,
+              fallbackModel: message.fallback_model,
+              scope: message.scope ?? 'session',
+              category: message.api_refusal_category ?? null,
+              explanation: message.api_refusal_explanation ?? null
+            }
+          ]
+
         // Every other system subtype, of which there are dozens and counting.
         default:
           return []
