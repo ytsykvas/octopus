@@ -108,9 +108,10 @@ export function DiffPanel({
    * every render redraws every file on every render — which is the thing the
    * memo exists to prevent, and it caught this.
    */
-  const attribution = useMemo(() => {
-    const { chats = [], writers = {} } = workspace ?? {}
+  const chats = workspace?.chats ?? NO_CHATS
+  const writers = workspace?.writers ?? NO_RECORD
 
+  const attribution = useMemo(() => {
     // Named exactly as the tab strip names them, so a mark here and a tab there
     // are recognisably the same conversation.
     const named = chats.map((chat, index) => ({
@@ -135,7 +136,7 @@ export function DiffPanel({
     }
 
     return { named, marks }
-  }, [workspace?.chats, workspace?.writers, t])
+  }, [chats, writers, t])
 
   const roomForSplit = width >= threshold
   const effectiveView: DiffView = view === 'split' && roomForSplit ? 'split' : 'unified'
@@ -680,3 +681,12 @@ function FilterChip({
  * `DiffFile` is memoised on its props, and `[]` is a new array every time.
  */
 const NO_WRITERS: readonly string[] = []
+
+/**
+ * What a pane with no workspace reads instead.
+ *
+ * Shared constants rather than fresh literals, so the memo below them is keyed
+ * on something that holds still while there is nothing to key on.
+ */
+const NO_CHATS: WorkspaceView['chats'] = []
+const NO_RECORD: WorkspaceView['writers'] = {}
