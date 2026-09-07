@@ -298,6 +298,42 @@ It does not close the note. The `⌘T` sighting has no unanswered request in it,
 and the renderer ones have no directory. But it does say what to look for in
 those: something the test starts and nothing waits for.
 
+## The `ENOTEMPTY` half is closed, structurally
+
+**2026-09-07.** The cause above was fixed as a class rather than a test at a
+time, and the fix is in the service rather than in the suite.
+
+`closeChats` — the one path that ends every session, called when the application
+quits — did two things less than `closeOneChat`:
+
+- it **left the open questions unanswered**. `canUseTool` blocks on the promise
+  a question holds, so a session closed with one open leaves the turn behind it
+  running, and whatever that turn was writing goes on writing.
+- it **did not wait for anything the sessions had started**. Writes go out from
+  event handlers through `background`, which was fire-and-forget. `background`
+  now keeps what it starts, and `closeChats` waits for it — a loop, since
+  finishing one piece of work starts another.
+
+Both suites that build a service now wrap `createService` under its own name,
+keep what it made, and close it all in `afterEach` before the temporary
+directory goes: `service.test.ts` and `ipc.test.ts`. So a test can no longer
+leave work running for the next one to be blamed for, whether or not whoever
+wrote it remembered.
+
+That removes the whole mechanism behind every `ENOTEMPTY` sighting in this
+file — the unanswered permission requests of 2026-09-06, and the
+`pullRequests.test.ts` one of 2026-09-05 in so far as it shares the shape.
+
+**What is left is the renderer half**, which has no temporary directory and no
+service: `⌘T` in `App.test.tsx` and the two in `Chat.test.tsx`. Nothing above
+explains those, and the guard added on 2026-09-02 — `refuseSilence` — is still
+the thing that will name them when they next appear.
+
+**And one thing this exposed rather than fixed**, recorded separately in
+`a-quit-does-not-wait-for-the-record-it-is-writing.md`: `main` calls
+`closeChats` as `void service.closeChats()` on `will-quit`, so the waiting the
+service now does reaches the tests and not the application.
+
 ## What not to do
 
 Do not add a retry. A test that passes on the second attempt is a test that has

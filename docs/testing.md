@@ -181,6 +181,19 @@ a temporary directory. Writing to `~/.octopus` while the app runs leaves it
 acting on a stale in-memory copy — a repro that corrupts what it diagnoses is
 worse than no repro.
 
+**A test that starts a service closes it**, and neither suite that does relies
+on remembering to. `service.test.ts` and `ipc.test.ts` each wrap
+`createService` under its own name, keep what it made, and close it all in
+`afterEach` before the temporary directory goes.
+
+That is not tidiness. A service writes transcripts and state from event handlers
+with nothing awaiting them, so a turn still running when `rm` starts writes into
+a directory being removed — `ENOTEMPTY: directory not empty, rmdir`, reported in
+whichever test the runner tears down next rather than in the one that left the
+work going. It cost a month of a flake nobody could name. `closeChats` abandons
+the questions holding a turn open and then waits for what those turns were
+writing, which is what makes the close enough on its own.
+
 Discipline is not enough on its own, so both configs set **`HOME` to a scratch
 directory** through `testEnv` in `vitest.shared.ts`. Every path goes through
 `rootDir()`, which defaults to `homedir()`, so a test that simply forgets to

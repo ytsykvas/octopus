@@ -37,9 +37,10 @@ import {
   type ChatEvent,
   type ChatsChangedEvent,
   type ChatStatusEvent,
-  createService,
+  createService as makeService,
   sameWindows,
   type OctopusService,
+  type ServiceOptions,
   type UsageOutcome,
   type WorkspaceStatusEvent
 } from './service.js'
@@ -79,12 +80,40 @@ function paths(root: string): Parameters<typeof createService>[0] {
   }
 }
 
+/**
+ * Every service this file makes, so teardown can stop them all.
+ *
+ * A wrapper around the real `createService` rather than a change at every call
+ * site, of which there are fifty. The name is the imported one, so nothing else
+ * in the file knows the difference.
+ */
+const started: OctopusService[] = []
+
+async function createService(options: ServiceOptions = {}): Promise<OctopusService> {
+  const made = await makeService(options)
+  started.push(made)
+  return made
+}
+
 beforeEach(async () => {
   dir = await mkdtemp(join(tmpdir(), 'octopus-service-'))
   service = await createService(paths(dir))
 })
 
 afterEach(async () => {
+  /*
+   * Stopped before the directory goes, and this is not tidiness.
+   *
+   * A service writes transcripts and state from event handlers with nothing
+   * awaiting them, so a turn still running when `rm` starts writes into a
+   * directory being removed — `ENOTEMPTY: directory not empty, rmdir`, in
+   * whichever test the runner tears down next rather than in the one that left
+   * the work running. `closeChats` abandons the open questions and waits for
+   * what they were holding up.
+   */
+  await Promise.allSettled(started.map((one) => one.closeChats()))
+  started.length = 0
+
   await rm(dir, { recursive: true, force: true })
 })
 
@@ -6242,6 +6271,71 @@ describe('the agent chat', () => {
       await service.closeChats()
 
       expect(agent().closed()).toBe(1)
+    })
+
+    /*
+     * The `ENOTEMPTY` that had been failing whole runs, as one test.
+     *
+     * `canUseTool` blocks on the promise a question holds, so a session closed
+     * with one open leaves the turn behind it running — and whatever that turn
+     * was in the middle of writing goes on writing, into a directory the next
+     * test's teardown is removing. `closeOneChat` has always abandoned them;
+     * this is the path that quits the application, and it did not.
+     */
+    it('answers the questions it is closing on', async () => {
+      const { service, workspaceId } = await withWorkspace()
+      const chat = await service.openChat(workspaceId)
+      await service.sendToChat(chat.id, 'work')
+      const asked = agent().ask('Bash', { command: 'ls' })
+
+      await service.closeChats()
+
+      await expect(asked).resolves.toMatchObject({ behavior: 'deny', message: ABANDONED })
+    })
+
+    /*
+     * The other half of stopping. Writes go out from event handlers with
+     * nothing awaiting them, so closing the sessions leaves them running — and
+     * a write still running when the temporary directory goes is the
+     * `ENOTEMPTY` above, landing in whichever test is torn down next.
+     *
+     * The account reading a finished turn takes is the lever: it is background
+     * work like any other, and this test holds it open.
+     */
+    it('waits for the work its sessions started', async () => {
+      const { service, workspaceId, events } = await withWorkspace()
+      const chat = await service.openChat(workspaceId)
+      await service.sendToChat(chat.id, 'work')
+
+      let release = (): void => undefined
+      usageAnswer = () =>
+        new Promise((resolve) => {
+          release = () => {
+            resolve(USAGE_RESPONSE)
+          }
+        })
+
+      agent().emit(resultMessage)
+      // The event goes out after the work is started, so this says the reading
+      // is under way rather than merely about to be.
+      await vi.waitFor(() => {
+        expect(events.some((entry) => entry.event.type === 'result')).toBe(true)
+      })
+
+      const closing = service.closeChats()
+      const waiting = Symbol('still waiting')
+      const first = await Promise.race([
+        closing.then(() => 'closed'),
+        new Promise((resolve) =>
+          setTimeout(() => {
+            resolve(waiting)
+          }, 20)
+        )
+      ])
+      expect(first).toBe(waiting)
+
+      release()
+      await expect(closing).resolves.toBeUndefined()
     })
 
     it('has nothing to do when no session was ever started', async () => {

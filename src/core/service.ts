@@ -1019,7 +1019,13 @@ export interface OctopusService {
    * is closed.
    */
   onChatsChanged(handler: (event: ChatsChangedEvent) => void): () => void
-  /** Ends every live session. Called when the application quits. */
+  /**
+   * Ends every live session and waits for what they started.
+   *
+   * Called when the application quits, and by the tests before the temporary
+   * directory they gave it goes: a write still running when `rm` starts is a
+   * failure in whichever test the runner tears down next.
+   */
   closeChats(): Promise<void>
 }
 
@@ -1832,11 +1838,49 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
     if (context) handleEvent(chat, { type: 'change_context', toolUseId, context })
   }
 
+  /**
+   * Work started from an event handler that nothing is awaiting.
+   *
+   * Kept rather than merely started, so shutting down can wait for it. A
+   * transcript append or a state write still running when the process exits is
+   * a record cut in half — and in the tests it is a write racing the removal of
+   * the temporary directory it writes into, which is the `ENOTEMPTY` that had
+   * been failing whole runs for a month.
+   */
+  const inFlight = new Set<{ readonly promise: Promise<void> }>()
+
   /** Lets a write started from an event handler finish without anyone awaiting it. */
   function background(chat: Chat, work: Promise<unknown>): void {
-    void work.catch((error: unknown) => {
-      report(chat, error)
-    })
+    // Held in a box so the promise can forget itself: it has to be added to the
+    // set before it can name the thing to remove.
+    const entry: { promise: Promise<void> } = { promise: Promise.resolve() }
+    entry.promise = work
+      .then(
+        () => undefined,
+        (error: unknown) => {
+          report(chat, error)
+        }
+      )
+      .finally(() => inFlight.delete(entry))
+
+    inFlight.add(entry)
+  }
+
+  /**
+   * Waits for everything started and never awaited.
+   *
+   * A loop rather than a single wait: finishing one piece of work starts
+   * another — a turn's result writes the chat's status, and that write is
+   * background work of its own.
+   */
+  async function settle(): Promise<void> {
+    while (inFlight.size > 0) {
+      await Promise.allSettled([...inFlight].map((entry) => entry.promise))
+    }
+
+    // State writes are serialised on a chain of their own, which the work above
+    // will have added to.
+    await stateWrites
   }
 
   /**
@@ -4163,9 +4207,24 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
       const live = [...sessions.values()]
       sessions.clear()
 
+      /*
+       * The questions go with the sessions, for the reason `closeOneChat`
+       * gives: a session that ends leaves one nobody will ever answer. On the
+       * way out it is worse than untidy — `canUseTool` blocks on that promise,
+       * so the turn behind it never ends, and the transcript write it is
+       * holding never finishes.
+       */
+      for (const chatId of new Set([...pending.values()].map((request) => request.chatId))) {
+        abandonPermissions(chatId)
+      }
+
       // Every one of them, even if an earlier close fails: each holds a child
       // process, and one that is not closed outlives the application.
       await Promise.allSettled(live.map((session) => session.close()))
+
+      // And what they started on their way out, which is the half of shutting
+      // down that has nothing to do with child processes.
+      await settle()
     }
   }
 }

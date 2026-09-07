@@ -21,7 +21,11 @@ import type { QueryFn } from '../core/agent.js'
 import type { Config } from '../core/config.js'
 import { MAX_PASTE_BYTES } from '../core/attachments.js'
 import type { RemoteRepository } from '../core/github.js'
-import { createService, type OctopusService, type ServiceOptions } from '../core/service.js'
+import {
+  createService as makeService,
+  type OctopusService,
+  type ServiceOptions
+} from '../core/service.js'
 import type {
   ChatEvent,
   ChatsChangedEvent,
@@ -267,6 +271,20 @@ const CONNECTED: AccountsStatus = {
   github: { connected: false, login: null, name: null, seesOrganisations: null }
 }
 
+/**
+ * Every service this file makes, so teardown can stop them all.
+ *
+ * A wrapper rather than a change at each call site, and the name is the
+ * imported one so nothing else here knows the difference.
+ */
+const started: OctopusService[] = []
+
+async function createService(options: ServiceOptions = {}): Promise<OctopusService> {
+  const made = await makeService(options)
+  started.push(made)
+  return made
+}
+
 beforeEach(async () => {
   dir = await mkdtemp(join(tmpdir(), 'octopus-ipc-'))
   service = await createService(servicePaths(dir))
@@ -288,6 +306,12 @@ beforeEach(async () => {
 })
 
 afterEach(async () => {
+  // Stopped before the directory goes: a service writes from event handlers
+  // with nothing awaiting them, and a write still running when `rm` starts
+  // fails in whichever test the runner tears down next rather than in this one.
+  await Promise.allSettled(started.map((one) => one.closeChats()))
+  started.length = 0
+
   await rm(dir, { recursive: true, force: true })
 })
 
