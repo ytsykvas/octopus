@@ -25,7 +25,28 @@ repository. A catalogue that writes into a checkout's `.claude/commands/` or
 `.claude/agents/` is the part still ahead, so a project gains a reviewer
 subagent or a `/ship` command without anybody copying files by hand.
 
-The obvious trap, unchanged: anything written there lands in a tracked
-directory, so the same approval question that guards `.octopus/` applies — and
-`repoConfig.ts`'s export is the only write octopus makes inside a checkout
-today, which that feature would be the second of.
+## Measured, 2026-09-07 — the checkout does not come into it
+
+The paragraph above assumed a catalogue must write into `.claude/commands/` or
+`.claude/agents/` inside the repository, and therefore inherit the approval
+question that guards `.octopus/`. A probe against a live session says otherwise.
+
+A command and a subagent placed under an **additional root** — the same
+mechanism the two skill stores already reach a session by — are both picked up:
+`supportedCommands()` listed the command, and `supportedAgents()` listed the
+subagent beside the built-in ones. So a catalogue writes where skills already go,
+`~/.octopus`, and octopus goes on making exactly one kind of write inside a
+checkout: `repoConfig.ts`'s export.
+
+Which leaves the feature much smaller than it looked, and shaped like the skill
+import that already exists — a folder, pasted text or a link, landing in a store
+rather than in somebody's repository. The approval question does not arise.
+
+**`supportedAgents()` is real and answers.** The note above called it "still
+never called"; it is still never called, but it is no longer unverified — it
+returns the subagents a session holds, by name, which is the same reconciliation
+the skills panel now does.
+
+What is left to decide is only what a catalogue _is_: a list somebody browses, a
+paste box, or a link — and whether commands and subagents get panels of their
+own or ride the skills one.
