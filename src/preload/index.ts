@@ -37,7 +37,7 @@ import type {
   SkillPreview,
   SkillSave
 } from '@core/skills.js'
-import type { SkillStore } from '@core/skillNames.js'
+import type { Store } from '@core/stores.js'
 import type { InstructionSource } from '@core/instructionSources.js'
 import type { UsageWindows } from '@core/usage.js'
 import type { RepoConfigView, RepoItemId } from '@core/repoConfig.js'
@@ -604,17 +604,17 @@ const api = {
 
   skills: {
     /** What one of the two stores holds, for a settings section. */
-    list: (store: SkillStore): Promise<Result<SkillEntry[]>> =>
+    list: (store: Store): Promise<Result<SkillEntry[]>> =>
       ipcRenderer.invoke('skills:list', store) as Promise<Result<SkillEntry[]>>,
 
     /** One of them opened: the form's two fields and the raw document. */
-    read: (store: SkillStore, name: string): Promise<Result<SkillDocument>> =>
+    read: (store: Store, name: string): Promise<Result<SkillDocument>> =>
       ipcRenderer.invoke('skills:read', store, name) as Promise<Result<SkillDocument>>,
 
-    save: (store: SkillStore, name: string, save: SkillSave): Promise<Result<SkillEntry>> =>
+    save: (store: Store, name: string, save: SkillSave): Promise<Result<SkillEntry>> =>
       ipcRenderer.invoke('skills:save', store, name, save) as Promise<Result<SkillEntry>>,
 
-    remove: (store: SkillStore, name: string): Promise<Result<void>> =>
+    remove: (store: Store, name: string): Promise<Result<void>> =>
       ipcRenderer.invoke('skills:remove', store, name) as Promise<Result<void>>,
 
     /**
@@ -624,7 +624,7 @@ const api = {
      * three stored things use, so a rename that moved only the folder would
      * switch the skill back on wherever it had been turned off.
      */
-    rename: (store: SkillStore, folder: string, to: string): Promise<Result<SkillEntry>> =>
+    rename: (store: Store, folder: string, to: string): Promise<Result<SkillEntry>> =>
       ipcRenderer.invoke('skills:rename', store, folder, to) as Promise<Result<SkillEntry>>,
 
     /**
@@ -634,11 +634,11 @@ const api = {
      * previewed does not fetch the address a second time — the second answer
      * need not be the first, and it is the first the reader approved.
      */
-    inspect: (store: SkillStore, request: SkillImport): Promise<Result<SkillPreview>> =>
+    inspect: (store: Store, request: SkillImport): Promise<Result<SkillPreview>> =>
       ipcRenderer.invoke('skills:inspect', store, request) as Promise<Result<SkillPreview>>,
 
     /** Brings in a skill written elsewhere: on disk, pasted, or downloaded. */
-    import: (store: SkillStore, request: SkillImport): Promise<Result<SkillEntry>> =>
+    import: (store: Store, request: SkillImport): Promise<Result<SkillEntry>> =>
       ipcRenderer.invoke('skills:import', store, request) as Promise<Result<SkillEntry>>,
 
     /** The skills the checkout carries, so one can be copied into a store. */

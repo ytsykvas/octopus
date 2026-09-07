@@ -2,7 +2,8 @@ import { Plus } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
-import { isSkillName, type SkillStore, skillKey } from '@core/skillNames.js'
+import { isSkillName, skillKey } from '@core/skillNames.js'
+import type { Store } from '@core/stores.js'
 import type { SkillDocument, SkillEntry } from '@core/skills.js'
 
 import { useAskText } from '../../hooks/useAskText.js'
@@ -15,7 +16,7 @@ import { SkillEditor } from './SkillEditor.js'
 import { SkillImport } from './SkillImport.js'
 
 interface SkillsSectionProps {
-  readonly store: SkillStore
+  readonly store: Store
   /** Keys switched off in every new conversation of this scope. */
   readonly disabledDefaults: readonly string[]
   readonly onDefaults: (next: string[]) => void

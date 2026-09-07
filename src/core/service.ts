@@ -162,7 +162,8 @@ import {
   writeRawSkill,
   writeSkill
 } from './skills.js'
-import { type SkillStore, skillKey, type SkillScope } from './skillNames.js'
+import { skillKey, type SkillScope } from './skillNames.js'
+import type { Store } from './stores.js'
 import { type QuestionAnswer, readQuestions, withAnswers } from './questions.js'
 import { describeError } from './persist.js'
 import {
@@ -702,7 +703,7 @@ export interface OctopusService {
   readEffectiveInstruction(workspaceId: string, kind: InstructionKind): Promise<string>
 
   /** The skills one of the two stores holds, for a settings section. */
-  listSkills(store: SkillStore): Promise<SkillEntry[]>
+  listSkills(store: Store): Promise<SkillEntry[]>
   /**
    * The skills the checkout itself carries, so one can be copied out of it.
    *
@@ -720,17 +721,17 @@ export interface OctopusService {
    * the app itself created, and a name cannot address a row at all where two
    * directories claim one.
    */
-  readStoredSkill(store: SkillStore, folder: string): Promise<SkillDocument>
-  saveStoredSkill(store: SkillStore, folder: string, save: SkillSave): Promise<SkillEntry>
-  removeStoredSkill(store: SkillStore, folder: string): Promise<void>
+  readStoredSkill(store: Store, folder: string): Promise<SkillDocument>
+  saveStoredSkill(store: Store, folder: string, save: SkillSave): Promise<SkillEntry>
+  removeStoredSkill(store: Store, folder: string): Promise<void>
   /**
    * Gives a skill another name, and moves every answer stored against it.
    *
    * A migration rather than an edit, which is why the editor's name field is
    * disabled: the name is the directory *and* the key three stored things use.
    */
-  renameStoredSkill(store: SkillStore, folder: string, to: string): Promise<SkillEntry>
-  importStoredSkill(store: SkillStore, request: SkillImport): Promise<SkillEntry>
+  renameStoredSkill(store: Store, folder: string, to: string): Promise<SkillEntry>
+  importStoredSkill(store: Store, request: SkillImport): Promise<SkillEntry>
   /**
    * What an import would write, without writing it.
    *
@@ -738,7 +739,7 @@ export interface OctopusService {
    * text they can read, while an address shows nothing until it has been
    * fetched — and what comes back is prose the agent will later follow.
    */
-  inspectSkillImport(store: SkillStore, request: SkillImport): Promise<SkillPreview>
+  inspectSkillImport(store: Store, request: SkillImport): Promise<SkillPreview>
   /**
    * Every skill this conversation could use, and whether it is on.
    *
@@ -2198,18 +2199,18 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
   }
 
   /** Where a store's files sit; a path, so reading one creates nothing. */
-  function storeRoot(store: SkillStore): string {
+  function storeRoot(store: Store): string {
     return store.kind === 'global'
       ? globalSkillsRoot(dataRoot)
       : projectSkillsRoot(requireProject(store.projectId).id, dataRoot)
   }
 
   /** The same, given the shape a session reads — only on the way to writing. */
-  function writableStore(store: SkillStore): Promise<string> {
+  function writableStore(store: Store): Promise<string> {
     return ensureStore(storeRoot(store))
   }
 
-  function storeSkills(store: SkillStore): Promise<SkillEntry[]> {
+  function storeSkills(store: Store): Promise<SkillEntry[]> {
     return readSkillsIn(skillsDirOf(storeRoot(store)))
   }
 
@@ -2222,7 +2223,7 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
    * inside a single directory, which is the wrong scope for a key this wide.
    *
    * **All three sources**, which is what the scope of the key demands. The
-   * checkouts were the missing one: a `SkillStore` names no workspace, so this
+   * checkouts were the missing one: a `Store` names no workspace, so this
    * looked unreachable from here — but the worktrees are in `state`, and which
    * of them share a session with this store is a question this function is the
    * only place able to answer. A global skill meets every project's checkout; a
@@ -2232,7 +2233,7 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
    * Read on a write rather than kept: a listing is a `readdir` that never
    * throws, and one taken at startup would be wrong the moment somebody pulled.
    */
-  async function namesBesideStore(store: SkillStore): Promise<string[]> {
+  async function namesBesideStore(store: Store): Promise<string[]> {
     const others =
       store.kind === 'global'
         ? state.projects.map((project) => projectSkillsRoot(project.id, dataRoot))

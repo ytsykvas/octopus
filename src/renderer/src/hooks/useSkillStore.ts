@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 
-import type { SkillStore } from '@core/skillNames.js'
+import type { Store } from '@core/stores.js'
 import type { SkillEntry, SkillImport, SkillPreview, SkillSave } from '@core/skills.js'
 
 import { useErrorMessage } from './useErrorMessage.js'
@@ -37,13 +37,13 @@ export interface SkillStoreController {
  * builds the object inline on every render, and an identity check would re-read
  * the list on each one.
  */
-export function useSkillStore(store: SkillStore): SkillStoreController {
+export function useSkillStore(store: Store): SkillStoreController {
   const [skills, setSkills] = useState<readonly SkillEntry[]>([])
   const [error, setError] = useState<string | null>(null)
   const describeFailure = useErrorMessage()
 
   const projectId = store.kind === 'project' ? store.projectId : null
-  const target = useMemo<SkillStore>(
+  const target = useMemo<Store>(
     () => (projectId === null ? { kind: 'global' } : { kind: 'project', projectId }),
     [projectId]
   )

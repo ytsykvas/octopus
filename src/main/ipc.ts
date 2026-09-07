@@ -46,7 +46,8 @@ import { RepoItemIdsSchema } from '../core/repoConfig.js'
 import { RevertPathSchema } from '../core/revert.js'
 import { ScriptBodySchema, ScriptKindSchema } from '../core/scripts.js'
 import { SkillImportSchema, SkillSaveSchema } from '../core/skills.js'
-import { SkillNameSchema, SkillStoreSchema } from '../core/skillNames.js'
+import { SkillNameSchema } from '../core/skillNames.js'
+import { StoreSchema } from '../core/stores.js'
 import type {
   ChatEvent,
   ChatsChangedEvent,
@@ -467,19 +468,17 @@ export function registerIpc(
    * of it is a path.
    */
   host.handle('skills:list', (_event, store: unknown) =>
-    attempt(() => service.listSkills(SkillStoreSchema.parse(store)))
+    attempt(() => service.listSkills(StoreSchema.parse(store)))
   )
 
   host.handle('skills:read', (_event, store: unknown, folder: unknown) =>
-    attempt(() =>
-      service.readStoredSkill(SkillStoreSchema.parse(store), SkillNameSchema.parse(folder))
-    )
+    attempt(() => service.readStoredSkill(StoreSchema.parse(store), SkillNameSchema.parse(folder)))
   )
 
   host.handle('skills:save', (_event, store: unknown, folder: unknown, save: unknown) =>
     attempt(() =>
       service.saveStoredSkill(
-        SkillStoreSchema.parse(store),
+        StoreSchema.parse(store),
         SkillNameSchema.parse(folder),
         SkillSaveSchema.parse(save)
       )
@@ -488,7 +487,7 @@ export function registerIpc(
 
   host.handle('skills:remove', (_event, store: unknown, folder: unknown) =>
     attempt(() =>
-      service.removeStoredSkill(SkillStoreSchema.parse(store), SkillNameSchema.parse(folder))
+      service.removeStoredSkill(StoreSchema.parse(store), SkillNameSchema.parse(folder))
     )
   )
 
@@ -499,7 +498,7 @@ export function registerIpc(
   host.handle('skills:rename', (_event, store: unknown, folder: unknown, to: unknown) =>
     attempt(() =>
       service.renameStoredSkill(
-        SkillStoreSchema.parse(store),
+        StoreSchema.parse(store),
         SkillNameSchema.parse(folder),
         SkillNameSchema.parse(to)
       )
@@ -512,13 +511,13 @@ export function registerIpc(
    */
   host.handle('skills:inspect', (_event, store: unknown, request: unknown) =>
     attempt(() =>
-      service.inspectSkillImport(SkillStoreSchema.parse(store), SkillImportSchema.parse(request))
+      service.inspectSkillImport(StoreSchema.parse(store), SkillImportSchema.parse(request))
     )
   )
 
   host.handle('skills:import', (_event, store: unknown, request: unknown) =>
     attempt(() =>
-      service.importStoredSkill(SkillStoreSchema.parse(store), SkillImportSchema.parse(request))
+      service.importStoredSkill(StoreSchema.parse(store), SkillImportSchema.parse(request))
     )
   )
 
