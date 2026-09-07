@@ -1418,6 +1418,22 @@ scripts it runs to 0755 and one without it fails outright, so `.octopus/`
 scripts and `.claude/hooks/` are exactly the files an agent makes executable in
 this app — and the pane was blind to a class of change the app then acts on.
 
+**Who wrote a file, once more than one conversation could have.** Three
+conversations share one worktree and this pane shows their work merged into a
+single diff, so a file header carries the names of the conversations recorded as
+having written it — named exactly as the tab strip names them, so a mark here
+and a tab there are recognisably the same one. A strip of chips above the list
+narrows it to one of them, and pressing the chosen chip again clears it.
+
+Both are drawn only where they answer something: nothing at all for a workspace
+holding one conversation, where every mark would say the same name, and no strip
+where none of the files on screen has a writer, where every chip would empty the
+pane. A file nobody here is recorded as having written — edited by hand, or
+written before any of this was recorded — carries no mark and is never hidden by
+the filter. The record itself is `writers` on the workspace, described in
+[data.md](data.md): by file rather than by line, because a line number recorded
+now points somewhere else by the time the pane draws it.
+
 **What is measured against what.** The left-hand side is the merge base of the
 project's base branch and the workspace's HEAD, and the right-hand side is the
 working tree — so committed, staged and unstaged work all show, while whatever

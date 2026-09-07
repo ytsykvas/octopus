@@ -6,6 +6,8 @@ import { highlight } from './highlight.js'
 import { octopus } from '../../test/octopus.js'
 import { fileDiff, hunk, workspaceDiff } from '../../test/diff.js'
 import { commentController, revertController } from '../../test/comments.js'
+import type { WorkspaceChat } from '@core/workspaces.js'
+
 import { workspaceView } from '../../test/workspaces.js'
 import { DiffPanel } from './DiffPanel.js'
 
@@ -1577,5 +1579,160 @@ describe('reverting one file', () => {
     await userEvent.click(await screen.findByRole('button', { name: /Revert moved\.ts/ }))
 
     expect(revert.revert).toHaveBeenCalledWith('moved.ts', 'kept.ts')
+  })
+})
+
+describe('who wrote which file', () => {
+  const chat = (id: string, title: string | null = null): WorkspaceChat => ({
+    id,
+    agent: 'claude',
+    title,
+    status: 'idle',
+    started: true
+  })
+
+  /** A workspace with two conversations, the second having written `src/b.ts`. */
+  const shared = workspaceView('anna', {
+    chats: [chat('chat-1'), chat('chat-2')],
+    writers: { 'src/a.ts': ['chat-1'], 'src/b.ts': ['chat-1', 'chat-2'] }
+  })
+
+  const twoFiles = (): ReturnType<typeof workspaceDiff> =>
+    workspaceDiff([fileDiff('src/a.ts'), fileDiff('src/b.ts')])
+
+  it('names the conversations that wrote a file, as the tab strip names them', async () => {
+    answer(twoFiles())
+    renderPanel(shared)
+
+    expect(await screen.findByTitle('Written by Claude 1')).toBeInTheDocument()
+    expect(screen.getByTitle('Written by Claude 1, Claude 2')).toBeInTheDocument()
+  })
+
+  it('uses the name the reader gave a conversation', async () => {
+    answer(twoFiles())
+    renderPanel(
+      workspaceView('anna', {
+        chats: [chat('chat-1', 'Refactor'), chat('chat-2')],
+        writers: { 'src/a.ts': ['chat-1'] }
+      })
+    )
+
+    expect(await screen.findByTitle('Written by Refactor')).toBeInTheDocument()
+  })
+
+  /*
+   * One conversation per worktree was the whole world until recently, and a
+   * mark on every row saying the same name is noise: the question only exists
+   * once two of them could have written something.
+   */
+  it('says nothing where one conversation wrote everything', async () => {
+    answer(twoFiles())
+    renderPanel(
+      workspaceView('anna', { chats: [chat('chat-1')], writers: { 'src/a.ts': ['chat-1'] } })
+    )
+
+    expect(await screen.findByRole('button', { name: 'src/a.ts' })).toBeInTheDocument()
+    expect(screen.queryByTitle(/Written by/)).not.toBeInTheDocument()
+  })
+
+  // The id is what is stored, and an id is not a name.
+  it('says nothing for a conversation that has been closed', async () => {
+    answer(twoFiles())
+    renderPanel(
+      workspaceView('anna', {
+        chats: [chat('chat-1'), chat('chat-2')],
+        writers: { 'src/a.ts': ['chat-gone'] }
+      })
+    )
+
+    expect(await screen.findByRole('button', { name: 'src/a.ts' })).toBeInTheDocument()
+    expect(screen.queryByTitle(/Written by/)).not.toBeInTheDocument()
+  })
+
+  it('narrows the list to one conversation, and back', async () => {
+    const user = userEvent.setup()
+    // A third file nobody here is recorded as having written — edited by hand,
+    // or written before any of this was — which is not what was asked for
+    // either, so it goes with the rest.
+    answer(workspaceDiff([fileDiff('src/a.ts'), fileDiff('src/b.ts'), fileDiff('by-hand.ts')]))
+    renderPanel(shared)
+
+    await user.click(await screen.findByRole('button', { name: 'Claude 2' }))
+
+    expect(screen.queryByRole('button', { name: 'src/a.ts' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'by-hand.ts' })).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'src/b.ts' })).toBeInTheDocument()
+
+    // Pressing the chosen one again clears it, which is what makes it a filter
+    // rather than a tab.
+    await user.click(screen.getByRole('button', { name: 'Claude 2' }))
+
+    expect(screen.getByRole('button', { name: 'src/a.ts' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'by-hand.ts' })).toBeInTheDocument()
+  })
+
+  it('goes back to everything', async () => {
+    const user = userEvent.setup()
+    answer(twoFiles())
+    renderPanel(shared)
+
+    await user.click(await screen.findByRole('button', { name: 'Claude 2' }))
+    await user.click(screen.getByRole('button', { name: 'Everything' }))
+
+    expect(screen.getByRole('button', { name: 'src/a.ts' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'src/b.ts' })).toBeInTheDocument()
+  })
+
+  /*
+   * A filter belongs to the conversation it names. Closing that tab would
+   * otherwise leave the list narrowed to an id nothing here has: a short list
+   * with no chip pressed to explain it, and nothing to press to get out.
+   */
+  it('stops narrowing when the conversation it named is closed', async () => {
+    const user = userEvent.setup()
+    answer(twoFiles())
+    const three = {
+      chats: [chat('chat-1'), chat('chat-2'), chat('chat-3')],
+      writers: { 'src/a.ts': ['chat-1'], 'src/b.ts': ['chat-3'] }
+    }
+    const { rerender } = render(
+      <DiffPanel
+        workspace={workspaceView('anna', three)}
+        visible
+        view="unified"
+        onView={vi.fn()}
+        width={WIDE}
+        comments={commentController()}
+        revert={revertController()}
+        onError={vi.fn()}
+      />
+    )
+
+    await user.click(await screen.findByRole('button', { name: 'Claude 3' }))
+    expect(screen.queryByRole('button', { name: 'src/a.ts' })).not.toBeInTheDocument()
+
+    rerender(
+      <DiffPanel
+        workspace={workspaceView('anna', { ...three, chats: three.chats.slice(0, 2) })}
+        visible
+        view="unified"
+        onView={vi.fn()}
+        width={WIDE}
+        comments={commentController()}
+        revert={revertController()}
+        onError={vi.fn()}
+      />
+    )
+
+    expect(screen.getByRole('button', { name: 'src/a.ts' })).toBeInTheDocument()
+  })
+
+  // A control that empties the pane whichever chip is pressed.
+  it('offers no filter where nothing here is recorded as having written anything', async () => {
+    answer(twoFiles())
+    renderPanel(workspaceView('anna', { chats: [chat('chat-1'), chat('chat-2')] }))
+
+    expect(await screen.findByRole('button', { name: 'src/a.ts' })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Everything' })).not.toBeInTheDocument()
   })
 })

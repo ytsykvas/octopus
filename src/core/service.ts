@@ -7,7 +7,7 @@
  */
 
 import { randomUUID } from 'node:crypto'
-import { join } from 'node:path'
+import { isAbsolute, join, relative, resolve } from 'node:path'
 
 import {
   forkSession as defaultForkSession,
@@ -47,7 +47,7 @@ import {
   sessionModel,
   type WorkingMode
 } from './chats.js'
-import { type EditTarget, readChangeContext, readEditTarget } from './changeContext.js'
+import { type EditTarget, readChangeContext, readEditTarget, writtenPath } from './changeContext.js'
 import {
   type FileSides,
   readWholeFileSides,
@@ -1085,6 +1085,56 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
   const editsInFlight = new Map<string, EditTarget & { readonly chatId: string }>()
 
   /**
+   * Who has written what, for workspaces whose turn has not ended yet.
+   *
+   * A turn's worth of edits gathered before one write of `state.json`, which
+   * `commit` writes whole: an agent makes dozens in a turn, and a write each
+   * would be the record costing more than the work. Lost on a crash mid-turn,
+   * which is the right trade — the alternative is paying for every edit against
+   * the chance of losing the last few.
+   */
+  const pendingWriters = new Map<string, Map<string, Set<string>>>()
+
+  /** Remembers that a conversation wrote a file, by its path in the worktree. */
+  function noteWriter(chat: Chat, written: string): void {
+    const workspace = state.workspaces.find((item) => item.id === chat.workspaceId)
+    if (!workspace) return
+
+    /* Absolute in practice and resolved against the worktree in case it is
+       not, since the diff names its files relatively and the two have to meet.
+       Refused where it lands outside: a path this workspace's diff cannot show
+       is not one the pane could attribute either. */
+    const path = relative(workspace.path, resolve(workspace.path, written))
+    if (path === '' || path.startsWith('..') || isAbsolute(path)) return
+
+    const forWorkspace = pendingWriters.get(workspace.id) ?? new Map<string, Set<string>>()
+    forWorkspace.set(path, (forWorkspace.get(path) ?? new Set()).add(chat.id))
+    pendingWriters.set(workspace.id, forWorkspace)
+  }
+
+  /** Writes a turn's worth of them down, once. */
+  async function saveWriters(workspaceId: string): Promise<void> {
+    const gathered = pendingWriters.get(workspaceId)
+    pendingWriters.delete(workspaceId)
+    // Nothing gathered is the common case: most turns write no files at all.
+    if (!gathered) return
+
+    await commit((current) => ({
+      ...current,
+      workspaces: current.workspaces.map((workspace) => {
+        if (workspace.id !== workspaceId) return workspace
+
+        const writers = { ...workspace.writers }
+        for (const [path, chats] of gathered) {
+          writers[path] = [...new Set([...(writers[path] ?? []), ...chats])]
+        }
+
+        return { ...workspace, writers }
+      })
+    }))
+  }
+
+  /**
    * Chats whose user asked, just now, for the conversation to be forgotten.
    *
    * The reset that comes back cannot be read as consent on its own: the SDK
@@ -1700,6 +1750,18 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
     if (event.type === 'tool_use') {
       const edit = readEditTarget(event.name, event.input)
       if (edit) editsInFlight.set(event.toolUseId, { ...edit, chatId: chat.id })
+
+      /*
+       * And who is writing what, which the changes pane needs and the diff
+       * cannot say. Three conversations work in one worktree, so "the agent
+       * changed this" stopped being one sentence.
+       *
+       * Held here and written at the end of the turn: an agent makes dozens of
+       * edits in a turn and `commit` writes `state.json` whole, so recording
+       * each one as it lands would be a write per edit.
+       */
+      const written = writtenPath(event.name, event.input)
+      if (written !== null) noteWriter(chat, written)
     }
 
     if (event.type === 'tool_result') {
@@ -1715,6 +1777,7 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
 
     if (event.type === 'result') {
       background(chat, setChatStatus(chat.id, event.ok ? 'idle' : 'error'))
+      background(chat, saveWriters(chat.workspaceId))
 
       /*
        * The account's windows have just moved, and this is the moment they can

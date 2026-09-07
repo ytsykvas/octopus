@@ -39,6 +39,35 @@ export function readEditTarget(toolName: string, input: unknown): EditTarget | n
   return parsed.success ? { path: parsed.data.file_path, written: parsed.data.new_string } : null
 }
 
+/**
+ * Tools that leave a file changed, named by `file_path`.
+ *
+ * An allowlist, and it has to be one: `Read` names a `file_path` too, and
+ * attributing a file to whoever merely looked at it would make the pane wrong
+ * rather than incomplete — which is the more expensive of the two on a review
+ * surface. A tool not on this list attributes nothing, so something added
+ * upstream is silent until somebody adds it here.
+ *
+ * `Bash` writes files and is deliberately absent: what a command touched is not
+ * knowable from its arguments, and guessing at it is the same mistake.
+ */
+const WRITING_TOOLS = new Set(['Edit', 'Write', 'MultiEdit', 'NotebookEdit'])
+
+/**
+ * The file a tool call left changed, or null.
+ *
+ * Wider than `readEditTarget` above and asking a different question: that one
+ * wants the text an edit left, so the lines around it can be found, and only
+ * `Edit` leaves such text. This one wants only **which file**.
+ */
+export function writtenPath(toolName: string, input: unknown): string | null {
+  if (!WRITING_TOOLS.has(toolName)) return null
+  if (typeof input !== 'object' || input === null) return null
+
+  const value = (input as Record<string, unknown>).file_path
+  return typeof value === 'string' && value !== '' ? value : null
+}
+
 /** How many lines either side. Enough to place a change, short enough to scan. */
 const RADIUS = 3
 

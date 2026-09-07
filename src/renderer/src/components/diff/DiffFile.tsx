@@ -99,6 +99,15 @@ interface DiffFileProps {
    */
   readonly onRevert: (file: FileDiff) => void
   readonly onOpen: (path: string) => void
+  /**
+   * Which conversations wrote this file, named as the tab strip names them.
+   *
+   * Empty where nobody here did — a file the reader edited by hand, or one
+   * written before this was recorded — and empty for a workspace holding one
+   * conversation, where there is nothing to tell apart. A mark on every row
+   * saying the same thing is noise, and the question only exists with several.
+   */
+  readonly writers: readonly string[]
 }
 
 /**
@@ -149,7 +158,8 @@ export const DiffFile = memo(function DiffFile({
   comments,
   onToggle,
   onRevert,
-  onOpen
+  onOpen,
+  writers
 }: DiffFileProps): React.JSX.Element {
   const { t } = useTranslation()
   const [copied, setCopied] = useState<Copied>('idle')
@@ -219,6 +229,22 @@ export const DiffFile = memo(function DiffFile({
             {file.removed > 0 && <span className="text-danger">−{file.removed}</span>}
           </span>
         </button>
+
+        {/* Who wrote it, when more than one conversation could have.
+            Outside the button for the reason the warning below it is: the
+            button's accessible name is the path, and a label nested in one is
+            a label nobody hears. */}
+        {writers.length > 0 && (
+          <span
+            /* Bounded: the pane is 360px by default and three named
+               conversations would otherwise take the row from the path, which
+               is what identifies it. The whole list is in the tooltip. */
+            className="text-ink-faint max-w-24 shrink-0 truncate text-[11px]"
+            title={t('diff.writtenBy', { names: writers.join(', ') })}
+          >
+            {writers.join(', ')}
+          </span>
+        )}
 
         {/* Outside the button rather than inside it: the button already
             carries the path as its whole accessible name, and a label nested

@@ -178,7 +178,24 @@ the next fetch. `resolveBase` in [`remotes.ts`](../src/core/remotes.ts) is where
 the question is asked, every time it is asked.
 
 A **workspace** is a git worktree: `id`, `projectId`, `name`, `branch`, `path`,
-`status`, `port`, `createdAt`, `ownerId`.
+`status`, `port`, `createdAt`, `writers`, `ownerId`.
+
+`writers` says which conversation wrote which file, by path relative to the
+worktree. A workspace holds up to three conversations working at once in one
+checkout and the changes pane shows their work as a single diff, so "the agent
+changed this" stopped being one sentence when the second conversation arrived.
+
+By **file** rather than by line, and that is the honest limit rather than a
+first step: hunks come from a diff against the merge base, and every line after
+an edit shifts as the next one lands, so a line number recorded now points
+somewhere else by the time the pane draws it. A path does not move.
+
+Stored rather than held in memory, because a workspace is open for days and an
+in-memory record would attribute what was written since the app last started
+while leaving the rest looking untouched — a review surface that is wrong costs
+more than one that is silent. Written once at the end of a turn rather than per
+edit: `commit` writes `state.json` whole, and an agent makes dozens of edits in
+a turn.
 
 `port` is **allocated, not derived**. It used to be a hash of the id, so it
 survived a restart and a bookmark kept working — but the hash asked only our own

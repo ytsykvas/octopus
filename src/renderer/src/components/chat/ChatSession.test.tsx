@@ -28,6 +28,7 @@ function workspace(overrides: Partial<WorkspaceView> = {}): WorkspaceView {
     status: 'idle',
     port: 3100,
     createdAt: '2026-08-07T12:00:00.000Z',
+    writers: {},
     ownerId: null,
     envProfile: null,
     chats: [],

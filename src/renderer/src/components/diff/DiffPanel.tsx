@@ -11,6 +11,7 @@ import { useTranslation } from 'react-i18next'
 
 import type { FileDiff } from '@core/diff.js'
 import { shortBranchName } from '@core/branches.js'
+import { AGENT_NAMES } from '@core/chats.js'
 import type { WorkspaceView } from '@core/workspaces.js'
 
 import {
@@ -86,6 +87,56 @@ export function DiffPanel({
    * dragging it wide again should bring back the two columns rather than
    * having silently forgotten them.
    */
+  /*
+   * The one conversation whose work the reader has narrowed the list to.
+   *
+   * A workspace holds up to three conversations working at once in one
+   * worktree, and this pane shows their work merged into a single diff. "The
+   * agent changed this" was unambiguous while there was one agent per worktree;
+   * reviewing needs to know who did what, and the record is on the workspace
+   * because only the service sees the edits as they land.
+   *
+   * Not stored: it is a way of reading the list now, not a preference, and one
+   * kept across a restart would draw a short list with no memory of why.
+   */
+  const [chosenWriter, setChosenWriter] = useState<string | null>(null)
+
+  /*
+   * Who wrote what, worked out once per workspace rather than once per render.
+   *
+   * `DiffFile` is memoised on its props, so handing it a fresh array of names
+   * every render redraws every file on every render — which is the thing the
+   * memo exists to prevent, and it caught this.
+   */
+  const attribution = useMemo(() => {
+    const { chats = [], writers = {} } = workspace ?? {}
+
+    // Named exactly as the tab strip names them, so a mark here and a tab there
+    // are recognisably the same conversation.
+    const named = chats.map((chat, index) => ({
+      id: chat.id,
+      name: chat.title ?? t('chat.tab', { agent: AGENT_NAMES[chat.agent], number: index + 1 })
+    }))
+
+    /*
+     * Nothing at all for a workspace holding one conversation: a mark on every
+     * row saying the same name is noise, and the question does not exist until
+     * there are two. Names are in tab order and only of conversations still
+     * open — a closed one leaves its id behind in the record, and an id is not
+     * a name.
+     */
+    const marks = new Map<string, readonly string[]>()
+    if (named.length > 1) {
+      for (const [path, ids] of Object.entries(writers)) {
+        const wrote = new Set(ids)
+        const names = named.filter((chat) => wrote.has(chat.id)).map((chat) => chat.name)
+        if (names.length > 0) marks.set(path, names)
+      }
+    }
+
+    return { named, marks }
+  }, [workspace?.chats, workspace?.writers, t])
+
   const roomForSplit = width >= threshold
   const effectiveView: DiffView = view === 'split' && roomForSplit ? 'split' : 'unified'
 
@@ -289,6 +340,27 @@ export function DiffPanel({
     setChoices(new Map(diff.files.map((file) => [file.path, collapsed])))
   }
 
+  const { named, marks } = attribution
+
+  /* No strip where there is nothing to tell apart. The record can also name
+     files this diff no longer has — one reverted, one whose change has landed
+     on the base branch — and a strip offered over those is a control that
+     empties the pane whichever chip is pressed. */
+  const canFilter = diff.files.some((file) => marks.has(file.path))
+
+  /* A filter belongs to the conversation it names and to the strip that offers
+     it, so it ends with either. Switching workspace or closing a tab would
+     otherwise leave the list narrowed to an id nothing here has: an empty pane
+     with no chip pressed to explain it, and nothing to press to get out. */
+  const only = canFilter && named.some((chat) => chat.id === chosenWriter) ? chosenWriter : null
+
+  /* The filter narrows what is drawn and nothing else — in particular it does
+     not reorder, so a file keeps the place the reader last saw it in. */
+  const shownFiles =
+    only === null
+      ? diff.files
+      : diff.files.filter((file) => (workspace.writers[file.path] ?? []).includes(only))
+
   return (
     <div className="relative flex min-h-0 flex-1 flex-col">
       {sample}
@@ -348,6 +420,38 @@ export function DiffPanel({
         </div>
       </div>
 
+      {/* A chip per conversation, and only where there are two to tell apart.
+          It narrows the list rather than marking it: the marks on the headers
+          already say who wrote what, and this answers the other question —
+          "show me only what mine did". */}
+      {canFilter && (
+        <div
+          role="group"
+          aria-label={t('diff.writtenByAll')}
+          className="border-line flex shrink-0 flex-wrap gap-1 border-b px-3 py-1.5"
+        >
+          <FilterChip
+            label={t('diff.writtenByAll')}
+            selected={only === null}
+            onSelect={() => {
+              setChosenWriter(null)
+            }}
+          />
+
+          {named.map((chat) => (
+            <FilterChip
+              key={chat.id}
+              label={chat.name}
+              title={t('diff.writtenByFilter', { name: chat.name })}
+              selected={only === chat.id}
+              onSelect={() => {
+                setChosenWriter(only === chat.id ? null : chat.id)
+              }}
+            />
+          ))}
+        </div>
+      )}
+
       {diff.omittedFiles > 0 && (
         <p className="text-ink-faint border-line shrink-0 border-b px-3 py-1 text-[11px]">
           {t('diff.omittedFiles', { count: diff.omittedFiles })}
@@ -357,7 +461,7 @@ export function DiffPanel({
       {/* The only scroll container in here: sticky headers stop working the
           moment an ancestor between them and the scroller hides its overflow. */}
       <div ref={scroller} className="min-h-0 flex-1 overflow-auto">
-        {diff.files.map((file) => (
+        {shownFiles.map((file) => (
           <DiffFile
             key={file.path}
             file={file}
@@ -368,6 +472,7 @@ export function DiffPanel({
             comments={surface}
             onOpen={openFile}
             onRevert={revertFile}
+            writers={marks.get(file.path) ?? NO_WRITERS}
           />
         ))}
       </div>
@@ -534,3 +639,44 @@ function useSplitThreshold(ready: boolean): {
 
 /** The line-number gutter plus the sign column, from the classes that draw them. */
 const GUTTER_AND_SIGN_PX = 56
+
+/**
+ * One conversation on the filter strip.
+ *
+ * A button rather than a tab: the strip does not switch between panels, it
+ * narrows one list, and pressing the chosen one again clears it.
+ */
+function FilterChip({
+  label,
+  title,
+  selected,
+  onSelect
+}: {
+  readonly label: string
+  readonly title?: string
+  readonly selected: boolean
+  readonly onSelect: () => void
+}): React.JSX.Element {
+  return (
+    <button
+      type="button"
+      aria-pressed={selected}
+      title={title}
+      onClick={onSelect}
+      // The shape the usage card's spans already have, which is what a chosen
+      // one of several looks like in this app.
+      className={`focus-ring max-w-40 truncate rounded-[var(--radius-control)] px-2 py-0.5 text-[11px] transition-colors ${
+        selected ? 'bg-muted text-ink' : 'text-ink-faint hover:text-ink'
+      }`}
+    >
+      {label}
+    </button>
+  )
+}
+
+/**
+ * One shared empty list for the files nobody here wrote.
+ *
+ * `DiffFile` is memoised on its props, and `[]` is a new array every time.
+ */
+const NO_WRITERS: readonly string[] = []

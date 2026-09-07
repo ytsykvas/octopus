@@ -490,6 +490,9 @@ export const uk: Translation = {
     revertCancel: 'Лишити',
     invisibleCharacters:
       'У цьому файлі є символи, які малюються не собою, — рядок може читатися інакше, ніж виконується.',
+    writtenBy: 'Написала {{names}}',
+    writtenByFilter: 'Показати лише те, що написала {{name}}',
+    writtenByAll: 'Усе',
     omittedFiles_one: '{{count}} файл завеликий, щоб його намалювати',
     omittedFiles_few: '{{count}} файли завеликі, щоб їх намалювати',
     omittedFiles_many: '{{count}} файлів завеликі, щоб їх намалювати',

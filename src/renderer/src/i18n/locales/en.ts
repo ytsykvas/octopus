@@ -616,6 +616,12 @@ export const en = {
     revertCancel: 'Keep',
     invisibleCharacters:
       'This file contains characters that do not draw as themselves — a line may read differently from how it runs.',
+    /* Which conversations wrote a file, and only where more than one could
+       have: a workspace holds up to three working in one worktree, and "the
+       agent changed this" stopped being one sentence. */
+    writtenBy: 'Written by {{names}}',
+    writtenByFilter: 'Show only what {{name}} wrote',
+    writtenByAll: 'Everything',
     omittedFiles_one: '{{count}} file is too large to draw',
     omittedFiles_few: '{{count}} files are too large to draw',
     omittedFiles_many: '{{count}} files are too large to draw',

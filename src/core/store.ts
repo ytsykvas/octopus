@@ -154,6 +154,27 @@ export const WorkspaceSchema = z.object({
    * would be no way to say "follow" again.
    */
   envProfile: ProfileNameSchema.nullable().default(null),
+  /**
+   * Which conversation wrote which file here, by path relative to the worktree.
+   *
+   * A workspace holds up to three conversations working at once in one
+   * checkout, and the changes pane shows their work merged into a single diff.
+   * "The agent changed this" was unambiguous while there was one agent per
+   * worktree; it is not now, and reviewing needs to know who did what.
+   *
+   * By **file** rather than by line, and that is the honest limit rather than a
+   * first step. Hunks come from a diff against the merge base and every line
+   * after an edit shifts as the next one lands, so a line recorded now points
+   * somewhere else by the time the pane draws it. A path does not move.
+   *
+   * Stored rather than held in memory, or a workspace open for days would
+   * attribute what was written since the app last started and leave the rest
+   * looking untouched — which is worse than saying nothing, because a review
+   * surface that is wrong costs more than one that is silent.
+   *
+   * Defaulted, because every workspace written before this lacks it entirely.
+   */
+  writers: z.record(z.string(), z.array(z.string())).default({}),
   /** Reserved for future multi-user support; always null for now. */
   ownerId: z.string().nullable()
 })

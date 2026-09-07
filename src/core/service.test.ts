@@ -7946,4 +7946,213 @@ describe('the agent chat', () => {
 
     return found.event.requestId
   }
+
+  describe('who wrote which file', () => {
+    /** The workspace as the changes pane reads it. */
+    async function writersOf(
+      service: OctopusService,
+      projectId: string,
+      workspaceId?: string
+    ): Promise<Record<string, readonly string[]>> {
+      const listed = await service.listWorkspaces(projectId)
+      const workspace =
+        workspaceId === undefined ? listed[0] : listed.find((one) => one.id === workspaceId)
+      if (!workspace) throw new Error('the workspace is gone')
+      return workspace.writers
+    }
+
+    it('records the conversation that made the edit', async () => {
+      const { service, projectId, workspaceId } = await withWorkspace()
+      const chat = await service.openChat(workspaceId)
+      await service.sendToChat(chat.id, 'edit it')
+
+      agent().emit(
+        toolCallMessage('c-1', 'Edit', {
+          file_path: 'notes.txt',
+          old_string: 'a',
+          new_string: 'b'
+        })
+      )
+      agent().emit(resultMessage)
+
+      await vi.waitFor(async () => {
+        expect(await writersOf(service, projectId)).toEqual({ 'notes.txt': [chat.id] })
+      })
+    })
+
+    /*
+     * The point of the whole record. Three conversations share one worktree and
+     * the pane shows their work as a single diff, so a file has to say which of
+     * them left it changed.
+     */
+    it('records both conversations that wrote the same file', async () => {
+      const { service, projectId, workspaceId } = await withWorkspace()
+      const first = await service.openChat(workspaceId)
+      const second = await service.createChat(workspaceId)
+      await service.sendToChat(first.id, 'edit it')
+      await service.sendToChat(second.id, 'edit it too')
+
+      const [one, other] = agents
+      if (!one || !other) throw new Error('both sessions should be running')
+
+      one.emit(toolCallMessage('c-1', 'Edit', { file_path: 'shared.ts' }))
+      one.emit(resultMessage)
+      other.emit(toolCallMessage('c-2', 'Write', { file_path: 'shared.ts' }))
+      other.emit(toolCallMessage('c-3', 'Write', { file_path: 'only-theirs.ts' }))
+      other.emit(resultMessage)
+
+      await vi.waitFor(async () => {
+        expect(await writersOf(service, projectId)).toEqual({
+          'shared.ts': [first.id, second.id],
+          'only-theirs.ts': [second.id]
+        })
+      })
+    })
+
+    // Two workspaces at work at once is the ordinary state of this app, and a
+    // turn ending in one must not write anything against the other.
+    it('records against the workspace whose conversation wrote it', async () => {
+      const { service, projectId, workspaceId } = await withWorkspace()
+      const second = await service.createWorkspaceIn(projectId)
+      const here = await service.openChat(workspaceId)
+      const there = await service.openChat(second.id)
+      await service.sendToChat(here.id, 'edit it')
+      await service.sendToChat(there.id, 'edit it')
+
+      const [one, other] = agents
+      if (!one || !other) throw new Error('both sessions should be running')
+
+      one.emit(toolCallMessage('c-1', 'Edit', { file_path: 'here.ts' }))
+      one.emit(resultMessage)
+      other.emit(toolCallMessage('c-2', 'Edit', { file_path: 'there.ts' }))
+      other.emit(resultMessage)
+
+      await vi.waitFor(async () => {
+        expect(await writersOf(service, projectId, second.id)).toEqual({ 'there.ts': [there.id] })
+      })
+      expect(await writersOf(service, projectId, workspaceId)).toEqual({ 'here.ts': [here.id] })
+    })
+
+    /*
+     * The record outlives the turn that made it. A file one conversation wrote
+     * last week and another rewrites today belongs to both, so a turn merges
+     * into what is stored rather than replacing it — and a file written twice
+     * in one turn is written by one conversation, not by it twice over.
+     */
+    it('adds a later turn to what is already there, without repeating itself', async () => {
+      const { service, projectId, workspaceId } = await withWorkspace()
+      const first = await service.openChat(workspaceId)
+      const second = await service.createChat(workspaceId)
+      await service.sendToChat(first.id, 'edit it')
+
+      agent().emit(toolCallMessage('c-1', 'Edit', { file_path: 'notes.txt' }))
+      agent().emit(toolCallMessage('c-2', 'Edit', { file_path: 'notes.txt' }))
+      agent().emit(resultMessage)
+      await vi.waitFor(async () => {
+        expect(await writersOf(service, projectId)).toEqual({ 'notes.txt': [first.id] })
+      })
+
+      await service.sendToChat(second.id, 'edit it too')
+      const other = agents[1]
+      if (!other) throw new Error('the second session should be running')
+      other.emit(toolCallMessage('c-3', 'Write', { file_path: 'notes.txt' }))
+      other.emit(resultMessage)
+
+      await vi.waitFor(async () => {
+        expect(await writersOf(service, projectId)).toEqual({ 'notes.txt': [first.id, second.id] })
+      })
+
+      /* And the same conversation coming back to the same file, which is what
+         an agent does all day: the entry stays one name long rather than
+         growing by one every turn. */
+      await service.sendToChat(first.id, 'once more')
+      agent().emit(toolCallMessage('c-4', 'Edit', { file_path: 'notes.txt' }))
+      // A file nothing has seen before, so the turn's write can be waited for:
+      // waiting on the entry that must not change would be waiting for nothing.
+      agent().emit(toolCallMessage('c-5', 'Edit', { file_path: 'fresh.ts' }))
+      agent().emit(resultMessage)
+
+      await vi.waitFor(async () => {
+        expect(await writersOf(service, projectId)).toMatchObject({ 'fresh.ts': [first.id] })
+      })
+      expect((await writersOf(service, projectId))['notes.txt']).toEqual([first.id, second.id])
+    })
+
+    /*
+     * A turn's worth of edits, one write of `state.json`. An agent makes dozens
+     * in a turn and `commit` writes the file whole, so recording each as it
+     * lands would be a write per edit.
+     */
+    it('writes nothing down until the turn ends', async () => {
+      const { service, projectId, workspaceId, events } = await withWorkspace()
+      const chat = await service.openChat(workspaceId)
+      await service.sendToChat(chat.id, 'edit it')
+
+      agent().emit(toolCallMessage('c-1', 'Edit', { file_path: 'notes.txt' }))
+      await vi.waitFor(() => {
+        expect(events.some((entry) => entry.event.type === 'tool_use')).toBe(true)
+      })
+
+      expect(await writersOf(service, projectId)).toEqual({})
+
+      agent().emit(resultMessage)
+      await vi.waitFor(async () => {
+        expect(await writersOf(service, projectId)).toEqual({ 'notes.txt': [chat.id] })
+      })
+    })
+
+    // Not a file this workspace's diff can show, so not one the pane could
+    // attribute either.
+    it('ignores a path outside the worktree', async () => {
+      const { service, projectId, workspaceId } = await withWorkspace()
+      const chat = await service.openChat(workspaceId)
+      await service.sendToChat(chat.id, 'edit it')
+
+      agent().emit(toolCallMessage('c-1', 'Edit', { file_path: join(dir, 'elsewhere.ts') }))
+      agent().emit(toolCallMessage('c-2', 'Edit', { file_path: 'notes.txt' }))
+      agent().emit(resultMessage)
+
+      await vi.waitFor(async () => {
+        expect(await writersOf(service, projectId)).toEqual({ 'notes.txt': [chat.id] })
+      })
+    })
+
+    /*
+     * A workspace can go while its session is still speaking — the removal is
+     * forced and the stream is not — so an edit can arrive with nowhere to be
+     * recorded. What matters is that the turn carries on: an exception here
+     * would take the reader loop with it, and every later event of that session
+     * with the loop.
+     */
+    it('carries on when the workspace an edit belongs to has gone', async () => {
+      const { service, workspaceId, events } = await withWorkspace()
+      const chat = await service.openChat(workspaceId)
+      await service.sendToChat(chat.id, 'edit it')
+
+      await service.removeWorkspaceById(workspaceId, { force: true })
+      agent().emit(toolCallMessage('c-1', 'Edit', { file_path: 'notes.txt' }))
+      agent().emit(textMessage('carried on'))
+
+      await vi.waitFor(() => {
+        expect(events.some((entry) => entry.event.type === 'text')).toBe(true)
+      })
+    })
+
+    // `Read` names a `file_path` exactly as an edit does.
+    it('does not attribute a file to whoever only read it', async () => {
+      const { service, projectId, workspaceId } = await withWorkspace()
+      const chat = await service.openChat(workspaceId)
+      await service.sendToChat(chat.id, 'look at it')
+
+      agent().emit(toolCallMessage('c-1', 'Read', { file_path: 'notes.txt' }))
+      agent().emit(resultMessage)
+
+      // The turn is over before the record is read, or an empty answer would
+      // only mean the write had not happened yet.
+      await vi.waitFor(() => {
+        expect(service.listChats(workspaceId)[0]?.status).toBe('idle')
+      })
+      expect(await writersOf(service, projectId)).toEqual({})
+    })
+  })
 })

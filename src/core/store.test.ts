@@ -67,6 +67,7 @@ function makeWorkspace(overrides: Partial<Workspace> = {}): Workspace {
     port: 3100,
     createdAt: '2026-08-07T12:00:00.000Z',
     envProfile: null,
+    writers: {},
     ownerId: null,
     ...overrides
   }
@@ -997,5 +998,32 @@ describe('pointing a project at another checkout', () => {
     const next = updateProject(state, 'ledger', { repoPath: '/repos/moved' })
 
     expect(next.projects[1]?.repoPath).toBe('/repos/moved')
+  })
+})
+
+describe('who wrote which file in a workspace', () => {
+  it('starts empty', () => {
+    expect(makeWorkspace().writers).toEqual({})
+  })
+
+  /*
+   * Every workspace in every state file predates the field, and the reader
+   * throws on a mismatch — so a missing default would not lose the attribution,
+   * it would stop the app opening. That has happened once already, which is why
+   * a field that can be absent carries a default rather than a version bump.
+   */
+  it('loads a workspace written before it was recorded', async () => {
+    const older: Record<string, unknown> = { ...makeWorkspace() }
+    delete older.writers
+
+    await writeFile(
+      file,
+      JSON.stringify({ version: 1, projects: [project], workspaces: [older], chats: [] }),
+      'utf8'
+    )
+
+    const state = await loadState(file)
+
+    expect(state.workspaces[0]?.writers).toEqual({})
   })
 })

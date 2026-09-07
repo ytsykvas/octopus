@@ -33,7 +33,26 @@ vi.mock('./DiffFile.js', () => ({
   })
 }))
 
+/*
+ * A file in nothing the highlighter knows, deliberately.
+ *
+ * Colours arrive asynchronously and land as a new `tokens` prop, which is a
+ * redraw that says nothing about whether the pane keeps its props steady — and
+ * whether it lands between two renders depends on how warm the grammars are.
+ * With no language there is nothing to wait for.
+ */
+const FILE = 'notes.bin'
+
 const anna = workspaceView('anna')
+
+/** The same workspace with two conversations, one of which wrote the file. */
+const attributed = workspaceView('anna', {
+  chats: [
+    { id: 'chat-1', agent: 'claude', title: null, status: 'idle', started: true },
+    { id: 'chat-2', agent: 'claude', title: null, status: 'idle', started: true }
+  ],
+  writers: { [FILE]: ['chat-1'] }
+})
 
 // Held still across renders, as `App` holds them: both are built once up there
 // and handed down, so a test rebuilding them would be measuring itself.
@@ -47,14 +66,14 @@ beforeEach(() => {
   fileRenders = 0
   vi.mocked(octopus().workspaces.diff).mockResolvedValue({
     ok: true,
-    value: workspaceDiff([fileDiff('src/a.ts', { hunks: [hunk()] })])
+    value: workspaceDiff([fileDiff(FILE, { hunks: [hunk()] })])
   })
 })
 
-function panel(width: number): React.JSX.Element {
+function panel(width: number, workspace = anna): React.JSX.Element {
   return (
     <DiffPanel
-      workspace={anna}
+      workspace={workspace}
       visible
       view="unified"
       onView={onView}
@@ -74,6 +93,23 @@ describe('a pane whose width changed', () => {
 
     rerender(panel(901))
     rerender(panel(902))
+
+    expect(fileRenders).toBe(drawn)
+  })
+
+  /*
+   * The names of who wrote a file are worked out from the workspace, and the
+   * first version worked them out per file per render — a fresh array every
+   * time, which is a new prop every time. The test above missed it because a
+   * workspace with one conversation is handed the same empty list either way.
+   */
+  it('does not redraw them because a file says who wrote it', async () => {
+    const { rerender } = render(panel(900, attributed))
+    await screen.findByTestId('file')
+    const drawn = fileRenders
+
+    rerender(panel(901, attributed))
+    rerender(panel(902, attributed))
 
     expect(fileRenders).toBe(drawn)
   })

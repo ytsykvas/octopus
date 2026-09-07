@@ -4,7 +4,7 @@ import { join } from 'node:path'
 
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 
-import { readChangeContext, readEditTarget } from './changeContext.js'
+import { readChangeContext, readEditTarget, writtenPath } from './changeContext.js'
 
 let worktree: string
 
@@ -169,5 +169,37 @@ describe('edges of finding the change', () => {
       after: [],
       startLine: 1
     })
+  })
+})
+
+describe('the file a tool call left changed', () => {
+  it('is named by each of the tools that write one', () => {
+    for (const tool of ['Edit', 'Write', 'MultiEdit', 'NotebookEdit']) {
+      expect(writtenPath(tool, { file_path: '/w/src/a.ts' })).toBe('/w/src/a.ts')
+    }
+  })
+
+  /*
+   * The allowlist earning its keep. `Read` names a `file_path` exactly as an
+   * edit does, so a rule of "any tool with one" would attribute a file to
+   * whoever merely looked at it — wrong rather than incomplete, which on a
+   * review surface is the more expensive of the two.
+   */
+  it('is nothing for a tool that only reads one', () => {
+    expect(writtenPath('Read', { file_path: '/w/src/a.ts' })).toBeNull()
+    expect(writtenPath('Grep', { file_path: '/w/src/a.ts' })).toBeNull()
+  })
+
+  // What a command touched is not knowable from its arguments.
+  it('is nothing for a shell command', () => {
+    expect(writtenPath('Bash', { command: 'echo hi > /w/src/a.ts' })).toBeNull()
+  })
+
+  it('is nothing when the input does not name one', () => {
+    expect(writtenPath('Edit', { old_string: 'a' })).toBeNull()
+    expect(writtenPath('Edit', { file_path: '' })).toBeNull()
+    expect(writtenPath('Edit', { file_path: 42 })).toBeNull()
+    expect(writtenPath('Edit', null)).toBeNull()
+    expect(writtenPath('Edit', 'src/a.ts')).toBeNull()
   })
 })

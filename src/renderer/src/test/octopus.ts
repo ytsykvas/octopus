@@ -331,6 +331,7 @@ function workspaceFixture(): Workspace {
     status: 'idle' as const,
     port: 3100,
     createdAt: '2026-08-08T00:00:00.000Z',
+    writers: {},
     ownerId: null,
     envProfile: null
   }

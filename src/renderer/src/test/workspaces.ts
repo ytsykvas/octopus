@@ -16,6 +16,7 @@ export function workspaceView(name: string, overrides: Partial<WorkspaceView> = 
     status: 'idle',
     port: 3100,
     createdAt: '2026-08-08T00:00:00.000Z',
+    writers: {},
     ownerId: null,
     envProfile: null,
     chats: [],

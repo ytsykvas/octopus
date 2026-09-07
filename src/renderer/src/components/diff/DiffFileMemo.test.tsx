@@ -46,7 +46,8 @@ const props = {
   comments,
   onToggle: vi.fn(),
   onRevert: vi.fn(),
-  onOpen: vi.fn()
+  onOpen: vi.fn(),
+  writers: []
 }
 
 describe('a file that has not changed', () => {
