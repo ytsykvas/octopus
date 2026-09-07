@@ -141,8 +141,8 @@ import {
   stateFile,
   stateTempFile
 } from './paths.js'
+import { DOWNLOAD_TIMEOUT_MS } from './download.js'
 import {
-  DOWNLOAD_TIMEOUT_MS,
   ensureStore,
   importFromPath,
   importFromText,

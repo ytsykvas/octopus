@@ -27,10 +27,11 @@
 import { cp, mkdir, readdir, readFile, rename, rm, stat, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 
-import { type Document, parseDocument, stringify } from 'yaml'
 import { z } from 'zod'
 
 import { CodedError } from './codedError.js'
+import { parseFrontmatter, setFields } from './frontmatter.js'
+import { type Download, fetchDocument } from './download.js'
 import { skillsDirOf } from './paths.js'
 import { isSkillName, type SkillScope } from './skillNames.js'
 
@@ -151,38 +152,6 @@ export interface SkillListing {
   readonly enabled: boolean
 }
 
-interface SplitDocument {
-  readonly front: string
-  readonly body: string
-}
-
-/**
- * Frontmatter and prose, or null where there is no frontmatter at all.
- *
- * Written with `indexOf` rather than one regular expression on purpose: a
- * capture group reads back as `string | undefined` under
- * `noUncheckedIndexedAccess`, and the branch handling an `undefined` that
- * cannot happen is a line no test can reach — which the coverage threshold
- * then fails the build over.
- */
-function splitDocument(text: string): SplitDocument | null {
-  const normalised = text.replace(/\r\n/g, '\n')
-  if (!normalised.startsWith('---\n')) return null
-
-  const close = normalised.indexOf('\n---', 3)
-  if (close === -1) return null
-
-  return {
-    front: normalised.slice(4, close),
-    // Every blank line between the delimiter and the prose goes, rather than
-    // just the one that ends the delimiter's own line. The composer below
-    // always writes exactly one, so keeping them would make the body a line
-    // taller on every save — read, write, read, and the file grows without
-    // anybody typing.
-    body: normalised.slice(close + 4).replace(/^\n+/, '')
-  }
-}
-
 interface ParsedSkill {
   readonly name: string
   readonly description: string
@@ -192,61 +161,21 @@ interface ParsedSkill {
   readonly raw: string
 }
 
-/** One frontmatter scalar, or the empty string for anything that is not one. */
-function readField(document: Document, key: string): string {
-  const value: unknown = document.get(key)
-
-  return typeof value === 'string' ? value.trim() : ''
-}
-
-/**
- * The same, read off the line rather than out of the document.
- *
- * Because real frontmatter is often not valid YAML and the agent reads it
- * anyway. A `description` is one long unquoted sentence, and a sentence has
- * colons in it — `Triggers on: access_denied` makes YAML see a nested mapping
- * and refuse the whole block. Two skills shipped in a repository this app was
- * opened on did exactly that, and the panel called them "no skills yet" while
- * the agent was using both.
- *
- * So this is the fallback, not the reader: everything after the first colon on
- * the line that starts with the key, unwrapped from quotes if it has them. It
- * cannot see a block scalar and does not have to — that is what the parser is
- * for, and this only runs where the parser has already given up.
- */
-function scanField(front: string, key: string): string {
-  for (const line of front.split('\n')) {
-    if (!line.startsWith(`${key}:`)) continue
-
-    const value = line.slice(key.length + 1).trim()
-
-    return value.replace(/^(['"])(.*)\1$/, '$2')
-  }
-
-  return ''
-}
-
 /**
  * The document, or null when there is no frontmatter at all.
  *
- * Frontmatter that will not parse is **not** a refusal. It is read line by line
- * instead, because the agent reads those files and a list that dropped them
- * would be describing a different set of skills than the one in use.
+ * Frontmatter that will not parse is **not** a refusal — `frontmatter.ts` says
+ * why, and reads it line by line instead.
  */
 function parse(raw: string): ParsedSkill | null {
-  const parts = splitDocument(raw)
-  if (parts === null) return null
-
-  const document = parseDocument(parts.front)
-  const parsed = document.errors.length === 0
+  const document = parseFrontmatter(raw)
+  if (document === null) return null
 
   return {
-    name: parsed ? readField(document, 'name') : scanField(parts.front, 'name'),
-    description: parsed
-      ? readField(document, 'description')
-      : scanField(parts.front, 'description'),
-    front: parts.front,
-    body: parts.body,
+    name: document.field('name'),
+    description: document.field('description'),
+    front: document.front,
+    body: document.body,
     raw
   }
 }
@@ -380,51 +309,12 @@ export async function readSkill(dir: string, folder: string): Promise<SkillDocum
 /**
  * Frontmatter for a skill about to be written.
  *
- * An imported skill may carry `allowed-tools`, `when_to_use` or a comment
- * somebody wrote, and the form edits two fields. So where there is a document
- * to keep, the two fields are set **on** it and everything else survives; only
- * where there is nothing to keep is one written from scratch.
+ * The name goes in beside the description because the two are what the form
+ * edits; everything else the document carried survives, which is what
+ * `setFields` is for.
  */
 function frontmatterFor(previous: string | null, name: string, description: string): string {
-  if (previous === null) return stringify({ name, description })
-
-  const document = parseDocument(previous)
-  if (document.errors.length === 0) {
-    document.set('name', name)
-    document.set('description', description)
-
-    return String(document)
-  }
-
-  // Frontmatter the parser will not take, edited the way it was read: the two
-  // lines are replaced and every other line is copied through untouched.
-  // Rewriting it as YAML would tidy away the `allowed-tools` beside them, and
-  // writing back what the parser made of a block it could not read would be
-  // worse than either.
-  return replaceLines(previous, { name, description })
-}
-
-/** Sets two keys in frontmatter no parser will take, line by line. */
-function replaceLines(front: string, fields: Readonly<Record<string, string>>): string {
-  const written = new Set<string>()
-
-  const lines = front.split('\n').map((line) => {
-    for (const [key, value] of Object.entries(fields)) {
-      if (line.startsWith(`${key}:`)) {
-        written.add(key)
-
-        return `${key}: ${value}`
-      }
-    }
-
-    return line
-  })
-
-  const missing = Object.entries(fields)
-    .filter(([key]) => !written.has(key))
-    .map(([key, value]) => `${key}: ${value}`)
-
-  return [...missing, ...lines].join('\n')
+  return setFields(previous, { name, description })
 }
 
 function assertFits(text: string): void {
@@ -735,78 +625,6 @@ export async function importFromPath(
   return importFromText(dir, await readFile(source, 'utf8'), elsewhere)
 }
 
-type Fetch = typeof fetch
-
-/**
- * How a download is made, handed in rather than defaulted.
- *
- * The convention every other outward-facing module here follows — `git.ts`
- * takes its executor, `agent.ts` takes its `query`. A default would also make
- * the timeout untestable: covering the branch that fires it would mean waiting
- * out the real one, and covering the default itself would mean the suite
- * reaching the network.
- */
-export interface Download {
-  readonly fetch: Fetch
-  readonly timeoutMs: number
-}
-
-/** What the service passes, and the only place the number is written down. */
-export const DOWNLOAD_TIMEOUT_MS = 10_000
-
-/** The address, or null for anything that is not an `https` URL. */
-function httpsUrl(value: string): URL | null {
-  let url
-  try {
-    url = new URL(value)
-  } catch {
-    return null
-  }
-
-  return url.protocol === 'https:' ? url : null
-}
-
-/**
- * The body, decoded as it arrives and refused the moment it is too long.
- *
- * Read through the stream rather than `text()` because the length is the one
- * thing about a download the user does not decide: a server answering with a
- * gigabyte would otherwise be held in memory in full before anything checked.
- */
-async function readCapped(response: Response): Promise<string> {
-  // Annotated rather than inferred: `Response.body` reaches us from
-  // `@types/node` as an unparameterised `ReadableStream`, which is
-  // `ReadableStream<any>` — and `any` flowing into a length check and a
-  // decoder is exactly what the no-`any` rule is there to stop. Saying what a
-  // fetch body is made of costs nothing and is not in doubt.
-  const body: ReadableStream<Uint8Array> | null = response.body
-  if (body === null) return ''
-
-  const reader = body.getReader()
-  const decoder = new TextDecoder()
-  let text = ''
-  let bytes = 0
-
-  for (;;) {
-    const chunk = await reader.read()
-    if (chunk.done) break
-
-    bytes += chunk.value.byteLength
-    if (bytes > MAX_DOWNLOAD_BYTES) {
-      await reader.cancel()
-      throw new SkillError(
-        'skillTooLarge',
-        { limit: String(MAX_DOWNLOAD_BYTES) },
-        'The download is too large to be one skill.'
-      )
-    }
-
-    text += decoder.decode(chunk.value, { stream: true })
-  }
-
-  return text + decoder.decode()
-}
-
 /**
  * Downloads one `SKILL.md` and files it.
  *
@@ -824,46 +642,21 @@ export async function importFromUrl(
   download: Download,
   elsewhere: readonly string[] = []
 ): Promise<SkillEntry> {
-  const url = httpsUrl(value)
-  if (url === null) {
-    throw new SkillError('skillUrlRefused', { url: value }, 'Only https addresses are fetched.')
-  }
-
-  return importFromText(dir, await fetched(url, value, download), elsewhere)
+  return importFromText(dir, await fetched(value, download), elsewhere)
 }
 
 /**
- * The document at an address, refused the moment it stops being one.
+ * The document at an address, in this module's own words.
  *
  * Its own function because the preview reads the same address the same way —
  * and because a link inspected and then imported must be fetched **once**: the
  * second answer need not be the first, and the reader approved the first.
  */
-async function fetched(url: URL, value: string, download: Download): Promise<string> {
-  const controller = new AbortController()
-  const timer = setTimeout(() => {
-    controller.abort()
-  }, download.timeoutMs)
-
-  try {
-    const response = await download.fetch(url, { signal: controller.signal, redirect: 'follow' })
-
-    if (!response.ok) {
-      throw new SkillError(
-        'skillUrlRefused',
-        { url: value, status: String(response.status) },
-        `${value} answered ${String(response.status)}.`
-      )
-    }
-
-    if (response.url !== '' && httpsUrl(response.url) === null) {
-      throw new SkillError('skillUrlRefused', { url: response.url }, 'The redirect left https.')
-    }
-
-    return await readCapped(response)
-  } finally {
-    clearTimeout(timer)
-  }
+function fetched(value: string, download: Download): Promise<string> {
+  return fetchDocument(value, MAX_DOWNLOAD_BYTES, download, {
+    refuseUrl: (params, message) => new SkillError('skillUrlRefused', params, message),
+    refuseSize: (params, message) => new SkillError('skillTooLarge', params, message)
+  })
 }
 
 /** What a preview says about a skill that has not been written yet. */
@@ -918,18 +711,7 @@ async function sourceText(
   request: Extract<SkillImport, { kind: 'path' | 'url' }>,
   download: Download
 ): Promise<string> {
-  if (request.kind === 'url') {
-    const url = httpsUrl(request.url)
-    if (url === null) {
-      throw new SkillError(
-        'skillUrlRefused',
-        { url: request.url },
-        'Only https addresses are fetched.'
-      )
-    }
-
-    return fetched(url, request.url, download)
-  }
+  if (request.kind === 'url') return fetched(request.url, download)
 
   const info = await stat(request.path)
   if (!info.isDirectory()) return readFile(request.path, 'utf8')
