@@ -77,7 +77,7 @@ export function WorkspaceTerminals({
           // columns at all and the session would come back mangled.
           className={`absolute inset-0 ${workspace.id === activeId ? '' : 'invisible'}`}
         >
-          <Terminal cwd={workspace.path} />
+          <Terminal cwd={workspace.path} owner={{ workspaceId: workspace.id, purpose: 'shell' }} />
         </div>
       ))}
     </div>

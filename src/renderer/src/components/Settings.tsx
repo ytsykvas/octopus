@@ -9,10 +9,11 @@ import {
   Sparkles,
   SquareSlash
 } from 'lucide-react'
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import type { AttachmentStore } from '@core/attachments.js'
+import type { TerminalSession } from '@core/terminal.js'
 import { type AgentModel, DEFAULT_MODEL, type Effort, type WorkingMode } from '@core/chats.js'
 import type {
   Config,
@@ -510,6 +511,7 @@ function AboutSection({ config }: { config: Config }): React.JSX.Element {
         value={new Date(config.installedAt).toLocaleString()}
       />
       <PastedImagesRow />
+      <RunningTerminals />
 
       {/* The space is on a wrapper, not on the image: `size-20` sets the box,
           and padding inside it would eat the picture rather than move it.
@@ -519,6 +521,102 @@ function AboutSection({ config }: { config: Config }): React.JSX.Element {
         <Mascot className="mx-auto block size-20" />
       </div>
     </div>
+  )
+}
+
+/**
+ * What is still running, and a way to end one.
+ *
+ * A pseudo-terminal outlives the pane that started it more easily than it
+ * looks: a window closed, a document reloaded, a half unmounted without its
+ * cleanup. What it costs is not tidy — a shell stays alive, a port stays held,
+ * and a dev server goes on writing to a file nobody reads. The symptom that
+ * reaches the user comes from somebody else's tool: "a server is already
+ * running".
+ *
+ * So the answer is the same one the pasted images got: make it **visible**, and
+ * leave the decision here. Every window's sessions rather than this one's, for
+ * the reason the list exists at all — the session worth finding is precisely
+ * the one whose pane is gone.
+ *
+ * Read once when the section opens rather than watched. Nothing announces a
+ * session starting, and a row that quietly went stale would be worse than one
+ * the reader knows is a snapshot; the button below re-reads it.
+ */
+function RunningTerminals(): React.JSX.Element {
+  const { t } = useTranslation()
+  const { confirm, dialog } = useConfirm()
+  const [sessions, setSessions] = useState<readonly TerminalSession[] | null>(null)
+
+  const read = useCallback(async () => {
+    const answer = await window.octopus.terminal.list()
+    if (answer.ok) setSessions(answer.value)
+  }, [])
+
+  useEffect(() => {
+    const controller = new AbortController()
+
+    void (async () => {
+      const answer = await window.octopus.terminal.list()
+      if (!controller.signal.aborted && answer.ok) setSessions(answer.value)
+    })()
+
+    return () => {
+      controller.abort()
+    }
+  }, [])
+
+  const end = async (session: TerminalSession): Promise<void> => {
+    const { confirmed } = await confirm({
+      title: t('settings.terminalsEndTitle'),
+      message: t('settings.terminalsEndMessage'),
+      detail: t('settings.terminalsEndDetail'),
+      confirmLabel: t('settings.terminalsEndConfirm'),
+      cancelLabel: t('settings.terminalsEndCancel'),
+      destructive: true
+    })
+    if (!confirmed) return
+
+    await window.octopus.terminal.dispose(session.id)
+    await read()
+  }
+
+  // Nothing until the answer arrives, as the row above it: a list that said
+  // "none" and then corrected itself would be worse than one that appears once.
+  if (sessions === null) return <></>
+
+  return (
+    <>
+      <div className="flex items-baseline justify-between gap-4">
+        <span className="text-ink-soft">{t('settings.terminals')}</span>
+        {sessions.length === 0 && (
+          <span className="text-ink-faint text-[11px]">{t('settings.terminalsNone')}</span>
+        )}
+      </div>
+
+      {sessions.length > 0 && (
+        <ul className="border-line divide-line mt-1.5 divide-y rounded-[var(--radius-panel)] border">
+          {sessions.map((session) => (
+            <li key={session.id} className="flex items-center gap-3 px-3 py-1.5">
+              <span className="text-ink-faint min-w-0 flex-1 truncate text-[11px]">
+                {t(`settings.terminalPurpose.${session.owner.purpose}`)}
+                {session.owner.workspaceId !== null && ` · ${session.owner.workspaceId}`}
+              </span>
+              <Button
+                size="sm"
+                onClick={() => {
+                  void end(session)
+                }}
+              >
+                {t('settings.terminalsEnd')}
+              </Button>
+            </li>
+          ))}
+        </ul>
+      )}
+
+      {dialog}
+    </>
   )
 }
 

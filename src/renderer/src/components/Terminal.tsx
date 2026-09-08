@@ -4,6 +4,8 @@ import { useEffect, useRef } from 'react'
 
 import '@xterm/xterm/css/xterm.css'
 
+import type { TerminalOwner } from '@core/terminal.js'
+
 /**
  * The design tokens, as values.
  *
@@ -40,6 +42,13 @@ interface TerminalProps {
   readonly commandLine?: string
   /** Extra environment for the session — how a script learns its port. */
   readonly env?: Readonly<Record<string, string>>
+  /**
+   * Whose session this is, for the list that says what is still running.
+   *
+   * Chosen here rather than worked out in `main`, which sees a working
+   * directory and an argv and cannot tell a dev server from a shell tab.
+   */
+  readonly owner?: TerminalOwner
   readonly onExit?: (exitCode: number | null) => void
   /**
    * Called once this session has actually ended, after unmounting.
@@ -76,6 +85,7 @@ export function Terminal({
   command,
   commandLine,
   env,
+  owner,
   onExit,
   onClosed,
   onFailed
@@ -160,6 +170,7 @@ export function Terminal({
       let result
       try {
         result = await window.octopus.terminal.create({
+          owner: owner ?? { workspaceId: null, purpose: 'shell' },
           cwd,
           command: command ? [...command] : [],
           commandLine: commandLine ?? '',

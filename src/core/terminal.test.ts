@@ -32,6 +32,7 @@ describe('TerminalSpecSchema', () => {
 
   it('keeps an explicit command and size', () => {
     const spec = TerminalSpecSchema.parse({
+      owner: { workspaceId: null, purpose: 'shell' },
       cwd: '/repo',
       command: ['gh', 'auth', 'login'],
       cols: 120,
@@ -114,6 +115,7 @@ describe('buildTerminalArgv', () => {
     // The more specific of the two wins, and visibly: running the argv and
     // dropping the line would be a silent choice.
     const spec = TerminalSpecSchema.parse({
+      owner: { workspaceId: null, purpose: 'shell' },
       cwd: '/tmp',
       command: ['ignored'],
       commandLine: 'chosen'
@@ -207,6 +209,7 @@ describe('buildTerminalArgv against a hostile command', () => {
     // split or executed shows up as a difference.
     it(`reaches a shell as one literal word: ${JSON.stringify(path)}`, async () => {
       const argv = buildTerminalArgv({
+        owner: { workspaceId: null, purpose: 'shell' },
         cwd: '/tmp',
         command: ['printf', '%s', path],
         commandLine: '',
@@ -222,6 +225,7 @@ describe('buildTerminalArgv against a hostile command', () => {
 
   it('keeps a multi-word command as separate words', () => {
     const argv = buildTerminalArgv({
+      owner: { workspaceId: null, purpose: 'shell' },
       cwd: '/tmp',
       command: ['gh', 'auth', 'login'],
       commandLine: '',
@@ -238,6 +242,7 @@ describe('buildTerminalArgv against a hostile command', () => {
   // because writing this assertion by hand is exactly where it went wrong.
   it('escapes a quote rather than ending the word early', async () => {
     const argv = buildTerminalArgv({
+      owner: { workspaceId: null, purpose: 'shell' },
       cwd: '/tmp',
       command: ['printf', '%s', "it's"],
       commandLine: '',

@@ -121,7 +121,15 @@ beforeEach(() => {
   renderer = target()
 })
 
-const SPEC = { cwd: '/tmp/work', command: [], commandLine: '', env: {}, cols: 80, rows: 24 }
+const SPEC = {
+  owner: { workspaceId: null, purpose: 'shell' as const },
+  cwd: '/tmp/work',
+  command: [],
+  commandLine: '',
+  env: {},
+  cols: 80,
+  rows: 24
+}
 
 describe('creating a session', () => {
   it('starts one pty and hands back an id', () => {
@@ -469,5 +477,51 @@ describe('disposal', () => {
 
     expect(signals.map(([pid]) => pid)).toEqual(spawned.map((pty) => -pty.pid))
     expect(manager.size).toBe(0)
+  })
+})
+
+describe('what is still running', () => {
+  /*
+   * The residue this exists to make visible. A pty whose pane is gone is held
+   * here and nothing on screen could say so, and what it costs is a shell alive,
+   * a port held, and a dev server writing to a file nobody reads.
+   */
+  it('names each session by whose it is', () => {
+    manager.create(
+      { ...SPEC, owner: { workspaceId: 'planner/anna', purpose: 'run' } },
+      renderer as never
+    )
+    manager.create({ ...SPEC, owner: { workspaceId: null, purpose: 'auth' } }, renderer as never)
+
+    expect(manager.list()).toEqual([
+      { id: 'term-1', owner: { workspaceId: 'planner/anna', purpose: 'run' } },
+      { id: 'term-2', owner: { workspaceId: null, purpose: 'auth' } }
+    ])
+  })
+
+  /*
+   * Every window's, not the caller's own — which is the whole point: the
+   * session worth finding is precisely the one whose window is gone.
+   */
+  it('answers with every window\u2019s, not one window\u2019s', () => {
+    const other = target()
+    manager.create(SPEC, renderer as never)
+    manager.create(SPEC, other as never)
+
+    expect(manager.list()).toHaveLength(2)
+  })
+
+  it('has nothing to say before anything is started', () => {
+    expect(manager.list()).toEqual([])
+  })
+
+  it('drops one that has been ended', async () => {
+    const id = manager.create(SPEC, renderer as never)
+
+    const ending = manager.dispose(id)
+    spawned[0]?.end({ exitCode: 0 })
+    await ending
+
+    expect(manager.list()).toEqual([])
   })
 })

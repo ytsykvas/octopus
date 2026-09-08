@@ -439,6 +439,7 @@ function Runner({
           <Terminal
             key={run}
             cwd={workspace.path}
+            owner={{ workspaceId: workspace.id, purpose: kind }}
             /*
              * A file is executed; a command line goes to the shell as written.
              * Exactly one of these is set, which is what `buildTerminalArgv`

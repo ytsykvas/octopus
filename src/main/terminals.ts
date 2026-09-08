@@ -9,6 +9,8 @@ import {
   resolveCwd,
   resolveShell,
   type TerminalId,
+  type TerminalOwner,
+  type TerminalSession,
   type TerminalSpec
 } from '../core/terminal.js'
 
@@ -40,6 +42,8 @@ export type Kill = (pid: number, signal: NodeJS.Signals) => void
 interface Session {
   readonly pty: IPty
   readonly target: WebContents
+  /** Whose it is, kept because `main` cannot work it out from a spec. */
+  readonly owner: TerminalOwner
 }
 
 export class TerminalManager {
@@ -91,7 +95,7 @@ export class TerminalManager {
       void this.dispose(id)
     })
 
-    this.sessions.set(id, { pty, target })
+    this.sessions.set(id, { pty, target, owner: spec.owner })
     return id
   }
 
@@ -184,6 +188,18 @@ export class TerminalManager {
   /** Kills every session — called when the application quits. */
   disposeAll(): void {
     for (const id of [...this.sessions.keys()]) void this.dispose(id)
+  }
+
+  /**
+   * Everything still running, whichever window asked for it.
+   *
+   * The residue this exists to make visible: a session whose pane is gone is
+   * held here and nothing on screen could say so. Every window's, not the
+   * caller's own — a pty orphaned by one window is exactly the one the reader
+   * cannot see from the other.
+   */
+  list(): TerminalSession[] {
+    return [...this.sessions].map(([id, session]) => ({ id, owner: session.owner }))
   }
 
   get size(): number {

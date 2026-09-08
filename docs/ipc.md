@@ -123,6 +123,13 @@ a delete.
 `dialog:pickMarkdown` belongs with them: one file, never a folder — a skill may
 be a directory and neither of these ever is.
 
+`terminal:list` answers with every live session — its id and its `owner`, which
+is the workspace it belongs to and what it is running. No argument and not
+scoped to the caller: the session worth finding is the one whose pane is gone,
+and a list scoped to the asker could never show it. The `owner` is on the spec
+and chosen by the renderer, since `main` cannot tell a dev server from a shell
+tab by looking at an argv.
+
 `chats:elicitation` answers an MCP server's question: the request id, one of
 `accept`, `decline` and `cancel`, and the form as the window holds it — text for
 every field, numbers included. The values are parsed rather than trusted, since

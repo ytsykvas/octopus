@@ -1096,7 +1096,28 @@ export const en = {
        that opens the question and the one that answers it should not be the
        same word. */
     attachmentsClearConfirm: 'Delete them',
-    attachmentsClearCancel: 'Keep them'
+    attachmentsClearCancel: 'Keep them',
+
+    /* What is still running. A pseudo-terminal outlives its pane more easily
+       than it looks, and what it costs is a held port and a dev server writing
+       to a file nobody reads — reported by somebody else's tool as "a server is
+       already running". Making it visible is the answer. */
+    terminals: 'Running terminals',
+    terminalsNone: 'None',
+    terminalPurpose: {
+      shell: 'Terminal',
+      setup: 'Setup script',
+      run: 'Dev server',
+      archive: 'Archive script',
+      auth: 'Sign-in'
+    },
+    terminalsEnd: 'End',
+    terminalsEndTitle: 'End this session?',
+    terminalsEndMessage: 'The shell and everything it started are stopped.',
+    terminalsEndDetail:
+      'A dev server is asked to shut down first, and hung up on if it will not. Anything unsaved inside the session is lost.',
+    terminalsEndConfirm: 'End it',
+    terminalsEndCancel: 'Leave it running'
   },
 
   skills: {

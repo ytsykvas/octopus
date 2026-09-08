@@ -963,6 +963,21 @@ link route, it is how the name gets on screen before it is decided. What the
 source suggests is prefilled: a subagent's own `name`, a file's own name tidied
 (`Run Checks.md` becomes `run-checks`), and nothing at all for pasted text.
 
+**About lists the terminals still running, with a way to end one.** A
+pseudo-terminal outlives the pane that started it more easily than it looks — a
+window closed, a document reloaded, a half unmounted without its cleanup — and
+what that costs is not tidiness: a shell stays alive, a port stays held, and a
+dev server goes on writing to a file nobody reads. The symptom reaches the user
+from somebody else's tool, as "a server is already running".
+
+Every window's sessions rather than the open one's, which is the whole point:
+the session worth finding is precisely the one whose pane is gone. Each row says
+what it is and whose it is, from an `owner` the **renderer** chooses — `main`
+sees a working directory and an argv and cannot tell a dev server from a shell
+tab. Read once when the section opens rather than watched, because nothing
+announces a session starting and a row that quietly went stale would be worse
+than one the reader knows is a snapshot.
+
 **A quit waits for what the sessions were writing, for up to a second.** A
 transcript is append-only JSONL, so a write cut in half leaves a partial line the
 reader refuses — and the reader is what a reopened conversation is drawn from.

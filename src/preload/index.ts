@@ -17,7 +17,7 @@ import type {
 import type { ScriptsInWorkspace } from '@core/repoSource.js'
 import type { QuestionAnswer } from '@core/questions.js'
 import type { ChatEntry } from '@core/transcript.js'
-import type { TerminalExit, TerminalOutput, TerminalSpec } from '@core/terminal.js'
+import type { TerminalExit, TerminalOutput, TerminalSession, TerminalSpec } from '@core/terminal.js'
 import type { Config } from '@core/config.js'
 import type { CliPermission } from '@core/cliPermissions.js'
 import type { FileSides, WorkspaceDiff } from '@core/diff.js'
@@ -141,6 +141,16 @@ const api = {
     /** Resolves once the session has actually ended, not once it was asked to. */
     dispose: (id: string): Promise<void> =>
       ipcRenderer.invoke('terminal:dispose', id) as Promise<void>,
+
+    /**
+     * Every session still running, whichever window started it.
+     *
+     * What makes an orphaned one visible at all: a pty whose pane is gone keeps
+     * a shell alive and holds a port, and until this there was nothing that
+     * could say so.
+     */
+    list: (): Promise<Result<TerminalSession[]>> =>
+      ipcRenderer.invoke('terminal:list') as Promise<Result<TerminalSession[]>>,
 
     onData: (handler: (output: TerminalOutput) => void): (() => void) => {
       const listener = (_event: unknown, output: TerminalOutput): void => {

@@ -158,9 +158,19 @@ function terminalsStub(): { manager: TerminalManager; sessions: TerminalSpies } 
     dispose: vi.fn()
   }
 
+  // Enough of a manager to answer `list`, so a test about the channel can read
+  // back what the parse made of the spec it was given.
+  const live: { id: string; owner: unknown }[] = []
+
   return {
     manager: {
-      create: vi.fn(() => 'term-1'),
+      create: vi.fn((spec: { owner: unknown }) => {
+        const id = `term-${String(live.length + 1)}`
+        live.push({ id, owner: spec.owner })
+
+        return id
+      }),
+      list: vi.fn(() => [...live]),
       ...sessions,
       disposeAll: vi.fn(),
       disposeFor: vi.fn(() => Promise.resolve()),
@@ -432,6 +442,7 @@ describe('channel table', () => {
     'terminal:write',
     'terminal:resize',
     'terminal:dispose',
+    'terminal:list',
     'accounts:status',
     'accounts:github',
     'accounts:signOut',
@@ -2624,5 +2635,41 @@ describe('the MCP question channel', () => {
     await expect(invoke('chats:elicitation', 'r-gone', 'decline', {})).resolves.toMatchObject({
       ok: true
     })
+  })
+})
+
+describe('the list of what is still running', () => {
+  /*
+   * No argument, and every window's rather than the caller's own: the session
+   * worth finding is precisely the one whose pane is gone, and a list scoped to
+   * the asker could never show it.
+   */
+  it('names each session by whose it is', async () => {
+    await invoke('terminal:create', {
+      cwd: '/tmp/work',
+      owner: { workspaceId: 'planner/anna', purpose: 'run' }
+    })
+
+    await expect(invoke('terminal:list')).resolves.toMatchObject({
+      ok: true,
+      value: [{ owner: { workspaceId: 'planner/anna', purpose: 'run' } }]
+    })
+  })
+
+  // Defaulted rather than required: an unnamed session on the list is a worse
+  // answer than no session, and a refusal here would be the worst of the three.
+  it('accepts a spec that says nothing about ownership', async () => {
+    await invoke('terminal:create', { cwd: '/tmp/work' })
+
+    await expect(invoke('terminal:list')).resolves.toMatchObject({
+      ok: true,
+      value: [{ owner: { workspaceId: null, purpose: 'shell' } }]
+    })
+  })
+
+  it('refuses a purpose that is none of the five', async () => {
+    await expect(
+      invoke('terminal:create', { cwd: '/tmp/work', owner: { purpose: 'mining' } })
+    ).resolves.toMatchObject({ ok: false })
   })
 })

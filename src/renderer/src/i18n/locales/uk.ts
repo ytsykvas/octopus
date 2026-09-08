@@ -855,7 +855,24 @@ export const uk: Translation = {
     attachmentsClearDetail:
       'Повідомлення, які його несли, зберігають шлях, тож стара розмова показуватиме файл, якого вже немає. Більше нічого це не зачіпає.',
     attachmentsClearConfirm: 'Видалити їх',
-    attachmentsClearCancel: 'Залишити'
+    attachmentsClearCancel: 'Залишити',
+
+    terminals: 'Термінали, що працюють',
+    terminalsNone: 'Немає',
+    terminalPurpose: {
+      shell: 'Термінал',
+      setup: 'Скрипт налаштування',
+      run: 'Сервер розробки',
+      archive: 'Скрипт архівації',
+      auth: 'Вхід'
+    },
+    terminalsEnd: 'Завершити',
+    terminalsEndTitle: 'Завершити цю сесію?',
+    terminalsEndMessage: 'Оболонку і все, що вона запустила, буде зупинено.',
+    terminalsEndDetail:
+      'Сервер розробки спершу попросять завершитися, а якщо він не послухає — обірвуть. Усе незбережене всередині сесії буде втрачено.',
+    terminalsEndConfirm: 'Завершити',
+    terminalsEndCancel: 'Лишити працювати'
   },
 
   skills: {

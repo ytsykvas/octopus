@@ -922,3 +922,104 @@ describe('the pasted images row', () => {
     expect(screen.queryByText('Pasted images')).not.toBeInTheDocument()
   })
 })
+
+describe('the running terminals row', () => {
+  const RUNNING = [
+    { id: 'term-1', owner: { workspaceId: 'planner/anna', purpose: 'run' as const } },
+    { id: 'term-2', owner: { workspaceId: null, purpose: 'auth' as const } }
+  ]
+
+  /*
+   * A pseudo-terminal outlives its pane more easily than it looks, and what it
+   * costs is a held port and a dev server writing to a file nobody reads. Until
+   * this there was nothing that could say so.
+   */
+  it('names each session by what it is and whose it is', async () => {
+    const user = userEvent.setup()
+    vi.mocked(octopus().terminal.list).mockResolvedValue({ ok: true, value: RUNNING })
+    await renderSettings()
+
+    await openSection(user, 'About')
+
+    expect(await screen.findByText(/Dev server · planner\/anna/)).toBeInTheDocument()
+    // No workspace to name: the sign-in session belongs to none.
+    expect(screen.getByText('Sign-in')).toBeInTheDocument()
+  })
+
+  it('says so when nothing is running', async () => {
+    const user = userEvent.setup()
+    await renderSettings()
+
+    await openSection(user, 'About')
+
+    expect(await screen.findByText('None')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'End' })).not.toBeInTheDocument()
+  })
+
+  it('asks before ending one, and re-reads the list after', async () => {
+    const user = userEvent.setup()
+    vi.mocked(octopus().terminal.list)
+      .mockResolvedValueOnce({ ok: true, value: [RUNNING[0]!] })
+      .mockResolvedValue({ ok: true, value: [] })
+    await renderSettings()
+
+    await openSection(user, 'About')
+    await user.click(await screen.findByRole('button', { name: 'End' }))
+
+    expect(octopus().terminal.dispose).not.toHaveBeenCalled()
+
+    await user.click(await screen.findByRole('button', { name: 'End it' }))
+
+    expect(octopus().terminal.dispose).toHaveBeenCalledWith('term-1')
+    expect(await screen.findByText('None')).toBeInTheDocument()
+  })
+
+  /*
+   * The list is re-read after ending one rather than patched, because the
+   * manager is the thing being changed. So the re-read can fail on its own,
+   * after an ending that worked — and the row then keeps what it had rather
+   * than emptying itself on no evidence.
+   */
+  it('keeps the list it had when the re-read fails', async () => {
+    const user = userEvent.setup()
+    vi.mocked(octopus().terminal.list)
+      .mockResolvedValueOnce({ ok: true, value: [RUNNING[0]!] })
+      .mockResolvedValue({ ok: false, error: 'no', code: 'fileUnreadable' })
+    await renderSettings()
+
+    await openSection(user, 'About')
+    await user.click(await screen.findByRole('button', { name: 'End' }))
+    await user.click(await screen.findByRole('button', { name: 'End it' }))
+
+    expect(octopus().terminal.dispose).toHaveBeenCalledWith('term-1')
+    expect(await screen.findByText(/Dev server/)).toBeInTheDocument()
+  })
+
+  it('ends nothing when the question is answered no', async () => {
+    const user = userEvent.setup()
+    vi.mocked(octopus().terminal.list).mockResolvedValue({ ok: true, value: RUNNING })
+    await renderSettings()
+
+    await openSection(user, 'About')
+    await user.click((await screen.findAllByRole('button', { name: 'End' }))[0]!)
+    await user.click(await screen.findByRole('button', { name: 'Leave it running' }))
+
+    expect(octopus().terminal.dispose).not.toHaveBeenCalled()
+  })
+
+  // A row that said "none" and then corrected itself would be worse than one
+  // that appears once.
+  it('draws nothing until the answer arrives', async () => {
+    const user = userEvent.setup()
+    vi.mocked(octopus().terminal.list).mockResolvedValue({
+      ok: false,
+      error: 'no',
+      code: 'fileUnreadable'
+    })
+    await renderSettings()
+
+    await openSection(user, 'About')
+
+    expect(screen.queryByText('Running terminals')).not.toBeInTheDocument()
+  })
+})

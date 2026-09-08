@@ -14,7 +14,46 @@ import { z } from 'zod'
 /** Identifies a live terminal session. */
 export type TerminalId = string
 
+/**
+ * What a session is for, in the words a reader would use.
+ *
+ * The three script kinds are the project's own; `shell` is the workspace's
+ * terminal tab; `auth` is the sign-in flow in Settings, which belongs to no
+ * workspace at all.
+ */
+export const TerminalPurposeSchema = z.enum(['shell', 'setup', 'run', 'archive', 'auth'])
+export type TerminalPurpose = z.infer<typeof TerminalPurposeSchema>
+
+/**
+ * Whose session this is.
+ *
+ * Chosen by the renderer and kept beside the pty, because `main` cannot work it
+ * out: a spec is a working directory and an argv, and neither says which
+ * workspace's tab asked for it or what the reader would call it.
+ *
+ * The reason it exists is that nothing could **see** what was running. A pty
+ * nobody claims keeps a shell alive, holds a port, and for a dev server goes on
+ * writing to a file nobody reads — and the symptom that reaches the user is
+ * somebody else's tool saying "a server is already running". A list with no
+ * names on it would say a number and nothing else.
+ */
+export const TerminalOwnerSchema = z.object({
+  /** Null for a session that belongs to no workspace, which is the sign-in one. */
+  workspaceId: z.string().nullable().default(null),
+  purpose: TerminalPurposeSchema.default('shell')
+})
+export type TerminalOwner = z.infer<typeof TerminalOwnerSchema>
+
 export const TerminalSpecSchema = z.object({
+  /**
+   * Whose session it is, for the list that says what is still running.
+   *
+   * Defaulted rather than required, so a caller that has nothing useful to say
+   * about ownership still starts a session — an unnamed one on the list is a
+   * worse answer than no session, and a refusal here would be the worst of the
+   * three.
+   */
+  owner: TerminalOwnerSchema.default({ workspaceId: null, purpose: 'shell' }),
   /** Working directory for the shell. */
   cwd: z.string().min(1),
   /**
@@ -50,6 +89,20 @@ export const TerminalSpecSchema = z.object({
 })
 
 export type TerminalSpec = z.infer<typeof TerminalSpecSchema>
+
+/**
+ * One live session, as a list of them draws it.
+ *
+ * The owner and nothing else of the spec: a list exists so somebody can see
+ * what is still running and end it, and the argv is neither their question nor
+ * theirs to read — a command line comes from a repository's own settings and
+ * putting it on a Settings row would be showing somebody a string a checkout
+ * chose.
+ */
+export interface TerminalSession {
+  readonly id: TerminalId
+  readonly owner: TerminalOwner
+}
 
 /** Data flowing from a session to the UI. */
 export interface TerminalOutput {

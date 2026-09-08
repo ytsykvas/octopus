@@ -264,6 +264,15 @@ export function registerIpc(
   // restart waits on this before binding the port again.
   host.handle('terminal:dispose', (_event, id: string) => terminals.dispose(id))
 
+  /*
+   * Everything still running, whichever window asked for it.
+   *
+   * No argument, and every window's rather than the caller's own: the session
+   * worth finding is precisely the one whose pane is gone, and a list scoped to
+   * the asker could never show it.
+   */
+  host.handle('terminal:list', () => attempt(() => Promise.resolve(terminals.list())))
+
   // The patch is validated rather than trusted: it arrives from the renderer
   // and its base branch reaches a git command.
   host.handle('projects:update', (_event, projectId: string, patch: unknown) =>

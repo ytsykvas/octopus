@@ -37,7 +37,12 @@ export function AuthTerminal({
       </div>
 
       <div className="panel min-h-0 flex-1 overflow-hidden p-2">
-        <Terminal cwd="~" command={session.command} onExit={setExitCode} />
+        <Terminal
+          cwd="~"
+          command={session.command}
+          owner={{ workspaceId: null, purpose: 'auth' }}
+          onExit={setExitCode}
+        />
       </div>
 
       {exitCode !== undefined && (
