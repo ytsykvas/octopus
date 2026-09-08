@@ -1509,3 +1509,24 @@ describe('the skills section', () => {
     )
   })
 })
+
+describe('the commands section', () => {
+  // Both kinds, in the store this project alone reaches — the same two places
+  // its skills are kept, because a session finds all three under one root.
+  it('opens on the store this project alone reaches', async () => {
+    const user = userEvent.setup()
+    await renderDialog()
+
+    await openSection(user, 'Commands')
+
+    expect(await screen.findByText('Subagents')).toBeInTheDocument()
+    expect(octopus().library.list).toHaveBeenCalledWith(
+      { kind: 'project', projectId: 'planner' },
+      'command'
+    )
+    expect(octopus().library.list).toHaveBeenCalledWith(
+      { kind: 'project', projectId: 'planner' },
+      'subagent'
+    )
+  })
+})

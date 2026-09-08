@@ -12,6 +12,7 @@ import { lstat, realpath } from 'node:fs/promises'
 import { homedir } from 'node:os'
 import { isAbsolute, join, normalize, sep } from 'node:path'
 
+import type { LibraryKind } from './libraryNames.js'
 import type { ChatId, ProjectId, WorkspaceId } from './types.js'
 
 const ROOT_DIR_NAME = '.octopus'
@@ -174,6 +175,22 @@ export function projectSkillsRoot(projectId: ProjectId, root: string = rootDir()
 /** Where the skills themselves sit inside such a root. */
 export function skillsDirOf(skillRoot: string): string {
   return join(skillRoot, '.claude', 'skills')
+}
+
+/**
+ * The directory each kind of library item is discovered in, under a store.
+ *
+ * The two names are Claude Code's, not ours, and they are the whole reason this
+ * is a lookup rather than two functions: a caller holding a `LibraryKind` has no
+ * business knowing that a subagent lives in `agents`.
+ */
+const LIBRARY_DIRS: Readonly<Record<LibraryKind, string>> = {
+  command: 'commands',
+  subagent: 'agents'
+}
+
+export function libraryDirOf(root: string, kind: LibraryKind): string {
+  return join(root, '.claude', LIBRARY_DIRS[kind])
 }
 
 /**

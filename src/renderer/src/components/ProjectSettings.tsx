@@ -5,6 +5,7 @@ import {
   GitBranch,
   Info,
   KeyRound,
+  SquareSlash,
   Terminal,
   TriangleAlert,
   Variable
@@ -38,6 +39,7 @@ import { SectionRail } from './SectionRail.js'
 import { FileEditor } from './FileEditor.js'
 import { InstructionEditors } from './InstructionEditors.js'
 import { RepoConfig } from './RepoConfig.js'
+import { LibrarySection } from './settings/LibrarySection.js'
 import { SkillsSection } from './settings/SkillsSection.js'
 
 interface ProjectSettingsProps {
@@ -130,6 +132,7 @@ export type SectionId =
   | 'files'
   | 'env'
   | 'skills'
+  | 'library'
   | 'instructions'
   | 'repository'
   | 'danger'
@@ -143,6 +146,7 @@ const SECTIONS: readonly {
     | 'project.sectionFiles'
     | 'project.sectionEnv'
     | 'project.sectionSkills'
+    | 'project.sectionLibrary'
     | 'project.sectionInstructions'
     | 'project.sectionRepository'
     | 'project.sectionDanger'
@@ -161,6 +165,7 @@ const SECTIONS: readonly {
   // Before the instructions and after the environment: both are prose the
   // agent reads, and this is the one that comes with a switch.
   { id: 'skills', labelKey: 'project.sectionSkills', Icon: Blocks },
+  { id: 'library', labelKey: 'project.sectionLibrary', Icon: SquareSlash },
   { id: 'instructions', labelKey: 'project.sectionInstructions', Icon: BookText },
   // Last before the danger zone, and after everything it moves: the section is
   // about the six above rather than a setting of its own.
@@ -801,6 +806,17 @@ export function ProjectSettings({
                   .then((result) => result.ok)
               }
             />
+          )}
+
+          {/* This project's own commands and subagents, in the store beside its
+              skills. A section of their own because neither has a
+              per-conversation switch, so the list beside them is answering a
+              different question. */}
+          {section === 'library' && (
+            <>
+              <LibrarySection store={{ kind: 'project', projectId: project.id }} kind="command" />
+              <LibrarySection store={{ kind: 'project', projectId: project.id }} kind="subagent" />
+            </>
           )}
 
           {section === 'instructions' && (

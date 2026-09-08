@@ -37,6 +37,8 @@ import type {
   SkillPreview,
   SkillSave
 } from '@core/skills.js'
+import type { LibraryDocument, LibraryEntry, LibraryImport, LibraryPreview } from '@core/library.js'
+import type { LibraryKind } from '@core/libraryNames.js'
 import type { Store } from '@core/stores.js'
 import type { InstructionSource } from '@core/instructionSources.js'
 import type { UsageWindows } from '@core/usage.js'
@@ -597,9 +599,70 @@ const api = {
     pickSkill: (title: string): Promise<Result<string | null>> =>
       ipcRenderer.invoke('dialog:pickSkill', title) as Promise<Result<string | null>>,
 
+    /** One markdown file: a command or a subagent, which are never folders. */
+    pickMarkdown: (title: string): Promise<Result<string | null>> =>
+      ipcRenderer.invoke('dialog:pickMarkdown', title) as Promise<Result<string | null>>,
+
     /** Files to attach. Empty when the dialog was cancelled, which is a choice. */
     pickFiles: (title: string): Promise<Result<string[]>> =>
       ipcRenderer.invoke('dialog:pickFiles', title) as Promise<Result<string[]>>
+  },
+
+  /**
+   * The commands and subagents beside the skills, in the same two stores.
+   *
+   * A section of its own rather than more of `skills`, because none of it is a
+   * skill: these are single files, nothing is keyed on their names, and neither
+   * has a per-conversation switch.
+   */
+  library: {
+    list: (store: Store, kind: LibraryKind): Promise<Result<LibraryEntry[]>> =>
+      ipcRenderer.invoke('library:list', store, kind) as Promise<Result<LibraryEntry[]>>,
+
+    read: (store: Store, kind: LibraryKind, name: string): Promise<Result<LibraryDocument>> =>
+      ipcRenderer.invoke('library:read', store, kind, name) as Promise<Result<LibraryDocument>>,
+
+    /** Saves an edit over what is there, which is what editing one means. */
+    save: (
+      store: Store,
+      kind: LibraryKind,
+      name: string,
+      text: string
+    ): Promise<Result<LibraryEntry>> =>
+      ipcRenderer.invoke('library:save', store, kind, name, text) as Promise<Result<LibraryEntry>>,
+
+    /** Writes one that is not here yet: every import, and the empty-file button. */
+    create: (
+      store: Store,
+      kind: LibraryKind,
+      name: string,
+      text: string
+    ): Promise<Result<LibraryEntry>> =>
+      ipcRenderer.invoke('library:create', store, kind, name, text) as Promise<
+        Result<LibraryEntry>
+      >,
+
+    remove: (store: Store, kind: LibraryKind, name: string): Promise<Result<void>> =>
+      ipcRenderer.invoke('library:remove', store, kind, name) as Promise<Result<void>>,
+
+    rename: (
+      store: Store,
+      kind: LibraryKind,
+      name: string,
+      to: string
+    ): Promise<Result<LibraryEntry>> =>
+      ipcRenderer.invoke('library:rename', store, kind, name, to) as Promise<Result<LibraryEntry>>,
+
+    /**
+     * What an import would write, and the name it suggests for it.
+     *
+     * The answer carries the document back whatever the route, so importing
+     * what was previewed reads the source once — for a link because the second
+     * answer need not be the first, and for the rest because the name is chosen
+     * between the two steps.
+     */
+    inspect: (kind: LibraryKind, request: LibraryImport): Promise<Result<LibraryPreview>> =>
+      ipcRenderer.invoke('library:inspect', kind, request) as Promise<Result<LibraryPreview>>
   },
 
   skills: {

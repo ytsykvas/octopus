@@ -137,11 +137,27 @@ import {
   globalSkillsRoot,
   projectSkillsRoot,
   rootDir,
+  libraryDirOf,
   skillsDirOf,
   stateFile,
   stateTempFile
 } from './paths.js'
 import { DOWNLOAD_TIMEOUT_MS } from './download.js'
+import {
+  ensureLibrary,
+  importLibraryItem,
+  inspectLibraryImport,
+  type LibraryDocument,
+  type LibraryEntry,
+  type LibraryImport,
+  type LibraryPreview,
+  readLibraryIn,
+  readLibraryItem,
+  removeLibraryItem,
+  renameLibraryItem,
+  writeLibraryItem
+} from './library.js'
+import type { LibraryKind } from './libraryNames.js'
 import {
   ensureStore,
   importFromPath,
@@ -701,6 +717,60 @@ export interface OctopusService {
    * order of precedence and ask twice to apply it.
    */
   readEffectiveInstruction(workspaceId: string, kind: InstructionKind): Promise<string>
+
+  /**
+   * The commands or subagents one of the two stores holds.
+   *
+   * Beside the skills and in the same two places, because Claude Code finds
+   * `.claude/commands/` and `.claude/agents/` under a working-directory root
+   * exactly as it finds `.claude/skills/`. So none of this is written inside a
+   * checkout, and nothing new reaches a session: the roots it already gets
+   * carry all three.
+   */
+  listLibrary(store: Store, kind: LibraryKind): Promise<LibraryEntry[]>
+  /** One of them, opened: the document whole and the body without its frontmatter. */
+  readLibraryEntry(store: Store, kind: LibraryKind, name: string): Promise<LibraryDocument>
+  /** Saves an edit over what is there, which is what editing one means. */
+  saveLibraryEntry(
+    store: Store,
+    kind: LibraryKind,
+    name: string,
+    text: string
+  ): Promise<LibraryEntry>
+  /**
+   * Writes one that is not here yet — every import, and the empty-file button.
+   *
+   * Separate from the save because the name is the whole difference: this one
+   * must land on nothing, in either store or in any checkout that shares a
+   * session with it.
+   */
+  createLibraryEntry(
+    store: Store,
+    kind: LibraryKind,
+    name: string,
+    text: string
+  ): Promise<LibraryEntry>
+  removeLibraryEntry(store: Store, kind: LibraryKind, name: string): Promise<void>
+  /**
+   * Gives one another name.
+   *
+   * An ordinary rename, unlike a skill's: nothing is keyed on a command or a
+   * subagent, because the SDK offers no per-conversation switch for either.
+   */
+  renameLibraryEntry(
+    store: Store,
+    kind: LibraryKind,
+    name: string,
+    to: string
+  ): Promise<LibraryEntry>
+  /**
+   * What an import would write, and the name it suggests for it.
+   *
+   * The name is why this step exists at all, where a skill's preview is a
+   * courtesy: a skill's document names itself, and a command names itself
+   * nowhere — so somebody has to choose, and choosing needs the document first.
+   */
+  inspectLibrary(kind: LibraryKind, request: LibraryImport): Promise<LibraryPreview>
 
   /** The skills one of the two stores holds, for a settings section. */
   listSkills(store: Store): Promise<SkillEntry[]>
@@ -2253,6 +2323,38 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
     return listings.flat().map((skill) => skill.name)
   }
 
+  /** Where one kind of library item lives in a store; a path, made on demand. */
+  function libraryDir(store: Store, kind: LibraryKind): string {
+    return libraryDirOf(storeRoot(store), kind)
+  }
+
+  /**
+   * The names of one kind already in use everywhere this store shares a session.
+   *
+   * The same scope `namesBesideStore` computes for skills and for the same
+   * reason: a session is handed both stores and its own checkout at once, so
+   * two files sharing a name are one command as far as the agent is concerned,
+   * and which of them answers is not ours to decide.
+   */
+  async function libraryNamesBeside(store: Store, kind: LibraryKind): Promise<string[]> {
+    const others =
+      store.kind === 'global'
+        ? state.projects.map((project) => projectSkillsRoot(project.id, dataRoot))
+        : [globalSkillsRoot(dataRoot)]
+
+    const worktrees = (
+      store.kind === 'global'
+        ? state.workspaces
+        : state.workspaces.filter((workspace) => workspace.projectId === store.projectId)
+    ).map((workspace) => workspace.path)
+
+    const listings = await Promise.all(
+      [...others, ...worktrees].map((root) => readLibraryIn(libraryDirOf(root, kind), kind))
+    )
+
+    return listings.flat().map((entry) => entry.name)
+  }
+
   interface SessionSkills {
     /** Extra roots to hand the session, so it finds the stores' skills. */
     readonly roots: string[]
@@ -2489,7 +2591,16 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
     // is not there is at best untested — and until the first skill is written
     // neither of ours exists. A write, so it lives here rather than in
     // `sessionSkills`, which is also the read path behind the skills panel.
-    await Promise.all([...skills.roots, attachments].map((root) => ensureStore(root)))
+    await Promise.all([
+      ...[...skills.roots, attachments].map((root) => ensureStore(root)),
+      // The commands and subagents beside them, for the same reason: the roots
+      // are passed once at session start, and a directory that was not there
+      // then stays invisible for the life of the conversation.
+      ...skills.roots.flatMap((root) => [
+        ensureLibrary(root, 'command'),
+        ensureLibrary(root, 'subagent')
+      ])
+    ])
 
     const session = startSession(
       {
@@ -3198,6 +3309,63 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
         download,
         await namesBesideStore(store)
       )
+    },
+
+    async listLibrary(store, kind) {
+      return readLibraryIn(libraryDir(store, kind), kind)
+    },
+
+    async readLibraryEntry(store, kind, name) {
+      return readLibraryItem(libraryDir(store, kind), kind, name)
+    },
+
+    async saveLibraryEntry(store, kind, name, text) {
+      const written = await writeLibraryItem(
+        await ensureLibrary(storeRoot(store), kind),
+        kind,
+        name,
+        text
+      )
+      await refreshRunningSkills()
+
+      return written
+    },
+
+    async createLibraryEntry(store, kind, name, text) {
+      const written = await importLibraryItem(
+        await ensureLibrary(storeRoot(store), kind),
+        kind,
+        name,
+        text,
+        await libraryNamesBeside(store, kind)
+      )
+      await refreshRunningSkills()
+
+      return written
+    },
+
+    async removeLibraryEntry(store, kind, name) {
+      await removeLibraryItem(libraryDir(store, kind), name)
+      await refreshRunningSkills()
+    },
+
+    async renameLibraryEntry(store, kind, name, to) {
+      const renamed = await renameLibraryItem(
+        await ensureLibrary(storeRoot(store), kind),
+        kind,
+        name,
+        to,
+        await libraryNamesBeside(store, kind)
+      )
+      await refreshRunningSkills()
+
+      return renamed
+    },
+
+    async inspectLibrary(kind, request) {
+      // Nothing about a store: this reads a source and suggests a name, and a
+      // preview must create nothing for an item nobody has agreed to yet.
+      return inspectLibraryImport(kind, request, download)
     },
 
     async skillsForChat(chatId) {

@@ -783,3 +783,22 @@ describe('the skills section', () => {
     })
   })
 })
+
+describe('the commands section', () => {
+  /*
+   * Both kinds in one pane, and a pane of their own rather than more of the
+   * skills one: neither a command nor a subagent has a per-conversation switch,
+   * so the list beside them is answering a different question.
+   */
+  it('opens on the installation-wide store, holding both kinds', async () => {
+    const user = userEvent.setup()
+    await renderSettings()
+
+    await openSection(user, 'Commands')
+
+    expect(await screen.findByText('Subagents')).toBeInTheDocument()
+    expect(screen.getByText(/Typed after a slash in any conversation/)).toBeInTheDocument()
+    expect(octopus().library.list).toHaveBeenCalledWith({ kind: 'global' }, 'command')
+    expect(octopus().library.list).toHaveBeenCalledWith({ kind: 'global' }, 'subagent')
+  })
+})

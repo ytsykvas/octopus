@@ -144,8 +144,49 @@ export function installOctopusStub(): Api {
     dialog: {
       pickDirectory: vi.fn(() => ok(null)),
       pickSkill: vi.fn(() => ok(null)),
+      pickMarkdown: vi.fn(() => ok(null)),
       pickFiles: vi.fn(() => ok([]))
     },
+    library: {
+      list: vi.fn(() => ok([])),
+      read: vi.fn(() =>
+        ok({
+          kind: 'command' as const,
+          name: 'ship',
+          description: '',
+          body: '',
+          raw: '',
+          path: '/library/ship.md'
+        })
+      ),
+      save: vi.fn(() =>
+        ok({
+          kind: 'command' as const,
+          name: 'ship',
+          description: '',
+          path: '/library/ship.md'
+        })
+      ),
+      create: vi.fn(() =>
+        ok({
+          kind: 'command' as const,
+          name: 'ship',
+          description: '',
+          path: '/library/ship.md'
+        })
+      ),
+      remove: vi.fn(() => ok(undefined)),
+      rename: vi.fn(() =>
+        ok({
+          kind: 'command' as const,
+          name: 'ship',
+          description: '',
+          path: '/library/ship.md'
+        })
+      ),
+      inspect: vi.fn(() => ok({ name: 'ship', description: '', text: '' }))
+    },
+
     skills: {
       list: vi.fn(() => ok([])),
       read: vi.fn(() =>

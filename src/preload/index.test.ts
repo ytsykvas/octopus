@@ -74,6 +74,7 @@ describe('the exposed bridge', () => {
       'config',
       'dialog',
       'files',
+      'library',
       'projects',
       'settings',
       'skills',
@@ -384,11 +385,75 @@ describe('channel names', () => {
       'dialog:pickDirectory'
     ],
     ['dialog.pickSkill', () => method('dialog', 'pickSkill')('t' as never), 'dialog:pickSkill'],
+    [
+      'dialog.pickMarkdown',
+      () => method('dialog', 'pickMarkdown')('t' as never),
+      'dialog:pickMarkdown'
+    ],
     ['dialog.pickFiles', () => method('dialog', 'pickFiles')('t' as never), 'dialog:pickFiles'],
     [
       'attachments.paste',
       () => method('attachments', 'paste')('image/png' as never, new Uint8Array() as never),
       'attachments:paste'
+    ],
+    [
+      'library.list',
+      () => method('library', 'list')({ kind: 'global' } as never, 'command' as never),
+      'library:list'
+    ],
+    [
+      'library.read',
+      () =>
+        method('library', 'read')({ kind: 'global' } as never, 'command' as never, 'ship' as never),
+      'library:read'
+    ],
+    [
+      'library.save',
+      () =>
+        method('library', 'save')(
+          { kind: 'global' } as never,
+          'command' as never,
+          'ship' as never,
+          'text' as never
+        ),
+      'library:save'
+    ],
+    [
+      'library.create',
+      () =>
+        method('library', 'create')(
+          { kind: 'global' } as never,
+          'command' as never,
+          'ship' as never,
+          'text' as never
+        ),
+      'library:create'
+    ],
+    [
+      'library.remove',
+      () =>
+        method('library', 'remove')(
+          { kind: 'global' } as never,
+          'command' as never,
+          'ship' as never
+        ),
+      'library:remove'
+    ],
+    [
+      'library.rename',
+      () =>
+        method('library', 'rename')(
+          { kind: 'global' } as never,
+          'command' as never,
+          'ship' as never,
+          'gate' as never
+        ),
+      'library:rename'
+    ],
+    [
+      'library.inspect',
+      () => method('library', 'inspect')('command' as never, { kind: 'text', text: '' } as never),
+      'library:inspect'
     ],
     ['skills.list', () => method('skills', 'list')({ kind: 'global' } as never), 'skills:list'],
     [

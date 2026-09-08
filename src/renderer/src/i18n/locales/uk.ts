@@ -124,6 +124,7 @@ export const uk: Translation = {
     sectionFiles: 'Файли',
     sectionEnv: 'Env',
     sectionSkills: 'Скіли',
+    sectionLibrary: 'Команди',
     sectionInstructions: 'Інструкції',
     sectionRepository: 'Репозиторій',
     sectionDanger: 'Небезпечна зона',
@@ -752,6 +753,7 @@ export const uk: Translation = {
     sectionGit: 'Git',
     sectionAgent: 'Агент',
     sectionSkills: 'Скіли',
+    sectionLibrary: 'Команди',
     sectionInstructions: 'Інструкції',
     sectionAccounts: 'Claude',
     sectionAbout: 'Про застосунок',
@@ -902,6 +904,82 @@ export const uk: Translation = {
     importAction: 'Імпортувати'
   },
 
+  library: {
+    commands: 'Команди',
+    commandsNote:
+      'Викликаються через слеш у будь-якій розмові. Зберігаються в octopus, а не в репозиторії.',
+    commandsProjectNote:
+      'Викликаються через слеш у розмовах цього проєкту. Зберігаються в octopus, а не в репозиторії.',
+    subagents: 'Субагенти',
+    subagentsNote:
+      'Помічники, до яких агент звертається сам, кожен зі своїми інструкціями. Зберігаються в octopus, а не в репозиторії.',
+    subagentsProjectNote:
+      'Помічники, до яких агент звертається в цьому проєкті, кожен зі своїми інструкціями. Зберігаються в octopus, а не в репозиторії.',
+
+    empty: {
+      command: 'Команд тут ще немає.',
+      subagent: 'Субагентів тут ще немає.'
+    },
+    add: {
+      command: 'Нова команда',
+      subagent: 'Новий субагент'
+    },
+    new: {
+      command: 'Нова команда',
+      subagent: 'Новий субагент'
+    },
+    import: 'Імпортувати…',
+    importTitle: {
+      command: 'Імпорт команди',
+      subagent: 'Імпорт субагента'
+    },
+
+    rowActions: 'Що зробити з {{name}}',
+    edit: 'Редагувати',
+    editing: 'Редагування {{name}}',
+    rename: 'Перейменувати',
+    renameTitle: 'Перейменувати \u201c{{name}}\u201d',
+    renameLabel: 'Нова назва (малі літери, цифри, дефіси й підкреслення)',
+    renameConfirm: 'Перейменувати',
+    renameCancel: 'Скасувати',
+    renameInvalid: 'Лише малі літери, цифри, дефіси й підкреслення.',
+    remove: 'Видалити',
+    removeTitle: 'Видалити {{name}}?',
+    removeMessage: 'Файл буде видалено.',
+    removeDetail: 'Розмови, що вже тривають, перестануть його бачити.',
+    removeConfirm: 'Видалити',
+    removeCancel: 'Скасувати',
+
+    name: 'Назва',
+    nameHint: {
+      command: 'Те, що ви вводите після слеша. Малі літери, цифри, дефіси й підкреслення.',
+      subagent: 'Те, як його називає агент. Малі літери, цифри, дефіси й підкреслення.'
+    },
+    nameInvalid: 'Використовуйте малі літери, цифри, дефіси й підкреслення.',
+    nameTaken: 'Щось із такою назвою вже тут є.',
+    document: 'Документ',
+    documentHint: {
+      command: 'Markdown. Увесь файл — це промпт; $ARGUMENTS — те, що введено після назви команди.',
+      subagent:
+        'Markdown із frontmatter, що називає його й каже, коли ним користуватися. tools і model зберігаються як написано.'
+    },
+    save: 'Зберегти',
+    cancel: 'Скасувати',
+
+    fromDisk: 'З диска',
+    fromDiskNote: 'Один markdown-файл.',
+    choose: 'Обрати…',
+    fromText: 'Вставити',
+    fromTextNote: 'Увесь файл, разом із frontmatter, якщо він є.',
+    fromUrl: 'За посиланням',
+    fromUrlNote:
+      'https-адреса, що віддає один markdown-файл. Нічого поруч із ним не завантажується.',
+    url: 'Адреса',
+    inspectAction: 'Прочитати',
+    importAction: 'Імпортувати',
+    noDescription: 'Про себе він нічого не каже.'
+  },
+
   trust: {
     title: 'Що цей репозиторій може робити',
     explain:
@@ -914,6 +992,15 @@ export const uk: Translation = {
     linkBroken: 'Посилання, що вказує в нікуди.'
   },
   errors: {
+    libraryNameInvalid:
+      '\u201c{{name}}\u201d не може бути назвою: використовуйте малі літери, цифри, дефіси й підкреслення. Назва стає іменем файлу, а в цій файловій системі \u201cShip\u201d і \u201cship\u201d — це одне й те саме.',
+    libraryExists: 'Щось на ім’я \u201c{{name}}\u201d уже є тут або в сусідньому сховищі.',
+    libraryMissing: 'Цього файлу вже немає.',
+    libraryTooLarge: 'Він довший за {{limit}} символів, а це вже не промпт.',
+    libraryUrlRefused:
+      '\u201c{{url}}\u201d не вдалося прочитати. Завантажуються лише https-адреси, що віддають один markdown-файл.',
+    librarySubagentNeedsDescription:
+      'Субагентові потрібен frontmatter з описом того, коли ним користуватися, — інакше агент ніколи до нього не звернеться.',
     branchMissing:
       '\u0423 \u0446\u044c\u043e\u043c\u0443 \u0440\u0435\u043f\u043e\u0437\u0438\u0442\u043e\u0440\u0456\u0457 \u043d\u0435\u043c\u0430\u0454 \u0433\u0456\u043b\u043a\u0438 \u00ab{{branch}}\u00bb. \u041e\u0431\u0435\u0440\u0456\u0442\u044c \u0431\u0430\u0437\u043e\u0432\u0443 \u0433\u0456\u043b\u043a\u0443, \u044f\u043a\u0430 \u0432 \u043d\u044c\u043e\u043c\u0443 \u0454, \u043f\u0435\u0440\u0448 \u043d\u0456\u0436 \u043f\u0435\u0440\u0435\u043d\u0430\u0446\u0456\u043b\u044e\u0432\u0430\u0442\u0438 \u043f\u0440\u043e\u0454\u043a\u0442.',
     draftFailed:

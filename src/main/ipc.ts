@@ -47,6 +47,8 @@ import { RevertPathSchema } from '../core/revert.js'
 import { ScriptBodySchema, ScriptKindSchema } from '../core/scripts.js'
 import { SkillImportSchema, SkillSaveSchema } from '../core/skills.js'
 import { SkillNameSchema } from '../core/skillNames.js'
+import { LibraryImportSchema, LibraryRawSchema } from '../core/library.js'
+import { LibraryKindSchema, LibraryNameSchema } from '../core/libraryNames.js'
 import { StoreSchema } from '../core/stores.js'
 import type {
   ChatEvent,
@@ -521,6 +523,89 @@ export function registerIpc(
     )
   )
 
+  /*
+   * The commands and subagents beside the skills, in the same two stores.
+   *
+   * Every argument is parsed rather than trusted, and the name most of all: it
+   * becomes a file under `~/.octopus` and reaches a delete, so
+   * `LibraryNameSchema` is the boundary that refuses `..` before any of it is a
+   * path. `LibraryKindSchema` is the other half — the kind decides which
+   * directory is written into, so a value outside the two has to be impossible
+   * rather than defaulted.
+   */
+  host.handle('library:list', (_event, store: unknown, kind: unknown) =>
+    attempt(() => service.listLibrary(StoreSchema.parse(store), LibraryKindSchema.parse(kind)))
+  )
+
+  host.handle('library:read', (_event, store: unknown, kind: unknown, name: unknown) =>
+    attempt(() =>
+      service.readLibraryEntry(
+        StoreSchema.parse(store),
+        LibraryKindSchema.parse(kind),
+        LibraryNameSchema.parse(name)
+      )
+    )
+  )
+
+  host.handle(
+    'library:save',
+    (_event, store: unknown, kind: unknown, name: unknown, text: unknown) =>
+      attempt(() =>
+        service.saveLibraryEntry(
+          StoreSchema.parse(store),
+          LibraryKindSchema.parse(kind),
+          LibraryNameSchema.parse(name),
+          LibraryRawSchema.parse(text)
+        )
+      )
+  )
+
+  host.handle(
+    'library:create',
+    (_event, store: unknown, kind: unknown, name: unknown, text: unknown) =>
+      attempt(() =>
+        service.createLibraryEntry(
+          StoreSchema.parse(store),
+          LibraryKindSchema.parse(kind),
+          LibraryNameSchema.parse(name),
+          LibraryRawSchema.parse(text)
+        )
+      )
+  )
+
+  host.handle('library:remove', (_event, store: unknown, kind: unknown, name: unknown) =>
+    attempt(() =>
+      service.removeLibraryEntry(
+        StoreSchema.parse(store),
+        LibraryKindSchema.parse(kind),
+        LibraryNameSchema.parse(name)
+      )
+    )
+  )
+
+  /* Both names go through the same schema, and the second one has to: it
+     becomes the file the first is moved to. */
+  host.handle(
+    'library:rename',
+    (_event, store: unknown, kind: unknown, name: unknown, to: unknown) =>
+      attempt(() =>
+        service.renameLibraryEntry(
+          StoreSchema.parse(store),
+          LibraryKindSchema.parse(kind),
+          LibraryNameSchema.parse(name),
+          LibraryNameSchema.parse(to)
+        )
+      )
+  )
+
+  /* Reads what an import would write, and writes nothing — including the name
+     it suggests, which is the answer this step exists to get. */
+  host.handle('library:inspect', (_event, kind: unknown, request: unknown) =>
+    attempt(() =>
+      service.inspectLibrary(LibraryKindSchema.parse(kind), LibraryImportSchema.parse(request))
+    )
+  )
+
   host.handle('skills:inRepository', (_event, workspaceId: string) =>
     attempt(() => service.listRepositorySkills(workspaceId))
   )
@@ -803,6 +888,27 @@ export function registerIpc(
       title,
       properties: ['openFile', 'openDirectory'],
       filters: [{ name: 'SKILL.md', extensions: ['md'] }]
+    }
+
+    const picked = await host.showOpenDialog(options, window ?? undefined)
+
+    const [chosen] = picked.filePaths
+    return { ok: true, value: picked.canceled ? null : (chosen ?? null) }
+  })
+
+  /*
+   * One markdown file, for a command or a subagent.
+   *
+   * Files only, where `dialog:pickSkill` takes a directory too: a skill may be
+   * a folder and neither of these ever is, so offering one would let the user
+   * choose something the read behind it can only fail on.
+   */
+  host.handle('dialog:pickMarkdown', async (event, title: string) => {
+    const window = host.windowFor(event)
+    const options: Electron.OpenDialogOptions = {
+      title,
+      properties: ['openFile'],
+      filters: [{ name: 'Markdown', extensions: ['md'] }]
     }
 
     const picked = await host.showOpenDialog(options, window ?? undefined)

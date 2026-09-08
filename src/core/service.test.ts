@@ -6261,6 +6261,25 @@ describe('the agent chat', () => {
     })
   })
 
+  describe('the roots a session is given', () => {
+    /*
+     * The roots are handed over **once**, at session start, and the SDK only
+     * re-scans directories it already knows about — so one that was not there
+     * then stays invisible for the life of the conversation. That cost the
+     * skills a release; the commands and subagents beside them get the same
+     * treatment rather than learning it again.
+     */
+    it('gives the command and subagent stores their shape before the agent looks', async () => {
+      const { service, workspaceId } = await withWorkspace()
+      const chat = await service.openChat(workspaceId)
+      await service.sendToChat(chat.id, 'work')
+
+      const root = join(dir, 'data', 'skills', '.claude')
+      await expect(access(join(root, 'commands'))).resolves.toBeUndefined()
+      await expect(access(join(root, 'agents'))).resolves.toBeUndefined()
+    })
+  })
+
   describe('shutting down', () => {
     // Every session holds a child process; unclosed, it outlives the app.
     it('closes every live session', async () => {
@@ -8248,5 +8267,156 @@ describe('the agent chat', () => {
       })
       expect(await writersOf(service, projectId)).toEqual({})
     })
+  })
+})
+
+describe('the commands and subagents a store holds', () => {
+  let service: OctopusService
+  let projectId: string
+
+  beforeEach(async () => {
+    const repo = join(dir, 'planner')
+    await initRepo(repo)
+    service = await createService(paths(dir))
+    const project = await service.addProjectFromPath(repo)
+    projectId = project.id
+  })
+
+  const global = { kind: 'global' } as const
+  const ofProject = (): { kind: 'project'; projectId: string } => ({ kind: 'project', projectId })
+
+  const SUBAGENT = '---\nname: reviewer\ndescription: When reviewing.\n---\n\nYou review.'
+
+  it('starts with nothing in either store', async () => {
+    await expect(service.listLibrary(global, 'command')).resolves.toEqual([])
+    await expect(service.listLibrary(ofProject(), 'subagent')).resolves.toEqual([])
+  })
+
+  it('writes a command where a session will find it', async () => {
+    const written = await service.createLibraryEntry(global, 'command', 'ship', 'Commit and push.')
+
+    // The directory is Claude Code's, and getting it wrong makes everything
+    // here invisible to the session while every test still passes.
+    expect(written.path).toBe(join(dir, 'data', 'skills', '.claude', 'commands', 'ship.md'))
+    await expect(readFile(written.path, 'utf8')).resolves.toBe('Commit and push.')
+  })
+
+  it('writes a subagent where a session will find it', async () => {
+    const written = await service.createLibraryEntry(global, 'subagent', 'reviewer', SUBAGENT)
+
+    expect(written.path).toBe(join(dir, 'data', 'skills', '.claude', 'agents', 'reviewer.md'))
+    expect(written.description).toBe('When reviewing.')
+  })
+
+  it("keeps a project's own apart from the installation's", async () => {
+    await service.createLibraryEntry(global, 'command', 'ship', 'x')
+    await service.createLibraryEntry(ofProject(), 'command', 'deploy', 'y')
+
+    await expect(service.listLibrary(global, 'command')).resolves.toMatchObject([{ name: 'ship' }])
+    await expect(service.listLibrary(ofProject(), 'command')).resolves.toMatchObject([
+      { name: 'deploy' }
+    ])
+  })
+
+  /*
+   * A session is handed both stores at once, so a `ship` in each is one command
+   * as far as the agent is concerned and which of them answers is not ours to
+   * say. The check is across stores for exactly that reason.
+   */
+  it('refuses a name the store beside it already uses', async () => {
+    await service.createLibraryEntry(global, 'command', 'ship', 'x')
+
+    await expect(
+      service.createLibraryEntry(ofProject(), 'command', 'ship', 'y')
+    ).rejects.toMatchObject({ name: 'LibraryError', code: 'libraryExists' })
+  })
+
+  // The two kinds are two namespaces: a `review` command and a `review`
+  // subagent are different things and never meet.
+  it('lets the two kinds share a name', async () => {
+    await service.createLibraryEntry(global, 'command', 'reviewer', 'x')
+
+    await expect(
+      service.createLibraryEntry(global, 'subagent', 'reviewer', SUBAGENT)
+    ).resolves.toMatchObject({ name: 'reviewer' })
+  })
+
+  it('opens one for editing and saves over it', async () => {
+    await service.createLibraryEntry(global, 'command', 'ship', 'Commit.')
+
+    await expect(service.readLibraryEntry(global, 'command', 'ship')).resolves.toMatchObject({
+      name: 'ship',
+      body: 'Commit.'
+    })
+
+    await service.saveLibraryEntry(global, 'command', 'ship', 'Commit and push.')
+
+    await expect(service.readLibraryEntry(global, 'command', 'ship')).resolves.toMatchObject({
+      raw: 'Commit and push.'
+    })
+  })
+
+  it('renames one, and refuses a name in use beside it', async () => {
+    await service.createLibraryEntry(global, 'command', 'ship', 'x')
+    await service.createLibraryEntry(ofProject(), 'command', 'deploy', 'y')
+
+    await expect(
+      service.renameLibraryEntry(global, 'command', 'ship', 'deploy')
+    ).rejects.toMatchObject({ code: 'libraryExists' })
+
+    await expect(
+      service.renameLibraryEntry(global, 'command', 'ship', 'gate')
+    ).resolves.toMatchObject({ name: 'gate' })
+    await expect(service.listLibrary(global, 'command')).resolves.toMatchObject([{ name: 'gate' }])
+  })
+
+  it('removes one', async () => {
+    await service.createLibraryEntry(global, 'command', 'ship', 'x')
+
+    await service.removeLibraryEntry(global, 'command', 'ship')
+
+    await expect(service.listLibrary(global, 'command')).resolves.toEqual([])
+  })
+
+  /*
+   * A checkout carries its own, and they share a session with the stores. So a
+   * name taken there is taken here, which is the reach `libraryNamesBeside`
+   * exists to cover — and the reason it reads the worktrees rather than only
+   * the two stores.
+   */
+  it("refuses a name a workspace's own checkout already uses", async () => {
+    const workspace = await service.createWorkspaceIn(projectId)
+    await mkdir(join(workspace.path, '.claude', 'commands'), { recursive: true })
+    await writeFile(join(workspace.path, '.claude', 'commands', 'ship.md'), 'x', 'utf8')
+
+    await expect(service.createLibraryEntry(global, 'command', 'ship', 'y')).rejects.toMatchObject({
+      code: 'libraryExists'
+    })
+  })
+
+  // A project's store meets only its own checkouts; the installation's meets
+  // every one of them, which is the whole difference between the two arms.
+  it("does not mind a name taken in another project's checkout", async () => {
+    const other = await initRepo(join(dir, 'ledger')).then(() =>
+      service.addProjectFromPath(join(dir, 'ledger'))
+    )
+    const workspace = await service.createWorkspaceIn(other.id)
+    await mkdir(join(workspace.path, '.claude', 'commands'), { recursive: true })
+    await writeFile(join(workspace.path, '.claude', 'commands', 'ship.md'), 'x', 'utf8')
+
+    await expect(
+      service.createLibraryEntry(ofProject(), 'command', 'ship', 'y')
+    ).resolves.toMatchObject({ name: 'ship' })
+  })
+
+  it('reads what an import would write without writing it', async () => {
+    const preview = await service.inspectLibrary('subagent', { kind: 'text', text: SUBAGENT })
+
+    expect(preview).toEqual({
+      name: 'reviewer',
+      description: 'When reviewing.',
+      text: SUBAGENT
+    })
+    await expect(service.listLibrary(global, 'subagent')).resolves.toEqual([])
   })
 })

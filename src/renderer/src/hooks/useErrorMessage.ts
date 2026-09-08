@@ -159,6 +159,18 @@ export function useErrorMessage(): (failure: Failure) => string {
           return t('errors.skillLinkRefused', { name: failure.params?.name ?? '' })
         case 'skillUrlRefused':
           return t('errors.skillUrlRefused', { url: failure.params?.url ?? '' })
+        case 'libraryNameInvalid':
+          return t('errors.libraryNameInvalid', { name: failure.params?.name ?? '' })
+        case 'libraryExists':
+          return t('errors.libraryExists', { name: failure.params?.name ?? '' })
+        case 'libraryMissing':
+          return t('errors.libraryMissing')
+        case 'libraryTooLarge':
+          return t('errors.libraryTooLarge', { limit: failure.params?.limit ?? '' })
+        case 'libraryUrlRefused':
+          return t('errors.libraryUrlRefused', { url: failure.params?.url ?? '' })
+        case 'librarySubagentNeedsDescription':
+          return t('errors.librarySubagentNeedsDescription')
         default:
           return t('errors.unknown', { message: failure.error })
       }

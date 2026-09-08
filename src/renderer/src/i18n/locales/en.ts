@@ -143,6 +143,9 @@ export const en = {
     sectionFiles: 'Files',
     sectionEnv: 'Env',
     sectionSkills: 'Skills',
+    /* Commands and subagents together. Named for the half the reader types,
+       because that is the one they go looking for. */
+    sectionLibrary: 'Commands',
     sectionInstructions: 'Instructions',
     sectionRepository: 'Repository',
     sectionDanger: 'Danger zone',
@@ -975,6 +978,9 @@ export const en = {
     sectionGit: 'Git',
     sectionAgent: 'Agent',
     sectionSkills: 'Skills',
+    /* Commands and subagents together. Named for the half the reader types,
+       because that is the one they go looking for. */
+    sectionLibrary: 'Commands',
     sectionInstructions: 'Instructions',
     /* The global one. What a project's own instruction overrides, and what
        applies wherever a project has not written one. */
@@ -1154,6 +1160,97 @@ export const en = {
     importAction: 'Import'
   },
 
+  library: {
+    /* Commands and subagents, kept beside the skills and in the same two
+       places. Named by what the reader does with them rather than by what
+       Claude Code calls the directories: "commands" is what you type, and a
+       "subagent" is a helper the model reaches for on its own. */
+    commands: 'Commands',
+    commandsNote:
+      'Typed after a slash in any conversation. Kept in octopus, not in the repository.',
+    commandsProjectNote:
+      'Typed after a slash in this project’s conversations. Kept in octopus, not in the repository.',
+    subagents: 'Subagents',
+    subagentsNote:
+      'Helpers the agent reaches for on its own, each with its own instructions. Kept in octopus, not in the repository.',
+    subagentsProjectNote:
+      'Helpers the agent reaches for in this project, each with its own instructions. Kept in octopus, not in the repository.',
+
+    empty: {
+      command: 'No commands here yet.',
+      subagent: 'No subagents here yet.'
+    },
+    add: {
+      command: 'New command',
+      subagent: 'New subagent'
+    },
+    new: {
+      command: 'New command',
+      subagent: 'New subagent'
+    },
+    /* An ellipsis because it opens a dialog rather than importing anything —
+       and because the dialog's own button is the one called Import. */
+    import: 'Import…',
+    importTitle: {
+      command: 'Import a command',
+      subagent: 'Import a subagent'
+    },
+
+    /* The row's menu button. Its face is an ellipsis, which reads as nothing at
+       all to anyone not looking at it. */
+    rowActions: 'What to do with {{name}}',
+    edit: 'Edit',
+    editing: 'Edit {{name}}',
+    rename: 'Rename',
+    renameTitle: 'Rename \u201c{{name}}\u201d',
+    renameLabel: 'New name (lowercase letters, digits, dashes and underscores)',
+    renameConfirm: 'Rename',
+    renameCancel: 'Cancel',
+    renameInvalid: 'Lowercase letters, digits, dashes and underscores only.',
+    remove: 'Remove',
+    removeTitle: 'Remove {{name}}?',
+    removeMessage: 'The file is deleted.',
+    removeDetail: 'Conversations already running stop seeing it.',
+    removeConfirm: 'Remove',
+    removeCancel: 'Cancel',
+
+    /* The editor. One field and not the form-and-raw pair a skill gets: a
+       command is its text, and a subagent's other fields are ones a form could
+       only drop. */
+    name: 'Name',
+    nameHint: {
+      command: 'What you type after the slash. Lowercase letters, digits, dashes and underscores.',
+      subagent: 'What the agent calls it. Lowercase letters, digits, dashes and underscores.'
+    },
+    nameInvalid: 'Use lowercase letters, digits, dashes and underscores.',
+    nameTaken: 'Something of this name is already here.',
+    document: 'Document',
+    documentHint: {
+      command: 'Markdown. The whole file is the prompt; $ARGUMENTS is what was typed after it.',
+      subagent:
+        'Markdown with frontmatter naming it and saying when to use it. tools and model are kept as written.'
+    },
+    save: 'Save',
+    cancel: 'Cancel',
+
+    /* Import. The same three routes a skill has, minus the folder — both of
+       these are one file. The name is asked for, which a skill's import never
+       does: a command names itself nowhere. */
+    fromDisk: 'From disk',
+    fromDiskNote: 'A single markdown file.',
+    choose: 'Choose…',
+    fromText: 'Paste',
+    fromTextNote: 'The whole file, frontmatter included if it has any.',
+    fromUrl: 'From a link',
+    fromUrlNote: 'An https address answering with one markdown file. Nothing beside it is fetched.',
+    url: 'Address',
+    /* Two steps, because neither what is being imported nor what it will be
+       called is on screen until it has been read. */
+    inspectAction: 'Read it',
+    importAction: 'Import',
+    noDescription: 'It describes itself as nothing.'
+  },
+
   trust: {
     title: 'What this repository can do',
     explain:
@@ -1166,6 +1263,18 @@ export const en = {
     linkBroken: 'A link pointing at nothing.'
   },
   errors: {
+    /* Commands and subagents. Each says what the reader can do about it, which
+       for a name is "choose another" and for a document is "it is not one". */
+    libraryNameInvalid:
+      '\u201c{{name}}\u201d cannot be a name: use lowercase letters, digits, dashes and underscores. The name becomes a filename, and on this filesystem \u201cShip\u201d and \u201cship\u201d would be the same one.',
+    libraryExists:
+      'Something called \u201c{{name}}\u201d is already here, or in the store beside it.',
+    libraryMissing: 'That file is not there any more.',
+    libraryTooLarge: 'It is longer than {{limit}} characters, which is more than a prompt.',
+    libraryUrlRefused:
+      '\u201c{{url}}\u201d could not be read. Only https addresses answering with one markdown file are fetched.',
+    librarySubagentNeedsDescription:
+      'A subagent needs frontmatter with a description saying when to use it, or the agent will never reach for it.',
     branchMissing:
       'That repository has no branch called \u201c{{branch}}\u201d. Choose a base branch it does have before pointing the project at it.',
     draftFailed: 'The description could not be drafted: {{reason}}',

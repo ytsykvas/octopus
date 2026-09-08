@@ -101,6 +101,28 @@ The default marks need no channel of their own: they are a field on the config
 and a field on the project, so they travel on `config:update` and
 `projects:update` like any other setting.
 
+### Commands and subagents
+
+The same two stores the skills live in, because Claude Code finds
+`.claude/commands/` and `.claude/agents/` under a working-directory root exactly
+as it finds `.claude/skills/`. Every one takes a `kind` — `command` or
+`subagent` — parsed before it becomes a directory name, and a `name` parsed with
+`LibraryNameSchema`, which is what refuses `..`: this becomes a file and reaches
+a delete.
+
+| Channel           | Arguments                       | Notes                                                                                                                                                                                                                                                             |
+| ----------------- | ------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `library:list`    | `store`, `kind`                 | what one store holds of one kind                                                                                                                                                                                                                                  |
+| `library:read`    | `store`, `kind`, `name`         | the document whole, and the body without its frontmatter                                                                                                                                                                                                          |
+| `library:save`    | `store`, `kind`, `name`, `text` | saves over what is there, which is what editing one means                                                                                                                                                                                                         |
+| `library:create`  | `store`, `kind`, `name`, `text` | writes one that is not here yet — every import, and the empty-file button. Separate from the save because this one must land on nothing, in either store or in any checkout that shares a session with it                                                         |
+| `library:remove`  | `store`, `kind`, `name`         | one file                                                                                                                                                                                                                                                          |
+| `library:rename`  | `store`, `kind`, `name`, `to`   | an ordinary rename, unlike a skill's migration: nothing is keyed on either, because the SDK offers no per-conversation switch for them                                                                                                                            |
+| `library:inspect` | `kind`, `request`               | what an import would write **and the name it suggests**, which is why this step exists where a skill's preview is a courtesy: a skill's document names itself and a command names itself nowhere. The answer carries the document back so the source is read once |
+
+`dialog:pickMarkdown` belongs with them: one file, never a folder — a skill may
+be a directory and neither of these ever is.
+
 ### Workspaces
 
 | Channel                          | Arguments                             | Notes                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             |

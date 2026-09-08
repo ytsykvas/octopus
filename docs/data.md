@@ -10,8 +10,10 @@ else joins a home directory by hand.
   state.json                         projects, workspaces and chats
   chats/<chatId>.jsonl               one conversation each, append-only
   instructions/*.md                  seven prompts every project falls back to
-  skills/                            an extra working-directory root: the skills every project gets, made at the first message
+  skills/                            an extra working-directory root: what every project gets, made at the first message
     .claude/skills/<folder>/SKILL.md one skill, in Claude Code's own format
+    .claude/commands/<name>.md       one command, typed as /<name>; the file is the whole prompt
+    .claude/agents/<name>.md         one subagent, named and described in its frontmatter
   attachments/                       pasted images, and another root — nothing else attached is ever copied here
   projects/<projectId>/
     carry                            paths carried from the checkout into a workspace
@@ -21,7 +23,7 @@ else joins a home directory by hand.
     scripts/run.sh                   starts the dev server
     scripts/archive.sh               takes back what setup gave out, on removal
     instructions/*.md                this project's own, which win
-    skills/                          the same shape again, for skills only this project gets
+    skills/                          the same shape again, for what only this project gets
   workspaces/<projectId>/<name>/     the git worktrees
 ```
 

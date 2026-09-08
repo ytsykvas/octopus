@@ -372,7 +372,15 @@ describe('channel table', () => {
     'skills:forChat',
     'skills:forWorkspace',
     'skills:setForChat',
+    'library:list',
+    'library:read',
+    'library:save',
+    'library:create',
+    'library:remove',
+    'library:rename',
+    'library:inspect',
     'dialog:pickSkill',
+    'dialog:pickMarkdown',
     'dialog:pickFiles',
     'attachments:paste',
     'workspaces:list',
@@ -2444,3 +2452,118 @@ function answeringQuery(text: string): QueryFn {
     }) as unknown as Query
   }
 }
+
+describe('the commands and subagents channels', () => {
+  const GLOBAL = { kind: 'global' }
+  const SUBAGENT = '---\nname: reviewer\ndescription: When reviewing.\n---\n\nYou review.'
+
+  it('writes one, lists it, opens it and takes it away', async () => {
+    await expect(
+      invoke('library:create', GLOBAL, 'command', 'ship', 'Commit and push.')
+    ).resolves.toMatchObject({ ok: true, value: { name: 'ship' } })
+
+    await expect(invoke('library:list', GLOBAL, 'command')).resolves.toMatchObject({
+      ok: true,
+      value: [{ name: 'ship' }]
+    })
+
+    await expect(invoke('library:read', GLOBAL, 'command', 'ship')).resolves.toMatchObject({
+      ok: true,
+      value: { raw: 'Commit and push.' }
+    })
+
+    await expect(
+      invoke('library:save', GLOBAL, 'command', 'ship', 'Commit.')
+    ).resolves.toMatchObject({ ok: true })
+
+    await expect(
+      invoke('library:rename', GLOBAL, 'command', 'ship', 'gate')
+    ).resolves.toMatchObject({ ok: true, value: { name: 'gate' } })
+
+    await expect(invoke('library:remove', GLOBAL, 'command', 'gate')).resolves.toMatchObject({
+      ok: true
+    })
+    await expect(invoke('library:list', GLOBAL, 'command')).resolves.toMatchObject({
+      ok: true,
+      value: []
+    })
+  })
+
+  it('reads what an import would write without writing it', async () => {
+    await expect(
+      invoke('library:inspect', 'subagent', { kind: 'text', text: SUBAGENT })
+    ).resolves.toMatchObject({ ok: true, value: { name: 'reviewer' } })
+
+    await expect(invoke('library:list', GLOBAL, 'subagent')).resolves.toMatchObject({
+      ok: true,
+      value: []
+    })
+  })
+
+  /*
+   * The name becomes a file under `~/.octopus` and reaches a delete, so it is
+   * refused here rather than anywhere further in. Types are gone by this point:
+   * a renderer sending this is the case the parse exists for.
+   */
+  it('refuses a name that would name a file somewhere else', async () => {
+    for (const name of ['../escape', 'a/b', '..', 'Upper']) {
+      await expect(invoke('library:read', GLOBAL, 'command', name)).resolves.toMatchObject({
+        ok: false
+      })
+      await expect(invoke('library:remove', GLOBAL, 'command', name)).resolves.toMatchObject({
+        ok: false
+      })
+      await expect(
+        invoke('library:rename', GLOBAL, 'command', 'ship', name)
+      ).resolves.toMatchObject({ ok: false })
+    }
+  })
+
+  // The kind decides which directory is written into, so a value outside the
+  // two has to be impossible rather than defaulted.
+  it('refuses a kind that is neither of the two', async () => {
+    await expect(invoke('library:list', GLOBAL, 'skill')).resolves.toMatchObject({ ok: false })
+    await expect(invoke('library:create', GLOBAL, 'skill', 'ship', 'x')).resolves.toMatchObject({
+      ok: false
+    })
+  })
+
+  it('refuses a store that is neither of the two, and a request that is none of the three', async () => {
+    await expect(invoke('library:list', { kind: 'somewhere' }, 'command')).resolves.toMatchObject({
+      ok: false
+    })
+    await expect(invoke('library:inspect', 'command', { kind: 'sideways' })).resolves.toMatchObject(
+      { ok: false }
+    )
+  })
+
+  /*
+   * Files only, where the skill picker takes a directory too: a skill may be a
+   * folder and neither of these ever is, so offering one would let the user
+   * choose something the read behind it can only fail on.
+   */
+  it('offers one markdown file from disk, never a folder', async () => {
+    bench.picked = { canceled: false, filePaths: ['/x/ship.md'] }
+
+    await expect(invoke('dialog:pickMarkdown', 'Pick')).resolves.toEqual({
+      ok: true,
+      value: '/x/ship.md'
+    })
+    expect(bench.dialogOptions.at(-1)?.properties).toEqual(['openFile'])
+  })
+
+  it('answers with nothing when the picker is cancelled', async () => {
+    bench.picked = { canceled: true, filePaths: [] }
+
+    await expect(invoke('dialog:pickMarkdown', 'Pick')).resolves.toEqual({ ok: true, value: null })
+  })
+
+  // The window can be gone by the time the call lands; the dialog then opens
+  // unparented rather than not at all.
+  it('opens unparented when the window has closed, and answers for an empty pick', async () => {
+    bench.window = null
+    bench.picked = { canceled: false, filePaths: [] }
+
+    await expect(invoke('dialog:pickMarkdown', 'Pick')).resolves.toEqual({ ok: true, value: null })
+  })
+})

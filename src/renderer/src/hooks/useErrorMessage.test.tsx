@@ -9,6 +9,7 @@ import type { GitHubErrorCode } from '@core/github.js'
 import type { InvalidFileCode } from '@core/persist.js'
 import type { ProjectValidationCode } from '@core/projects.js'
 import type { RepoConfigCode } from '@core/repoConfig.js'
+import type { LibraryErrorCode } from '@core/library.js'
 import type { SkillErrorCode } from '@core/skills.js'
 import type { StateConflictCode } from '@core/store.js'
 import type { WorkspaceErrorCode } from '@core/workspaces.js'
@@ -36,6 +37,7 @@ type CoreErrorCode =
   | EnvProfileCode
   | GitHubErrorCode
   | InvalidFileCode
+  | LibraryErrorCode
   // Raised at the bridge rather than in core: `attempt` is where a `ZodError`
   // becomes something the window can say.
   | 'valueRefused'
@@ -57,6 +59,12 @@ type Interpolated = Readonly<Record<string, string>> | null | 'internal'
 
 const CODE_PARAMETERS: Record<CoreErrorCode, Interpolated> = {
   attachmentTooLarge: { limit: '12' },
+  libraryNameInvalid: { name: 'Ship It' },
+  libraryExists: { name: 'ship' },
+  libraryMissing: null,
+  libraryTooLarge: { limit: '64000' },
+  libraryUrlRefused: { url: 'https://example.test/ship.md' },
+  librarySubagentNeedsDescription: null,
   attachmentType: { type: 'application/x-sh' },
   envProfileExists: { name: 'prod' },
   envProfileMissing: { name: 'prod' },

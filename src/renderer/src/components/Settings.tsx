@@ -6,7 +6,8 @@ import {
   Info,
   type LucideIcon,
   Monitor,
-  Sparkles
+  Sparkles,
+  SquareSlash
 } from 'lucide-react'
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
@@ -31,6 +32,7 @@ import { SectionRail } from './SectionRail.js'
 import { AccountCard } from './settings/AccountCard.js'
 import { AuthTerminal } from './settings/AuthTerminal.js'
 import { ClaudeSection } from './settings/ClaudeSection.js'
+import { LibrarySection } from './settings/LibrarySection.js'
 import { SkillsSection } from './settings/SkillsSection.js'
 import { type AccountsController, useAccounts } from './settings/useAccounts.js'
 
@@ -50,7 +52,7 @@ interface SettingsProps {
 }
 
 export type SectionId =
-  'general' | 'git' | 'agent' | 'skills' | 'instructions' | 'accounts' | 'about'
+  'general' | 'git' | 'agent' | 'skills' | 'library' | 'instructions' | 'accounts' | 'about'
 
 const SECTIONS: readonly {
   readonly id: SectionId
@@ -59,6 +61,7 @@ const SECTIONS: readonly {
     | 'settings.sectionGit'
     | 'settings.sectionAgent'
     | 'settings.sectionSkills'
+    | 'settings.sectionLibrary'
     | 'settings.sectionInstructions'
     | 'settings.sectionAccounts'
     | 'settings.sectionAbout'
@@ -68,6 +71,7 @@ const SECTIONS: readonly {
   { id: 'git', labelKey: 'settings.sectionGit', Icon: GitBranch },
   { id: 'agent', labelKey: 'settings.sectionAgent', Icon: Sparkles },
   { id: 'skills', labelKey: 'settings.sectionSkills', Icon: Blocks },
+  { id: 'library', labelKey: 'settings.sectionLibrary', Icon: SquareSlash },
   { id: 'instructions', labelKey: 'settings.sectionInstructions', Icon: BookText },
   { id: 'accounts', labelKey: 'settings.sectionAccounts', Icon: Bot },
   { id: 'about', labelKey: 'settings.sectionAbout', Icon: Info }
@@ -118,6 +122,16 @@ export function Settings({
                 void onChange({ disabledSkillDefaults })
               }}
             />
+          )}
+          {/* Commands and subagents, in the same two stores as the skills and
+              found by the session the same way — a section of their own because
+              neither has a per-conversation switch, so the list beside them is
+              answering a different question. */}
+          {section === 'library' && (
+            <>
+              <LibrarySection store={{ kind: 'global' }} kind="command" />
+              <LibrarySection store={{ kind: 'global' }} kind="subagent" />
+            </>
           )}
           {section === 'instructions' && <InstructionsSection />}
           {section === 'accounts' && <ClaudeSection accounts={accounts} />}
