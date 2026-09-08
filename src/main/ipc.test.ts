@@ -1871,7 +1871,12 @@ describe('workspaces of a real project', () => {
 
     await expect(invoke('projects:pullRequests', projectId)).resolves.toMatchObject({
       ok: true,
-      value: [{ branch: 'ytsykvas/anna', number: 7, state: 'open', checks: 'none' }]
+      value: {
+        requests: [{ branch: 'ytsykvas/anna', number: 7, state: 'open', checks: 'none' }],
+        // One request against a limit of a hundred: nothing is missing, and the
+        // header may go on saying there is no request rather than doubting it.
+        capped: false
+      }
     })
   })
 

@@ -5,6 +5,15 @@ import type { BranchRequest } from '@core/pullRequestShapes.js'
 export interface BranchRequestController {
   /** What each branch's request is, by branch name; absent means there is none. */
   readonly byBranch: ReadonlyMap<string, BranchRequest>
+  /**
+   * Whether the answer came back full, and so may be missing older requests.
+   *
+   * Absent from this map means "no request" only when this is false. The read
+   * asks for the hundred most recent, so a workspace whose request is older is
+   * not in the answer — and the header must stop naming an action it cannot
+   * know is the right one.
+   */
+  readonly capped: boolean
   /** Reads again — after one is opened here, or merged. */
   readonly refresh: () => void
 }
@@ -34,6 +43,7 @@ const INTERVAL_MS = 60_000
  */
 export function useBranchRequests(projectId: string | null): BranchRequestController {
   const [byBranch, setByBranch] = useState<ReadonlyMap<string, BranchRequest>>(new Map())
+  const [capped, setCapped] = useState(false)
 
   /** Bumped to ask again, which is the whole of what `refresh` does. */
   const [nonce, setNonce] = useState(0)
@@ -50,6 +60,7 @@ export function useBranchRequests(projectId: string | null): BranchRequestContro
   if (projectId !== shownId) {
     setShownId(projectId)
     setByBranch(new Map())
+    setCapped(false)
   }
 
   const refresh = useCallback(() => {
@@ -67,7 +78,8 @@ export function useBranchRequests(projectId: string | null): BranchRequestContro
       if (stopped) return
 
       if (result.ok) {
-        setByBranch(new Map(result.value.map((request) => [request.branch, request])))
+        setByBranch(new Map(result.value.requests.map((request) => [request.branch, request])))
+        setCapped(result.value.capped)
       }
 
       // Rescheduled from the answer rather than run on an interval, so a slow
@@ -85,5 +97,5 @@ export function useBranchRequests(projectId: string | null): BranchRequestContro
     // `nonce` is not read in here; it is what makes a refresh re-run the effect.
   }, [projectId, nonce])
 
-  return { byBranch, refresh }
+  return { byBranch, capped, refresh }
 }

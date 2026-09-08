@@ -670,6 +670,18 @@ export async function readPullRequestDetail(
 export const BRANCH_REQUEST_LIMIT = 100
 
 /**
+ * Every branch with a request, and whether that is all of them.
+ *
+ * A shape rather than a bare list for the reason `RepositoryList` is one: a
+ * caller that cannot tell "no request" from "not in the hundred we asked for"
+ * will say the wrong thing with complete confidence.
+ */
+export interface BranchRequestList {
+  readonly requests: readonly BranchRequest[]
+  readonly capped: boolean
+}
+
+/**
  * Every branch of the repository that has a request, in one call.
  *
  * One call for the whole project rather than one per workspace. The mark is
@@ -679,7 +691,7 @@ export const BRANCH_REQUEST_LIMIT = 100
 export async function readBranchRequests(
   gh: GhExec,
   limit: number = BRANCH_REQUEST_LIMIT
-): Promise<BranchRequest[]> {
+): Promise<BranchRequestList> {
   const payload = shaped(
     BranchListSchema,
     parsed(
@@ -698,7 +710,19 @@ export async function readBranchRequests(
     )
   )
 
-  return toBranchRequests(payload)
+  const requests = toBranchRequests(payload)
+
+  /*
+   * Whether the answer came back full, decided here rather than by counting
+   * what survives the filtering.
+   *
+   * `gh` was asked for the hundred most recent requests of the repository, so a
+   * workspace whose request is older than those hundred is simply not in the
+   * answer — and an absent request reads exactly like a branch that has none.
+   * The reader cannot tell the two apart, so the header must stop claiming
+   * which it is. The same reasoning, and the same field, as `listRepositories`.
+   */
+  return { requests, capped: payload.length >= limit }
 }
 
 /** `gh` refusing to answer, which is a different failure from an odd answer. */

@@ -953,9 +953,9 @@ describe('every branch of a project at once', () => {
   it('asks once for every branch, not once per branch', async () => {
     const { gh, calls } = fakeGh({ list: LIST })
 
-    const requests = await readBranchRequests(gh)
+    const answer = await readBranchRequests(gh)
 
-    expect(requests).toEqual([
+    expect(answer.requests).toEqual([
       {
         branch: 'octopus/anna',
         number: 7,
@@ -1028,5 +1028,58 @@ describe('the state map', () => {
 
       expect(view.request?.state).toBe(quiet)
     }
+  })
+})
+
+describe('whether the branch list was all of them', () => {
+  /*
+   * `gh` is asked for the hundred most recent requests of the whole repository,
+   * so a workspace whose request is older is simply not in the answer — and
+   * absent reads exactly like "has none". The caller has to be able to tell the
+   * two apart, or it says the wrong thing with complete confidence.
+   */
+  it('says so when the answer came back full', async () => {
+    const branch = await branchWithCommit()
+    const { gh } = fakeGh({
+      list: JSON.stringify([
+        { headRefName: branch, number: 7, state: 'OPEN', url: 'https://e.test/7' },
+        { headRefName: 'other', number: 8, state: 'OPEN', url: 'https://e.test/8' }
+      ])
+    })
+
+    await expect(readBranchRequests(gh, 2)).resolves.toMatchObject({ capped: true })
+  })
+
+  it('says nothing of the sort when it came back short', async () => {
+    const branch = await branchWithCommit()
+    const { gh } = fakeGh({
+      list: JSON.stringify([
+        { headRefName: branch, number: 7, state: 'OPEN', url: 'https://e.test/7' }
+      ])
+    })
+
+    const answer = await readBranchRequests(gh, 2)
+
+    expect(answer.capped).toBe(false)
+    expect(answer.requests).toHaveLength(1)
+  })
+
+  /*
+   * Decided at the read rather than by measuring what survives: the filtering
+   * below drops requests this list has no use for, and a count taken after it
+   * would call a full answer short whenever it dropped one.
+   */
+  it('counts what GitHub answered, not what came through the filtering', async () => {
+    const { gh } = fakeGh({
+      list: JSON.stringify([
+        { headRefName: 'a', number: 7, state: 'OPEN', url: 'https://e.test/7' },
+        { headRefName: 'a', number: 8, state: 'CLOSED', url: 'https://e.test/8' }
+      ])
+    })
+
+    const answer = await readBranchRequests(gh, 2)
+
+    expect(answer.requests).toHaveLength(1)
+    expect(answer.capped).toBe(true)
   })
 })

@@ -19,7 +19,18 @@ const request = (overrides: Partial<BranchRequest> = {}): BranchRequest => ({
 })
 
 function answer(...requests: BranchRequest[]): void {
-  vi.mocked(octopus().projects.pullRequests).mockResolvedValue({ ok: true, value: requests })
+  vi.mocked(octopus().projects.pullRequests).mockResolvedValue({
+    ok: true,
+    value: { requests, capped: false }
+  })
+}
+
+/** The same, from a read that came back full — so older ones may be missing. */
+function cappedAnswer(...requests: BranchRequest[]): void {
+  vi.mocked(octopus().projects.pullRequests).mockResolvedValue({
+    ok: true,
+    value: { requests, capped: true }
+  })
 }
 
 afterEach(() => {
@@ -87,13 +98,13 @@ describe('what each branch of a project has become', () => {
 
   // The answer belongs to a list that is no longer on screen.
   it('drops an answer that arrives after the project was closed', async () => {
-    const gate = held<{ ok: true; value: BranchRequest[] }>()
+    const gate = held<{ ok: true; value: { requests: BranchRequest[]; capped: boolean } }>()
     vi.mocked(octopus().projects.pullRequests).mockReturnValue(gate.promise)
 
     const { result, unmount } = renderHook(() => useBranchRequests(PLANNER))
     unmount()
 
-    gate.resolve({ ok: true, value: [request()] })
+    gate.resolve({ ok: true, value: { requests: [request()], capped: false } })
     await Promise.resolve()
 
     expect(result.current.byBranch.size).toBe(0)
@@ -142,5 +153,49 @@ describe('what each branch of a project has become', () => {
     expect(result.current.byBranch.size).toBe(0)
     // Retried on the same clock rather than given up on for the session.
     expect(vi.mocked(octopus().projects.pullRequests).mock.calls.length).toBeGreaterThan(1)
+  })
+})
+
+describe('whether the answer was all of them', () => {
+  /*
+   * The read asks for the hundred most recent requests of the whole repository,
+   * so a workspace whose request is older is simply not in the answer — and
+   * absent reads exactly like "has none". A caller that cannot tell the two
+   * apart will say the wrong thing with complete confidence.
+   */
+  it('says so when the list came back full', async () => {
+    cappedAnswer(request())
+    const { result } = renderHook(() => useBranchRequests(PLANNER))
+
+    await waitFor(() => {
+      expect(result.current.capped).toBe(true)
+    })
+  })
+
+  it('says nothing of the sort when it did not', async () => {
+    answer(request())
+    const { result } = renderHook(() => useBranchRequests(PLANNER))
+
+    await waitFor(() => {
+      expect(result.current.byBranch.size).toBe(1)
+    })
+    expect(result.current.capped).toBe(false)
+  })
+
+  // The marks are dropped when the project changes, and so is the doubt: it
+  // belongs to a read of the project that is no longer showing.
+  it('forgets the doubt with the project it belonged to', async () => {
+    cappedAnswer(request())
+    const { result, rerender } = renderHook(({ id }) => useBranchRequests(id), {
+      initialProps: { id: PLANNER }
+    })
+
+    await waitFor(() => {
+      expect(result.current.capped).toBe(true)
+    })
+
+    rerender({ id: 'ledger' })
+
+    expect(result.current.capped).toBe(false)
   })
 })

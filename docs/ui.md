@@ -1012,6 +1012,26 @@ the boundary stays — types are gone by then, and a window sending more is what
 boundary is for — but somebody typing must not be allowed to fill a note that
 will then be refused. A count appears as the limit comes close and not before.
 
+**A branch list that came back full makes the header stop claiming.** The mark
+on every workspace row comes from one read of the repository's hundred most
+recent requests — one call for the whole project, because a read per row would
+be a network call per row on every refresh. A workspace whose request is older
+than those hundred is simply not in the answer, and **absent reads exactly like
+"has none"**: the header then offered `Create PR` for a branch that already had
+one.
+
+So the read says whether it was all of them, and where it was not the button
+stops naming the action and says `Check PR` instead. Pressing it does the same
+thing either way — it opens the pull request tab, which asks about _this branch_
+rather than reading the capped list, and is therefore the one authority on what
+the branch has.
+
+The two alternatives were both worse. Hiding the button takes away a shortcut
+over a doubt; leaving it saying `Create PR` is a wrong sentence said with
+confidence. Not `Pull request` either, which is what the tab it opens is already
+called — two buttons of one name is a question for whoever hears them read out.
+The row's mark stays absent, which says nothing rather than something false.
+
 **A quit waits for what the sessions were writing, for up to a second.** A
 transcript is append-only JSONL, so a write cut in half leaves a partial line the
 reader refuses — and the reader is what a reopened conversation is drawn from.

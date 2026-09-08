@@ -2024,15 +2024,18 @@ describe('App', () => {
     })
     vi.mocked(window.octopus.projects.pullRequests).mockResolvedValue({
       ok: true,
-      value: [
-        {
-          branch: 'ytsykvas/anna',
-          number: 812,
-          state: 'open',
-          checks: 'passed',
-          url: 'https://github.com/o/p/pull/812'
-        }
-      ]
+      value: {
+        capped: false,
+        requests: [
+          {
+            branch: 'ytsykvas/anna',
+            number: 812,
+            state: 'open',
+            checks: 'passed',
+            url: 'https://github.com/o/p/pull/812'
+          }
+        ]
+      }
     })
     const user = await openApp()
     await user.click(await screen.findByRole('button', { name: 'PL' }))
@@ -2122,15 +2125,18 @@ describe('App', () => {
     })
     vi.mocked(window.octopus.projects.pullRequests).mockResolvedValue({
       ok: true,
-      value: [
-        {
-          branch: 'ytsykvas/anna',
-          number: 812,
-          state: 'open',
-          checks,
-          url: 'https://github.com/o/p/pull/812'
-        }
-      ]
+      value: {
+        capped: false,
+        requests: [
+          {
+            branch: 'ytsykvas/anna',
+            number: 812,
+            state: 'open',
+            checks,
+            url: 'https://github.com/o/p/pull/812'
+          }
+        ]
+      }
     })
   }
 
@@ -2196,5 +2202,59 @@ describe('App', () => {
     fireEvent.keyDown(window, { key: 'N', metaKey: true, shiftKey: true })
 
     expect(window.octopus.workspaces.create).not.toHaveBeenCalled()
+  })
+})
+
+describe('a branch list that came back full', () => {
+  /*
+   * The read asks GitHub for the hundred most recent requests of the whole
+   * repository. A workspace whose request is older than those hundred is not in
+   * the answer, and absent reads exactly like "has none" — so the header used
+   * to offer **Create PR** for a branch that already had one.
+   *
+   * It cannot know, so it stops naming the action and names the place. The
+   * button opens the same tab either way, and that tab asks about this branch
+   * rather than reading the capped list.
+   */
+  it('names the place rather than the action', async () => {
+    vi.mocked(window.octopus.projects.list).mockResolvedValue({ ok: true, value: [PLANNER] })
+    vi.mocked(window.octopus.workspaces.list).mockResolvedValue({
+      ok: true,
+      value: [workspaceView('anna', { ahead: 2 })]
+    })
+    vi.mocked(window.octopus.projects.pullRequests).mockResolvedValue({
+      ok: true,
+      // Full, and this branch is not among what came back.
+      value: { capped: true, requests: [] }
+    })
+
+    const user = await openApp()
+    await user.click(await screen.findByRole('button', { name: 'PL' }))
+    await user.click(await screen.findByText('anna'))
+
+    // Not "Pull request": that is what the tab it opens is already called, and
+    // two buttons of one name is a question for whoever hears them read out.
+    expect(await screen.findByRole('button', { name: 'Check PR' })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Create PR' })).not.toBeInTheDocument()
+  })
+
+  // Under an answer that was all of them, absent means absent — and saying so
+  // is worth keeping, because it tells the reader there is nothing there yet.
+  it('still says Create PR when the answer was all of them', async () => {
+    vi.mocked(window.octopus.projects.list).mockResolvedValue({ ok: true, value: [PLANNER] })
+    vi.mocked(window.octopus.workspaces.list).mockResolvedValue({
+      ok: true,
+      value: [workspaceView('anna', { ahead: 2 })]
+    })
+    vi.mocked(window.octopus.projects.pullRequests).mockResolvedValue({
+      ok: true,
+      value: { capped: false, requests: [] }
+    })
+
+    const user = await openApp()
+    await user.click(await screen.findByRole('button', { name: 'PL' }))
+    await user.click(await screen.findByText('anna'))
+
+    expect(await screen.findByRole('button', { name: 'Create PR' })).toBeInTheDocument()
   })
 })

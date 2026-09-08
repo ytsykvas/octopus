@@ -23,7 +23,8 @@ import type { CliPermission } from '@core/cliPermissions.js'
 import type { FileSides, WorkspaceDiff } from '@core/diff.js'
 import type { MergeMethod, PullRequestDraft, PullRequestView } from '@core/pullRequests.js'
 import type { DraftedPullRequest } from '@core/pullRequestDraft.js'
-import type { BranchRequest, PullRequestDetail } from '@core/pullRequestShapes.js'
+import type { PullRequestDetail } from '@core/pullRequestShapes.js'
+import type { BranchRequestList } from '@core/pullRequests.js'
 import type { RemoteRepository, RepositoryList } from '@core/github.js'
 import type { Workspace } from '@core/store.js'
 import type { RemoveOptions, WorkspaceView } from '@core/workspaces.js'
@@ -805,8 +806,8 @@ const api = {
      * One call for the whole project, which is what lets the workspace list
      * mark every row without a network call per row.
      */
-    pullRequests: (projectId: string): Promise<Result<BranchRequest[]>> =>
-      ipcRenderer.invoke('projects:pullRequests', projectId) as Promise<Result<BranchRequest[]>>,
+    pullRequests: (projectId: string): Promise<Result<BranchRequestList>> =>
+      ipcRenderer.invoke('projects:pullRequests', projectId) as Promise<Result<BranchRequestList>>,
 
     /** Reads a project script; a missing one comes back as a template. */
     readScript: (projectId: string, kind: ScriptKind): Promise<Result<string>> =>

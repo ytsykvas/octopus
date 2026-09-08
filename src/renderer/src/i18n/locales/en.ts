@@ -483,6 +483,12 @@ export const en = {
     /* On the window header, beside the branch. Short because it sits in a row
        already carrying a project, a path and a branch name. */
     createShortcut: 'Create PR',
+    /* When the branch list came back full, an older request may be missing from
+       it — so the header stops naming the action. "Create PR" over a branch
+       that already has one is a wrong sentence said with confidence; this one
+       is true either way, and says why somebody would press it: to find out.
+       Not "Pull request", which is what the tab it opens is already called. */
+    openShortcut: 'Check PR',
     commitMessage: 'Commit message',
     commitMessagePlaceholder: 'Rename the thing',
     commitHint:

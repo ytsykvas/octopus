@@ -123,10 +123,11 @@ import {
   type NewPullRequest,
   type PullRequestView,
   readBranchRequests,
+  type BranchRequestList,
   readPullRequest,
   readPullRequestDetail
 } from './pullRequests.js'
-import type { BranchRequest, PullRequestDetail } from './pullRequestShapes.js'
+import type { PullRequestDetail } from './pullRequestShapes.js'
 import { gitIn, isIgnored } from './git.js'
 import { FETCH_OPTIONS, resolveBase } from './remotes.js'
 import { type InstructionSource, instructionSources } from './instructionSources.js'
@@ -956,7 +957,14 @@ export interface OctopusService {
    *
    * Per project rather than per workspace: the list marks every row at once.
    */
-  readBranchRequests(projectId: string): Promise<BranchRequest[]>
+  /**
+   * Every branch of a project with a request, and whether that is all of them.
+   *
+   * The cap matters to the caller rather than being an implementation detail:
+   * a workspace whose request is older than the hundred asked for is missing
+   * from the answer, and missing reads exactly like having none.
+   */
+  readBranchRequests(projectId: string): Promise<BranchRequestList>
   /**
    * An absolute path inside a workspace, for a caller that will open it.
    *

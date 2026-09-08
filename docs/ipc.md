@@ -123,6 +123,13 @@ a delete.
 `dialog:pickMarkdown` belongs with them: one file, never a folder — a skill may
 be a directory and neither of these ever is.
 
+`projects:pullRequests` answers with the branches that have a request **and
+whether that is all of them**. The read asks for the hundred most recent of the
+whole repository, so an older request is missing from the answer and missing
+reads like "has none" — a caller that cannot tell the two apart says the wrong
+thing with confidence. The same shape, and the same reason, as the repository
+list's `capped`.
+
 `workspaces:notes` writes the line a workspace carries for its user, parsing the
 body rather than trusting it — it lands in `state.json`, which `commit` rewrites
 whole, so its ceiling is paid for by every other field in the file. The window
