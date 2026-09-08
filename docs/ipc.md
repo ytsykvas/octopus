@@ -123,6 +123,12 @@ a delete.
 `dialog:pickMarkdown` belongs with them: one file, never a folder — a skill may
 be a directory and neither of these ever is.
 
+`attachments:measure` and `attachments:clear` take no arguments, and that is the
+point: there is one directory and one answer, so nothing there can be pointed
+somewhere else. The clear empties it and leaves the directory, which every
+session is holding as a working-directory root, and answers with what is left so
+the row redraws itself from the write rather than from a second read.
+
 ### Workspaces
 
 | Channel                          | Arguments                             | Notes                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             |

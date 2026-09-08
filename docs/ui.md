@@ -940,6 +940,18 @@ link route, it is how the name gets on screen before it is decided. What the
 source suggests is prefilled: a subagent's own `name`, a file's own name tidied
 (`Run Checks.md` becomes `run-checks`), and nothing at all for pasted text.
 
+**About says how much the pasted images weigh, with a way to empty them.** It is
+the one place octopus quietly uses disk: nothing removes a pasted image on its
+own, and nothing should — a path in a sent message is a promise the file is
+there, and a transcript is read back weeks later. A reaper on start-up would
+break an old conversation to tidy a folder nobody was looking at, so the answer
+is to make the folder **visible** and leave the decision where it belongs, which
+is the shape the trust digest and the skill stores already use. The row is not
+drawn at all until the measurement comes back — one that said "0 images" and
+then corrected itself to twelve would be worse than one that appears once — and
+emptying asks first, saying plainly that an old message will then point at a
+file that is gone.
+
 `FileEditor` can carry `notes` — a function run against the text on every
 keystroke, whose answers appear under the box. The env block uses it; told on
 blur instead, a warning arrives after the attention that could act on it.

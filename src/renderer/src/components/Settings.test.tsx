@@ -802,3 +802,123 @@ describe('the commands section', () => {
     expect(octopus().library.list).toHaveBeenCalledWith({ kind: 'global' }, 'subagent')
   })
 })
+
+describe('the pasted images row', () => {
+  /*
+   * The one place octopus quietly uses disk. Nothing removes a pasted image on
+   * its own and nothing should — a path in a sent message is a promise the file
+   * is there — so the answer is to make the folder visible.
+   */
+  it('says how much is there, in a size somebody can judge', async () => {
+    const user = userEvent.setup()
+    vi.mocked(octopus().attachments.measure).mockResolvedValue({
+      ok: true,
+      value: { files: 12, bytes: 3_500_000 }
+    })
+    await renderSettings()
+
+    await openSection(user, 'About')
+
+    expect(await screen.findByText('12 images, 3.3 MB')).toBeInTheDocument()
+  })
+
+  // Kilobytes under a megabyte: the answer for three screenshots is not "0 MB",
+  // which reads as a bug rather than as a small number.
+  it('drops to kilobytes for a folder that is barely used', async () => {
+    const user = userEvent.setup()
+    vi.mocked(octopus().attachments.measure).mockResolvedValue({
+      ok: true,
+      value: { files: 1, bytes: 40_000 }
+    })
+    await renderSettings()
+
+    await openSection(user, 'About')
+
+    expect(await screen.findByText('1 image, 39 kB')).toBeInTheDocument()
+  })
+
+  it('offers nothing to empty when there is nothing there', async () => {
+    const user = userEvent.setup()
+    await renderSettings()
+
+    await openSection(user, 'About')
+
+    expect(await screen.findByText('None yet')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Empty' })).not.toBeInTheDocument()
+  })
+
+  it('asks before deleting anything, and redraws itself after', async () => {
+    const user = userEvent.setup()
+    vi.mocked(octopus().attachments.measure).mockResolvedValue({
+      ok: true,
+      value: { files: 2, bytes: 40_000 }
+    })
+    vi.mocked(octopus().attachments.clear).mockResolvedValue({
+      ok: true,
+      value: { files: 0, bytes: 0 }
+    })
+    await renderSettings()
+
+    await openSection(user, 'About')
+    await user.click(await screen.findByRole('button', { name: 'Empty' }))
+
+    expect(octopus().attachments.clear).not.toHaveBeenCalled()
+
+    await user.click(await screen.findByRole('button', { name: 'Delete them' }))
+
+    expect(await screen.findByText('None yet')).toBeInTheDocument()
+  })
+
+  // The row is redrawn from what the delete answers with, so a delete that
+  // failed must leave the count it had rather than claiming an empty folder.
+  it('keeps the count it had when the delete fails', async () => {
+    const user = userEvent.setup()
+    vi.mocked(octopus().attachments.measure).mockResolvedValue({
+      ok: true,
+      value: { files: 2, bytes: 40_000 }
+    })
+    vi.mocked(octopus().attachments.clear).mockResolvedValue({
+      ok: false,
+      error: 'no',
+      code: 'fileUnreadable'
+    })
+    await renderSettings()
+
+    await openSection(user, 'About')
+    await user.click(await screen.findByRole('button', { name: 'Empty' }))
+    await user.click(await screen.findByRole('button', { name: 'Delete them' }))
+
+    expect(await screen.findByText('2 images, 39 kB')).toBeInTheDocument()
+  })
+
+  it('deletes nothing when the question is answered no', async () => {
+    const user = userEvent.setup()
+    vi.mocked(octopus().attachments.measure).mockResolvedValue({
+      ok: true,
+      value: { files: 2, bytes: 40_000 }
+    })
+    await renderSettings()
+
+    await openSection(user, 'About')
+    await user.click(await screen.findByRole('button', { name: 'Empty' }))
+    await user.click(await screen.findByRole('button', { name: 'Keep them' }))
+
+    expect(octopus().attachments.clear).not.toHaveBeenCalled()
+  })
+
+  // A row that said "0 images" and then corrected itself to twelve is worse
+  // than a row that appears once.
+  it('draws nothing until the answer arrives', async () => {
+    const user = userEvent.setup()
+    vi.mocked(octopus().attachments.measure).mockResolvedValue({
+      ok: false,
+      error: 'no',
+      code: 'fileUnreadable'
+    })
+    await renderSettings()
+
+    await openSection(user, 'About')
+
+    expect(screen.queryByText('Pasted images')).not.toBeInTheDocument()
+  })
+})

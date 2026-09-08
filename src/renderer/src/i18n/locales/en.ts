@@ -1073,7 +1073,30 @@ export const en = {
     plan: 'Plan',
     organisation: 'Organisation',
     deviceId: 'Device id',
-    installedAt: 'First run'
+    installedAt: 'First run',
+
+    /* The one place octopus quietly uses disk. Nothing removes a pasted image
+       on its own and nothing should — a path in a sent message is a promise the
+       file is there — so this makes the folder visible and leaves the decision
+       here. */
+    attachments: 'Pasted images',
+    attachmentsEmpty: 'None yet',
+    /* Four forms, as `diff.omittedFiles` has: English needs two and Ukrainian
+       needs four, and the type is taken from this file. */
+    attachmentsHeld_one: '{{count}} image, {{size}}',
+    attachmentsHeld_few: '{{count}} images, {{size}}',
+    attachmentsHeld_many: '{{count}} images, {{size}}',
+    attachmentsHeld_other: '{{count}} images, {{size}}',
+    attachmentsClear: 'Empty',
+    attachmentsClearTitle: 'Empty the pasted images?',
+    attachmentsClearMessage: 'Every image pasted into a composer is deleted from disk.',
+    attachmentsClearDetail:
+      'Messages that carried one keep the path, so an old conversation will show a file that is no longer there. Nothing else is affected.',
+    /* Paired with "Keep them", and deliberately not "Empty" again: the button
+       that opens the question and the one that answers it should not be the
+       same word. */
+    attachmentsClearConfirm: 'Delete them',
+    attachmentsClearCancel: 'Keep them'
   },
 
   skills: {

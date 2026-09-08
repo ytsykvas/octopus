@@ -67,7 +67,12 @@ import {
 } from './carry.js'
 import type { PermissionUpdate } from '@anthropic-ai/claude-agent-sdk'
 
-import { writePastedImage } from './attachments.js'
+import {
+  type AttachmentStore,
+  clearAttachments,
+  measureAttachments,
+  writePastedImage
+} from './attachments.js'
 import { type CliPermission, readCliPermissions } from './cliPermissions.js'
 import { allowedStanding, type StandingPermission, withStanding } from './standingPermissions.js'
 import type { CarryReport } from './carry.js'
@@ -565,6 +570,17 @@ export interface OctopusService {
    * a paste has no path until one is made.
    */
   writePastedAttachment(type: string, bytes: Uint8Array): Promise<string>
+  /**
+   * How much has accumulated where pasted images go.
+   *
+   * The one place octopus quietly uses disk. Nothing removes a pasted image —
+   * a path in a sent message is a promise the file is there, and a transcript
+   * is read back weeks later — so the answer is to make the disk **visible**
+   * and leave the decision where it belongs.
+   */
+  measureAttachments(): Promise<AttachmentStore>
+  /** Empties it, and answers with what is left so a row can redraw itself. */
+  clearAttachments(): Promise<AttachmentStore>
 
   /** Which of the checkout's files travel into a workspace, one path per line. */
   readProjectCarryList(projectId: string): Promise<string>
@@ -2813,6 +2829,14 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
 
     async writePastedAttachment(type, bytes) {
       return writePastedImage(type, bytes, new Date(), dataRoot)
+    },
+
+    async measureAttachments() {
+      return measureAttachments(dataRoot)
+    },
+
+    async clearAttachments() {
+      return clearAttachments(dataRoot)
     },
 
     async readProjectCarryList(projectId) {

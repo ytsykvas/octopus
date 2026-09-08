@@ -841,7 +841,21 @@ export const uk: Translation = {
     plan: 'Підписка',
     organisation: 'Організація',
     deviceId: 'Ідентифікатор пристрою',
-    installedAt: 'Перший запуск'
+    installedAt: 'Перший запуск',
+
+    attachments: 'Вставлені зображення',
+    attachmentsEmpty: 'Поки що немає',
+    attachmentsHeld_one: '{{count}} зображення, {{size}}',
+    attachmentsHeld_few: '{{count}} зображення, {{size}}',
+    attachmentsHeld_many: '{{count}} зображень, {{size}}',
+    attachmentsHeld_other: '{{count}} зображення, {{size}}',
+    attachmentsClear: 'Очистити',
+    attachmentsClearTitle: 'Очистити вставлені зображення?',
+    attachmentsClearMessage: 'Кожне зображення, вставлене в поле вводу, буде видалено з диска.',
+    attachmentsClearDetail:
+      'Повідомлення, які його несли, зберігають шлях, тож стара розмова показуватиме файл, якого вже немає. Більше нічого це не зачіпає.',
+    attachmentsClearConfirm: 'Видалити їх',
+    attachmentsClearCancel: 'Залишити'
   },
 
   skills: {

@@ -959,6 +959,12 @@ export function registerIpc(
     )
   )
 
+  host.handle('attachments:measure', () => attempt(() => service.measureAttachments()))
+
+  /* Deletes files, and takes no argument for exactly that reason: there is one
+     directory and one answer, so nothing here can be pointed elsewhere. */
+  host.handle('attachments:clear', () => attempt(() => service.clearAttachments()))
+
   // Inside `attempt`, not before it: resolving the destination writes the
   // choice to the config, and a failed write would otherwise reject across IPC
   // as an opaque Electron error the renderer cannot explain.

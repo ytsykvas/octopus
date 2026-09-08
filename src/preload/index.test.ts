@@ -396,6 +396,8 @@ describe('channel names', () => {
       () => method('attachments', 'paste')('image/png' as never, new Uint8Array() as never),
       'attachments:paste'
     ],
+    ['attachments.measure', () => method('attachments', 'measure')(), 'attachments:measure'],
+    ['attachments.clear', () => method('attachments', 'clear')(), 'attachments:clear'],
     [
       'library.list',
       () => method('library', 'list')({ kind: 'global' } as never, 'command' as never),

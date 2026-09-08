@@ -38,6 +38,7 @@ import type {
   SkillSave
 } from '@core/skills.js'
 import type { LibraryDocument, LibraryEntry, LibraryImport, LibraryPreview } from '@core/library.js'
+import type { AttachmentStore } from '@core/attachments.js'
 import type { LibraryKind } from '@core/libraryNames.js'
 import type { Store } from '@core/stores.js'
 import type { InstructionSource } from '@core/instructionSources.js'
@@ -577,6 +578,14 @@ const api = {
      */
     paste: (type: string, bytes: Uint8Array): Promise<Result<string>> =>
       ipcRenderer.invoke('attachments:paste', type, bytes) as Promise<Result<string>>,
+
+    /** How much has accumulated where pasted images go. */
+    measure: (): Promise<Result<AttachmentStore>> =>
+      ipcRenderer.invoke('attachments:measure') as Promise<Result<AttachmentStore>>,
+
+    /** Empties it, and answers with what is left so a row can redraw itself. */
+    clear: (): Promise<Result<AttachmentStore>> =>
+      ipcRenderer.invoke('attachments:clear') as Promise<Result<AttachmentStore>>,
 
     /**
      * Where a dropped file actually is.

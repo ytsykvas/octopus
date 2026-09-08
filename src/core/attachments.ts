@@ -12,7 +12,7 @@
  * it becomes one.
  */
 
-import { mkdir, writeFile } from 'node:fs/promises'
+import { mkdir, readdir, rm, stat, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 
 import { CodedError } from './codedError.js'
@@ -87,4 +87,80 @@ function suffix(): string {
   return Math.floor(Math.random() * 0x10000)
     .toString(16)
     .padStart(4, '0')
+}
+
+/** What the directory holds, for a settings row that makes the disk visible. */
+export interface AttachmentStore {
+  readonly files: number
+  readonly bytes: number
+}
+
+/**
+ * How much has accumulated, measured rather than counted as it goes.
+ *
+ * Nothing here is written down: a screenshot pasted a year ago and one pasted
+ * this morning are the same kind of file, and a tally kept alongside would be a
+ * second answer that goes wrong the first time somebody empties the folder from
+ * Finder. The directory holds tens of files, so reading it is free.
+ *
+ * Never throws. There is no directory until the first paste, and a settings row
+ * that failed to draw because nobody has pasted anything would be absurd.
+ */
+export async function measureAttachments(root?: string): Promise<AttachmentStore> {
+  const dir = attachmentsDir(root)
+
+  try {
+    const listing = await readdir(dir, { withFileTypes: true })
+
+    let files = 0
+    let bytes = 0
+
+    for (const entry of listing) {
+      if (!entry.isFile()) continue
+
+      files += 1
+      bytes += (await stat(join(dir, entry.name))).size
+    }
+
+    return { files, bytes }
+  } catch {
+    /*
+     * One catch over the whole read, and it answers with nothing.
+     *
+     * The ordinary case is a directory that does not exist yet — there is none
+     * until the first paste. The other is a read that fails halfway, and "none"
+     * is the right answer there too: this is a size on a settings row, and a
+     * number arrived at by counting some of the files would be worse than a row
+     * that says nothing and is right again the next time it is opened.
+     */
+    return { files: 0, bytes: 0 }
+  }
+}
+
+/**
+ * Empties it, leaving the directory itself.
+ *
+ * The directory is handed to every session as a working-directory root, and a
+ * root passed at session start that then disappears is the trap `ensureStore`
+ * exists to avoid — so this removes what is in it and not the thing itself.
+ *
+ * **Files directly inside, and nothing else.** Everything octopus writes here
+ * is one flat file; a directory somebody else put here is theirs, and a button
+ * in Settings that recursed into it would be deleting more than it offered to.
+ */
+export async function clearAttachments(root?: string): Promise<AttachmentStore> {
+  const dir = attachmentsDir(root)
+
+  let listing
+  try {
+    listing = await readdir(dir, { withFileTypes: true })
+  } catch {
+    return { files: 0, bytes: 0 }
+  }
+
+  for (const entry of listing) {
+    if (entry.isFile()) await rm(join(dir, entry.name), { force: true })
+  }
+
+  return measureAttachments(root)
 }

@@ -383,6 +383,8 @@ describe('channel table', () => {
     'dialog:pickMarkdown',
     'dialog:pickFiles',
     'attachments:paste',
+    'attachments:measure',
+    'attachments:clear',
     'workspaces:list',
     'workspaces:create',
     'workspaces:rename',
@@ -2565,5 +2567,31 @@ describe('the commands and subagents channels', () => {
     bench.picked = { canceled: false, filePaths: [] }
 
     await expect(invoke('dialog:pickMarkdown', 'Pick')).resolves.toEqual({ ok: true, value: null })
+  })
+})
+
+describe('the pasted images channels', () => {
+  it('measures what is there and empties it', async () => {
+    await expect(invoke('attachments:measure')).resolves.toEqual({
+      ok: true,
+      value: { files: 0, bytes: 0 }
+    })
+
+    const written = (await invoke(
+      'attachments:paste',
+      'image/png',
+      Uint8Array.from([0x89, 0x50])
+    )) as Result<string>
+    if (!written.ok) throw new Error(written.error)
+
+    await expect(invoke('attachments:measure')).resolves.toMatchObject({
+      ok: true,
+      value: { files: 1 }
+    })
+
+    await expect(invoke('attachments:clear')).resolves.toEqual({
+      ok: true,
+      value: { files: 0, bytes: 0 }
+    })
   })
 })

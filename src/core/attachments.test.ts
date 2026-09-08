@@ -1,10 +1,17 @@
-import { mkdtemp, readFile, readdir, rm } from 'node:fs/promises'
+import { mkdir, mkdtemp, readFile, readdir, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 
-import { AttachmentError, MAX_PASTE_BYTES, writePastedImage } from './attachments.js'
+import {
+  AttachmentError,
+  clearAttachments,
+  MAX_PASTE_BYTES,
+  measureAttachments,
+  writePastedImage
+} from './attachments.js'
+import { attachmentsDir } from './paths.js'
 
 let dir: string
 const NOW = new Date('2026-09-06T11:02:03.456Z')
@@ -84,5 +91,64 @@ describe('a pasted image', () => {
     const limit = new Uint8Array(MAX_PASTE_BYTES)
 
     await expect(writePastedImage('image/png', limit, NOW, dir)).resolves.toContain('.png')
+  })
+})
+
+describe('how much has accumulated', () => {
+  it('is nothing before anything has been pasted', async () => {
+    await expect(measureAttachments(dir)).resolves.toEqual({ files: 0, bytes: 0 })
+  })
+
+  it('counts the files and adds up their sizes', async () => {
+    await writePastedImage('image/png', PNG, NOW, dir)
+    await writePastedImage('image/png', new Uint8Array(100), NOW, dir)
+
+    await expect(measureAttachments(dir)).resolves.toEqual({ files: 2, bytes: PNG.length + 100 })
+  })
+
+  // Only what is directly inside: everything octopus writes here is one flat
+  // file, and a directory somebody else put here is theirs.
+  it('does not go into a directory somebody put here', async () => {
+    await mkdir(join(attachmentsDir(dir), 'mine'), { recursive: true })
+    await writeFile(join(attachmentsDir(dir), 'mine', 'kept.png'), new Uint8Array(500))
+
+    await expect(measureAttachments(dir)).resolves.toEqual({ files: 0, bytes: 0 })
+  })
+})
+
+describe('emptying it', () => {
+  it('takes the files away and answers with what is left', async () => {
+    await writePastedImage('image/png', PNG, NOW, dir)
+
+    await expect(clearAttachments(dir)).resolves.toEqual({ files: 0, bytes: 0 })
+    await expect(readdir(attachmentsDir(dir))).resolves.toEqual([])
+  })
+
+  /*
+   * The directory is handed to every session as a working-directory root, and
+   * one passed at session start that then disappears is the trap `ensureStore`
+   * exists to avoid. So this empties it rather than removing it.
+   */
+  it('leaves the directory itself, which a session is holding', async () => {
+    await writePastedImage('image/png', PNG, NOW, dir)
+
+    await clearAttachments(dir)
+
+    await expect(readdir(attachmentsDir(dir))).resolves.toEqual([])
+  })
+
+  it('leaves a directory somebody put here alone', async () => {
+    await writePastedImage('image/png', PNG, NOW, dir)
+    await mkdir(join(attachmentsDir(dir), 'mine'), { recursive: true })
+    await writeFile(join(attachmentsDir(dir), 'mine', 'kept.png'), PNG)
+
+    await clearAttachments(dir)
+
+    await expect(readdir(attachmentsDir(dir))).resolves.toEqual(['mine'])
+    await expect(readFile(join(attachmentsDir(dir), 'mine', 'kept.png'))).resolves.toHaveLength(4)
+  })
+
+  it('is untroubled by a directory that was never made', async () => {
+    await expect(clearAttachments(dir)).resolves.toEqual({ files: 0, bytes: 0 })
   })
 })

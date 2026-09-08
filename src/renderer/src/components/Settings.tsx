@@ -9,9 +9,10 @@ import {
   Sparkles,
   SquareSlash
 } from 'lucide-react'
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
+import type { AttachmentStore } from '@core/attachments.js'
 import { type AgentModel, DEFAULT_MODEL, type Effort, type WorkingMode } from '@core/chats.js'
 import type {
   Config,
@@ -28,6 +29,7 @@ import { modelRows } from './chat/modelRows.js'
 import { Field } from './Field.js'
 import { Mascot } from './Mascot.js'
 import { Modal } from './Modal.js'
+import { useConfirm } from '../hooks/useConfirm.js'
 import { SectionRail } from './SectionRail.js'
 import { AccountCard } from './settings/AccountCard.js'
 import { AuthTerminal } from './settings/AuthTerminal.js'
@@ -507,6 +509,7 @@ function AboutSection({ config }: { config: Config }): React.JSX.Element {
         label={t('settings.installedAt')}
         value={new Date(config.installedAt).toLocaleString()}
       />
+      <PastedImagesRow />
 
       {/* The space is on a wrapper, not on the image: `size-20` sets the box,
           and padding inside it would eat the picture rather than move it.
@@ -517,6 +520,107 @@ function AboutSection({ config }: { config: Config }): React.JSX.Element {
       </div>
     </div>
   )
+}
+
+/**
+ * How much has accumulated where pasted images go, and a way to empty it.
+ *
+ * The one place octopus quietly uses disk. Nothing removes a pasted image on
+ * its own and nothing should: a path in a sent message is a promise the file is
+ * there, and a transcript is read back weeks later — so a reaper that ran on
+ * start-up would break an old conversation to save a folder nobody was looking
+ * at. Making the disk visible and leaving the decision here is the honest
+ * answer, and it is the shape the trust digest and the skill stores already use.
+ */
+function PastedImagesRow(): React.JSX.Element {
+  const { t } = useTranslation()
+  const { confirm, dialog } = useConfirm()
+  const [store, setStore] = useState<AttachmentStore | null>(null)
+
+  useEffect(() => {
+    const controller = new AbortController()
+
+    void (async () => {
+      const answer = await window.octopus.attachments.measure()
+      if (!controller.signal.aborted && answer.ok) setStore(answer.value)
+    })()
+
+    return () => {
+      controller.abort()
+    }
+  }, [])
+
+  const empty = async (): Promise<void> => {
+    const { confirmed } = await confirm({
+      title: t('settings.attachmentsClearTitle'),
+      message: t('settings.attachmentsClearMessage'),
+      detail: t('settings.attachmentsClearDetail'),
+      confirmLabel: t('settings.attachmentsClearConfirm'),
+      cancelLabel: t('settings.attachmentsClearCancel'),
+      destructive: true
+    })
+    if (!confirmed) return
+
+    const answer = await window.octopus.attachments.clear()
+    if (answer.ok) setStore(answer.value)
+  }
+
+  // Nothing at all until the answer arrives: a row saying "0 images" and then
+  // correcting itself to twelve is worse than a row that appears once.
+  if (store === null) return <></>
+
+  return (
+    <>
+      <div className="flex items-baseline justify-between gap-4">
+        <span className="text-ink-soft">{t('settings.attachments')}</span>
+        {store.files === 0 ? (
+          <span className="text-ink-faint text-[11px]">{t('settings.attachmentsEmpty')}</span>
+        ) : (
+          <span className="flex items-baseline gap-2">
+            <span className="text-ink-faint text-[11px]">
+              {t('settings.attachmentsHeld', {
+                count: store.files,
+                size: fileSize(store.bytes)
+              })}
+            </span>
+            <Button
+              size="sm"
+              onClick={() => {
+                void empty()
+              }}
+            >
+              {t('settings.attachmentsClear')}
+            </Button>
+          </span>
+        )}
+      </div>
+      {dialog}
+    </>
+  )
+}
+
+/**
+ * A size somebody can judge at a glance, in the reader's own numbering.
+ *
+ * Two units rather than one: a folder of screenshots is megabytes and the
+ * answer for three of them is not "0 MB", which reads as a bug rather than as a
+ * small number. `Intl` carries the unit and the decimal separator, so neither
+ * is spelled out in a translation that would then have to be kept in step.
+ */
+function fileSize(bytes: number): string {
+  const kilobytes = bytes / 1024
+
+  return kilobytes < 1024
+    ? new Intl.NumberFormat(undefined, {
+        style: 'unit',
+        unit: 'kilobyte',
+        maximumFractionDigits: 0
+      }).format(kilobytes)
+    : new Intl.NumberFormat(undefined, {
+        style: 'unit',
+        unit: 'megabyte',
+        maximumFractionDigits: 1
+      }).format(kilobytes / 1024)
 }
 
 /** A value the user can read and copy but not change. */
