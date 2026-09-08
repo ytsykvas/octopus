@@ -211,6 +211,15 @@ it would go stale the moment they edited the original. The chip above the field
 names the file and holds the whole path on hover; taking it back before sending
 is a click.
 
+**One strip carries both the files and the review notes**, and it is drawn only
+when it has something on it — the way the attic above it is. An empty rule over
+the field would be chrome asserting that a review exists. Files come first and
+stay first: a file is what the message is about more often than a note is, and a
+strip that reordered as notes arrived would be hard to aim a click at. It has
+room above as well as below, or the chips touch the attic's rule and read as
+part of the row above rather than as part of the message they are going out
+with.
+
 The **paste** is the one exception and cannot be anything else, since a
 clipboard carries a picture rather than a file. That one is written under
 `~/.octopus/attachments/`, and that directory goes to every session as a root of
