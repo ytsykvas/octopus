@@ -954,6 +954,18 @@ link route, it is how the name gets on screen before it is decided. What the
 source suggests is prefilled: a subagent's own `name`, a file's own name tidied
 (`Run Checks.md` becomes `run-checks`), and nothing at all for pasted text.
 
+**A quit waits for what the sessions were writing, for up to a second.** A
+transcript is append-only JSONL, so a write cut in half leaves a partial line the
+reader refuses — and the reader is what a reopened conversation is drawn from.
+`will-quit` is synchronous, so waiting means refusing the first pass, quitting
+again once the promise settles, and a flag so the second falls through.
+
+The ceiling is `SHUTDOWN_GRACE_MS`, and what ends at it is the **waiting**
+rather than the write: a filesystem write in flight cannot be called back, and
+`within` says "I stopped waiting" rather than "it stopped". A truncated
+transcript is worse than a slow quit up to about a second and worse than nothing
+after it, which is where the number comes from rather than from any measurement.
+
 **About says how much the pasted images weigh, with a way to empty them.** It is
 the one place octopus quietly uses disk: nothing removes a pasted image on its
 own, and nothing should — a path in a sent message is a promise the file is

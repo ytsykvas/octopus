@@ -180,11 +180,34 @@ async function start(): Promise<void> {
   }
 
   const terminals = new TerminalManager()
-  app.on('will-quit', () => {
+
+  /*
+   * The quit waits for what the sessions were writing, and then goes.
+   *
+   * `will-quit` is synchronous, so waiting means the usual dance: refuse the
+   * first pass, quit again once the promise settles, and a flag so the second
+   * pass falls through. Thrown away with `void`, as it was, the process exited
+   * with a transcript append wherever it had got to — and a transcript is
+   * append-only JSONL, so a line cut in half is a conversation that will not
+   * reopen.
+   *
+   * It cannot hang: `closeChats` is bounded by `SHUTDOWN_GRACE_MS`, and what
+   * ends at that ceiling is the waiting rather than the write.
+   */
+  let leaving = false
+  app.on('will-quit', (event) => {
+    if (leaving) return
+
+    leaving = true
+    event.preventDefault()
+
+    // First and synchronously: each holds a pseudo-terminal, and one not
+    // disposed outlives the application whatever happens after this line.
     terminals.disposeAll()
-    // Each live session holds a child process of its own; unclosed, they
-    // outlive the application exactly as an orphaned pseudo-terminal would.
-    void service.closeChats()
+
+    void service.closeChats().finally(() => {
+      app.quit()
+    })
   })
 
   registerIpc(service, terminals, {

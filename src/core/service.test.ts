@@ -39,6 +39,7 @@ import {
   type ChatStatusEvent,
   createService as makeService,
   sameWindows,
+  SHUTDOWN_GRACE_MS,
   type OctopusService,
   type ServiceOptions,
   type UsageOutcome,
@@ -6563,6 +6564,28 @@ describe('the agent chat', () => {
 
       release()
       await expect(closing).resolves.toBeUndefined()
+    })
+
+    /*
+     * A quit is worth a moment and not a hang. A transcript append cut in half
+     * is a conversation that will not reopen, so this waits — but a session
+     * that will not close must not hold the application open, and what ends at
+     * the ceiling is the **waiting** rather than the write, which cannot be
+     * called back.
+     */
+    it('gives up on a session that will not close, rather than holding the app open', async () => {
+      const { service, workspaceId } = await withWorkspace()
+      const chat = await service.openChat(workspaceId)
+      await service.sendToChat(chat.id, 'work')
+
+      // Never resolves, which is the case the ceiling exists for.
+      usageAnswer = () => new Promise(() => undefined)
+      agent().emit(resultMessage)
+
+      const started = Date.now()
+      await expect(service.closeChats()).resolves.toBeUndefined()
+
+      expect(Date.now() - started).toBeLessThan(SHUTDOWN_GRACE_MS * 4)
     })
 
     it('has nothing to do when no session was ever started', async () => {

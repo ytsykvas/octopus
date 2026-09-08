@@ -1,6 +1,6 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 
-import { allOf } from './parallel.js'
+import { allOf, within } from './parallel.js'
 
 /** A promise that settles after a tick, so "waited for" is observable. */
 function later<T>(value: T, ms: number, done?: () => void): Promise<T> {
@@ -101,5 +101,52 @@ describe('reads made at once', () => {
   // carried back.
   it('treats a rejection with null as a failure rather than as success', async () => {
     await expect(allOf([refusing(null), Promise.resolve('kept')])).rejects.toThrow('null')
+  })
+})
+
+describe('waiting, but not for ever', () => {
+  it('answers as soon as the work is done, and says it was', async () => {
+    await expect(within(1_000, later('done', 1))).resolves.toBe(true)
+  })
+
+  /*
+   * The work is **not** cancelled — a filesystem write in flight is in flight.
+   * What ends is the waiting, and saying which of the two happened is the whole
+   * honesty of this: "I stopped waiting", not "it stopped".
+   */
+  it('gives up after the ceiling, and says it gave up', async () => {
+    let finished = false
+    const slow = later('eventually', 60, () => {
+      finished = true
+    })
+
+    await expect(within(5, slow)).resolves.toBe(false)
+    expect(finished).toBe(false)
+
+    // Still running, and still finishing: nothing was called back.
+    await slow
+    expect(finished).toBe(true)
+  })
+
+  /*
+   * Whether the work went well is the work's own business, reported wherever
+   * such things are reported. This answers only whether it is over.
+   */
+  it('counts a failure as finishing', async () => {
+    await expect(within(1_000, failsLater(new Error('nope'), 1))).resolves.toBe(true)
+  })
+
+  // Or a process with nothing else to do would sit out the rest of the ceiling
+  // before exiting, which for a quit is the delay this exists to avoid.
+  it('leaves no timer running once the work is done', async () => {
+    vi.useFakeTimers()
+    try {
+      const waiting = within(60_000, Promise.resolve('done'))
+
+      await expect(waiting).resolves.toBe(true)
+      expect(vi.getTimerCount()).toBe(0)
+    } finally {
+      vi.useRealTimers()
+    }
   })
 })

@@ -15,10 +15,14 @@
  * assertion passed, the test ended, and `rm` raced a `git` that was still
  * making files.
  *
- * So this waits for **all** of them and then reports the first failure. The
+ * So `allOf` waits for **all** of them and then reports the first failure. The
  * cost is the milliseconds between the first rejection and the last answer; what
  * it buys is that a caller holding a directory knows, when this resolves or
  * rejects, that nothing it started is still writing into it.
+ *
+ * `within` is the other half of the same subject: waiting properly, but not for
+ * ever. Some work is worth a moment and not a hang — a quit that waits for a
+ * transcript append is right up to about a second and wrong after it.
  */
 
 import { inspect } from 'node:util'
@@ -56,4 +60,45 @@ export async function allOf<T extends readonly unknown[] | []>(
   }
 
   return answers as { -readonly [K in keyof T]: Awaited<T[K]> }
+}
+
+/**
+ * Waits for work, and gives up after a while.
+ *
+ * Answers whether the work finished. A caller that has to go on either way —
+ * quitting, closing a pane — needs a bounded wait rather than a promise it must
+ * trust, and needs to be told which of the two happened rather than guessing
+ * from the absence of a failure.
+ *
+ * The work is **not** cancelled when the ceiling is reached, because it cannot
+ * be: a filesystem write in flight is in flight. What ends is the waiting, and
+ * that distinction is the whole honesty of this function — it says "I stopped
+ * waiting", not "it stopped".
+ *
+ * A failure counts as finishing. Whether the work went well is the work's own
+ * business and is reported wherever such things are reported; this answers only
+ * whether it is over.
+ */
+export async function within(ms: number, work: Promise<unknown>): Promise<boolean> {
+  let timer: ReturnType<typeof setTimeout> | undefined
+
+  const ceiling = new Promise<false>((resolve) => {
+    timer = setTimeout(() => {
+      resolve(false)
+    }, ms)
+  })
+
+  try {
+    return await Promise.race([
+      work.then(
+        () => true,
+        () => true
+      ),
+      ceiling
+    ])
+  } finally {
+    // Or a process with nothing else to do would sit out the rest of the
+    // ceiling before exiting — which for a quit is the delay this is avoiding.
+    clearTimeout(timer)
+  }
 }

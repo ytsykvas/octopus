@@ -150,6 +150,7 @@ import {
   stateTempFile
 } from './paths.js'
 import { DOWNLOAD_TIMEOUT_MS } from './download.js'
+import { within } from './parallel.js'
 import {
   ensureLibrary,
   importLibraryItem,
@@ -1141,9 +1142,25 @@ export interface OctopusService {
    * Called when the application quits, and by the tests before the temporary
    * directory they gave it goes: a write still running when `rm` starts is a
    * failure in whichever test the runner tears down next.
+   *
+   * Bounded by `SHUTDOWN_GRACE_MS`, so a session that will not close cannot
+   * hold the application open. What ends at the ceiling is the **waiting** —
+   * the write itself is in flight and cannot be called back — and that is the
+   * honest reading of a quit: worth a moment, not worth a hang.
    */
   closeChats(): Promise<void>
 }
+
+/**
+ * How long a quit waits for what the sessions were writing.
+ *
+ * A transcript is append-only JSONL, so a write cut in half leaves a partial
+ * line the reader refuses — and the reader is what a reopened conversation is
+ * drawn from. A truncated transcript is worse than a slow quit up to about a
+ * second, and worse than nothing after it, which is where this number comes
+ * from rather than from any measurement.
+ */
+export const SHUTDOWN_GRACE_MS = 1_000
 
 /**
  * Creates the service, reading state and config from disk.
@@ -4527,19 +4544,30 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
        * gives: a session that ends leaves one nobody will ever answer. On the
        * way out it is worse than untidy — `canUseTool` blocks on that promise,
        * so the turn behind it never ends, and the transcript write it is
-       * holding never finishes.
+       * holding never finishes. An MCP server's question holds a tool call the
+       * same way.
        */
       for (const chatId of new Set([...pending.values()].map((request) => request.chatId))) {
         abandonPermissions(chatId)
       }
+      for (const chatId of new Set(
+        [...pendingElicitations.values()].map((request) => request.chatId)
+      )) {
+        abandonElicitations(chatId)
+      }
 
-      // Every one of them, even if an earlier close fails: each holds a child
-      // process, and one that is not closed outlives the application.
-      await Promise.allSettled(live.map((session) => session.close()))
+      return within(
+        SHUTDOWN_GRACE_MS,
+        (async () => {
+          // Every one of them, even if an earlier close fails: each holds a
+          // child process, and one that is not closed outlives the application.
+          await Promise.allSettled(live.map((session) => session.close()))
 
-      // And what they started on their way out, which is the half of shutting
-      // down that has nothing to do with child processes.
-      await settle()
+          // And what they started on their way out, which is the half of
+          // shutting down that has nothing to do with child processes.
+          await settle()
+        })()
+      ).then(() => undefined)
     }
   }
 }
