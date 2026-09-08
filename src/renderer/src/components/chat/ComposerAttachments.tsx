@@ -70,7 +70,11 @@ export function ComposerAttachments({
   if (notes.length === 0 && files.length === 0) return null
 
   return (
-    <div className="flex flex-wrap gap-1 px-1 pb-1">
+    /* Room above as well as below. The strip sits directly under the attic's
+       bottom rule, and with padding on one side only the chips touched the line
+       while floating over the field — which read as though they belonged to the
+       row above rather than to the message. */
+    <div className="flex flex-wrap gap-1 px-1 pt-2 pb-1">
       {/* Files first: they are what the message is about more often than a note
           is, and a strip that reorders as notes arrive would be hard to aim at. */}
       {files.map((path) => (
