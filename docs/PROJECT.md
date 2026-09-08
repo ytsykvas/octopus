@@ -333,7 +333,7 @@ A workspace holds up to **three conversations at once**, switched by a strip of 
 
 They run in the same worktree with no locking between them, deliberately (§16). Every tab stays mounted while its workspace is open, so a conversation keeps its place in the log and the answer being streamed into it while another is on screen — but only the one showing may raise a dialog, since a modal about work the reader cannot see is the worst kind of interruption.
 
-**Right pane — changes, terminal, scripts, the pull request and notes** in tabs. Shows what the agent did and gives manual access to the workspace. Draggable, and both its width and which tab is showing persist. Whether it is folded away does not — that is a mood about the current window. Its active tab carries the open project's colour, falling back to the accent while no project is open.
+**Right pane — terminal, changes, scripts, the pull request and notes** in tabs. Shows what the agent did and gives manual access to the workspace. Draggable, and both its width and which tab is showing persist. Whether it is folded away does not — that is a mood about the current window. Its active tab carries the open project's colour, falling back to the accent while no project is open.
 
 #### Shortcuts
 

@@ -978,13 +978,19 @@ tab. Read once when the section opens rather than watched, because nothing
 announces a session starting and a row that quietly went stale would be worse
 than one the reader knows is a snapshot.
 
-**Notes is a tab of an icon, and the only one.** The tab row decides the pane's
-narrowest allowed width — the measurement two paragraphs down is exactly that —
-so a fifth **word** would widen the floor for everybody for ever, to carry a tab
-most people open rarely. An icon costs about a third of it. What it may not lose
-along with the word is its name: the label moves to the button's `aria-label`
-and its tooltip rather than disappearing, because a tab a screen reader
-announces as nothing would be the real price of the saving.
+**Two tabs are icons, and they are the two ends.** The tab row decides the
+pane's narrowest allowed width — the measurement further down is exactly that —
+so every **word** in the row raises the floor for everybody for ever. Terminal
+and Notes carry an icon each instead, which costs about a third of a word.
+
+Which two is not arbitrary. The ends are the tools somebody reaches for — a
+shell and a scratchpad — and the three in the middle are about the work itself,
+which is what the words are worth spending the width on. An icon between words
+would read as a mistake; at the ends they read as what they are.
+
+What they may not lose along with the word is their name: the label moves to the
+button's `aria-label` and its tooltip rather than disappearing, because a tab a
+screen reader announces as nothing would be the real price of the saving.
 
 **The note is the one thing a workspace carries that the agent never reads.**
 Everything else in the pane is something the agent acts on or produced; this is
@@ -1082,8 +1088,8 @@ for the same turn endings and settles for the same 300ms, and re-reads only the
 project the workspace belongs to: a turn ending is a poor reason to run
 `git status` over every workspace of every project.
 
-**The right pane carries five tabs.** Changes and Terminal, then Scripts, Pull
-request, and Notes. Build and server were two tabs and are now two halves of one: they
+**The right pane carries five tabs.** Terminal, then Changes, Scripts and Pull
+request, then Notes. Build and server were two tabs and are now two halves of one: they
 are the same question — what this workspace runs — and splitting it cost a fifth
 of a row whose width has to be **measured** because it barely fits. Stacked, a
 server can be seen running while a build is read, which two tabs could not show
@@ -1475,10 +1481,12 @@ inside it, or once folded there is nothing left to click, and the way back has t
 be hunted for somewhere else.
 
 Both side panes are resizable and their widths persist. The right pane's floor is
-**measured, not chosen**: it is whatever its five tabs need. The labels change
-width with the language, a number picked against English left the Ukrainian ones
-overflowing, and since the pane does not shrink, anything sticking out of it
-pushed the window wider and put a horizontal scrollbar under the application.
+**measured, not chosen**: it is whatever its five tabs need. The three that
+carry a label change width with the language — a number picked against English
+left the Ukrainian ones overflowing, and since the pane does not shrink,
+anything sticking out of it pushed the window wider and put a horizontal
+scrollbar under the application. The two that carry an icon do not change at
+all, which is the whole reason they carry one.
 
 **The tabs cannot wrap and cannot shrink**, and that is what makes the
 measurement mean anything. A button free to squash reports the width it was

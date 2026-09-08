@@ -7,7 +7,8 @@ import {
   Pencil,
   Play,
   RotateCw,
-  Square
+  Square,
+  SquareTerminal
 } from 'lucide-react'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
@@ -56,12 +57,18 @@ const TABS: readonly {
    */
   readonly Icon?: LucideIcon
 }[] = [
+  /*
+   * An icon, three words, an icon.
+   *
+   * The two ends are the tools somebody reaches for — a shell and a scratchpad
+   * — and the three in the middle are about the work itself, which is what the
+   * words are worth spending the width on. Icons between words would read as a
+   * mistake; at the ends they read as what they are.
+   */
+  { id: 'terminal', labelKey: 'panel.terminal', Icon: SquareTerminal },
   { id: 'diff', labelKey: 'panel.changes' },
-  { id: 'terminal', labelKey: 'panel.terminal' },
   { id: 'scripts', labelKey: 'panel.scripts' },
   { id: 'pullRequest', labelKey: 'panel.pullRequest' },
-  // Last, because an icon between words reads as a mistake — and because it
-  // leaves the four that were here where they were.
   { id: 'notes', labelKey: 'panel.notes', Icon: NotebookPen }
 ]
 
@@ -680,18 +687,17 @@ export function RightPanel({
         ))}
       </div>
 
-      {/* The note is the one thing a workspace carries that the agent never
-          reads. Remounted per workspace by the key, which is what makes its
-          debounced save safe: an editor that loads against one target and saves
-          a moment later writes the old text into the newly chosen one. */}
+      {/* Hidden, never unmounted: a session belongs to the workspace, not to
+          whether its tab happens to be on screen. Switching to Changes used to
+          kill every terminal in the project. */}
       <div
-        aria-hidden={tab !== 'notes'}
-        className={`flex min-h-0 flex-1 flex-col ${tab === 'notes' ? '' : 'hidden'}`}
+        aria-hidden={tab !== 'terminal'}
+        className={`flex min-h-0 flex-1 flex-col ${tab === 'terminal' ? '' : 'hidden'}`}
       >
-        <NotesPanel
-          key={activeWorkspaceId ?? 'none'}
-          workspaceId={activeWorkspaceId}
-          notes={workspaces.find((one) => one.id === activeWorkspaceId)?.notes ?? ''}
+        <WorkspaceTerminals
+          workspaces={workspaces}
+          activeId={activeWorkspaceId}
+          visible={tab === 'terminal'}
         />
       </div>
 
@@ -717,20 +723,6 @@ export function RightPanel({
           comments={comments}
           revert={revert}
           onError={onError}
-        />
-      </div>
-
-      {/* Hidden, never unmounted: a session belongs to the workspace, not to
-          whether its tab happens to be on screen. Switching to Changes used to
-          kill every terminal in the project. */}
-      <div
-        aria-hidden={tab !== 'terminal'}
-        className={`flex min-h-0 flex-1 flex-col ${tab === 'terminal' ? '' : 'hidden'}`}
-      >
-        <WorkspaceTerminals
-          workspaces={workspaces}
-          activeId={activeWorkspaceId}
-          visible={tab === 'terminal'}
         />
       </div>
 
@@ -1145,6 +1137,20 @@ export function RightPanel({
           onEditInstructions={onEditInstructions}
           onError={onError}
           onRemoveWorkspace={onRemoveWorkspace}
+        />
+      </div>
+      {/* The note is the one thing a workspace carries that the agent never
+          reads. Remounted per workspace by the key, which is what makes its
+          debounced save safe: an editor that loads against one target and saves
+          a moment later writes the old text into the newly chosen one. */}
+      <div
+        aria-hidden={tab !== 'notes'}
+        className={`flex min-h-0 flex-1 flex-col ${tab === 'notes' ? '' : 'hidden'}`}
+      >
+        <NotesPanel
+          key={activeWorkspaceId ?? 'none'}
+          workspaceId={activeWorkspaceId}
+          notes={workspaces.find((one) => one.id === activeWorkspaceId)?.notes ?? ''}
         />
       </div>
     </section>

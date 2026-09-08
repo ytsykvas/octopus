@@ -288,17 +288,35 @@ describe('RightPanel', () => {
   })
 
   /*
-   * The notes tab is an icon, because the row sets the pane's narrowest allowed
-   * width and a fifth **word** would widen the floor for everybody. What it may
-   * not lose along with the word is its name — a tab a screen reader announces
-   * as nothing would be the real cost of the saving.
+   * Two tabs are icons, because the row sets the pane's narrowest allowed width
+   * and every **word** in it raises that floor for everybody. What they may not
+   * lose along with the word is their name — a tab a screen reader announces as
+   * nothing would be the real cost of the saving.
    */
-  it('names the notes tab even though it has no word on it', () => {
+  it('names the tabs that have no word on them', () => {
     renderPanel()
 
-    const notes = screen.getByRole('button', { name: 'Notes' })
-    expect(notes).toHaveTextContent('')
-    expect(notes).toHaveAttribute('title', 'Notes')
+    for (const name of ['Terminal', 'Notes']) {
+      const tab = screen.getByRole('button', { name })
+      expect(tab).toHaveTextContent('')
+      expect(tab).toHaveAttribute('title', name)
+    }
+  })
+
+  /*
+   * An icon, three words, an icon: the ends are the tools somebody reaches for
+   * and the middle is the work. Asserted in order, because nothing else here
+   * would notice the row being shuffled back.
+   */
+  it('opens the row with the terminal and closes it with the notes', () => {
+    renderPanel()
+
+    const row = screen.getByRole('button', { name: 'Terminal' }).parentElement
+    const labels = [...(row?.children ?? [])].map(
+      (one) => one.getAttribute('title') ?? one.textContent
+    )
+
+    expect(labels).toEqual(['Terminal', 'Changes', 'Scripts', 'Pull request', 'Notes'])
   })
 
   /*
