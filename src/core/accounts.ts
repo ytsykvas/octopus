@@ -7,6 +7,7 @@
  * where those tools put them.
  */
 
+import { allOf } from './parallel.js'
 import { execFile } from 'node:child_process'
 import { promisify } from 'node:util'
 
@@ -226,7 +227,9 @@ export async function readTokenScopes(exec: CommandExec = defaultExec): Promise<
  * three-second budget that a second round trip would have spent twice.
  */
 export async function checkGitHubAccount(exec: CommandExec = defaultExec): Promise<GitHubAccount> {
-  const [raw, scopes] = await Promise.all([
+  // `allOf`, so a scope read that fails does not leave `gh api user` running
+  // for nobody. The first is already caught; the second is the one that throws.
+  const [raw, scopes] = await allOf([
     exec('gh', ['api', 'user']).catch(() => null),
     readTokenScopes(exec)
   ])
@@ -253,7 +256,7 @@ export async function checkGitHubAccount(exec: CommandExec = defaultExec): Promi
 
 /** Both accounts at once — they are independent, so the checks run in parallel. */
 export async function checkAccounts(exec: CommandExec = defaultExec): Promise<AccountsStatus> {
-  const [claude, github] = await Promise.all([checkClaudeAccount(exec), checkGitHubAccount(exec)])
+  const [claude, github] = await allOf([checkClaudeAccount(exec), checkGitHubAccount(exec)])
   return { claude, github }
 }
 

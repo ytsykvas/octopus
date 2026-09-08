@@ -14,6 +14,7 @@ import { join } from 'node:path'
 
 import { CodedError } from './codedError.js'
 import { type GitExec, GitError, OUTPUT_TOO_LARGE } from './git.js'
+import { allOf } from './parallel.js'
 
 /** Reads a file's bytes; a parameter so tests need no filesystem. */
 export type ReadBytes = (path: string) => Promise<Uint8Array>
@@ -727,7 +728,10 @@ export async function readWorkspaceDiff(
 
   const baseCommit = await mergeBase(exec, options.baseBranch)
 
-  const [numstat, nameStatus, raw, untracked] = await Promise.all([
+  // `allOf`: four `git` reads of one worktree, and a failure in any of them
+  // must not leave the other three running against a directory the caller is
+  // about to stop holding.
+  const [numstat, nameStatus, raw, untracked] = await allOf([
     exec([...RAW_PATHS, 'diff', '--numstat', '-z', ...DIFF_FLAGS, baseCommit]),
     exec([...RAW_PATHS, 'diff', '--name-status', '-z', ...DIFF_FLAGS, baseCommit]),
     // The third, because neither of the two above reports a mode and the

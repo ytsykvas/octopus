@@ -21,6 +21,7 @@ import { workspacePath } from './paths.js'
 import { workspaceSlug } from './scriptEnv.js'
 import { firstFreeBlock, POOL_START } from './ports.js'
 import type { Project, State, Workspace } from './store.js'
+import { allOf } from './parallel.js'
 import {
   addWorktree,
   changedFiles,
@@ -668,7 +669,7 @@ export async function countChanges(
 
   await Promise.all(
     workspaces.map(async (workspace) => {
-      const [changedFiles, ahead] = await Promise.all([
+      const [changedFiles, ahead] = await allOf([
         changeCount(workspace, makeExec),
         countAhead(makeExec(workspace.path), baseBranch, workspace.branch)
       ])

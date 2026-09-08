@@ -37,6 +37,10 @@
   --danger-bg: #fdeaea;
   --warning-bg: #fdf3e3;
   --info-bg: #e4f4f8;
+  /* The ground a chosen-of-several control sits on. In the same family as the
+     status backgrounds above and used the same way: pale enough for `--ink` to
+     read on, saturated enough to say "this one". */
+  --accent-bg: #e8eefd;
 
   /* The ground a changed line of code is drawn on.
      Paler than the status backgrounds beside them, and measured rather than
@@ -92,6 +96,7 @@
   --danger-bg: #2b1516;
   --warning-bg: #2b1f0d;
   --info-bg: #0d2429;
+  --accent-bg: #132038;
 
   --diff-added-bg: #101d15;
   --diff-removed-bg: #211318;
@@ -134,6 +139,7 @@
   --color-warning: var(--warning);
   --color-info: var(--info);
 
+  --color-accent-bg: var(--accent-bg);
   --color-success-bg: var(--success-bg);
   --color-danger-bg: var(--danger-bg);
   --color-warning-bg: var(--warning-bg);

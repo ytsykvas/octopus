@@ -181,6 +181,22 @@ a temporary directory. Writing to `~/.octopus` while the app runs leaves it
 acting on a stale in-memory copy — a repro that corrupts what it diagnoses is
 worse than no repro.
 
+**A colour class is checked by nothing, so one test checks them.**
+`src/renderer/src/tokens.test.ts` reads every `--color-*` the stylesheet maps,
+takes the first segment of each as a **family** — `accent`, `ink`, `line`,
+`diff` — and then requires that every `bg-`/`text-`/`border-` class in the window
+reaching for one of those families names a token that exists. It says nothing
+about Tailwind's own palette, which is Tailwind's business, and nothing needs
+maintaining as either side changes.
+
+That is where the mistake actually happens: a name invented next to a real one,
+and the two read alike. `bg-accent-bg` was written against a
+`--color-accent-bg` that did not exist, and Tailwind emits no rule for a colour
+it cannot resolve and no error either — so the chosen job tab was marked by its
+border alone until somebody copied the class somewhere the missing fill showed.
+TypeScript cannot see inside a class string and the linter has no opinion about
+one; this is the only thing that can.
+
 **A test that starts a service closes it**, and neither suite that does relies
 on remembering to. `service.test.ts` and `ipc.test.ts` each wrap
 `createService` under its own name, keep what it made, and close it all in

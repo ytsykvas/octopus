@@ -324,10 +324,10 @@ That removes the whole mechanism behind every `ENOTEMPTY` sighting in this
 file — the unanswered permission requests of 2026-09-06, and the
 `pullRequests.test.ts` one of 2026-09-05 in so far as it shares the shape.
 
-**What is left is the renderer half**, which has no temporary directory and no
-service: `⌘T` in `App.test.tsx` and the two in `Chat.test.tsx`. Nothing above
-explains those, and the guard added on 2026-09-02 — `refuseSilence` — is still
-the thing that will name them when they next appear.
+**What was left after that was the renderer half and this file**, and this file
+is now accounted for below. The renderer sightings — `⌘T` in `App.test.tsx` and
+the two in `Chat.test.tsx` — have no temporary directory, and the guard added on
+2026-09-02, `refuseSilence`, is still the thing that will name them.
 
 **2026-09-08: it appeared, and the message was thrown away again.** One renderer
 suite reported `1 failed | 2182 passed` inside a `npm run check`; the run's
@@ -339,6 +339,36 @@ That is the third sighting lost the same way, and the instruction two paragraphs
 up said exactly not to do it. **Write the run to a file and read the file** —
 `npm run check > check.log 2>&1` — because a filter on the pipe is how every one
 of these has escaped.
+
+## The `pullRequests.test.ts` half is closed, with the message that named it
+
+**2026-09-08, one run later**, doing exactly that:
+
+    FAIL  src/core/pullRequests.test.ts > reading a branch > refuses an answer that is not JSON
+    Error: ENOTEMPTY: directory not empty, rmdir '…/octopus-pr-tuqi5Y/work/.git'
+
+The lead in the section above was right, and the mechanism is exact.
+`readPullRequest` makes four reads at once: one `gh` and **three `git`**. The
+tests this note has named as victims every time — `refuses an answer that is not
+JSON`, `refuses an answer shaped like something else`, `says GitHub could not be
+asked rather than inventing an answer` — are precisely the ones where the `gh`
+half **rejects**. `Promise.all` rejects the moment it does, the assertion passes,
+the test ends, and three `git` processes are still making files inside `.git`
+while `afterEach` removes it.
+
+That explains every recorded oddity at once: why this file is the repeat victim
+(it spawns the most), why the failure lands in whichever test is torn down next
+rather than in the one that caused it, why a busy machine makes it likelier, and
+why a clean CI runner sees it too.
+
+`parallel.ts` carries the fix — `allOf`, which waits for all of them and then
+reports the first failure in the order written — and the four places that run a
+child process beside a fallible read use it: `pullRequests.ts`, `accounts.ts`
+twice, `diff.ts` and `workspaces.ts`. `pullRequests.test.ts` has a test that
+fails under `Promise.all` and passes under `allOf`.
+
+**What is left is the renderer half only**, which has no temporary directory,
+no service and no spawn. Nothing recorded here explains it.
 
 **And one thing this exposed rather than fixed**, recorded separately in
 `a-quit-does-not-wait-for-the-record-it-is-writing.md`: `main` calls

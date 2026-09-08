@@ -6,7 +6,7 @@ import { promisify } from 'node:util'
 
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 
-import { gitIn } from './git.js'
+import { type GitExec, gitIn } from './git.js'
 import { GitHubError } from './github.js'
 import {
   BRANCH_REQUEST_LIMIT,
@@ -248,6 +248,39 @@ describe('reading a branch', () => {
     await expect(readPullRequest(branch, 'main', gh, workExec())).rejects.toMatchObject({
       code: 'listFailed'
     })
+  })
+
+  /*
+   * The `ENOTEMPTY` that failed one full run in five for a month, as one test.
+   *
+   * Three `git` reads run beside the `gh` one, and the `gh` one is what refuses
+   * an answer of the wrong shape. Under `Promise.all` the refusal arrived while
+   * the three were still running: the assertion passed, the test ended, and the
+   * `rm` in `afterEach` raced a `git` still making files inside `.git`. The
+   * failure then landed in whichever test the runner tore down next, which is
+   * why it was never the one that caused it.
+   */
+  it('waits for the reads it started when another one fails first', async () => {
+    const started: string[] = []
+    const finished: string[] = []
+
+    const slowGit: GitExec = async (args) => {
+      const name = args.join(' ')
+      started.push(name)
+      await new Promise((resolve) => setTimeout(resolve, 20))
+      finished.push(name)
+
+      return ''
+    }
+
+    const { gh } = fakeGh({ list: 'not json' })
+
+    await expect(readPullRequest('b', 'main', gh, slowGit)).rejects.toMatchObject({
+      code: 'listFailed'
+    })
+
+    expect(started.length).toBeGreaterThan(0)
+    expect(finished).toHaveLength(started.length)
   })
 
   it('refuses an answer shaped like something else', async () => {

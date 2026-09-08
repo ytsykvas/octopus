@@ -31,6 +31,7 @@ import {
   toPullRequestState
 } from './pullRequestShapes.js'
 import { commitAll, hasUncommittedChanges } from './worktree.js'
+import { allOf } from './parallel.js'
 
 const run = promisify(execFile)
 
@@ -127,7 +128,12 @@ export async function readPullRequest(
   gh: GhExec,
   git: GitExec
 ): Promise<PullRequestView> {
-  const [remote, dirty, pushed, ahead] = await Promise.all([
+  /* `allOf`, not `Promise.all`: the `gh` read below refuses an answer of the
+     wrong shape, and three `git` reads are in flight beside it. Rejecting on
+     the first of them left those three writing into a worktree the caller had
+     already moved on from — which is the `ENOTEMPTY` that failed a full run in
+     five for a month. */
+  const [remote, dirty, pushed, ahead] = await allOf([
     listPullRequests(branch, gh),
     hasUncommittedChanges(git),
     isPushed(branch, git),
