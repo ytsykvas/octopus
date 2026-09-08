@@ -202,6 +202,11 @@ describe('channel names', () => {
       'workspaces:envProfile'
     ],
     [
+      'workspaces.setNotes',
+      () => method('workspaces', 'setNotes')('w' as never, 'a note' as never),
+      'workspaces:notes'
+    ],
+    [
       'workspaces.approveScripts',
       () => method('workspaces', 'approveScripts')('w' as never),
       'scripts:approve'

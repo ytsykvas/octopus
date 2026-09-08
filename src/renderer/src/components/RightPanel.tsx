@@ -2,6 +2,8 @@ import {
   ChevronDown,
   ChevronRight,
   ExternalLink,
+  type LucideIcon,
+  NotebookPen,
   Pencil,
   Play,
   RotateCw,
@@ -25,6 +27,7 @@ import type { WorkspaceView } from '@core/workspaces.js'
 
 import { Button } from './Button.js'
 import { DiffPanel } from './diff/DiffPanel.js'
+import { NotesPanel } from './NotesPanel.js'
 import { DropdownMenu } from './DropdownMenu.js'
 import type { DiffView } from './diff/DiffHunk.js'
 import { ResizeHandle } from './ResizeHandle.js'
@@ -40,12 +43,26 @@ import { WorkspaceTerminals } from './WorkspaceTerminals.js'
  */
 const TABS: readonly {
   readonly id: RightPanelTab
-  readonly labelKey: 'panel.changes' | 'panel.terminal' | 'panel.scripts' | 'panel.pullRequest'
+  readonly labelKey:
+    'panel.changes' | 'panel.terminal' | 'panel.scripts' | 'panel.pullRequest' | 'panel.notes'
+  /**
+   * Drawn instead of the label, where there is one.
+   *
+   * Only the notes tab has one, and the reason is the measurement below: the
+   * row sets the pane's narrowest allowed width, so a fifth **word** would
+   * widen the floor for everybody for ever. An icon costs about a third of it.
+   * The label is still what names the button — it moves to `aria-label` and
+   * `title` rather than disappearing.
+   */
+  readonly Icon?: LucideIcon
 }[] = [
   { id: 'diff', labelKey: 'panel.changes' },
   { id: 'terminal', labelKey: 'panel.terminal' },
   { id: 'scripts', labelKey: 'panel.scripts' },
-  { id: 'pullRequest', labelKey: 'panel.pullRequest' }
+  { id: 'pullRequest', labelKey: 'panel.pullRequest' },
+  // Last, because an icon between words reads as a mistake — and because it
+  // leaves the four that were here where they were.
+  { id: 'notes', labelKey: 'panel.notes', Icon: NotebookPen }
 ]
 
 /**
@@ -643,15 +660,39 @@ export function RightPanel({
                squashed to, and the pane then takes that for its floor and
                squashes it again. `Pull request` is where it showed — the label
                broke across two lines inside a row 32px tall. */
-            className={`focus-ring -mb-px h-8 shrink-0 rounded-t-[8px] border px-3 font-medium whitespace-nowrap transition-colors ${
+            // Named for a reader and on hover when the face is an icon. A tab
+            // with no accessible name would be the real cost of dropping the
+            // word, and it is not one worth paying.
+            {...(item.Icon !== undefined && {
+              'aria-label': t(item.labelKey),
+              title: t(item.labelKey)
+            })}
+            className={`focus-ring -mb-px flex h-8 shrink-0 items-center justify-center rounded-t-[8px] border font-medium whitespace-nowrap transition-colors ${
+              item.Icon === undefined ? 'px-3' : 'px-2.5'
+            } ${
               tab === item.id
                 ? 'tab-selected'
                 : 'text-ink-soft hover:bg-muted hover:text-ink border-transparent'
             }`}
           >
-            {t(item.labelKey)}
+            {item.Icon === undefined ? t(item.labelKey) : <item.Icon aria-hidden size={14} />}
           </button>
         ))}
+      </div>
+
+      {/* The note is the one thing a workspace carries that the agent never
+          reads. Remounted per workspace by the key, which is what makes its
+          debounced save safe: an editor that loads against one target and saves
+          a moment later writes the old text into the newly chosen one. */}
+      <div
+        aria-hidden={tab !== 'notes'}
+        className={`flex min-h-0 flex-1 flex-col ${tab === 'notes' ? '' : 'hidden'}`}
+      >
+        <NotesPanel
+          key={activeWorkspaceId ?? 'none'}
+          workspaceId={activeWorkspaceId}
+          notes={workspaces.find((one) => one.id === activeWorkspaceId)?.notes ?? ''}
+        />
       </div>
 
       {/* Every pane below stays mounted and is hidden by a class. `aria-hidden`

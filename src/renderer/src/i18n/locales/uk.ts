@@ -327,6 +327,7 @@ export const uk: Translation = {
     terminal: 'Термінал',
     scripts: 'Скрипти',
     pullRequest: 'Pull request',
+    notes: 'Нотатки',
     collapse: 'Згорнути панель',
     expand: 'Показати панель',
     terminalPlaceholder: 'Виберіть воркспейс, щоб відкрити термінал у його теці.',
@@ -1023,6 +1024,15 @@ export const uk: Translation = {
       cancel: 'Знято, коли хід зупинився.'
     },
     gone: 'Відповіді вже ніхто не чекає.'
+  },
+
+  notes: {
+    placeholder: 'Рядок собі про цей воркспейс. Агент його ніколи не читає.',
+    noWorkspace: 'Оберіть воркспейс, щоб написати про нього нотатку.',
+    remaining_one: 'Лишився {{count}} символ',
+    remaining_few: 'Лишилося {{count}} символи',
+    remaining_many: 'Лишилося {{count}} символів',
+    remaining_other: 'Лишилося {{count}} символів'
   },
 
   trust: {

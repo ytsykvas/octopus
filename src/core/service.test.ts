@@ -8501,6 +8501,103 @@ describe('the agent chat', () => {
   })
 })
 
+describe('the note a workspace carries for its user', () => {
+  it('starts empty and keeps what is written', async () => {
+    const repo = join(dir, 'planner')
+    await initRepo(repo)
+    const service = await createService(paths(dir))
+    const project = await service.addProjectFromPath(repo)
+    const workspace = await service.createWorkspaceIn(project.id)
+
+    const listed = async (): Promise<string | undefined> =>
+      (await service.listWorkspaces(project.id)).find((one) => one.id === workspace.id)?.notes
+
+    await expect(listed()).resolves.toBe('')
+
+    await service.setWorkspaceNotes(workspace.id, 'check the migration before opening it')
+
+    await expect(listed()).resolves.toBe('check the migration before opening it')
+  })
+
+  // One note per workspace is the whole of the feature, so writing one must not
+  // be visible from another.
+  it("leaves another workspace's note alone", async () => {
+    const repo = join(dir, 'planner')
+    await initRepo(repo)
+    const service = await createService(paths(dir))
+    const project = await service.addProjectFromPath(repo)
+    const first = await service.createWorkspaceIn(project.id)
+    const second = await service.createWorkspaceIn(project.id)
+
+    await service.setWorkspaceNotes(first.id, 'mine')
+
+    const listed = await service.listWorkspaces(project.id)
+    expect(listed.find((one) => one.id === first.id)?.notes).toBe('mine')
+    expect(listed.find((one) => one.id === second.id)?.notes).toBe('')
+  })
+
+  it('survives the service being started again', async () => {
+    const repo = join(dir, 'planner')
+    await initRepo(repo)
+    const service = await createService(paths(dir))
+    const project = await service.addProjectFromPath(repo)
+    const workspace = await service.createWorkspaceIn(project.id)
+    await service.setWorkspaceNotes(workspace.id, 'kept')
+
+    const reopened = await createService(paths(dir))
+
+    await expect(reopened.listWorkspaces(project.id).then((all) => all[0]?.notes)).resolves.toBe(
+      'kept'
+    )
+  })
+
+  /*
+   * The whole reason the note is a field on the record rather than a file of
+   * its own: removing the workspace takes it, and renaming keeps it, without
+   * anybody arranging either. A file would have to be moved and deleted by
+   * hand, and the day somebody forgot, a new workspace of the same name would
+   * open holding a stranger's note.
+   */
+  it('goes when its workspace goes', async () => {
+    const repo = join(dir, 'planner')
+    await initRepo(repo)
+    const service = await createService(paths(dir))
+    const project = await service.addProjectFromPath(repo)
+    const workspace = await service.createWorkspaceIn(project.id)
+    await service.setWorkspaceNotes(workspace.id, 'about this one')
+
+    await service.removeWorkspaceById(workspace.id, { force: true })
+
+    await expect(service.listWorkspaces(project.id)).resolves.toEqual([])
+    // And it is gone from the file, not merely from the list: a workspace made
+    // again under the same name must not come back holding it.
+    await expect(readFile(join(dir, 'state.json'), 'utf8')).resolves.not.toContain('about this one')
+  })
+
+  it('follows a workspace that is renamed', async () => {
+    const repo = join(dir, 'planner')
+    await initRepo(repo)
+    const service = await createService(paths(dir))
+    const project = await service.addProjectFromPath(repo)
+    const workspace = await service.createWorkspaceIn(project.id)
+    await service.setWorkspaceNotes(workspace.id, 'kept through the rename')
+
+    await service.renameWorkspaceById(workspace.id, 'renamed')
+
+    await expect(service.listWorkspaces(project.id).then((all) => all[0]?.notes)).resolves.toBe(
+      'kept through the rename'
+    )
+  })
+
+  it('refuses a workspace that is not there', async () => {
+    const service = await createService(paths(dir))
+
+    await expect(service.setWorkspaceNotes('planner/nowhere', 'x')).rejects.toBeInstanceOf(
+      WorkspaceError
+    )
+  })
+})
+
 describe('the commands and subagents a store holds', () => {
   let service: OctopusService
   let projectId: string

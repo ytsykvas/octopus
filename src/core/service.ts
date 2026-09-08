@@ -640,6 +640,14 @@ export interface OctopusService {
   /** Puts one workspace on a set of its own, or `null` to follow the project. */
   setWorkspaceEnvProfile(workspaceId: string, name: string | null): Promise<void>
   /**
+   * Writes the note this workspace carries for its user.
+   *
+   * Not for the agent: nothing here reaches a prompt. It is a line somebody
+   * wrote to themselves about a task that runs for days, and the whole of what
+   * this does is store it.
+   */
+  setWorkspaceNotes(workspaceId: string, notes: string): Promise<void>
+  /**
    * Whether git would keep this project's env file out of a commit.
    *
    * Asked of the checkout, which shares its `.gitignore` with every worktree
@@ -3072,6 +3080,11 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
             : workspace
         )
       }))
+    },
+
+    async setWorkspaceNotes(workspaceId, notes) {
+      const workspace = requireWorkspace(workspaceId)
+      await commit((current) => updateWorkspace(current, workspace.id, { notes }))
     },
 
     async setWorkspaceEnvProfile(workspaceId, name) {

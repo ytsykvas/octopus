@@ -123,6 +123,11 @@ a delete.
 `dialog:pickMarkdown` belongs with them: one file, never a folder — a skill may
 be a directory and neither of these ever is.
 
+`workspaces:notes` writes the line a workspace carries for its user, parsing the
+body rather than trusting it — it lands in `state.json`, which `commit` rewrites
+whole, so its ceiling is paid for by every other field in the file. The window
+enforces the same ceiling in the field itself; this is the boundary behind it.
+
 `terminal:list` answers with every live session — its id and its `owner`, which
 is the workspace it belongs to and what it is running. No argument and not
 scoped to the caller: the session worth finding is the one whose pane is gone,

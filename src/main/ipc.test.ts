@@ -398,6 +398,7 @@ describe('channel table', () => {
     'workspaces:list',
     'workspaces:create',
     'workspaces:rename',
+    'workspaces:notes',
     'workspaces:remove',
     'workspaces:hasChanges',
     'workspaces:diff',
@@ -2671,5 +2672,37 @@ describe('the list of what is still running', () => {
     await expect(
       invoke('terminal:create', { cwd: '/tmp/work', owner: { purpose: 'mining' } })
     ).resolves.toMatchObject({ ok: false })
+  })
+})
+
+describe('the workspace notes channel', () => {
+  it('writes a note and hands it back on the list', async () => {
+    const projectId = await addProject('noted')
+    const workspace = await createWorkspace(projectId)
+
+    await expect(invoke('workspaces:notes', workspace.id, 'remember this')).resolves.toMatchObject({
+      ok: true
+    })
+
+    const listed = (await invoke('workspaces:list', projectId)) as Result<{ notes: string }[]>
+    expect(listed.ok && listed.value[0]?.notes).toBe('remember this')
+  })
+
+  /*
+   * The body is parsed rather than trusted: it is written into `state.json`,
+   * which `commit` rewrites whole, so its ceiling is paid for by every other
+   * field in the file. Types are gone by this point — a renderer sending
+   * something else is the case the parse exists for.
+   */
+  it('refuses a body past the ceiling, and one that is not text', async () => {
+    const projectId = await addProject('noted')
+    const workspace = await createWorkspace(projectId)
+
+    await expect(
+      invoke('workspaces:notes', workspace.id, 'x'.repeat(16_001))
+    ).resolves.toMatchObject({ ok: false })
+    await expect(invoke('workspaces:notes', workspace.id, { text: 'no' })).resolves.toMatchObject({
+      ok: false
+    })
   })
 })

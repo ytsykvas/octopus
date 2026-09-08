@@ -50,6 +50,7 @@ import { SkillNameSchema } from '../core/skillNames.js'
 import { FormValuesSchema } from '../core/elicitation.js'
 import { LibraryImportSchema, LibraryRawSchema } from '../core/library.js'
 import { LibraryKindSchema, LibraryNameSchema } from '../core/libraryNames.js'
+import { NotesBodySchema } from '../core/notes.js'
 import { StoreSchema } from '../core/stores.js'
 import type {
   ChatEvent,
@@ -655,6 +656,13 @@ export function registerIpc(
 
   host.handle('workspaces:create', (_event, projectId: string) =>
     attempt(() => service.createWorkspaceIn(projectId))
+  )
+
+  /* The body is parsed rather than trusted: it arrives from the renderer and is
+     written into `state.json`, which `commit` rewrites whole — so its ceiling is
+     paid for by every other field in the file. */
+  host.handle('workspaces:notes', (_event, workspaceId: string, notes: unknown) =>
+    attempt(() => service.setWorkspaceNotes(workspaceId, NotesBodySchema.parse(notes)))
   )
 
   host.handle('workspaces:rename', (_event, workspaceId: string, name: string) =>

@@ -255,7 +255,7 @@ describe('RightPanel', () => {
   it('gives its tabs no room to wrap or squash', () => {
     renderPanel()
 
-    for (const label of ['Changes', 'Terminal', 'Scripts', 'Pull request']) {
+    for (const label of ['Changes', 'Terminal', 'Scripts', 'Pull request', 'Notes']) {
       expect(screen.getByRole('button', { name: label })).toHaveClass(
         'shrink-0',
         'whitespace-nowrap'
@@ -279,12 +279,60 @@ describe('RightPanel', () => {
     expect(props.onTab).toHaveBeenCalledWith('scripts')
   })
 
-  it('offers all four tabs', () => {
+  it('offers all five tabs', () => {
     renderPanel()
 
-    for (const label of ['Changes', 'Terminal', 'Scripts', 'Pull request']) {
+    for (const label of ['Changes', 'Terminal', 'Scripts', 'Pull request', 'Notes']) {
       expect(screen.getByRole('button', { name: label })).toBeInTheDocument()
     }
+  })
+
+  /*
+   * The notes tab is an icon, because the row sets the pane's narrowest allowed
+   * width and a fifth **word** would widen the floor for everybody. What it may
+   * not lose along with the word is its name — a tab a screen reader announces
+   * as nothing would be the real cost of the saving.
+   */
+  it('names the notes tab even though it has no word on it', () => {
+    renderPanel()
+
+    const notes = screen.getByRole('button', { name: 'Notes' })
+    expect(notes).toHaveTextContent('')
+    expect(notes).toHaveAttribute('title', 'Notes')
+  })
+
+  /*
+   * The pane is remounted per workspace, and this is what that buys: the field
+   * is seeded from the note when it mounts, so without the key it would go on
+   * showing the first workspace's note under the second — and the next save
+   * would write it there.
+   */
+  it("shows the chosen workspace's note rather than the one before it", () => {
+    const { rerender } = renderPanel({
+      workspaces: [
+        { ...anna, notes: 'about anna' },
+        { ...bob, notes: 'about bob' }
+      ],
+      activeWorkspaceId: anna.id,
+      tab: 'notes'
+    })
+
+    expect(screen.getByRole('textbox', { name: 'Notes' })).toHaveValue('about anna')
+
+    rerender({ activeWorkspaceId: bob.id })
+
+    expect(screen.getByRole('textbox', { name: 'Notes' })).toHaveValue('about bob')
+  })
+
+  it('shows the notes pane on its own tab, and reports the choice', async () => {
+    const { props } = renderPanel({ workspaces: [anna], activeWorkspaceId: anna.id, tab: 'notes' })
+
+    // By role: the tab button carries the same name, which is right — the tab
+    // names the pane and the field is the pane.
+    expect(screen.getByRole('textbox', { name: 'Notes' })).toBeInTheDocument()
+
+    await userEvent.click(screen.getByRole('button', { name: 'Changes' }))
+    expect(props.onTab).toHaveBeenCalledWith('diff')
   })
 
   it('shows the pull request pane on its own tab', async () => {
@@ -1511,10 +1559,16 @@ describe('RightPanel', () => {
     renderPanel({ width: 280 })
 
     await waitFor(() => {
-      // Four buttons of 90, and jsdom reports padding and gaps as zero — so the
-      // floor is exactly 360. Asserting the number rather than "more than
-      // before" is what would catch the measurement itself going wrong.
-      expect(screen.getByRole('separator')).toHaveAttribute('aria-valuemin', '360')
+      /*
+       * Five buttons of 90, and jsdom reports padding and gaps as zero — so the
+       * floor is exactly 450. Asserting the number rather than "more than
+       * before" is what would catch the measurement itself going wrong.
+       *
+       * Every button is given the same width here, which the real row does not
+       * have: the notes tab is an icon precisely so that it costs about a third
+       * of a word. What this pins is that the row decides the floor at all.
+       */
+      expect(screen.getByRole('separator')).toHaveAttribute('aria-valuemin', '450')
     })
   })
 

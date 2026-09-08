@@ -391,6 +391,10 @@ export const en = {
        it: the tab is one place, and what it holds is two. */
     scripts: 'Scripts',
     pullRequest: 'Pull request',
+    /* An icon rather than a word in the tab row, so the fifth tab does not
+       widen the narrowest the pane may be. This is still its name — it moves to
+       the button's `aria-label` and its tooltip rather than disappearing. */
+    notes: 'Notes',
     collapse: 'Collapse panel',
     expand: 'Show panel',
     terminalPlaceholder: 'Select a workspace to open a terminal in its directory.',
@@ -1322,6 +1326,19 @@ export const en = {
     /* Neither open nor recorded: the turn it belonged to is gone, and the
        transcript never got its outcome. */
     gone: 'No longer waiting for an answer.'
+  },
+
+  notes: {
+    /* The one thing a workspace carries that the agent never reads. Everything
+       else in the pane is something it acts on; this is only for the person. */
+    placeholder: 'A line to yourself about this workspace. The agent never reads it.',
+    noWorkspace: 'Choose a workspace to write a note about it.',
+    /* Shown only as the ceiling comes close. The limit is not about the note:
+       the state file is rewritten whole on every save. */
+    remaining_one: '{{count}} character left',
+    remaining_few: '{{count}} characters left',
+    remaining_many: '{{count}} characters left',
+    remaining_other: '{{count}} characters left'
   },
 
   trust: {

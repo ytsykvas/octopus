@@ -531,6 +531,15 @@ const api = {
     approveScripts: (workspaceId: string): Promise<Result<void>> =>
       ipcRenderer.invoke('scripts:approve', workspaceId) as Promise<Result<void>>,
 
+    /**
+     * Writes the note this workspace carries for its user.
+     *
+     * Nothing here reaches the agent: it is a line somebody wrote to themselves
+     * about a task that runs for days.
+     */
+    setNotes: (workspaceId: string, notes: string): Promise<Result<void>> =>
+      ipcRenderer.invoke('workspaces:notes', workspaceId, notes) as Promise<Result<void>>,
+
     /** Puts this workspace on a set of variables of its own, or back to follow. */
     setEnvProfile: (workspaceId: string, name: string | null): Promise<Result<void>> =>
       ipcRenderer.invoke('workspaces:envProfile', workspaceId, name) as Promise<Result<void>>,

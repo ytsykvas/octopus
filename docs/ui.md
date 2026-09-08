@@ -978,6 +978,34 @@ tab. Read once when the section opens rather than watched, because nothing
 announces a session starting and a row that quietly went stale would be worse
 than one the reader knows is a snapshot.
 
+**Notes is a tab of an icon, and the only one.** The tab row decides the pane's
+narrowest allowed width — the measurement two paragraphs down is exactly that —
+so a fifth **word** would widen the floor for everybody for ever, to carry a tab
+most people open rarely. An icon costs about a third of it. What it may not lose
+along with the word is its name: the label moves to the button's `aria-label`
+and its tooltip rather than disappearing, because a tab a screen reader
+announces as nothing would be the real price of the saving.
+
+**The note is the one thing a workspace carries that the agent never reads.**
+Everything else in the pane is something the agent acts on or produced; this is
+a line the person wrote to themselves about a task that runs for days. Saying so
+in the placeholder is part of the feature — a text box in an agent's window is
+otherwise assumed to be talking to it.
+
+It **saves itself**: once the typing pauses, and at once on leaving the field. A
+note headed "so I do not forget" behind a Save button somebody forgets to press
+is a note that was not written. The pause is there because `commit` rewrites
+`state.json` whole, so a write per keystroke would rewrite the file per
+keystroke — and the pane is remounted per workspace, which is what makes a save
+still counting down safe: an editor that loads against one target and saves a
+moment later writes the old text into the newly chosen one, the trap the env
+editor recorded first.
+
+The ceiling is enforced **in the field**, not only at the bridge. The parse at
+the boundary stays — types are gone by then, and a window sending more is what a
+boundary is for — but somebody typing must not be allowed to fill a note that
+will then be refused. A count appears as the limit comes close and not before.
+
 **A quit waits for what the sessions were writing, for up to a second.** A
 transcript is append-only JSONL, so a write cut in half leaves a partial line the
 reader refuses — and the reader is what a reopened conversation is drawn from.
@@ -1054,8 +1082,8 @@ for the same turn endings and settles for the same 300ms, and re-reads only the
 project the workspace belongs to: a turn ending is a poor reason to run
 `git status` over every workspace of every project.
 
-**The right pane carries four tabs.** Changes and Terminal, then Scripts and
-Pull request. Build and server were two tabs and are now two halves of one: they
+**The right pane carries five tabs.** Changes and Terminal, then Scripts, Pull
+request, and Notes. Build and server were two tabs and are now two halves of one: they
 are the same question — what this workspace runs — and splitting it cost a fifth
 of a row whose width has to be **measured** because it barely fits. Stacked, a
 server can be seen running while a build is read, which two tabs could not show
@@ -1447,7 +1475,7 @@ inside it, or once folded there is nothing left to click, and the way back has t
 be hunted for somewhere else.
 
 Both side panes are resizable and their widths persist. The right pane's floor is
-**measured, not chosen**: it is whatever its four tabs need. The labels change
+**measured, not chosen**: it is whatever its five tabs need. The labels change
 width with the language, a number picked against English left the Ukrainian ones
 overflowing, and since the pane does not shrink, anything sticking out of it
 pushed the window wider and put a horizontal scrollbar under the application.

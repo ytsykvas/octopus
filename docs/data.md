@@ -181,7 +181,15 @@ the next fetch. `resolveBase` in [`remotes.ts`](../src/core/remotes.ts) is where
 the question is asked, every time it is asked.
 
 A **workspace** is a git worktree: `id`, `projectId`, `name`, `branch`, `path`,
-`status`, `port`, `createdAt`, `writers`, `ownerId`.
+`status`, `port`, `createdAt`, `writers`, `notes`, `ownerId`.
+
+`notes` is a line the user wrote to themselves about this workspace, and the one
+thing a workspace carries that the agent never reads. On the record rather than
+in a file of its own so that removing the workspace takes it and renaming keeps
+it, both without anybody arranging either — a file would have to be moved and
+deleted by hand, and the day somebody forgot, a new workspace of the same name
+would open holding a stranger's note. Bounded by `NOTES_LIMIT` for a reason that
+is not about the note: `commit` rewrites this file **whole** on every call.
 
 `writers` says which conversation wrote which file, by path relative to the
 worktree. A workspace holds up to three conversations working at once in one

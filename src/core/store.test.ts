@@ -4,6 +4,8 @@ import { join } from 'node:path'
 
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 
+import { NotesBodySchema } from './notes.js'
+
 import { InvalidFileError } from './persist.js'
 import {
   addChat,
@@ -68,6 +70,7 @@ function makeWorkspace(overrides: Partial<Workspace> = {}): Workspace {
     createdAt: '2026-08-07T12:00:00.000Z',
     envProfile: null,
     writers: {},
+    notes: '',
     ownerId: null,
     ...overrides
   }
@@ -1025,5 +1028,39 @@ describe('who wrote which file in a workspace', () => {
     const state = await loadState(file)
 
     expect(state.workspaces[0]?.writers).toEqual({})
+  })
+})
+
+describe('the note a workspace carries for its user', () => {
+  it('starts empty', () => {
+    expect(makeWorkspace().notes).toBe('')
+  })
+
+  /*
+   * Every workspace in every state file predates the field, and the reader
+   * throws on a mismatch — so a missing default would not lose the note, it
+   * would stop the app opening. That has happened twice, which is why a field
+   * that can be absent carries a default rather than a version bump.
+   */
+  it('loads a workspace written before there were notes', async () => {
+    const older: Record<string, unknown> = { ...makeWorkspace() }
+    delete older.notes
+
+    await writeFile(
+      file,
+      JSON.stringify({ version: 1, projects: [project], workspaces: [older], chats: [] }),
+      'utf8'
+    )
+
+    const state = await loadState(file)
+
+    expect(state.workspaces[0]?.notes).toBe('')
+  })
+
+  // The ceiling is not about the note: `commit` rewrites `state.json` whole, so
+  // an unbounded one is paid for by every unrelated write in the file.
+  it('refuses one past the ceiling', () => {
+    expect(NotesBodySchema.safeParse('x'.repeat(16_000)).success).toBe(true)
+    expect(NotesBodySchema.safeParse('x'.repeat(16_001)).success).toBe(false)
   })
 })

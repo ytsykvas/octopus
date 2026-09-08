@@ -70,7 +70,7 @@ export type LanguagePreference = z.infer<typeof LanguageSchema>
  * drift apart. The renderer takes the **type** only — this module reaches
  * `node:os` through `paths.ts`, and a value import would follow it there.
  */
-export const RIGHT_PANEL_TABS = ['diff', 'terminal', 'scripts', 'pullRequest'] as const
+export const RIGHT_PANEL_TABS = ['diff', 'terminal', 'scripts', 'pullRequest', 'notes'] as const
 export const RightPanelTabSchema = z.enum(RIGHT_PANEL_TABS)
 export type RightPanelTab = z.infer<typeof RightPanelTabSchema>
 

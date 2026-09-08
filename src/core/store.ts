@@ -11,6 +11,7 @@ import { isAbsolute } from 'node:path'
 import { z } from 'zod'
 
 import { CodedError } from './codedError.js'
+import { NotesBodySchema } from './notes.js'
 import { UsageWindowsSchema } from './usage.js'
 
 import {
@@ -175,6 +176,18 @@ export const WorkspaceSchema = z.object({
    * Defaulted, because every workspace written before this lacks it entirely.
    */
   writers: z.record(z.string(), z.array(z.string())).default({}),
+  /**
+   * A line the user wrote to themselves about this workspace.
+   *
+   * A workspace is a task that runs for days, and the thing worth keeping is
+   * usually not code — what was half-done, what to check before opening the
+   * request. Stored on the record rather than in a file of its own so that a
+   * renamed workspace keeps its note and a removed one takes it with it, both
+   * without anybody arranging it.
+   *
+   * Defaulted, because every workspace written before this lacks it entirely.
+   */
+  notes: NotesBodySchema.default(''),
   /** Reserved for future multi-user support; always null for now. */
   ownerId: z.string().nullable()
 })
