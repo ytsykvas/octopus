@@ -21,6 +21,8 @@ import {
   type AgentSkill,
   type ContextUsage,
   DENIED,
+  type ElicitationAnswer,
+  type ElicitationAsk,
   type PermissionAsk,
   type PermissionOutcome,
   type QueryFn,
@@ -162,6 +164,7 @@ import {
   renameLibraryItem,
   writeLibraryItem
 } from './library.js'
+import { type ElicitationField, type FormValues, toContent } from './elicitation.js'
 import type { LibraryKind } from './libraryNames.js'
 import {
   ensureStore,
@@ -465,6 +468,14 @@ export interface PermissionRequest {
   readonly requestId: string
   readonly toolName: string
   readonly input: unknown
+}
+
+interface PendingElicitation {
+  readonly resolve: (answer: ElicitationAnswer) => void
+  /** Kept so the fields can be read again when the answer arrives. */
+  readonly fields: readonly ElicitationField[]
+  readonly chatId: string
+  readonly workspaceId: string
 }
 
 interface PendingPermission {
@@ -1045,6 +1056,24 @@ export interface OctopusService {
    */
   answerPermission(requestId: string, answer: PermissionAnswer, feedback?: string): Promise<void>
   /**
+   * Answers an MCP server's question, or turns it down.
+   *
+   * `accept` carries the form's values as the window holds them — text for
+   * every field, including the numbers — and core makes the answer the server
+   * takes back. Doing that conversion here rather than in the window is the
+   * same rule the rest of this file follows: the window draws, core decides
+   * what a thing means.
+   *
+   * `decline` is the user saying no, and `cancel` is the question going away
+   * without an answer. They are different words to a server, so they are
+   * different words here.
+   */
+  answerElicitation(
+    requestId: string,
+    answer: 'accept' | 'decline' | 'cancel',
+    values?: FormValues
+  ): Promise<void>
+  /**
    * Answers the questions the agent asked, releasing the tool call.
    *
    * Separate from `answerPermission` because it is not a permission: the user
@@ -1166,6 +1195,13 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
   const chatStatusListeners = new Set<(event: ChatStatusEvent) => void>()
   const chatsChangedListeners = new Set<(event: ChatsChangedEvent) => void>()
   const pending = new Map<string, PendingPermission>()
+  /**
+   * MCP servers' questions waiting for an answer.
+   *
+   * Its own map beside the permissions, because the two are answered by
+   * different calls and mixing them would mean a lookup that can return either.
+   */
+  const pendingElicitations = new Map<string, PendingElicitation>()
 
   /**
    * Edits the agent has announced but not yet finished, keyed by tool call.
@@ -1900,7 +1936,10 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
     // session's own stream reaches here — a background write that failed is
     // reported straight to the listeners by `report` — so this cannot withdraw
     // a question a live turn is still waiting on.
-    if (event.type === 'result' || event.type === 'error') abandonPermissions(chat.id)
+    if (event.type === 'result' || event.type === 'error') {
+      abandonPermissions(chat.id)
+      abandonElicitations(chat.id)
+    }
 
     emit({ chatId: chat.id, workspaceId: chat.workspaceId, event })
   }
@@ -2036,6 +2075,56 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
     }
   }
 
+  /**
+   * Puts an MCP server's question in front of the user and waits.
+   *
+   * The promise is what holds the server's call, exactly as a permission holds
+   * a tool call. Nothing here decides anything: the form has already been read
+   * by `agent.ts`, which declines what it cannot draw before this is reached.
+   */
+  function askElicitation(chat: Chat, ask: ElicitationAsk): Promise<ElicitationAnswer> {
+    const requestId = uuid()
+
+    handleEvent(chat, {
+      type: 'elicitation_request',
+      requestId,
+      serverName: ask.serverName,
+      message: ask.message,
+      title: ask.title,
+      fields: [...ask.fields]
+    })
+
+    return new Promise<ElicitationAnswer>((resolve) => {
+      pendingElicitations.set(requestId, {
+        resolve,
+        fields: ask.fields,
+        chatId: chat.id,
+        workspaceId: chat.workspaceId
+      })
+    })
+  }
+
+  /**
+   * Lets go of every question of one chat's, answering each as cancelled.
+   *
+   * `cancel` rather than `decline`, and the two are different words to a
+   * server: declining is the user saying no, and cancelling is the question
+   * going away without one. A turn that was stopped is the second.
+   */
+  function abandonElicitations(chatId: string): void {
+    for (const [requestId, request] of pendingElicitations) {
+      if (request.chatId !== chatId) continue
+
+      pendingElicitations.delete(requestId)
+      request.resolve({ action: 'cancel' })
+      handleEvent(requireChat(chatId), {
+        type: 'elicitation_answered',
+        requestId,
+        action: 'cancel'
+      })
+    }
+  }
+
   function abandonPermissions(chatId: string): void {
     for (const [requestId, request] of pending) {
       if (request.chatId !== chatId) continue
@@ -2119,6 +2208,7 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
     // for, and a question nobody will ever answer at all. Both go with it,
     // and only this chat's, since the maps are the whole service's.
     abandonPermissions(chat.id)
+    abandonElicitations(chat.id)
     abandonEdits(chat.id)
 
     // A `/clear` the session never got round to answering, and a clearing
@@ -2570,7 +2660,10 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
       {
         query: runQuery,
         onEvent: () => undefined,
-        askPermission: () => Promise.resolve({ allow: false, message: DENIED })
+        askPermission: () => Promise.resolve({ allow: false, message: DENIED }),
+        // Nothing draws for this session — it exists to run one command — so a
+        // question from it could only ever be waited on for ever.
+        askElicitation: () => Promise.resolve({ action: 'decline' as const })
       }
     )
   }
@@ -2644,7 +2737,10 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
           // session id written after the first turn would not be in it.
           handleEvent(findChat(state, chat.id) ?? chat, event)
         },
-        askPermission: (ask) => askPermission(chat, ask)
+        askPermission: (ask) => askPermission(chat, ask),
+        // The snapshot, as `askPermission` above takes it: this reads only the
+        // chat's id and its workspace, and neither of those changes.
+        askElicitation: (ask) => askElicitation(chat, ask)
       }
     )
 
@@ -4135,6 +4231,7 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
       // applies to an edit announced and never finished — no result is coming
       // for it now.
       abandonPermissions(chatId)
+      abandonElicitations(chatId)
       abandonEdits(chatId)
 
       // Nothing running is not a failure — the button is simply ahead of the
@@ -4202,6 +4299,31 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
       }
 
       return null
+    },
+
+    async answerElicitation(requestId, answer, values = {}) {
+      const request = pendingElicitations.get(requestId)
+      // Unknown means already answered, or the turn it belonged to is over.
+      if (!request) return
+
+      // Removed as the answer is given, never before it: a question taken out
+      // first and then failing to be answered would leave the server blocked on
+      // something nothing could offer again.
+      pendingElicitations.delete(requestId)
+      request.resolve(
+        answer === 'accept'
+          ? { action: 'accept', content: toContent(request.fields, values) }
+          : { action: answer }
+      )
+
+      const chat = findChat(state, request.chatId)
+      // The turn carries on either way — a declined question is an answer the
+      // server acts on, not the end of anything — so nothing here writes a
+      // status. The record is written so a reopened conversation shows what
+      // became of the question rather than showing it still waiting.
+      if (chat) handleEvent(chat, { type: 'elicitation_answered', requestId, action: answer })
+
+      await Promise.resolve()
     },
 
     async answerPermission(requestId, answer, feedback) {

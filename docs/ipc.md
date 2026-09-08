@@ -123,6 +123,11 @@ a delete.
 `dialog:pickMarkdown` belongs with them: one file, never a folder — a skill may
 be a directory and neither of these ever is.
 
+`chats:elicitation` answers an MCP server's question: the request id, one of
+`accept`, `decline` and `cancel`, and the form as the window holds it — text for
+every field, numbers included. The values are parsed rather than trusted, since
+they become the `content` a server reads back, and core makes the numbers.
+
 `attachments:measure` and `attachments:clear` take no arguments, and that is the
 point: there is one directory and one answer, so nothing there can be pointed
 somewhere else. The clear empties it and leaves the directory, which every

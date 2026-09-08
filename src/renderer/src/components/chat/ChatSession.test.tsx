@@ -441,6 +441,43 @@ describe('events arriving from the agent', () => {
   })
 })
 
+describe('a question from an MCP server', () => {
+  /*
+   * Reachable today: `settingSources` includes the project layer, and a
+   * worktree's own `.mcp.json` starts servers — so any repository somebody
+   * clones can raise one of these. Before the card, the SDK declined it and
+   * nobody saw anything.
+   */
+  it('is drawn, and answered where the whole pane can see it', async () => {
+    const user = userEvent.setup()
+    givenChat()
+    await openLoadedChat()
+
+    emitAgentEvent({
+      type: 'elicitation_request',
+      requestId: 'e-1',
+      serverName: 'ledger',
+      message: 'Which token should I use?',
+      title: '',
+      fields: [
+        { kind: 'text', name: 'token', label: 'Token', description: '', required: true, value: '' }
+      ]
+    })
+
+    expect(screen.getByText('A question from ledger')).toBeInTheDocument()
+
+    await user.type(screen.getByLabelText('Token'), 'abc')
+    // The card's own confirm, which is deliberately not the composer's `Send`.
+    await user.click(screen.getByRole('button', { name: 'Answer' }))
+
+    await waitFor(() => {
+      expect(octopus().chats.answerElicitation).toHaveBeenCalledWith('e-1', 'accept', {
+        token: 'abc'
+      })
+    })
+  })
+})
+
 describe('following the conversation', () => {
   // Yanking the view down while someone reads something further up is the
   // single most irritating thing a log can do.

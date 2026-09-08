@@ -424,6 +424,7 @@ describe('channel table', () => {
     'chats:pending',
     'chats:usage',
     'chats:permission',
+    'chats:elicitation',
     'chats:rateLimit',
     'chats:subscription',
     'chats:refreshSubscription',
@@ -2592,6 +2593,36 @@ describe('the pasted images channels', () => {
     await expect(invoke('attachments:clear')).resolves.toEqual({
       ok: true,
       value: { files: 0, bytes: 0 }
+    })
+  })
+})
+
+describe('the MCP question channel', () => {
+  /*
+   * The values become the `content` an MCP server reads back, so they are
+   * parsed rather than trusted: a window sending something else is the case
+   * the parse exists for. Types are gone by this point.
+   */
+  it('refuses an answer that is none of the three words', async () => {
+    await expect(invoke('chats:elicitation', 'r-1', 'perhaps', {})).resolves.toMatchObject({
+      ok: false
+    })
+  })
+
+  it('refuses values that are not text or flags', async () => {
+    await expect(
+      invoke('chats:elicitation', 'r-1', 'accept', { token: { nested: true } })
+    ).resolves.toMatchObject({ ok: false })
+    await expect(invoke('chats:elicitation', 'r-1', 'accept', 'nope')).resolves.toMatchObject({
+      ok: false
+    })
+  })
+
+  // A question nobody is holding open is not an error: it is a second window
+  // pressing a button the first had already pressed.
+  it('is untroubled by an answer to a question that has gone', async () => {
+    await expect(invoke('chats:elicitation', 'r-gone', 'decline', {})).resolves.toMatchObject({
+      ok: true
     })
   })
 })

@@ -12,6 +12,8 @@ import {
   type AgentSession,
   DENIED,
   mapMessage,
+  type ElicitationAnswer,
+  type ElicitationAsk,
   type PermissionAsk,
   type PermissionOutcome,
   READ_ONLY_TOOLS,
@@ -60,6 +62,7 @@ function fakeAgent(
        the third argument to `canUseTool` go unnoticed: a double that drops a
        field cannot fail when the code drops it too. */
     askPermission?: (ask: PermissionAsk) => Promise<PermissionOutcome>
+    askElicitation?: (ask: ElicitationAsk) => Promise<ElicitationAnswer>
     models?: ModelInfo[]
     commands?: SlashCommand[]
   } = {}
@@ -173,7 +176,9 @@ function fakeAgent(
       },
       onEvent: (event) => events.push(event),
       askPermission: (ask) =>
-        hooks.askPermission?.(ask) ?? Promise.resolve({ allow: true } as const)
+        hooks.askPermission?.(ask) ?? Promise.resolve({ allow: true } as const),
+      askElicitation: (ask) =>
+        hooks.askElicitation?.(ask) ?? Promise.resolve({ action: 'decline' } as const)
     }
   )
 
@@ -1101,7 +1106,8 @@ describe('a session that will not close', () => {
       {
         query: () => conversation,
         onEvent: () => undefined,
-        askPermission: () => Promise.resolve({ allow: true } as const)
+        askPermission: () => Promise.resolve({ allow: true } as const),
+        askElicitation: () => Promise.resolve({ action: 'decline' } as const)
       }
     )
 
@@ -1764,5 +1770,160 @@ describe('the stream the session reads', () => {
 
     await expect(agent.session.contextUsage()).resolves.toMatchObject({ percentage: 2 })
     await expect(agent.session.models()).resolves.toEqual([])
+  })
+})
+
+describe("an MCP server's question", () => {
+  /** Calls the SDK's `onElicitation` the way the SDK does. */
+  function elicitationCall(
+    agent: FakeQuery
+  ): (request: Record<string, unknown>) => Promise<{ action: string; content?: unknown }> {
+    const onElicitation = agent.options().onElicitation
+    if (typeof onElicitation !== 'function') {
+      throw new Error('onElicitation was not passed to the SDK')
+    }
+
+    const call = onElicitation as (
+      request: Record<string, unknown>,
+      options: { signal: AbortSignal }
+    ) => Promise<{ action: string; content?: unknown }>
+
+    return (request) => call(request, { signal: new AbortController().signal })
+  }
+
+  const FORM = {
+    type: 'object',
+    properties: { token: { type: 'string', title: 'Token' } },
+    required: ['token']
+  }
+
+  /*
+   * Declared at all because the SDK **declines automatically** when it is not:
+   * the server is refused, the agent carries on as though an answer had been
+   * given, and nobody sees anything.
+   */
+  it('is declared, so the SDK stops declining it on its own', () => {
+    const { agent } = fakeAgent()
+
+    expect(typeof agent.options().onElicitation).toBe('function')
+  })
+
+  it('reaches whoever answers, with the form already read', async () => {
+    const asked: unknown[] = []
+    const { agent } = fakeAgent(
+      {},
+      {
+        askElicitation: (ask) => {
+          asked.push(ask)
+          return Promise.resolve({ action: 'accept', content: { token: 'abc' } })
+        }
+      }
+    )
+
+    const answer = await elicitationCall(agent)({
+      serverName: 'ledger',
+      message: 'Which token should I use?',
+      requestedSchema: FORM
+    })
+
+    expect(asked).toEqual([
+      {
+        serverName: 'ledger',
+        message: 'Which token should I use?',
+        title: '',
+        fields: [
+          {
+            kind: 'text',
+            name: 'token',
+            label: 'Token',
+            description: '',
+            required: true,
+            value: ''
+          }
+        ]
+      }
+    ])
+    expect(answer).toEqual({ action: 'accept', content: { token: 'abc' } })
+  })
+
+  it('carries a heading the server offered', async () => {
+    const asked: { title: string }[] = []
+    const { agent } = fakeAgent(
+      {},
+      {
+        askElicitation: (ask) => {
+          asked.push({ title: ask.title })
+          return Promise.resolve({ action: 'decline' })
+        }
+      }
+    )
+
+    await elicitationCall(agent)({
+      serverName: 'ledger',
+      message: 'x',
+      title: 'Credentials',
+      requestedSchema: FORM
+    })
+
+    expect(asked).toEqual([{ title: 'Credentials' }])
+  })
+
+  /*
+   * A `url` mode asks the host to send somebody to an address a repository
+   * chose. That is an outward-facing act, and it is not taken on a server's
+   * say-so — so it is refused here rather than shown.
+   */
+  it('refuses to send anybody to an address a server chose', async () => {
+    const asked: unknown[] = []
+    const { agent } = fakeAgent(
+      {},
+      {
+        askElicitation: (ask) => {
+          asked.push(ask)
+          return Promise.resolve({ action: 'accept', content: {} })
+        }
+      }
+    )
+
+    // With a form beside it that **could** be drawn, so the refusal can only be
+    // about the mode: without one, declining because there is nothing to draw
+    // would look exactly the same.
+    const answer = await elicitationCall(agent)({
+      serverName: 'ledger',
+      message: 'Sign in',
+      mode: 'url',
+      url: 'https://example.test/auth',
+      requestedSchema: FORM
+    })
+
+    expect(answer.action).toBe('decline')
+    expect(asked).toEqual([])
+  })
+
+  /*
+   * A half-drawn form collects an answer the server then refuses, and the user
+   * has typed it for nothing. Declined with a reason instead, which costs the
+   * same turn and says something true.
+   */
+  it('declines a form it cannot draw, rather than drawing part of one', async () => {
+    const asked: unknown[] = []
+    const { agent } = fakeAgent(
+      {},
+      {
+        askElicitation: (ask) => {
+          asked.push(ask)
+          return Promise.resolve({ action: 'accept', content: {} })
+        }
+      }
+    )
+
+    const answer = await elicitationCall(agent)({
+      serverName: 'ledger',
+      message: 'x',
+      requestedSchema: { type: 'object', properties: { nested: { type: 'object' } } }
+    })
+
+    expect(answer.action).toBe('decline')
+    expect(asked).toEqual([])
   })
 })

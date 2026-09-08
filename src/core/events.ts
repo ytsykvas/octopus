@@ -16,6 +16,7 @@
 import { z } from 'zod'
 
 import { AgentCommandSchema } from './chats.js'
+import { ElicitationFieldSchema } from './elicitation.js'
 import { QuestionAnswerSchema } from './questions.js'
 import { UsageReportSchema } from './usage.js'
 
@@ -111,6 +112,45 @@ export const AgentEventSchema = z.discriminatedUnion('type', [
      * own. Optional also keeps every transcript written before this readable.
      */
     reason: z.string().optional()
+  }),
+
+  /**
+   * An MCP server has stopped mid-call to ask the user something.
+   *
+   * A different mechanism from the permission request above and from the
+   * agent's own questions: this comes from a server the session started, over
+   * `onElicitation`, and the SDK **declines it automatically** when nothing
+   * answers. So the alternative to drawing it is not a delay, it is a refusal
+   * nobody sees.
+   *
+   * The form is already read by the time it gets here — `elicitation.ts` turns
+   * the server's JSON Schema into fields a window can draw, and answers null
+   * for anything it cannot. A request whose form could not be read never
+   * becomes one of these; it is declined where it arrives, with a reason.
+   */
+  z.object({
+    type: z.literal('elicitation_request'),
+    requestId: z.string(),
+    /** Which server is asking. The one thing a reader needs to place it. */
+    serverName: z.string(),
+    /** What it is asking for, in its own words. */
+    message: z.string(),
+    /** A heading the server offered for the question, where it offered one. */
+    title: z.string().default(''),
+    fields: z.array(ElicitationFieldSchema)
+  }),
+
+  /**
+   * The same question, answered or withdrawn.
+   *
+   * Written into the transcript so a reopened conversation shows that something
+   * was asked and what became of it. Without it the log would carry the
+   * question for ever, with no sign that it had been dealt with.
+   */
+  z.object({
+    type: z.literal('elicitation_answered'),
+    requestId: z.string(),
+    action: z.enum(['accept', 'decline', 'cancel'])
   }),
 
   /**

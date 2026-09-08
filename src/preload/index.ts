@@ -39,6 +39,7 @@ import type {
 } from '@core/skills.js'
 import type { LibraryDocument, LibraryEntry, LibraryImport, LibraryPreview } from '@core/library.js'
 import type { AttachmentStore } from '@core/attachments.js'
+import type { FormValues } from '@core/elicitation.js'
 import type { LibraryKind } from '@core/libraryNames.js'
 import type { Store } from '@core/stores.js'
 import type { InstructionSource } from '@core/instructionSources.js'
@@ -274,6 +275,21 @@ const api = {
       feedback?: string
     ): Promise<Result<void>> =>
       ipcRenderer.invoke('chats:permission', requestId, answer, feedback) as Promise<Result<void>>,
+
+    /**
+     * Answers an MCP server's question; the server is blocked until it arrives.
+     *
+     * `accept` carries the form as the window holds it — text for every field,
+     * numbers included. Core makes the answer the server takes back.
+     */
+    answerElicitation: (
+      requestId: string,
+      answer: 'accept' | 'decline' | 'cancel',
+      values?: FormValues
+    ): Promise<Result<void>> =>
+      ipcRenderer.invoke('chats:elicitation', requestId, answer, values ?? {}) as Promise<
+        Result<void>
+      >,
 
     /** The last rate limit any session reported; `null` before one has. */
     rateLimit: (): Promise<Result<RateLimit | null>> =>

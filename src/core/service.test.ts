@@ -3093,6 +3093,8 @@ describe('the agent chat', () => {
       decisionReason?: string,
       suggestions?: readonly PermissionUpdate[]
     ) => Promise<unknown>
+    /** Calls the SDK's `onElicitation`, which is what an MCP server blocks on. */
+    readonly elicit: (request: Record<string, unknown>) => Promise<{ action: string }>
     readonly sent: string[]
     readonly interrupted: () => number
     readonly closed: () => number
@@ -3234,6 +3236,17 @@ describe('the agent chat', () => {
             ...(decisionReason !== undefined && { decisionReason }),
             ...(suggestions !== undefined && { suggestions })
           })
+        },
+        elicit: (request) => {
+          const onElicitation = options.onElicitation
+          if (typeof onElicitation !== 'function') throw new Error('no onElicitation')
+
+          return (
+            onElicitation as (
+              request: Record<string, unknown>,
+              options: { signal: AbortSignal }
+            ) => Promise<{ action: string }>
+          )(request, { signal: new AbortController().signal })
         },
         interrupted: () => interrupted,
         closed: () => closed,
@@ -3610,6 +3623,30 @@ describe('the agent chat', () => {
       })
 
       await expect(agents[0]?.ask('Bash')).resolves.toMatchObject({ behavior: 'deny' })
+      await reading
+    })
+
+    /*
+     * The same argument for an MCP server's question. Nothing draws for a
+     * probe — it exists to read a gauge — so a question from one could only
+     * ever be waited on for ever.
+     */
+    it('turns down a question a probe is asked, rather than holding it open', async () => {
+      const { service, workspaceId } = await withWorkspace()
+      await service.openChat(workspaceId)
+
+      const reading = service.refreshSubscriptionUsage()
+      await vi.waitFor(() => {
+        expect(agents).toHaveLength(1)
+      })
+
+      await expect(
+        agents[0]?.elicit({
+          serverName: 'ledger',
+          message: 'x',
+          requestedSchema: { type: 'object', properties: { token: { type: 'string' } } }
+        })
+      ).resolves.toMatchObject({ action: 'decline' })
       await reading
     })
 
@@ -6258,6 +6295,177 @@ describe('the agent chat', () => {
         WorkspaceError
       )
       await expect(service.setChatPlanMode('chat-nothing', true)).rejects.toThrow(WorkspaceError)
+    })
+  })
+
+  describe("an MCP server's question", () => {
+    const FORM = {
+      type: 'object',
+      properties: { token: { type: 'string', title: 'Token' }, save: { type: 'boolean' } },
+      required: ['token']
+    }
+
+    /** A session with a question from a server already on the books. */
+    async function asked(): Promise<{
+      service: OctopusService
+      chatId: string
+      events: ChatEvent[]
+      answer: Promise<{ action: string }>
+      requestId: string
+    }> {
+      const { service, workspaceId, events } = await withWorkspace()
+      const chat = await service.openChat(workspaceId)
+      await service.sendToChat(chat.id, 'work')
+
+      const answer = agent().elicit({
+        serverName: 'ledger',
+        message: 'Which token should I use?',
+        requestedSchema: FORM
+      })
+
+      await vi.waitFor(() => {
+        expect(events.some((entry) => entry.event.type === 'elicitation_request')).toBe(true)
+      })
+
+      const raised = events.find((entry) => entry.event.type === 'elicitation_request')?.event
+      if (raised?.type !== 'elicitation_request') throw new Error('no request was raised')
+
+      return { service, chatId: chat.id, events, answer, requestId: raised.requestId }
+    }
+
+    it('reaches the window with the form already read', async () => {
+      const { events } = await asked()
+
+      expect(
+        events.map((entry) => entry.event).find((one) => one.type === 'elicitation_request')
+      ).toMatchObject({
+        serverName: 'ledger',
+        message: 'Which token should I use?',
+        fields: [
+          { kind: 'text', name: 'token', required: true },
+          { kind: 'boolean', name: 'save', required: false }
+        ]
+      })
+    })
+
+    /*
+     * The values arrive as the window holds them — text for every field — and
+     * core makes the answer the server takes back. A flag is always sent,
+     * because "off" is an answer.
+     */
+    it('sends back what was filled in, as the server takes it', async () => {
+      const { service, requestId, answer } = await asked()
+
+      await service.answerElicitation(requestId, 'accept', { token: 'abc', save: true })
+
+      await expect(answer).resolves.toEqual({
+        action: 'accept',
+        content: { token: 'abc', save: true }
+      })
+    })
+
+    it('turns one down without sending anything', async () => {
+      const { service, requestId, answer } = await asked()
+
+      await service.answerElicitation(requestId, 'decline')
+
+      await expect(answer).resolves.toEqual({ action: 'decline' })
+    })
+
+    // So a reopened conversation shows what became of the question rather than
+    // showing it still waiting.
+    it('writes down what became of it', async () => {
+      const { service, requestId, events } = await asked()
+
+      await service.answerElicitation(requestId, 'decline')
+
+      expect(events.map((entry) => entry.event)).toContainEqual({
+        type: 'elicitation_answered',
+        requestId,
+        action: 'decline'
+      })
+    })
+
+    /*
+     * `cancel`, not `decline`: declining is the user saying no, and cancelling
+     * is the question going away without one. A turn that ended is the second,
+     * and a server tells the two apart.
+     */
+    it('is withdrawn as cancelled when the turn ends under it', async () => {
+      const { answer, events } = await asked()
+
+      agent().emit(resultMessage)
+
+      await expect(answer).resolves.toEqual({ action: 'cancel' })
+      await vi.waitFor(() => {
+        expect(events.map((entry) => entry.event)).toContainEqual(
+          expect.objectContaining({ type: 'elicitation_answered', action: 'cancel' })
+        )
+      })
+    })
+
+    it('is withdrawn when the conversation is interrupted', async () => {
+      const { service, chatId, answer } = await asked()
+
+      await service.interruptChat(chatId)
+
+      await expect(answer).resolves.toEqual({ action: 'cancel' })
+    })
+
+    /*
+     * Two conversations share a workspace, and each may have a server waiting.
+     * A turn ending in one must not withdraw the other's question — the server
+     * behind it is still there, and cancelling would be this application
+     * answering for a turn that never stopped.
+     */
+    it("leaves another conversation's question alone when this turn ends", async () => {
+      const { service, workspaceId, events } = await withWorkspace()
+      const first = await service.openChat(workspaceId)
+      const second = await service.createChat(workspaceId)
+      await service.sendToChat(first.id, 'work')
+      await service.sendToChat(second.id, 'work too')
+
+      const [one, other] = agents
+      if (!one || !other) throw new Error('both sessions should be running')
+
+      const form = {
+        serverName: 'ledger',
+        message: 'x',
+        requestedSchema: { type: 'object', properties: { token: { type: 'string' } } }
+      }
+      const heldByOne = one.elicit(form)
+      const heldByOther = other.elicit(form)
+
+      // Both on the books before either turn ends, or the loop would have
+      // nothing of the other's to skip.
+      await vi.waitFor(() => {
+        expect(events.filter((entry) => entry.event.type === 'elicitation_request')).toHaveLength(2)
+      })
+
+      let othersAnswered = false
+      void heldByOther.then(() => {
+        othersAnswered = true
+      })
+
+      one.emit(resultMessage)
+      await expect(heldByOne).resolves.toMatchObject({ action: 'cancel' })
+
+      // The loop has run by now — it is what settled the promise above — and
+      // the other server is still waiting, because its turn never stopped.
+      expect(othersAnswered).toBe(false)
+
+      other.emit(resultMessage)
+      await expect(heldByOther).resolves.toMatchObject({ action: 'cancel' })
+    })
+
+    // An answer to a question nobody is holding open is not an error; it is a
+    // second window pressing a button the first had already pressed.
+    it('does nothing for a question that is already settled', async () => {
+      const { service, requestId } = await asked()
+
+      await service.answerElicitation(requestId, 'decline')
+
+      await expect(service.answerElicitation(requestId, 'accept', {})).resolves.toBeUndefined()
     })
   })
 

@@ -8,6 +8,7 @@ import {
   type WorkingMode
 } from '@core/chats.js'
 import { isEphemeral } from '@core/events.js'
+import type { FormValues } from '@core/elicitation.js'
 import type { QuestionAnswer } from '@core/questions.js'
 import type { PermissionAnswer } from '@core/service.js'
 import type { ChatEntry } from '@core/transcript.js'
@@ -38,6 +39,21 @@ export interface ChatController {
   readonly busy: boolean
   /** The request the agent is blocked on, or null when it is not blocked. */
   readonly pending: PendingPermission | null
+  /**
+   * The MCP server's question still open, by request id, or null.
+   *
+   * Beside `pending` rather than folded into it: a server's question is not a
+   * permission, is answered by a different call, and does not put the
+   * conversation into `waiting_permission` — the turn is inside a tool call and
+   * the agent is not the one asking.
+   */
+  readonly pendingElicitation: string | null
+  /** Answers it, or turns it down. */
+  readonly answerElicitation: (
+    requestId: string,
+    answer: 'accept' | 'decline',
+    values?: FormValues
+  ) => Promise<void>
   readonly loading: boolean
   readonly error: string | null
   /**
@@ -117,6 +133,8 @@ export function useChat(
   const [streaming, setStreaming] = useState<Streaming>(NOTHING_STREAMING)
   const [busy, setBusy] = useState(false)
   const [pending, setPending] = useState<PendingPermission | null>(null)
+  /** The one MCP question a server is holding open, by its request id. */
+  const [pendingElicitation, setPendingElicitation] = useState<string | null>(null)
   const [loading, setLoading] = useState(chatId !== null)
   const [error, setError] = useState<string | null>(null)
   const [shownChatId, setShownChatId] = useState(chatId)
@@ -251,6 +269,17 @@ export function useChat(
       setStreaming(NOTHING_STREAMING)
       setEntries((current) => [...current, { role: 'agent', at: new Date().toISOString(), event }])
 
+      /* Its own state beside the permission, not the same one: the two are
+         answered by different calls, and a server's question does not put the
+         conversation into `waiting_permission` — the turn is inside a tool
+         call, and the agent is not asking anything. */
+      if (event.type === 'elicitation_request') setPendingElicitation(event.requestId)
+
+      // Answered somewhere else, or withdrawn when the turn stopped.
+      if (event.type === 'elicitation_answered') {
+        setPendingElicitation((current) => (current === event.requestId ? null : current))
+      }
+
       if (event.type === 'permission_request') {
         setPending({
           requestId: event.requestId,
@@ -267,6 +296,7 @@ export function useChat(
       if (event.type === 'result' || event.type === 'error') {
         setBusy(false)
         setPending(null)
+        setPendingElicitation(null)
       }
     }, openChatId)
   }, [openChatId])
@@ -375,6 +405,20 @@ export function useChat(
       if (!sent.ok) setError(describeFailure(sent))
     },
     [pending, describeFailure]
+  )
+
+  const answerElicitation = useCallback(
+    async (requestId: string, answer: 'accept' | 'decline', values?: FormValues) => {
+      // Cleared first, as with a permission: the server is released either way,
+      // and leaving the form live while it works reads as though the button did
+      // nothing. The card stays in the log and redraws from the
+      // `elicitation_answered` event.
+      setPendingElicitation(null)
+
+      const sent = await window.octopus.chats.answerElicitation(requestId, answer, values)
+      if (!sent.ok) setError(describeFailure(sent))
+    },
+    [describeFailure]
   )
 
   const answerQuestions = useCallback(
@@ -488,6 +532,8 @@ export function useChat(
     send,
     interrupt,
     answer,
+    answerElicitation,
+    pendingElicitation,
     answerQuestions,
     setWorkingMode,
     setPlanMode,

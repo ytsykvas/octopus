@@ -1,32 +1,25 @@
-# Other agent dialogs have nowhere to appear
+# The CLI's own dialogs have nowhere to appear
 
 ## What happens
 
-The agent's questions now have a card (`QuestionCard.tsx`), but that was the
-first of several things the agent can put in front of the user, and the rest
-still have nowhere to go:
+**MCP elicitation is done.** `onElicitation` is declared, `elicitation.ts` reads
+the server's schema into fields, and `ElicitationCard` draws them in the log —
+see `docs/ui.md`. What is left is the other half.
 
-- **`onUserDialog`** — a blocking dialog the CLI asks the host to render,
-  declared per `dialogKind` (`sdk.d.ts:1543-1578`). The only kind documented
-  today is `refusal_fallback_prompt`. It requires `supportedDialogKinds`, and
-  the CLI **fails closed**: a kind not declared there is never sent, and the
-  flow behind it degrades silently. So we are not ignoring these dialogs — we
-  are not being offered them, and the user sees the degraded path without ever
-  learning there was a choice.
-- **MCP elicitation** (`onElicitation`, `sdk.d.ts:1522-1542`) — an MCP server
-  asking for input, with its own JSON Schema for the form. Without the callback
-  the SDK auto-declines. Reachable today: `settingSources` defaults to `all`
-  (`src/core/config.ts:290`, and `:349` raises an older `none` up to it), and a
-  worktree's own `.mcp.json` starts servers (`src/core/repoTrust.ts:4-8`). Any
-  cloned repository carrying one can raise an elicitation, and the SDK declines
-  it with nothing shown to the user.
+**`onUserDialog`** — a blocking dialog the CLI asks the host to render, declared
+per `dialogKind` (`sdk.d.ts:1543-1578`). The only kind documented today is
+`refusal_fallback_prompt`. It requires `supportedDialogKinds`, and the CLI
+**fails closed**: a kind not declared there is never sent, and the flow behind it
+degrades silently. So we are not ignoring these dialogs — we are not being
+offered them, and the user sees the degraded path without ever learning there was
+a choice.
 
 ## Why it matters
 
-Both are the same class of failure the questions had: the agent asks, the
-interface does not show it, and the conversation goes on as though the answer
-had been given. That failure is invisible from inside the app — the only sign is
-the agent behaving as if it had been told something.
+The same class of failure the questions had and the elicitations had: the agent
+asks, the interface does not show it, and the conversation goes on as though the
+answer had been given. That failure is invisible from inside the app — the only
+sign is the agent behaving as if it had been told something.
 
 `refusal_fallback_prompt` is the one with a name: it is what the CLI raises
 instead of ending a turn with a refusal, so not declaring it costs the user a
@@ -34,17 +27,16 @@ turn every time it would have fired.
 
 ## What is already decided
 
-The answer path exists. `PermissionOutcome.updatedInput` and the card in the log
-are the shape to copy; the difference is that these two dialogs come through
-their own callbacks rather than through `canUseTool`, so they need their own
-event and their own way of reaching a window.
+The answer path exists, and now twice over: `ElicitationCard` is the worked
+example — its own event, its own pending map, its own channel, abandoned with
+the turn like a permission. A dialog kind would be the same shape again.
 
 ## Evidence
 
 `sdk.d.ts:1543-1578` (`onUserDialog`, `supportedDialogKinds`), `:7325-7356`
 (`UserDialogRequest`, `UserDialogResult`), `:1522-1542` and `:577-605`
-(elicitation). `startSession` in `src/core/agent.ts:336` passes neither
-callback — only `canUseTool`, at `:395`.
+(elicitation). `startSession` in `src/core/agent.ts` passes `onElicitation` and
+`canUseTool`, and not `onUserDialog`.
 
 ## A sketch
 
@@ -73,6 +65,10 @@ question we cannot act on.
 
 So this needs the payload shape observed on a live session before anything is
 built, and provoking a refusal to obtain it is not something to do casually.
-**MCP elicitation is the tractable half** — `onElicitation` has a declared
-schema for its form (`sdk.d.ts:577-605`) and a declared result, and it is
-reachable today through any cloned repository carrying an `.mcp.json`.
+
+**2026-09-08: the tractable half shipped, and this one still has not.** MCP
+elicitation is drawn, answered and recorded. Nothing about the reasoning above
+changed — the payload for `refusal_fallback_prompt` is still undeclared, and
+declaring the kind without knowing it is still worse than leaving the CLI to
+fail closed. What is new is only that the shape to copy now exists in this
+repository rather than being described in a note.

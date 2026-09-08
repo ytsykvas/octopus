@@ -14,6 +14,7 @@ import {
 import { useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
 
+import type { FormValues } from '@core/elicitation.js'
 import { type AgentEvent, type ChangeContext, type TurnOutcome, turnOutcome } from '@core/events.js'
 import { type QuestionAnswer, readQuestions } from '@core/questions.js'
 import type { PermissionAnswer } from '@core/service.js'
@@ -26,8 +27,16 @@ import type { Streaming } from '../../hooks/useChat.js'
 import { formatTokens } from './format.js'
 import type { Change, ChangeLine } from './changeSummary.js'
 import { Markdown } from './Markdown.js'
+import { ElicitationCard } from './ElicitationCard.js'
 import { QuestionCard } from './QuestionCard.js'
-import { answersByRequest, groupToolRuns, planCalls, toolCount, toolRunRows } from './toolRuns.js'
+import {
+  answersByRequest,
+  elicitationsByRequest,
+  groupToolRuns,
+  planCalls,
+  toolCount,
+  toolRunRows
+} from './toolRuns.js'
 import { readFailure } from './toolFailure.js'
 import { describeToolInput, readPlan } from './toolSummary.js'
 import { UsageCard } from './UsageCard.js'
@@ -58,7 +67,15 @@ interface ChatLogProps {
   readonly streaming: Streaming
   readonly busy: boolean
   readonly pendingRequestId: string | null
+  /** The one MCP question a server is still holding open, if any. */
+  readonly pendingElicitationId: string | null
   readonly onAnswer: (requestId: string, answer: PermissionAnswer) => void
+  /** Answers an MCP server's question, which is neither a permission nor a tool. */
+  readonly onAnswerElicitation: (
+    requestId: string,
+    answer: 'accept' | 'decline',
+    values?: FormValues
+  ) => void
   /** Answers the agent's own questions, which is not a permission. */
   readonly onAnswerQuestions: (requestId: string, answers: readonly QuestionAnswer[]) => void
   /** Asks for a plan already in the log to be carried out. */
@@ -77,7 +94,9 @@ export function ChatLog({
   streaming,
   busy,
   pendingRequestId,
+  pendingElicitationId,
   onAnswer,
+  onAnswerElicitation,
   onAnswerQuestions,
   onExecutePlan
 }: ChatLogProps): React.JSX.Element {
@@ -96,6 +115,7 @@ export function ChatLog({
   // Gathered once for the whole log: an answer is recorded as its own event, so
   // it sits further down than the question whose card draws it.
   const answers = useMemo(() => answersByRequest(entries), [entries])
+  const elicitationAnswers = useMemo(() => elicitationsByRequest(entries), [entries])
   const blocks = useMemo(() => groupToolRuns(entries), [entries])
   // Which calls handed over a plan, so that a plan sent back for another round
   // is not drawn as something that broke.
@@ -127,6 +147,9 @@ export function ChatLog({
             plans={plans}
             busy={busy}
             pendingRequestId={pendingRequestId}
+            pendingElicitationId={pendingElicitationId}
+            elicitationAnswers={elicitationAnswers}
+            onAnswerElicitation={onAnswerElicitation}
             answers={answers}
             onAnswer={onAnswer}
             onAnswerQuestions={onAnswerQuestions}
@@ -154,6 +177,13 @@ export function ChatLog({
 interface AnswerProps {
   busy: boolean
   pendingRequestId: string | null
+  pendingElicitationId: string | null
+  elicitationAnswers: Map<string, 'accept' | 'decline' | 'cancel'>
+  onAnswerElicitation: (
+    requestId: string,
+    answer: 'accept' | 'decline',
+    values?: FormValues
+  ) => void
   /** What was chosen, by request, for questions read back from the transcript. */
   answers: Map<string, readonly QuestionAnswer[]>
   onAnswer: (requestId: string, answer: PermissionAnswer) => void
@@ -181,6 +211,9 @@ function AgentRow({
   plans,
   busy,
   pendingRequestId,
+  pendingElicitationId,
+  elicitationAnswers,
+  onAnswerElicitation,
   answers,
   onAnswer,
   onAnswerQuestions,
@@ -223,6 +256,33 @@ function AgentRow({
       ) : (
         <ToolFailure content={event.content} />
       )
+
+    case 'elicitation_request':
+      return (
+        <ElicitationCard
+          serverName={event.serverName}
+          message={event.message}
+          title={event.title}
+          fields={event.fields}
+          // Answerable only while the server is still waiting. One read back
+          // from the transcript is history, and buttons on it would let the
+          // user answer a question nobody is holding open.
+          answerable={pendingElicitationId === event.requestId}
+          answered={elicitationAnswers.get(event.requestId) ?? null}
+          onAnswer={(values) => {
+            onAnswerElicitation(event.requestId, 'accept', values)
+          }}
+          onDecline={() => {
+            onAnswerElicitation(event.requestId, 'decline')
+          }}
+        />
+      )
+
+    // The record of what became of one. Nothing of its own in the log: the card
+    // above reads it and says so on itself, which keeps the question and its
+    // outcome in one place rather than two entries apart.
+    case 'elicitation_answered':
+      return null
 
     case 'permission_request': {
       // A plan's request has nothing left to say here. The plan itself is

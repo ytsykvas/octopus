@@ -994,6 +994,20 @@ export const uk: Translation = {
     noDescription: 'Про себе він нічого не каже.'
   },
 
+  elicitation: {
+    from: 'Запитання від {{server}}',
+    optional: '{{label}} (необовʼязково)',
+    choose: 'Оберіть…',
+    send: 'Відповісти',
+    decline: 'Відхилити',
+    was: {
+      accept: 'Відповідь надано.',
+      decline: 'Відхилено.',
+      cancel: 'Знято, коли хід зупинився.'
+    },
+    gone: 'Відповіді вже ніхто не чекає.'
+  },
+
   trust: {
     title: 'Що цей репозиторій може робити',
     explain:

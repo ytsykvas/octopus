@@ -47,6 +47,7 @@ import { RevertPathSchema } from '../core/revert.js'
 import { ScriptBodySchema, ScriptKindSchema } from '../core/scripts.js'
 import { SkillImportSchema, SkillSaveSchema } from '../core/skills.js'
 import { SkillNameSchema } from '../core/skillNames.js'
+import { FormValuesSchema } from '../core/elicitation.js'
 import { LibraryImportSchema, LibraryRawSchema } from '../core/library.js'
 import { LibraryKindSchema, LibraryNameSchema } from '../core/libraryNames.js'
 import { StoreSchema } from '../core/stores.js'
@@ -204,6 +205,9 @@ async function writeConfig(
  * read the contract. The length is bounded here as well as in core — this one
  * is about what crosses the bridge, and core's is about what is written.
  */
+/** The three words a server tells apart, and nothing else. */
+const ElicitationAnswerSchema = z.enum(['accept', 'decline', 'cancel'])
+
 const PastedBytesSchema = z
   .instanceof(Uint8Array)
   .refine((bytes) => bytes.byteLength <= MAX_PASTE_BYTES)
@@ -859,6 +863,24 @@ export function registerIpc(
         requestId,
         PermissionAnswerSchema.parse(answer),
         PlanFeedbackSchema.optional().parse(feedback)
+      )
+    )
+  )
+
+  /*
+   * An MCP server's question, answered.
+   *
+   * The values are parsed rather than trusted: they become the `content` a
+   * server reads back, and a window sending something else is what the parse is
+   * for. Every field is text or a flag — a number is still text at this point,
+   * and core makes it a number on the way out.
+   */
+  host.handle('chats:elicitation', (_event, requestId: string, answer: unknown, values: unknown) =>
+    attempt(() =>
+      service.answerElicitation(
+        requestId,
+        ElicitationAnswerSchema.parse(answer),
+        FormValuesSchema.parse(values)
       )
     )
   )

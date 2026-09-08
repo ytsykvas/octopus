@@ -252,6 +252,103 @@ describe('answering a question', () => {
   })
 })
 
+describe("an MCP server's question", () => {
+  const REQUEST = {
+    type: 'elicitation_request' as const,
+    requestId: 'e-1',
+    serverName: 'ledger',
+    message: 'Which token?',
+    title: '',
+    fields: []
+  }
+
+  /*
+   * Its own state beside the permission, not the same one: a server's question
+   * does not put the conversation into `waiting_permission`, because the turn
+   * is inside a tool call and the agent is not the one asking.
+   */
+  it('is held apart from a permission request', async () => {
+    givenChat()
+    const { result } = renderHook(() => useChat(...open()))
+    await waitFor(() => {
+      expect(result.current.chat).not.toBeNull()
+    })
+
+    emitAgentEvent(REQUEST)
+
+    expect(result.current.pendingElicitation).toBe('e-1')
+    expect(result.current.pending).toBeNull()
+  })
+
+  it('answers it with what was filled in', async () => {
+    givenChat()
+    const { result } = renderHook(() => useChat(...open()))
+    await waitFor(() => {
+      expect(result.current.chat).not.toBeNull()
+    })
+
+    emitAgentEvent(REQUEST)
+
+    await act(async () => {
+      await result.current.answerElicitation('e-1', 'accept', { token: 'abc' })
+    })
+
+    expect(octopus().chats.answerElicitation).toHaveBeenCalledWith('e-1', 'accept', {
+      token: 'abc'
+    })
+    // Cleared first: the server is released either way, and a form that stayed
+    // live while it works reads as though the button did nothing.
+    expect(result.current.pendingElicitation).toBeNull()
+  })
+
+  it('says why an answer could not be sent', async () => {
+    givenChat()
+    vi.mocked(octopus().chats.answerElicitation).mockResolvedValue({
+      ok: false,
+      error: 'the agent is gone',
+      code: 'chatMissing'
+    })
+    const { result } = renderHook(() => useChat(...open()))
+    await waitFor(() => {
+      expect(result.current.chat).not.toBeNull()
+    })
+
+    await act(async () => {
+      await result.current.answerElicitation('e-1', 'decline')
+    })
+
+    expect(result.current.error).toBe('the agent is gone')
+  })
+
+  // Another window on the same workspace answered it, or the turn withdrew it.
+  it('drops a form something else has settled', async () => {
+    givenChat()
+    const { result } = renderHook(() => useChat(...open()))
+    await waitFor(() => {
+      expect(result.current.chat).not.toBeNull()
+    })
+
+    emitAgentEvent(REQUEST)
+    emitAgentEvent({ type: 'elicitation_answered', requestId: 'e-1', action: 'decline' })
+
+    expect(result.current.pendingElicitation).toBeNull()
+  })
+
+  // An outcome for some other question leaves this one alone.
+  it('leaves a form that is waiting on a different question', async () => {
+    givenChat()
+    const { result } = renderHook(() => useChat(...open()))
+    await waitFor(() => {
+      expect(result.current.chat).not.toBeNull()
+    })
+
+    emitAgentEvent(REQUEST)
+    emitAgentEvent({ type: 'elicitation_answered', requestId: 'e-other', action: 'cancel' })
+
+    expect(result.current.pendingElicitation).toBe('e-1')
+  })
+})
+
 describe('two settings changed in quick succession', () => {
   /*
    * Both writes reach the core correctly; only the pane disagrees. `change`

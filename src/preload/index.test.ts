@@ -370,6 +370,11 @@ describe('channel names', () => {
       () => method('chats', 'answerPermission')('r' as never, 'allow' as never),
       'chats:permission'
     ],
+    [
+      'chats.answerElicitation',
+      () => method('chats', 'answerElicitation')('r-1' as never, 'decline' as never),
+      'chats:elicitation'
+    ],
     ['chats.rateLimit', () => method('chats', 'rateLimit')(), 'chats:rateLimit'],
     ['chats.subscription', () => method('chats', 'subscription')(), 'chats:subscription'],
     [

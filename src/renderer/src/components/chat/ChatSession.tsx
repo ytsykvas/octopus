@@ -190,7 +190,11 @@ export function ChatSession({
             streaming={chat.streaming}
             busy={chat.busy}
             pendingRequestId={pending?.requestId ?? null}
+            pendingElicitationId={chat.pendingElicitation}
             onAnswer={(requestId, answer) => void chat.answer(requestId, answer)}
+            onAnswerElicitation={(requestId, answer, values) =>
+              void chat.answerElicitation(requestId, answer, values)
+            }
             onAnswerQuestions={(requestId, answers) =>
               void chat.answerQuestions(requestId, answers)
             }

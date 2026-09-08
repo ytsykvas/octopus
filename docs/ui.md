@@ -966,6 +966,32 @@ then corrected itself to twelve would be worse than one that appears once — an
 emptying asks first, saying plainly that an old message will then point at a
 file that is gone.
 
+**An MCP server's question gets a card, and says whose it is first.** A server
+may stop mid-call and ask for a token, a choice or a confirmation. The SDK
+offers `onElicitation` for it and **declines automatically when nothing answers**
+— so before this the server was refused, the agent carried on as though an
+answer had been given, and nobody saw anything. That is reachable today rather
+than hypothetical: `settingSources` includes the project layer and a worktree's
+own `.mcp.json` starts servers, so any repository somebody clones can raise one.
+
+A card in the log rather than a dialog, for the reason `QuestionCard` gives: the
+answer belongs to the conversation and stays worth reading a month later. What
+is different from every other card is the first line — **which server is
+asking**. This is the one thing in the log written by software nobody here
+chose, and a form asking for a token with no visible author is the shape a
+phishing prompt has.
+
+Two things are refused rather than drawn, and both would otherwise be this app
+pretending. A `url` mode asks the host to send somebody to an address a
+repository chose, which is an outward-facing act and is not taken on a server's
+say-so. And a schema `elicitation.ts` cannot read is declined with a reason,
+because a half-drawn form collects an answer the server then refuses and the
+user has typed it for nothing.
+
+`decline` and `cancel` are different words to a server and so different
+sentences here: one is the user saying no, the other is the question going away
+when the turn stopped.
+
 `FileEditor` can carry `notes` — a function run against the text on every
 keystroke, whose answers appear under the box. The env block uses it; told on
 blur instead, a warning arrives after the attention that could act on it.
@@ -1940,6 +1966,7 @@ field styling had already drifted by a few pixels of height.
 | `LibrarySection`                                       | the commands or subagents of one store, in both settings dialogs and once per kind. No switch on a row, which is the visible difference from the skills beside them: the SDK offers no per-conversation override for either, so one is present or it is not                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             |
 | `LibraryEditor`                                        | one document in one field. A command is its text; a subagent's other frontmatter is kept as written, which a form could not promise                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
 | `LibraryImport`                                        | the same three routes a skill's import has, minus the folder — both kinds are one file — plus the field a skill never needs: the name. Read first, name second, write third                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             |
+| `ElicitationCard`                                      | an MCP server's question in the log, drawn from the schema it sent. Named by its server before anything else, because it is the one card written by software nobody here chose. Two states rather than one map of values, so a text box holds a string and a checkbox holds a flag and no reader needs an arm for the case that cannot happen                                                                                                                                                                                                                                                                                                                                                                                                                                                           |
 | `SkillsSection`                                        | the same list in both settings dialogs, given the store as a prop — they differ only in reach, and two copies would drift into looking like different features. Its switch is about **new** conversations; the panel above is about the one in hand. The project one also lists the checkout's own, and those rows carry the same switch: the **file** is read-only, since editing it from a settings dialog would be octopus writing inside somebody's checkout, but whether the agent may reach for it is our record and writes nothing into the repository                                                                                                                                                                                                                                           |
 | `SkillEditor`                                          | a form for the two fields anybody writing a skill is actually choosing, and the document itself one click away. The raw mode is not an afterthought — `allowed-tools` and `when_to_use` live in that frontmatter, and the form's save keeps every key it does not know about. The name is disabled after creation: it is the key every stored answer uses — the default marks, each conversation's overrides — so changing it is a migration rather than an edit, and it has a task file of its own. It is **not** the folder, though it is for a skill the app itself created: a folder placed by hand may name something else, and the editor addresses the directory the listing found                                                                                                               |
 | `useAnchoredPanel`                                     | where both composer panels are drawn: `fixed` against the window the way `DropdownMenu` does it and for the same reason, flipped above the chip when it would run off the bottom, clamped when it would run off the right, closed on a scroll of something the chip sits inside. The size is given per opening, since a panel's height can depend on how many rows it is about to hold                                                                                                                                                                                                                                                                                                                                                                                                                  |

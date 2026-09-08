@@ -60,6 +60,26 @@ export function answersByRequest(
 }
 
 /**
+ * What became of each MCP server's question, by the request that asked.
+ *
+ * The same walk and the same reason: the outcome is its own event and sits
+ * further down the log than the card that draws it.
+ */
+export function elicitationsByRequest(
+  entries: readonly ChatEntry[]
+): Map<string, 'accept' | 'decline' | 'cancel'> {
+  const found = new Map<string, 'accept' | 'decline' | 'cancel'>()
+
+  for (const entry of entries) {
+    if (entry.role === 'agent' && entry.event.type === 'elicitation_answered') {
+      found.set(entry.event.requestId, entry.event.action)
+    }
+  }
+
+  return found
+}
+
+/**
  * A tool call that is working out rather than a result.
  *
  * What the agent looked at folds; what it changed does not. A grep is how the

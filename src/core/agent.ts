@@ -26,6 +26,7 @@ import type {
 
 import type { AgentCommand, AgentModel, EffortChoice, PermissionMode } from './chats.js'
 import { sessionEffort } from './chats.js'
+import { type AnswerValue, type ElicitationField, readForm } from './elicitation.js'
 import type { AgentEvent } from './events.js'
 import { describeError } from './persist.js'
 import type { UsageReport } from './usage.js'
@@ -196,7 +197,28 @@ export interface SessionHooks {
   readonly onEvent: (event: AgentEvent) => void
   /** Answers a permission request. */
   readonly askPermission: (ask: PermissionAsk) => Promise<PermissionOutcome>
+  /**
+   * Answers an MCP server's question, or declines it.
+   *
+   * Held open exactly as `askPermission` is: the server is blocked until it
+   * comes back, which is what an elicitation is for.
+   */
+  readonly askElicitation: (ask: ElicitationAsk) => Promise<ElicitationAnswer>
 }
+
+/** What an MCP server wants from the user, once the form has been read. */
+export interface ElicitationAsk {
+  readonly serverName: string
+  readonly message: string
+  /** A heading the server offered, where it offered one. */
+  readonly title: string
+  readonly fields: readonly ElicitationField[]
+}
+
+/** What comes back. `content` only for an answer, and only what was filled in. */
+export type ElicitationAnswer =
+  | { readonly action: 'accept'; readonly content: Readonly<Record<string, AnswerValue>> }
+  | { readonly action: 'decline' | 'cancel' }
 
 export interface AgentSession {
   /** Queues a message. Returns immediately — the answer arrives as events. */
@@ -460,6 +482,46 @@ export function startSession(options: SessionOptions, hooks: SessionHooks): Agen
       // What makes text appear while it is being written rather than in one
       // block at the end of a turn.
       includePartialMessages: true,
+      /*
+       * An MCP server asking the user something, mid-call.
+       *
+       * Declared at all because the SDK **declines automatically** when it is
+       * not: the server is refused, the agent carries on as though an answer
+       * had been given, and nobody sees anything — the same failure the agent's
+       * own questions had before they had a card.
+       *
+       * Two things are refused here rather than shown, and both are refusals
+       * this application would otherwise have to pretend about. A `url` mode
+       * asks the host to send somebody to an address a repository chose; that
+       * is an outward-facing act and is not taken on a server's say-so. And a
+       * form whose schema `readForm` cannot draw is declined with a reason,
+       * because a half-drawn form collects an answer the server then refuses
+       * and the user has typed it for nothing.
+       */
+      onElicitation: async (request) => {
+        if (request.mode === 'url') {
+          return {
+            action: 'decline',
+            content: { reason: 'octopus does not open addresses on a server’s behalf.' }
+          }
+        }
+
+        const fields = readForm(request.requestedSchema)
+        if (fields === null) {
+          return {
+            action: 'decline',
+            content: { reason: 'octopus could not draw the form this server asked for.' }
+          }
+        }
+
+        return hooks.askElicitation({
+          serverName: request.serverName,
+          message: request.message,
+          title: request.title ?? '',
+          fields
+        })
+      },
+
       canUseTool: async (toolName, toolInput, { decisionReason, suggestions }) => {
         const outcome = await hooks.askPermission({
           toolName,

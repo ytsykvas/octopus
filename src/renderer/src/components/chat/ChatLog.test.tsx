@@ -24,10 +24,12 @@ const TURN: ChatEntry = fromAgent({ type: 'text', text: 'that is done' })
 
 function renderLog(overrides: Partial<React.ComponentProps<typeof ChatLog>> = {}): {
   onAnswer: ReturnType<typeof vi.fn>
+  onAnswerElicitation: ReturnType<typeof vi.fn>
   onAnswerQuestions: ReturnType<typeof vi.fn>
   onExecutePlan: ReturnType<typeof vi.fn>
 } {
   const onAnswer = vi.fn()
+  const onAnswerElicitation = vi.fn()
   const onAnswerQuestions = vi.fn()
   const onExecutePlan = vi.fn()
 
@@ -37,14 +39,16 @@ function renderLog(overrides: Partial<React.ComponentProps<typeof ChatLog>> = {}
       streaming={{ text: '', thinking: '' }}
       busy={false}
       pendingRequestId={null}
+      pendingElicitationId={null}
       onAnswer={onAnswer}
+      onAnswerElicitation={onAnswerElicitation}
       onAnswerQuestions={onAnswerQuestions}
       onExecutePlan={onExecutePlan}
       {...overrides}
     />
   )
 
-  return { onAnswer, onAnswerQuestions, onExecutePlan }
+  return { onAnswer, onAnswerElicitation, onAnswerQuestions, onExecutePlan }
 }
 
 describe('what the log shows', () => {
@@ -77,7 +81,9 @@ describe('what the log shows', () => {
         streaming={{ text: '', thinking: '' }}
         busy={false}
         pendingRequestId={null}
+        pendingElicitationId={null}
         onAnswer={vi.fn()}
+        onAnswerElicitation={vi.fn()}
         onAnswerQuestions={vi.fn()}
         onExecutePlan={vi.fn()}
       />
@@ -106,7 +112,9 @@ describe('what the log shows', () => {
         streaming={{ text: '**still writing**', thinking: '' }}
         busy
         pendingRequestId={null}
+        pendingElicitationId={null}
         onAnswer={vi.fn()}
+        onAnswerElicitation={vi.fn()}
         onAnswerQuestions={vi.fn()}
         onExecutePlan={vi.fn()}
       />
@@ -1365,5 +1373,82 @@ describe('the answer to /usage', () => {
 
     expect(screen.getByRole('progressbar')).toBeVisible()
     expect(screen.getAllByText('Grep')).toHaveLength(2)
+  })
+})
+
+describe('a question from an MCP server, in the log', () => {
+  const REQUEST: AgentEvent = {
+    type: 'elicitation_request',
+    requestId: 'e-1',
+    serverName: 'ledger',
+    message: 'Which token should I use?',
+    title: '',
+    fields: [
+      { kind: 'text', name: 'token', label: 'Token', description: '', required: true, value: '' }
+    ]
+  }
+
+  /** The card's own confirm, which the composer's `Send` is not. */
+  const answer = (): HTMLElement => screen.getByRole('button', { name: 'Answer' })
+
+  it('is drawn as a card of its own', () => {
+    renderLog({ entries: [fromAgent(REQUEST)], pendingElicitationId: 'e-1' })
+
+    expect(screen.getByText('A question from ledger')).toBeInTheDocument()
+    expect(answer()).toBeInTheDocument()
+  })
+
+  it('answers it with what was typed', async () => {
+    const user = userEvent.setup()
+    const { onAnswerElicitation } = renderLog({
+      entries: [fromAgent(REQUEST)],
+      pendingElicitationId: 'e-1'
+    })
+
+    await user.type(screen.getByLabelText('Token'), 'abc')
+    await user.click(answer())
+
+    expect(onAnswerElicitation).toHaveBeenCalledWith('e-1', 'accept', { token: 'abc' })
+  })
+
+  it('turns it down', async () => {
+    const user = userEvent.setup()
+    const { onAnswerElicitation } = renderLog({
+      entries: [fromAgent(REQUEST)],
+      pendingElicitationId: 'e-1'
+    })
+
+    await user.click(screen.getByRole('button', { name: 'Decline' }))
+
+    expect(onAnswerElicitation).toHaveBeenCalledWith('e-1', 'decline')
+  })
+
+  /*
+   * One read back from the transcript is history: the server it belonged to
+   * stopped waiting long ago, and buttons on it would let the user answer a
+   * question nobody is holding open.
+   */
+  it('offers no buttons for one nothing is waiting on', () => {
+    renderLog({ entries: [fromAgent(REQUEST)], pendingElicitationId: null })
+
+    expect(screen.queryByRole('button', { name: 'Decline' })).not.toBeInTheDocument()
+  })
+
+  /*
+   * The outcome is its own event and sits further down the log than the card
+   * that draws it, so it is gathered in one pass — and it is said on the card
+   * rather than as a second row, which keeps the question and what became of it
+   * in one place.
+   */
+  it('says what became of it, from an event further down', () => {
+    renderLog({
+      entries: [
+        fromAgent(REQUEST),
+        fromAgent({ type: 'elicitation_answered', requestId: 'e-1', action: 'decline' })
+      ],
+      pendingElicitationId: null
+    })
+
+    expect(screen.getByText('Declined.')).toBeInTheDocument()
   })
 })

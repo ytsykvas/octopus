@@ -1278,6 +1278,31 @@ export const en = {
     noDescription: 'It describes itself as nothing.'
   },
 
+  elicitation: {
+    /* A question from an MCP server. The one card in the log that comes from
+       software nobody here wrote — a `.mcp.json` in a checkout starts these —
+       so whose question it is comes before what it asks. */
+    from: 'A question from {{server}}',
+    optional: '{{label}} (optional)',
+    choose: 'Choose…',
+    /* "Answer", not "Send": the composer's own button is Send, and two of them
+       on one screen is one too many. It is also the truer word — this answers a
+       question rather than sending a message. */
+    send: 'Answer',
+    decline: 'Decline',
+    /* What became of it, read back later. `decline` and `cancel` are different
+       words to a server: one is the user saying no, the other is the question
+       going away without an answer. */
+    was: {
+      accept: 'Answered.',
+      decline: 'Declined.',
+      cancel: 'Withdrawn when the turn stopped.'
+    },
+    /* Neither open nor recorded: the turn it belonged to is gone, and the
+       transcript never got its outcome. */
+    gone: 'No longer waiting for an answer.'
+  },
+
   trust: {
     title: 'What this repository can do',
     explain:
