@@ -329,6 +329,17 @@ service: `⌘T` in `App.test.tsx` and the two in `Chat.test.tsx`. Nothing above
 explains those, and the guard added on 2026-09-02 — `refuseSilence` — is still
 the thing that will name them when they next appear.
 
+**2026-09-08: it appeared, and the message was thrown away again.** One renderer
+suite reported `1 failed | 2182 passed` inside a `npm run check`; the run's
+output was read through a `grep` that kept only the count, so which test failed
+is unknown. The same file passed immediately after, twice, and the next full
+`check` was green.
+
+That is the third sighting lost the same way, and the instruction two paragraphs
+up said exactly not to do it. **Write the run to a file and read the file** —
+`npm run check > check.log 2>&1` — because a filter on the pipe is how every one
+of these has escaped.
+
 **And one thing this exposed rather than fixed**, recorded separately in
 `a-quit-does-not-wait-for-the-record-it-is-writing.md`: `main` calls
 `closeChats` as `void service.closeChats()` on `will-quit`, so the waiting the

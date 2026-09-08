@@ -926,6 +926,20 @@ not, and a control that looked like a choice would be a control that did
 nothing. A list answering a different question belongs beside the skills, not
 inside them.
 
+**A new command reaches a running conversation; a new subagent does not.**
+Measured against a live session, twice: with a store handed over as an additional
+root, a command and a subagent written **before** the session started were both
+listed, and one written **after** it appeared in `supportedCommands()` only once
+`reloadSkills()` had been called — while the subagent written at the same moment
+was still missing from `supportedAgents()` after the same reload. The SDK half
+says as much: the SessionStart flag is documented as re-scanning "skill and
+command directories", and nothing anywhere names `.claude/agents/`.
+
+So the reload call after every write earns its keep for commands, and the
+subagent sections carry a sentence saying a new one reaches the conversations
+started after it. Written where it is true rather than left to be discovered
+when the agent does not use one.
+
 A command is drawn as `/name`, because that is what the reader types; a subagent
 by its bare name, because it is never typed at all. The editor is **one field**
 rather than the form-and-raw pair a skill gets: a command _is_ its text, and a

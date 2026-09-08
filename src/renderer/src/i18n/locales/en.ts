@@ -1194,10 +1194,14 @@ export const en = {
     commandsProjectNote:
       'Typed after a slash in this project’s conversations. Kept in octopus, not in the repository.',
     subagents: 'Subagents',
+    /* The second sentence is measured, not guessed: against a live session, a
+       command written while it was running appeared after a reload and a
+       subagent did not. Said here rather than left to be discovered when the
+       agent does not use one. */
     subagentsNote:
-      'Helpers the agent reaches for on its own, each with its own instructions. Kept in octopus, not in the repository.',
+      'Helpers the agent reaches for on its own, each with its own instructions. Kept in octopus, not in the repository. A new one reaches conversations started after it, not ones already running.',
     subagentsProjectNote:
-      'Helpers the agent reaches for in this project, each with its own instructions. Kept in octopus, not in the repository.',
+      'Helpers the agent reaches for in this project, each with its own instructions. Kept in octopus, not in the repository. A new one reaches conversations started after it, not ones already running.',
 
     empty: {
       command: 'No commands here yet.',
