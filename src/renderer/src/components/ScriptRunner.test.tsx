@@ -969,9 +969,18 @@ describe('ScriptRunner', () => {
     await waitFor(() => {
       expect(onOutcome).toHaveBeenCalledWith(false)
     })
-    // Drawn in the header, outside the terminal — the build half is folded on
-    // every mount, so the red text on the canvas is the sign nobody sees.
-    expect(await screen.findByText(/spawn \/bin\/zsh ENOENT/)).toBeInTheDocument()
+    /* Drawn in the header, outside the terminal — the build half is folded on
+       every mount, so the red text on the canvas is the sign nobody sees.
+
+       Named as the header's paragraph rather than asked of the whole document.
+       Both carry it: `Terminal` writes the refusal onto the canvas, because a
+       bare terminal has nowhere else to put it, and calls `onFailed` so a host
+       that folds the canvas can say it too. The canvas row renders on xterm's
+       own schedule, so a query that would take either matched once, twice, or
+       failed with "found multiple" depending on the run — about one full
+       renderer suite in four, measured. */
+    const shown = await screen.findAllByText(/spawn \/bin\/zsh ENOENT/)
+    expect(shown.filter((node) => node.tagName === 'P')).toHaveLength(1)
   })
   describe('saying what is running', () => {
     const props = {

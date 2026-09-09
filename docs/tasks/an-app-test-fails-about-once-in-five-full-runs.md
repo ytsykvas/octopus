@@ -370,6 +370,39 @@ fails under `Promise.all` and passes under `allOf`.
 **What is left is the renderer half only**, which has no temporary directory,
 no service and no spawn. Nothing recorded here explains it.
 
+## 2026-09-10: a renderer sighting caught, and it is a second mechanism
+
+Caught by doing the one thing this note has been asking for — running the
+renderer suite with the output kept in a file rather than piped through `grep`.
+One failure in four full runs, and the message was not the timeout this note
+describes at all:
+
+```
+FAIL  src/renderer/src/components/ScriptRunner.test.tsx > reports the half finished when its session never starts
+TestingLibraryElementError: Found multiple elements with the text: /spawn \/bin\/zsh ENOENT/
+  <p class="text-danger …">spawn /bin/zsh ENOENT</p>
+  <span class="xterm-fg-1">spawn /bin/zsh ENOENT</span>
+```
+
+**The opposite of the shape this note is about.** Not an element that never
+arrived — an element that arrived _twice_, sometimes. `Terminal` writes a
+refused `terminal.create` onto the canvas, because a bare terminal has nowhere
+else to put it, and calls `onFailed` so a host that folds the canvas can say it
+too (`src/renderer/src/components/Terminal.tsx:189-190`). Both are deliberate.
+The test's own comment said it meant the header, and its query asked the whole
+document — so whether it passed depended on whether xterm had painted its row
+yet.
+
+Fixed by naming which of the two it means, and five consecutive full runs are
+green where four produced one failure. **This does not close the note**: the
+original sightings were `findByText` timeouts in `App.test.tsx` and
+`Chat.test.tsx`, and nothing here explains those.
+
+What it does establish: **"the renderer half" is not one bug.** At least two
+independent mechanisms produce an intermittent red in that suite, and the next
+sighting has to be read on its own rather than filed against this one. The
+method stands — keep the output — and it worked the first time it was used.
+
 **And one thing this exposed, which has since landed.** `main` called
 `closeChats` as a bare `void service.closeChats()` on `will-quit`, so the waiting
 the service does reached the tests and not the application. It is now
