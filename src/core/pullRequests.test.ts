@@ -233,6 +233,45 @@ describe('reading a branch', () => {
     expect(view.unpushedCommits).toBe(1)
   })
 
+  /* Two answers meet on this object and only one of them is live. GitHub
+     deletes the head branch on merge, octopus fetches without `--prune`, so the
+     tracking ref outlives the branch — and the pane went on saying everything
+     was on GitHub about a branch that was not there. */
+  it('counts everything unpushed once the remote no longer has the branch', async () => {
+    const branch = await branchWithCommit()
+    const work = join(dir, 'work')
+    await run('git', ['push', '-q', '-u', 'origin', branch], { cwd: work })
+
+    // What the server does on merge, leaving this clone's ref behind.
+    await run('git', ['--git-dir', join(dir, 'origin.git'), 'branch', '-D', branch])
+
+    const view = await readPullRequest(branch, 'main', fakeGh().gh, workExec())
+
+    // Both together: either alone still passes with the two left disagreeing.
+    expect(view.pushed).toBe(false)
+    expect(view.unpushedCommits).toBe(1)
+  })
+
+  /* The other way the two sources disagree, and the one no local read can
+     settle: the branch is on the remote and this clone has no ref for it, which
+     is what a push from a second checkout leaves. The count falls back to what
+     the branch has since the base — see
+     docs/tasks/a-branch-pushed-from-another-clone-reads-as-unpushed.md. */
+  it('falls back to the count against the base for a copy this clone cannot see', async () => {
+    const branch = await branchWithCommit()
+    const work = join(dir, 'work')
+    await run('git', ['push', '-q', '-u', 'origin', branch], { cwd: work })
+
+    // What a clone that never fetched this branch looks like.
+    await run('git', ['branch', '--unset-upstream', branch], { cwd: work })
+    await run('git', ['update-ref', '-d', `refs/remotes/origin/${branch}`], { cwd: work })
+
+    const view = await readPullRequest(branch, 'main', fakeGh().gh, workExec())
+
+    expect(view.pushed).toBe(true)
+    expect(view.unpushedCommits).toBe(1)
+  })
+
   it('knows whether the branch is on the remote', async () => {
     const branch = await branchWithCommit()
     const work = join(dir, 'work')

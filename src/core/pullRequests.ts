@@ -147,9 +147,16 @@ export async function readPullRequest(
     pushed,
     dirty,
     ahead,
-    // Null means the remote has no copy of this branch, so nothing on it has
-    // been pushed — which is what `ahead` already counts.
-    unpushedCommits: unpushed ?? ahead,
+    /* Two answers to "is this branch on the remote" meet here, and only one of
+       them is live. `pushed` asked the remote a moment ago; the count read this
+       clone's cached refs, and a ref outlives the branch it tracked — GitHub
+       deletes the head branch on merge and nothing here prunes. So where the
+       remote says it has no such branch, the cached answer is about something
+       that is gone, and everything here is unpushed.
+
+       Null means the same thing by the other route: no copy to count from,
+       which is what `ahead` already counts. */
+    unpushedCommits: pushed ? (unpushed ?? ahead) : ahead,
     base
   }
 }
