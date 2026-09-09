@@ -123,6 +123,10 @@ export type GitHubErrorCode =
   // Asking the agent to write the title and body is on the way to a pull
   // request too, and fails in the same place as far as the reader is concerned.
   | 'draftFailed'
+  // Its sibling, and apart because the remedies differ: that one could not ask
+  // the agent, this one asked and got prose the format could not be read out
+  // of. Nothing is broken here and trying again usually works.
+  | 'draftUnreadable'
 
 export class GitHubError extends CodedError<GitHubErrorCode> {
   override readonly name = 'GitHubError'

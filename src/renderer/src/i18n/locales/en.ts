@@ -1452,6 +1452,11 @@ export const en = {
     branchMissing:
       'That repository has no branch called \u201c{{branch}}\u201d. Choose a base branch it does have before pointing the project at it.',
     draftFailed: 'The description could not be drafted: {{reason}}',
+    /* Not a failure to reach the agent — it answered, and the answer had no
+       title and body in it. Says what to do, because trying again is usually
+       all it takes and nothing here is broken. */
+    draftUnreadable:
+      'The agent answered, but not with a title and a description. Try again, or write them yourself.',
     envProfileExists: 'This project already has a set of variables called \u201c{{name}}\u201d.',
     envProfileMissing: 'There is no set of variables called \u201c{{name}}\u201d any more.',
     envProfileName:

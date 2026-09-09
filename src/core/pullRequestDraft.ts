@@ -15,6 +15,7 @@ import { z } from 'zod'
 import { InputQueue, mapMessage, type QueryFn, READ_ONLY_TOOLS, userMessage } from './agent.js'
 import type { WorkspaceDiff } from './diff.js'
 import { GitHubError } from './github.js'
+import { describeError } from './persist.js'
 
 /**
  * Delimiters rather than JSON.
@@ -237,16 +238,28 @@ export async function draftPullRequest(
       }
     }
   } catch (error) {
+    /* The reason goes in the **params**, not only in the English text. The
+       message the reader sees is `…could not be drafted: {{reason}}`, and this
+       threw with nothing to interpolate — so the one sentence whose whole job
+       was to say why ended at the colon. */
     throw new GitHubError(
       'draftFailed',
-      {},
-      `The agent could not be asked for a description: ${String(error)}`
+      { reason: describeError(error) },
+      `The agent could not be asked for a description: ${describeError(error)}`
     )
   }
 
   const draft = parseDraft(reply, options.commitInstruction !== null)
   if (draft === null) {
-    throw new GitHubError('draftFailed', {}, 'The agent did not answer with a title and a body.')
+    /* A different failure with a different remedy, so a different code. The
+       agent answered and the answer was not in the shape it was asked for —
+       nothing is broken, and asking again usually works, which is not true of
+       the one above. */
+    throw new GitHubError(
+      'draftUnreadable',
+      {},
+      'The agent did not answer with a title and a body.'
+    )
   }
 
   return draft

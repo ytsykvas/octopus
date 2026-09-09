@@ -109,6 +109,7 @@ const CODE_PARAMETERS: Record<CoreErrorCode, Interpolated> = {
   commitFailed: { reason: 'hook refused' },
   createFailed: { reason: 'no upstream' },
   draftFailed: { reason: 'the agent gave up' },
+  draftUnreadable: null,
   pushFailed: { branch: 'octopus/anna', reason: 'rejected' },
   closeFailed: { number: '42', reason: 'already closed' },
   replyFailed: { reason: 'empty' },

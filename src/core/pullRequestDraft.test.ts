@@ -379,16 +379,24 @@ describe('draftPullRequest', () => {
     expect(asked).toContain('Subject, then why.')
   })
 
-  it('reports a failure to reach the agent as one', async () => {
+  /* The reason travels in the **params**, not only in the English text. The
+     message the reader sees is "…could not be drafted: {{reason}}", and this
+     threw with nothing to interpolate — so the one sentence whose whole job was
+     to say why ended at the colon and said nothing. */
+  it('reports a failure to reach the agent, and says what it was', async () => {
     await expect(draftPullRequest(options, failing('no subscription'))).rejects.toMatchObject({
-      code: 'draftFailed'
+      code: 'draftFailed',
+      params: { reason: 'no subscription' }
     })
   })
 
-  it('reports an answer it could not read as a failure to draft', async () => {
+  /* Its own code, because the remedy differs: nothing is broken here — the
+     agent answered and the answer had no title in it — and asking again usually
+     works, which is not true of the failure above. */
+  it('keeps an unreadable answer apart from a failure to ask', async () => {
     await expect(draftPullRequest(options, answering('I would rather not.'))).rejects.toMatchObject(
       {
-        code: 'draftFailed'
+        code: 'draftUnreadable'
       }
     )
   })

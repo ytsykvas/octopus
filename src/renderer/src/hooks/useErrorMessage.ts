@@ -20,6 +20,8 @@ export function useErrorMessage(): (failure: Failure) => string {
           return t('errors.branchMissing', { branch: failure.params?.branch ?? '' })
         case 'draftFailed':
           return t('errors.draftFailed', { reason: failure.params?.reason ?? '' })
+        case 'draftUnreadable':
+          return t('errors.draftUnreadable')
         case 'envProfileExists':
           return t('errors.envProfileExists', { name: failure.params?.name ?? '' })
         case 'envProfileMissing':
