@@ -617,8 +617,15 @@ the app never sees a token (§10.9).
   enables auto-merge instead when a required check has not passed — so the pane
   reads the request again afterwards, which is also what turns a refusal it
   cannot name into a visible reason.
+  **A red check disables the button.** That is not a refusal GitHub would make,
+  which is what the other three conditions are: it merges happily over a check
+  nobody marked required. It is a policy the app keeps, it is hard, and the way
+  past it is to fix the check or to merge in the browser — where nobody does it
+  by reflex.
 - **Committing and pushing** an answer to a review, without which the loop ends
-  in the terminal.
+  in the terminal — and **pushing on its own**, which is the half that was
+  missing: the commit button only ever appeared while the worktree was dirty, so work the agent committed, or the reader committed in the
+  workspace's terminal, had no way onto the request except the terminal.
 
 **Every branch of a project is read in one call**, not one per workspace: the
 workspace list marks each row with what has become of its branch, and a read

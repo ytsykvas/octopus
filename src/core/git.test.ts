@@ -28,6 +28,7 @@ import {
   isIgnored,
   OUTPUT_TOO_LARGE,
   repositoryName,
+  resolveRef,
   toSlug,
   reasonFrom
 } from './git.js'
@@ -272,6 +273,29 @@ describe('branchExists', () => {
     await initRepo(dir)
     await addRemote()
     await expect(branchExists(exec, 'origin/develop')).resolves.toBe(false)
+  })
+})
+
+describe('resolveRef', () => {
+  it('answers with the commit a ref names', async () => {
+    await initRepo(dir)
+
+    const commit = await resolveRef(exec, 'refs/heads/main')
+
+    expect(commit).toMatch(/^[0-9a-f]{40}$/u)
+  })
+
+  it('answers null for a ref that does not exist', async () => {
+    await initRepo(dir)
+    await expect(resolveRef(exec, 'refs/heads/missing')).resolves.toBeNull()
+  })
+
+  /* `@{upstream}` on a branch that has none exits non-zero with a message
+     rather than answering emptily, and `publish.ts` leans on both spellings of
+     "no" arriving as the same null. */
+  it('answers null for an upstream that was never set', async () => {
+    await initRepo(dir)
+    await expect(resolveRef(exec, 'main@{upstream}')).resolves.toBeNull()
   })
 })
 

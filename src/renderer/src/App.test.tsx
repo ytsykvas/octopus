@@ -1947,6 +1947,7 @@ describe('App', () => {
         },
         pushed: true,
         dirty: false,
+        unpushedCommits: 0,
         ahead: 0,
         base: 'main'
       }

@@ -408,6 +408,7 @@ describe('channel table', () => {
     'workspaces:createPullRequest',
     'workspaces:draftPullRequest',
     'workspaces:commitAndPush',
+    'workspaces:push',
     'workspaces:pullRequestDetail',
     'workspaces:mergePullRequest',
     'workspaces:closePullRequest',
@@ -1664,6 +1665,44 @@ describe('workspaces of a real project', () => {
       cwd: workspace.path
     })
     expect(pushed.stdout).toContain(workspace.branch)
+  })
+
+  /*
+   * The other half of the pair, and the one that was missing: work committed in
+   * the workspace's own terminal, or by the agent, had no way onto the request.
+   * Uncommitted work stays where it is — a button that committed on the
+   * reader's behalf would be choosing a commit message for them.
+   */
+  it('pushes what is committed and leaves uncommitted work alone', async () => {
+    const projectId = await addProject('sending')
+    const origin = join(dir, 'sending-origin.git')
+    await run('git', ['init', '-q', '--bare', origin])
+    await run('git', ['remote', 'add', 'origin', origin], { cwd: join(dir, 'sending') })
+
+    const workspace = await createWorkspace(projectId)
+    await writeFile(join(workspace.path, 'committed.txt'), 'done\n', 'utf8')
+    await run('git', ['add', '-A'], { cwd: workspace.path })
+    await run('git', ['commit', '-q', '-m', 'a change'], { cwd: workspace.path })
+    await writeFile(join(workspace.path, 'loose.txt'), 'not yet\n', 'utf8')
+
+    await expect(invoke('workspaces:push', workspace.id)).resolves.toMatchObject({ ok: true })
+
+    const pushed = await run('git', ['ls-remote', '--heads', 'origin', workspace.branch], {
+      cwd: workspace.path
+    })
+    expect(pushed.stdout).toContain(workspace.branch)
+    const left = await run('git', ['status', '--porcelain'], { cwd: workspace.path })
+    expect(left.stdout).toContain('loose.txt')
+  })
+
+  it('says why a push failed rather than swallowing it', async () => {
+    const projectId = await addProject('unsendable')
+    const workspace = await createWorkspace(projectId)
+
+    await expect(invoke('workspaces:push', workspace.id)).resolves.toMatchObject({
+      ok: false,
+      code: 'pushFailed'
+    })
   })
 
   // The message becomes an argument to git, so an empty one is refused here

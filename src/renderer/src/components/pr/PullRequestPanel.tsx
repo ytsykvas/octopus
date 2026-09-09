@@ -91,6 +91,7 @@ export function PullRequestPanel({
   const [merging, setMerging] = useState(false)
   const [closing, setClosing] = useState(false)
   const [committing, setCommitting] = useState(false)
+  const [pushing, setPushing] = useState(false)
 
   /*
    * Whether git ignores the file octopus writes this workspace's variables into.
@@ -235,6 +236,25 @@ export function PullRequestPanel({
     })()
   }
 
+  /*
+   * Sends what is committed and nothing else.
+   *
+   * The same shape as the two above: read again either way, because what the
+   * pane believes is the fresh reading rather than what the call answered. The
+   * request's detail too — pushing is what starts the checks again.
+   */
+  const push = (): void => {
+    setPushing(true)
+    void (async () => {
+      const result = await window.octopus.workspaces.push(workspace.id)
+      setPushing(false)
+      if (!result.ok) report(result)
+
+      refresh()
+      detail.refresh()
+    })()
+  }
+
   const attached = new Set(quotes.pending.map((quote) => quote.key))
 
   return (
@@ -366,6 +386,9 @@ export function PullRequestPanel({
                   commitAndPush(t('pullRequest.answerCommit'))
                 }}
                 committing={committing}
+                onPush={push}
+                pushing={pushing}
+                unpushedCommits={view.unpushedCommits}
                 onRemoveWorkspace={() => {
                   onRemoveWorkspace(workspace.id)
                 }}

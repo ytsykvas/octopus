@@ -476,6 +476,10 @@ const api = {
     commitAndPush: (workspaceId: string, message: string): Promise<Result<void>> =>
       ipcRenderer.invoke('workspaces:commitAndPush', workspaceId, message) as Promise<Result<void>>,
 
+    /** Sends what is already committed, and leaves uncommitted work alone. */
+    push: (workspaceId: string): Promise<Result<void>> =>
+      ipcRenderer.invoke('workspaces:push', workspaceId) as Promise<Result<void>>,
+
     /** The checks, the review and the mergeability of a request that exists. */
     pullRequestDetail: (workspaceId: string, number: number): Promise<Result<PullRequestDetail>> =>
       ipcRenderer.invoke('workspaces:pullRequestDetail', workspaceId, number) as Promise<

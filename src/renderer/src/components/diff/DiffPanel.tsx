@@ -4,7 +4,8 @@ import {
   Columns2,
   MessageSquarePlus,
   RefreshCw,
-  Rows3
+  Rows3,
+  Upload
 } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
@@ -12,6 +13,7 @@ import { useTranslation } from 'react-i18next'
 import type { FileDiff } from '@core/diff.js'
 import { shortBranchName } from '@core/branches.js'
 import { AGENT_NAMES } from '@core/chats.js'
+import type { PublishState } from '@core/publish.js'
 import type { WorkspaceView } from '@core/workspaces.js'
 
 import {
@@ -22,7 +24,8 @@ import {
 import { useErrorMessage } from '../../hooks/useErrorMessage.js'
 import type { FileRevertController } from '../../hooks/useFileRevert.js'
 import { useWorkspaceDiff } from '../../hooks/useWorkspaceDiff.js'
-import { DiffFile } from './DiffFile.js'
+import { Button } from '../Button.js'
+import { DiffFile, PublishBadge } from './DiffFile.js'
 import type { DiffView } from './DiffHunk.js'
 import { MIN_SPLIT_COLUMNS, splitThreshold } from './measure.js'
 import { lineAddress, selectionAnchor } from './selectionAnchor.js'
@@ -36,6 +39,17 @@ import { NO_TOKENS, useHighlighting } from './useHighlighting.js'
  * putting it in the way of the files that are is what makes a review tedious.
  */
 const AUTO_COLLAPSE_LINES = 500
+
+/**
+ * The order the pane lists files in: least left to do first.
+ *
+ * Settled work at the top and the work still in hand at the bottom, so the
+ * bottom of the column is where the reader's own attention belongs. A
+ * presentation decision, so it lives here rather than in `publish.ts` — and a
+ * **stable** sort by it, which keeps git's own order inside each rung and means
+ * a file only ever moves when its state actually changes.
+ */
+const PUBLISH_ORDER: readonly PublishState[] = ['pushed', 'committed', 'uncommitted']
 
 interface DiffPanelProps {
   readonly workspace: WorkspaceView | null
@@ -100,6 +114,17 @@ export function DiffPanel({
    * kept across a restart would draw a short list with no memory of why.
    */
   const [chosenWriter, setChosenWriter] = useState<string | null>(null)
+
+  /**
+   * The workspace a push is in flight for, rather than a bare boolean.
+   *
+   * This pane is never remounted when the workspace changes — `RightPanel`
+   * renders it without a `key` — so a boolean stayed true across the switch and
+   * the next workspace drew a disabled "Pushing…" for a push that was not
+   * happening in it. Carrying the id makes the state answer for itself instead
+   * of relying on a reset staying in step with it.
+   */
+  const [pushingIn, setPushingIn] = useState<string | null>(null)
 
   /*
    * Who wrote what, worked out once per workspace rather than once per render.
@@ -297,6 +322,38 @@ export function DiffPanel({
     [revert, refresh]
   )
 
+  /*
+   * Sends what is committed, and reads the pane again either way.
+   *
+   * Committed work only: pushing does nothing about a file that has not been
+   * committed, and a button here that quietly committed on the reader's behalf
+   * would be choosing a commit message for them. The pull request pane is where
+   * that decision is made, and it has a field for it.
+   */
+  const push = useCallback(() => {
+    const workspaceId = openIn.current
+    setPushingIn(workspaceId)
+
+    void (async () => {
+      const result = await window.octopus.workspaces.push(workspaceId)
+      // Reported whichever workspace is on screen by now: the banner it goes to
+      // belongs to the window, and a push that failed is worth saying wherever
+      // the reader has got to.
+      if (!result.ok) onError(describeFailure(result))
+
+      /* But the reading is not. `refresh` is bound to the workspace that was
+         open when the button was pressed, and it claims the hook's generation —
+         so calling it after the reader has moved on replaces the workspace they
+         are looking at with the file list of the one they left. */
+      if (openIn.current !== workspaceId) return
+
+      setPushingIn(null)
+      // Re-read either way: a refusal leaves the branch where it was, and the
+      // pane saying so from a fresh reading beats it saying so from memory.
+      await refresh()
+    })()
+  }, [onError, describeFailure, refresh])
+
   const surface = useMemo(
     () => ({
       pending,
@@ -355,12 +412,38 @@ export function DiffPanel({
      with no chip pressed to explain it, and nothing to press to get out. */
   const only = canFilter && named.some((chat) => chat.id === chosenWriter) ? chosenWriter : null
 
+  /* Sorted before the filter rather than after it, which is what keeps the
+     promise below: the order is a fact about the files, pressing a chip is a
+     way of reading them, and a chip that also reshuffled the list would leave
+     the reader hunting for a row that had not changed. */
+  const ordered = [...diff.files].sort(
+    (left, right) => PUBLISH_ORDER.indexOf(left.publish) - PUBLISH_ORDER.indexOf(right.publish)
+  )
+
   /* The filter narrows what is drawn and nothing else — in particular it does
      not reorder, so a file keeps the place the reader last saw it in. */
   const shownFiles =
     only === null
-      ? diff.files
-      : diff.files.filter((file) => (workspace.writers[file.path] ?? []).includes(only))
+      ? ordered
+      : ordered.filter((file) => (workspace.writers[file.path] ?? []).includes(only))
+
+  /* How many files sit on each rung, for the strip below the header. Counted
+     over the whole diff rather than over what a chip left on screen: the strip
+     answers "where does this branch stand", which a filter does not change. */
+  const counts: Record<PublishState, number> = { pushed: 0, committed: 0, uncommitted: 0 }
+  for (const file of diff.files) counts[file.publish] += 1
+  const stale = diff.files.filter((file) => file.staleOnRemote).length
+
+  /* Nothing left to send: the one state where the strip alone says everything,
+     and a mark on every row would repeat it. Every other state has something to
+     act on, and the marks say which files.
+
+     Read off the branch rather than counted from the rows. A change that nets
+     out against the merge base — reverting a pushed file is one — leaves this
+     list entirely while still being work the remote has not got, and counting
+     `pushed` rows called that "everything is on GitHub" with the revert
+     unsent. `publish.ts` answers it from the reads that can see it. */
+  const allPushed = diff.nothingToSend
 
   return (
     <div className="relative flex min-h-0 flex-1 flex-col">
@@ -421,6 +504,66 @@ export function DiffPanel({
         </div>
       </div>
 
+      {/* Where this branch stands against GitHub, and the one control that
+          changes it. Below the header rather than in it: the header is already
+          four buttons and a branch name at the pane's 280px floor, and this
+          wraps to a second line rather than squeezing them. */}
+      <div className="border-line flex shrink-0 flex-wrap items-center gap-x-3 gap-y-1 border-b px-3 py-1.5 text-[11px]">
+        {allPushed ? (
+          <span className="text-ink-faint">{t('diff.publishAllSent')}</span>
+        ) : (
+          <>
+            {/* The same three badges the rows carry, with a count each — which
+                is what makes this strip the legend for them. */}
+            {PUBLISH_ORDER.filter((state) => counts[state] > 0).map((state) => (
+              <PublishBadge key={state} state={state} count={counts[state]} />
+            ))}
+
+            {stale > 0 && (
+              <span className="text-danger">{t('diff.publishStaleCount', { count: stale })}</span>
+            )}
+
+            {/* Everything from here down is about GitHub, and a project is
+                allowed to have no remote at all — a repository, a commit and a
+                base branch is all `projects.ts` asks for. A permanent band
+                about a service such a project has nothing to do with is one
+                that can never come true and cannot be dismissed. */}
+            {diff.hasRemote && (
+              <>
+                {diff.remoteCommit === null && (
+                  <span className="text-ink-faint">{t('diff.publishNoRemote')}</span>
+                )}
+
+                {/* Three states, not two. `unpushedCommits` means different
+                    things either side of a remote copy — commits ahead of the
+                    base where there is none, commits ahead of the copy where
+                    there is — so one sentence for zero told a pushed branch
+                    that nothing was committed yet, beside its own "2 pushed". */}
+                <span className="text-ink-faint ml-auto">
+                  {diff.unpushedCommits > 0
+                    ? t('diff.publishUnpushed', { count: diff.unpushedCommits })
+                    : t(
+                        diff.remoteCommit === null
+                          ? 'diff.publishNothingToPush'
+                          : 'diff.publishAllCommitsSent'
+                      )}
+                </span>
+
+                {/* Offered only where it would do something. A disabled button
+                    is one more thing to read past on a pane that is mostly
+                    reading. */}
+                {diff.unpushedCommits > 0 && (
+                  <Button size="sm" onClick={push} disabled={pushingIn === workspace.id}>
+                    <Upload aria-hidden size={12} />
+                    {t(pushingIn === workspace.id ? 'diff.pushing' : 'diff.push')}
+                  </Button>
+                )}
+              </>
+            )}
+          </>
+        )}
+      </div>
+
       {/* A chip per conversation, and only where there are two to tell apart.
           It narrows the list rather than marking it: the marks on the headers
           already say who wrote what, and this answers the other question —
@@ -474,6 +617,7 @@ export function DiffPanel({
             onOpen={openFile}
             onRevert={revertFile}
             writers={marks.get(file.path) ?? NO_WRITERS}
+            showPublish={!allPushed}
           />
         ))}
       </div>

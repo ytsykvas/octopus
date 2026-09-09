@@ -720,6 +720,13 @@ export function registerIpc(
     attempt(() => service.commitAndPushWorkspace(workspaceId, CommitMessageSchema.parse(message)))
   )
 
+  // Nothing to validate past the id: the branch and the remote are both facts
+  // the service reads from the workspace it resolves, and neither reaches git
+  // from here.
+  host.handle('workspaces:push', (_event, workspaceId: string) =>
+    attempt(() => service.pushWorkspace(workspaceId))
+  )
+
   // The number becomes an argument to `gh`, so it is proved to be one before it
   // gets there rather than trusted because the renderer read it from us.
   host.handle('workspaces:pullRequestDetail', (_event, workspaceId: string, number: unknown) =>

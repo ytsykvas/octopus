@@ -48,7 +48,7 @@ async function commit(message: string): Promise<void> {
 async function readDiff(
   options: Partial<Parameters<typeof readWorkspaceDiff>[1]> = {}
 ): ReturnType<typeof readWorkspaceDiff> {
-  return readWorkspaceDiff(exec, { baseBranch: 'main', root: dir, ...options })
+  return readWorkspaceDiff(exec, { baseBranch: 'main', root: dir, branch: 'work', ...options })
 }
 
 beforeEach(async () => {
@@ -1181,7 +1181,8 @@ describe('readWorkspaceDiff', () => {
     // it is the diff carrying the lines that overflows.
     const diff = await readWorkspaceDiff(gitIn(dir, { maxBuffer: 8_000 }), {
       baseBranch: 'main',
-      root: dir
+      root: dir,
+      branch: 'work'
     })
 
     expect(diff.files[0]).toMatchObject({ path: 'a.txt', added: 1, omitted: 'tooLarge', hunks: [] })
@@ -1201,12 +1202,18 @@ describe('readWorkspaceDiff', () => {
       // failure the test is actually about.
       if (args.includes('--raw')) return Promise.resolve('')
       if (args[0] === 'ls-files') return Promise.resolve('')
+      // And the name listings the publish state is read from, for the same
+      // reason: a rejection there would end the read before the one below,
+      // which is the failure this test is about.
+      if (args.includes('--name-only')) return Promise.resolve('')
+      if (args[0] === 'rev-parse') return Promise.resolve('')
+      if (args[0] === 'remote') return Promise.resolve('')
       return Promise.reject(new GitError(args, 'fatal: bad object', '128'))
     }
 
-    await expect(readWorkspaceDiff(fake, { baseBranch: 'main', root: dir })).rejects.toThrow(
-      GitError
-    )
+    await expect(
+      readWorkspaceDiff(fake, { baseBranch: 'main', root: dir, branch: 'work' })
+    ).rejects.toThrow(GitError)
   })
 
   it('says an untracked file is too large to draw when it is', async () => {
@@ -1238,7 +1245,7 @@ describe('readWorkspaceDiff', () => {
       return Promise.resolve('')
     }
 
-    const diff = await readWorkspaceDiff(fake, { baseBranch: 'main', root: dir })
+    const diff = await readWorkspaceDiff(fake, { baseBranch: 'main', root: dir, branch: 'work' })
 
     expect(diff.files[0]).toMatchObject({ path: 'ghost.txt', status: 'modified' })
   })
@@ -1252,15 +1259,201 @@ describe('readWorkspaceDiff', () => {
       return Promise.resolve('')
     }
 
-    const diff = await readWorkspaceDiff(fake, { baseBranch: 'main', root: dir })
+    const diff = await readWorkspaceDiff(fake, { baseBranch: 'main', root: dir, branch: 'work' })
 
     expect(diff.files[0]?.hunks).toEqual([])
+  })
+
+  it('says where the branch stands against a remote it has no copy on', async () => {
+    await writeFile(join(dir, 'a.txt'), 'changed\n', 'utf8')
+    await commit('second')
+
+    const diff = await readDiff()
+
+    expect(diff.remoteCommit).toBeNull()
+    expect(diff.unpushedCommits).toBe(1)
+  })
+
+  it('stamps every file with how far its change has got', async () => {
+    await writeFile(join(dir, 'a.txt'), 'changed\n', 'utf8')
+    await commit('second')
+    await writeFile(join(dir, 'b.txt'), 'loose\n', 'utf8')
+
+    const diff = await readDiff()
+
+    expect(diff.files).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ path: 'a.txt', publish: 'committed', staleOnRemote: false }),
+        expect.objectContaining({ path: 'b.txt', publish: 'uncommitted', staleOnRemote: false })
+      ])
+    )
+  })
+
+  /* Stamped after the ceilings rather than before them: what was left out of
+     the pane is a drawing decision, and "did that go out?" is worth answering
+     about a file the reader cannot see as much as about one they can. */
+  it('stamps a file that was too large to draw as well', async () => {
+    await writeFile(join(dir, 'a.txt'), 'x\n'.repeat(50), 'utf8')
+
+    const diff = await readDiff({ limits: { ...DIFF_LIMITS, maxFileLines: 5 } })
+
+    expect(diff.files[0]).toMatchObject({ omitted: 'tooLarge', publish: 'uncommitted' })
+  })
+
+  it('marks a file the remote has an older version of', async () => {
+    const bare = await mkdtemp(join(tmpdir(), 'octopus-diff-origin-'))
+
+    try {
+      await run('git', ['init', '-q', '--bare', bare])
+      await run('git', ['remote', 'add', 'origin', bare], { cwd: dir })
+      await writeFile(join(dir, 'a.txt'), 'pushed\n', 'utf8')
+      await commit('second')
+      await run('git', ['push', '-q', '-u', 'origin', 'work'], { cwd: dir })
+
+      // Pushed and untouched since: the one state where the pane draws no mark.
+      const settled = await readDiff()
+      expect(settled.files[0]).toMatchObject({ publish: 'pushed', staleOnRemote: false })
+      expect(settled.unpushedCommits).toBe(0)
+
+      await writeFile(join(dir, 'a.txt'), 'edited again\n', 'utf8')
+
+      const stale = await readDiff()
+      expect(stale.files[0]).toMatchObject({ publish: 'uncommitted', staleOnRemote: true })
+    } finally {
+      await rm(bare, { recursive: true, force: true })
+    }
+  })
+
+  /* The wiring at the stamping call, which the pure test in publish.test.ts
+     cannot reach: passing `null` where `file.oldPath` belongs left every
+     rename that happened after a push without its warning, and the suite was
+     green either way. */
+  it('keeps the warning on a file renamed after it was pushed', async () => {
+    const bare = await mkdtemp(join(tmpdir(), 'octopus-diff-origin-'))
+
+    try {
+      await run('git', ['init', '-q', '--bare', bare])
+      await run('git', ['remote', 'add', 'origin', bare], { cwd: dir })
+
+      // Long enough that git pairs the move from the merge base as well as
+      // from the remote — a two-line file is a delete beside an add.
+      const body = Array.from({ length: 10 }, (_, line) => `line ${String(line)}\n`).join('')
+      await writeFile(join(dir, 'big.txt'), body, 'utf8')
+      await commit('a file worth pairing')
+      await run('git', ['checkout', '-q', 'main'], { cwd: dir })
+      await run('git', ['merge', '-q', 'work'], { cwd: dir })
+      await run('git', ['checkout', '-q', 'work'], { cwd: dir })
+
+      await writeFile(join(dir, 'big.txt'), `${body}one more\n`, 'utf8')
+      await commit('change it')
+      await run('git', ['push', '-q', '-u', 'origin', 'work'], { cwd: dir })
+
+      await run('git', ['mv', 'big.txt', 'renamed.txt'], { cwd: dir })
+      await commit('move it')
+
+      const diff = await readDiff()
+
+      expect(diff.files[0]).toMatchObject({
+        path: 'renamed.txt',
+        oldPath: 'big.txt',
+        publish: 'committed',
+        staleOnRemote: true
+      })
+    } finally {
+      await rm(bare, { recursive: true, force: true })
+    }
+  })
+
+  /* The rung itself can depend on the old name. The three listings have three
+     different left-hand sides, so a deletion this pane pairs into a rename can
+     stay unpaired against the remote and appear under the SOURCE name alone —
+     and asking only the destination read the row as fully pushed while an
+     uncommitted deletion sat in the worktree. */
+  it('reads a rename the listings pair differently by its source name', async () => {
+    const bare = await mkdtemp(join(tmpdir(), 'octopus-diff-origin-'))
+
+    try {
+      await run('git', ['init', '-q', '--bare', bare])
+      await run('git', ['remote', 'add', 'origin', bare], { cwd: dir })
+
+      const body = Array.from({ length: 200 }, (_, line) => `line ${String(line)}\n`).join('')
+      await writeFile(join(dir, 'big.txt'), body, 'utf8')
+      await commit('a file worth pairing')
+      await run('git', ['checkout', '-q', 'main'], { cwd: dir })
+      await run('git', ['merge', '-q', 'work'], { cwd: dir })
+      await run('git', ['checkout', '-q', 'work'], { cwd: dir })
+
+      // A near-copy committed and pushed, then the original deleted here and
+      // left uncommitted. Against the merge base that pairs as one move.
+      await writeFile(join(dir, 'copy.txt'), `${body}one more\n`, 'utf8')
+      await commit('copy it')
+      await run('git', ['push', '-q', '-u', 'origin', 'work'], { cwd: dir })
+      await rm(join(dir, 'big.txt'))
+
+      const diff = await readDiff()
+
+      expect(diff.files[0]).toMatchObject({
+        path: 'copy.txt',
+        oldPath: 'big.txt',
+        publish: 'uncommitted'
+      })
+      expect(diff.nothingToSend).toBe(false)
+    } finally {
+      await rm(bare, { recursive: true, force: true })
+    }
+  })
+
+  /* Whether the branch has anything left to send is a fact about the branch,
+     not a count of the rows: a change that nets out against the merge base
+     leaves this list entirely and is still work the remote has not got. The
+     pane's own revert control produces exactly that, and counting `pushed`
+     rows called it "everything is on GitHub". */
+  it('still has something to send when a pushed file is reverted out of the diff', async () => {
+    const bare = await mkdtemp(join(tmpdir(), 'octopus-diff-origin-'))
+
+    try {
+      await run('git', ['init', '-q', '--bare', bare])
+      await run('git', ['remote', 'add', 'origin', bare], { cwd: dir })
+      await writeFile(join(dir, 'a.txt'), 'changed\n', 'utf8')
+      await writeFile(join(dir, 'b.txt'), 'changed too\n', 'utf8')
+      await commit('second')
+      await run('git', ['push', '-q', '-u', 'origin', 'work'], { cwd: dir })
+
+      expect((await readDiff()).nothingToSend).toBe(true)
+
+      // What `revertFile` does: back to the state the workspace branched from,
+      // leaving the commit standing. The file drops out of the diff.
+      await run('git', ['checkout', 'main', '--', 'a.txt'], { cwd: dir })
+
+      const diff = await readDiff()
+
+      expect(diff.files.map((file) => file.path)).toEqual(['b.txt'])
+      expect(diff.nothingToSend).toBe(false)
+    } finally {
+      await rm(bare, { recursive: true, force: true })
+    }
+  })
+
+  it('says whether the repository has a remote to push to at all', async () => {
+    const withNone = await readDiff()
+    expect(withNone.hasRemote).toBe(false)
+
+    const bare = await mkdtemp(join(tmpdir(), 'octopus-diff-origin-'))
+    try {
+      await run('git', ['init', '-q', '--bare', bare])
+      await run('git', ['remote', 'add', 'origin', bare], { cwd: dir })
+      expect((await readDiff()).hasRemote).toBe(true)
+    } finally {
+      await rm(bare, { recursive: true, force: true })
+    }
   })
 
   it('treats a merge base that answers with nothing as a base it cannot find', async () => {
     const fake: GitExec = () => Promise.resolve('')
 
-    await expect(readWorkspaceDiff(fake, { baseBranch: 'main', root: dir })).rejects.toMatchObject({
+    await expect(
+      readWorkspaceDiff(fake, { baseBranch: 'main', root: dir, branch: 'work' })
+    ).rejects.toMatchObject({
       code: 'baseUnknown'
     })
   })

@@ -1582,15 +1582,16 @@ describe('reverting one file', () => {
   })
 })
 
-describe('who wrote which file', () => {
-  const chat = (id: string, title: string | null = null): WorkspaceChat => ({
-    id,
-    agent: 'claude',
-    title,
-    status: 'idle',
-    started: true
-  })
+/** One conversation in a workspace, as the strip and the marks name them. */
+const chat = (id: string, title: string | null = null): WorkspaceChat => ({
+  id,
+  agent: 'claude',
+  title,
+  status: 'idle',
+  started: true
+})
 
+describe('who wrote which file', () => {
   /** A workspace with two conversations, the second having written `src/b.ts`. */
   const shared = workspaceView('anna', {
     chats: [chat('chat-1'), chat('chat-2')],
@@ -1734,5 +1735,354 @@ describe('who wrote which file', () => {
 
     expect(await screen.findByRole('button', { name: 'src/a.ts' })).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Everything' })).not.toBeInTheDocument()
+  })
+})
+
+/*
+ * Where the branch stands against GitHub — the question the pane could not
+ * answer at all, because one diff against the merge base folds committed,
+ * staged and unstaged work into a single pile.
+ */
+describe('what has reached GitHub', () => {
+  /** A file on each rung, listed in git's order rather than the pane's. */
+  function threeRungs(): ReturnType<typeof workspaceDiff> {
+    return workspaceDiff(
+      [
+        fileDiff('src/loose.ts', { publish: 'uncommitted' }),
+        fileDiff('src/sent.ts', { publish: 'pushed' }),
+        fileDiff('src/held.ts', { publish: 'committed' })
+      ],
+      { remoteCommit: 'remote01', unpushedCommits: 2 }
+    )
+  }
+
+  /** The file headers, in the order the column draws them. */
+  function order(): string[] {
+    return screen
+      .getAllByRole('button', { expanded: true })
+      .map((button) => button.getAttribute('aria-label') ?? '')
+  }
+
+  it('lists what is settled first and what is still in hand last', async () => {
+    answer(threeRungs())
+    renderPanel()
+
+    await screen.findByRole('button', { name: 'src/sent.ts' })
+    expect(order()).toEqual(['src/sent.ts', 'src/held.ts', 'src/loose.ts'])
+  })
+
+  /* The assertion that catches an unstable sort: two files on the same rung
+     have to come back in the order git listed them, whatever the comparator
+     does with a tie. */
+  it('keeps git\u2019s own order inside a rung', async () => {
+    answer(
+      workspaceDiff(
+        [
+          fileDiff('src/z.ts', { publish: 'committed' }),
+          fileDiff('src/sent.ts', { publish: 'pushed' }),
+          fileDiff('src/a.ts', { publish: 'committed' })
+        ],
+        { remoteCommit: 'remote01', unpushedCommits: 1 }
+      )
+    )
+    renderPanel()
+
+    await screen.findByRole('button', { name: 'src/sent.ts' })
+    expect(order()).toEqual(['src/sent.ts', 'src/z.ts', 'src/a.ts'])
+  })
+
+  it('counts the files on each rung and offers to send what is committed', async () => {
+    answer(threeRungs())
+    renderPanel()
+
+    expect(await screen.findByText('1 not committed')).toBeInTheDocument()
+    expect(screen.getByText('1 committed')).toBeInTheDocument()
+    expect(screen.getByText('1 pushed')).toBeInTheDocument()
+    expect(screen.getByText('2 commits not pushed')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Push' })).toBeInTheDocument()
+    // And not the sentence for a branch that has no copy on the remote.
+    expect(screen.queryByText('This branch is not on GitHub yet.')).not.toBeInTheDocument()
+  })
+
+  it('marks each file with how far its change has got', async () => {
+    answer(threeRungs())
+    renderPanel()
+
+    await screen.findByRole('button', { name: 'src/sent.ts' })
+    // Twice each: once on the file's own row, once in the strip above with a
+    // count beside it. That is what makes the strip the legend for the rows
+    // rather than a second vocabulary to learn.
+    expect(screen.getAllByTitle(/Not committed/)).toHaveLength(2)
+    expect(screen.getAllByTitle(/not on GitHub yet/)).toHaveLength(2)
+    expect(screen.getAllByTitle(/nothing here is newer/)).toHaveLength(2)
+  })
+
+  it('warns about a file the request still shows an older version of', async () => {
+    answer(
+      workspaceDiff([fileDiff('src/a.ts', { publish: 'committed', staleOnRemote: true })], {
+        remoteCommit: 'remote01',
+        unpushedCommits: 1
+      })
+    )
+    renderPanel()
+
+    expect(await screen.findByText('1 file is out of date in the request')).toBeInTheDocument()
+    expect(screen.getByRole('img', { name: /older version of this file/ })).toBeInTheDocument()
+  })
+
+  it('says a branch is not on GitHub at all, and still offers to send it', async () => {
+    answer(
+      workspaceDiff([fileDiff('src/a.ts', { publish: 'committed' })], {
+        remoteCommit: null,
+        unpushedCommits: 1
+      })
+    )
+    renderPanel()
+
+    expect(await screen.findByText(/not on GitHub yet/)).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Push' })).toBeInTheDocument()
+  })
+
+  // Pushing publishes nothing that has not been committed, and choosing a
+  // commit message belongs to the pull request pane, which has a field for it.
+  it('offers nothing to press when nothing has been committed at all', async () => {
+    answer(
+      workspaceDiff([fileDiff('src/a.ts', { publish: 'uncommitted' })], {
+        remoteCommit: null,
+        unpushedCommits: 0
+      })
+    )
+    renderPanel()
+
+    expect(
+      await screen.findByText('Nothing is committed yet, so there is nothing to push.')
+    ).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Push' })).not.toBeInTheDocument()
+  })
+
+  /* The everyday state a single sentence for zero got wrong: the branch is
+     pushed and one file has been edited since, so "nothing is committed yet"
+     stood beside a "2 pushed" badge contradicting it. The count means
+     different things either side of a remote copy. */
+  it('says what a zero means on a branch that has been pushed', async () => {
+    answer(
+      workspaceDiff(
+        [
+          fileDiff('src/sent.ts', { publish: 'pushed' }),
+          fileDiff('src/also.ts', { publish: 'pushed' }),
+          fileDiff('src/loose.ts', { publish: 'uncommitted' })
+        ],
+        { remoteCommit: 'remote01', unpushedCommits: 0, nothingToSend: false }
+      )
+    )
+    renderPanel()
+
+    expect(
+      await screen.findByText('Everything committed is already on GitHub.')
+    ).toBeInTheDocument()
+    expect(screen.queryByText(/is committed yet/)).not.toBeInTheDocument()
+  })
+
+  /* A project needs a repository, a commit and a base branch — never a remote.
+     A permanent band about GitHub over a local-only project is one that can
+     never come true and cannot be dismissed. */
+  it('says nothing about GitHub for a project that has no remote', async () => {
+    answer(
+      workspaceDiff([fileDiff('src/a.ts', { publish: 'committed' })], {
+        remoteCommit: null,
+        hasRemote: false,
+        unpushedCommits: 2,
+        nothingToSend: false
+      })
+    )
+    renderPanel()
+
+    expect(await screen.findByText('1 committed')).toBeInTheDocument()
+    expect(screen.queryByText(/GitHub/)).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Push' })).not.toBeInTheDocument()
+  })
+
+  /* Nothing left to send is a fact about the branch, not a count of the rows.
+     A commit whose tree matches the remote — an amend — leaves every file on
+     the pushed rung with a commit still to go. */
+  it('still offers to push when every file is pushed and a commit is not', async () => {
+    answer(
+      workspaceDiff([fileDiff('src/a.ts', { publish: 'pushed' })], {
+        remoteCommit: 'remote01',
+        unpushedCommits: 1,
+        nothingToSend: false
+      })
+    )
+    renderPanel()
+
+    expect(await screen.findByText('1 commit not pushed')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Push' })).toBeInTheDocument()
+    expect(screen.queryByText('Everything here is on GitHub.')).not.toBeInTheDocument()
+  })
+
+  /* Whether anything is left to send is a fact about the branch, not a count
+     of the rows. Reverting a pushed file takes it out of the diff entirely —
+     the pane's own control does this — while leaving work the remote has not
+     got, and counting `pushed` rows called that "everything is on GitHub". */
+  it('does not claim everything is sent when a change left the diff', async () => {
+    answer(
+      workspaceDiff([fileDiff('src/b.ts', { publish: 'pushed' })], {
+        remoteCommit: 'remote01',
+        unpushedCommits: 0,
+        nothingToSend: false
+      })
+    )
+    renderPanel()
+
+    expect(await screen.findByRole('button', { name: 'src/b.ts' })).toBeInTheDocument()
+    expect(screen.queryByText('Everything here is on GitHub.')).not.toBeInTheDocument()
+    // And the badges stay, since there is still something to tell apart.
+    expect(screen.getAllByTitle(/nothing here is newer/).length).toBeGreaterThan(0)
+  })
+
+  /* The one state where the strip says everything: a mark on every row would
+     repeat it, which is the rule the writers mark already keeps. */
+  it('says so once and marks nothing when everything is on GitHub', async () => {
+    answer(workspaceDiff([fileDiff('src/a.ts')], { unpushedCommits: 0 }))
+    renderPanel()
+
+    expect(await screen.findByText('Everything here is on GitHub.')).toBeInTheDocument()
+    expect(screen.queryByTitle(/nothing here is newer/)).not.toBeInTheDocument()
+  })
+
+  it('sends the branch and reads the pane again', async () => {
+    const user = userEvent.setup()
+    answer(threeRungs())
+    renderPanel()
+
+    await user.click(await screen.findByRole('button', { name: 'Push' }))
+
+    expect(octopus().workspaces.push).toHaveBeenCalledWith(anna.id)
+    await waitFor(() => {
+      expect(octopus().workspaces.diff).toHaveBeenCalledTimes(2)
+    })
+  })
+
+  /* The counts answer "where does this branch stand", which a chip does not
+     change. Counted over what a chip left on screen instead, pressing the chip
+     of a conversation whose files are all pushed emptied the whole feature. */
+  it('counts the whole branch, not what a conversation filter left on screen', async () => {
+    const user = userEvent.setup()
+    answer(
+      workspaceDiff(
+        [
+          fileDiff('src/mine.ts', { publish: 'pushed' }),
+          fileDiff('src/theirs.ts', { publish: 'uncommitted' })
+        ],
+        { remoteCommit: 'remote01', unpushedCommits: 1, nothingToSend: false }
+      )
+    )
+    renderPanel(
+      workspaceView('anna', {
+        chats: [chat('chat-1'), chat('chat-2')],
+        writers: { 'src/mine.ts': ['chat-1'], 'src/theirs.ts': ['chat-2'] }
+      })
+    )
+
+    await user.click(await screen.findByRole('button', { name: 'Claude 1' }))
+
+    expect(screen.queryByRole('button', { name: 'src/theirs.ts' })).not.toBeInTheDocument()
+    expect(screen.getByText('1 pushed')).toBeInTheDocument()
+    expect(screen.getByText('1 not committed')).toBeInTheDocument()
+  })
+
+  /* This pane is never remounted when the workspace changes, so a push left in
+     flight used to disable the next workspace's button and then land that
+     workspace's file list in the pane the reader had moved to. */
+  it('leaves a workspace the reader has moved on from alone when a push returns', async () => {
+    const user = userEvent.setup()
+    answer(
+      workspaceDiff([fileDiff('src/a.ts', { publish: 'committed' })], {
+        remoteCommit: 'remote01',
+        unpushedCommits: 1,
+        nothingToSend: false
+      })
+    )
+
+    let release: () => void = vi.fn()
+    vi.mocked(octopus().workspaces.push).mockReturnValue(
+      new Promise((resolve) => {
+        release = () => {
+          resolve({ ok: true, value: undefined })
+        }
+      })
+    )
+
+    const { rerender } = render(
+      <DiffPanel
+        workspace={anna}
+        visible
+        view="unified"
+        onView={vi.fn()}
+        width={WIDE}
+        comments={commentController()}
+        revert={revertController()}
+        onError={vi.fn()}
+      />
+    )
+
+    await user.click(await screen.findByRole('button', { name: 'Push' }))
+    expect(screen.getByRole('button', { name: 'Pushing…' })).toBeDisabled()
+
+    rerender(
+      <DiffPanel
+        workspace={bob}
+        visible
+        view="unified"
+        onView={vi.fn()}
+        width={WIDE}
+        comments={commentController()}
+        revert={revertController()}
+        onError={vi.fn()}
+      />
+    )
+
+    // The second workspace is not the one being pushed, so its own button works.
+    expect(await screen.findByRole('button', { name: 'Push' })).toBeEnabled()
+
+    const readsBefore = vi.mocked(octopus().workspaces.diff).mock.calls.length
+    await act(async () => {
+      release()
+      await Promise.resolve()
+    })
+
+    // And the first workspace's re-read never lands in the pane showing the second.
+    expect(octopus().workspaces.diff).toHaveBeenCalledTimes(readsBefore)
+  })
+
+  it('says what went wrong rather than leaving a press that did nothing', async () => {
+    const user = userEvent.setup()
+    const onError = vi.fn()
+    answer(threeRungs())
+    vi.mocked(octopus().workspaces.push).mockResolvedValue({
+      ok: false,
+      code: 'pushFailed',
+      params: { branch: 'octopus/anna' },
+      error: 'Could not push the branch.'
+    })
+
+    render(
+      <DiffPanel
+        workspace={anna}
+        visible
+        view="unified"
+        onView={vi.fn()}
+        width={WIDE}
+        comments={commentController()}
+        revert={revertController()}
+        onError={onError}
+      />
+    )
+
+    await user.click(await screen.findByRole('button', { name: 'Push' }))
+
+    await waitFor(() => {
+      expect(onError).toHaveBeenCalled()
+    })
   })
 })

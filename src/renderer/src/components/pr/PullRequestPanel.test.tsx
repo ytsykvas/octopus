@@ -19,7 +19,15 @@ const anna = workspaceView('anna')
 
 /** A branch with commits and no pull request — the state that offers the form. */
 function view(overrides: Partial<PullRequestView> = {}): PullRequestView {
-  return { request: null, pushed: true, dirty: false, ahead: 2, base: 'main', ...overrides }
+  return {
+    request: null,
+    pushed: true,
+    dirty: false,
+    ahead: 2,
+    unpushedCommits: 0,
+    base: 'main',
+    ...overrides
+  }
 }
 
 /** A pull request as `gh` reports one — all four fields, never some of them. */
@@ -727,6 +735,41 @@ describe('a pull request that exists', () => {
   })
 
   /*
+   * Not a refusal GitHub would make — it merges over a check nobody marked
+   * required — so this is a policy octopus keeps, and a hard one. The window
+   * header's own merge button has always blocked on this; the pane's did not,
+   * and the two disagreed about the same request.
+   */
+  it('refuses to merge while a check is red, and says how many', async () => {
+    answer(view({ request: request() }))
+    answerDetail(detail({ checks: [failing({ name: 'lint' })] }))
+    renderPanel()
+
+    expect(await screen.findByText('1 check failed. Fix it before merging.')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Merge' })).toBeDisabled()
+  })
+
+  it('lets it through once the checks pass', async () => {
+    answer(view({ request: request() }))
+    answerDetail(detail({ checks: [failing({ state: 'passed' })] }))
+    renderPanel()
+
+    expect(await screen.findByRole('button', { name: 'Merge' })).toBeEnabled()
+    expect(screen.queryByText(/before merging/)).not.toBeInTheDocument()
+  })
+
+  /* A check still running is not a check that failed. `gh` turns a merge into
+     auto-merge where a required one has not finished, which is the right
+     answer and not one to refuse in advance. */
+  it('does not refuse merely because a check is still running', async () => {
+    answer(view({ request: request() }))
+    answerDetail(detail({ checks: [failing({ state: 'pending', completedAt: null })] }))
+    renderPanel()
+
+    expect(await screen.findByRole('button', { name: 'Merge' })).toBeEnabled()
+  })
+
+  /*
    * The other way a request ends. Beside merging rather than behind a menu:
    * both are one press from the pane a person is already looking at.
    */
@@ -1275,6 +1318,77 @@ describe('what the tab can do about a request', () => {
 
     await waitFor(() => {
       expect(onError).toHaveBeenCalledWith(expect.stringContaining('no such chat'))
+    })
+  })
+
+  /*
+   * The half of the pair that was missing. `Commit and push` appears only while
+   * the worktree is dirty, so work the agent committed — or the reader
+   * committed in the terminal — had no way onto the request short of the
+   * terminal.
+   */
+  it('offers to send commits the remote has not got', async () => {
+    const user = userEvent.setup()
+    answer(view({ request: request(), unpushedCommits: 2 }))
+    answerDetail(detail())
+    renderPanel()
+
+    expect(await screen.findByText('2 commits are not on GitHub yet.')).toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: 'Push' }))
+
+    expect(octopus().workspaces.push).toHaveBeenCalledWith(anna.id)
+    // Read again either way, and the detail too: pushing is what starts the
+    // checks over. Both reads are asserted — without the branch read the count
+    // never drops and the button lingers over a push that has landed.
+    await waitFor(() => {
+      expect(octopus().workspaces.pullRequestDetail).toHaveBeenCalledTimes(2)
+      expect(octopus().workspaces.pullRequest).toHaveBeenCalledTimes(2)
+    })
+  })
+
+  /* A merged or closed request has nothing left to do to it, and a workspace
+     outlives its merge — so the agent committing anything afterwards leaves
+     commits the remote has not got. Without the guard the pane offered to push
+     them under "this branch is merged". */
+  it('offers no push once the request is no longer open', async () => {
+    answer(view({ request: request({ state: 'merged' }), unpushedCommits: 3 }))
+    answerDetail(detail({ state: 'merged' }))
+    renderPanel()
+
+    // Waited for on something PullRequestActions itself draws: the summary
+    // above it is drawn from the branch read, which lands first.
+    await screen.findByText('This branch is merged. Its workspace is still here.')
+
+    expect(screen.queryByRole('button', { name: 'Push' })).not.toBeInTheDocument()
+    expect(screen.queryByText(/not on GitHub yet/)).not.toBeInTheDocument()
+  })
+
+  it('offers nothing to press when the remote already has every commit', async () => {
+    answer(view({ request: request(), unpushedCommits: 0 }))
+    answerDetail(detail())
+    renderPanel()
+
+    await screen.findByRole('button', { name: 'Merge' })
+    expect(screen.queryByRole('button', { name: 'Push' })).not.toBeInTheDocument()
+  })
+
+  it('says why a push failed rather than leaving a press that did nothing', async () => {
+    const user = userEvent.setup()
+    answer(view({ request: request(), unpushedCommits: 1 }))
+    answerDetail(detail())
+    vi.mocked(octopus().workspaces.push).mockResolvedValue({
+      ok: false,
+      code: 'pushFailed',
+      params: { branch: 'octopus/anna' },
+      error: 'Could not push the branch.'
+    })
+    const { onError } = renderPanel()
+
+    await user.click(await screen.findByRole('button', { name: 'Push' }))
+
+    await waitFor(() => {
+      expect(onError).toHaveBeenCalled()
     })
   })
 

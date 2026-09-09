@@ -277,6 +277,7 @@ describe('channel names', () => {
       () => method('workspaces', 'commitAndPush')('w' as never, 'Add a thing' as never),
       'workspaces:commitAndPush'
     ],
+    ['workspaces.push', () => method('workspaces', 'push')('w' as never), 'workspaces:push'],
     [
       'workspaces.pullRequestDetail',
       () => method('workspaces', 'pullRequestDetail')('w' as never, 7 as never),

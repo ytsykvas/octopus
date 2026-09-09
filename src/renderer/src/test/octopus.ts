@@ -102,7 +102,14 @@ export function installOctopusStub(): Api {
       // A branch with commits and no pull request — the state the pane offers
       // to act on, and the one most tests are about.
       pullRequest: vi.fn(() =>
-        ok({ request: null, pushed: false, dirty: false, ahead: 1, base: 'main' })
+        ok({
+          request: null,
+          pushed: false,
+          dirty: false,
+          ahead: 1,
+          unpushedCommits: 1,
+          base: 'main'
+        })
       ),
       createPullRequest: vi.fn(() => ok('https://github.com/ytsykvas/octopus/pull/1')),
       draftPullRequest: vi.fn(() =>
@@ -113,6 +120,7 @@ export function installOctopusStub(): Api {
         })
       ),
       commitAndPush: vi.fn(() => ok(undefined)),
+      push: vi.fn(() => ok(undefined)),
       // A request nobody has reviewed and nothing has checked, which is what
       // one looks like for the first minute of its life.
       pullRequestDetail: vi.fn(() => ok(detailFixture())),
@@ -342,7 +350,11 @@ function emptyDiff(): WorkspaceDiff {
     files: [],
     added: 0,
     removed: 0,
-    omittedFiles: 0
+    omittedFiles: 0,
+    remoteCommit: null,
+    hasRemote: true,
+    unpushedCommits: 0,
+    nothingToSend: false
   }
 }
 

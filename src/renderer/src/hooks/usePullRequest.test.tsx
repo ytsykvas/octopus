@@ -12,6 +12,7 @@ const VIEW: PullRequestView = {
   pushed: true,
   dirty: false,
   ahead: 1,
+  unpushedCommits: 0,
   base: 'main'
 }
 

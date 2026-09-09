@@ -15,6 +15,14 @@ import { join } from 'node:path'
 import { CodedError } from './codedError.js'
 import { type GitExec, GitError, OUTPUT_TOO_LARGE } from './git.js'
 import { allOf } from './parallel.js'
+import {
+  nothingToSend,
+  type PublishState,
+  publishStateOf,
+  type PublishStatus,
+  readPublishStatus,
+  staleOnRemote
+} from './publish.js'
 
 /** Reads a file's bytes; a parameter so tests need no filesystem. */
 export type ReadBytes = (path: string) => Promise<Uint8Array>
@@ -89,7 +97,21 @@ export interface FileDiff {
   readonly removed: number
   readonly omitted: DiffOmission
   readonly hunks: readonly Hunk[]
+  /** How far this file's change has got towards the remote (`publish.ts`). */
+  readonly publish: PublishState
+  /** Whether the remote's copy of the branch shows an older version of it. */
+  readonly staleOnRemote: boolean
 }
+
+/**
+ * A file before the two facts about the remote are known.
+ *
+ * Everything below builds these and one pass at the end stamps them, so the
+ * classification happens once against one reading of the remote — rather than
+ * being threaded through the budget, the parser and the untracked walk, none of
+ * which has an opinion about GitHub.
+ */
+type UnstampedFile = Omit<FileDiff, 'publish' | 'staleOnRemote'>
 
 export interface WorkspaceDiff {
   /** The commit everything is measured against. */
@@ -101,6 +123,26 @@ export interface WorkspaceDiff {
   readonly removed: number
   /** Files whose lines were left out because the change is too big to draw. */
   readonly omittedFiles: number
+  /**
+   * The tip of this branch's copy on the remote, or null where it has none.
+   *
+   * Null is what a workspace nobody has pushed looks like, and it is the
+   * difference between "nothing to send" and "nothing sent yet".
+   */
+  readonly remoteCommit: string | null
+  /** Whether this repository has an `origin` to push to at all. */
+  readonly hasRemote: boolean
+  /** Commits here the remote's copy does not have — what a push would send. */
+  readonly unpushedCommits: number
+  /**
+   * Whether the branch has nothing left to send.
+   *
+   * A fact about the branch rather than about the rows: a change that nets out
+   * against the merge base — reverting a pushed file is one — leaves the list
+   * below entirely while still being work the remote does not have. Counting
+   * `pushed` rows would call that "everything is on GitHub".
+   */
+  readonly nothingToSend: boolean
 }
 
 export interface DiffLimits {
@@ -139,6 +181,13 @@ export interface ReadDiffOptions {
   readonly baseBranch: string
   /** The worktree root; untracked files are read relative to it. */
   readonly root: string
+  /**
+   * The workspace's own branch — what has a copy on the remote to compare to.
+   *
+   * Named rather than read from `HEAD`: the caller knows it already, and asking
+   * git would be one more read to learn something that is stored.
+   */
+  readonly branch: string
   readonly limits?: DiffLimits
   readonly readBytes?: ReadBytes
   readonly statBytes?: StatBytes
@@ -757,12 +806,24 @@ export async function readWorkspaceDiff(
     lines: limits.maxTotalLines
   })
 
-  const untrackedFiles = await readUntrackedFiles(splitNul(untracked), left, {
-    root: options.root,
-    limits,
-    readBytes,
-    statBytes
-  })
+  const untrackedPaths = splitNul(untracked)
+
+  /* The remote is asked about beside the untracked files rather than after
+     them: neither needs the other's answer, and the reads are what the pane
+     waits on. `allOf` again, for the same reason the four above use it. */
+  const [untrackedFiles, publish] = await allOf([
+    readUntrackedFiles(untrackedPaths, left, {
+      root: options.root,
+      limits,
+      readBytes,
+      statBytes
+    }),
+    readPublishStatus(exec, {
+      branch: options.branch,
+      baseCommit,
+      untracked: untrackedPaths
+    })
+  ])
 
   const files = [...markOmitted(tracked, drawable), ...untrackedFiles]
 
@@ -785,14 +846,36 @@ export async function readWorkspaceDiff(
           limits
         })
 
+  const stamped = stampPublish(withHunks, publish)
+
   return {
     baseCommit,
     baseBranch: options.baseBranch,
-    files: withHunks,
-    added: withHunks.reduce((total, file) => total + file.added, 0),
-    removed: withHunks.reduce((total, file) => total + file.removed, 0),
-    omittedFiles: withHunks.filter((file) => file.omitted === 'tooLarge').length
+    files: stamped,
+    added: stamped.reduce((total, file) => total + file.added, 0),
+    removed: stamped.reduce((total, file) => total + file.removed, 0),
+    omittedFiles: stamped.filter((file) => file.omitted === 'tooLarge').length,
+    remoteCommit: publish.remoteCommit,
+    hasRemote: publish.hasRemote,
+    unpushedCommits: publish.unpushedCommits,
+    nothingToSend: nothingToSend(publish)
   }
+}
+
+/**
+ * The last pass: how far each file got, and whether the request is behind it.
+ *
+ * After the ceilings rather than before, so a file too large to draw still says
+ * where it stands. What was left out of the pane is a drawing decision; what is
+ * on GitHub is not, and a reviewer asking "did that go out?" deserves an answer
+ * about the file they cannot see as much as about the ones they can.
+ */
+function stampPublish(files: readonly UnstampedFile[], status: PublishStatus): FileDiff[] {
+  return files.map((file) => ({
+    ...file,
+    publish: publishStateOf(file.path, file.oldPath, status),
+    staleOnRemote: staleOnRemote(file.path, file.oldPath, status)
+  }))
 }
 
 /**
@@ -830,7 +913,7 @@ function trackedFiles(
   counts: readonly NumstatEntry[],
   statuses: readonly NameStatusEntry[],
   modes: readonly RawModeEntry[]
-): FileDiff[] {
+): UnstampedFile[] {
   const byPath = new Map(statuses.map((entry) => [entry.path, entry]))
   const modeByPath = new Map(modes.map((entry) => [entry.path, entry]))
 
@@ -877,8 +960,8 @@ async function readUntrackedFiles(
   paths: readonly string[],
   budget: Budget,
   context: UntrackedContext
-): Promise<FileDiff[]> {
-  const files: FileDiff[] = []
+): Promise<UnstampedFile[]> {
+  const files: UnstampedFile[] = []
   let left = budget
 
   for (const path of paths) {
@@ -896,7 +979,7 @@ async function readUntracked(
   path: string,
   left: Budget,
   { root, limits, readBytes, statBytes }: UntrackedContext
-): Promise<FileDiff> {
+): Promise<UnstampedFile> {
   const base = {
     path,
     oldPath: null,
@@ -957,11 +1040,11 @@ async function readUntracked(
  * than quietly appearing unchanged.
  */
 function chooseDrawable(
-  files: readonly FileDiff[],
+  files: readonly UnstampedFile[],
   limits: DiffLimits,
   budget: Budget
-): { drawable: FileDiff[]; left: Budget } {
-  const drawable: FileDiff[] = []
+): { drawable: UnstampedFile[]; left: Budget } {
+  const drawable: UnstampedFile[] = []
   let left = budget
 
   for (const file of files) {
@@ -980,7 +1063,7 @@ function chooseDrawable(
 /** What the hunk-carrying diff has to know, beyond the files it is describing. */
 interface DrawRequest {
   readonly baseCommit: string
-  readonly drawable: readonly FileDiff[]
+  readonly drawable: readonly UnstampedFile[]
   /** Whether every file git would write out is one we asked for. */
   readonly everything: boolean
   readonly limits: DiffLimits
@@ -1087,9 +1170,9 @@ export async function readWholeFileSides(
  */
 async function attachHunks(
   exec: GitExec,
-  files: readonly FileDiff[],
+  files: readonly UnstampedFile[],
   { baseCommit, drawable, everything, limits }: DrawRequest
-): Promise<FileDiff[]> {
+): Promise<UnstampedFile[]> {
   // A rename is two paths, and asking for one of them loses the pairing: git
   // matches a deletion to an addition only among the paths it was given, so
   // with the new path alone it sees a file appearing from nowhere and draws
@@ -1194,7 +1277,10 @@ function collectHunks(blocks: readonly ParsedFile[]): Map<string, CollectedFile>
  * An untracked file is never in `drawable` — it is drawn from its own contents
  * rather than from git — so it is not what this is about.
  */
-function markOmitted(files: readonly FileDiff[], drawable: readonly FileDiff[]): FileDiff[] {
+function markOmitted(
+  files: readonly UnstampedFile[],
+  drawable: readonly UnstampedFile[]
+): UnstampedFile[] {
   const asked = new Set(drawable.map((file) => file.path))
 
   return files.map((file) =>

@@ -1255,6 +1255,28 @@ showing. A refused reply leaves what was typed where it is — the sentence took
 thought, and clearing it makes the reader write it twice to find out the second
 attempt fails too.
 
+**A red check disables Merge, and says how many failed.** The other three
+conditions on that button — a conflict, a draft, a merge already in flight — are
+refusals GitHub would make anyway, and saying so here only saves a round trip
+that ends in an error the pane would have to explain. This one is not: GitHub
+merges over a check nobody marked required. It is a policy the app keeps, it is
+hard, and the way past it is to fix the check or to merge in the browser, where
+nobody does it by reflex. The window header's own merge button has always
+refused on this, and until now the two disagreed about the same request.
+
+A check still **running** is not one that failed and does not disable anything:
+`gh` turns a merge into auto-merge where a required check has not finished, which
+is the right answer and not one to refuse in advance.
+
+**Push sends what is already committed.** _Commit and push_ appears only while
+the worktree is dirty, so work the agent committed — or the reader committed in
+the workspace's terminal — had no way onto the request except the terminal. The
+two sit side by side rather than replacing each other, because a branch can be in
+both states at once: something committed and not sent, something else not
+committed at all. The count of waiting commits is read against the branch's own
+copy on the remote, which is a different question from the `ahead` the form uses:
+a branch fully pushed is still ahead of `main`.
+
 **A merged request offers to remove its workspace.** §3 draws the lifecycle as
 ending in an archive, and that was the arrow the app did not draw: a merged
 workspace looked exactly like a working one in the list, so the list filled with
@@ -1608,6 +1630,65 @@ working tree — so committed, staged and unstaged work all show, while whatever
 landed on the base branch after the fork does not. A change staged and then
 reverted in the working tree is invisible, which is the right answer for a pane
 that reports what the workspace now holds.
+
+**How far each change has got, and whether the request is behind it.** One diff
+against the merge base is one comparison, and it folds committed, staged and
+unstaged work into a single pile — which is not the question a reviewer has once
+a request is open. Two facts answer that one, drawn as two marks so that neither
+hides the other.
+
+The first is a ladder of three rungs, filled up to the one reached, with the word
+beside it: **not committed** (amber), **committed** (blue), **pushed** (faint).
+The furthest-behind rung wins, so a file committed once and edited again reads
+"not committed", because committing it again is the work still to do. The second
+is a red cloud, and only where the remote's copy of the branch already changed
+that path: the request is showing an older version of this file, and somebody may
+be reviewing it. It survives a rename, because rename detection prints only the
+destination and the remote knows the file by the name it had.
+
+**The list sorts itself by that ladder** — pushed first, then committed, then not
+committed — so the bottom of the column is where the reader's own attention
+belongs. A **stable** sort, so git's order survives inside each rung and a file
+only moves when its state actually changes; and applied before the writers filter
+narrows the list, so pressing a chip still never reshuffles anything.
+
+A strip above the list carries the same three badges with a count each, which is
+what makes it the legend for the rows rather than a second vocabulary. It says
+when the branch is not on GitHub at all, how many commits are waiting, and how
+many files are out of date in the request — and it carries **Push**, offered only
+where there is a commit to send. Pushing publishes nothing uncommitted, and a
+button here that committed on the reader's behalf would be choosing a commit
+message for them; that decision belongs to the pull request tab, which has a
+field for it. The counts are taken over the whole branch and not over what a
+writers chip left on screen: the strip answers where the branch stands, which a
+way of reading the list does not change.
+
+**A count of zero waiting commits means two different things**, so it gets two
+sentences. On a branch with no copy on the remote the count is measured from the
+base, and zero means nothing has been committed yet. On a branch that has one it
+is measured from that copy, and zero means everything committed is already
+there. One sentence for both told a pushed branch that nothing was committed
+yet, directly beside its own "2 pushed" badge.
+
+When the branch has nothing left to send, the strip says so in one line and
+**the per-file marks are not drawn at all** — the same rule the writers mark
+keeps: a mark on every row saying the same thing is noise, and the question only
+exists where there is something to tell apart.
+
+That is a fact about the **branch**, not a count of the rows, and the difference
+is load-bearing. The list holds what differs from the merge base, so a change
+that nets out against it is not in the list at all — reverting a pushed file
+with the pane's own control is exactly that — while being precisely a change the
+remote has not got. Counting `pushed` rows said "everything is on GitHub" over
+an unsent revert and hid every badge that might have hinted otherwise;
+`publish.ts` answers it instead from the reads that can see it, an amended
+commit included.
+
+**A project is allowed to have no remote.** A repository, a commit and a base
+branch is all a project needs, so a local-only checkout is supported — and for
+one, none of the sentences above is drawn and Push is not offered. "Not pushed
+yet" and "there is nowhere to push" are different answers, and a band about a
+service the project has nothing to do with can never come true or be dismissed.
 
 **Colour says what changed; the code says what it is.** The row carries
 `--diff-added-bg` or `--diff-removed-bg` and the sign in the gutter carries the

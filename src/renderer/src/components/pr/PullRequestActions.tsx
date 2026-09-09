@@ -1,4 +1,4 @@
-import { GitMerge, Upload } from 'lucide-react'
+import { ArrowUpFromLine, GitMerge, Upload } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 
 import type { InstructionKind } from '@core/instructions.js'
@@ -86,6 +86,17 @@ interface PullRequestActionsProps {
   readonly onCommitAndPush: () => void
   readonly committing: boolean
   /**
+   * Sends what is already committed, without committing anything else.
+   *
+   * The other half of the pair above, and the one that was missing: work the
+   * agent committed, or the reader committed in the terminal, had no way onto
+   * the request short of the terminal.
+   */
+  readonly onPush: () => void
+  readonly pushing: boolean
+  /** Commits the remote's copy of this branch lacks; zero hides the button. */
+  readonly unpushedCommits: number
+  /**
    * Removes the workspace, asking first — the sidebar's own flow.
    *
    * Offered off the request's **state** rather than off the press that merged
@@ -116,6 +127,9 @@ export function PullRequestActions({
   closing,
   onCommitAndPush,
   committing,
+  onPush,
+  pushing,
+  unpushedCommits,
   onRemoveWorkspace
 }: PullRequestActionsProps): React.JSX.Element {
   const { t } = useTranslation()
@@ -123,12 +137,17 @@ export function PullRequestActions({
   const conflicting = detail.mergeable === 'conflicting'
   const note = MERGE_NOTES[detail.mergeState]
 
+  /* Read once and used twice: it decides both whether the fix prompt is worth
+     offering and whether merging is allowed at all, and two spellings of the
+     same question are two things that can drift apart. */
+  const failed = detail.checks.filter((check) => check.state === 'failed').length
+
   /* Looked up rather than tested at each row: a table keyed by the same word the
      row carries cannot disagree with it, and there is no chain of conditions for
      a fourth case to be left out of. */
   const offered: Record<'always' | 'failed' | 'reviewed', boolean> = {
     always: true,
-    failed: detail.checks.some((check) => check.state === 'failed'),
+    failed: failed > 0,
     reviewed: detail.decision === 'changesRequested' || hasRemarks(detail)
   }
 
@@ -156,12 +175,35 @@ export function PullRequestActions({
       {detail.draft && (
         <p className="text-ink-faint leading-relaxed">{t('pullRequest.mergeDraft')}</p>
       )}
+      {/* Not a refusal GitHub would make — it merges over a check nobody marked
+          required — so this says outright that the app is the one refusing, and
+          the button below is disabled to match. */}
+      {failed > 0 && open && (
+        <p className="text-danger leading-relaxed">
+          {t('pullRequest.mergeChecksFailed', { count: failed })}
+        </p>
+      )}
+      {unpushedCommits > 0 && open && (
+        <p className="text-ink-faint leading-relaxed">
+          {t('pullRequest.unpushed', { count: unpushedCommits })}
+        </p>
+      )}
 
       <div className="flex flex-wrap gap-1">
         {dirty && open && (
           <Button size="sm" onClick={onCommitAndPush} disabled={committing}>
             <Upload aria-hidden size={12} />
             {t(committing ? 'pullRequest.creating' : 'pullRequest.commitAndPush')}
+          </Button>
+        )}
+
+        {/* Beside it rather than instead of it: the two answer different
+            states, and a branch can be in both at once — something committed
+            and not sent, something else not committed at all. */}
+        {unpushedCommits > 0 && open && (
+          <Button size="sm" onClick={onPush} disabled={pushing}>
+            <ArrowUpFromLine aria-hidden size={12} />
+            {t(pushing ? 'pullRequest.pushing' : 'pullRequest.push')}
           </Button>
         )}
 
@@ -219,10 +261,16 @@ export function PullRequestActions({
                 onClick={onClick}
                 aria-expanded={shown}
                 className="flex-1"
-                // A conflict and a draft are both refusals GitHub would make
-                // anyway; saying so here saves a round trip that ends in an
-                // error the pane would then have to explain.
-                disabled={merging || conflicting || detail.draft}
+                // A conflict and a draft are refusals GitHub would make anyway;
+                // saying so here saves a round trip that ends in an error the
+                // pane would then have to explain.
+                //
+                // A red check is not that. GitHub merges over one that nobody
+                // marked required, so this fourth condition is a policy octopus
+                // keeps rather than a refusal it is predicting — and it is a
+                // hard one: the way past it is to fix the check, or to merge in
+                // the browser, where nobody can do it by reflex.
+                disabled={merging || conflicting || detail.draft || failed > 0}
               >
                 <GitMerge aria-hidden size={12} />
                 {t(merging ? 'pullRequest.merging' : 'pullRequest.merge')}

@@ -40,6 +40,8 @@ function file(overrides: Partial<FileDiff> = {}): FileDiff {
     added: 1,
     removed: 1,
     omitted: 'none',
+    publish: 'uncommitted',
+    staleOnRemote: false,
     hunks: [
       hunk([
         ['removed', 'const a = 1'],
@@ -58,6 +60,10 @@ function diff(overrides: Partial<WorkspaceDiff> = {}): WorkspaceDiff {
     added: 1,
     removed: 1,
     omittedFiles: 0,
+    remoteCommit: null,
+    hasRemote: false,
+    unpushedCommits: 0,
+    nothingToSend: false,
     ...overrides
   }
 }

@@ -17,6 +17,10 @@ export function fileDiff(path: string, overrides: Partial<FileDiff> = {}): FileD
     removed: 1,
     omitted: 'none',
     hunks: [hunk()],
+    // Pushed and settled by default, so a test that is not about the remote
+    // gets a pane with no publish marks on it at all.
+    publish: 'pushed',
+    staleOnRemote: false,
     ...overrides
   }
 }
@@ -49,6 +53,12 @@ export function workspaceDiff(
     added: files.reduce((total, file) => total + file.added, 0),
     removed: files.reduce((total, file) => total + file.removed, 0),
     omittedFiles: 0,
+    remoteCommit: 'remote01',
+    hasRemote: true,
+    unpushedCommits: 0,
+    // Settled by default, so a test that is not about the remote gets a pane
+    // with no publish marks on it at all.
+    nothingToSend: files.every((file) => file.publish === 'pushed'),
     ...overrides
   }
 }

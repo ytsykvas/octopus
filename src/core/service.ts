@@ -124,6 +124,7 @@ import {
   type PullRequestView,
   readBranchRequests,
   type BranchRequestList,
+  pushBranch,
   readPullRequest,
   readPullRequestDetail
 } from './pullRequests.js'
@@ -934,6 +935,17 @@ export interface OctopusService {
    * one does the same two steps on its way.
    */
   commitAndPushWorkspace(workspaceId: string, message: string): Promise<void>
+
+  /**
+   * Sends what is already committed, and nothing else.
+   *
+   * The other half of the pair above, and the one that was missing: work
+   * committed in the workspace's terminal, or by the agent itself, had no way
+   * onto the request short of the terminal. Uncommitted work is untouched — a
+   * button that quietly committed on the reader's behalf would be choosing a
+   * commit message for them.
+   */
+  pushWorkspace(workspaceId: string): Promise<void>
 
   /** Merges it. Answers with nothing — see `mergePullRequest` for why. */
   mergePullRequest(workspaceId: string, number: number, method: MergeMethod): Promise<void>
@@ -3850,7 +3862,8 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
       // the untracked files — is a fact about this workspace's own directory.
       return readWorkspaceDiff(makeExec(workspace.path), {
         baseBranch: await baseRefOf(project),
-        root: workspace.path
+        root: workspace.path,
+        branch: workspace.branch
       })
     },
 
@@ -3900,7 +3913,8 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
       const [diff, changed, instruction, commitInstruction] = await Promise.all([
         readWorkspaceDiff(makeExec(workspace.path), {
           baseBranch: await baseRefOf(project),
-          root: workspace.path
+          root: workspace.path,
+          branch: workspace.branch
         }),
         changeCount(workspace, makeExec),
         // The same chain the pane reads and the prepared prompts send. These
@@ -3933,6 +3947,11 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
     commitAndPushWorkspace(workspaceId, message) {
       const workspace = requireWorkspace(workspaceId)
       return commitAndPush(message, workspace.branch, makeExec(workspace.path))
+    },
+
+    pushWorkspace(workspaceId) {
+      const workspace = requireWorkspace(workspaceId)
+      return pushBranch(workspace.branch, makeExec(workspace.path))
     },
 
     readPullRequestDetail(workspaceId, number) {

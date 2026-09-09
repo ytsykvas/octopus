@@ -209,6 +209,25 @@ export async function refExists(exec: GitExec, ref: string): Promise<boolean> {
   }
 }
 
+/**
+ * The commit a ref names, or null where there is no such ref.
+ *
+ * `refExists` above is this call with the answer thrown away. Both are kept:
+ * asking whether a base branch exists reads better than comparing a commit to
+ * null, and the callers that want the commit would otherwise resolve it twice.
+ *
+ * `--quiet` so git says nothing on the way out: an absent ref is an ordinary
+ * answer here, not a failure worth a line of stderr.
+ */
+export async function resolveRef(exec: GitExec, ref: string): Promise<string | null> {
+  try {
+    const commit = (await exec(['rev-parse', '--verify', '--quiet', ref])).trim()
+    return commit === '' ? null : commit
+  } catch {
+    return null
+  }
+}
+
 /** Whether a local branch with this name exists. */
 export async function branchExists(exec: GitExec, branch: string): Promise<boolean> {
   return refExists(exec, `refs/heads/${branch}`)
@@ -248,7 +267,6 @@ export async function detectBaseBranch(exec: GitExec): Promise<string | null> {
   return currentBranch(exec)
 }
 
-/** Repository name — the last segment of its root path. */
 /**
  * How far a branch is ahead of another, in commits.
  *
@@ -267,6 +285,7 @@ export async function countAhead(exec: GitExec, base: string, branch: string): P
   }
 }
 
+/** Repository name — the last segment of its root path. */
 export function repositoryName(repoRoot: string): string {
   return basename(repoRoot)
 }

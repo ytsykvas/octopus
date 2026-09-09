@@ -559,6 +559,12 @@ export const en = {
     mergeBehind: '{{base}} has moved on since this branch left it.',
     mergeUnstable: 'A check has not passed, but merging is still allowed.',
     mergeDraft: 'A draft cannot be merged. Mark it ready on GitHub first.',
+    /* Not a refusal GitHub would make — it merges over a check that is not
+       required — so this one says outright that the app is the one refusing. */
+    mergeChecksFailed_one: '{{count}} check failed. Fix it before merging.',
+    mergeChecksFailed_few: '{{count}} checks failed. Fix them before merging.',
+    mergeChecksFailed_many: '{{count}} checks failed. Fix them before merging.',
+    mergeChecksFailed_other: '{{count}} checks failed. Fix them before merging.',
 
     /* The prepared messages, named for what pressing them does. Each sends the
        project's instruction as a visible message in the conversation. */
@@ -568,6 +574,14 @@ export const en = {
     multiAgentReview: 'Multi-agent review',
     resolveConflicts: 'Resolve the conflicts',
     commitAndPush: 'Commit and push',
+    /* The other half of the pair: work already committed, which had no way onto
+       the request short of the terminal. */
+    push: 'Push',
+    pushing: 'Pushing…',
+    unpushed_one: '{{count}} commit is not on GitHub yet.',
+    unpushed_few: '{{count}} commits are not on GitHub yet.',
+    unpushed_many: '{{count}} commits are not on GitHub yet.',
+    unpushed_other: '{{count}} commits are not on GitHub yet.',
     /* The message the button commits under. Named for what the commit is
        rather than for what changed, which is the agent's to describe — and this
        button exists to get its answer onto the request, not to write history. */
@@ -639,6 +653,37 @@ export const en = {
     omittedFiles_few: '{{count}} files are too large to draw',
     omittedFiles_many: '{{count}} files are too large to draw',
     omittedFiles_other: '{{count}} files are too large to draw',
+    /* How far a file's change has got towards GitHub, and separately whether
+       the request is already showing an older version of it. Two facts, two
+       marks: the second is the one that costs a reviewer their time, and it
+       applies whichever of the first three is true. */
+    publishUncommitted: 'not committed',
+    publishCommitted: 'committed',
+    publishPushed: 'pushed',
+    publishUncommittedLabel: 'Not committed — commit it, then push',
+    publishCommittedLabel: 'Committed here, not on GitHub yet — push it',
+    publishPushedLabel: 'On GitHub, and nothing here is newer',
+    publishStale: 'The pull request still shows an older version of this file.',
+    publishNoRemote: 'This branch is not on GitHub yet.',
+    publishAllSent: 'Everything here is on GitHub.',
+    /* Two sentences for one count of zero, because the count means opposite
+       things either side of a remote copy: commits ahead of the base where the
+       branch has none, commits ahead of the copy where it has one. One string
+       told a pushed branch that nothing was committed yet, next to its own
+       "2 pushed" badge. */
+    publishNothingToPush: 'Nothing is committed yet, so there is nothing to push.',
+    publishAllCommitsSent: 'Everything committed is already on GitHub.',
+    publishUnpushed_one: '{{count}} commit not pushed',
+    publishUnpushed_few: '{{count}} commits not pushed',
+    publishUnpushed_many: '{{count}} commits not pushed',
+    publishUnpushed_other: '{{count}} commits not pushed',
+    publishStaleCount_one: '{{count}} file is out of date in the request',
+    publishStaleCount_few: '{{count}} files are out of date in the request',
+    publishStaleCount_many: '{{count}} files are out of date in the request',
+    publishStaleCount_other: '{{count}} files are out of date in the request',
+    publishCount: '{{count}} {{state}}',
+    push: 'Push',
+    pushing: 'Pushing…',
     copyPath: 'Copy path',
     copied: 'Path copied',
     copyFailed: 'Could not copy',

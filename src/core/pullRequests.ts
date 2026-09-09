@@ -30,6 +30,7 @@ import {
   toPullRequestDetail,
   toPullRequestState
 } from './pullRequestShapes.js'
+import { countUnpushed } from './publish.js'
 import { commitAll, hasUncommittedChanges } from './worktree.js'
 import { allOf } from './parallel.js'
 
@@ -91,6 +92,16 @@ export interface PullRequestView {
   /** Commits this branch has that the base does not; zero means nothing to open. */
   readonly ahead: number
   /**
+   * Commits the remote's copy of this branch does not have — what Push sends.
+   *
+   * Not the same question as `ahead`, which is measured against the *base*
+   * branch: a branch fully pushed is still ahead of `main`, and one pushed once
+   * and committed to since is ahead of both by different amounts. Falls back to
+   * `ahead` where the remote has no copy at all, because then everything here
+   * is unpushed by definition.
+   */
+  readonly unpushedCommits: number
+  /**
    * What the request would be opened against.
    *
    * Carried because the pane names it — "no commits that `main` does not" — and
@@ -133,11 +144,12 @@ export async function readPullRequest(
      the first of them left those three writing into a worktree the caller had
      already moved on from — which is the `ENOTEMPTY` that failed a full run in
      five for a month. */
-  const [remote, dirty, pushed, ahead] = await allOf([
+  const [remote, dirty, pushed, ahead, unpushed] = await allOf([
     listPullRequests(branch, gh),
     hasUncommittedChanges(git),
     isPushed(branch, git),
-    countAhead(git, base, branch)
+    countAhead(git, base, branch),
+    countUnpushed(git, branch, base)
   ])
 
   // The newest, when a branch has been opened and closed and opened again:
@@ -157,6 +169,9 @@ export async function readPullRequest(
     pushed,
     dirty,
     ahead,
+    // Null means the remote has no copy of this branch, so nothing on it has
+    // been pushed — which is what `ahead` already counts.
+    unpushedCommits: unpushed ?? ahead,
     base
   }
 }
@@ -273,7 +288,7 @@ export async function createPullRequest(
     )
   }
 
-  await push(request.branch, git)
+  await pushBranch(request.branch, git)
 
   let raw: string
   try {
@@ -317,7 +332,7 @@ export async function createPullRequest(
  * `-u` as well as pushing: `gh` reads the upstream to know what to open a
  * request from, and a branch pushed without one is a branch it cannot find.
  */
-async function push(branch: string, git: GitExec): Promise<void> {
+export async function pushBranch(branch: string, git: GitExec): Promise<void> {
   try {
     await git(['push', '-u', 'origin', branch])
   } catch (error) {
@@ -341,7 +356,7 @@ async function push(branch: string, git: GitExec): Promise<void> {
  */
 export async function commitAndPush(message: string, branch: string, git: GitExec): Promise<void> {
   await commit(message, git)
-  await push(branch, git)
+  await pushBranch(branch, git)
 }
 
 /**

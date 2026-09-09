@@ -37,7 +37,7 @@ async function revert(path: string, oldPath: string | null = null): Promise<void
 
 /** The paths the pane would draw, which is what a revert has to empty. */
 async function changed(): Promise<string[]> {
-  const diff = await readWorkspaceDiff(exec, { baseBranch: 'main', root: dir })
+  const diff = await readWorkspaceDiff(exec, { baseBranch: 'main', root: dir, branch: 'work' })
   return diff.files.map((file) => file.path)
 }
 

@@ -11,6 +11,7 @@ import { GitHubError } from './github.js'
 import {
   BRANCH_REQUEST_LIMIT,
   commitAndPush,
+  pushBranch,
   createPullRequest,
   type GhExec,
   ghIn,
@@ -198,6 +199,38 @@ describe('reading a branch', () => {
     const view = await readPullRequest('b', 'main', fakeGh().gh, () => Promise.resolve('plenty'))
 
     expect(view.ahead).toBe(0)
+  })
+
+  /*
+   * A different question from `ahead`, and the pane draws a different button
+   * off it: a branch fully pushed is still ahead of `main`, and one pushed once
+   * and committed to since is ahead of both by different amounts.
+   */
+  it('counts what the remote has not got, once it has a copy at all', async () => {
+    const branch = await branchWithCommit()
+    const work = join(dir, 'work')
+    await run('git', ['push', '-q', '-u', 'origin', branch], { cwd: work })
+
+    const sent = await readPullRequest(branch, 'main', fakeGh().gh, workExec())
+    expect(sent.ahead).toBe(1)
+    expect(sent.unpushedCommits).toBe(0)
+
+    await writeFile(join(work, 'b.txt'), 'two\n', 'utf8')
+    await run('git', ['add', '.'], { cwd: work })
+    await run('git', [...IDENTITY, 'commit', '-q', '-m', 'more'], { cwd: work })
+
+    const behind = await readPullRequest(branch, 'main', fakeGh().gh, workExec())
+    expect(behind.unpushedCommits).toBe(1)
+  })
+
+  // Nothing on the other end for anything to have been sent to, so everything
+  // this branch has is unpushed — which is what `ahead` already counts.
+  it('falls back to the count against the base where the remote has no copy', async () => {
+    const branch = await branchWithCommit()
+
+    const view = await readPullRequest(branch, 'main', fakeGh().gh, workExec())
+
+    expect(view.unpushedCommits).toBe(1)
   })
 
   it('knows whether the branch is on the remote', async () => {
@@ -607,6 +640,39 @@ describe('committing an answer onto a request that exists', () => {
     await run('git', ['remote', 'set-url', 'origin', join(dir, 'nowhere.git')], { cwd: work })
 
     await expect(commitAndPush('Answer the review', branch, workExec())).rejects.toMatchObject({
+      code: 'pushFailed',
+      params: { branch }
+    })
+  })
+})
+
+describe('pushing what is already committed', () => {
+  /*
+   * The half of the pair above that was missing. Work the agent committed, or
+   * the reader committed in the workspace's terminal, had no way onto the
+   * request short of the terminal — the button only appeared while there was
+   * something uncommitted to commit.
+   */
+  it('sends the branch without committing anything', async () => {
+    const branch = await branchWithCommit()
+    const work = join(dir, 'work')
+    // Left uncommitted on purpose: pushing must not sweep it up.
+    await writeFile(join(work, 'loose.txt'), 'not yet\n', 'utf8')
+
+    await pushBranch(branch, workExec())
+
+    const remote = await run('git', ['ls-remote', '--heads', 'origin', branch], { cwd: work })
+    expect(remote.stdout).toContain(branch)
+    const staged = await run('git', ['status', '--porcelain'], { cwd: work })
+    expect(staged.stdout).toContain('loose.txt')
+  })
+
+  it('names the branch that could not be pushed', async () => {
+    const branch = await branchWithCommit()
+    const work = join(dir, 'work')
+    await run('git', ['remote', 'set-url', 'origin', join(dir, 'nowhere.git')], { cwd: work })
+
+    await expect(pushBranch(branch, workExec())).rejects.toMatchObject({
       code: 'pushFailed',
       params: { branch }
     })
