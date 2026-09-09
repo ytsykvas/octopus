@@ -35,6 +35,7 @@ import {
   elicitationsByRequest,
   groupToolRuns,
   planCalls,
+  retractedUuids,
   toolCount,
   toolRunRows
 } from './toolRuns.js'
@@ -121,6 +122,9 @@ export function ChatLog({
   // Which calls handed over a plan, so that a plan sent back for another round
   // is not drawn as something that broke.
   const plans = useMemo(() => planCalls(entries), [entries])
+  // What the agent took back, so the rows it names can say so rather than
+  // standing above their own replacement as though they still held.
+  const retracted = useMemo(() => retractedUuids(entries), [entries])
 
   return (
     <div className="mx-auto flex w-full max-w-6xl flex-col gap-3 px-6 py-5">
@@ -146,6 +150,7 @@ export function ChatLog({
             key={block.at}
             entry={block.entry}
             plans={plans}
+            retracted={retracted}
             busy={busy}
             pendingRequestId={pendingRequestId}
             pendingElicitationId={pendingElicitationId}
@@ -196,15 +201,33 @@ interface AnswerProps {
 interface RowProps extends AnswerProps {
   /** The calls that handed over a plan, by id. See `planCalls`. */
   plans: ReadonlySet<string>
+  /** Wire ids the agent has taken back. See `retractedUuids`. */
+  retracted: ReadonlySet<string>
 }
 
 function EntryRow({
   entry,
   ...answering
 }: { entry: ChatEntry } & RowProps): React.JSX.Element | null {
+  const { t } = useTranslation()
+
   if (entry.role === 'user') return <UserMessage text={entry.text} />
 
-  return <AgentRow event={entry.event} {...answering} />
+  const row = <AgentRow event={entry.event} {...answering} />
+
+  /* Struck through rather than dropped. The work was really done and then
+     abandoned, and a log that quietly loses it reads as though the agent never
+     started — while the same conversation on disk would still hold it. The
+     spelling is the one the sidebar already uses for a workspace whose
+     directory is gone. */
+  const uuid = 'uuid' in entry.event ? entry.event.uuid : undefined
+  if (uuid === undefined || !answering.retracted.has(uuid)) return row
+
+  return (
+    <div className="text-ink-faint line-through opacity-60" title={t('chat.retracted')}>
+      {row}
+    </div>
+  )
 }
 
 function AgentRow({
@@ -363,6 +386,11 @@ function AgentRow({
 
     case 'model_refusal_no_fallback':
       return <RefusalNoFallbackRow event={event} />
+
+    // A record, not a row. What it names is struck through above it, and a line
+    // of its own would say the same thing twice.
+    case 'retracted':
+      return null
 
     // Deltas never reach the log — they are drawn from the streaming buffer
     // and replaced by the completed block that follows.

@@ -2437,7 +2437,10 @@ describe('the agent chat', () => {
     await vi.waitFor(() => {
       expect(bench.chatEvents.map((entry) => entry.event)).toContainEqual({
         type: 'text',
-        text: 'there'
+        text: 'there',
+        // The message's own wire id, so a retraction naming it has something
+        // to point at on the other side of the bridge too.
+        uuid: 'u-1'
       })
     })
   })

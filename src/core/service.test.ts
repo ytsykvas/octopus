@@ -4507,7 +4507,7 @@ describe('the agent chat', () => {
         expect(events).toContainEqual({
           chatId: chat.id,
           workspaceId,
-          event: { type: 'text', text: 'there' }
+          event: { type: 'text', text: 'there', uuid: 'u-1' }
         })
       })
     })
@@ -4790,7 +4790,10 @@ describe('the agent chat', () => {
       await vi.waitFor(async () => {
         await expect(service.chatHistory(chat.id)).resolves.toEqual([
           expect.objectContaining({ role: 'user', text: 'add a test' }),
-          expect.objectContaining({ role: 'agent', event: { type: 'text', text: 'done' } })
+          expect.objectContaining({
+            role: 'agent',
+            event: { type: 'text', text: 'done', uuid: 'u-1' }
+          })
         ])
       })
     })
@@ -5465,7 +5468,8 @@ describe('the agent chat', () => {
               toolUseId: 'c-1',
               ok: true,
               content: 'x'.repeat(2000),
-              truncated: true
+              truncated: true,
+              uuid: 'u-result'
             }
           })
         )
@@ -5473,7 +5477,13 @@ describe('the agent chat', () => {
 
       expect(events).toContainEqual(
         expect.objectContaining({
-          event: { type: 'tool_result', toolUseId: 'c-1', ok: true, content: 'x'.repeat(5000) }
+          event: {
+            type: 'tool_result',
+            toolUseId: 'c-1',
+            ok: true,
+            content: 'x'.repeat(5000),
+            uuid: 'u-result'
+          }
         })
       )
     })
@@ -5492,7 +5502,13 @@ describe('the agent chat', () => {
         await expect(service.chatHistory(chat.id)).resolves.toContainEqual(
           expect.objectContaining({
             role: 'agent',
-            event: { type: 'tool_result', toolUseId: 'c-1', ok: false, content: 'x'.repeat(5000) }
+            event: {
+              type: 'tool_result',
+              toolUseId: 'c-1',
+              ok: false,
+              content: 'x'.repeat(5000),
+              uuid: 'u-result'
+            }
           })
         )
       })

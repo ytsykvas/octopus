@@ -907,6 +907,46 @@ describe('what the log shows', () => {
     expect(screen.getByText(/no other model took it/).parentElement?.children).toHaveLength(1)
   })
 
+  /*
+   * A model refused, the CLI retried, and what the first had already said is
+   * taken back. Struck through rather than dropped: the work was really done
+   * and abandoned, and a log that quietly loses it reads as though the agent
+   * never started down that road — while the file on disk would still hold it.
+   */
+  it('strikes through what the agent took back', () => {
+    renderLog({
+      entries: [
+        fromAgent({ type: 'text', text: 'Half an answer', uuid: 'u-1' }),
+        fromAgent({ type: 'retracted', uuids: ['u-1'] }),
+        fromAgent({ type: 'text', text: 'The real one', uuid: 'u-2' })
+      ]
+    })
+
+    expect(screen.getByText('Half an answer').closest('.line-through')).not.toBeNull()
+    expect(screen.getByText('The real one').closest('.line-through')).toBeNull()
+  })
+
+  // An id nothing matches is ordinary: the CLI names everything it evicted, and
+  // some of it may never have reached this transcript.
+  it('leaves the log alone for an id it does not have', () => {
+    renderLog({
+      entries: [
+        fromAgent({ type: 'text', text: 'Still standing', uuid: 'u-1' }),
+        fromAgent({ type: 'retracted', uuids: ['u-elsewhere'] })
+      ]
+    })
+
+    expect(screen.getByText('Still standing').closest('.line-through')).toBeNull()
+  })
+
+  // A record, not a row: what it names is struck through above it, and a line
+  // of its own would say the same thing twice.
+  it('draws no row for the retraction itself', () => {
+    renderLog({ entries: [fromAgent({ type: 'retracted', uuids: ['u-1'] })] })
+
+    expect(screen.queryByText(/took this back/)).not.toBeInTheDocument()
+  })
+
   // The reset the user did ask for takes the whole log with it, so there is
   // nothing left for a line to sit in.
   it('says nothing about a reset that emptied the log', () => {

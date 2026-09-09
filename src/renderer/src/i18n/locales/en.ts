@@ -800,6 +800,10 @@ export const en = {
        than silence: after a fallback the reader has an answer, and here the
        turn just ends — which reads as the app having dropped something. */
     refusalDeclined: '{{from}} declined this turn, and no other model took it',
+    /* Struck through rather than dropped: the work was really done and then
+       abandoned, and a log that quietly loses it reads as though the agent
+       never started down that road. */
+    retracted: 'The agent took this back after the model declined the turn.',
 
     emptyTitle: 'Start the conversation',
     emptyBody:

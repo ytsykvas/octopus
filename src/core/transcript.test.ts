@@ -195,7 +195,12 @@ describe('every kind of event survives being written and read', () => {
       originalModel: 'claude-opus-5',
       category: null,
       explanation: null
-    }
+    },
+    // What the agent took back. It is the only record that a road was started
+    // and abandoned, so it has to survive a restart like everything else here.
+    { type: 'retracted', uuids: ['u-1', 'u-1-tool'] },
+    // And the id the retraction points at, on the entry it points at.
+    { type: 'text', text: 'Looking at auth.rb', uuid: 'u-1' }
   ]
 
   it.each(events.map((event) => [event.type, event] as const))(

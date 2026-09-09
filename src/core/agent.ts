@@ -735,6 +735,11 @@ export function mapMessage(message: SDKMessage): AgentEvent[] {
            would leave a swap that outlives the turn described as local. */
         case 'model_refusal_fallback':
           return [
+            /* The same retraction the replacement already named, said again at
+               the end of the turn. The SDK calls the two idempotent and keeps
+               this one as the complete audit record — it also carries tool
+               results that no replacement frame was attached to. */
+            ...retraction(message.retracted_message_uuids, message.uuid),
             {
               type: 'model_refusal_fallback',
               originalModel: message.original_model,
@@ -852,6 +857,12 @@ export function toIsoTimestamp(value: number | undefined): string | null {
 function fromAssistant(message: SDKAssistantMessage): AgentEvent[] {
   const events: AgentEvent[] = []
 
+  /* What this message replaces, said on arrival rather than at end of turn.
+     `supersedes` rides on the replacement itself, so the retraction is settled
+     while the event that caused it is in hand — the end-of-turn notice says the
+     same thing again, and the SDK calls the two idempotent. */
+  events.push(...retraction(message.supersedes, message.uuid))
+
   for (const block of message.message.content) {
     // A block with nothing in it is not an event. Reasoning arrives that way
     // routinely — the SDK can be asked to summarise it or omit it, and an
@@ -859,22 +870,39 @@ function fromAssistant(message: SDKAssistantMessage): AgentEvent[] {
     // through, each drew a disclosure with nothing behind it and left a record
     // in the transcript that remembers nothing.
     if (block.type === 'text' && block.text.trim() !== '') {
-      events.push({ type: 'text', text: block.text })
+      events.push({ type: 'text', text: block.text, uuid: message.uuid })
     }
     if (block.type === 'thinking' && block.thinking.trim() !== '') {
-      events.push({ type: 'thinking', text: block.thinking })
+      events.push({ type: 'thinking', text: block.thinking, uuid: message.uuid })
     }
     if (block.type === 'tool_use') {
       events.push({
         type: 'tool_use',
         toolUseId: block.id,
         name: block.name,
-        input: block.input
+        input: block.input,
+        uuid: message.uuid
       })
     }
   }
 
   return events
+}
+
+/**
+ * What a message says it takes back, as none or one event.
+ *
+ * An array rather than a nullable, because both callers splice it into a list
+ * they are already building — and one of them does so inside a `return`.
+ *
+ * The carrier's own id is dropped: a message naming itself would strike out the
+ * replacement, and the SDK's own reader drops it for the same reason. Ids are
+ * kept opaque and matched by equality — an unmatched one is a no-op.
+ */
+function retraction(uuids: readonly string[] | undefined, carrier: string): AgentEvent[] {
+  const taken = (uuids ?? []).filter((uuid) => uuid !== carrier)
+
+  return taken.length === 0 ? [] : [{ type: 'retracted', uuids: taken }]
 }
 
 /**
@@ -896,7 +924,10 @@ function fromUser(message: SDKUserMessage): AgentEvent[] {
       type: 'tool_result',
       toolUseId: block.tool_use_id,
       ok: block.is_error !== true,
-      content: describeToolResult(block.content)
+      content: describeToolResult(block.content),
+      // Optional on this message where it is required on an assistant one, so
+      // a result that arrives without one simply cannot be retracted.
+      ...(message.uuid === undefined ? {} : { uuid: message.uuid })
     })
   }
 

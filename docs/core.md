@@ -274,6 +274,32 @@ that can spell a state nothing means is a shape the renderer has to answer for.
 A second member of the union also leaves every transcript already on disk
 untouched, since no line written before it carries that type.
 
+**And what the fallback took back is taken back here too.** The refused model
+had usually already said something — a half-answer, and any tool results that
+went with it — and the CLI evicts those from its own state when it retries. They
+were kept here, so a reopened conversation showed the abandoned work above its
+own replacement and the transcript disagreed with what the agent held.
+
+Two signals name the same thing and both are read. `supersedes` rides on the
+replacement message itself, so the retraction is settled while the event that
+caused it is in hand; `retracted_message_uuids` says it again at the end of the
+turn and is the complete audit record, carrying results that no replacement
+frame was attached to. The SDK calls the two idempotent.
+
+The ids are **opaque**, and that is a decision rather than laziness. The CLI
+splits a multi-block message before emitting it and derives a per-block id for
+each part; the ids in a retraction are the ones it handed us. Computing that
+derivation here would be encoding an implementation that `sdk.d.ts` does not
+document — so they are matched by equality and an unmatched one is a no-op,
+which is what the SDK promises and what its own reader does. A message naming
+itself is dropped: it would strike out its own replacement.
+
+**Marked, not removed.** The retraction is appended like any other event, and
+the rows it names are struck through. Removing them would break the append-only
+promise the transcript is built on — the log's React keys are positions in it,
+so a deletion renumbers every row below — and it would lose the thing the
+retraction is evidence of: the agent started down a road and abandoned it.
+
 One case still has no line, and it is the SDK's rather than ours: a user who
 **declines the retry dialog** gets neither message. octopus does not draw that
 dialog either — `supportedDialogKinds` is undeclared, for the reasons in

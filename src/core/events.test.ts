@@ -101,6 +101,9 @@ describe('what gets stored', () => {
         category: null,
         explanation: null
       },
+      // The only record that work was started and taken back, so it outlives
+      // the session that produced it like the refusal above.
+      { type: 'retracted', uuids: ['u-1'] },
       { type: 'usage', report: null },
       {
         type: 'result',

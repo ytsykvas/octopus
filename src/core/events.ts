@@ -49,20 +49,29 @@ export const AgentEventSchema = z.discriminatedUnion('type', [
   /** The session exists and can be resumed by this id. */
   z.object({ type: z.literal('session_started'), sessionId: z.string() }),
 
-  /** A finished block of prose. What the transcript keeps. */
-  z.object({ type: z.literal('text'), text: z.string() }),
+  /**
+   * A finished block of prose. What the transcript keeps.
+   *
+   * `uuid` is the wire id the CLI gave the message this came from, kept so a
+   * retraction has something to point at. **Optional, and it must stay so:**
+   * every line already on disk lacks it, and `readTranscript` drops a line it
+   * cannot parse — a required field would erase the history of every
+   * conversation on the machine without anything saying so.
+   */
+  z.object({ type: z.literal('text'), text: z.string(), uuid: z.string().optional() }),
 
   /** A fragment of prose still being written. Shown, never stored. */
   z.object({ type: z.literal('text_delta'), text: z.string() }),
 
-  z.object({ type: z.literal('thinking'), text: z.string() }),
+  z.object({ type: z.literal('thinking'), text: z.string(), uuid: z.string().optional() }),
   z.object({ type: z.literal('thinking_delta'), text: z.string() }),
 
   z.object({
     type: z.literal('tool_use'),
     toolUseId: z.string(),
     name: z.string(),
-    input: ToolInputSchema
+    input: ToolInputSchema,
+    uuid: z.string().optional()
   }),
 
   z.object({
@@ -78,7 +87,8 @@ export const AgentEventSchema = z.discriminatedUnion('type', [
      * Only ever set on the transcript's copy — see `forTranscript` below; the
      * live event carries the whole thing.
      */
-    truncated: z.boolean().optional()
+    truncated: z.boolean().optional(),
+    uuid: z.string().optional()
   }),
 
   /**
@@ -286,6 +296,27 @@ export const AgentEventSchema = z.discriminatedUnion('type', [
    * `session`/`local` distinction does not arise. The `why` is carried exactly
    * as it is above — the SDK sends the same two fields either way.
    */
+  /**
+   * Messages the agent has taken back, named by their wire ids.
+   *
+   * A model refuses, the CLI retries on another one, and what the first had
+   * already said is retracted — a half-answer and any tool results that went
+   * with it. The CLI evicts them from its own state; without this the
+   * transcript keeps them for ever, so a reopened conversation shows the
+   * abandoned work above its replacement and disagrees with what the agent
+   * holds.
+   *
+   * Appended rather than applied by rewriting. The transcript is append-only
+   * and the log's React keys are positions in it, so removing an entry would
+   * renumber every row below and remount the rest of the conversation — and
+   * the file would stop being the record of what happened.
+   *
+   * The ids are **opaque**. They are matched by equality and an unmatched one
+   * is a no-op, which is what the SDK promises and what its own reader does;
+   * anything that computed them here would be encoding an implementation.
+   */
+  z.object({ type: z.literal('retracted'), uuids: z.array(z.string()) }),
+
   z.object({
     type: z.literal('model_refusal_no_fallback'),
     originalModel: z.string(),

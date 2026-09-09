@@ -45,6 +45,30 @@ function contextsById(entries: readonly ChatEntry[]): Map<string, ChangeContext>
  * recorded as its own event, so it sits further down the log than the question
  * whose card draws it.
  */
+/**
+ * The wire ids the agent has taken back.
+ *
+ * Gathered rather than applied by filtering. The log is append-only and its
+ * React keys are positions in it, so dropping an entry would renumber every row
+ * below and remount the rest of the conversation — and the reader would lose
+ * the fact that the agent started down a road and abandoned it, which is the
+ * one thing the retraction is evidence of.
+ *
+ * Ids nothing matches are ordinary: the CLI names what it evicted, and some of
+ * it may never have reached this transcript.
+ */
+export function retractedUuids(entries: readonly ChatEntry[]): ReadonlySet<string> {
+  const taken = new Set<string>()
+
+  for (const entry of entries) {
+    if (entry.role === 'agent' && entry.event.type === 'retracted') {
+      for (const uuid of entry.event.uuids) taken.add(uuid)
+    }
+  }
+
+  return taken
+}
+
 export function answersByRequest(
   entries: readonly ChatEntry[]
 ): Map<string, readonly QuestionAnswer[]> {

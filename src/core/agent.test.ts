@@ -526,10 +526,18 @@ describe('mapping SDK messages', () => {
       ])
     )
 
+    // The message's own wire id on each, so a retraction naming it has
+    // something to point at.
     expect(events).toEqual([
-      { type: 'thinking', text: 'weighing it up' },
-      { type: 'text', text: 'Looking at auth.rb' },
-      { type: 'tool_use', toolUseId: 'call-1', name: 'Read', input: { file_path: '/a.rb' } }
+      { type: 'thinking', text: 'weighing it up', uuid: 'u-1' },
+      { type: 'text', text: 'Looking at auth.rb', uuid: 'u-1' },
+      {
+        type: 'tool_use',
+        toolUseId: 'call-1',
+        name: 'Read',
+        input: { file_path: '/a.rb' },
+        uuid: 'u-1'
+      }
     ])
   })
 
@@ -548,7 +556,71 @@ describe('mapping SDK messages', () => {
       ])
     )
 
-    expect(events).toEqual([{ type: 'text', text: 'Looking at auth.rb' }])
+    expect(events).toEqual([{ type: 'text', text: 'Looking at auth.rb', uuid: 'u-1' }])
+  })
+
+  /*
+   * A model refused, the CLI retried on another one, and what the first had
+   * already said is taken back. The replacement names it on arrival; without
+   * this the transcript keeps the abandoned half-answer for ever and a reopened
+   * conversation shows it above its own replacement.
+   *
+   * The ids are opaque here on purpose. The CLI derives a per-block one for a
+   * message it split, and computing that ourselves would be encoding an
+   * implementation — an id that matches nothing is a no-op, which is what the
+   * SDK promises and what its own reader does.
+   */
+  it('takes back what a replacement message says it supersedes', () => {
+    const message = {
+      type: 'assistant',
+      message: { content: [{ type: 'text', text: 'Here instead.' }] },
+      parent_tool_use_id: null,
+      uuid: 'u-2',
+      supersedes: ['u-1', 'u-1-tool'],
+      session_id: 's-1'
+    } as unknown as SDKMessage
+
+    expect(mapMessage(message)).toEqual([
+      { type: 'retracted', uuids: ['u-1', 'u-1-tool'] },
+      { type: 'text', text: 'Here instead.', uuid: 'u-2' }
+    ])
+  })
+
+  // A message naming itself would strike out the replacement, which is what the
+  // SDK's own reader drops it for.
+  it('never lets a message take itself back', () => {
+    const message = {
+      type: 'assistant',
+      message: { content: [{ type: 'text', text: 'Here instead.' }] },
+      parent_tool_use_id: null,
+      uuid: 'u-2',
+      supersedes: ['u-2'],
+      session_id: 's-1'
+    } as unknown as SDKMessage
+
+    expect(mapMessage(message)).toEqual([{ type: 'text', text: 'Here instead.', uuid: 'u-2' }])
+  })
+
+  /* The end-of-turn notice says the same thing again, and the SDK calls the two
+     idempotent — it is kept because it is the complete audit record, carrying
+     tool results that no replacement frame was attached to. */
+  it('takes back what the end-of-turn notice names as well', () => {
+    const message = {
+      type: 'system',
+      subtype: 'model_refusal_fallback',
+      trigger: 'refusal',
+      direction: 'retry',
+      scope: 'session',
+      original_model: 'claude-opus-5',
+      fallback_model: 'claude-sonnet-5',
+      retracted_message_uuids: ['u-1'],
+      request_id: null,
+      content: '',
+      uuid: 'u-9',
+      session_id: 'sess-42'
+    } as unknown as SDKMessage
+
+    expect(mapMessage(message)[0]).toEqual({ type: 'retracted', uuids: ['u-1'] })
   })
 
   it('reads a tool result out of the user message that carries it', () => {
@@ -902,7 +974,7 @@ describe('a session', () => {
     agent.emit(assistant([{ type: 'text', text: 'done' }]))
     await settle()
 
-    expect(events).toEqual([{ type: 'text', text: 'done' }])
+    expect(events).toEqual([{ type: 'text', text: 'done', uuid: 'u-1' }])
   })
 
   // Whatever the SDK failed at — a spawn, a lost subscription — the chat is
