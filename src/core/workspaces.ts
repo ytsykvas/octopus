@@ -80,6 +80,23 @@ export interface WorkspaceView extends Workspace {
   /** The directory is gone — removed outside the app. */
   readonly missing: boolean
   /**
+   * Whether the worktree still has this workspace's own branch checked out.
+   *
+   * The workspace terminal is a shipped tab and `git checkout` is one command
+   * in it. The Changes tab already notices and the pull request pane already
+   * refuses to commit — the list is the thing always on screen, and it was the
+   * one place that said nothing.
+   *
+   * Free: `git worktree list --porcelain` reports the branch of every worktree
+   * and `parseWorktrees` already keeps it, so this is a comparison in the same
+   * pass that decides `missing` rather than a read of its own.
+   *
+   * True where git could not be asked at all. An unreadable repository knows
+   * nothing about where HEAD is, and "we cannot say" must not draw a warning on
+   * every row — the same choice `missing` makes two lines above.
+   */
+  readonly headOnBranch: boolean
+  /**
    * The workspace's conversations, in the order they were opened.
    *
    * The list draws one dot per conversation, so it needs each one's state
@@ -602,20 +619,34 @@ export function reconcile(
     return workspaces.map((workspace) => ({
       ...workspace,
       missing: false,
+      // Nothing was read, so nothing is claimed. A warning glyph on every row
+      // because the repository moved would say the wrong thing loudly.
+      headOnBranch: true,
       ...(counts.get(workspace.id) ?? NOTHING),
       chats: conversations(workspace)
     }))
   }
 
-  // A prunable entry is one git still lists but whose directory is gone, so it
-  // counts as missing rather than as present.
-  const present = new Set(
-    worktrees.filter((worktree) => !worktree.prunable).map((worktree) => worktree.path)
+  /* A prunable entry is one git still lists but whose directory is gone, so it
+     counts as missing rather than as present.
+
+     The branch rides along in the same map. `--porcelain` reports it per
+     worktree — null for a detached HEAD, which falls out of the comparison
+     below with no arm of its own — so knowing where each worktree is standing
+     costs the allocation and not one more git process. */
+  const checkedOut = new Map(
+    worktrees
+      .filter((worktree) => !worktree.prunable)
+      .map((worktree) => [worktree.path, worktree.branch] as const)
   )
 
   return workspaces.map((workspace) => ({
     ...workspace,
-    missing: !present.has(workspace.path),
+    missing: !checkedOut.has(workspace.path),
+    // A worktree git has never heard of is not standing anywhere, and the row
+    // already says its directory is gone.
+    headOnBranch:
+      !checkedOut.has(workspace.path) || checkedOut.get(workspace.path) === workspace.branch,
     ...(counts.get(workspace.id) ?? NOTHING),
     chats: conversations(workspace)
   }))

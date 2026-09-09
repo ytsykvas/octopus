@@ -80,6 +80,12 @@ export const en = {
     statusWaiting: 'Waiting for your answer',
     statusError: 'The last turn ended in an error',
     missingHint: 'Removed outside the app. Removing the entry is safe.',
+    /* The Changes tab and the pull request pane both say this at length; here
+       there is room for a tooltip, and it must not contradict them. Names the
+       branch, because the row's own label is the workspace name and the branch
+       is the thing that has been left behind. */
+    headElsewhere:
+      'The worktree is not on {{branch}}. Work done here will not go onto this workspace\u2019s branch.',
     // Ukrainian needs `few` and `many` as well; i18next picks the form that
     // applies to the active language and ignores the rest.
     changedFiles_one: '{{count}} file',

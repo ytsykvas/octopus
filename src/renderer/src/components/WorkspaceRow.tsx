@@ -1,4 +1,4 @@
-import { AlertTriangle, MoreHorizontal, Pencil, Trash2 } from 'lucide-react'
+import { AlertTriangle, GitBranchPlus, MoreHorizontal, Pencil, Trash2 } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 
 import { AGENT_NAMES } from '@core/chats.js'
@@ -81,6 +81,21 @@ export function WorkspaceRow({
         {/* After the name, before the count: the name is what the row is, this
             is what has become of it, and the count is how much is in flight. */}
         <RequestMark request={request} />
+
+        {/* The worktree is standing on some other branch, so the name on this
+            row is not where the work is going. Suppressed for a workspace whose
+            directory is gone, which already says so louder and would otherwise
+            be two answers to one question. */}
+        {!workspace.headOnBranch && !workspace.missing && (
+          <span
+            role="img"
+            aria-label={t('workspaces.headElsewhere', { branch: workspace.branch })}
+            title={t('workspaces.headElsewhere', { branch: workspace.branch })}
+            className="text-warning shrink-0"
+          >
+            <GitBranchPlus aria-hidden size={11} />
+          </span>
+        )}
 
         {workspace.missing ? (
           <span className="text-warning ml-auto shrink-0 text-[11px]">

@@ -43,6 +43,7 @@ function workspace(overrides: Partial<WorkspaceView> = {}): WorkspaceView {
     changedFiles: 0,
     ahead: 0,
     missing: false,
+    headOnBranch: true,
     ...overrides
   }
 }

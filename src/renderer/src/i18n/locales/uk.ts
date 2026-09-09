@@ -77,6 +77,8 @@ export const uk: Translation = {
     statusWaiting: 'Чекає на твою відповідь',
     statusError: 'Останній хід завершився помилкою',
     missingHint: 'Прибрано повз застосунок. Запис можна безпечно видалити.',
+    headElsewhere:
+      'Робоче дерево не на гілці {{branch}}. Робота, зроблена тут, не потрапить у гілку цього воркспейса.',
     changedFiles_one: '{{count}} файл',
     changedFiles_few: '{{count}} файли',
     changedFiles_many: '{{count}} файлів',

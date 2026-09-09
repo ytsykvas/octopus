@@ -34,6 +34,7 @@ function workspace(overrides: Partial<WorkspaceView> = {}): WorkspaceView {
     envProfile: null,
     chats: [],
     missing: false,
+    headOnBranch: true,
     changedFiles: 0,
     ahead: 0,
     ...overrides

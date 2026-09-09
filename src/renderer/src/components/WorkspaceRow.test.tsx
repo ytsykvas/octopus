@@ -24,6 +24,7 @@ function workspace(overrides: Partial<WorkspaceView> = {}): WorkspaceView {
     changedFiles: 0,
     ahead: 0,
     missing: false,
+    headOnBranch: true,
     ...overrides
   }
 }
@@ -277,6 +278,37 @@ describe('WorkspaceRow', () => {
 
     expect(screen.getByText('Directory is gone')).toBeInTheDocument()
     expect(screen.queryByText('4 files')).not.toBeInTheDocument()
+  })
+
+  /*
+   * The workspace terminal is a shipped tab and `git checkout` is one command
+   * in it. The Changes tab says this at length and the pull request pane
+   * refuses to commit; the list is what is always on screen, and it was the one
+   * place that said nothing.
+   */
+  it('says when the worktree is standing on some other branch', () => {
+    renderRow({ workspace: workspace({ headOnBranch: false }) })
+
+    expect(
+      screen.getByRole('img', { name: /worktree is not on ytsykvas\/anna/ })
+    ).toBeInTheDocument()
+  })
+
+  // Most workspaces are on their own branch most of the time, and a mark for
+  // that would put a glyph on every row and say nothing by being there.
+  it('draws nothing while the worktree is on the workspace’s own branch', () => {
+    renderRow({ workspace: workspace({ headOnBranch: true }) })
+
+    expect(screen.queryByRole('img', { name: /worktree is not on/ })).not.toBeInTheDocument()
+  })
+
+  /* Two warnings for one fact is noise rather than emphasis: a directory that
+     is gone is not standing on any branch, and the row already says so. */
+  it('says nothing about the branch of a workspace whose directory is gone', () => {
+    renderRow({ workspace: workspace({ missing: true, headOnBranch: false }) })
+
+    expect(screen.getByText('Directory is gone')).toBeInTheDocument()
+    expect(screen.queryByRole('img', { name: /worktree is not on/ })).not.toBeInTheDocument()
   })
 
   it('selects the workspace when its name is clicked', async () => {

@@ -24,6 +24,7 @@ export function workspaceView(name: string, overrides: Partial<WorkspaceView> = 
     changedFiles: 0,
     ahead: 0,
     missing: false,
+    headOnBranch: true,
     ...overrides
   }
 }

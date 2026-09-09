@@ -954,6 +954,50 @@ describe('reconcile', () => {
     expect(views[0]?.changedFiles).toBe(3)
   })
 
+  /*
+   * The workspace terminal is a shipped tab and `git checkout` is one command
+   * in it. The Changes tab already notices and the pull request pane refuses to
+   * commit; the list was the one place that said nothing.
+   *
+   * Free: `--porcelain` reports the branch of every worktree, so this is a
+   * comparison in the pass that already decides `missing`.
+   */
+  it('says whether the worktree still has the workspace’s own branch out', async () => {
+    const workspace = await create()
+
+    expect(reconcile([workspace], await listWorktrees(exec))[0]?.headOnBranch).toBe(true)
+
+    await run('git', ['checkout', '-q', '-b', 'side'], { cwd: workspace.path })
+
+    expect(reconcile([workspace], await listWorktrees(exec))[0]?.headOnBranch).toBe(false)
+  })
+
+  // What `git checkout <sha>` leaves, and the case `--porcelain` reports as no
+  // branch at all — which falls out of the comparison with no arm of its own.
+  it('counts a detached HEAD as standing elsewhere', async () => {
+    const workspace = await create()
+    await run('git', ['checkout', '-q', '--detach'], { cwd: workspace.path })
+
+    expect(reconcile([workspace], await listWorktrees(exec))[0]?.headOnBranch).toBe(false)
+  })
+
+  /* Nothing was read, so nothing is claimed. A warning glyph on every row
+     because the repository was moved would say the wrong thing loudly — the
+     same choice `missing` makes for the same reason. */
+  it('claims nothing about the branch when git could not be asked', () => {
+    const workspace = { id: 'planner/anna', path: '/tmp/anna' } as Workspace
+
+    expect(reconcile([workspace], null)[0]?.headOnBranch).toBe(true)
+  })
+
+  // The row already says its directory is gone, and two warnings for one fact
+  // is noise rather than emphasis.
+  it('claims nothing about the branch of a workspace git has never heard of', () => {
+    const workspace = { id: 'planner/anna', path: '/tmp/anna' } as Workspace
+
+    expect(reconcile([workspace], [])[0]?.headOnBranch).toBe(true)
+  })
+
   it('reports a workspace as missing when git reports an empty list', () => {
     const workspace = { id: 'planner/anna', path: '/tmp/anna' } as Workspace
     expect(reconcile([workspace], [])[0]?.missing).toBe(true)

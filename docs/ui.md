@@ -1032,6 +1032,28 @@ confidence. Not `Pull request` either, which is what the tab it opens is already
 called — two buttons of one name is a question for whoever hears them read out.
 The row's mark stays absent, which says nothing rather than something false.
 
+**And a row says when its worktree is standing on some other branch.** `git
+checkout` is one command in the workspace terminal, which is a shipped tab, and
+after it the name on the row is no longer where work done there will go. The
+Changes tab says this at length and _Commit and push_ refuses outright; the list
+is the thing always on screen, and it was the one place that said nothing.
+
+A glyph beside the name, in the same shape as the request mark, with the branch
+in its tooltip — there is no branch text on the row to hang it on, only the
+workspace name. Absent while the worktree is where it should be, which is most
+workspaces most of the time: a mark for the ordinary case would put a glyph on
+every row and say nothing by being there.
+
+Suppressed for a workspace whose directory is gone, and where git could not be
+read at all. The first already says so louder, and two warnings for one fact is
+noise rather than emphasis; the second knows nothing about where HEAD is, and
+"we cannot say" must not draw a warning on every row.
+
+**The fact costs nothing to learn.** `git worktree list --porcelain` reports the
+branch of every worktree and the parser already keeps it, so this is a
+comparison in the pass that already decides whether a directory is missing — not
+one more `git` per workspace on a list that re-reads after every agent turn.
+
 **A quit waits for what the sessions were writing, for up to a second.** A
 transcript is append-only JSONL, so a write cut in half leaves a partial line the
 reader refuses — and the reader is what a reopened conversation is drawn from.
