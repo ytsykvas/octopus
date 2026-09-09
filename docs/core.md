@@ -260,6 +260,26 @@ other would describe a lasting swap as a passing one.
 `retry` is emitted, the other two kept for consumer compatibility — a field
 whose every value is the same value says nothing.
 
+**And the refusal nothing was retried after is drawn too**, which for a while it
+was not. `model_refusal_no_fallback` arrives when no fallback model is configured
+or per-category routing declines the retry; the SDK sends exactly one of the two
+and never both. It fell into the same `default` arm the fallback message was
+rescued from — so the worse of the two cases wore the quieter symptom: after a
+fallback the reader at least has an answer and a line naming who gave it, and
+here the turn simply ended with nothing in the log to interpret.
+
+Its own event rather than a nullable `fallbackModel` and a nullable `scope` on
+the first. Those two would have to agree — null exactly when null — and a shape
+that can spell a state nothing means is a shape the renderer has to answer for.
+A second member of the union also leaves every transcript already on disk
+untouched, since no line written before it carries that type.
+
+One case still has no line, and it is the SDK's rather than ours: a user who
+**declines the retry dialog** gets neither message. octopus does not draw that
+dialog either — `supportedDialogKinds` is undeclared, for the reasons in
+`docs/tasks/other-agent-dialogs-have-nowhere-to-appear.md` — so nothing is
+inconsistent, and it is worth knowing which silence is whose.
+
 ### What the types leave unsaid is measured, not guessed
 
 Two fields on the way in carry no unit in the SDK's types, and both were checked

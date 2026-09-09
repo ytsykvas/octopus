@@ -778,6 +778,10 @@ export const en = {
     refusalSwapped:
       '{{from}} declined this turn, so {{to}} took it \u2014 and the rest of this conversation',
     refusalSwappedLocally: '{{from}} declined part of this turn, so {{to}} answered that part',
+    /* And the case with no second model in it. Worth its own sentence rather
+       than silence: after a fallback the reader has an answer, and here the
+       turn just ends — which reads as the app having dropped something. */
+    refusalDeclined: '{{from}} declined this turn, and no other model took it',
 
     emptyTitle: 'Start the conversation',
     emptyBody:

@@ -2,6 +2,7 @@ import {
   Check,
   ChevronRight,
   Archive,
+  CircleSlash,
   Eraser,
   Map,
   Pencil,
@@ -359,6 +360,9 @@ function AgentRow({
 
     case 'model_refusal_fallback':
       return <RefusalFallbackRow event={event} />
+
+    case 'model_refusal_no_fallback':
+      return <RefusalNoFallbackRow event={event} />
 
     // Deltas never reach the log — they are drawn from the streaming buffer
     // and replaced by the completed block that follows.
@@ -935,17 +939,72 @@ function RefusalFallbackRow({
   const { t } = useTranslation()
 
   return (
+    <RefusalRow
+      icon={<Repeat aria-hidden size={12} />}
+      said={t(event.scope === 'session' ? 'chat.refusalSwapped' : 'chat.refusalSwappedLocally', {
+        from: event.originalModel,
+        to: event.fallbackModel
+      })}
+      explanation={event.explanation}
+    />
+  )
+}
+
+/**
+ * The line where a model refused and nothing took the turn instead.
+ *
+ * The worse of the two wearing the quieter symptom, which is why it is drawn at
+ * all: after a fallback the reader has an answer and a line naming who gave it,
+ * and here the turn simply ends. Without this the log shows nothing, and the
+ * silence has to be interpreted — still thinking, dropped by the app, or worth
+ * asking again.
+ *
+ * No second model to name and no scope to describe: with no retry there is no
+ * swap. What is left is who declined and, when it said so, why.
+ */
+function RefusalNoFallbackRow({
+  event
+}: {
+  event: Extract<AgentEvent, { type: 'model_refusal_no_fallback' }>
+}): React.JSX.Element {
+  const { t } = useTranslation()
+
+  return (
+    <RefusalRow
+      icon={<CircleSlash aria-hidden size={12} />}
+      said={t('chat.refusalDeclined', { from: event.originalModel })}
+      explanation={event.explanation}
+    />
+  )
+}
+
+/**
+ * What both refusal lines are made of.
+ *
+ * Shared because the two differ in one sentence and one glyph, and the markup
+ * under them is load-bearing — the explanation is a second paragraph, so this
+ * is the one row in the quiet register that is a `div` rather than a `p`.
+ * Two copies of that would drift the first time either is touched.
+ */
+function RefusalRow({
+  icon,
+  said,
+  explanation
+}: {
+  readonly icon: React.ReactNode
+  readonly said: string
+  /** The model's own prose, drawn as given: display only, never parsed. */
+  readonly explanation: string | null
+}): React.JSX.Element {
+  return (
     <div className="text-ink-faint border-line border-t pt-2 text-[11px]">
       <p className="flex items-center gap-2">
-        <Repeat aria-hidden size={12} />
-        {t(event.scope === 'session' ? 'chat.refusalSwapped' : 'chat.refusalSwappedLocally', {
-          from: event.originalModel,
-          to: event.fallbackModel
-        })}
+        {icon}
+        {said}
       </p>
 
-      {event.explanation !== null && event.explanation.trim() !== '' && (
-        <p className="mt-1 pl-5 leading-relaxed">{event.explanation}</p>
+      {explanation !== null && explanation.trim() !== '' && (
+        <p className="mt-1 pl-5 leading-relaxed">{explanation}</p>
       )}
     </div>
   )

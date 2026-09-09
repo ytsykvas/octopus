@@ -319,6 +319,57 @@ describe('mapping SDK messages', () => {
   /* An older CLI sends no scope, and the SDK says to read that as `session`.
      It is also the conservative reading: the other way round would describe a
      swap that outlives the turn as a local one. */
+  /* The other half of the pair, and the one that was falling past every arm
+     into `default: return []` — so a refusal nothing was retried after produced
+     no line at all, which is the silence the fallback line exists to end.
+
+     A hand-built message, because this has never been seen in this repository:
+     putting the arm back verifies the fixture rather than the wire, and that is
+     worth knowing about this test rather than assuming otherwise. */
+  it('maps a refusal that nothing was retried after', () => {
+    const message = {
+      type: 'system',
+      subtype: 'model_refusal_no_fallback',
+      original_model: 'claude-opus-5',
+      api_refusal_category: 'cyber',
+      api_refusal_explanation: 'The request looked like credential harvesting.',
+      request_id: null,
+      content: '',
+      session_id: 'sess-42'
+    } as unknown as SDKMessage
+
+    expect(mapMessage(message)).toEqual([
+      {
+        type: 'model_refusal_no_fallback',
+        originalModel: 'claude-opus-5',
+        category: 'cyber',
+        explanation: 'The request looked like credential harvesting.'
+      }
+    ])
+  })
+
+  // Both are absent from older CLIs, and a refusal with no reason attached is
+  // still a refusal worth a line.
+  it('draws the same line where the refusal gave no reason', () => {
+    const message = {
+      type: 'system',
+      subtype: 'model_refusal_no_fallback',
+      original_model: 'claude-opus-5',
+      request_id: null,
+      content: '',
+      session_id: 'sess-42'
+    } as unknown as SDKMessage
+
+    expect(mapMessage(message)).toEqual([
+      {
+        type: 'model_refusal_no_fallback',
+        originalModel: 'claude-opus-5',
+        category: null,
+        explanation: null
+      }
+    ])
+  })
+
   it('reads a missing scope as one that outlives the turn', () => {
     const message = {
       type: 'system',

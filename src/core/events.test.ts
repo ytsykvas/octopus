@@ -93,6 +93,14 @@ describe('what gets stored', () => {
       // line explaining why the agent forgot has to survive a restart.
       { type: 'conversation_reset', cleared: false },
       { type: 'question_answered', requestId: 'r-1', answers: [] },
+      /* A refusal nothing was retried after is the only account of why a turn
+         produced nothing, so it has to outlive the session that made it. */
+      {
+        type: 'model_refusal_no_fallback',
+        originalModel: 'claude-opus-5',
+        category: null,
+        explanation: null
+      },
       { type: 'usage', report: null },
       {
         type: 'result',

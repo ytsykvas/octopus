@@ -268,6 +268,32 @@ export const AgentEventSchema = z.discriminatedUnion('type', [
   }),
 
   /**
+   * A model refused, and nothing was retried.
+   *
+   * The worse of the two wearing the quieter symptom. Where a fallback ran the
+   * reader at least gets an answer and a line saying who gave it; here the turn
+   * simply ends, and without this the log shows nothing at all — leaving them to
+   * work out whether the agent is still thinking, whether the app dropped
+   * something, or whether to ask again.
+   *
+   * Its own member rather than a nullable `fallbackModel` and a nullable
+   * `scope` on the one above. Those two would have to agree — null exactly when
+   * null — and a shape that can spell a state nothing means is a shape the
+   * renderer has to answer for. It also leaves every transcript already written
+   * untouched, since no line on disk carries this type.
+   *
+   * `scope` has nothing to describe: with no retry there is no swap, so the
+   * `session`/`local` distinction does not arise. The `why` is carried exactly
+   * as it is above — the SDK sends the same two fields either way.
+   */
+  z.object({
+    type: z.literal('model_refusal_no_fallback'),
+    originalModel: z.string(),
+    category: z.string().nullable(),
+    explanation: z.string().nullable()
+  }),
+
+  /**
    * The list of slash commands changed mid-session.
    *
    * Ephemeral for the same reason as a rate limit: it describes what the agent

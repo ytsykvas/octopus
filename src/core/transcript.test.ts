@@ -177,7 +177,25 @@ describe('every kind of event survives being written and read', () => {
       outputTokens: 2,
       terminalReason: 'completed'
     },
-    { type: 'error', message: 'claude exited with code 1' }
+    { type: 'error', message: 'claude exited with code 1' },
+    /* Both refusals, which were missing from this list while one of them was
+       being written to disk. The pair is the reason the list is worth keeping
+       whole: they differ in three fields, and a shape that cannot be read back
+       takes the only account of why a turn went the way it did with it. */
+    {
+      type: 'model_refusal_fallback',
+      originalModel: 'claude-opus-5',
+      fallbackModel: 'claude-sonnet-5',
+      scope: 'session',
+      category: 'cyber',
+      explanation: 'It looked like credential harvesting.'
+    },
+    {
+      type: 'model_refusal_no_fallback',
+      originalModel: 'claude-opus-5',
+      category: null,
+      explanation: null
+    }
   ]
 
   it.each(events.map((event) => [event.type, event] as const))(

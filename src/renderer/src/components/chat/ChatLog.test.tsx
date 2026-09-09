@@ -869,6 +869,44 @@ describe('what the log shows', () => {
     ).toHaveLength(1)
   })
 
+  /*
+   * The other refusal, and the one the log used to say nothing at all about:
+   * the turn ends with no answer, and silence is left to be interpreted as the
+   * agent still thinking or the app having dropped something.
+   */
+  it('says so when a turn was declined and nothing took it', () => {
+    renderLog({
+      entries: [
+        fromAgent({
+          type: 'model_refusal_no_fallback',
+          originalModel: 'claude-opus-5',
+          category: 'cyber',
+          explanation: 'The request looked like credential harvesting.'
+        })
+      ]
+    })
+
+    expect(screen.getByText(/no other model took it/)).toBeVisible()
+    expect(screen.getByText(/credential harvesting/)).toBeVisible()
+    // And not the sentence for a turn something else answered.
+    expect(screen.queryByText(/the rest of this conversation/)).not.toBeInTheDocument()
+  })
+
+  it('draws no second line where that refusal said nothing either', () => {
+    renderLog({
+      entries: [
+        fromAgent({
+          type: 'model_refusal_no_fallback',
+          originalModel: 'claude-opus-5',
+          category: null,
+          explanation: null
+        })
+      ]
+    })
+
+    expect(screen.getByText(/no other model took it/).parentElement?.children).toHaveLength(1)
+  })
+
   // The reset the user did ask for takes the whole log with it, so there is
   // nothing left for a line to sit in.
   it('says nothing about a reset that emptied the log', () => {

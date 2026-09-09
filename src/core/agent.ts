@@ -745,6 +745,21 @@ export function mapMessage(message: SDKMessage): AgentEvent[] {
             }
           ]
 
+        /* And the refusal nothing was retried after. The SDK sends exactly
+           one of these two and never both, so this is the case where the turn
+           ends with no answer at all — which without a line is silence the
+           reader is left to interpret. Its message carries the same `why` as
+           the one above and none of the five fields that describe a retry. */
+        case 'model_refusal_no_fallback':
+          return [
+            {
+              type: 'model_refusal_no_fallback',
+              originalModel: message.original_model,
+              category: message.api_refusal_category ?? null,
+              explanation: message.api_refusal_explanation ?? null
+            }
+          ]
+
         // Every other system subtype, of which there are dozens and counting.
         default:
           return []
