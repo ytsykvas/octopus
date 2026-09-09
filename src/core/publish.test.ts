@@ -121,6 +121,7 @@ describe('a branch that has been pushed', () => {
   it('finds its copy through the upstream the push set', async () => {
     const found = await status()
 
+    expect(found.headOnBranch).toBe(true)
     expect(found.remoteCommit).toMatch(/^[0-9a-f]{40}$/u)
     expect(found.unpushedCommits).toBe(0)
   })
@@ -348,6 +349,79 @@ describe('a remote-tracking ref left over from an earlier workspace', () => {
   })
 })
 
+/*
+ * Every read here is anchored on HEAD while the branch arrives as a name, and
+ * the workspace's terminal is a shipped tab where `git checkout` is one command.
+ * Apart, `work`'s copy on the remote was compared against a `side` that never
+ * had one, and the answer was reported as where this workspace stands.
+ */
+describe('a worktree standing on another branch', () => {
+  beforeEach(async () => {
+    await writeFile(join(dir, 'a.txt'), 'two\n', 'utf8')
+    await commit('second')
+    await git('push', '-q', '-u', 'origin', 'work')
+    await git('checkout', '-q', '-b', 'side')
+  })
+
+  it('makes no claim about the remote copy', async () => {
+    await writeFile(join(dir, 'a.txt'), 'three\n', 'utf8')
+    await commit('on side')
+
+    const found = await status()
+
+    expect(found.headOnBranch).toBe(false)
+    expect(found.remoteCommit).toBeNull()
+    expect(found.onRemote.size).toBe(0)
+    expect(found.beyondRemote.size).toBe(0)
+  })
+
+  /* The file has to be one the pushed copy already matches, or it lands in
+     `beyondRemote` either way and the answer holds with the guard reverted. */
+  it('leaves every file short of pushed, there being no copy to match', async () => {
+    await writeFile(join(dir, 'b.txt'), 'new here\n', 'utf8')
+    await commit('on side')
+
+    expect(publishStateOf('a.txt', null, await status())).toBe('committed')
+  })
+
+  it('never says everything is sent while HEAD is elsewhere', async () => {
+    expect(nothingToSend(await status())).toBe(false)
+  })
+
+  it('will not count what is unpushed from a HEAD on another branch', async () => {
+    await writeFile(join(dir, 'b.txt'), 'one\n', 'utf8')
+    await commit('first on side')
+    await writeFile(join(dir, 'c.txt'), 'two\n', 'utf8')
+    await commit('second on side')
+
+    expect(await countUnpushed(exec, 'work', 'main')).toBeNull()
+  })
+
+  // What `git checkout <sha>` in the terminal leaves, and the case
+  // `currentBranch` answers null for.
+  it('says the same for a HEAD that is on no branch at all', async () => {
+    await git('checkout', '-q', '--detach')
+
+    const found = await status()
+
+    expect(found.headOnBranch).toBe(false)
+    expect(found.remoteCommit).toBeNull()
+  })
+})
+
+/*
+ * git answering emptily is not git failing, and `merge-base` does it for a
+ * revision it cannot resolve. Driven with a fake, since a real repository has
+ * no way to produce it — which is the point of the guard being here at all.
+ */
+describe('a base git will not place', () => {
+  it('cannot count what is unpushed without knowing where the branch began', async () => {
+    const fake: GitExec = (args) => Promise.resolve(args[0] === 'branch' ? 'work\n' : '')
+
+    expect(await countUnpushed(fake, 'work', 'main')).toBeNull()
+  })
+})
+
 describe('a repository with no remote at all', () => {
   it('says so, rather than leaving it to look like a branch nobody pushed', async () => {
     await git('remote', 'remove', 'origin')
@@ -375,6 +449,7 @@ describe('the classification', () => {
     return {
       remoteCommit: 'remote01',
       hasRemote: true,
+      headOnBranch: true,
       unpushedCommits: 0,
       onRemote: new Set(),
       beyondRemote: new Set(),

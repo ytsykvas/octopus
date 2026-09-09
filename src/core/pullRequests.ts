@@ -17,7 +17,7 @@ import { z } from 'zod'
 
 import { shortBranchName } from './branches.js'
 import { GitHubError } from './github.js'
-import { countAhead, type GitExec, reasonFrom } from './git.js'
+import { countAhead, currentBranch, type GitExec, reasonFrom } from './git.js'
 import {
   type BranchRequest,
   BranchListSchema,
@@ -260,6 +260,11 @@ export async function createPullRequest(
   gh: GhExec,
   git: GitExec
 ): Promise<string> {
+  // First, and before the count below: refused after it, the reader would be
+  // told this branch has nothing the base does not — true of the branch, and no
+  // help at all to somebody standing on another one.
+  await requireHeadOn(request.branch, git)
+
   // Before the count below, not after it: a workspace whose only work is
   // uncommitted is zero commits ahead until this lands, and checking first
   // would refuse exactly the request this field exists to open.
@@ -340,8 +345,34 @@ export async function pushBranch(branch: string, git: GitExec): Promise<void> {
  * the same codes — which is why they are functions rather than inline there.
  */
 export async function commitAndPush(message: string, branch: string, git: GitExec): Promise<void> {
+  await requireHeadOn(branch, git)
   await commit(message, git)
   await pushBranch(branch, git)
+}
+
+/**
+ * Refuses while the worktree is standing on a different branch.
+ *
+ * The two steps below this disagree about what a branch is. `commitAll` lands
+ * on **HEAD**; `pushBranch` sends a **name**. Apart, the work is committed onto
+ * one branch and another is pushed, and both report success — so the reader is
+ * told their answer went out while it sits on a branch nothing will look at.
+ *
+ * The workspace's terminal is a shipped tab and `git checkout` is one command
+ * in it, so this is a state the app offers a way into.
+ *
+ * `pushBranch` is deliberately not guarded: it commits nothing and pushes the
+ * branch it names, which is a true operation whatever HEAD is doing.
+ */
+async function requireHeadOn(branch: string, git: GitExec): Promise<void> {
+  const head = await currentBranch(git)
+  if (head === branch) return
+
+  throw new GitHubError(
+    'headNotOnBranch',
+    { branch },
+    `HEAD is on ${head ?? 'no branch'}, not on ${branch}. Nothing was committed or pushed.`
+  )
 }
 
 /**

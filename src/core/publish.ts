@@ -16,7 +16,7 @@
  * writes.
  */
 
-import { countAhead, type GitExec, resolveRef } from './git.js'
+import { countAhead, currentBranch, type GitExec, resolveRef } from './git.js'
 import { allOf } from './parallel.js'
 import { listRemotes } from './remotes.js'
 
@@ -50,6 +50,21 @@ export interface PublishStatus {
    * one is a band that can never become true or be dismissed.
    */
   readonly hasRemote: boolean
+  /**
+   * Whether the branch this is about is the one the worktree has checked out.
+   *
+   * Every read here is anchored on `HEAD` while the branch arrives as a name,
+   * and the workspace's terminal is a shipped tab with `git checkout` one
+   * command away. Apart, the copy of `work` on the remote is compared against a
+   * `side` that never had one, and the answer is reported as where this
+   * workspace stands.
+   *
+   * A boolean rather than the name of wherever HEAD went: "on another branch"
+   * and "on no branch" are one fact to the reader and one thing to do about it,
+   * and `currentBranch` answering null for a detached HEAD falls out of the
+   * comparison with no arm of its own.
+   */
+  readonly headOnBranch: boolean
   /** Commits here the remote's copy does not have. */
   readonly unpushedCommits: number
   /** Paths the remote's copy of the branch changed, measured from its fork. */
@@ -196,6 +211,12 @@ export async function countUnpushed(
   branch: string,
   base: string
 ): Promise<number | null> {
+  /* The count below is `HEAD` against this branch's copy on the remote, so with
+     HEAD standing somewhere else the two ends are different branches. Null
+     already means "cannot say", and the caller's fallback is measured on the
+     branch itself. */
+  if ((await currentBranch(exec)) !== branch) return null
+
   const baseCommit = await forkOf(exec, base, 'HEAD')
   if (baseCommit === null) return null
 
@@ -214,7 +235,19 @@ export async function readPublishStatus(
   exec: GitExec,
   options: ReadPublishOptions
 ): Promise<PublishStatus> {
-  const remoteCommit = await remoteCopy(exec, options.branch, options.baseCommit)
+  /* Asked before anything is compared, because everything below is anchored on
+     `HEAD`: the listings, the count, and the copy on the remote that they are
+     measured against. With HEAD on another branch the comparison is between two
+     different pieces of work, and the answer would be reported as where this
+     workspace stands. Skipping `remoteCopy` puts the read on the arm it already
+     has for a branch nobody has pushed — no file can reach `pushed`,
+     `nothingToSend` cannot come out true, and the commit count becomes what is
+     actually checked out since it left the base. */
+  const headOnBranch = (await currentBranch(exec)) === options.branch
+
+  const remoteCommit = headOnBranch
+    ? await remoteCopy(exec, options.branch, options.baseCommit)
+    : null
 
   const beyondHeadRead = names(exec, ['HEAD'])
   const remotesRead = listRemotes(exec)
@@ -229,6 +262,7 @@ export async function readPublishStatus(
     return {
       remoteCommit,
       hasRemote: remotes.includes(ORIGIN),
+      headOnBranch,
       unpushedCommits,
       onRemote: new Set(),
       beyondRemote: new Set(),
@@ -260,6 +294,9 @@ export async function readPublishStatus(
   return {
     remoteCommit,
     hasRemote: remotes.includes(ORIGIN),
+    // True by construction: there is no remote copy to compare against unless
+    // HEAD is on the branch that has one.
+    headOnBranch,
     unpushedCommits,
     onRemote,
     beyondRemote,

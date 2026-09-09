@@ -519,6 +519,8 @@ export const uk: Translation = {
     publishPushedLabel: 'На GitHub, і новішого тут немає',
     publishStale: 'У пул-реквесті досі лежить старіша версія цього файлу.',
     publishNoRemote: 'Цієї гілки ще немає на GitHub.',
+    publishHeadElsewhere:
+      'HEAD не на гілці {{branch}} цього воркспейсу, тож про GitHub тут нічого сказати. Перемкніться на неї в терміналі.',
     publishAllSent: 'Усе, що тут є, уже на GitHub.',
     publishNothingToPush: 'Нічого не закомічено, тож і пушити нічого.',
     publishAllCommitsSent: 'Усе закомічене вже на GitHub.',
@@ -1136,6 +1138,8 @@ export const uk: Translation = {
     mergeFailed: 'GitHub не влив #{{number}}. Каже: {{reason}}',
     requestNotOnBranch:
       'Запит #{{number}} у гілці {{head}}, а не в {{branch}} цього воркспейсу. Нічого не зроблено.',
+    headNotOnBranch:
+      'HEAD не на гілці {{branch}} цього воркспейсу. Нічого не закомічено й не запушено — спершу перемкніться на неї в терміналі.',
     closeFailed: 'GitHub не закрив #{{number}}. Каже: {{reason}}',
     replyFailed: 'GitHub не опублікував відповідь. Каже: {{reason}}',
     attachmentTooLarge: 'Це зображення більше за {{limit}} МБ. Збережіть його й прикріпіть файлом.',

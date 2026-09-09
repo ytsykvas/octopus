@@ -115,6 +115,7 @@ const CODE_PARAMETERS: Record<CoreErrorCode, Interpolated> = {
   resolveFailed: { reason: 'not found' },
   mergeFailed: { number: '42', reason: 'checks failing' },
   requestNotOnBranch: { number: '42', head: 'octopus/bo', branch: 'octopus/anna' },
+  headNotOnBranch: { branch: 'octopus/anna' },
   repoConfigSymlink: { path: '.octopus/scripts/setup.sh' },
   repoConfigTooLarge: { path: '.octopus/carry' },
   repoConfigMalformed: { path: '.octopus/project.json' },

@@ -666,6 +666,12 @@ export const en = {
     publishPushedLabel: 'On GitHub, and nothing here is newer',
     publishStale: 'The pull request still shows an older version of this file.',
     publishNoRemote: 'This branch is not on GitHub yet.',
+    /* Said in place of everything else this strip carries, because everything
+       else rests on HEAD being this workspace's branch: the rungs, both counts
+       and Push are all measured from it. Not `publishNoRemote` — "not on GitHub
+       yet" is a different false statement about a branch that may well be. */
+    publishHeadElsewhere:
+      'HEAD is not on this workspace\u2019s branch {{branch}}, so nothing here can be said about GitHub. Check it out in the terminal.',
     publishAllSent: 'Everything here is on GitHub.',
     /* Two sentences for one count of zero, because the count means opposite
        things either side of a remote copy: commits ahead of the base where the
@@ -1467,6 +1473,11 @@ export const en = {
        the number alone cannot answer it. */
     requestNotOnBranch:
       'Pull request #{{number}} is on {{head}}, not on this workspace\u2019s {{branch}}. Nothing was done.',
+    /* Refused before anything was committed. Committing lands on whatever the
+       worktree has checked out while pushing sends a name, so apart the two put
+       the work on one branch and send another — and both report success. */
+    headNotOnBranch:
+      'HEAD is not on this workspace\u2019s branch {{branch}}. Nothing was committed or pushed \u2014 check it out in the terminal first.',
     closeFailed: 'GitHub would not close #{{number}}. It said: {{reason}}',
     /* No number on either: a reply and a resolve are addressed to a thread, and
        the thread is what the reader is looking at when one of them fails. */

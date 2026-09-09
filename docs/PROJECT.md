@@ -628,7 +628,10 @@ the app never sees a token (§10.9).
   review nobody had left — and that is the only description those changes will
   ever have. There is no title and no drafted text to fall back to on this side,
   so the button is dead until something is typed, which is what git would say
-  anyway. And **pushing on its own**, which is the half that was
+  anyway. Both this and opening a request **refuse** while `HEAD` is not on the
+  workspace's branch: committing lands on whatever is checked out and pushing
+  sends a name, so apart they put the work on one branch and send another, and
+  report success for both. And **pushing on its own**, which is the half that was
   missing: the commit button only ever appeared while the worktree was dirty, so work the agent committed, or the reader committed in the
   workspace's terminal, had no way onto the request except the terminal.
 

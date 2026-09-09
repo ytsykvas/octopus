@@ -509,9 +509,22 @@ export function DiffPanel({
           four buttons and a branch name at the pane's 280px floor, and this
           wraps to a second line rather than squeezing them. */}
       <div className="border-line flex shrink-0 flex-wrap items-center gap-x-3 gap-y-1 border-b px-3 py-1.5 text-[11px]">
-        {allPushed ? (
+        {/* Nothing below this line is measured against the branch the workspace
+            names while HEAD is standing somewhere else, so the strip says that
+            instead of saying something else. Reusing "not on GitHub yet" would
+            trade one false statement for another about a branch that may well
+            be there. */}
+        {!diff.headOnBranch && (
+          <span className="text-warning">
+            {t('diff.publishHeadElsewhere', { branch: shortBranchName(workspace.branch) })}
+          </span>
+        )}
+
+        {diff.headOnBranch && allPushed && (
           <span className="text-ink-faint">{t('diff.publishAllSent')}</span>
-        ) : (
+        )}
+
+        {diff.headOnBranch && !allPushed && (
           <>
             {/* The same three badges the rows carry, with a count each — which
                 is what makes this strip the legend for them. */}
@@ -617,7 +630,7 @@ export function DiffPanel({
             onOpen={openFile}
             onRevert={revertFile}
             writers={marks.get(file.path) ?? NO_WRITERS}
-            showPublish={!allPushed}
+            showPublish={diff.headOnBranch && !allPushed}
           />
         ))}
       </div>

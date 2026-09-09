@@ -353,6 +353,7 @@ function emptyDiff(): WorkspaceDiff {
     omittedFiles: 0,
     remoteCommit: null,
     hasRemote: true,
+    headOnBranch: true,
     unpushedCommits: 0,
     nothingToSend: false
   }

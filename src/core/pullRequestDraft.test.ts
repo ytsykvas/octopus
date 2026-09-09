@@ -62,6 +62,7 @@ function diff(overrides: Partial<WorkspaceDiff> = {}): WorkspaceDiff {
     omittedFiles: 0,
     remoteCommit: null,
     hasRemote: false,
+    headOnBranch: true,
     unpushedCommits: 0,
     nothingToSend: false,
     ...overrides

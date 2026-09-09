@@ -55,6 +55,7 @@ export function workspaceDiff(
     omittedFiles: 0,
     remoteCommit: 'remote01',
     hasRemote: true,
+    headOnBranch: true,
     unpushedCommits: 0,
     // Settled by default, so a test that is not about the remote gets a pane
     // with no publish marks on it at all.

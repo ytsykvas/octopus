@@ -1940,6 +1940,51 @@ describe('what has reached GitHub', () => {
     expect(screen.getAllByTitle(/nothing here is newer/).length).toBeGreaterThan(0)
   })
 
+  /* The skew is on purpose. With `unpushedCommits` at zero, removing the
+     suppression would take Push away by itself and this would stay green over a
+     pane that had gone back to asserting — so the fixture carries the state a
+     real workspace on another branch produces: no copy in the comparison, and
+     commits since the base on whatever is checked out. */
+  it('says nothing about GitHub while HEAD is not on the workspace’s branch', async () => {
+    answer(
+      workspaceDiff(
+        [
+          fileDiff('src/a.ts', { publish: 'committed' }),
+          fileDiff('src/b.ts', { publish: 'uncommitted' })
+        ],
+        {
+          headOnBranch: false,
+          remoteCommit: null,
+          unpushedCommits: 2,
+          nothingToSend: false
+        }
+      )
+    )
+    renderPanel()
+
+    expect(await screen.findByText(/HEAD is not on this workspace’s branch/)).toBeInTheDocument()
+    expect(screen.queryByText('This branch is not on GitHub yet.')).not.toBeInTheDocument()
+    expect(screen.queryByText('2 commits not pushed')).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Push' })).not.toBeInTheDocument()
+  })
+
+  // A rung is a claim about the branch too, so the rows lose theirs with it.
+  it('draws no rung on a row either while HEAD is elsewhere', async () => {
+    answer(
+      workspaceDiff([fileDiff('src/a.ts', { publish: 'committed' })], {
+        headOnBranch: false,
+        remoteCommit: null,
+        unpushedCommits: 2,
+        nothingToSend: false
+      })
+    )
+    renderPanel()
+
+    await screen.findByRole('button', { name: 'src/a.ts' })
+    expect(screen.queryByTitle(/not on GitHub yet/)).not.toBeInTheDocument()
+    expect(screen.queryByText('1 committed')).not.toBeInTheDocument()
+  })
+
   /* The one state where the strip says everything: a mark on every row would
      repeat it, which is the rule the writers mark already keeps. */
   it('says so once and marks nothing when everything is on GitHub', async () => {

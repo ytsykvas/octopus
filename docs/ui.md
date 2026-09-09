@@ -1693,6 +1693,21 @@ an unsent revert and hid every badge that might have hinted otherwise;
 `publish.ts` answers it instead from the reads that can see it, an amended
 commit included.
 
+**And none of it is said while `HEAD` is not on the workspace's branch.** Every
+reading behind this strip is anchored on `HEAD` while the branch arrives as a
+name, so with the two apart the copy of `work` on the remote is being compared
+against a `side` that never had one. The workspace terminal is a shipped tab and
+`git checkout` is one command in it, so this is a state the app offers a way
+into. The strip says that and nothing else, and the rows lose their rungs with
+it — two of the three rung labels are themselves claims about GitHub.
+
+Deliberately **not** the "not on GitHub yet" sentence: the branch may well be
+there, and reusing it would trade one false statement for another. The pull
+request tab's _Commit and push_ refuses outright in the same state, which is the
+half that was doing damage — committing lands on whatever is checked out while
+pushing sends a name, so apart the two put the work on one branch and send
+another, both reporting success.
+
 **A project is allowed to have no remote.** A repository, a commit and a base
 branch is all a project needs, so a local-only checkout is supported — and for
 one, none of the sentences above is drawn and Push is not offered. "Not pushed

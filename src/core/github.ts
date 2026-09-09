@@ -96,6 +96,10 @@ export type GitHubErrorCode =
   // the repository rather than against the branch it is standing in, so a stale
   // number would merge whatever it names.
   | 'requestNotOnBranch'
+  /* Refused before anything is committed: `commitAll` lands on HEAD and
+     `pushBranch` sends a *name*, so with the two apart the commit goes on one
+     branch while another is pushed — and both report success. */
+  | 'headNotOnBranch'
   // Asking the agent to write the title and body is on the way to a pull
   // request too, and fails in the same place as far as the reader is concerned.
   | 'draftFailed'

@@ -510,6 +510,27 @@ describe('opening one', () => {
     expect(calls[0]?.[calls[0].indexOf('--title') + 1]).toBe('--force a rename')
   })
 
+  /* First of all, and before the count below: refused after it, the reader
+     would be told this branch has nothing the base does not — true of the
+     branch, and no help at all to somebody standing on another one. */
+  it('refuses to open one from a worktree with another branch checked out', async () => {
+    const branch = await branchWithCommit()
+    const work = join(dir, 'work')
+    await run('git', ['checkout', '-q', '-b', 'side'], { cwd: work })
+    await writeFile(join(work, 'b.txt'), 'two\n', 'utf8')
+    const { gh, calls } = fakeGh()
+
+    await expect(
+      createPullRequest({ ...draft, commitMessage: 'Add b', branch, base: 'main' }, gh, workExec())
+    ).rejects.toMatchObject({ code: 'headNotOnBranch', params: { branch } })
+
+    // Refused before anything happened: `gh` was never asked, and the commit
+    // that would have landed on `side` did not.
+    expect(calls).toEqual([])
+    const log = await run('git', ['log', '-1', '--format=%s'], { cwd: work })
+    expect(log.stdout.trim()).toBe('work')
+  })
+
   it('refuses a branch with nothing the base does not have', async () => {
     const { gh, calls } = fakeGh()
 
@@ -672,6 +693,38 @@ describe('committing an answer onto a request that exists', () => {
     })
   })
 
+  /* The half that hurts. `commitAll` lands on HEAD and `pushBranch` sends a
+     name, so with the two apart the work is committed onto one branch and
+     another is pushed — both reporting success, and the answer sitting where
+     nobody will look for it. */
+  it('refuses to commit while HEAD is on another branch, and commits nothing', async () => {
+    const branch = await branchWithCommit()
+    const work = join(dir, 'work')
+    await run('git', ['checkout', '-q', '-b', 'side'], { cwd: work })
+    await writeFile(join(work, 'b.txt'), 'two\n', 'utf8')
+
+    await expect(commitAndPush('Answer the review', branch, workExec())).rejects.toMatchObject({
+      code: 'headNotOnBranch',
+      params: { branch }
+    })
+
+    // Still uncommitted, which is the assertion that matters: refusing after
+    // the commit would leave it on `side` for ever.
+    const status = await run('git', ['status', '--porcelain'], { cwd: work })
+    expect(status.stdout).toContain('b.txt')
+  })
+
+  it('refuses the same way when HEAD is on no branch at all', async () => {
+    const branch = await branchWithCommit()
+    const work = join(dir, 'work')
+    await run('git', ['checkout', '-q', '--detach'], { cwd: work })
+    await writeFile(join(work, 'b.txt'), 'two\n', 'utf8')
+
+    await expect(commitAndPush('Answer the review', branch, workExec())).rejects.toMatchObject({
+      code: 'headNotOnBranch'
+    })
+  })
+
   it('names the branch that could not be pushed', async () => {
     const branch = await branchWithCommit()
     const work = join(dir, 'work')
@@ -715,6 +768,20 @@ describe('pushing what is already committed', () => {
       code: 'pushFailed',
       params: { branch }
     })
+  })
+
+  /* Deliberately not guarded the way committing is, and pinned so a later
+     session does not "fix" it: this commits nothing and pushes the branch it
+     names, which is true whatever HEAD is standing on. */
+  it('still sends the branch from a worktree standing somewhere else', async () => {
+    const branch = await branchWithCommit()
+    const work = join(dir, 'work')
+    await run('git', ['checkout', '-q', '-b', 'side'], { cwd: work })
+
+    await pushBranch(branch, workExec())
+
+    const remote = await run('git', ['ls-remote', '--heads', 'origin', branch], { cwd: work })
+    expect(remote.stdout).toContain(branch)
   })
 })
 

@@ -132,6 +132,14 @@ export interface WorkspaceDiff {
   readonly remoteCommit: string | null
   /** Whether this repository has an `origin` to push to at all. */
   readonly hasRemote: boolean
+  /**
+   * Whether the worktree has the workspace's own branch checked out.
+   *
+   * False stops the pane asserting anything about GitHub, and it must not fall
+   * back to the sentence for a branch with no copy on the remote — that is a
+   * different false statement about a branch that may well be there.
+   */
+  readonly headOnBranch: boolean
   /** Commits here the remote's copy does not have — what a push would send. */
   readonly unpushedCommits: number
   /**
@@ -857,6 +865,7 @@ export async function readWorkspaceDiff(
     omittedFiles: stamped.filter((file) => file.omitted === 'tooLarge').length,
     remoteCommit: publish.remoteCommit,
     hasRemote: publish.hasRemote,
+    headOnBranch: publish.headOnBranch,
     unpushedCommits: publish.unpushedCommits,
     nothingToSend: nothingToSend(publish)
   }

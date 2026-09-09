@@ -1208,6 +1208,9 @@ describe('readWorkspaceDiff', () => {
       if (args.includes('--name-only')) return Promise.resolve('')
       if (args[0] === 'rev-parse') return Promise.resolve('')
       if (args[0] === 'remote') return Promise.resolve('')
+      // And the branch HEAD is on, asked first of all: a rejection there would
+      // end the read before the one this test is about.
+      if (args[0] === 'branch') return Promise.resolve('work\n')
       return Promise.reject(new GitError(args, 'fatal: bad object', '128'))
     }
 
@@ -1242,6 +1245,9 @@ describe('readWorkspaceDiff', () => {
       if (args.includes('--name-status')) return Promise.resolve('')
       if (args[0] === 'merge-base') return Promise.resolve('abc123\n')
       if (args[0] === 'ls-files') return Promise.resolve('')
+      // Named, or the empty answer below reads as a detached HEAD and moves
+      // this onto the path where nothing about the remote is read at all.
+      if (args[0] === 'branch') return Promise.resolve('work\n')
       return Promise.resolve('')
     }
 
@@ -1256,6 +1262,9 @@ describe('readWorkspaceDiff', () => {
       if (args.includes('--name-status')) return Promise.resolve('M\0ghost.txt\0')
       if (args[0] === 'merge-base') return Promise.resolve('abc123\n')
       if (args[0] === 'ls-files') return Promise.resolve('')
+      // Named, or the empty answer below reads as a detached HEAD and moves
+      // this onto the path where nothing about the remote is read at all.
+      if (args[0] === 'branch') return Promise.resolve('work\n')
       return Promise.resolve('')
     }
 
