@@ -622,8 +622,13 @@ the app never sees a token (§10.9).
   nobody marked required. It is a policy the app keeps, it is hard, and the way
   past it is to fix the check or to merge in the browser — where nobody does it
   by reflex.
-- **Committing and pushing** an answer to a review, without which the loop ends
-  in the terminal — and **pushing on its own**, which is the half that was
+- **Committing and pushing**, under a message typed here, without which the loop
+  ends in the terminal. The message used to be fixed at "Answer the review", so
+  a branch worked on this way ended with four identical commits describing a
+  review nobody had left — and that is the only description those changes will
+  ever have. There is no title and no drafted text to fall back to on this side,
+  so the button is dead until something is typed, which is what git would say
+  anyway. And **pushing on its own**, which is the half that was
   missing: the commit button only ever appeared while the worktree was dirty, so work the agent committed, or the reader committed in the
   workspace's terminal, had no way onto the request except the terminal.
 

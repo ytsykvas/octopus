@@ -382,9 +382,7 @@ export function PullRequestPanel({
                   close(request.number)
                 }}
                 closing={closing}
-                onCommitAndPush={() => {
-                  commitAndPush(t('pullRequest.answerCommit'))
-                }}
+                onCommitAndPush={commitAndPush}
                 committing={committing}
                 onPush={push}
                 pushing={pushing}

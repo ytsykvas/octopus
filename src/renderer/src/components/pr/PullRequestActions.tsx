@@ -1,4 +1,5 @@
 import { ArrowUpFromLine, GitMerge, Upload } from 'lucide-react'
+import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import type { InstructionKind } from '@core/instructions.js'
@@ -6,6 +7,7 @@ import type { MergeMethod } from '@core/pullRequests.js'
 import type { MergeState, PullRequestDetail } from '@core/pullRequestShapes.js'
 
 import { Button } from '../Button.js'
+import { CommitMessageField } from './CommitMessageField.js'
 import { DropdownMenu } from '../DropdownMenu.js'
 import { MERGE_METHODS } from './mergeMethods.js'
 
@@ -83,7 +85,15 @@ interface PullRequestActionsProps {
   /** Closes the request without merging it. */
   readonly onClose: () => void
   readonly closing: boolean
-  readonly onCommitAndPush: () => void
+  /**
+   * Commits everything here under the message given, and pushes.
+   *
+   * The message rather than nothing: it used to be fixed at "Answer the
+   * review", so every press produced that sentence whether or not anybody had
+   * reviewed anything — and it is the only description those changes will ever
+   * have.
+   */
+  readonly onCommitAndPush: (message: string) => void
   readonly committing: boolean
   /**
    * Sends what is already committed, without committing anything else.
@@ -133,6 +143,11 @@ export function PullRequestActions({
   onRemoveWorkspace
 }: PullRequestActionsProps): React.JSX.Element {
   const { t } = useTranslation()
+
+  /* Not stored and not defaulted. There is no title and no drafted text to fall
+     back to here, unlike the form that opens a request, so an empty field means
+     the press cannot say what it did — which is the state this replaced. */
+  const [message, setMessage] = useState('')
 
   const conflicting = detail.mergeable === 'conflicting'
   const note = MERGE_NOTES[detail.mergeState]
@@ -189,9 +204,25 @@ export function PullRequestActions({
         </p>
       )}
 
+      {dirty && open && (
+        <CommitMessageField
+          value={message}
+          onChange={setMessage}
+          hint={t('pullRequest.commitAndPushHint')}
+        />
+      )}
+
       <div className="flex flex-wrap gap-1">
         {dirty && open && (
-          <Button size="sm" onClick={onCommitAndPush} disabled={committing}>
+          <Button
+            size="sm"
+            onClick={() => {
+              onCommitAndPush(message.trim())
+            }}
+            // Dead until something is typed, rather than committing under a
+            // sentence nobody chose. git refuses an empty message too.
+            disabled={committing || message.trim() === ''}
+          >
             <Upload aria-hidden size={12} />
             {t(committing ? 'pullRequest.creating' : 'pullRequest.commitAndPush')}
           </Button>

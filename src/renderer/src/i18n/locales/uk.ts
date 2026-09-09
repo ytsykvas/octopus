@@ -462,7 +462,8 @@ export const uk: Translation = {
     unpushed_few: '{{count}} коміти ще не на GitHub.',
     unpushed_many: '{{count}} комітів ще не на GitHub.',
     unpushed_other: '{{count}} комітів ще не на GitHub.',
-    answerCommit: 'Відповідь на ревю',
+    commitAndPushHint:
+      'Комітить усі зміни цього воркспейса під цим повідомленням і пушить їх у пул-реквест.',
     sending: 'Надсилаю…',
 
     context: 'Pull request #{{number}} — гілка {{branch}} у {{base}}\n{{url}}',

@@ -582,10 +582,11 @@ export const en = {
     unpushed_few: '{{count}} commits are not on GitHub yet.',
     unpushed_many: '{{count}} commits are not on GitHub yet.',
     unpushed_other: '{{count}} commits are not on GitHub yet.',
-    /* The message the button commits under. Named for what the commit is
-       rather than for what changed, which is the agent's to describe — and this
-       button exists to get its answer onto the request, not to write history. */
-    answerCommit: 'Answer the review',
+    /* The twin of `commitHint`, for the request that already exists. Said
+       because both halves happen to something outside this window, and the
+       message is now typed rather than fixed. */
+    commitAndPushHint:
+      'Commits every change in this workspace under this message, then pushes it onto the request.',
     sending: 'Sending…',
 
     /* Appended to whichever instruction is sent, so the agent does not have to

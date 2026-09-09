@@ -1268,6 +1268,15 @@ A check still **running** is not one that failed and does not disable anything:
 `gh` turns a merge into auto-merge where a required check has not finished, which
 is the right answer and not one to refuse in advance.
 
+**The commit message is typed, and the button waits for it.** The field is the
+same one the create form carries — one component, because two fields for one idea
+drift, and this app has already spent a commit deleting a second copy of a
+function for that reason. What differs is the sentence under it and the fallback:
+the form commits under the drafted text or the title when the field is empty,
+and here there is neither, so an empty field means the press cannot say what it
+did. It was fixed at "Answer the review" until this, on every press, whether or
+not anybody had reviewed anything.
+
 **Push sends what is already committed.** _Commit and push_ appears only while
 the worktree is dirty, so work the agent committed — or the reader committed in
 the workspace's terminal — had no way onto the request except the terminal. The

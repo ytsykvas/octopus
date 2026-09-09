@@ -1461,15 +1461,39 @@ describe('what the tab can do about a request', () => {
    * Without this the loop does not close: the agent answers the review, and the
    * only way to get that answer onto the request is the terminal.
    */
-  it('commits and pushes an answer to the review', async () => {
+  it('commits and pushes under the message that was typed', async () => {
     const user = userEvent.setup()
     answer(view({ request: request(), dirty: true }))
     answerDetail(detail())
     renderPanel()
 
-    await user.click(await screen.findByRole('button', { name: 'Commit and push' }))
+    await user.type(
+      await screen.findByRole('textbox', { name: 'Commit message' }),
+      'Widen the schema'
+    )
+    await user.click(screen.getByRole('button', { name: 'Commit and push' }))
 
-    expect(octopus().workspaces.commitAndPush).toHaveBeenCalledWith(anna.id, expect.any(String))
+    // The exact string, not `any(String)`: the message used to be fixed at
+    // "Answer the review", and an assertion about its type held either way.
+    expect(octopus().workspaces.commitAndPush).toHaveBeenCalledWith(anna.id, 'Widen the schema')
+  })
+
+  /* There is no title and no drafted text to fall back to here, so an empty
+     field would commit under a sentence nobody chose — which is the state this
+     field replaced. */
+  it('will not commit until something is typed', async () => {
+    const user = userEvent.setup()
+    answer(view({ request: request(), dirty: true }))
+    answerDetail(detail())
+    renderPanel()
+
+    expect(await screen.findByRole('button', { name: 'Commit and push' })).toBeDisabled()
+
+    await user.type(screen.getByRole('textbox', { name: 'Commit message' }), ' ')
+    expect(screen.getByRole('button', { name: 'Commit and push' })).toBeDisabled()
+
+    await user.type(screen.getByRole('textbox', { name: 'Commit message' }), 'Something')
+    expect(screen.getByRole('button', { name: 'Commit and push' })).toBeEnabled()
   })
 
   it('says why the commit did not land', async () => {
@@ -1483,7 +1507,11 @@ describe('what the tab can do about a request', () => {
     })
     const { onError } = renderPanel()
 
-    await user.click(await screen.findByRole('button', { name: 'Commit and push' }))
+    await user.type(
+      await screen.findByRole('textbox', { name: 'Commit message' }),
+      'Widen the schema'
+    )
+    await user.click(screen.getByRole('button', { name: 'Commit and push' }))
 
     await waitFor(() => {
       expect(onError).toHaveBeenCalledWith(expect.stringContaining('nothing here to commit'))

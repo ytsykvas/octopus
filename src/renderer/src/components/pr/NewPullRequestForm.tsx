@@ -5,6 +5,7 @@ import type { DraftedPullRequest } from '@core/pullRequestDraft.js'
 import type { PullRequestDraft, PullRequestView } from '@core/pullRequests.js'
 
 import { Button } from '../Button.js'
+import { CommitMessageField } from './CommitMessageField.js'
 
 interface NewPullRequestFormProps {
   readonly view: PullRequestView
@@ -115,29 +116,15 @@ export function NewPullRequestForm({
 
       {view.dirty && (
         <div className="flex flex-col gap-1">
-          {/* The label wraps the field and nothing else. Everything said about
-              it sits outside, or the field's own name would be the label plus
-              two paragraphs of explanation — which is what anything reading the
-              form aloud would announce. */}
-          <label className="flex flex-col gap-1">
-            <span className="section-label">{t('pullRequest.commitMessage')}</span>
-            <input
-              value={commitMessage}
-              onChange={(event) => {
-                setCommitMessage(event.target.value)
-              }}
-              placeholder={t('pullRequest.commitMessagePlaceholder')}
-              className="input"
-            />
-          </label>
-
           {/* Left empty, the commit still happens — under what the agent wrote
               or under the title. The two strings differ in which; neither of
               them is the old "the work stays behind", which stopped being true
               when this field stopped deciding. */}
-          <p className="text-ink-faint leading-relaxed">
-            {t(committing ? 'pullRequest.commitHint' : 'pullRequest.dirty')}
-          </p>
+          <CommitMessageField
+            value={commitMessage}
+            onChange={setCommitMessage}
+            hint={t(committing ? 'pullRequest.commitHint' : 'pullRequest.dirty')}
+          />
 
           {/* Not gated on the field above. Pressing the button commits whether
               or not a message was typed, so a warning that waited for one was
