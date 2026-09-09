@@ -252,12 +252,12 @@ describe('reading a branch', () => {
     expect(view.unpushedCommits).toBe(1)
   })
 
-  /* The other way the two sources disagree, and the one no local read can
-     settle: the branch is on the remote and this clone has no ref for it, which
-     is what a push from a second checkout leaves. The count falls back to what
-     the branch has since the base — see
-     docs/tasks/a-branch-pushed-from-another-clone-reads-as-unpushed.md. */
-  it('falls back to the count against the base for a copy this clone cannot see', async () => {
+  /* This clone's refs used to answer the count, and they go stale exactly when
+     the live read is right: with no tracking ref and no upstream the pane said
+     one commit was waiting for a branch that was fully pushed, and pressing
+     Push reported "Everything up-to-date" for ever. `ls-remote` had the commit
+     all along and was answering yes or no with it. */
+  it('counts against the commit the remote named, not this clone\u2019s refs', async () => {
     const branch = await branchWithCommit()
     const work = join(dir, 'work')
     await run('git', ['push', '-q', '-u', 'origin', branch], { cwd: work })
@@ -269,7 +269,68 @@ describe('reading a branch', () => {
     const view = await readPullRequest(branch, 'main', fakeGh().gh, workExec())
 
     expect(view.pushed).toBe(true)
-    expect(view.unpushedCommits).toBe(1)
+    expect(view.unpushedCommits).toBe(0)
+  })
+
+  /* And where this clone has not got what the remote named — a branch pushed
+     from a second checkout — the count cannot be worked out at all. Zero would
+     be a confident "nothing left to push" about a branch that is ahead of us,
+     which is the shape the cached refs used to produce. */
+  it('says it cannot count against a commit this clone does not have', async () => {
+    const branch = await branchWithCommit()
+    const absent = '0'.repeat(40)
+    const git: GitExec = (args) =>
+      args[0] === 'ls-remote'
+        ? Promise.resolve(`${absent}\trefs/heads/${branch}\n`)
+        : workExec()(args)
+
+    const view = await readPullRequest(branch, 'main', fakeGh().gh, git)
+
+    expect(view.pushed).toBe(true)
+    expect(view.unpushedCommits).toBeNull()
+  })
+
+  // The count is `<tip>..HEAD`, so with HEAD somewhere else the two ends are
+  // different pieces of work — the same "cannot say" the Changes tab draws.
+  it('says it cannot count while HEAD is on another branch', async () => {
+    const branch = await branchWithCommit()
+    const work = join(dir, 'work')
+    await run('git', ['push', '-q', '-u', 'origin', branch], { cwd: work })
+    await run('git', ['checkout', '-q', '-b', 'side'], { cwd: work })
+
+    const view = await readPullRequest(branch, 'main', fakeGh().gh, workExec())
+
+    expect(view.unpushedCommits).toBeNull()
+  })
+
+  /* `rev-list --count` answers a number, and this is the guard for the day it
+     does not. A fake, because real git has no way to produce it — which is the
+     point of the guard being here at all. */
+  it('says it cannot count when git answers something that is not a number', async () => {
+    const branch = 'octopus/anna'
+    const git: GitExec = (args) => {
+      if (args[0] === 'ls-remote') return Promise.resolve(`abc123\trefs/heads/${branch}\n`)
+      if (args[0] === 'branch') return Promise.resolve(`${branch}\n`)
+      return Promise.resolve('plenty')
+    }
+
+    const view = await readPullRequest(branch, 'main', fakeGh().gh, git)
+
+    expect(view.unpushedCommits).toBeNull()
+  })
+
+  /* `--heads origin <name>` matches the **tail** of a ref path, and every
+     workspace branch is `<prefix>/<name>` — so a branch the remote does not
+     have read as pushed whenever another prefix ended in the same segment. */
+  it('does not take a branch under another prefix for this one', async () => {
+    const work = join(dir, 'work')
+    await branchWithCommit('octopus/anna')
+    await run('git', ['push', '-q', 'origin', 'octopus/anna'], { cwd: work })
+    await run('git', ['checkout', '-q', '-b', 'anna'], { cwd: work })
+
+    const view = await readPullRequest('anna', 'main', fakeGh().gh, workExec())
+
+    expect(view.pushed).toBe(false)
   })
 
   it('knows whether the branch is on the remote', async () => {

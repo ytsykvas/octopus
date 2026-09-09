@@ -1299,6 +1299,24 @@ and here there is neither, so an empty field means the press cannot say what it
 did. It was fixed at "Answer the review" until this, on every press, whether or
 not anybody had reviewed anything.
 
+**What is left to push is counted from the commit the remote just named.**
+`ls-remote` prints `<sha>\t<ref>`, and the sha was being thrown away — so the
+count came from this clone's cached refs, which go stale exactly when the live
+read would have been right. A branch pushed from a second checkout has no
+tracking ref here, and the pane said a commit was waiting for a branch that was
+fully pushed, with Push reporting "Everything up-to-date" for ever.
+
+There is a third answer, and it is drawn rather than rounded to zero: the
+commit the count starts from is on the remote and may not be in this checkout,
+and HEAD may be standing on another branch. Neither can be counted here and
+neither can be pushed past, so the button goes with the number and a sentence
+takes their place.
+
+The ref is asked for in full, because the pattern matches the **tail** of a ref
+path: `--heads origin anna` also finds `refs/heads/octopus/anna`. Every
+workspace branch is `<prefix>/<name>`, so a branch the remote does not have read
+as pushed whenever another prefix ended in the same segment.
+
 **Push sends what is already committed.** _Commit and push_ appears only while
 the worktree is dirty, so work the agent committed — or the reader committed in
 the workspace's terminal — had no way onto the request except the terminal. The

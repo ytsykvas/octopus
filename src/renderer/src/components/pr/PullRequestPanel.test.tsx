@@ -1364,6 +1364,19 @@ describe('what the tab can do about a request', () => {
     expect(screen.queryByText(/not on GitHub yet/)).not.toBeInTheDocument()
   })
 
+  /* A branch pushed from a second checkout: the remote has commits this one
+     does not, so the count cannot be worked out and pushing would be refused
+     anyway. Said rather than left blank — a pushed branch with no count and no
+     button reads as the pane having given up. */
+  it('says so when what is left to push cannot be counted', async () => {
+    answer(view({ request: request(), unpushedCommits: null }))
+    answerDetail(detail())
+    renderPanel()
+
+    expect(await screen.findByText(/cannot be counted from here/)).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Push' })).not.toBeInTheDocument()
+  })
+
   it('offers nothing to press when the remote already has every commit', async () => {
     answer(view({ request: request(), unpushedCommits: 0 }))
     answerDetail(detail())

@@ -104,8 +104,15 @@ interface PullRequestActionsProps {
    */
   readonly onPush: () => void
   readonly pushing: boolean
-  /** Commits the remote's copy of this branch lacks; zero hides the button. */
-  readonly unpushedCommits: number
+  /**
+   * Commits the remote's copy of this branch lacks; zero hides the button.
+   *
+   * Null is a third answer: the commit the count would be measured from is on
+   * the remote and not in this checkout, or HEAD is standing on another branch.
+   * Neither can be counted here, and neither can be pushed past — so the button
+   * goes with the number, and a sentence takes their place.
+   */
+  readonly unpushedCommits: number | null
   /**
    * Removes the workspace, asking first — the sidebar's own flow.
    *
@@ -198,10 +205,16 @@ export function PullRequestActions({
           {t('pullRequest.mergeChecksFailed', { count: failed })}
         </p>
       )}
-      {unpushedCommits > 0 && open && (
+      {unpushedCommits !== null && unpushedCommits > 0 && open && (
         <p className="text-ink-faint leading-relaxed">
           {t('pullRequest.unpushed', { count: unpushedCommits })}
         </p>
+      )}
+      {/* Said rather than left blank. A pushed branch with no count and no
+          button, and nothing accounting for either, reads as the pane having
+          given up — and the remedy is one command away. */}
+      {unpushedCommits === null && open && (
+        <p className="text-ink-faint leading-relaxed">{t('pullRequest.unpushedUnknown')}</p>
       )}
 
       {dirty && open && (
@@ -231,7 +244,7 @@ export function PullRequestActions({
         {/* Beside it rather than instead of it: the two answer different
             states, and a branch can be in both at once — something committed
             and not sent, something else not committed at all. */}
-        {unpushedCommits > 0 && open && (
+        {unpushedCommits !== null && unpushedCommits > 0 && open && (
           <Button size="sm" onClick={onPush} disabled={pushing}>
             <ArrowUpFromLine aria-hidden size={12} />
             {t(pushing ? 'pullRequest.pushing' : 'pullRequest.push')}

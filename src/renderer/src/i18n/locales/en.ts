@@ -595,6 +595,11 @@ export const en = {
     unpushed_few: '{{count}} commits are not on GitHub yet.',
     unpushed_many: '{{count}} commits are not on GitHub yet.',
     unpushed_other: '{{count}} commits are not on GitHub yet.',
+    /* The third answer. Pushing from here would be refused anyway — the remote
+       is ahead of this checkout, or HEAD is not on the branch — so the button
+       goes with the number rather than failing when pressed. */
+    unpushedUnknown:
+      'What is left to push cannot be counted from here: this checkout does not have what GitHub holds for this branch, or HEAD is not on it. Fetch it in the terminal first.',
     /* The twin of `commitHint`, for the request that already exists. Said
        because both halves happen to something outside this window, and the
        message is now typed rather than fixed. */

@@ -466,6 +466,8 @@ export const uk: Translation = {
     unpushed_few: '{{count}} коміти ще не на GitHub.',
     unpushed_many: '{{count}} комітів ще не на GitHub.',
     unpushed_other: '{{count}} комітів ще не на GitHub.',
+    unpushedUnknown:
+      'Звідси не порахувати, що лишилось запушити: у цьому чекауті немає того, що GitHub має для цієї гілки, або HEAD не на ній. Спершу зробіть fetch у терміналі.',
     commitAndPushHint:
       'Комітить усі зміни цього воркспейса під цим повідомленням і пушить їх у пул-реквест.',
     sending: 'Надсилаю…',

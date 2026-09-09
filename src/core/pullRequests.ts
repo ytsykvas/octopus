@@ -30,7 +30,6 @@ import {
   toPullRequestDetail,
   toPullRequestState
 } from './pullRequestShapes.js'
-import { countUnpushed } from './publish.js'
 import { commitAll, hasUncommittedChanges } from './worktree.js'
 import { allOf } from './parallel.js'
 
@@ -77,8 +76,14 @@ export interface PullRequestView {
    * and committed to since is ahead of both by different amounts. Falls back to
    * `ahead` where the remote has no copy at all, because then everything here
    * is unpushed by definition.
+   *
+   * **Null is a third answer, not a zero.** The commit counted from comes from
+   * the remote, and this clone may not have it — a branch pushed from a second
+   * checkout, or a HEAD standing on some other branch. Both mean the number
+   * cannot be worked out here, and saying zero would be a confident "nothing
+   * left to push" about a branch that is ahead of us.
    */
-  readonly unpushedCommits: number
+  readonly unpushedCommits: number | null
   /**
    * What the request would be opened against.
    *
@@ -122,13 +127,19 @@ export async function readPullRequest(
      the first of them left those three writing into a worktree the caller had
      already moved on from — which is the `ENOTEMPTY` that failed a full run in
      five for a month. */
-  const [remote, dirty, pushed, ahead, unpushed] = await allOf([
+  const [remote, dirty, tip, ahead, head] = await allOf([
     listPullRequests(branch, gh),
     hasUncommittedChanges(git),
-    isPushed(branch, git),
+    remoteTip(branch, git),
     countAhead(git, base, branch),
-    countUnpushed(git, branch, base)
+    currentBranch(git)
   ])
+
+  /* One source now, and it is the live one. Nothing on the remote means
+     everything here is unpushed, which is what `ahead` counts; a HEAD standing
+     on another branch means the two ends of the count are different pieces of
+     work, which is the same "cannot say" the diff pane draws. */
+  const unpushedCommits = tip === null ? ahead : head === branch ? await countSince(tip, git) : null
 
   // The newest, when a branch has been opened and closed and opened again:
   // `gh` lists most recent first, and the current one is what the pane is about.
@@ -144,19 +155,10 @@ export async function readPullRequest(
             title: current.title,
             url: current.url
           },
-    pushed,
+    pushed: tip !== null,
     dirty,
     ahead,
-    /* Two answers to "is this branch on the remote" meet here, and only one of
-       them is live. `pushed` asked the remote a moment ago; the count read this
-       clone's cached refs, and a ref outlives the branch it tracked — GitHub
-       deletes the head branch on merge and nothing here prunes. So where the
-       remote says it has no such branch, the cached answer is about something
-       that is gone, and everything here is unpushed.
-
-       Null means the same thing by the other route: no copy to count from,
-       which is what `ahead` already counts. */
-    unpushedCommits: pushed ? (unpushed ?? ahead) : ahead,
+    unpushedCommits,
     base
   }
 }
@@ -199,19 +201,55 @@ async function listPullRequests(
 }
 
 /**
- * Whether the remote has this branch.
+ * Where the remote's copy of this branch is, or null where it has none.
  *
  * `ls-remote` asks the remote rather than reading what was last fetched, which
  * is the question worth asking: a branch pushed from another machine is on the
  * remote and absent from this clone's refs.
+ *
+ * The **commit**, not a yes. `ls-remote` prints `<sha>\t<ref>` and the sha was
+ * being thrown away, so everything downstream had to fall back to this clone's
+ * cached refs for a number the remote had just answered — and those refs go
+ * stale exactly when the live read would have been right.
+ *
+ * Asked by full ref, because the pattern matches the **tail** of a ref path:
+ * `--heads origin anna` also matches `refs/heads/octopus/anna`. Every workspace
+ * branch is `<prefix>/<name>`, so two prefixes ending in the same segment made
+ * this answer yes for a branch the remote does not have.
  */
-async function isPushed(branch: string, git: GitExec): Promise<boolean> {
+async function remoteTip(branch: string, git: GitExec): Promise<string | null> {
+  let out: string
   try {
-    return (await git(['ls-remote', '--heads', 'origin', branch])).trim() !== ''
+    out = await git(['ls-remote', '--heads', 'origin', `refs/heads/${branch}`])
   } catch {
     // No remote, no network, no permission — none of which is an answer of
     // "yes", and none of which should stop the pane drawing what it does know.
-    return false
+    return null
+  }
+
+  for (const line of out.split('\n')) {
+    const [commit, ref] = line.split('\t')
+    if (commit !== undefined && ref === `refs/heads/${branch}`) return commit
+  }
+
+  return null
+}
+
+/**
+ * Commits HEAD has that a given one does not, or null where it cannot be said.
+ *
+ * Not `countAhead`, which answers zero for everything that goes wrong. The
+ * commit here comes from the **remote**, so this clone may simply not have it —
+ * a branch pushed from a second checkout, or one this clone has never
+ * fetched — and git exits 128 rather than counting. Zero would then be a
+ * confident "nothing left to push" about a branch that is ahead of us.
+ */
+async function countSince(commit: string, git: GitExec): Promise<number | null> {
+  try {
+    const count = Number((await git(['rev-list', '--count', `${commit}..HEAD`])).trim())
+    return Number.isInteger(count) ? count : null
+  } catch {
+    return null
   }
 }
 

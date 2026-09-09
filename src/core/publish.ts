@@ -195,36 +195,6 @@ async function forkOf(exec: GitExec, revision: string, of: string): Promise<stri
 }
 
 /**
- * Commits on this branch the remote's copy lacks, or null where it has no copy.
- *
- * Null rather than a number, because the two callers want different fallbacks:
- * the diff pane counts from the merge base, and the pull request pane already
- * has that number under another name. Answering zero here would be a lie in
- * both — a branch that has never been pushed has everything left to push.
- *
- * Takes the base as a revision rather than a commit, because its caller has the
- * branch name and this has to resolve the fork point anyway to tell a real copy
- * from a leftover ref.
- */
-export async function countUnpushed(
-  exec: GitExec,
-  branch: string,
-  base: string
-): Promise<number | null> {
-  /* The count below is `HEAD` against this branch's copy on the remote, so with
-     HEAD standing somewhere else the two ends are different branches. Null
-     already means "cannot say", and the caller's fallback is measured on the
-     branch itself. */
-  if ((await currentBranch(exec)) !== branch) return null
-
-  const baseCommit = await forkOf(exec, base, 'HEAD')
-  if (baseCommit === null) return null
-
-  const remoteCommit = await remoteCopy(exec, branch, baseCommit)
-  return remoteCommit === null ? null : countAhead(exec, remoteCommit, 'HEAD')
-}
-
-/**
  * Everything the classification below needs, in as few reads as it takes.
  *
  * `allOf` rather than `Promise.all`, for the reason `pullRequests.ts` records:

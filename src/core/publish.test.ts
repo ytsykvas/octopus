@@ -18,7 +18,6 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 
 import { type GitExec, gitIn } from './git.js'
 import {
-  countUnpushed,
   nothingToSend,
   type PublishStatus,
   publishStateOf,
@@ -98,10 +97,6 @@ describe('a branch with no copy on the remote', () => {
     expect(staleOnRemote('a.txt', null, await status())).toBe(false)
   })
 
-  it('answers null for the unpushed count rather than zero', async () => {
-    expect(await countUnpushed(exec, 'work', 'main')).toBeNull()
-  })
-
   // Nothing to send is a claim about a remote copy, and there is not one.
   it('never says the branch has nothing left to send', async () => {
     await writeFile(join(dir, 'a.txt'), 'two\n', 'utf8')
@@ -139,13 +134,6 @@ describe('a branch that has been pushed', () => {
 
   it('says the branch has nothing left to send', async () => {
     expect(nothingToSend(await status())).toBe(true)
-  })
-
-  it('counts a commit made since the push', async () => {
-    await writeFile(join(dir, 'a.txt'), 'three\n', 'utf8')
-    await commit('third')
-
-    expect(await countUnpushed(exec, 'work', 'main')).toBe(1)
   })
 
   it('calls a file edited since the push uncommitted, and stale in the request', async () => {
@@ -343,10 +331,6 @@ describe('a remote-tracking ref left over from an earlier workspace', () => {
     // One commit of its own, not three counted from somebody else's tip.
     expect(found.unpushedCommits).toBe(1)
   })
-
-  it('refuses it for the pull request pane too', async () => {
-    expect(await countUnpushed(exec, 'work', 'main')).toBeNull()
-  })
 })
 
 /*
@@ -388,15 +372,6 @@ describe('a worktree standing on another branch', () => {
     expect(nothingToSend(await status())).toBe(false)
   })
 
-  it('will not count what is unpushed from a HEAD on another branch', async () => {
-    await writeFile(join(dir, 'b.txt'), 'one\n', 'utf8')
-    await commit('first on side')
-    await writeFile(join(dir, 'c.txt'), 'two\n', 'utf8')
-    await commit('second on side')
-
-    expect(await countUnpushed(exec, 'work', 'main')).toBeNull()
-  })
-
   // What `git checkout <sha>` in the terminal leaves, and the case
   // `currentBranch` answers null for.
   it('says the same for a HEAD that is on no branch at all', async () => {
@@ -414,11 +389,24 @@ describe('a worktree standing on another branch', () => {
  * revision it cannot resolve. Driven with a fake, since a real repository has
  * no way to produce it — which is the point of the guard being here at all.
  */
-describe('a base git will not place', () => {
-  it('cannot count what is unpushed without knowing where the branch began', async () => {
-    const fake: GitExec = (args) => Promise.resolve(args[0] === 'branch' ? 'work\n' : '')
+describe('a fork point git will not place', () => {
+  it('says nothing about what the remote changed', async () => {
+    const fake: GitExec = (args) => {
+      if (args[0] === 'branch') return Promise.resolve('work\n')
+      if (args.includes('--verify')) return Promise.resolve('remote01\n')
+      if (args[0] === 'remote') return Promise.resolve('origin\n')
+      // Including `merge-base`, which is the one this is about.
+      return Promise.resolve('')
+    }
 
-    expect(await countUnpushed(fake, 'work', 'main')).toBeNull()
+    const found = await readPublishStatus(fake, {
+      branch: 'work',
+      baseCommit: 'base01',
+      untracked: []
+    })
+
+    expect(found.remoteCommit).toBe('remote01')
+    expect(found.onRemote.size).toBe(0)
   })
 })
 
