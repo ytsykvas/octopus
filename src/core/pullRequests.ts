@@ -17,7 +17,7 @@ import { z } from 'zod'
 
 import { shortBranchName } from './branches.js'
 import { GitHubError } from './github.js'
-import { countAhead, type GitExec } from './git.js'
+import { countAhead, type GitExec, reasonFrom } from './git.js'
 import {
   type BranchRequest,
   BranchListSchema,
@@ -44,28 +44,6 @@ export function ghIn(cwd: string): GhExec {
     const { stdout } = await run('gh', [...args], { cwd, timeout: 30_000 })
     return stdout
   }
-}
-
-/**
- * What the tool said, short enough to put in a sentence.
- *
- * These failures used to be reported as "GitHub refused it" and nothing else:
- * `gh` writes a precise reason to stderr — a request already open for this
- * branch, a base that does not exist there, no permission to push — and every
- * one of them was thrown away with the error carrying it. The user was left
- * with a refusal and no way to act on it, and so was anybody they asked.
- *
- * The first line only. `gh` leads with the reason and follows with usage.
- */
-function reasonFrom(error: unknown): string {
-  const stderr =
-    typeof error === 'object' && error !== null && 'stderr' in error ? String(error.stderr) : ''
-
-  // Trimmed before the cut, so a leading blank line cannot become the answer.
-  const said = (stderr.trim() === '' ? String(error) : stderr).trim()
-  const breaks = said.indexOf('\n')
-
-  return (breaks === -1 ? said : said.slice(0, breaks)).trim().slice(0, 200)
 }
 
 /** One that exists, and therefore has all four of these rather than some. */

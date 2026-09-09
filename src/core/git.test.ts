@@ -170,6 +170,22 @@ describe('reasonFrom', () => {
   it('falls back to what the error itself says', () => {
     expect(reasonFrom(new Error('spawn git ENOENT'))).toContain('ENOENT')
   })
+
+  /* The message, not the whole `Error`. `pullRequests.ts` kept a second copy of
+     this function that fell back to `String(error)` instead, so every `gh`
+     failure with no stderr — the ordinary shape of "gh is not installed" —
+     reached the user with an `Error: ` glued to the front of it. */
+  it('reports the message without the class name in front of it', () => {
+    expect(reasonFrom(new Error('spawn gh ENOENT'))).toBe('spawn gh ENOENT')
+  })
+
+  // Whitespace is not a reason: a stderr of blank lines falls back the same way
+  // an absent one does, rather than answering with an empty sentence.
+  it('falls back where stderr holds nothing but whitespace', () => {
+    expect(reasonFrom(Object.assign(new Error('gone wrong'), { stderr: '  \n ' }))).toBe(
+      'gone wrong'
+    )
+  })
 })
 
 describe('extractCode', () => {

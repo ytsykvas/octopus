@@ -87,6 +87,13 @@ export function extractCode(error: unknown): string {
  * prompts disabled — and follows with advice about what to try. The first line
  * is the half a reader can act on, and the rest turns an error message into a
  * paragraph.
+ *
+ * `gh` is served by the same rule, which is why this is the only copy. Its
+ * refusals used to be reported as "GitHub refused it" and nothing else, while
+ * `gh` was writing the precise reason to stderr — a request already open for
+ * this branch, a base that does not exist there, no permission to push — and
+ * every one of them was thrown away with the error that carried it. It leads
+ * with the reason and follows with usage, exactly as git does.
  */
 export function reasonFrom(error: unknown): string {
   const said = extractStderr(error)
