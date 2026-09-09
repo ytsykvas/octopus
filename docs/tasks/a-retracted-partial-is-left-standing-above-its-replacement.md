@@ -10,7 +10,7 @@ inside the same message.
 `SDKModelRefusalFallbackMessage` carries `retracted_message_uuids`: the wire
 uuids of the messages the fallback **retracted** — the refused partial as the
 consumer received it, plus any tombstoned tool results
-(`sdk.d.ts:4245-4252`). The SDK is explicit about what a consumer does with it:
+(`sdk.d.ts:4256`). The SDK is explicit about what a consumer does with it:
 
 > Emitted AFTER the retraction, so this is a resolution-time eviction signal:
 > remove these messages from transcript state on receipt. Eviction is idempotent
@@ -22,8 +22,22 @@ turn — the conversation shows the work twice, once abandoned and once done, wi
 only the new line between them saying why.
 
 The same message also carries `refused_user_message_uuid`, the rewind target for
-edit-and-retry (`sdk.d.ts:4257`). Nothing uses that either, and it is a
+edit-and-retry (`sdk.d.ts:4260`). Nothing uses that either, and it is a
 different feature rather than a bug.
+
+**Two things the SDK has clarified since this was written**, both of which change
+the shape of the fix:
+
+- `SDKAssistantMessage.supersedes?: UUID[]` (`sdk.d.ts:3007`) is a **second**
+  eviction signal, and a cheaper entry point than the notice: it arrives on the
+  replacement message rather than at end of turn, so the event being mapped is
+  right there. The SDK calls it idempotent with the end-of-turn notice.
+- The retraction list carries _"one uuid per normalized SDK message; multi-block
+  messages carry per-block derived uuids"_, and the derivation is not documented.
+  A single assistant message that maps to `text` plus `tool_use` gives us one
+  `message.uuid` while the retraction may name two derived ones — so **carrying
+  `message.uuid` verbatim is not sufficient**, which the sketch below assumes it
+  is. That is the unknown to settle first.
 
 ## Why it matters
 

@@ -72,3 +72,21 @@ changed — the payload for `refusal_fallback_prompt` is still undeclared, and
 declaring the kind without knowing it is still worse than leaving the CLI to
 fail closed. What is new is only that the shape to copy now exists in this
 repository rather than being described in a note.
+
+**The check, so this stops being a standing intention.** After an SDK bump:
+
+```bash
+grep -n "refusal_fallback_prompt" node_modules/@anthropic-ai/claude-agent-sdk/sdk.d.ts
+```
+
+Three hits and all of them prose means nothing has moved. A **type** appearing
+unblocks this, and the work is then the elicitation shape: 12 source files, 9
+test files, both locales, three docs, and one channel beside `chats:elicitation`.
+Verified against SDK 0.3.224: still three, still all prose.
+
+One thing the SDK has since made explicit, which strengthens the case for waiting
+rather than wiring a bare callback: with `onUserDialog` absent the SDK sends **no
+answer at all**, because on a multi-client session another client may be the
+declared renderer and an auto-reply "would settle the dialog out from under it".
+Providing the callback without `supportedDialogKinds` is therefore not merely
+useless — it is the wrong side of a protocol choice.

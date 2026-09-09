@@ -22,7 +22,7 @@ On 2026-08-18, `src/renderer/src/components/chat/Chat.test.tsx` › "raises it
 once that conversation is the one showing" failed the same way in one full run —
 `findByText('The plan is ready')` timed out — then passed alone and through
 three consecutive full suites. The two do not have the same build, though it
-read that way for a while: the ⌘T test (`App.test.tsx:1584`) emits no agent
+read that way for a while: the ⌘T test (`App.test.tsx:1743`) emits no agent
 event at all — clicks, a `keyDown` on `window`, then a `waitFor` on a mock
 call — and the events the chat tests do emit are wrapped in `act`
 (`src/renderer/src/test/chat.ts:116`). What they share is thinner than that: an
@@ -96,7 +96,7 @@ under those ceilings is large:
   both alone and as the whole suite.
 - Renderer at `asyncUtilTimeout: 200`, a fifth of the real ceiling: ⌘T and both
   `Chat.test.tsx` victims **passed**. The only four failures were the
-  `useWorkspaces` tests that deliberately wait 400 ms (`useWorkspaces.test.tsx:55`).
+  `useWorkspaces` tests that deliberately wait 400 ms (`useWorkspaces.test.tsx:323`).
 
 So the named tests have four to five times the time they need, and closing that
 gap would take a machine five times slower at exactly that moment. Raising the
@@ -123,12 +123,12 @@ handlers at all.
 
 **It can turn the gate red without failing a single test, and that happened on
 2026-09-02.** A `npm run check` reported `1864 passed` and then failed on
-coverage: `DiffPanel.tsx:430` — the `if (anchor === null) return null` arm of
+coverage: `DiffPanel.tsx:693` — the `if (anchor === null) return null` arm of
 `passageIn` — was not reached. The very next identical run covered it. Nothing
 had changed between them.
 
 The mechanism is exact, and it is the one this note has been looking for.
-`DiffPanel.tsx:142-157` registers the `selectionchange` listener from an effect
+`DiffPanel.tsx:214-231` registers the `selectionchange` listener from an effect
 keyed on `[diff]`. `selectAcross` in the test dispatches that event
 synchronously. Until the effect has run there is no listener, so `passageIn` is
 never called at all — and the test that owns that branch,
@@ -158,7 +158,7 @@ never happened throws at `getByRole` before the assertion is reached, so they
 cannot hide anything. Nine reached a listener registered by an effect. Two more
 of those are now proven live before they assert — `useDismiss.test.tsx` dismisses
 from outside first, `DropdownMenu.test.tsx` closes the menu first — and
-`App.test.tsx:1638` fires ⌥2 and waits for the conversation to change before
+`App.test.tsx:1789` fires ⌥2 and waits for the conversation to change before
 pressing ⌘T.
 
 **The class is closed rather than the instances, where that was possible.**
@@ -370,10 +370,13 @@ fails under `Promise.all` and passes under `allOf`.
 **What is left is the renderer half only**, which has no temporary directory,
 no service and no spawn. Nothing recorded here explains it.
 
-**And one thing this exposed rather than fixed**, recorded separately in
-`a-quit-does-not-wait-for-the-record-it-is-writing.md`: `main` calls
-`closeChats` as `void service.closeChats()` on `will-quit`, so the waiting the
-service now does reaches the tests and not the application.
+**And one thing this exposed, which has since landed.** `main` called
+`closeChats` as a bare `void service.closeChats()` on `will-quit`, so the waiting
+the service does reached the tests and not the application. It is now
+`void service.closeChats().finally(…)` at `src/main/index.ts:208`, bounded by
+`SHUTDOWN_GRACE_MS` (`:194`) through `within` (`src/core/parallel.ts:82`). The
+note that carried it was deleted with the fix, per the convention; this sentence
+replaces the pointer to it.
 
 ## What not to do
 

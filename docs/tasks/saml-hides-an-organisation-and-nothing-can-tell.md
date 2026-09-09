@@ -44,3 +44,19 @@ repository in the list has an owner other than the account itself — a
 combination that is either SAML or an organisation with no repositories.
 Whether that is worth a sentence or is just a cleverer way to be wrong is the
 decision this note is waiting on.
+
+## The next step, and it is not code
+
+The decision above belongs in `docs/PROJECT.md` §16, where `docs/tasks/README.md`
+says a settled question goes, and it is not there. Until it is, this note is
+waiting on nobody in particular.
+
+What has to be settled is one sentence that is true in **both** readings of the
+condition — SAML withholding an organisation, and an organisation that simply has
+no repositories. Get it wrong and the picker gains the standing apology
+`docs/ui.md` was written to prevent, under a list that is perfectly complete.
+
+The code, once that is answered, is the smallest of anything open here: the owner
+is already on `RemoteRepository`, so the condition is pure and computed in
+`RepositoryPicker.tsx` beside the two footnotes it joins. No new IPC, one or two
+i18n keys in both locales, one test file.
