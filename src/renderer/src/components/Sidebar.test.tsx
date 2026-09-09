@@ -3,8 +3,8 @@ import userEvent from '@testing-library/user-event'
 import { describe, expect, it, vi } from 'vitest'
 
 import type { Project } from '@core/store.js'
-import type { WorkspaceView } from '@core/workspaces.js'
 
+import { workspaceView } from '../test/workspaces.js'
 import { Sidebar } from './Sidebar.js'
 
 function project(overrides: Partial<Project> = {}): Project {
@@ -21,29 +21,6 @@ function project(overrides: Partial<Project> = {}): Project {
     trustRepoScripts: false,
     disabledSkillDefaults: [],
     color: 'blue',
-    ...overrides
-  }
-}
-
-function workspace(overrides: Partial<WorkspaceView> = {}): WorkspaceView {
-  return {
-    id: 'planner/anna',
-    projectId: 'planner',
-    name: 'anna',
-    branch: 'ytsykvas/anna',
-    path: '/tmp/planner/anna',
-    status: 'idle',
-    port: 3100,
-    createdAt: '2026-08-08T00:00:00.000Z',
-    writers: {},
-    notes: '',
-    ownerId: null,
-    envProfile: null,
-    chats: [],
-    changedFiles: 0,
-    ahead: 0,
-    missing: false,
-    headOnBranch: true,
     ...overrides
   }
 }
@@ -116,7 +93,7 @@ describe('Sidebar', () => {
   })
 
   it('drops the invitation once a workspace exists', () => {
-    renderSidebar({ workspaces: [workspace()] })
+    renderSidebar({ workspaces: [workspaceView('anna')] })
 
     expect(
       screen.queryByText('No workspaces yet. Add one with the + above.')
@@ -159,10 +136,7 @@ describe('Sidebar', () => {
 
   it('lists every workspace of the project', () => {
     renderSidebar({
-      workspaces: [
-        workspace({ id: 'planner/anna', name: 'anna' }),
-        workspace({ id: 'planner/bob', name: 'bob' })
-      ]
+      workspaces: [workspaceView('anna'), workspaceView('bob')]
     })
 
     expect(screen.getByText('anna')).toBeInTheDocument()
@@ -172,10 +146,7 @@ describe('Sidebar', () => {
   it('selects the workspace that was clicked', async () => {
     const user = userEvent.setup()
     const props = renderSidebar({
-      workspaces: [
-        workspace({ id: 'planner/anna', name: 'anna' }),
-        workspace({ id: 'planner/bob', name: 'bob' })
-      ]
+      workspaces: [workspaceView('anna'), workspaceView('bob')]
     })
 
     await user.click(screen.getByText('bob'))
@@ -186,10 +157,7 @@ describe('Sidebar', () => {
   it('renames the workspace whose row was being edited', async () => {
     const user = userEvent.setup()
     const props = renderSidebar({
-      workspaces: [
-        workspace({ id: 'planner/anna', name: 'anna' }),
-        workspace({ id: 'planner/bob', name: 'bob' })
-      ],
+      workspaces: [workspaceView('anna'), workspaceView('bob')],
       editingWorkspaceId: 'planner/bob'
     })
 
@@ -203,10 +171,7 @@ describe('Sidebar', () => {
   it('starts renaming the workspace whose menu was used', async () => {
     const user = userEvent.setup()
     const props = renderSidebar({
-      workspaces: [
-        workspace({ id: 'planner/anna', name: 'anna' }),
-        workspace({ id: 'planner/bob', name: 'bob' })
-      ]
+      workspaces: [workspaceView('anna'), workspaceView('bob')]
     })
 
     const [, secondRowMenu] = screen.getAllByTitle('More')
@@ -239,10 +204,7 @@ describe('Sidebar', () => {
   it('removes the workspace whose menu was used', async () => {
     const user = userEvent.setup()
     const props = renderSidebar({
-      workspaces: [
-        workspace({ id: 'planner/anna', name: 'anna' }),
-        workspace({ id: 'planner/bob', name: 'bob' })
-      ]
+      workspaces: [workspaceView('anna'), workspaceView('bob')]
     })
 
     const [, secondRowMenu] = screen.getAllByTitle('More')

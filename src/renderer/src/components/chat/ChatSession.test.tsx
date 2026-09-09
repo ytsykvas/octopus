@@ -13,33 +13,11 @@ import { CHAT_ID, emitAgentEvent, emitChatStatus, givenChat } from '../../test/c
 import { commentController, quoteController } from '../../test/comments.js'
 import { stubDialogElement } from '../../test/dialog.js'
 import { octopus } from '../../test/octopus.js'
+import { workspaceView } from '../../test/workspaces.js'
 import { Chat } from './Chat.js'
 
 // The plan's approval is a dialog now, and jsdom implements none of `<dialog>`.
 beforeAll(stubDialogElement)
-
-function workspace(overrides: Partial<WorkspaceView> = {}): WorkspaceView {
-  return {
-    id: 'planner/anna',
-    projectId: 'planner',
-    name: 'anna',
-    branch: 'ytsykvas/anna',
-    path: '/ws/planner/anna',
-    status: 'idle',
-    port: 3100,
-    createdAt: '2026-08-07T12:00:00.000Z',
-    writers: {},
-    notes: '',
-    ownerId: null,
-    envProfile: null,
-    chats: [],
-    missing: false,
-    headOnBranch: true,
-    changedFiles: 0,
-    ahead: 0,
-    ...overrides
-  }
-}
 
 interface PaneProps {
   readonly workspace: WorkspaceView
@@ -112,7 +90,7 @@ function ChatPane({
  * a test that is not about them leaves them at the schema's own values.
  */
 async function openChat(
-  target: WorkspaceView = workspace(),
+  target: WorkspaceView = workspaceView('anna'),
   defaults: {
     workingMode?: WorkingMode
     effort?: Effort
@@ -188,7 +166,7 @@ describe('the project it belongs to', () => {
   // The stylesheet owns how the colour is used; the component only says which
   // one, and it resolves to a token rather than to a value (§10.4).
   it('carries the colour down for the stylesheet to use', async () => {
-    const { container } = render(<ChatPane workspace={workspace()} color="teal" />)
+    const { container } = render(<ChatPane workspace={workspaceView('anna')} color="teal" />)
     await waitFor(() => {
       expect(octopus().chats.list).toHaveBeenCalled()
     })
@@ -310,7 +288,7 @@ describe('an existing conversation', () => {
     const onError = vi.fn()
     vi.mocked(octopus().chats.list).mockResolvedValue({ ok: false, error: 'state is corrupt' })
 
-    render(<ChatPane workspace={workspace()} onError={onError} />)
+    render(<ChatPane workspace={workspaceView('anna')} onError={onError} />)
 
     await waitFor(() => {
       expect(onError).toHaveBeenCalledWith(expect.stringContaining('state is corrupt'))
@@ -321,13 +299,13 @@ describe('an existing conversation', () => {
   // continuation of this one.
   it('is replaced when the workspace changes', async () => {
     givenChat([{ role: 'user', at: '2026-08-11T09:00:00.000Z', text: 'first workspace' }])
-    const { rerender } = render(<ChatPane workspace={workspace()} />)
+    const { rerender } = render(<ChatPane workspace={workspaceView('anna')} />)
 
     expect(await screen.findByText('first workspace')).toBeInTheDocument()
 
     vi.mocked(octopus().chats.list).mockResolvedValue({ ok: true, value: [] })
     vi.mocked(octopus().chats.history).mockResolvedValue({ ok: true, value: [] })
-    rerender(<ChatPane workspace={workspace({ id: 'planner/maria', name: 'maria' })} />)
+    rerender(<ChatPane workspace={workspaceView('maria')} />)
 
     await waitFor(() => {
       expect(screen.queryByText('first workspace')).not.toBeInTheDocument()
@@ -794,7 +772,7 @@ describe('the permission mode', () => {
    * on their own as the record came back.
    */
   it('names what the settings will create the first record with', async () => {
-    await openChat(workspace(), { workingMode: 'acceptEdits', effort: 'high' })
+    await openChat(workspaceView('anna'), { workingMode: 'acceptEdits', effort: 'high' })
 
     expect(picker()).toHaveTextContent('Auto mode')
     expect(screen.getByRole('button', { name: 'Effort' })).toHaveTextContent('High')
@@ -804,7 +782,7 @@ describe('the permission mode', () => {
   // say a new conversation would have started on.
   it('lets the record overrule the settings', async () => {
     givenChat([], { workingMode: 'default', effort: 'low' })
-    await openChat(workspace(), { workingMode: 'acceptEdits', effort: 'high' })
+    await openChat(workspaceView('anna'), { workingMode: 'acceptEdits', effort: 'high' })
 
     await waitFor(() => {
       expect(octopus().chats.history).toHaveBeenCalled()
@@ -1194,8 +1172,8 @@ describe('answering a question the agent asked', () => {
  * looking at another workspace mid-sentence is ordinary rather than careless.
  */
 describe('a draft and the workspace it was typed in', () => {
-  const anna = workspace()
-  const bob = workspace({ id: 'planner/bob', name: 'bob', path: '/ws/planner/bob' })
+  const anna = workspaceView('anna')
+  const bob = workspaceView('bob')
 
   function renderFor(target: WorkspaceView, draft = ''): (next: WorkspaceView) => void {
     const { rerender } = render(<ChatPane workspace={target} draft={draft} />)
@@ -1240,7 +1218,7 @@ describe('a draft and the workspace it was typed in', () => {
 describe('a turn that was left running', () => {
   it('offers to stop a turn found already in flight', async () => {
     givenChat([], { status: 'running' })
-    render(<ChatPane workspace={workspace()} />)
+    render(<ChatPane workspace={workspaceView('anna')} />)
 
     expect(await screen.findByRole('button', { name: 'Stop' })).toBeInTheDocument()
   })
@@ -1248,7 +1226,7 @@ describe('a turn that was left running', () => {
   it('stops it when asked', async () => {
     const user = userEvent.setup()
     givenChat([], { status: 'running' })
-    render(<ChatPane workspace={workspace()} />)
+    render(<ChatPane workspace={workspaceView('anna')} />)
 
     await user.click(await screen.findByRole('button', { name: 'Stop' }))
 
@@ -1267,7 +1245,7 @@ describe('a turn that was left running', () => {
    */
   it('offers to send again once the conversation is no longer working', async () => {
     givenChat([], { status: 'running' })
-    render(<ChatPane workspace={workspace()} />)
+    render(<ChatPane workspace={workspaceView('anna')} />)
     expect(await screen.findByRole('button', { name: 'Stop' })).toBeInTheDocument()
 
     emitChatStatus(CHAT_ID, 'idle')
@@ -1313,7 +1291,7 @@ describe('notes from two places riding one message', () => {
     const comments = commentController({ pending: [NOTE] })
     const quotes = quoteController({ pending: [QUOTE] })
     givenChat()
-    render(<ChatPane workspace={workspace()} comments={comments} quotes={quotes} />)
+    render(<ChatPane workspace={workspaceView('anna')} comments={comments} quotes={quotes} />)
 
     const buttons = await screen.findAllByRole('button', { name: 'Remove this note' })
     await user.click(buttons[1]!)
@@ -1327,7 +1305,7 @@ describe('notes from two places riding one message', () => {
     const comments = commentController({ pending: [NOTE] })
     const quotes = quoteController({ pending: [QUOTE] })
     givenChat()
-    render(<ChatPane workspace={workspace()} comments={comments} quotes={quotes} />)
+    render(<ChatPane workspace={workspaceView('anna')} comments={comments} quotes={quotes} />)
 
     const buttons = await screen.findAllByRole('button', { name: 'Remove this note' })
     await user.click(buttons[0]!)

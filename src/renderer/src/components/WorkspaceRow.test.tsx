@@ -2,38 +2,14 @@ import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, it, vi } from 'vitest'
 
-import type { WorkspaceView } from '@core/workspaces.js'
-
+import { workspaceView } from '../test/workspaces.js'
 import { WorkspaceRow } from './WorkspaceRow.js'
-
-function workspace(overrides: Partial<WorkspaceView> = {}): WorkspaceView {
-  return {
-    id: 'planner/anna',
-    projectId: 'planner',
-    name: 'anna',
-    branch: 'ytsykvas/anna',
-    path: '/tmp/planner/anna',
-    status: 'idle',
-    port: 3100,
-    createdAt: '2026-08-08T00:00:00.000Z',
-    writers: {},
-    notes: '',
-    ownerId: null,
-    envProfile: null,
-    chats: [],
-    changedFiles: 0,
-    ahead: 0,
-    missing: false,
-    headOnBranch: true,
-    ...overrides
-  }
-}
 
 type WorkspaceRowProps = React.ComponentProps<typeof WorkspaceRow>
 
 function renderRow(overrides: Partial<WorkspaceRowProps> = {}): WorkspaceRowProps {
   const props: WorkspaceRowProps = {
-    workspace: workspace(),
+    workspace: workspaceView('anna'),
     request: null,
     selected: false,
     editing: false,
@@ -50,7 +26,7 @@ function renderRow(overrides: Partial<WorkspaceRowProps> = {}): WorkspaceRowProp
 
 describe('WorkspaceRow', () => {
   it('names the workspace', () => {
-    renderRow({ workspace: workspace({ name: 'anna' }) })
+    renderRow({ workspace: workspaceView('anna') })
 
     expect(screen.getByText('anna')).toBeInTheDocument()
   })
@@ -58,7 +34,7 @@ describe('WorkspaceRow', () => {
   // The row that is open is drawn as a lifted surface with a coloured mark down
   // its edge, and neither reaches a screen reader.
   it('announces the workspace that is open', () => {
-    renderRow({ workspace: workspace({ name: 'anna' }), selected: true })
+    renderRow({ workspace: workspaceView('anna'), selected: true })
 
     expect(screen.getByRole('button', { current: true })).toHaveTextContent('anna')
   })
@@ -70,19 +46,19 @@ describe('WorkspaceRow', () => {
   })
 
   it('shows the branch on hover', () => {
-    renderRow({ workspace: workspace({ branch: 'ytsykvas/anna' }) })
+    renderRow({ workspace: workspaceView('anna', { branch: 'ytsykvas/anna' }) })
 
     expect(screen.getByTitle('ytsykvas/anna')).toBeInTheDocument()
   })
 
   it('counts the uncommitted files', () => {
-    renderRow({ workspace: workspace({ changedFiles: 3 }) })
+    renderRow({ workspace: workspaceView('anna', { changedFiles: 3 }) })
 
     expect(screen.getByText('3 files')).toBeInTheDocument()
   })
 
   it('counts a single file in the singular', () => {
-    renderRow({ workspace: workspace({ changedFiles: 1 }) })
+    renderRow({ workspace: workspaceView('anna', { changedFiles: 1 }) })
 
     expect(screen.getByText('1 file')).toBeInTheDocument()
   })
@@ -90,7 +66,7 @@ describe('WorkspaceRow', () => {
   // A clean workspace says nothing rather than "0 files": the count is there to
   // draw the eye, and a row of zeroes would stop it doing that.
   it('says nothing about changes when the workspace is clean', () => {
-    renderRow({ workspace: workspace({ name: 'anna', changedFiles: 0 }) })
+    renderRow({ workspace: workspaceView('anna', { changedFiles: 0 }) })
 
     expect(screen.getByText('anna')).toBeInTheDocument()
     expect(screen.queryByText(/files?$/)).not.toBeInTheDocument()
@@ -102,7 +78,7 @@ describe('WorkspaceRow', () => {
    * one was busy — or stopped, waiting on an answer — was to open it.
    */
   it('says when the agent is working in a workspace that is not open', () => {
-    renderRow({ workspace: workspace({ status: 'running' }) })
+    renderRow({ workspace: workspaceView('anna', { status: 'running' }) })
 
     expect(screen.getByLabelText('The agent is working here')).toBeInTheDocument()
   })
@@ -110,13 +86,13 @@ describe('WorkspaceRow', () => {
   // The one state worth crossing the window for: the turn has stopped, and it
   // stopped on a question only the user can answer.
   it('says when a workspace is waiting on an answer', () => {
-    renderRow({ workspace: workspace({ status: 'waiting_permission' }) })
+    renderRow({ workspace: workspaceView('anna', { status: 'waiting_permission' }) })
 
     expect(screen.getByLabelText('Waiting for your answer')).toBeInTheDocument()
   })
 
   it('says when the last turn there ended badly', () => {
-    renderRow({ workspace: workspace({ status: 'error' }) })
+    renderRow({ workspace: workspaceView('anna', { status: 'error' }) })
 
     expect(screen.getByLabelText('The last turn ended in an error')).toBeInTheDocument()
   })
@@ -124,7 +100,7 @@ describe('WorkspaceRow', () => {
   // One mark, not two: idle with changes is the ordinary case, and the agent's
   // state only takes the dot while there is something to report.
   it('says nothing about an agent that is doing nothing', () => {
-    renderRow({ workspace: workspace({ status: 'idle', changedFiles: 2 }) })
+    renderRow({ workspace: workspaceView('anna', { status: 'idle', changedFiles: 2 }) })
 
     expect(screen.queryByLabelText(/agent|waiting|error/i)).not.toBeInTheDocument()
     expect(screen.getByText('2 files')).toBeInTheDocument()
@@ -137,7 +113,7 @@ describe('WorkspaceRow', () => {
    */
   it('draws a dot per conversation once a workspace holds several', () => {
     renderRow({
-      workspace: workspace({
+      workspace: workspaceView('anna', {
         status: 'waiting_permission',
         chats: [
           {
@@ -178,7 +154,7 @@ describe('WorkspaceRow', () => {
    */
   it('tells a conversation that has run from one nobody has written in', () => {
     renderRow({
-      workspace: workspace({
+      workspace: workspaceView('anna', {
         status: 'idle',
         chats: [
           { id: 'chat-1', agent: 'claude' as const, title: null, status: 'idle', started: true },
@@ -195,7 +171,7 @@ describe('WorkspaceRow', () => {
   // waiting on an answer, or one that ended badly. Those speak for themselves.
   it('leaves a conversation with something to report saying it', () => {
     renderRow({
-      workspace: workspace({
+      workspace: workspaceView('anna', {
         status: 'error',
         chats: [
           { id: 'chat-1', agent: 'claude' as const, title: null, status: 'error', started: true },
@@ -210,7 +186,7 @@ describe('WorkspaceRow', () => {
 
   it('says when one of several conversations ended badly', () => {
     renderRow({
-      workspace: workspace({
+      workspace: workspaceView('anna', {
         status: 'error',
         chats: [
           {
@@ -237,7 +213,7 @@ describe('WorkspaceRow', () => {
   // One conversation is the ordinary case, and the row reads as it always has.
   it('keeps the single mark for a workspace with one conversation', () => {
     renderRow({
-      workspace: workspace({
+      workspace: workspaceView('anna', {
         status: 'running',
         chats: [
           {
@@ -255,7 +231,7 @@ describe('WorkspaceRow', () => {
   })
 
   it('marks a workspace whose directory has gone', () => {
-    renderRow({ workspace: workspace({ missing: true }) })
+    renderRow({ workspace: workspaceView('anna', { missing: true }) })
 
     expect(screen.getByText('Directory is gone')).toBeInTheDocument()
   })
@@ -263,7 +239,7 @@ describe('WorkspaceRow', () => {
   // Removed outside the app, so the hint explains that removing the entry is
   // safe rather than leaving the branch looking like the culprit.
   it('explains the missing directory on hover instead of showing the branch', () => {
-    renderRow({ workspace: workspace({ missing: true, branch: 'ytsykvas/anna' }) })
+    renderRow({ workspace: workspaceView('anna', { missing: true, branch: 'ytsykvas/anna' }) })
 
     expect(
       screen.getByTitle('Removed outside the app. Removing the entry is safe.')
@@ -274,7 +250,7 @@ describe('WorkspaceRow', () => {
   // The directory is gone, so any earlier count is stale — the marker replaces
   // it rather than sitting beside it.
   it('drops the change count for a missing workspace', () => {
-    renderRow({ workspace: workspace({ missing: true, changedFiles: 4 }) })
+    renderRow({ workspace: workspaceView('anna', { missing: true, changedFiles: 4 }) })
 
     expect(screen.getByText('Directory is gone')).toBeInTheDocument()
     expect(screen.queryByText('4 files')).not.toBeInTheDocument()
@@ -287,7 +263,7 @@ describe('WorkspaceRow', () => {
    * place that said nothing.
    */
   it('says when the worktree is standing on some other branch', () => {
-    renderRow({ workspace: workspace({ headOnBranch: false }) })
+    renderRow({ workspace: workspaceView('anna', { headOnBranch: false }) })
 
     expect(
       screen.getByRole('img', { name: /worktree is not on ytsykvas\/anna/ })
@@ -297,7 +273,7 @@ describe('WorkspaceRow', () => {
   // Most workspaces are on their own branch most of the time, and a mark for
   // that would put a glyph on every row and say nothing by being there.
   it('draws nothing while the worktree is on the workspace’s own branch', () => {
-    renderRow({ workspace: workspace({ headOnBranch: true }) })
+    renderRow({ workspace: workspaceView('anna', { headOnBranch: true }) })
 
     expect(screen.queryByRole('img', { name: /worktree is not on/ })).not.toBeInTheDocument()
   })
@@ -305,7 +281,7 @@ describe('WorkspaceRow', () => {
   /* Two warnings for one fact is noise rather than emphasis: a directory that
      is gone is not standing on any branch, and the row already says so. */
   it('says nothing about the branch of a workspace whose directory is gone', () => {
-    renderRow({ workspace: workspace({ missing: true, headOnBranch: false }) })
+    renderRow({ workspace: workspaceView('anna', { missing: true, headOnBranch: false }) })
 
     expect(screen.getByText('Directory is gone')).toBeInTheDocument()
     expect(screen.queryByRole('img', { name: /worktree is not on/ })).not.toBeInTheDocument()
@@ -350,7 +326,7 @@ describe('WorkspaceRow', () => {
   })
 
   it('offers the current name for editing while a rename is in progress', () => {
-    renderRow({ workspace: workspace({ name: 'anna' }), editing: true })
+    renderRow({ workspace: workspaceView('anna'), editing: true })
 
     expect(screen.getByTitle('Enter to save, Escape to cancel')).toHaveValue('anna')
   })
@@ -406,7 +382,7 @@ describe('WorkspaceRow', () => {
   // that did not change would be work with nothing to show for it.
   it('does not rename when the name comes back unchanged', async () => {
     const user = userEvent.setup()
-    const props = renderRow({ workspace: workspace({ name: 'anna' }), editing: true })
+    const props = renderRow({ workspace: workspaceView('anna'), editing: true })
 
     await user.type(screen.getByTitle('Enter to save, Escape to cancel'), '{Enter}')
 
