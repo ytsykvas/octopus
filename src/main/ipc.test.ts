@@ -1070,6 +1070,7 @@ describe('reads that forward to the service', () => {
       data: {
         viewer: {
           login: 'ytsykvas',
+          organizations: { nodes: [] },
           repositories: {
             pageInfo: { hasNextPage: false, endCursor: null },
             nodes: [{ ...REPOSITORY, isArchived: false, viewerPermission: 'ADMIN' }]
@@ -1081,7 +1082,11 @@ describe('reads that forward to the service', () => {
 
     await expect(invoke('projects:listRemote')).resolves.toMatchObject({
       ok: true,
-      value: { repositories: [{ nameWithOwner: 'ytsykvas/planner' }], capped: false }
+      value: {
+        repositories: [{ nameWithOwner: 'ytsykvas/planner' }],
+        capped: false,
+        organisations: []
+      }
     })
   })
 })

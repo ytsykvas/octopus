@@ -1225,7 +1225,7 @@ describe('App', () => {
     const user = await openApp()
     vi.mocked(window.octopus.projects.listRemote).mockResolvedValue({
       ok: true,
-      value: { repositories: [LEDGER_REPOSITORY], capped: false }
+      value: { repositories: [LEDGER_REPOSITORY], capped: false, organisations: [] }
     })
 
     const picker = await openRepositoryPicker(user)
@@ -1247,7 +1247,7 @@ describe('App', () => {
     })
     vi.mocked(window.octopus.projects.listRemote).mockResolvedValue({
       ok: true,
-      value: { repositories: [LEDGER_REPOSITORY], capped: false }
+      value: { repositories: [LEDGER_REPOSITORY], capped: false, organisations: [] }
     })
 
     await user.click(screen.getByRole('button', { name: 'Add repository' }))
@@ -1261,7 +1261,7 @@ describe('App', () => {
     givenGitHubConnected()
     vi.mocked(window.octopus.projects.listRemote).mockResolvedValue({
       ok: true,
-      value: { repositories: [LEDGER_REPOSITORY], capped: false }
+      value: { repositories: [LEDGER_REPOSITORY], capped: false, organisations: [] }
     })
     const user = await openApp()
     await screen.findByText('Start with a repository')
@@ -1383,7 +1383,7 @@ describe('App', () => {
   it('closes the GitHub picker and lists the repository it cloned', async () => {
     vi.mocked(window.octopus.projects.listRemote).mockResolvedValue({
       ok: true,
-      value: { repositories: [LEDGER_REPOSITORY], capped: false }
+      value: { repositories: [LEDGER_REPOSITORY], capped: false, organisations: [] }
     })
     vi.mocked(window.octopus.projects.addFromGitHub).mockResolvedValue({
       ok: true,
@@ -1670,7 +1670,7 @@ describe('App', () => {
     givenTwoProjects()
     vi.mocked(window.octopus.projects.listRemote).mockResolvedValue({
       ok: true,
-      value: { repositories: [LEDGER_REPOSITORY], capped: false }
+      value: { repositories: [LEDGER_REPOSITORY], capped: false, organisations: [] }
     })
     vi.mocked(window.octopus.projects.addFromGitHub).mockResolvedValue({ ok: true, value: LEDGER })
     const user = await openApp()

@@ -67,7 +67,7 @@ export function RepositoryPicker({
       if (result.ok) {
         setListing(result.value)
       } else {
-        setListing({ repositories: [], capped: false })
+        setListing({ repositories: [], capped: false, organisations: [] })
         setError(describeFailure(result))
         setDisconnected(result.code === 'notConnected')
       }
@@ -79,6 +79,32 @@ export function RepositoryPicker({
   }, [describeFailure])
 
   const repositories = listing?.repositories ?? null
+
+  /*
+   * Organisations the account belongs to that put nothing in the list.
+   *
+   * The one thing that can be said here without guessing at a cause. SAML
+   * withholding an organisation from a token that holds `read:org` looks
+   * exactly like an organisation with nothing to push to, and no local read
+   * tells them apart — so this names the organisation and leaves the cause to
+   * the reader, who can see which of the two it is at a glance.
+   *
+   * Read from `repositories` and not from the filtered `matches`: this answers
+   * where the list came from, which typing in the search box does not change.
+   *
+   * Nothing while the walk stopped at its ceiling. An organisation may have
+   * plenty beyond it, and the line above already says the list is partial.
+   */
+  const silent = useMemo(
+    () =>
+      listing === null || listing.capped
+        ? []
+        : listing.organisations.filter(
+            (organisation) =>
+              !listing.repositories.some((repository) => repository.owner.login === organisation)
+          ),
+    [listing]
+  )
 
   const matches = useMemo(() => {
     if (!repositories) return []
@@ -234,11 +260,12 @@ export function RepositoryPicker({
 
         {/* Under the list rather than over it: both answer "why is my
             repository not here", which is a question the reader only has once
-            they have looked. Neither hides anything — a list that is short for
-            one of these reasons is still a list of real repositories. */}
+            they have looked. None of them hides anything — a list that is
+            short for one of these reasons is still a list of real
+            repositories. */}
         {repositories !== null &&
           error === null &&
-          (listing?.capped === true || seesOrganisations === false) && (
+          (listing?.capped === true || seesOrganisations === false || silent.length > 0) && (
             <div className="border-line text-ink-faint mt-3 space-y-1.5 border-t px-2 pt-3">
               {listing?.capped === true && <p>{t('repositories.capped')}</p>}
 
@@ -247,6 +274,10 @@ export function RepositoryPicker({
                   {t('repositories.noOrganisations')}{' '}
                   <code className="text-ink-soft font-mono">{t('repositories.grantOrgScope')}</code>
                 </p>
+              )}
+
+              {silent.length > 0 && (
+                <p>{t('repositories.silentOrganisations', { names: silent.join(', ') })}</p>
               )}
             </div>
           )}

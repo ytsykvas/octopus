@@ -59,6 +59,13 @@ export const en = {
       'GitHub answered with as many repositories as it was asked for, so there may be more it is not showing.',
     noOrganisations:
       'An organisation missing from this list is missing because the signed-in token cannot see organisations. To grant it:',
+    /* Names the organisation rather than guessing why it is quiet. SAML
+       withholding one from a token that holds `read:org` looks exactly like an
+       organisation with nothing to push to, and no local read tells them
+       apart — but the reader knows which of the two theirs is, and could not
+       act on either while the list simply looked complete. */
+    silentOrganisations:
+      'You belong to {{names}}, and none of its repositories are listed. Either there is nothing there you can push to, or the token needs SSO authorising for it on GitHub.',
     grantOrgScope: 'gh auth refresh -s read:org'
   },
 

@@ -154,6 +154,7 @@ describe('GitHub projects', () => {
     data: {
       viewer: {
         login: 'ytsykvas',
+        organizations: { nodes: [] },
         repositories: {
           pageInfo: { hasNextPage: false, endCursor: null },
           nodes: [{ ...repository, isArchived: false, viewerPermission: 'ADMIN' }]
@@ -168,7 +169,8 @@ describe('GitHub projects', () => {
 
     await expect(withGitHub.listRemoteRepositories()).resolves.toMatchObject({
       repositories: [expect.objectContaining({ nameWithOwner: expect.any(String) })],
-      capped: false
+      capped: false,
+      organisations: []
     })
   })
 
@@ -240,7 +242,8 @@ describe('GitHub projects', () => {
       const plain = await createService(paths(join(dir, 'plain')))
       await expect(plain.listRemoteRepositories()).resolves.toEqual({
         repositories: [repository],
-        capped: false
+        capped: false,
+        organisations: []
       })
     } finally {
       process.env.PATH = previousPath

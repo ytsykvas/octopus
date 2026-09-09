@@ -42,6 +42,20 @@ export type RemoteRepository = z.infer<typeof RemoteRepositorySchema>
 export interface RepositoryList {
   readonly repositories: readonly RemoteRepository[]
   readonly capped: boolean
+  /**
+   * The organisations the account belongs to, whether or not any of their
+   * repositories are above.
+   *
+   * Carried because the two answers together say something neither says alone:
+   * an organisation named here with nothing of its own in the list is one the
+   * picker can point at **by name**. Without it a short list looks complete,
+   * and the only alternative was guessing at the cause from what is absent —
+   * a guess that reads identically for somebody who belongs to no organisation
+   * at all.
+   *
+   * Free: a sibling field of `login` on the same `viewer`, in the same call.
+   */
+  readonly organisations: readonly string[]
 }
 
 /**
@@ -59,6 +73,12 @@ const RepositoryPageSchema = z.object({
   data: z.object({
     viewer: z.object({
       login: z.string().min(1),
+      /* Nullable nodes, which GraphQL allows and this does not need to tell
+         apart: an organisation the token cannot resolve is one it cannot name
+         either, so it is dropped rather than reported as a blank. */
+      organizations: z.object({
+        nodes: z.array(z.object({ login: z.string().min(1) }).nullable())
+      }),
       repositories: z.object({
         pageInfo: z.object({ hasNextPage: z.boolean(), endCursor: z.string().nullable() }),
         nodes: z.array(RepositoryNodeSchema)
@@ -112,6 +132,15 @@ export class GitHubError extends CodedError<GitHubErrorCode> {
 const PAGE_SIZE = 100
 
 /**
+ * How many organisations are worth naming.
+ *
+ * Not paged, unlike the repositories: this is used to say which organisations
+ * put nothing in the list, and somebody in more than a hundred of them has a
+ * different problem than a footnote can help with.
+ */
+const ORGANISATION_LIMIT = 100
+
+/**
  * Permissions that allow pushing a branch.
  *
  * Which is the whole point of the list: octopus works by pushing a branch and
@@ -136,6 +165,7 @@ const CAN_PUSH = new Set(['ADMIN', 'MAINTAIN', 'WRITE'])
 const REPOSITORIES_QUERY = `query($first: Int!, $after: String) {
   viewer {
     login
+    organizations(first: ${String(ORGANISATION_LIMIT)}) { nodes { login } }
     repositories(
       first: $first
       after: $after
@@ -171,6 +201,7 @@ export async function listRepositories(
 ): Promise<RepositoryList> {
   const nodes: z.infer<typeof RepositoryNodeSchema>[] = []
   let login = ''
+  let organisations: string[] = []
   let cursor: string | null = null
 
   // Paged rather than asked for in one go: GraphQL caps a page at 100 and the
@@ -180,6 +211,12 @@ export async function listRepositories(
     const page = await readPage(exec, Math.min(PAGE_SIZE, limit - nodes.length), cursor)
 
     login = page.data.viewer.login
+    // Read every page and overwritten each time rather than only on the first:
+    // the answer does not change between pages, and a `cursor === null` guard
+    // would be a branch whose two arms do the same thing.
+    organisations = page.data.viewer.organizations.nodes
+      .filter((node) => node !== null)
+      .map((node) => node.login)
     nodes.push(...page.data.viewer.repositories.nodes)
 
     const { hasNextPage, endCursor } = page.data.viewer.repositories.pageInfo
@@ -198,7 +235,8 @@ export async function listRepositories(
   // repository does not. It cannot fail on an answer from GitHub.
   return {
     repositories: sortByOwner(offered, login).map((node) => RemoteRepositorySchema.parse(node)),
-    capped: nodes.length >= limit
+    capped: nodes.length >= limit,
+    organisations
   }
 }
 

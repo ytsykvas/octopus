@@ -37,12 +37,20 @@ function node(
 /** One page of the GraphQL reply, as `gh api graphql` prints it. */
 function page(
   nodes: readonly unknown[],
-  { login = 'ytsykvas', endCursor = null as string | null } = {}
+  {
+    login = 'ytsykvas',
+    endCursor = null as string | null,
+    /** The account's organisations, which ride on the same `viewer`. */
+    organisations = [] as readonly (string | null)[]
+  } = {}
 ): string {
   return JSON.stringify({
     data: {
       viewer: {
         login,
+        organizations: {
+          nodes: organisations.map((name) => (name === null ? null : { login: name }))
+        },
         repositories: {
           pageInfo: { hasNextPage: endCursor !== null, endCursor },
           nodes
@@ -201,6 +209,7 @@ describe('listRepositories', () => {
       data: {
         viewer: {
           login: 'ytsykvas',
+          organizations: { nodes: [] },
           repositories: { pageInfo: { hasNextPage: true, endCursor: null }, nodes: [node()] }
         }
       }
@@ -209,6 +218,28 @@ describe('listRepositories', () => {
 
     await listRepositories(exec)
     expect(calls).toHaveLength(1)
+  })
+
+  /*
+   * A sibling field on the same `viewer`, so it costs no extra request — and it
+   * is the only thing that can be said about a quiet organisation without
+   * guessing at a cause. Without it a list short by a whole organisation looks
+   * exactly like a complete one.
+   */
+  it('names the organisations the account belongs to', async () => {
+    const list = await listRepositories(succeeds(page([node()], { organisations: ['Hylab'] })))
+
+    expect(list.organisations).toEqual(['Hylab'])
+  })
+
+  // GraphQL allows a null node, and an organisation the token cannot resolve is
+  // one it cannot name either — so it is dropped rather than reported as blank.
+  it('drops an organisation it was handed nothing for', async () => {
+    const list = await listRepositories(
+      succeeds(page([node()], { organisations: ['Hylab', null] }))
+    )
+
+    expect(list.organisations).toEqual(['Hylab'])
   })
 
   it('never asks for more than the limit allows', async () => {

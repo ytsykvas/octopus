@@ -60,7 +60,18 @@ function pending<T>(): { promise: Promise<T>; settle: (value: T) => void } {
 function offer(...repositories: readonly RemoteRepository[]): void {
   vi.mocked(window.octopus.projects.listRemote).mockResolvedValue({
     ok: true,
-    value: { repositories: [...repositories], capped: false }
+    value: { repositories: [...repositories], capped: false, organisations: [] }
+  })
+}
+
+/** The same, plus the organisations the account belongs to. */
+function offerBelonging(
+  organisations: readonly string[],
+  ...repositories: readonly RemoteRepository[]
+): void {
+  vi.mocked(window.octopus.projects.listRemote).mockResolvedValue({
+    ok: true,
+    value: { repositories: [...repositories], capped: false, organisations: [...organisations] }
   })
 }
 
@@ -68,7 +79,7 @@ function offer(...repositories: readonly RemoteRepository[]): void {
 function offerCapped(...repositories: readonly RemoteRepository[]): void {
   vi.mocked(window.octopus.projects.listRemote).mockResolvedValue({
     ok: true,
-    value: { repositories: [...repositories], capped: true }
+    value: { repositories: [...repositories], capped: true, organisations: [] }
   })
 }
 
@@ -113,7 +124,10 @@ describe('RepositoryPicker', () => {
 
     expect(screen.getByText('Loading…')).toBeInTheDocument()
 
-    listing.settle({ ok: true, value: { repositories: [repository()], capped: false } })
+    listing.settle({
+      ok: true,
+      value: { repositories: [repository()], capped: false, organisations: [] }
+    })
 
     expect(await screen.findByText('ytsykvas/planner')).toBeInTheDocument()
     expect(screen.queryByText('Loading…')).not.toBeInTheDocument()
@@ -502,7 +516,10 @@ describe('RepositoryPicker', () => {
     await screen.findByRole('dialog')
 
     unmount()
-    listing.settle({ ok: true, value: { repositories: [repository()], capped: false } })
+    listing.settle({
+      ok: true,
+      value: { repositories: [repository()], capped: false, organisations: [] }
+    })
     await listing.promise
 
     expect(screen.queryByText('ytsykvas/planner')).not.toBeInTheDocument()
@@ -516,6 +533,7 @@ describe('RepositoryPicker', () => {
   describe('why the list may be short', () => {
     const CAP = /as many repositories as it was asked for/
     const ORG = /cannot see organisations/
+    const SILENT = /none of its repositories are listed/
 
     it('says so when GitHub answered with as much as it was asked for', async () => {
       offerCapped(repository())
@@ -558,6 +576,60 @@ describe('RepositoryPicker', () => {
       await screen.findByText('ytsykvas/planner')
 
       expect(screen.queryByText(ORG)).not.toBeInTheDocument()
+    })
+
+    /*
+     * The one thing that can be said about a quiet organisation without
+     * guessing at a cause. SAML withholding one from a token that holds
+     * `read:org` looks exactly like an organisation with nothing to push to —
+     * and the reader knows which of the two theirs is, while the list simply
+     * looked complete.
+     */
+    it('names an organisation that put nothing in the list', async () => {
+      offerBelonging(['Hylab'], repository())
+      await renderPicker({ seesOrganisations: true })
+      await screen.findByText('ytsykvas/planner')
+
+      expect(screen.getByText(SILENT)).toBeInTheDocument()
+      expect(screen.getByText(/Hylab/)).toBeInTheDocument()
+    })
+
+    // An organisation with repositories in the list is not quiet, and a line
+    // about it would be a standing apology under a list that is complete.
+    it('says nothing about an organisation that is represented', async () => {
+      offerBelonging(
+        ['Hylab'],
+        repository({ nameWithOwner: 'Hylab/planner', owner: { login: 'Hylab' } })
+      )
+      await renderPicker({ seesOrganisations: true })
+      await screen.findByText('Hylab/planner')
+
+      expect(screen.queryByText(SILENT)).not.toBeInTheDocument()
+    })
+
+    // Which is every account that belongs to none — the case a condition
+    // guessed from what is absent would have fired on.
+    it('says nothing where the account belongs to no organisation', async () => {
+      offer(repository())
+      await renderPicker({ seesOrganisations: true })
+      await screen.findByText('ytsykvas/planner')
+
+      expect(screen.queryByText(SILENT)).not.toBeInTheDocument()
+    })
+
+    /* An organisation may have plenty past the ceiling, so "none of its
+       repositories are listed" is not a claim this can support — and the line
+       above already says the list is partial. */
+    it('says nothing about a quiet organisation while the walk was capped', async () => {
+      vi.mocked(window.octopus.projects.listRemote).mockResolvedValue({
+        ok: true,
+        value: { repositories: [repository()], capped: true, organisations: ['Hylab'] }
+      })
+      await renderPicker({ seesOrganisations: true })
+      await screen.findByText('ytsykvas/planner')
+
+      expect(screen.getByText(CAP)).toBeInTheDocument()
+      expect(screen.queryByText(SILENT)).not.toBeInTheDocument()
     })
 
     // A failed listing already carries its own explanation, and a second one

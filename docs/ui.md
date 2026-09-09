@@ -2112,18 +2112,39 @@ It offers only repositories the account can **push to**. octopus works by
 pushing a branch and opening a pull request from it, so a repository that can
 only be read looks like a working choice right up until the first push fails.
 
-**A list that is short says why, under itself.** Two ordinary things shorten it
-without producing an error, and neither used to leave a trace: the walk stopping
-at its limit, and a token without `read:org`, which makes GitHub answer as
-though the account belonged to no organisation at all. So a footnote below the
-rows names whichever applies, and the scope one carries the command that grants
-it. Under the list rather than over it, because it answers "why is my repository
-not here" — a question the reader only has after looking.
+**A list that is short says why, under itself.** Three ordinary things shorten
+it without producing an error, and none used to leave a trace: the walk stopping
+at its limit; a token without `read:org`, which makes GitHub answer as though
+the account belonged to no organisation at all; and an organisation the account
+does belong to that put nothing in the list. So a footnote below the rows names
+whichever applies, and the scope one carries the command that grants it. Under
+the list rather than over it, because it answers "why is my repository not
+here" — a question the reader only has after looking.
 
-Neither hides anything: the repositories that _are_ listed are real, and
-somebody adding one of them has no use for a dialog that refuses. And neither
-line is a standing apology — each appears only when it is true, and being unable
-to tell is a third case that says nothing. `gh` reports no scopes at all for a
+**The third names the organisation and stops there.** A token that holds
+`read:org` but has not been SSO-authorised for an organisation makes GitHub
+answer as if that organisation did not exist — indistinguishable, locally, from
+an organisation with nothing in it the account can push to. Nothing octopus can
+read tells the two apart: `gh` relays no SAML signal, and both readings produce
+the same short list.
+
+So the line does not guess. It says which organisation is quiet and leaves the
+cause to the reader, who knows which of the two theirs is and could act on
+either — while the list simply looked complete. The earlier candidate was a
+condition inferred from what is _absent_, and it fired identically for somebody
+who belongs to no organisation at all: a cleverer way to be wrong.
+
+The organisations come free. `viewer.organizations` is a sibling of `login` on
+the same GraphQL `viewer`, so it rides in the request already being made, and it
+is what turns "something may be missing" into a name. It says nothing while the
+walk stopped at its ceiling — an organisation may have plenty beyond it, and
+"none of its repositories are listed" is not a claim that survives a partial
+list.
+
+None of them hides anything: the repositories that _are_ listed are real, and
+somebody adding one of them has no use for a dialog that refuses. And none is a
+standing apology — each appears only when it is true, and being unable to tell
+is a further case that says nothing. `gh` reports no scopes at all for a
 fine-grained token, which can reach an organisation regardless, so reading
 silence as "the scope is missing" would put a confident wrong sentence under a
 list that is perfectly complete.

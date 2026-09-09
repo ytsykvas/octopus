@@ -236,7 +236,7 @@ export function installOctopusStub(): Api {
       add: vi.fn(() => ok(null)),
       update: vi.fn(() => ok(undefined)),
       remove: vi.fn(() => ok(undefined)),
-      listRemote: vi.fn(() => ok({ repositories: [], capped: false })),
+      listRemote: vi.fn(() => ok({ repositories: [], capped: false, organisations: [] })),
       addFromGitHub: vi.fn(() => ok(null)),
       branches: vi.fn(() => ok(['origin/main'])),
       pullRequests: vi.fn(() => ok({ requests: [], capped: false })),
