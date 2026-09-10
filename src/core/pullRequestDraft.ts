@@ -117,6 +117,15 @@ export function buildPrompt(parts: PromptParts): string {
     'The diff follows. You may read files in the working directory for context;',
     'do not change anything.',
     '',
+    /* Said before the instruction, because the instruction is what makes it
+       necessary. A project's own text is written for the whole act of opening a
+       request, and a good one says to run its checks first — but this task has
+       read-only tools and opens nothing, so an agent that took that literally
+       spent its turn failing to run a test suite and answered with no title at
+       all. Measured on a real project, where it did exactly that. */
+    'You cannot run commands here, and nothing is being committed, pushed or',
+    'opened: this asks for the text alone.',
+    '',
     'Reply in exactly this form, with nothing before or after it and no code',
     'fence around it:',
     '',
@@ -127,6 +136,11 @@ export function buildPrompt(parts: PromptParts): string {
     ...(wantsCommit ? [COMMIT_MARKER, 'a subject line, then a blank line, then why'] : []),
     '',
     '# How this project wants pull requests written',
+    '',
+    'Written for the whole act of opening one, so some of it will be about',
+    'running checks, choosing a base branch or staging files. None of that',
+    'applies here — take only what it says about how the title and the',
+    'description should read.',
     '',
     parts.instruction.trim(),
     ...(wantsCommit

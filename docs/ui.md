@@ -1195,6 +1195,19 @@ one file, reached from the place it matters, which is the arrangement "Write the
 script" already uses. A second editor here would be a second place for the two
 to disagree.
 
+**The form's own draft button is a different thing from the one below**, and the
+difference is what makes it fragile. It asks the agent once, with read-only
+tools and no session, for nothing but the title and the description — while the
+instruction it hands over is written for the whole act of opening a request, and
+a good one says to run the project's checks first.
+
+So the prompt says what the task is not before handing the instruction over:
+nothing is run, committed, pushed or opened, and only what the instruction says
+about how the text should read applies. Unframed, an agent read "before opening,
+run rspec, rubocop and brakeman", could not — the tools are read-only — and
+spent its turn on that, answering with no title in it. The failure looked like
+the agent being broken and was the prompt failing to say which job this was.
+
 **Ask the agent to describe it** sends that instruction — the project's, or the
 global one in Settings where a project has written none — to the workspace's
 conversation, as an ordinary message. Not a call behind the reader's back: §4

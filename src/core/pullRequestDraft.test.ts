@@ -165,6 +165,42 @@ describe('renderDiff', () => {
 })
 
 describe('buildPrompt', () => {
+  /*
+   * A project's instruction is written for the whole act of opening a request,
+   * and a good one says to run its checks first. This task has read-only tools
+   * and opens nothing, so an agent that took that literally spent its turn
+   * failing to run a test suite and answered with no title at all — measured on
+   * a real project, where the instruction listed rspec, rubocop and brakeman.
+   */
+  it('says what this task is not, before handing over the instruction', () => {
+    const prompt = buildPrompt({
+      instruction: 'Before opening, run bundle exec rspec.',
+      commitInstruction: null,
+      diffText: 'the diff',
+      branch: 'feature/thing'
+    })
+
+    expect(prompt).toContain('You cannot run commands here')
+    expect(prompt).toContain('this asks for the text alone')
+    expect(prompt).toContain('None of that\napplies here')
+    // And the instruction itself still goes over, since the style rules in it
+    // are the whole reason it is carried.
+    expect(prompt).toContain('Before opening, run bundle exec rspec.')
+  })
+
+  // Before it, not after: the reader of a prompt takes the framing that comes
+  // first, and an instruction qualified afterwards has already been followed.
+  it('frames the instruction before it rather than after', () => {
+    const prompt = buildPrompt({
+      instruction: 'Lead with why.',
+      commitInstruction: null,
+      diffText: 'the diff',
+      branch: 'feature/thing'
+    })
+
+    expect(prompt.indexOf('None of that')).toBeLessThan(prompt.indexOf('Lead with why.'))
+  })
+
   it("carries the project's instruction, the branch and the diff", () => {
     const prompt = buildPrompt({
       instruction: 'Lead with why.',
