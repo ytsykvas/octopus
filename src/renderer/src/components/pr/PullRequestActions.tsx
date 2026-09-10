@@ -260,6 +260,10 @@ export function PullRequestActions({
             // Dead until something is typed, rather than committing under a
             // sentence nobody chose. git refuses an empty message too.
             disabled={committing || message.trim() === ''}
+            /* And it says why. A control that is simply grey is a control the
+               reader has to guess at — the prepared-message buttons above take
+               the same trouble when there is no conversation to send into. */
+            {...(message.trim() === '' ? { title: t('pullRequest.commitNeedsMessage') } : {})}
           >
             <Upload aria-hidden size={12} />
             {t(committing ? 'pullRequest.creating' : 'pullRequest.commitAndPush')}

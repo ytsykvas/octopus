@@ -610,6 +610,7 @@ export const en = {
     /* The twin of `commitHint`, for the request that already exists. Said
        because both halves happen to something outside this window, and the
        message is now typed rather than fixed. */
+    commitNeedsMessage: 'Write a commit message above first.',
     commitAndPushHint:
       'Commits every change in this workspace under this message, then pushes it onto the request.',
     sending: 'Sending…',

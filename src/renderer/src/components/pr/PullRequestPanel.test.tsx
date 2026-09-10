@@ -1524,7 +1524,10 @@ describe('what the tab can do about a request', () => {
     answerDetail(detail())
     renderPanel()
 
-    expect(await screen.findByRole('button', { name: 'Commit and push' })).toBeDisabled()
+    const button = await screen.findByRole('button', { name: 'Commit and push' })
+    expect(button).toBeDisabled()
+    // And says why: a control that is simply grey is one the reader guesses at.
+    expect(button).toHaveAttribute('title', 'Write a commit message above first.')
 
     await user.type(screen.getByRole('textbox', { name: 'Commit message' }), ' ')
     expect(screen.getByRole('button', { name: 'Commit and push' })).toBeDisabled()
