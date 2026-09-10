@@ -617,11 +617,13 @@ the app never sees a token (§10.9).
   enables auto-merge instead when a required check has not passed — so the pane
   reads the request again afterwards, which is also what turns a refusal it
   cannot name into a visible reason.
-  **A red check disables the button.** That is not a refusal GitHub would make,
-  which is what the other three conditions are: it merges happily over a check
-  nobody marked required. It is a policy the app keeps, it is hard, and the way
-  past it is to fix the check or to merge in the browser — where nobody does it
-  by reflex.
+  **A check that is red, or still running, disables the button.** Neither is a
+  refusal GitHub would make — it merges happily over a check nobody marked
+  required, and turns a press during a run into auto-merge. Both are policies
+  the app keeps, they are hard, and the way past them is to fix the check, wait,
+  or merge in the browser — where nobody does it by reflex. A repository that
+  runs no checks at all is unaffected: waiting for checks that never arrive
+  would leave it unmergeable from here for ever.
 - **Committing and pushing**, under a message typed here, without which the loop
   ends in the terminal. The message used to be fixed at "Answer the review", so
   a branch worked on this way ended with four identical commits describing a

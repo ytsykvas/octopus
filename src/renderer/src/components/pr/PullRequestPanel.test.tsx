@@ -758,15 +758,39 @@ describe('a pull request that exists', () => {
     expect(screen.queryByText(/before merging/)).not.toBeInTheDocument()
   })
 
-  /* A check still running is not a check that failed. `gh` turns a merge into
-     auto-merge where a required one has not finished, which is the right
-     answer and not one to refuse in advance. */
-  it('does not refuse merely because a check is still running', async () => {
+  /* Waited for rather than merged past. `gh` would take the press and turn it
+     into auto-merge — a fair thing for `gh` to do, and the wrong thing to offer
+     beside a list that says "running". */
+  it('waits for a check that is still running', async () => {
     answer(view({ request: request() }))
     answerDetail(detail({ checks: [failing({ state: 'pending', completedAt: null })] }))
     renderPanel()
 
+    expect(await screen.findByText('1 check is still running.')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Merge' })).toBeDisabled()
+  })
+
+  /* A repository that runs nothing reports no checks at all, and waiting for
+     checks that will never arrive would leave it unable to merge from here for
+     ever. Only what is actually reported holds the button. */
+  it('merges a request whose repository runs no checks at all', async () => {
+    answer(view({ request: request() }))
+    answerDetail(detail({ checks: [] }))
+    renderPanel()
+
     expect(await screen.findByRole('button', { name: 'Merge' })).toBeEnabled()
+  })
+
+  /* `unstable` says GitHub would merge it anyway, which stopped being true the
+     moment a check of ours started holding the button. Two sentences
+     contradicting each other is worse than the quieter one going. */
+  it('drops GitHub\u2019s own note while a check of ours is holding the button', async () => {
+    answer(view({ request: request() }))
+    answerDetail(detail({ mergeState: 'unstable', checks: [failing({ name: 'lint' })] }))
+    renderPanel()
+
+    expect(await screen.findByText(/before merging/)).toBeInTheDocument()
+    expect(screen.queryByText(/merging is still allowed/)).not.toBeInTheDocument()
   })
 
   /*

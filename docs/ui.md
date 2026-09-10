@@ -1286,9 +1286,24 @@ hard, and the way past it is to fix the check or to merge in the browser, where
 nobody does it by reflex. The window header's own merge button has always
 refused on this, and until now the two disagreed about the same request.
 
-A check still **running** is not one that failed and does not disable anything:
-`gh` turns a merge into auto-merge where a required check has not finished, which
-is the right answer and not one to refuse in advance.
+**A check still running holds it too.** `gh` would take the press and turn it
+into auto-merge, which is a fair thing for `gh` to do and the wrong thing to
+offer beside a list that says "running" — the reader is looking at work in
+progress and a button that would merge past it.
+
+Counted from the list rather than from `mergeStateStatus`, which is GitHub's
+summary of whether _required_ checks are settled: a repository that marks none
+required reports itself perfectly mergeable while its whole suite is still
+going. What the reader can see is what holds the button.
+
+Only what is reported holds it. A repository that runs nothing has no checks at
+all, and waiting for checks that will never arrive would leave it unmergeable
+from here for ever.
+
+And while this pane is giving its own reason, GitHub's `unstable` note is
+dropped. That note says merging is allowed anyway, which stopped being true the
+moment a check of ours took the button — two sentences contradicting each other
+under one button is worse than the quieter one going.
 
 **The commit message is typed, and the button waits for it.** The field is the
 same one the create form carries — one component, because two fields for one idea

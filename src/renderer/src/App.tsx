@@ -653,7 +653,15 @@ export function App(): React.JSX.Element {
                     variant="accent"
                     onClick={onClick}
                     aria-expanded={shown}
-                    disabled={finishing || openRequest.checks === 'failed'}
+                    /* The same rule the pane keeps, said in the summary this
+                       list carries: a red check and a check still going both
+                       hold the button, and a repository that runs none reports
+                       `none` and is merged as it always was. */
+                    disabled={
+                      finishing ||
+                      openRequest.checks === 'failed' ||
+                      openRequest.checks === 'running'
+                    }
                   >
                     <GitMerge aria-hidden size={12} />
                     {t('pullRequest.merge')}

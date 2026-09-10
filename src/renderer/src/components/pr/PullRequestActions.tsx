@@ -164,6 +164,22 @@ export function PullRequestActions({
      same question are two things that can drift apart. */
   const failed = detail.checks.filter((check) => check.state === 'failed').length
 
+  /* Still going, and merging waits for them. `gh` would accept the press and
+     turn it into auto-merge, which is a reasonable thing for `gh` to do and the
+     wrong thing to offer here: the reader is looking at a list that says
+     "running" and a button that would merge anyway.
+
+     Counted rather than derived from `mergeState`, which is GitHub's summary of
+     whether *required* checks are settled — a repository that marks none
+     required reports itself perfectly mergeable while its whole suite is still
+     going. The list is what the reader can see. */
+  const running = detail.checks.filter((check) => check.state === 'pending').length
+
+  /* A repository that runs nothing has no checks at all, and waiting for checks
+     that will never arrive would leave it unable to merge from here for ever.
+     Only what is actually reported holds the button. */
+  const waiting = failed > 0 || running > 0
+
   /* Looked up rather than tested at each row: a table keyed by the same word the
      row carries cannot disagree with it, and there is no chain of conditions for
      a fourth case to be left out of. */
@@ -191,7 +207,11 @@ export function PullRequestActions({
           {t('pullRequest.envNotIgnoredPush', { file: exposedEnvFile })}
         </p>
       )}
-      {!conflicting && note !== undefined && (
+      {/* GitHub's own reasons, and only where this pane is not already giving
+          one of its own: `unstable` says merging is allowed anyway, which stops
+          being true the moment a check of ours holds the button, and two
+          sentences contradicting each other is worse than the quieter one. */}
+      {!conflicting && !waiting && note !== undefined && (
         <p className="text-ink-faint leading-relaxed">{t(note, { base })}</p>
       )}
       {detail.draft && (
@@ -203,6 +223,11 @@ export function PullRequestActions({
       {failed > 0 && open && (
         <p className="text-danger leading-relaxed">
           {t('pullRequest.mergeChecksFailed', { count: failed })}
+        </p>
+      )}
+      {running > 0 && open && (
+        <p className="text-ink-faint leading-relaxed">
+          {t('pullRequest.mergeChecksRunning', { count: running })}
         </p>
       )}
       {unpushedCommits !== null && unpushedCommits > 0 && open && (
@@ -314,7 +339,7 @@ export function PullRequestActions({
                 // keeps rather than a refusal it is predicting — and it is a
                 // hard one: the way past it is to fix the check, or to merge in
                 // the browser, where nobody can do it by reflex.
-                disabled={merging || conflicting || detail.draft || failed > 0}
+                disabled={merging || conflicting || detail.draft || waiting}
               >
                 <GitMerge aria-hidden size={12} />
                 {t(merging ? 'pullRequest.merging' : 'pullRequest.merge')}

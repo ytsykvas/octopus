@@ -2117,8 +2117,30 @@ describe('App', () => {
     expect(screen.getByRole('button', { name: 'Close' })).toBeEnabled()
   })
 
+  // The same rule the pane keeps, said in the summary this list carries. The
+  // two used to disagree about a running check, over the same request.
+  it('will not merge from the header while a check is still running', async () => {
+    givenOpenRequest('running')
+    const user = await openApp()
+    await user.click(await screen.findByRole('button', { name: 'PL' }))
+    await user.click(await screen.findByText('anna'))
+
+    expect(await screen.findByRole('button', { name: 'Merge' })).toBeDisabled()
+  })
+
+  // A repository that runs nothing reports `none`, and waiting for checks that
+  // will never arrive would leave it unmergeable from here for ever.
+  it('merges from the header for a repository that runs no checks', async () => {
+    givenOpenRequest('none')
+    const user = await openApp()
+    await user.click(await screen.findByRole('button', { name: 'PL' }))
+    await user.click(await screen.findByText('anna'))
+
+    expect(await screen.findByRole('button', { name: 'Merge' })).toBeEnabled()
+  })
+
   /** A project whose one workspace has a request open on GitHub. */
-  function givenOpenRequest(checks: 'passed' | 'failed' = 'passed'): void {
+  function givenOpenRequest(checks: 'passed' | 'failed' | 'running' | 'none' = 'passed'): void {
     vi.mocked(window.octopus.projects.list).mockResolvedValue({ ok: true, value: [PLANNER] })
     vi.mocked(window.octopus.workspaces.list).mockResolvedValue({
       ok: true,
