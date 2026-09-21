@@ -12,7 +12,6 @@ import {
 import { useCallback, useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
-import { shortBranchName } from '@core/branches.js'
 import { DEFAULT_EFFORT } from '@core/chats.js'
 import type { Config } from '@core/config.js'
 import type { ThemeName } from '@core/types.js'
@@ -851,9 +850,8 @@ export function App(): React.JSX.Element {
             /*
              * Per workspace, from its own project's record.
              *
-             * These reach every runner — as `$OCTOPUS_ROOT_PATH`, as
-             * `CONDUCTOR_DEFAULT_BRANCH`, and as the env set a workspace falls
-             * back to — and handing down the open project's would build one
+             * These reach every runner — as `$OCTOPUS_ROOT_PATH` and as the env
+             * set a workspace falls back to — and handing down the open project's would build one
              * workspace against another's checkout. The pane used to filter its
              * list to the open project because of that, which meant a dev
              * server died the moment another project was opened.
@@ -869,7 +867,6 @@ export function App(): React.JSX.Element {
 
               return {
                 rootPath: owner?.repoPath ?? '',
-                defaultBranch: shortBranchName(owner?.baseBranch ?? ''),
                 envProfile: owner?.envProfile ?? 'default'
               }
             }}

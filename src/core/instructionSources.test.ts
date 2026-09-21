@@ -191,7 +191,7 @@ describe('what the agent will actually read', () => {
    * Asked about the checkout, this row cannot be answered by a stat. A worktree
    * holds what git tracks and this file is gitignored, so it reaches a
    * workspace only by being on the carry list — which is exactly what
-   * `.conductor` does for it by hand.
+   * a setup script does for it by hand.
    */
   it('reads the local settings of a checkout only when the carry list brings them', async () => {
     await writeFile(join(repo, '.claude', 'settings.local.json'), '{}', 'utf8')

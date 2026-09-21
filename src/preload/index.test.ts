@@ -138,11 +138,6 @@ describe('channel names', () => {
       'permissions:cli'
     ],
     [
-      'projects.declaredCarryFiles',
-      () => method('projects', 'declaredCarryFiles')('p' as never),
-      'carry:declared'
-    ],
-    [
       'projects.repoConfig',
       () => method('projects', 'repoConfig')('p' as never),
       'repoConfig:read'

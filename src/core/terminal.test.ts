@@ -96,32 +96,6 @@ describe('buildTerminalArgv', () => {
     const spec = TerminalSpecSchema.parse({ cwd: '/tmp', command: ['claude', 'auth', 'status'] })
     expect(buildTerminalArgv(spec)).toEqual(['-i', '-c', "'claude' 'auth' 'status'"])
   })
-
-  it('passes a command line to the shell as written', () => {
-    /*
-     * The whole reason the two forms are separate. This line comes from a
-     * repository's own settings, where `$CONDUCTOR_PORT` means what a shell
-     * would make of it — quoting it would make the sentence the name of a
-     * program.
-     */
-    const spec = TerminalSpecSchema.parse({
-      cwd: '/tmp',
-      commandLine: 'bin/rails server -p $CONDUCTOR_PORT'
-    })
-    expect(buildTerminalArgv(spec)).toEqual(['-i', '-c', 'bin/rails server -p $CONDUCTOR_PORT'])
-  })
-
-  it('runs the command line rather than the argv when a spec carries both', () => {
-    // The more specific of the two wins, and visibly: running the argv and
-    // dropping the line would be a silent choice.
-    const spec = TerminalSpecSchema.parse({
-      owner: { workspaceId: null, purpose: 'shell' },
-      cwd: '/tmp',
-      command: ['ignored'],
-      commandLine: 'chosen'
-    })
-    expect(buildTerminalArgv(spec)).toEqual(['-i', '-c', 'chosen'])
-  })
 })
 
 describe('buildTerminalEnv', () => {
@@ -212,7 +186,6 @@ describe('buildTerminalArgv against a hostile command', () => {
         owner: { workspaceId: null, purpose: 'shell' },
         cwd: '/tmp',
         command: ['printf', '%s', path],
-        commandLine: '',
         env: {},
         cols: 80,
         rows: 24
@@ -228,7 +201,6 @@ describe('buildTerminalArgv against a hostile command', () => {
       owner: { workspaceId: null, purpose: 'shell' },
       cwd: '/tmp',
       command: ['gh', 'auth', 'login'],
-      commandLine: '',
       env: {},
       cols: 80,
       rows: 24
@@ -245,7 +217,6 @@ describe('buildTerminalArgv against a hostile command', () => {
       owner: { workspaceId: null, purpose: 'shell' },
       cwd: '/tmp',
       command: ['printf', '%s', "it's"],
-      commandLine: '',
       env: {},
       cols: 80,
       rows: 24

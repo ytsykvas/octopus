@@ -22,7 +22,7 @@ function ownScript(kind: ScriptKind, path: string): ResolvedScript {
     kind,
     source: 'project',
     from: path,
-    run: { type: 'file', path },
+    path,
     contents: '#!/bin/sh\n'
   }
 }
@@ -76,7 +76,6 @@ describe('ScriptRunner', () => {
         script={SETUP_SCRIPT}
         port={3111}
         rootPath="/Users/test/planner"
-        defaultBranch="main"
         onOpenSettings={vi.fn()}
       />
     )
@@ -94,7 +93,6 @@ describe('ScriptRunner', () => {
         script={null}
         port={3111}
         rootPath="/Users/test/planner"
-        defaultBranch="main"
         onOpenSettings={onOpenSettings}
       />
     )
@@ -113,7 +111,6 @@ describe('ScriptRunner', () => {
         script={null}
         port={3111}
         rootPath="/Users/test/planner"
-        defaultBranch="main"
         onOpenSettings={vi.fn()}
       />
     )
@@ -132,7 +129,6 @@ describe('ScriptRunner', () => {
         script={SETUP_SCRIPT}
         port={3111}
         rootPath="/Users/test/planner"
-        defaultBranch="main"
         onOpenSettings={vi.fn()}
       />
     )
@@ -157,7 +153,6 @@ describe('ScriptRunner', () => {
         script={RUN_SCRIPT}
         port={3111}
         rootPath="/Users/test/planner"
-        defaultBranch="main"
         onOpenSettings={vi.fn()}
       />
     )
@@ -185,7 +180,6 @@ describe('ScriptRunner', () => {
       script: RUN_SCRIPT,
       port: 3111,
       rootPath: '/Users/test/planner',
-      defaultBranch: 'main',
       onOpenSettings: vi.fn()
     })
     await sessionsOpened(1)
@@ -217,7 +211,6 @@ describe('ScriptRunner', () => {
       script: RUN_SCRIPT,
       port: 3111,
       rootPath: '/Users/test/planner',
-      defaultBranch: 'main',
       onOpenSettings: vi.fn()
     })
 
@@ -242,7 +235,6 @@ describe('ScriptRunner', () => {
       script: SETUP_SCRIPT,
       port: 3111,
       rootPath: '/Users/test/planner',
-      defaultBranch: 'main',
       onOpenSettings: vi.fn()
     })
     await sessionsOpened(1)
@@ -259,7 +251,6 @@ describe('ScriptRunner', () => {
       script: RUN_SCRIPT,
       port: 3111,
       rootPath: '/Users/test/planner',
-      defaultBranch: 'main',
       onOpenSettings: vi.fn()
     })
 
@@ -275,7 +266,6 @@ describe('ScriptRunner', () => {
         script={RUN_SCRIPT}
         port={3111}
         rootPath="/Users/test/planner"
-        defaultBranch="main"
         onOpenSettings={vi.fn()}
         startToken={7}
       />
@@ -291,7 +281,6 @@ describe('ScriptRunner', () => {
       script: SETUP_SCRIPT,
       port: 3111,
       rootPath: '/Users/test/planner',
-      defaultBranch: 'main',
       onOpenSettings: vi.fn()
     })
 
@@ -314,7 +303,6 @@ describe('ScriptRunner', () => {
       script: SETUP_SCRIPT,
       port: 3111,
       rootPath: '/Users/test/planner',
-      defaultBranch: 'main',
       onOpenSettings: vi.fn()
     })
 
@@ -330,43 +318,6 @@ describe('ScriptRunner', () => {
     )
   })
 
-  it("runs a repository's command line as a line, with Conductor's names", async () => {
-    /*
-     * The two forms are opposites. A file is executed; a line goes to the shell
-     * as written, or `$CONDUCTOR_PORT` would be part of a program's name. And
-     * the workspace name it is given is the slug, so the database the build
-     * script makes is the one the cleanup script drops.
-     */
-    mountAndStart({
-      workspace: workspaceView('Fix login bug'),
-      kind: 'run',
-      script: {
-        kind: 'run',
-        source: 'repoConductor',
-        from: '.conductor/settings.toml',
-        run: { type: 'command', command: 'bin/rails server -p $CONDUCTOR_PORT' },
-        contents: 'bin/rails server -p $CONDUCTOR_PORT'
-      },
-      port: 3111,
-      rootPath: '/Users/test/planner',
-      defaultBranch: 'develop',
-      onOpenSettings: vi.fn()
-    })
-
-    await sessionsOpened(1)
-    expect(octopus().terminal.create).toHaveBeenCalledWith(
-      expect.objectContaining({
-        commandLine: 'bin/rails server -p $CONDUCTOR_PORT',
-        env: expect.objectContaining({
-          OCTOPUS_PORT: '3111',
-          CONDUCTOR_PORT: '3111',
-          CONDUCTOR_WORKSPACE_NAME: 'fix_login_bug',
-          CONDUCTOR_DEFAULT_BRANCH: 'develop'
-        }) as unknown
-      })
-    )
-  })
-
   it('hands the server script the workspace port', async () => {
     mountAndStart({
       workspace: anna,
@@ -374,7 +325,6 @@ describe('ScriptRunner', () => {
       script: RUN_SCRIPT,
       port: 3111,
       rootPath: '/Users/test/planner',
-      defaultBranch: 'main',
       onOpenSettings: vi.fn()
     })
 
@@ -401,7 +351,6 @@ describe('ScriptRunner', () => {
       script: RUN_SCRIPT,
       port: 3111,
       rootPath: '/Users/test/planner',
-      defaultBranch: 'main',
       onOpenSettings: vi.fn()
     })
     await sessionsOpened(1)
@@ -423,7 +372,6 @@ describe('ScriptRunner', () => {
       script: RUN_SCRIPT,
       port: 3111,
       rootPath: '/Users/test/planner',
-      defaultBranch: 'main',
       onOpenSettings: vi.fn()
     })
     await sessionsOpened(1)
@@ -448,7 +396,6 @@ describe('ScriptRunner', () => {
       script: SETUP_SCRIPT,
       port: 3111,
       rootPath: '/Users/test/planner',
-      defaultBranch: 'main',
       onOpenSettings: vi.fn(),
       onGone
     }
@@ -472,7 +419,6 @@ describe('ScriptRunner', () => {
         script={SETUP_SCRIPT}
         port={3111}
         rootPath="/Users/test/planner"
-        defaultBranch="main"
         onOpenSettings={vi.fn()}
         onGone={onGone}
       />
@@ -510,7 +456,6 @@ describe('ScriptRunner', () => {
       script: RUN_SCRIPT,
       port: 3111,
       rootPath: '/Users/test/planner',
-      defaultBranch: 'main',
       onOpenSettings: vi.fn()
     })
     await sessionsOpened(1)
@@ -541,7 +486,6 @@ describe('ScriptRunner', () => {
       script: RUN_SCRIPT,
       port: 3111,
       rootPath: '/Users/test/planner',
-      defaultBranch: 'main',
       onOpenSettings: vi.fn()
     })
     await sessionsOpened(1)
@@ -574,7 +518,6 @@ describe('ScriptRunner', () => {
       script: RUN_SCRIPT,
       port: 3111,
       rootPath: '/Users/test/planner',
-      defaultBranch: 'main',
       onOpenSettings: vi.fn()
     })
     await sessionsOpened(1)
@@ -608,7 +551,6 @@ describe('ScriptRunner', () => {
       script: SETUP_SCRIPT,
       port: 3111,
       rootPath: '/Users/test/planner',
-      defaultBranch: 'main',
       onOpenSettings: vi.fn()
     })
     await sessionsOpened(1)
@@ -634,7 +576,6 @@ describe('ScriptRunner', () => {
       script: RUN_SCRIPT,
       port: 3111,
       rootPath: '/Users/test/planner',
-      defaultBranch: 'main',
       onOpenSettings: vi.fn()
     })
 
@@ -659,7 +600,6 @@ describe('ScriptRunner', () => {
       script: RUN_SCRIPT,
       port: 3111,
       rootPath: '/Users/test/planner',
-      defaultBranch: 'main',
       onOpenSettings: vi.fn()
     })
     await sessionsOpened(1)
@@ -688,7 +628,6 @@ describe('ScriptRunner', () => {
       script: SETUP_SCRIPT,
       port: 3111,
       rootPath: '/Users/test/planner',
-      defaultBranch: 'main',
       onOpenSettings: vi.fn()
     })
     await sessionsOpened(1)
@@ -719,7 +658,6 @@ describe('ScriptRunner', () => {
       script: RUN_SCRIPT,
       port: 3111,
       rootPath: '/Users/test/planner',
-      defaultBranch: 'main',
       onOpenSettings: vi.fn()
     })
 
@@ -745,7 +683,6 @@ describe('ScriptRunner', () => {
       script: SETUP_SCRIPT,
       port: 3111,
       rootPath: '/Users/test/planner',
-      defaultBranch: 'main',
       onOpenSettings: vi.fn()
     })
     await sessionsOpened(1)
@@ -764,7 +701,6 @@ describe('ScriptRunner', () => {
       script: RUN_SCRIPT,
       port: 3111,
       rootPath: '/Users/test/planner',
-      defaultBranch: 'main',
       onOpenSettings: vi.fn()
     })
     await sessionsOpened(1)
@@ -784,7 +720,6 @@ describe('ScriptRunner', () => {
       script: SETUP_SCRIPT,
       port: 3111,
       rootPath: '/Users/test/planner',
-      defaultBranch: 'main',
       onOpenSettings: vi.fn(),
       onOutcome
     })
@@ -809,7 +744,6 @@ describe('ScriptRunner', () => {
       script: SETUP_SCRIPT,
       port: 3111,
       rootPath: '/Users/test/planner',
-      defaultBranch: 'main',
       onOpenSettings: vi.fn()
     })
     await sessionsOpened(1)
@@ -839,7 +773,6 @@ describe('ScriptRunner', () => {
       script: RUN_SCRIPT,
       port: 3111,
       rootPath: '/Users/test/planner',
-      defaultBranch: 'main',
       onOpenSettings: vi.fn()
     })
     await sessionsOpened(1)
@@ -854,7 +787,6 @@ describe('ScriptRunner', () => {
       script: RUN_SCRIPT,
       port: 3111,
       rootPath: '/Users/test/planner',
-      defaultBranch: 'main',
       onOpenSettings: vi.fn()
     })
     await sessionsOpened(1)
@@ -883,7 +815,6 @@ describe('ScriptRunner', () => {
       script: SETUP_SCRIPT,
       port: 3111,
       rootPath: '/Users/test/planner',
-      defaultBranch: 'main',
       onOpenSettings: vi.fn()
     })
 
@@ -907,7 +838,6 @@ describe('ScriptRunner', () => {
       script: SETUP_SCRIPT,
       port: 3111,
       rootPath: '/Users/test/planner',
-      defaultBranch: 'main',
       onOpenSettings: vi.fn()
     })
     await sessionsOpened(1)
@@ -928,7 +858,6 @@ describe('ScriptRunner', () => {
       script: SETUP_SCRIPT,
       port: 3111,
       rootPath: '/Users/test/planner',
-      defaultBranch: 'main',
       onOpenSettings: vi.fn(),
       onOutcome
     })
@@ -961,7 +890,6 @@ describe('ScriptRunner', () => {
       script: SETUP_SCRIPT,
       port: 3111,
       rootPath: '/Users/test/planner',
-      defaultBranch: 'main',
       onOpenSettings: vi.fn(),
       onOutcome
     })
@@ -989,7 +917,6 @@ describe('ScriptRunner', () => {
       script: RUN_SCRIPT,
       port: 3111,
       rootPath: '/Users/test/planner',
-      defaultBranch: 'main',
       onOpenSettings: vi.fn(),
       onOutcome: vi.fn()
     }

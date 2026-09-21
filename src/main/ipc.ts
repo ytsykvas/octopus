@@ -316,10 +316,6 @@ export function registerIpc(
     attempt(() => service.readCliPermissions(projectId))
   )
 
-  host.handle('carry:declared', (_event, projectId: string) =>
-    attempt(() => service.declaredCarryFiles(projectId))
-  )
-
   host.handle('workspace:env', (_event, workspaceId: string) =>
     attempt(() => service.readWorkspaceEnv(workspaceId))
   )

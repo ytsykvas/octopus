@@ -12,7 +12,7 @@ function scriptOf(id: string): ResolvedScript {
     kind: 'setup',
     source: 'project',
     from: `/scripts/${id}.sh`,
-    run: { type: 'file', path: `/scripts/${id}.sh` },
+    path: `/scripts/${id}.sh`,
     contents: '#!/bin/sh\n'
   }
 }

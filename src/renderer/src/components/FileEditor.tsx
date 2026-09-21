@@ -37,15 +37,6 @@ interface FileEditorProps {
    * and worth copying into the repository's file.
    */
   readonly supersededBy?: string | undefined
-  /**
-   * Bumped by a caller that has written the same file from somewhere else.
-   *
-   * The read runs once, which is right for a box being typed into and wrong the
-   * moment anything else writes underneath it — the carry list is now appended
-   * to by the declaration block below it, and without this the box went on
-   * showing the text from before the append.
-   */
-  readonly reloadKey?: number
 }
 
 /**
@@ -63,8 +54,7 @@ export function FileEditor({
   read,
   save,
   notes,
-  supersededBy,
-  reloadKey = 0
+  supersededBy
 }: FileEditorProps): React.JSX.Element {
   const describeFailure = useErrorMessage()
   const [body, setBody] = useState('')
@@ -88,7 +78,7 @@ export function FileEditor({
     // `read` is rebuilt on every render by its caller; re-running on it would
     // reload the file while it is being typed into.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [label, reloadKey])
+  }, [label])
 
   const commit = (): void => {
     // Writing an unchanged body would create the file, and a file that exists

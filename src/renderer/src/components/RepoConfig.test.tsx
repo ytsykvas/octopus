@@ -59,9 +59,9 @@ function offer(overrides: Partial<RepoConfigView>): void {
 function fromRepo(from: string): ResolvedScript {
   return {
     kind: 'setup',
-    source: 'repoConductor',
+    source: 'repoOctopus',
     from,
-    run: { type: 'command', command: 'npm ci' },
+    path: `/repo/${from}`,
     contents: 'npm ci'
   }
 }
@@ -482,7 +482,7 @@ describe('RepoConfig', () => {
 
     it('names each script the checkout supplies and the file it came from', async () => {
       offer({})
-      runs({ approved: true, scripts: { setup: fromRepo('.conductor/settings.toml') } })
+      runs({ approved: true, scripts: { setup: fromRepo('.octopus/scripts/setup.sh') } })
 
       render(
         <RepoConfig
@@ -494,7 +494,7 @@ describe('RepoConfig', () => {
         />
       )
 
-      expect(await screen.findByText('.conductor/settings.toml')).toBeInTheDocument()
+      expect(await screen.findByText('.octopus/scripts/setup.sh')).toBeInTheDocument()
       expect(screen.getByText(/have been read and are allowed/i)).toBeInTheDocument()
     })
 
@@ -543,7 +543,7 @@ describe('RepoConfig', () => {
             kind: 'setup',
             source: 'project',
             from: '/scripts/setup.sh',
-            run: { type: 'file', path: '/scripts/setup.sh' },
+            path: '/scripts/setup.sh',
             contents: '#!/bin/sh\n'
           }
         }

@@ -32,14 +32,6 @@ interface TerminalProps {
   readonly cwd: string
   /** Command to run; omit for an interactive shell. */
   readonly command?: readonly string[]
-  /**
-   * A command line for the shell, instead of `command`.
-   *
-   * For a script a repository names as a line rather than as a file. It reaches
-   * the shell unquoted, which is what makes it a command line and not an argv —
-   * `terminal.ts` has the whole of why the two are separate.
-   */
-  readonly commandLine?: string
   /** Extra environment for the session — how a script learns its port. */
   readonly env?: Readonly<Record<string, string>>
   /**
@@ -83,7 +75,6 @@ interface TerminalProps {
 export function Terminal({
   cwd,
   command,
-  commandLine,
   env,
   owner,
   onExit,
@@ -173,7 +164,6 @@ export function Terminal({
           owner: owner ?? { workspaceId: null, purpose: 'shell' },
           cwd,
           command: command ? [...command] : [],
-          commandLine: commandLine ?? '',
           env: env ? { ...env } : {},
           cols: term.cols,
           rows: term.rows

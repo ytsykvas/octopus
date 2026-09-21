@@ -9,8 +9,7 @@ const values = {
   // name a database with, and the raw label is what it must not be.
   workspaceName: 'Fix login bug',
   path: '/tmp/anna',
-  port: 3100,
-  defaultBranch: 'develop'
+  port: 3100
 }
 
 /** A script of the project's own, which is what the old arrangement always was. */
@@ -18,29 +17,20 @@ const ownScript: ResolvedScript = {
   kind: 'archive',
   source: 'project',
   from: '/data/projects/planner/scripts/archive.sh',
-  run: { type: 'file', path: '/data/projects/planner/scripts/archive.sh' },
+  path: '/data/projects/planner/scripts/archive.sh',
   contents: '#!/bin/sh\n'
-}
-
-/** One out of a repository's Conductor settings, which is a command line. */
-const conductorScript: ResolvedScript = {
-  kind: 'archive',
-  source: 'repoConductor',
-  from: '.conductor/settings.toml',
-  run: { type: 'command', command: 'bash .conductor/archive.sh' },
-  contents: 'bash .conductor/archive.sh'
 }
 
 /** Captures one invocation without spawning anything. */
 function recorder(): {
   readonly runner: RunScript
-  readonly seen: { file: string; args: readonly string[]; options: Parameters<RunScript>[2] }[]
+  readonly seen: { file: string; options: Parameters<RunScript>[1] }[]
 } {
-  const seen: { file: string; args: readonly string[]; options: Parameters<RunScript>[2] }[] = []
+  const seen: { file: string; options: Parameters<RunScript>[1] }[] = []
   return {
     seen,
-    runner: (file, args, options) => {
-      seen.push({ file, args, options })
+    runner: (file, options) => {
+      seen.push({ file, options })
       return Promise.resolve()
     }
   }
@@ -61,7 +51,6 @@ describe('runArchiveScript', () => {
 
     const [call] = seen
     expect(call?.file).toBe('/data/projects/planner/scripts/archive.sh')
-    expect(call?.args).toEqual([])
     expect(call?.options.cwd).toBe('/tmp/anna')
     // No port among them, though one was passed: `scriptEnv` gives the ports to
     // the server script alone, and cleanup is not serving.
@@ -70,43 +59,6 @@ describe('runArchiveScript', () => {
       OCTOPUS_WORKSPACE_NAME: 'Fix login bug',
       OCTOPUS_WORKSPACE_SLUG: 'fix_login_bug'
     })
-  })
-
-  it('hands a command line to a shell rather than trying to execute it', async () => {
-    const { runner, seen } = recorder()
-
-    await runArchiveScript(conductorScript, values, runner)
-
-    const [call] = seen
-    expect(call?.args).toEqual(['-c', 'bash .conductor/archive.sh'])
-    expect(call?.file).not.toBe('bash .conductor/archive.sh')
-  })
-
-  it("gives a Conductor script Conductor's names, with the slug as the workspace", async () => {
-    /*
-     * The whole reason a project no longer keeps a wrapper script whose only
-     * job was this translation. The slug rather than the label, so the name
-     * their script drops and the name our env block wrote are one string.
-     */
-    const { runner, seen } = recorder()
-
-    await runArchiveScript(conductorScript, values, runner)
-
-    expect(seen[0]?.options.env).toMatchObject({
-      CONDUCTOR_ROOT_PATH: '/Users/test/planner',
-      CONDUCTOR_WORKSPACE_NAME: 'fix_login_bug',
-      CONDUCTOR_DEFAULT_BRANCH: 'develop'
-    })
-    // Cleanup is not serving, so it gets no port under either vocabulary.
-    expect(seen[0]?.options.env).not.toHaveProperty('CONDUCTOR_PORT')
-  })
-
-  it("keeps Conductor's names away from a script that is not one", async () => {
-    const { runner, seen } = recorder()
-
-    await runArchiveScript(ownScript, values, runner)
-
-    expect(seen[0]?.options.env).not.toHaveProperty('CONDUCTOR_ROOT_PATH')
   })
 
   /*

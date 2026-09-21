@@ -4,9 +4,8 @@
  * A layer over `worktree.ts` and `store.ts`, shaped like `projects.ts` —
  * typed errors carrying a code the UI localises, and no knowledge of Electron.
  *
- * The layout follows Conductor's: one directory per workspace, one branch per
- * workspace, both named after the workspace. Unlike Conductor, everything
- * lives under a single root (§12.5).
+ * One directory per workspace, one branch per workspace, both named after the
+ * workspace, and everything under a single root (§12.5).
  */
 
 import { access, realpath } from 'node:fs/promises'

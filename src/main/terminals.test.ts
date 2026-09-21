@@ -125,7 +125,6 @@ const SPEC = {
   owner: { workspaceId: null, purpose: 'shell' as const },
   cwd: '/tmp/work',
   command: [],
-  commandLine: '',
   env: {},
   cols: 80,
   rows: 24

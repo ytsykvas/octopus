@@ -78,7 +78,6 @@ import {
 import { type CliPermission, readCliPermissions } from './cliPermissions.js'
 import { allowedStanding, type StandingPermission, withStanding } from './standingPermissions.js'
 import type { CarryReport } from './carry.js'
-import { type ConductorConfig, type DeclaredFile, readConductorConfig } from './conductorConfig.js'
 import { applyEnvOverrides, discardIfOnlyBlock, removeEnvBlock, readWorkspaceEnv } from './env.js'
 import { DEFAULT_PROFILE } from './envProfileNames.js'
 import {
@@ -92,7 +91,6 @@ import {
   writeProfile
 } from './envProfiles.js'
 import { runArchiveScript } from './archive.js'
-import { shortBranchName } from './branches.js'
 import { type UsageWindows, windowsFrom } from './usage.js'
 import {
   type Config,
@@ -513,19 +511,6 @@ function standingFrom(request: PendingPermission): StandingPermission {
   return { toolName: request.toolName, ruleContent: null }
 }
 
-/**
- * A `.conductor` declaration, reconciled against the carry list beside it.
- *
- * `carried` is the reconciliation and it runs one way only: a declaration the
- * list already names is settled, and a list entry the declaration does not
- * mention is nobody's problem — the list is the thing that decides.
- */
-export interface DeclaredCarryFiles {
-  /** The settings file that declared them, relative to the checkout. */
-  readonly path: string
-  readonly files: readonly (DeclaredFile & { readonly carried: boolean })[]
-}
-
 export interface OctopusService {
   getConfig(): Config
   updateConfig(
@@ -608,14 +593,6 @@ export interface OctopusService {
    */
   readCliPermissions(projectId: string): Promise<CliPermission[]>
 
-  /**
-   * What the checkout's `.conductor` says its workspaces need.
-   *
-   * Read and shown, never followed — see `conductorConfig.ts`. Answers `null`
-   * where there is no such declaration, which is every repository that was not
-   * set up for Conductor and most of the ones that were.
-   */
-  declaredCarryFiles(projectId: string): Promise<DeclaredCarryFiles | null>
   /**
    * The named sets of variables a project holds, and which it uses by default.
    *
@@ -2332,15 +2309,14 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
    *
    * Null covers three different things on purpose, because a removal treats
    * them alike: the project has no cleanup script, the repository supplies one
-   * nobody has read, and the repository's settings could not be read at all.
+   * nobody has read, and the repository's scripts could not be read at all.
    *
-   * That last one is why this exists. `readConductorConfig` throws on
-   * unparseable TOML, on a file too large and on a symlinked directory — and a
-   * worktree is where an agent works, so half-written and conflict-marked
-   * settings are ordinary rather than exotic. Left to throw, one such file made
-   * its workspace, and through `removeProjectById` the entire project,
-   * impossible to remove: the opposite of what `archive.ts` promises and what
-   * the comment at the call site says.
+   * That last one is why this exists. Resolving throws on a symlinked
+   * `.octopus/` — and a worktree is where an agent works, so an odd layout is
+   * ordinary rather than exotic. Left to throw, one such directory made its
+   * workspace, and through `removeProjectById` the entire project, impossible
+   * to remove: the opposite of what `archive.ts` promises and what the comment
+   * at the call site says.
    *
    * Losing the cleanup leaves a database behind. Losing the removal leaves a
    * project that cannot be deleted from the interface at all.
@@ -2402,7 +2378,7 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
    * The instruction this workspace would actually send.
    *
    * Three layers, repository first: a worktree carrying
-   * `.octopus/instructions/<kind>.md`, or Conductor's `[prompts]`, wins over
+   * `.octopus/instructions/<kind>.md` wins over
    * the project's own copy and the installation's. Not gated the way a script
    * is — this text goes into the log as a visible message, read before it does
    * anything, so a dialog in front of every one would be friction for no gain.
@@ -2994,35 +2970,6 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
       return readCliPermissions(requireProject(projectId).repoPath)
     },
 
-    async declaredCarryFiles(projectId) {
-      const project = requireProject(projectId)
-
-      /* Unreadable settings answer `null` rather than throwing, as `cleanupFor`
-         does and for the same reason: this is a courtesy beside a list that
-         works without it, and a half-written TOML in a checkout should not take
-         a settings screen down with it. */
-      let conductor: ConductorConfig | null
-      try {
-        conductor = await readConductorConfig(project.repoPath)
-      } catch {
-        return null
-      }
-
-      if (conductor === null || conductor.files.length === 0) return null
-
-      // Compared against the list's own reading of itself rather than against
-      // its raw text: the left side of `a = b` is the path, and a declaration
-      // matching that is already carried however the line was written.
-      const carried = new Set(
-        carriedFiles(await readCarryList(projectId, dataRoot)).map((file) => file.path)
-      )
-
-      return {
-        path: conductor.filesPath,
-        files: conductor.files.map((file) => ({ ...file, carried: carried.has(file.glob) }))
-      }
-    },
-
     async listEnvProfiles(projectId) {
       const project = requireProject(projectId)
       const profiles = await listProfiles(projectId, dataRoot)
@@ -3276,8 +3223,8 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
        *
        * Asked of the checkout alone, the dialog described one set of scripts
        * while the workspace beside it ran another. Seen in the real app —
-       * planner's checkout sat on `main` with a `.conductor/` while every
-       * worktree was cut from `develop` and carried an `.octopus/` — and the
+       * planner's checkout sat on `main` with no `.octopus/` while every
+       * worktree was cut from `develop` and carried one — and the
        * section even marked the project's own editors read-only against scripts
        * that were not going to run.
        *
@@ -3638,8 +3585,7 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
             rootPath: project.repoPath,
             workspaceName: workspace.name,
             path: workspace.path,
-            port: workspace.port,
-            defaultBranch: shortBranchName(project.baseBranch)
+            port: workspace.port
           })
 
           // Best-effort, one by one: a worktree already deleted from outside
@@ -3811,8 +3757,7 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
         rootPath: project.repoPath,
         workspaceName: workspace.name,
         path: workspace.path,
-        port: workspace.port,
-        defaultBranch: shortBranchName(project.baseBranch)
+        port: workspace.port
       })
 
       /*

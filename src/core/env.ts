@@ -12,9 +12,8 @@
  *
  * So a project may keep a small block of variables and octopus writes it at the
  * **end** of the workspace's `.env`. Last wins — `dotenv` and every
- * implementation of it keeps the final definition — which is the same trick the
- * Conductor setup this was measured against performs by hand, and for the same
- * stated reason.
+ * implementation of it keeps the final definition — which is the same trick a
+ * person otherwise performs by hand, and for the same reason.
  *
  * The block stays out of the repository: these are one machine's credentials.
  *

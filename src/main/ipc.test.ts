@@ -345,7 +345,6 @@ describe('channel table', () => {
     'scripts:paths',
     'carry:read',
     'carry:save',
-    'carry:declared',
     'permissions:cli',
     'repoConfig:read',
     'repoConfig:import',
@@ -1301,16 +1300,16 @@ describe('scripts and instructions of a real project', () => {
   it('says which scripts a repository supplies, and takes the approval', async () => {
     const projectId = await addProject()
     const workspace = await createWorkspace(projectId)
-    await mkdir(join(workspace.path, '.conductor'), { recursive: true })
+    await mkdir(join(workspace.path, '.octopus', 'scripts'), { recursive: true })
     await writeFile(
-      join(workspace.path, '.conductor', 'settings.toml'),
-      '[scripts]\nsetup = "make dev"\n',
+      join(workspace.path, '.octopus', 'scripts', 'setup.sh'),
+      '#!/bin/sh\nmake dev\n',
       'utf8'
     )
 
     await expect(invoke('scripts:resolved', workspace.id)).resolves.toMatchObject({
       ok: true,
-      value: { approved: false, scripts: { setup: { source: 'repoConductor' } } }
+      value: { approved: false, scripts: { setup: { source: 'repoOctopus' } } }
     })
 
     await expect(invoke('scripts:approve', workspace.id)).resolves.toMatchObject({ ok: true })
@@ -1324,16 +1323,16 @@ describe('scripts and instructions of a real project', () => {
   // open with no workspace to ask about.
   it('says which scripts the checkout itself supplies', async () => {
     const projectId = await addProject()
-    await mkdir(join(dir, 'planner', '.conductor'), { recursive: true })
+    await mkdir(join(dir, 'planner', '.octopus', 'scripts'), { recursive: true })
     await writeFile(
-      join(dir, 'planner', '.conductor', 'settings.toml'),
-      '[scripts]\nsetup = "make dev"\n',
+      join(dir, 'planner', '.octopus', 'scripts', 'setup.sh'),
+      '#!/bin/sh\nmake dev\n',
       'utf8'
     )
 
     await expect(invoke('scripts:project', projectId, null)).resolves.toMatchObject({
       ok: true,
-      value: { approved: false, scripts: { setup: { source: 'repoConductor' } } }
+      value: { approved: false, scripts: { setup: { source: 'repoOctopus' } } }
     })
   })
 
@@ -1367,27 +1366,6 @@ describe('scripts and instructions of a real project', () => {
     await expect(invoke('carry:read', projectId)).resolves.toMatchObject({
       ok: true,
       value: expect.stringContaining('.env')
-    })
-  })
-
-  it('answers with what the checkout declares, beside what the list carries', async () => {
-    const projectId = await addProject('declaring')
-    await mkdir(join(dir, 'declaring', '.conductor'), { recursive: true })
-    await writeFile(
-      join(dir, 'declaring', '.conductor', 'settings.toml'),
-      'file_include_globs = """\n.env\nconfig/*.key\n"""\n',
-      'utf8'
-    )
-
-    await expect(invoke('carry:declared', projectId)).resolves.toEqual({
-      ok: true,
-      value: {
-        path: '.conductor/settings.toml',
-        files: [
-          { glob: '.env', pattern: false, carried: true },
-          { glob: 'config/*.key', pattern: true, carried: false }
-        ]
-      }
     })
   })
 

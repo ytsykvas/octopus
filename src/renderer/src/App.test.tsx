@@ -169,7 +169,7 @@ function givenScriptsOf(paths: Record<string, Partial<Record<ScriptKind, string>
         kind: kind as ScriptKind,
         source: 'project',
         from: path,
-        run: { type: 'file', path },
+        path,
         contents: '#!/bin/sh\n'
       }
     }
@@ -1556,7 +1556,7 @@ describe('App', () => {
                   kind: 'setup' as const,
                   source: 'project' as const,
                   from: '/tmp/planner/setup.sh',
-                  run: { type: 'file' as const, path: '/tmp/planner/setup.sh' },
+                  path: '/tmp/planner/setup.sh',
                   contents: '#!/bin/sh\n'
                 }
               }

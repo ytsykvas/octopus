@@ -38,8 +38,7 @@ export const PORT_VARIABLE = 'OCTOPUS_PORT'
  * path, which then breaks on every other machine.
  *
  * The name is what a script needs to give this workspace something of its own:
- * a database, a container, a directory. Conductor's equivalents are
- * `CONDUCTOR_ROOT_PATH` and `CONDUCTOR_WORKSPACE_NAME`.
+ * a database, a container, a directory.
  */
 export const ROOT_VARIABLE = 'OCTOPUS_ROOT_PATH'
 export const WORKSPACE_VARIABLE = 'OCTOPUS_WORKSPACE_NAME'
@@ -73,10 +72,10 @@ export const SLUG_MAX_LENGTH = 30
  * a sentence. dotenv then reads the value up to the first space and nothing
  * says so.
  *
- * The rule is the one the shell pipelines in Conductor's own setup scripts use
- * — lowercase, every other character to `_`, truncate — so a slug built here
- * and a slug built there are the same string, and the script that creates a
- * database and the script that drops it cannot disagree.
+ * The rule is the one shell pipelines commonly use — lowercase, every other
+ * character to `_`, truncate — so a slug built here and one built in a script
+ * are the same string, and the script that creates a database and the script
+ * that drops it cannot disagree.
  *
  * `toSlug` in `git.ts` is not this: it produces a git ref, keeping `-` and `.`,
  * both of which need quoting in SQL.
@@ -96,52 +95,14 @@ export function workspaceSlug(name: string): string {
  *
  * One is not enough for a stack that is more than one process — a dev server,
  * an API, a mailcatcher — and a project that needs a second has nowhere to put
- * it without guessing at a number nothing is holding for it. Ten is what
- * Conductor gives, and it is enough that nobody counts.
+ * it without guessing at a number nothing is holding for it. Ten is
+ * enough that nobody counts.
  */
 export const BLOCK = 10
 
 /** Every port a workspace owns, its own first. */
 export function blockPorts(port: number): number[] {
   return Array.from({ length: BLOCK }, (_, offset) => port + offset)
-}
-
-/**
- * Conductor's names for the same values.
- *
- * Given only to a script that came out of a repository's `.conductor/` settings,
- * because that is the vocabulary those scripts were written against. It is what
- * removes the wrapper a project used to keep in its own settings for no purpose
- * but translating one set of names into the other.
- *
- * **The workspace name is the slug**, not the label. A `.conductor` script
- * slugifies whatever it is given before naming a database with it, so handing
- * it the slug makes that a no-op — and then the name our env block writes and
- * the name their script drops are the same string, which is the whole point of
- * the slug rule matching theirs.
- *
- * `CONDUCTOR_IS_LOCAL` is deliberately absent. Scripts branch on it, its value
- * is not documented, and being wrong about a flag is worse than not setting it.
- */
-export function conductorEnv(
-  kind: ScriptKind,
-  values: {
-    readonly rootPath: string
-    readonly workspaceName: string
-    readonly port: number
-    readonly defaultBranch: string
-  }
-): Record<string, string> {
-  const env: Record<string, string> = {
-    CONDUCTOR_ROOT_PATH: values.rootPath,
-    CONDUCTOR_WORKSPACE_NAME: workspaceSlug(values.workspaceName),
-    CONDUCTOR_DEFAULT_BRANCH: values.defaultBranch
-  }
-
-  // The same rule as ours: serving is the only thing a port is about.
-  if (kind === 'run') env.CONDUCTOR_PORT = String(values.port)
-
-  return env
 }
 
 /**
@@ -162,10 +123,8 @@ export function scriptEnv(
   }
 
   /*
-   * Ten, not one, and each named rather than left to arithmetic.
-   *
-   * Conductor documents a range and leaves the sums to the script; a variable
-   * per port is the same thing somebody can discover.
+   * Ten, not one, and each named rather than left to arithmetic: a variable
+   * per port is something a script can discover.
    */
   if (kind === 'run') {
     blockPorts(values.port).forEach((port, offset) => {

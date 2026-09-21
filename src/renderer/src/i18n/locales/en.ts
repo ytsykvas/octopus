@@ -208,20 +208,6 @@ export const en = {
     files: 'Files carried into a workspace',
     filesHint:
       'One path per line, relative to the repository. A worktree holds what git tracks and nothing else, so gitignored files — an .env, a config/master.key — have to be brought. Copied at creation and again before a run; a file already there is never overwritten. Add “= /somewhere/else/.env” to take one from another checkout instead — which is the answer for a project cloned from GitHub, where the checkout has no gitignored file to give. Those sources stay on this machine and are left out of the copy in the repository.',
-    /* What the repository declares, beside the list that decides. Shown, never
-       followed — copying paths a git pull can change into a worktree is the
-       class of thing that has to be approved rather than assumed. */
-    declaredFiles: 'Declared by the repository',
-    declaredFilesHint:
-      '{{path}} lists the files this repository says its workspaces need. octopus does not act on that list — the one above is what actually travels — but it can copy the entries across.',
-    declaredCarried: 'already listed',
-    declaredPattern: 'a pattern — octopus copies named files only',
-    /* All four forms in both locales, as `changedFiles` has them: the key set
-       is shared, and English needing only two does not shrink it. */
-    declaredAdd_one: 'Add {{count}} entry to the list above',
-    declaredAdd_few: 'Add {{count}} entries to the list above',
-    declaredAdd_many: 'Add {{count}} entries to the list above',
-    declaredAdd_other: 'Add {{count}} entries to the list above',
     archiveScript: 'Cleanup script',
     archiveScriptHint:
       'Runs when a workspace is removed, in its directory, while it still exists. Use it to take back what the build script gave out — a database or a container named after the workspace. Nothing it does can stop the removal. Saved as archive.sh.',
@@ -357,14 +343,6 @@ export const en = {
       'This repository\u2019s settings could not be read, so nothing here can run: {{reason}}',
     repoNotice:
       'This repository supplies the scripts below. Read them before they run \u2014 they arrive with a git pull, so what runs here is whatever the branch says.',
-    /* Shown only where a script is a command line rather than a file. A file's
-       body is the program, so approving what is shown approves what runs; a
-       line is a pointer, and the file it points at is neither shown nor
-       digested — so a later pull can change it without asking again. Said here
-       rather than left implied, because the sentence above would otherwise
-       promise more than the check can keep. */
-    repoCommandNotice:
-      'One of these is a command line, not a file. Approving it approves the line \u2014 not whatever the line goes on to run, which is not shown here and will not ask again if it changes.',
     repoApprove: 'Allow these',
     showEnv: "This workspace's env",
     noEnv:

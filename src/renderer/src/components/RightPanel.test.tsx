@@ -24,7 +24,7 @@ function ownScript(kind: ScriptKind): ResolvedScript {
     kind,
     source: 'project',
     from: path,
-    run: { type: 'file', path },
+    path,
     contents: '#!/bin/sh\n'
   }
 }
@@ -605,10 +605,10 @@ describe('RightPanel', () => {
     /** The same script, but arriving with the checkout rather than written here. */
     const fromRepo: ResolvedScript = {
       kind: 'run',
-      source: 'repoConductor',
-      from: '.conductor/settings.toml',
-      run: { type: 'command', command: 'bin/rails server -p $CONDUCTOR_PORT' },
-      contents: 'bin/rails server -p $CONDUCTOR_PORT'
+      source: 'repoOctopus',
+      from: '.octopus/scripts/run.sh',
+      path: '/ws/anna/.octopus/scripts/run.sh',
+      contents: 'bin/rails server -p $OCTOPUS_PORT'
     }
 
     it('shows every byte of it and refuses to run until it is allowed', async () => {
@@ -619,91 +619,10 @@ describe('RightPanel', () => {
       })
       await userEvent.click(scriptsTab())
 
-      expect(screen.getByText('.conductor/settings.toml')).toBeInTheDocument()
+      expect(screen.getByText('.octopus/scripts/run.sh')).toBeInTheDocument()
       expect(screen.getByText(fromRepo.contents)).toBeInTheDocument()
       // Not a button that quietly does nothing: the notice above says why.
       expect(screen.getByRole('button', { name: 'Run' })).toBeDisabled()
-    })
-
-    it('names the file once, however many scripts came out of it', async () => {
-      // All three usually come from one settings.toml, and the path above each
-      // box said the same thing three times without saying anything.
-      const from = '.conductor/settings.toml'
-      const of = (kind: ScriptKind): ResolvedScript => ({
-        kind,
-        source: 'repoConductor',
-        from,
-        run: { type: 'command', command: `${kind} it` },
-        contents: `${kind} it`
-      })
-
-      renderPanel({
-        workspaces: [anna],
-        activeWorkspaceId: anna.id,
-        scripts: scriptsFor({
-          approved: false,
-          scripts: { setup: of('setup'), run: of('run'), archive: of('archive') }
-        })
-      })
-      await userEvent.click(scriptsTab())
-
-      // Inside the panel alone: the Build half's own header names its source
-      // too, and that one is right to.
-      // `!` is allowed in tests, and the notice has just been found, so its
-      // parent exists by construction.
-      const panel = within((await screen.findByText(/This repository supplies/)).parentElement!)
-      expect(panel.getAllByText(from)).toHaveLength(1)
-      expect(panel.getByText('setup it')).toBeInTheDocument()
-      expect(panel.getByText('archive it')).toBeInTheDocument()
-    })
-
-    /*
-     * The one thing the notice above cannot promise. A file's body **is** the
-     * program, so approving every byte of it approves what runs. A `.conductor`
-     * script is a command line — a pointer — and the file it points at is
-     * neither shown nor digested, so a `git pull` that rewrites that file
-     * leaves the digest identical and the approval standing.
-     *
-     * `SECURITY.md` names exactly this as the failure it holds `repoSource.ts`
-     * to, so the card has to stop claiming more than the check keeps.
-     */
-    it('says a command line is approved as a line, not as what it runs', async () => {
-      renderPanel({
-        workspaces: [anna],
-        activeWorkspaceId: anna.id,
-        scripts: scriptsFor({
-          approved: false,
-          scripts: {
-            setup: {
-              kind: 'setup',
-              source: 'repoConductor',
-              from: '.conductor/settings.toml',
-              run: { type: 'command', command: './scripts/boot.sh' },
-              contents: './scripts/boot.sh'
-            }
-          }
-        })
-      })
-      await userEvent.click(scriptsTab())
-
-      expect(await screen.findByText(/Approving it approves the line/)).toBeInTheDocument()
-    })
-
-    // And not on the ordinary case, which is exactly digested: a sentence drawn
-    // on every card is one nobody reads by the second repository.
-    it('says nothing of the sort when every script is a file', async () => {
-      renderPanel({
-        workspaces: [anna],
-        activeWorkspaceId: anna.id,
-        scripts: scriptsFor({
-          approved: false,
-          scripts: { setup: { ...ownScript('setup'), source: 'repoOctopus' } }
-        })
-      })
-      await userEvent.click(scriptsTab())
-
-      await screen.findByText(/This repository supplies/)
-      expect(screen.queryByText(/Approving it approves the line/)).not.toBeInTheDocument()
     })
 
     it('keeps a long script from eating the tab, and lets it be read', async () => {
@@ -725,7 +644,7 @@ describe('RightPanel', () => {
         kind: 'setup',
         source: 'repoOctopus',
         from: '.octopus/scripts/setup.sh',
-        run: { type: 'file', path: '/ws/anna/.octopus/scripts/setup.sh' },
+        path: '/ws/anna/.octopus/scripts/setup.sh',
         contents: Array.from(
           { length: 120 },
           (_, line) => `# a comment long enough to need wrapping, line ${String(line)}`

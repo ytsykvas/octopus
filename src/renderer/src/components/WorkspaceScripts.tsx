@@ -33,15 +33,14 @@ interface WorkspaceScriptsProps {
   readonly visible: boolean
   /** The project's checkout, handed to every script as `$OCTOPUS_ROOT_PATH`. */
   /**
-   * The checkout and the base branch of a workspace's **own** project.
+   * The checkout of a workspace's **own** project.
    *
-   * A lookup rather than one pair for the open project, and that is what lets
-   * a runner outlive its project being left: `$OCTOPUS_ROOT_PATH` and
-   * `CONDUCTOR_DEFAULT_BRANCH` reach every script, so one set for whatever is
-   * on screen would build a workspace against a checkout that never asked.
+   * A lookup rather than one for the open project, and that is what lets a
+   * runner outlive its project being left: `$OCTOPUS_ROOT_PATH` reaches every
+   * script, so one checkout for whatever is on screen would build a workspace
+   * against a checkout that never asked.
    */
-  readonly projectFor: (workspaceId: string) => { rootPath: string; defaultBranch: string }
-  /** The base branch, for a script that reads it under Conductor's name. */
+  readonly projectFor: (workspaceId: string) => { rootPath: string }
   readonly onOpenSettings: () => void
   /**
    * This half's start token for a given workspace, from the Run sequence.
@@ -128,7 +127,6 @@ export function WorkspaceScripts({
             // No workspace, so no project of its own: this draws the "pick one"
             // text and runs nothing.
             rootPath=""
-            defaultBranch=""
             onOpenSettings={onOpenSettings}
           />
         </div>
@@ -149,7 +147,6 @@ export function WorkspaceScripts({
             script={scriptFor(workspace.id)}
             port={workspace.port}
             rootPath={projectFor(workspace.id).rootPath}
-            defaultBranch={projectFor(workspace.id).defaultBranch}
             onOpenSettings={onOpenSettings}
             onPort={(settled) => {
               onPort?.(workspace, settled)

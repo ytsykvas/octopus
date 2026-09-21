@@ -3,7 +3,6 @@ import { describe, expect, it } from 'vitest'
 import { ScriptKindSchema } from './scripts.js'
 import {
   BLOCK,
-  conductorEnv,
   PORT_VARIABLE,
   SCRIPT_KINDS,
   SLUG_MAX_LENGTH,
@@ -25,7 +24,7 @@ describe('workspaceSlug', () => {
   })
 
   it('replaces each character with exactly one underscore', () => {
-    // Length is what the shell pipelines this mirrors also preserve, and what a
+    // Length is what shell pipelines also preserve, and what a
     // truncation limit is only meaningful against.
     const name = 'a b-c.d'
     expect(workspaceSlug(name)).toHaveLength(name.length)
@@ -71,33 +70,6 @@ describe('blockPorts', () => {
   })
 })
 
-describe('conductorEnv', () => {
-  const values = {
-    rootPath: '/repo',
-    workspaceName: 'Fix login bug',
-    port: 3110,
-    defaultBranch: 'develop'
-  }
-
-  it("gives a Conductor script the slug as the workspace's name", () => {
-    /*
-     * Their scripts slugify whatever they are given before naming a database
-     * with it. Handing them the slug makes that a no-op, so the name their
-     * script drops and the name our env block wrote are one string.
-     */
-    expect(conductorEnv('setup', values)).toEqual({
-      CONDUCTOR_ROOT_PATH: '/repo',
-      CONDUCTOR_WORKSPACE_NAME: 'fix_login_bug',
-      CONDUCTOR_DEFAULT_BRANCH: 'develop'
-    })
-  })
-
-  it('gives the port to the server script alone, as we do', () => {
-    expect(conductorEnv('run', values)).toMatchObject({ CONDUCTOR_PORT: '3110' })
-    expect(conductorEnv('archive', values)).not.toHaveProperty('CONDUCTOR_PORT')
-  })
-})
-
 describe('scriptEnv', () => {
   const values = { rootPath: '/repo', workspaceName: 'Fix login bug', port: 3110 }
 
@@ -123,7 +95,7 @@ describe('scriptEnv', () => {
   })
 
   it('names every port it hands out', () => {
-    // Conductor documents a range and leaves the arithmetic to the script; the
+    // A range is documented and the arithmetic is left to the script; the
     // names are what make the other nine discoverable.
     const named = Object.keys(scriptEnv('run', values)).filter((key) =>
       key.startsWith(PORT_VARIABLE)

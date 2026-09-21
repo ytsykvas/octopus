@@ -61,21 +61,6 @@ export const TerminalSpecSchema = z.object({
    * Empty means a plain shell session.
    */
   command: z.array(z.string()).default([]),
-  /**
-   * A command line to run instead of `command`, when there is one.
-   *
-   * The two are not the same thing and cannot be. `command` is an argv and is
-   * quoted on the way to the shell, because a script's path contains a project
-   * id taken from a repository's directory name. A command line is the
-   * opposite: it comes from a repository's own settings, where
-   * `-p $CONDUCTOR_PORT` means what a shell would make of it, and quoting it
-   * would turn the whole line into the name of a program.
-   *
-   * So this is deliberately **not** quoted, and nothing may put it here that a
-   * person has not read and approved — `repoSource.ts` is where that is
-   * arranged.
-   */
-  commandLine: z.string().max(8_000).default(''),
   cols: z.number().int().min(1).max(1000).default(80),
   rows: z.number().int().min(1).max(1000).default(24),
   /**
@@ -170,9 +155,6 @@ export function shellQuote(argument: string): string {
  * `-i` (interactive) is deliberate: both auth flows prompt for input.
  */
 export function buildTerminalArgv(spec: TerminalSpec): readonly string[] {
-  // A command line first: it is the more specific of the two, and a spec
-  // carrying both would otherwise run the argv and drop it in silence.
-  if (spec.commandLine !== '') return ['-i', '-c', spec.commandLine]
   if (spec.command.length === 0) return []
   return ['-i', '-c', spec.command.map(shellQuote).join(' ')]
 }

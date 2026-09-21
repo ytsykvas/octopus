@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import type { ResolvedScript } from '@core/repoSource.js'
-import { conductorEnv, scriptEnv } from '@core/scriptEnv.js'
+import { scriptEnv } from '@core/scriptEnv.js'
 import type { ScriptKind } from '@core/scripts.js'
 import type { WorkspaceView } from '@core/workspaces.js'
 
@@ -25,8 +25,6 @@ interface ScriptRunnerProps {
   readonly port: number
   /** The project's own checkout, which a script cannot work out for itself. */
   readonly rootPath: string
-  /** The base branch, under the name Conductor's own scripts read it by. */
-  readonly defaultBranch: string
   readonly onOpenSettings: () => void
   /**
    * The port this run actually settled on.
@@ -79,7 +77,6 @@ export function ScriptRunner({
   script,
   port,
   rootPath,
-  defaultBranch,
   onOpenSettings,
   onPort,
   onGone,
@@ -112,7 +109,6 @@ export function ScriptRunner({
       script={script}
       port={port}
       rootPath={rootPath}
-      defaultBranch={defaultBranch}
       onPort={onPort}
       onGone={onGone}
       onRunning={onRunning}
@@ -129,7 +125,6 @@ interface RunnerProps {
   readonly script: ResolvedScript
   readonly port: number
   readonly rootPath: string
-  readonly defaultBranch: string
   readonly onPort: ((port: number) => void) | undefined
   readonly onGone: (() => void) | undefined
   readonly onRunning: ((running: boolean) => void) | undefined
@@ -152,7 +147,6 @@ function Runner({
   script,
   port: recordedPort,
   rootPath,
-  defaultBranch,
   onPort,
   onGone,
   onRunning,
@@ -440,26 +434,8 @@ function Runner({
             key={run}
             cwd={workspace.path}
             owner={{ workspaceId: workspace.id, purpose: kind }}
-            /*
-             * A file is executed; a command line goes to the shell as written.
-             * Exactly one of these is set, which is what `buildTerminalArgv`
-             * expects — the quoting rules for the two are opposites.
-             */
-            {...(script.run.type === 'file'
-              ? { command: [script.run.path] }
-              : { commandLine: script.run.command })}
-            env={{
-              ...scriptEnv(kind, { rootPath, workspaceName: workspace.name, port }),
-              // Only for a script that came from there — see `conductorEnv`.
-              ...(script.source === 'repoConductor'
-                ? conductorEnv(kind, {
-                    rootPath,
-                    workspaceName: workspace.name,
-                    port,
-                    defaultBranch
-                  })
-                : {})
-            }}
+            command={[script.path]}
+            env={scriptEnv(kind, { rootPath, workspaceName: workspace.name, port })}
             onExit={(exitCode) => {
               setRunning(false)
               onOutcome?.(exitCode === 0)

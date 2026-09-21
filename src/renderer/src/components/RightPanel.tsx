@@ -15,7 +15,7 @@ import { useTranslation } from 'react-i18next'
 
 import type { ProjectColor } from '@core/colors.js'
 import type { RightPanelTab } from '@core/config.js'
-import type { ResolvedScript, ScriptsInWorkspace } from '@core/repoSource.js'
+import type { ScriptsInWorkspace } from '@core/repoSource.js'
 import { SCRIPT_KINDS } from '@core/scriptEnv.js'
 import type { DiffCommentController } from '../hooks/useDiffComments.js'
 import type { FileRevertController } from '../hooks/useFileRevert.js'
@@ -147,16 +147,15 @@ interface RightPanelProps {
   readonly projectId: string | null
   /** The open project's checkout, handed to every script it runs. */
   /**
-   * The checkout and the base branch of a workspace's **own** project.
+   * The checkout and the env set of a workspace's **own** project.
    *
    * A lookup rather than the open project's pair. Every runner in the pane
-   * needs its own — they reach a script as `$OCTOPUS_ROOT_PATH` and
-   * `CONDUCTOR_DEFAULT_BRANCH` — and it is what lets a run survive the project
-   * being left, since unmounting a runner is how a run ends.
+   * needs its own — the checkout reaches a script as `$OCTOPUS_ROOT_PATH` — and
+   * it is what lets a run survive the project being left, since unmounting a
+   * runner is how a run ends.
    */
   readonly projectFor: (workspaceId: string) => {
     rootPath: string
-    defaultBranch: string
     envProfile: string
   }
   /**
@@ -170,7 +169,6 @@ interface RightPanelProps {
   readonly scriptFailures: ReadonlyMap<string, Failure>
   /** Re-reads the map, after an approval has changed the answer. */
   readonly onScriptsChanged: () => void
-  /** The open project's base branch, for a script that reads it as Conductor's. */
   /** Which set of variables the open project uses, before the list is read. */
   readonly defaultEnvProfile: string
   readonly onEditScripts: () => void
@@ -438,25 +436,11 @@ export function RightPanel({
           })()
         }
 
-  /**
-   * What the repository supplies, gathered by the file it came from.
-   *
-   * Usually one file holding all three, so this is one heading rather than the
-   * same path written three times.
-   */
-  const suppliedScripts = SCRIPT_KINDS.reduce<{ from: string; scripts: ResolvedScript[] }[]>(
-    (groups, kind) => {
-      const script = activeScripts?.scripts[kind]
-      if (script === undefined || script.source === 'project') return groups
-
-      const group = groups.find((candidate) => candidate.from === script.from)
-      if (group === undefined) return [...groups, { from: script.from, scripts: [script] }]
-
-      group.scripts.push(script)
-      return groups
-    },
-    []
-  )
+  /** What the repository supplies, in the order the scripts run. */
+  const suppliedScripts = SCRIPT_KINDS.flatMap((kind) => {
+    const script = activeScripts?.scripts[kind]
+    return script === undefined || script.source === 'project' ? [] : [script]
+  })
 
   /** Why this workspace has no scripts, where there is a reason. */
   const scriptFailure =
@@ -865,15 +849,6 @@ export function RightPanel({
           <div className="border-line bg-muted/40 shrink-0 space-y-2 border-b px-3 py-2.5">
             <p className="text-ink-soft leading-relaxed">{t('scripts.repoNotice')}</p>
 
-            {/* Only where one of these is a command line, because only there is
-                the sentence above short of the truth: a file's body is the
-                program, and a line is a pointer at one this never reads. Drawn
-                on every card it would be noise on the ordinary
-                `.octopus/scripts/` case, which is exactly digested. */}
-            {suppliedScripts.some(({ scripts: supplied }) =>
-              supplied.some((script) => script.run.type === 'command')
-            ) && <p className="text-ink-soft leading-relaxed">{t('scripts.repoCommandNotice')}</p>}
-
             {/* Bounded, with a scroll of its own.
                 
                 The block around it is `shrink-0`, so without a ceiling here a
@@ -884,27 +859,21 @@ export function RightPanel({
                 and the button stay outside this box on purpose — they are the
                 two things that must never scroll out of reach. */}
             <div className="max-h-[38vh] space-y-2 overflow-y-auto">
-              {/* Grouped by the file they came from. All three usually come from
-                  one `settings.toml`, and naming it above each box said the same
-                  path three times without saying anything. */}
-              {suppliedScripts.map(({ from, scripts: supplied }) => (
-                <div key={from}>
-                  <p className="text-ink-faint font-mono text-[11px]">{from}</p>
-                  {supplied.map((script) => (
-                    <pre
-                      key={script.kind}
-                      /* Wrapped rather than scrolled sideways. `overflow-x-auto`
-                         alone did clip correctly — but macOS hides the scrollbar
-                         until it moves, so 80-column shell in a 354px box read
-                         as text simply cut off. Asking somebody to scroll every
-                         line right and back is not a way to read code they are
-                         being asked to approve. `overflow-x-auto` stays for the
-                         one thing wrapping cannot break: an unbroken token. */
-                      className="border-line bg-canvas mt-1 overflow-x-auto rounded-[var(--radius-control)] border px-2 py-1.5 font-mono text-[11px] break-words whitespace-pre-wrap"
-                    >
-                      {script.contents}
-                    </pre>
-                  ))}
+              {suppliedScripts.map((script) => (
+                <div key={script.kind}>
+                  <p className="text-ink-faint font-mono text-[11px]">{script.from}</p>
+                  <pre
+                    /* Wrapped rather than scrolled sideways. `overflow-x-auto`
+                       alone did clip correctly — but macOS hides the scrollbar
+                       until it moves, so 80-column shell in a 354px box read as
+                       text simply cut off. Asking somebody to scroll every line
+                       right and back is not a way to read code they are being
+                       asked to approve. `overflow-x-auto` stays for the one
+                       thing wrapping cannot break: an unbroken token. */
+                    className="border-line bg-canvas mt-1 overflow-x-auto rounded-[var(--radius-control)] border px-2 py-1.5 font-mono text-[11px] break-words whitespace-pre-wrap"
+                  >
+                    {script.contents}
+                  </pre>
                 </div>
               ))}
             </div>

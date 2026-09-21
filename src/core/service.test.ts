@@ -53,6 +53,13 @@ import { WorkspaceError } from './workspaces.js'
 
 const run = promisify(execFile)
 
+/** Writes a script the way a repository carries it: under `.octopus/scripts/`, executable. */
+async function carryScript(root: string, name: string, body: string): Promise<void> {
+  const path = join(root, '.octopus', 'scripts', name)
+  await mkdir(join(path, '..'), { recursive: true })
+  await writeFile(path, body, { encoding: 'utf8', mode: 0o755 })
+}
+
 /** One window's share out of a reading, by the key the account named it with. */
 function share(windows: UsageWindows | null, key: UsageLimit['key']): number | undefined {
   return windows?.limits.find((window) => window.key === key)?.utilization
@@ -1767,14 +1774,9 @@ describe('the cleanup script', () => {
     const workspace = await service.createWorkspaceIn(project.id)
 
     const marker = join(dir, 'unapproved.txt')
-    await mkdir(join(workspace.path, '.conductor'), { recursive: true })
-    await writeFile(
-      join(workspace.path, '.conductor', 'settings.toml'),
-      `[scripts]\narchive = "printf ran > '${marker}'"\n`,
-      'utf8'
-    )
+    await carryScript(workspace.path, 'archive.sh', `#!/bin/sh\nprintf ran > '${marker}'\n`)
 
-    // `force`, because writing the settings into the worktree is itself an
+    // `force`, because writing the script into the worktree is itself an
     // uncommitted change.
     await service.removeWorkspaceById(workspace.id, { deleteBranch: false, force: true })
 
@@ -1783,23 +1785,18 @@ describe('the cleanup script', () => {
   })
 
   /*
-   * A worktree is where an agent works, so a half-written or conflict-marked
-   * settings file is ordinary rather than exotic — and this app ships a
-   * "resolve conflicts" action. Before the guard, one such file made its
-   * workspace impossible to remove from the interface at all.
+   * A worktree is where an agent works, so an odd layout is ordinary rather
+   * than exotic. Before the guard, a symlinked `.octopus/` made its workspace
+   * impossible to remove from the interface at all.
    */
-  it('removes the workspace even when the repository settings cannot be read', async () => {
+  it('removes the workspace even when the repository scripts cannot be read', async () => {
     const repo = join(dir, 'planner')
     await initRepo(repo)
     const project = await service.addProjectFromPath(repo)
     const workspace = await service.createWorkspaceIn(project.id)
 
-    await mkdir(join(workspace.path, '.conductor'), { recursive: true })
-    await writeFile(
-      join(workspace.path, '.conductor', 'settings.toml'),
-      '<<<<<<< HEAD\n[scripts]\narchive = "true"\n=======\n',
-      'utf8'
-    )
+    await mkdir(join(dir, 'elsewhere'), { recursive: true })
+    await symlink(join(dir, 'elsewhere'), join(workspace.path, '.octopus'))
 
     await expect(
       service.removeWorkspaceById(workspace.id, { deleteBranch: false, force: true })
@@ -1814,18 +1811,15 @@ describe('the cleanup script', () => {
     const workspace = await service.createWorkspaceIn(project.id)
 
     const marker = join(dir, 'approved.txt')
-    await mkdir(join(workspace.path, '.conductor'), { recursive: true })
-    await writeFile(
-      join(workspace.path, '.conductor', 'settings.toml'),
-      `[scripts]\narchive = "printf '%s' \\"$CONDUCTOR_WORKSPACE_NAME\\" > '${marker}'"\n`,
-      'utf8'
+    await carryScript(
+      workspace.path,
+      'archive.sh',
+      `#!/bin/sh\nprintf '%s' "$OCTOPUS_WORKSPACE_NAME" > '${marker}'\n`
     )
     await service.approveWorkspaceScripts(workspace.id)
 
     await service.removeWorkspaceById(workspace.id, { deleteBranch: false, force: true })
 
-    // Conductor's own name for the workspace, and the slug rather than the
-    // label — which is what makes their setup and archive agree.
     await expect(readFile(marker, 'utf8')).resolves.toBe(workspace.name)
   })
 })
@@ -1882,10 +1876,10 @@ describe('instructions a repository supplies', () => {
     const workspace = await service.createWorkspaceIn(project.id)
     await service.saveProjectInstruction(project.id, 'pullRequest', 'the local one\n')
 
-    await mkdir(join(workspace.path, '.conductor'), { recursive: true })
+    await mkdir(join(workspace.path, '.octopus', 'instructions'), { recursive: true })
     await writeFile(
-      join(workspace.path, '.conductor', 'settings.toml'),
-      '[prompts]\ncreate_pr = "always target develop"\n',
+      join(workspace.path, '.octopus', 'instructions', 'pull-request.md'),
+      'always target develop',
       'utf8'
     )
 
@@ -1901,10 +1895,10 @@ describe('instructions a repository supplies', () => {
     const workspace = await service.createWorkspaceIn(project.id)
     await service.saveProjectInstruction(project.id, 'commitMessage', 'ours\n')
 
-    await mkdir(join(workspace.path, '.conductor'), { recursive: true })
+    await mkdir(join(workspace.path, '.octopus', 'instructions'), { recursive: true })
     await writeFile(
-      join(workspace.path, '.conductor', 'settings.toml'),
-      '[prompts]\ncreate_pr = "theirs"\n',
+      join(workspace.path, '.octopus', 'instructions', 'pull-request.md'),
+      'theirs',
       'utf8'
     )
 
@@ -2106,16 +2100,16 @@ describe('removing a project', () => {
     expect(service.listProjects()).toHaveLength(0)
   })
 
-  it('removes the project even when the repository settings cannot be read', async () => {
-    // Worse than the workspace case: one unparseable file in one worktree used
-    // to make the whole project impossible to remove.
+  it('removes the project even when the repository scripts cannot be read', async () => {
+    // Worse than the workspace case: one odd layout in one worktree used to
+    // make the whole project impossible to remove.
     const repo = join(dir, 'planner')
     await initRepo(repo)
     const project = await service.addProjectFromPath(repo)
     const workspace = await service.createWorkspaceIn(project.id)
 
-    await mkdir(join(workspace.path, '.conductor'), { recursive: true })
-    await writeFile(join(workspace.path, '.conductor', 'settings.toml'), 'scripts = [[[', 'utf8')
+    await mkdir(join(dir, 'elsewhere'), { recursive: true })
+    await symlink(join(dir, 'elsewhere'), join(workspace.path, '.octopus'))
 
     await expect(service.removeProjectById(project.id)).resolves.toBeUndefined()
     expect(service.listProjects()).toHaveLength(0)
@@ -2134,12 +2128,7 @@ describe('removing a project', () => {
     const workspace = await service.createWorkspaceIn(project.id)
 
     const marker = join(dir, 'project-cleanup.txt')
-    await mkdir(join(workspace.path, '.conductor'), { recursive: true })
-    await writeFile(
-      join(workspace.path, '.conductor', 'settings.toml'),
-      `[scripts]\narchive = "printf ran > '${marker}'"\n`,
-      'utf8'
-    )
+    await carryScript(workspace.path, 'archive.sh', `#!/bin/sh\nprintf ran > '${marker}'\n`)
 
     await service.removeProjectById(project.id)
 
@@ -2153,11 +2142,10 @@ describe('removing a project', () => {
     const workspace = await service.createWorkspaceIn(project.id)
 
     const marker = join(dir, 'project-cleanup-approved.txt')
-    await mkdir(join(workspace.path, '.conductor'), { recursive: true })
-    await writeFile(
-      join(workspace.path, '.conductor', 'settings.toml'),
-      `[scripts]\narchive = "printf '%s' \\"$CONDUCTOR_WORKSPACE_NAME\\" > '${marker}'"\n`,
-      'utf8'
+    await carryScript(
+      workspace.path,
+      'archive.sh',
+      `#!/bin/sh\nprintf '%s' "$OCTOPUS_WORKSPACE_NAME" > '${marker}'\n`
     )
     await service.approveWorkspaceScripts(workspace.id)
 
@@ -2301,66 +2289,6 @@ describe('files carried into a workspace', () => {
     await service.saveProjectCarryList(id, '.env\nconfig/master.key\n')
 
     await expect(service.readProjectCarryList(id)).resolves.toBe('.env\nconfig/master.key\n')
-  })
-
-  describe('what the repository declares', () => {
-    async function declaring(globs: readonly string[]): Promise<string> {
-      const { id, repo } = await withProject()
-      await mkdir(join(repo, '.conductor'), { recursive: true })
-      await writeFile(
-        join(repo, '.conductor', 'settings.toml'),
-        `file_include_globs = """\n${globs.join('\n')}\n"""\n`,
-        'utf8'
-      )
-      return id
-    }
-
-    it('answers with nothing where the checkout declares nothing', async () => {
-      const { id } = await withProject()
-      await expect(service.declaredCarryFiles(id)).resolves.toBeNull()
-    })
-
-    /* The reconciliation, and it runs one way only: what the list already names
-       is settled, and what it names beyond the declaration is nobody's problem
-       — the list is the thing that decides. */
-    it('says which declarations the carry list already names', async () => {
-      const id = await declaring(['.env', 'config/master.key'])
-      await service.saveProjectCarryList(id, '.env\n')
-
-      await expect(service.declaredCarryFiles(id)).resolves.toEqual({
-        path: '.conductor/settings.toml',
-        files: [
-          { glob: '.env', pattern: false, carried: true },
-          { glob: 'config/master.key', pattern: false, carried: false }
-        ]
-      })
-    })
-
-    // The left side of `a = b` is the path, so a declaration matching it is
-    // carried however the line was written.
-    it('counts a declaration carried from another checkout as carried', async () => {
-      const id = await declaring(['.env'])
-      await service.saveProjectCarryList(id, '.env = /elsewhere/planner/.env\n')
-
-      await expect(service.declaredCarryFiles(id)).resolves.toMatchObject({
-        files: [{ glob: '.env', carried: true }]
-      })
-    })
-
-    /* Settings a workspace half-wrote should not take a settings screen down:
-       this is a courtesy beside a list that works without it, which is the same
-       reasoning `cleanupFor` gives for swallowing the same failure. */
-    it('answers with nothing rather than throwing on settings it cannot read', async () => {
-      const { id, repo } = await withProject()
-      await mkdir(join(repo, '.conductor'), { recursive: true })
-      await writeFile(join(repo, '.conductor', 'settings.toml'), 'file_include_globs = [[[', 'utf8')
-
-      await expect(service.declaredCarryFiles(id)).resolves.toBeNull()
-    })
-
-    it('refuses a project it does not have', async () => {
-      await expect(service.declaredCarryFiles('missing')).rejects.toThrow()
-    })
   })
 
   /*
@@ -2691,10 +2619,10 @@ describe('scripts a repository supplies', () => {
 
   it('does not run a repository script until it has been read', async () => {
     const { workspaceId } = await withWorkspace()
-    await inWorktree(workspaceId, '.conductor/settings.toml', '[scripts]\nsetup = "make dev"\n')
+    await inWorktree(workspaceId, '.octopus/scripts/setup.sh', '#!/bin/sh\nmake dev\n')
 
     const before = await service.workspaceScripts(workspaceId)
-    expect(before.scripts.setup?.source).toBe('repoConductor')
+    expect(before.scripts.setup?.source).toBe('repoOctopus')
     expect(before.approved).toBe(false)
 
     await service.approveWorkspaceScripts(workspaceId)
@@ -2705,10 +2633,10 @@ describe('scripts a repository supplies', () => {
     // The point of a digest rather than a flag: a `git pull` that rewrites the
     // build script is a new thing to read.
     const { workspaceId } = await withWorkspace()
-    await inWorktree(workspaceId, '.conductor/settings.toml', '[scripts]\nsetup = "make dev"\n')
+    await inWorktree(workspaceId, '.octopus/scripts/setup.sh', '#!/bin/sh\nmake dev\n')
     await service.approveWorkspaceScripts(workspaceId)
 
-    await inWorktree(workspaceId, '.conductor/settings.toml', '[scripts]\nsetup = "curl | sh"\n')
+    await inWorktree(workspaceId, '.octopus/scripts/setup.sh', '#!/bin/sh\ncurl | sh\n')
 
     await expect(service.workspaceScripts(workspaceId)).resolves.toMatchObject({ approved: false })
   })
@@ -2727,56 +2655,40 @@ describe('scripts a repository supplies', () => {
     // Settings opens with no workspace as often as with one, and every worktree
     // is cut from this checkout.
     const { projectId, repo } = await withWorkspace()
-    await mkdir(join(repo, '.conductor'), { recursive: true })
-    await writeFile(
-      join(repo, '.conductor', 'settings.toml'),
-      '[scripts]\nrun = "make s"\n',
-      'utf8'
-    )
+    await carryScript(repo, 'run.sh', '#!/bin/sh\nmake s\n')
 
     const answer = await service.projectScripts(projectId, null)
 
-    expect(answer.scripts.run?.source).toBe('repoConductor')
+    expect(answer.scripts.run?.source).toBe('repoOctopus')
     expect(answer.approved).toBe(false)
   })
 
   it('answers about the workspace when one is open, not about the checkout', async () => {
     /*
      * The defect this fixes, from the real app. planner's checkout sat on a
-     * branch that still had a `.conductor/` while every worktree was cut from
-     * one carrying an `.octopus/` — so Project settings named three scripts
-     * that were never going to run, and marked the editors read-only against
-     * them.
+     * branch with one set of scripts while every worktree was cut from one
+     * carrying another — so Project settings named three scripts that were
+     * never going to run, and marked the editors read-only against them.
      */
     const { projectId, workspaceId, repo } = await withWorkspace()
 
-    await mkdir(join(repo, '.conductor'), { recursive: true })
-    await writeFile(
-      join(repo, '.conductor', 'settings.toml'),
-      '[scripts]\nsetup = "the checkout\'s"\n',
-      'utf8'
-    )
+    await carryScript(repo, 'setup.sh', "#!/bin/sh\n# the checkout's\n")
     await inWorktree(workspaceId, '.octopus/scripts/setup.sh', "#!/bin/sh\n# the worktree's\n")
 
     const forWorkspace = await service.projectScripts(projectId, workspaceId)
-    expect(forWorkspace.scripts.setup?.source).toBe('repoOctopus')
+    expect(forWorkspace.scripts.setup?.contents).toContain("the worktree's")
 
     // And the checkout is still the answer when there is no workspace to ask
     // about, which is how the dialog opens from the sidebar.
     const forCheckout = await service.projectScripts(projectId, null)
-    expect(forCheckout.scripts.setup?.source).toBe('repoConductor')
+    expect(forCheckout.scripts.setup?.contents).toContain("the checkout's")
   })
 
   it('lets a trusted repository run without being read first', async () => {
     // The switch in Project settings. Off, every version is shown once; on,
     // whatever the checkout holds runs — reasonable for a repository you write.
     const { projectId, repo } = await withWorkspace()
-    await mkdir(join(repo, '.conductor'), { recursive: true })
-    await writeFile(
-      join(repo, '.conductor', 'settings.toml'),
-      '[scripts]\nrun = "make s"\n',
-      'utf8'
-    )
+    await carryScript(repo, 'run.sh', '#!/bin/sh\nmake s\n')
     await service.updateProjectById(projectId, { trustRepoScripts: true })
 
     await expect(service.projectScripts(projectId, null)).resolves.toMatchObject({

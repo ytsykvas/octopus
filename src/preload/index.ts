@@ -6,7 +6,6 @@ import type {
   ChatEvent,
   ChatsChangedEvent,
   ChatStatusEvent,
-  DeclaredCarryFiles,
   PermissionAnswer,
   PermissionRequest,
   RateLimit,
@@ -553,8 +552,7 @@ const api = {
      * The instruction this workspace would send.
      *
      * Three layers, not two: the **repository's** own — `.octopus/instructions`
-     * or Conductor's `[prompts]` — then the project's copy, then the
-     * installation's. The first is a fact about the branch in front of you
+     * — then the project's copy, then the installation's. The first is a fact about the branch in front of you
      * rather than a setting, which is why it wins.
      */
     instruction: (workspaceId: string, kind: InstructionKind): Promise<Result<string>> =>
@@ -835,13 +833,6 @@ const api = {
      */
     cliPermissions: (projectId: string): Promise<Result<CliPermission[]>> =>
       ipcRenderer.invoke('permissions:cli', projectId) as Promise<Result<CliPermission[]>>,
-
-    /**
-     * What the checkout's `.conductor` declares it needs, beside what the list
-     * above actually carries. Null where nothing declares anything.
-     */
-    declaredCarryFiles: (projectId: string): Promise<Result<DeclaredCarryFiles | null>> =>
-      ipcRenderer.invoke('carry:declared', projectId) as Promise<Result<DeclaredCarryFiles | null>>,
 
     /** The named sets of variables this project holds, and its default. */
     envProfiles: (

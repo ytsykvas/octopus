@@ -418,42 +418,6 @@ describe('ProjectSettings', () => {
     expect(await screen.findByDisplayValue('API_KEY=secret')).toBeInTheDocument()
   })
 
-  /*
-   * The declaration block writes the same file the box above it holds, so the
-   * box has to be told. Without this it goes on showing the text from before
-   * the append — and the reader's next edit saves that text back over it.
-   */
-  it('reloads the file list after the declaration block appends to it', async () => {
-    // A list that actually changes, rather than a queue of answers: the point
-    // is that the box reads the file again *after* something else wrote it.
-    let list = '.env\n'
-    vi.mocked(window.octopus.projects.readCarryList).mockImplementation(() =>
-      Promise.resolve({ ok: true, value: list })
-    )
-    vi.mocked(window.octopus.projects.saveCarryList).mockImplementation((_id, contents) => {
-      list = contents
-      return Promise.resolve({ ok: true, value: undefined })
-    })
-    vi.mocked(window.octopus.projects.declaredCarryFiles).mockResolvedValue({
-      ok: true,
-      value: {
-        path: '.conductor/settings.toml',
-        files: [{ glob: 'config/master.key', pattern: false, carried: false }]
-      }
-    })
-    const user = userEvent.setup()
-    await renderDialog()
-
-    await openSection(user, 'Files')
-    await user.click(await screen.findByRole('button', { name: /Add 1 entry/ }))
-
-    await waitFor(() => {
-      expect(screen.getByLabelText('Files carried into a workspace')).toHaveValue(
-        '.env\nconfig/master.key\n'
-      )
-    })
-  })
-
   it('saves an edited file list against the project it belongs to', async () => {
     vi.mocked(window.octopus.projects.readCarryList).mockResolvedValue({
       ok: true,
@@ -1316,9 +1280,9 @@ describe('ProjectSettings', () => {
   })
 
   it('names the file a script really comes from, and refuses to be typed into', async () => {
-    // Editing Build here with a `.conductor` present used to save happily and
-    // change nothing that runs: `resolveScript` returns the repository's
-    // command line regardless of what this file holds.
+    // Editing Build here with a repository script present would save happily
+    // and change nothing that runs: `resolveScript` returns the repository's
+    // file regardless of what this one holds.
     offerScripts()
     vi.mocked(window.octopus.projects.scripts).mockResolvedValue({
       ok: true,
@@ -1327,10 +1291,10 @@ describe('ProjectSettings', () => {
         scripts: {
           setup: {
             kind: 'setup',
-            source: 'repoConductor',
-            from: '.conductor/settings.toml',
-            run: { type: 'command', command: 'bin/setup' },
-            contents: 'bin/setup'
+            source: 'repoOctopus',
+            from: '.octopus/scripts/setup.sh',
+            path: '/repo/.octopus/scripts/setup.sh',
+            contents: '#!/bin/sh\nbin/setup\n'
           }
         }
       }
@@ -1340,7 +1304,7 @@ describe('ProjectSettings', () => {
 
     await openSection(user, 'Scripts')
 
-    expect(await screen.findByText(/\.conductor\/settings\.toml/)).toBeInTheDocument()
+    expect(await screen.findByText(/\.octopus\/scripts\/setup\.sh/)).toBeInTheDocument()
     expect(screen.getByLabelText('Build script')).toHaveAttribute('readonly')
     // The other two are the project's own and stay editable.
     expect(screen.getByLabelText('Server script')).not.toHaveAttribute('readonly')
@@ -1357,7 +1321,7 @@ describe('ProjectSettings', () => {
             kind: 'setup',
             source: 'project',
             from: '/scripts/setup.sh',
-            run: { type: 'file', path: '/scripts/setup.sh' },
+            path: '/scripts/setup.sh',
             contents: 'npm install'
           }
         }
@@ -1372,8 +1336,8 @@ describe('ProjectSettings', () => {
   })
 
   it('leaves the editors alone when the checkout cannot be read', async () => {
-    // A settings file with conflict markers in it is not a reason to tell
-    // somebody their own script does not run.
+    // A repository that cannot be read is not a reason to tell somebody their
+    // own script does not run.
     offerScripts()
     vi.mocked(window.octopus.projects.scripts).mockResolvedValue({
       ok: false,
