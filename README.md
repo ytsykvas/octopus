@@ -12,15 +12,30 @@ dedicated port.
 [![licence: MIT](https://img.shields.io/badge/licence-MIT-blue.svg)](LICENSE)
 ![macOS, Apple Silicon](https://img.shields.io/badge/macOS-Apple%20Silicon-111111)
 
-Built by **Yurii Tsykvas** — say hello:
-
-[![Telegram](https://img.shields.io/badge/Telegram-@tsykvas-26A5E4?logo=telegram&logoColor=white)](https://t.me/tsykvas)
-[![LinkedIn](https://img.shields.io/badge/LinkedIn-tsykvas-0A66C2?logo=linkedin&logoColor=white)](https://www.linkedin.com/in/tsykvas)
+[Quick start](#quick-start) · [What it does](#what-it-does) · [Docs](docs/README.md) · [Contributing](CONTRIBUTING.md)
 
 </div>
 
-Instead of waiting for one task to finish, you start several at once. They never
-see each other and never conflict.
+octopus is a local macOS app for starting several Claude Code tasks at once
+instead of waiting for one to finish. Each task gets a worktree, a branch, up to
+three agent conversations and a dev server of its own, so they never see each
+other and never conflict.
+
+## Quick start
+
+You build it yourself — there are no downloads, and [that is deliberate](#why-there-are-no-downloads).
+You need macOS 11+ on Apple Silicon, Node.js 22+, git and a Claude Code login;
+[the details](#installing) are below.
+
+```bash
+git clone https://github.com/ytsykvas/octopus.git
+cd octopus
+npm install
+npm run dist
+```
+
+That leaves `Octopus.app` in `dist/mac-arm64/`. Drag it to Applications and open
+it — no warning, no security prompt, nothing to click through.
 
 ## Why, when Claude Code already has worktrees
 
@@ -40,49 +55,38 @@ local-only, and is built to one person's taste.
 
 ## What it does
 
-**A workspace per task.** Adding one cuts a git worktree and a branch, and gives
-it a block of ten ports. Up to three agent conversations can run in it at once;
-each keeps its own transcript, model and mode, and survives a restart.
-
-**Build and run, on one button.** A project holds three scripts — `setup.sh`,
-`run.sh`, `archive.sh` — and Run does the first two in order. Several workspaces
-can serve at the same time, each on its own port.
-
-**The files a fresh worktree does not have.** A worktree holds what git tracks,
-so a gitignored `.env` or `config/master.key` is missing from every new one. A
-project names the files to copy in — from its own checkout, or from another one
-on the same disk, which is the answer when the project was cloned from GitHub and
-its checkout has no gitignored file to give. On top of that it can add a block of
-`KEY=value` overrides.
-
-**Settings that survive the machine.** A project's scripts, carried files and
-instructions can live in `~/.octopus`, which goes when the disk does — or in the
-repository itself, under `.octopus/`.
-The repository wins, so a clone works with nothing configured, and a second
-machine needs no setting up. What it may never carry is a credential: variables
-stay on the machine, so a pull can change what runs and never what it runs
-against. A script arriving that way is shown before it runs.
-
-**Run the whole pull request from here.** The right pane shows the diff against
-the base branch, takes comments on it, and opens a PR through `gh` — with a
-description the agent writes to whatever instructions the project keeps. From
-there the same pane follows it: the checks and whether they are still running,
-the review verdict, the threads people left on the code, and merge, squash or
-rebase when it is ready.
-
-**The agent is the one you already have.** octopus loads the same settings
-Claude Code loads in a terminal: the project's `CLAUDE.md`, its `.claude/`
-commands, skills and subagents. It adds nothing of its own to the context. A
-repository that ships settings which pre-approve tools or run hooks is shown to
-you once, before any of it is believed.
+- **A workspace per task.** Adding one cuts a git worktree and a branch, and
+  gives it a block of ten ports. Up to three agent conversations run in it at
+  once; each keeps its own transcript, model and mode, and survives a restart.
+- **Build and run, on one button.** A project holds three scripts — `setup.sh`,
+  `run.sh`, `archive.sh` — and Run does the first two in order. Several
+  workspaces can serve at the same time, each on its own port.
+- **The files a fresh worktree does not have.** A worktree holds what git
+  tracks, so a gitignored `.env` or `config/master.key` is missing from every new
+  one. A project names the files to copy in — from its own checkout, or from
+  another one on the same disk, which is the answer when it was cloned from
+  GitHub — and can add a block of `KEY=value` overrides on top.
+- **Settings that survive the machine.** Scripts, carried files and instructions
+  can live in `~/.octopus`, which goes when the disk does, or in the repository
+  itself under `.octopus/`. The repository wins, so a clone works with nothing
+  configured. What it may never carry is a credential: a pull can change what
+  runs and never what it runs against, and a script arriving that way is shown
+  before it runs.
+- **The whole pull request, from here.** The right pane shows the diff against
+  the base branch, takes comments on it and opens a PR through `gh`, with a
+  description the agent writes to your project's instructions. It then follows
+  the PR: checks, review verdict, threads, and merge, squash or rebase when it is
+  ready.
+- **The agent is the one you already have.** octopus loads the same settings
+  Claude Code loads in a terminal — the project's `CLAUDE.md`, its `.claude/`
+  commands, skills and subagents — and adds nothing to the context. A repository
+  that ships settings which pre-approve tools or run hooks is shown to you once,
+  before any of it is believed.
 
 The details behind each of these — the port pool, the env block, what a diff
 counts — are in [docs/](docs/README.md).
 
 ## Installing
-
-You build it yourself. There are no downloads, and that is deliberate — see
-[why](#why-there-are-no-downloads) below.
 
 **What you need first:**
 
@@ -97,20 +101,9 @@ You build it yourself. There are no downloads, and that is deliberate — see
 The agent itself is not one of these: the Claude Code binary comes down with
 `npm install` and lives inside the app.
 
-**Then:**
-
-```bash
-git clone https://github.com/ytsykvas/octopus.git
-cd octopus
-npm install
-npm run dist
-```
-
-That leaves `Octopus.app` in `dist/mac-arm64/`. Drag it to Applications and open
-it — no warning, no security prompt, nothing to click through.
-
-To run it in development instead, `npm run dev`. Only one copy runs at a time:
-it takes Electron's single-instance lock.
+Then follow the [quick start](#quick-start). To run it in development instead,
+use `npm run dev`. Only one copy runs at a time: it takes Electron's
+single-instance lock.
 
 ### Why there are no downloads
 
@@ -154,13 +147,11 @@ npm test         # tests
 npm run build    # typecheck and build
 ```
 
-`npm run check` must pass before every commit. Coverage is held at **100% across
-`src`** by a threshold that fails the build when it drops.
+`npm run check` must pass before every change lands. Coverage is held at **100%
+across `src`** by a threshold that fails the build when it drops.
 
 `src/main/`, `src/preload/` and anything in `src/core/` they import **do not hot
 reload** — a change there reaches the app only after `npm run dev` is restarted.
-
-## Layout
 
 ```
 src/core/         application logic, headless, no Electron
@@ -168,18 +159,19 @@ src/main/         Electron main process, thin IPC bridge, pseudo-terminals
 src/preload/      typed bridge to the renderer
 src/renderer/     UI (React + Tailwind + i18next)
 docs/             why things are shaped as they are — start at docs/README.md
-docs/PROJECT.md   the original intent, decisions and requirements
 ```
 
-## Localisation
-
-English is the default and the source of truth. Translations live in
-`src/renderer/src/i18n/locales/`; Ukrainian ships alongside English. TypeScript
+English is the default language and the source of truth for the interface;
+Ukrainian ships alongside it, in `src/renderer/src/i18n/locales/`. TypeScript
 requires every locale to carry every key.
 
-## Not there yet
+[CONTRIBUTING.md](CONTRIBUTING.md) covers the conventions the repository keeps.
+[docs/PROJECT.md](docs/PROJECT.md) holds the original intent and decisions.
 
-Notifications, a Monaco-based diff, and Linux and Windows builds.
+## Roadmap
+
+Not there yet: notifications, a Monaco-based diff, and Linux and Windows builds.
+Ideas and bugs are tracked as [issues](https://github.com/ytsykvas/octopus/issues).
 
 ## Contributing
 
@@ -193,8 +185,7 @@ every change has to pass and the conventions the repository keeps.
 - Telegram — [@tsykvas](https://t.me/tsykvas)
 - LinkedIn — [in/tsykvas](https://www.linkedin.com/in/tsykvas)
 
-Bugs and feature requests are better as
-[issues](https://github.com/ytsykvas/octopus/issues) than as messages: they stay
+Bugs and feature requests are better as issues than as messages: they stay
 searchable for whoever hits the same thing next.
 
 ## Licence
