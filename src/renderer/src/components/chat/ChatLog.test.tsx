@@ -447,7 +447,7 @@ describe('what the log shows', () => {
    *
    * Four chips: the folded tool row, the failure, the note against a plan and
    * the error. The card is in its own describe, with the plan's own dialog and
-   * everything else drawn as markdown still to come — `docs/tasks/` holds that.
+   * everything else drawn as markdown still to come.
    *
    * The tooltip is checked too. It is laid out by the same algorithm as the row
    * it hangs off, so a raw `title` is the same misreading with a delay.

@@ -276,8 +276,8 @@ async function start(): Promise<void> {
  * the data root at all — which is the whole of the point.
  *
  * The lock is keyed on Electron's own userData directory rather than on
- * `~/.octopus`, so a build whose userData differs is still unguarded; that is
- * recorded in `docs/tasks/` rather than left unsaid.
+ * `~/.octopus`, so a build whose userData differs is still unguarded. That is a
+ * known limit, stated here rather than left unsaid.
  */
 if (!app.requestSingleInstanceLock()) {
   app.quit()

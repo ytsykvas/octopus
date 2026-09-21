@@ -4,18 +4,17 @@ Written for whoever changes this code next — a person returning after a month,
 or an agent seeing it for the first time. It explains **why** things are shaped
 as they are; the code says what they do, and stays the authority on that.
 
-| Document                           | Read it when                                                                                             |
-| ---------------------------------- | -------------------------------------------------------------------------------------------------------- |
-| [PROJECT.md](PROJECT.md)           | you want the original intent: what this is, what it refuses to be, why the stack was chosen              |
-| [architecture.md](architecture.md) | you are adding anything and need to know which layer it belongs to                                       |
-| [core.md](core.md)                 | you are touching `src/core` — the modules, their contracts, the invariants                               |
-| [ipc.md](ipc.md)                   | you are adding a channel or wondering where a call ends up                                               |
-| [data.md](data.md)                 | you are changing what lives in `~/.octopus`, or adding a stored field                                    |
-| [repo-config.md](repo-config.md)   | you are looking at `.octopus/` in a repository, or wondering how settings survive a wiped installation   |
-| [ui.md](ui.md)                     | you are building a component, picking a colour, or laying something out                                  |
-| [testing.md](testing.md)           | you are writing tests, or a test is failing and you doubt the test                                       |
-| [releasing.md](releasing.md)       | you are building an app bundle, or wondering why there is nothing to download                            |
-| [tasks/](tasks/)                   | you have finished something and want the next thing, or you just found work and need somewhere to put it |
+| Document                           | Read it when                                                                                           |
+| ---------------------------------- | ------------------------------------------------------------------------------------------------------ |
+| [PROJECT.md](PROJECT.md)           | you want the original intent: what this is, what it refuses to be, why the stack was chosen            |
+| [architecture.md](architecture.md) | you are adding anything and need to know which layer it belongs to                                     |
+| [core.md](core.md)                 | you are touching `src/core` — the modules, their contracts, the invariants                             |
+| [ipc.md](ipc.md)                   | you are adding a channel or wondering where a call ends up                                             |
+| [data.md](data.md)                 | you are changing what lives in `~/.octopus`, or adding a stored field                                  |
+| [repo-config.md](repo-config.md)   | you are looking at `.octopus/` in a repository, or wondering how settings survive a wiped installation |
+| [ui.md](ui.md)                     | you are building a component, picking a colour, or laying something out                                |
+| [testing.md](testing.md)           | you are writing tests, or a test is failing and you doubt the test                                     |
+| [releasing.md](releasing.md)       | you are building an app bundle, or wondering why there is nothing to download                          |
 
 ## The shortest possible summary
 
@@ -32,7 +31,7 @@ src/renderer/  the interface.
 
 Two rules carry most of the weight, and both have been broken at least once:
 
-- **`core/` knows nothing about the UI** — a hook blocks importing `electron` there.
+- **`core/` knows nothing about the UI** — a lint rule blocks importing `electron` there.
 - **The renderer imports _types_ from core freely, but a _value_ only from a
   module free of Node dependencies.** Types are erased; values are not.
 

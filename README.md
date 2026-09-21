@@ -196,8 +196,7 @@ requires every locale to carry every key.
 
 Notifications, a Monaco-based diff, Linux and Windows builds, and replying to a
 review thread: a thread can be read in the right pane, but answering it still
-means going to GitHub. Work already identified but not done is written down one
-file at a time in [docs/tasks/](docs/tasks/).
+means going to GitHub.
 
 ## Contributing
 

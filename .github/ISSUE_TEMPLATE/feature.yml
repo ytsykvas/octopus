@@ -5,10 +5,7 @@ body:
   - type: markdown
     attributes:
       value: |
-        Worth checking [docs/tasks/](../../tree/main/docs/tasks) first — known
-        work is written down there one file at a time, and it may already be
-        listed. The non-goals in `docs/PROJECT.md` §5 say what this will not
-        become.
+        The non-goals in `docs/PROJECT.md` §5 say what this will not become.
 
   - type: textarea
     id: problem

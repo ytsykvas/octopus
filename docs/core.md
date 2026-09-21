@@ -301,9 +301,8 @@ retraction is evidence of: the agent started down a road and abandoned it.
 
 One case still has no line, and it is the SDK's rather than ours: a user who
 **declines the retry dialog** gets neither message. octopus does not draw that
-dialog either — `supportedDialogKinds` is undeclared, for the reasons in
-`docs/tasks/other-agent-dialogs-have-nowhere-to-appear.md` — so nothing is
-inconsistent, and it is worth knowing which silence is whose.
+dialog either — `supportedDialogKinds` is undeclared, and the CLI fails closed
+on a kind that is not declared — so nothing is inconsistent, and it is worth knowing which silence is whose.
 
 ### What the types leave unsaid is measured, not guessed
 
@@ -333,8 +332,8 @@ is the one that looked cheap because it never leaves the machine. The two used
 to be asked for together, so a turn's end cost the slower of them; they are
 asked for separately now, by the two things that want them. Loading a project's
 own settings does not move either figure: the same numbers come back from an
-empty directory and from this repository, with its `CLAUDE.md`, skills, hooks
-and MCP servers.
+empty directory and from a repository with a `CLAUDE.md`, skills, hooks and
+MCP servers.
 
 **And the whole of a read was measured later**, when the account block turned
 out to be lagging: `query()` to answer, including spawning the CLI, is
@@ -375,8 +374,7 @@ cost a dollar, and its `result` reported `input_tokens: 0` and
 neither idle nor free. Nothing reads those figures for anything but display, so
 this costs only the reading; it is written down because a zero that looks like a
 bug is worth recognising as the agent's own answer. The compaction itself is
-announced on `compact_boundary`, which is dropped — see
-[the two open tasks](tasks/) on what that costs.
+announced on `compact_boundary`, which is dropped.
 
 ### An answer travels as the tool's own arguments
 

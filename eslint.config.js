@@ -35,6 +35,24 @@ export default tseslint.config(
     rules: reactHooks.configs.recommended.rules
   },
   {
+    // §11.1: the core has to stay headless, so it can be tested without a
+    // display and extracted into a CLI or daemon later.
+    files: ['src/core/**/*.ts'],
+    rules: {
+      'no-restricted-imports': [
+        'error',
+        {
+          paths: [
+            {
+              name: 'electron',
+              message: 'core/ knows nothing about the UI — see docs/architecture.md.'
+            }
+          ]
+        }
+      ]
+    }
+  },
+  {
     files: ['**/*.{test,spec}.{ts,tsx}'],
     rules: {
       '@typescript-eslint/no-non-null-assertion': 'off',

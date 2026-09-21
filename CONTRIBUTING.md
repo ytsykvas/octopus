@@ -54,12 +54,12 @@ which question. The two rules that carry the most weight, and that have both bee
 broken at least once:
 
 - `src/core/` knows nothing about the UI, and must not import `electron` — a
-  git hook blocks it;
+  lint rule blocks it;
 - the renderer may import _types_ from any core module, but a _value_ only from
   one that pulls in nothing Node-only. Types are erased; values are not.
 
-[`docs/tasks/`](docs/tasks/) holds work that is known about and not done, one
-file each. It is a reasonable place to find something to pick up.
+[Issues](https://github.com/ytsykvas/octopus/issues) hold work that is known
+about and not done, and are a reasonable place to find something to pick up.
 
 ## Reporting something
 
