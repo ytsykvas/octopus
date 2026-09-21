@@ -15,27 +15,12 @@ dedicated port.
 Built by **Yurii Tsykvas** — say hello:
 
 [![Telegram](https://img.shields.io/badge/Telegram-@tsykvas-26A5E4?logo=telegram&logoColor=white)](https://t.me/tsykvas)
-[![WhatsApp](https://img.shields.io/badge/WhatsApp-message-25D366?logo=whatsapp&logoColor=white)](https://wa.me/qr/BIZ5LIYDL3THA1)
 [![LinkedIn](https://img.shields.io/badge/LinkedIn-tsykvas-0A66C2?logo=linkedin&logoColor=white)](https://www.linkedin.com/in/tsykvas)
 
 </div>
 
 Instead of waiting for one task to finish, you start several at once. They never
 see each other and never conflict.
-
-<!--
-  SCREENSHOTS GO HERE — the one thing this README is still missing.
-
-  Take three, put them in docs/screenshots/, and replace this comment:
-
-    ![The three panes](docs/screenshots/window.png)
-    ![Reviewing a diff](docs/screenshots/diff.png)
-    ![Several workspaces at once](docs/screenshots/workspaces.png)
-
-  Worth capturing: the full window with a real repository open; the right pane
-  showing a diff with a comment on it; the workspace list with two or three
-  running at the same time. Light or dark, but the same theme in all three.
--->
 
 ## Why, when Claude Code already has worktrees
 
@@ -194,9 +179,7 @@ requires every locale to carry every key.
 
 ## Not there yet
 
-Notifications, a Monaco-based diff, Linux and Windows builds, and replying to a
-review thread: a thread can be read in the right pane, but answering it still
-means going to GitHub.
+Notifications, a Monaco-based diff, and Linux and Windows builds.
 
 ## Contributing
 
@@ -208,7 +191,6 @@ every change has to pass and the conventions the repository keeps.
 **Yurii Tsykvas** — happy to hear from you about this or anything near it.
 
 - Telegram — [@tsykvas](https://t.me/tsykvas)
-- WhatsApp — [message](https://wa.me/qr/BIZ5LIYDL3THA1)
 - LinkedIn — [in/tsykvas](https://www.linkedin.com/in/tsykvas)
 
 Bugs and feature requests are better as
