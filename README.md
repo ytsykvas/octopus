@@ -50,11 +50,8 @@ have, and a diff you can read and comment on. Starting that by hand is a
 sequence you would not repeat willingly five times a day; the point of the app
 is that it is one click, five times a day.
 
-The other honest half: [Conductor](https://www.conductor.build/) does the same
-thing well, and its layout is where this one's comes from. octopus differs by
-adding nothing of its own to the agent's context, by being open source and
-local-only, and by being built to one person's taste. If Conductor suits you,
-use Conductor.
+octopus adds nothing of its own to the agent's context, is open source and
+local-only, and is built to one person's taste.
 
 ## What it does
 
@@ -75,7 +72,7 @@ its checkout has no gitignored file to give. On top of that it can add a block o
 
 **Settings that survive the machine.** A project's scripts, carried files and
 instructions can live in `~/.octopus`, which goes when the disk does — or in the
-repository itself, under `.octopus/` or the `.conductor/` it may already have.
+repository itself, under `.octopus/`.
 The repository wins, so a clone works with nothing configured, and a second
 machine needs no setting up. What it may never carry is a credential: variables
 stay on the machine, so a pull can change what runs and never what it runs

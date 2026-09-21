@@ -587,7 +587,7 @@ went wrong is worse than refusing to start.
 ## Scripts and instructions
 
 **Instructions come at three levels.** A worktree may carry them, in
-`.octopus/instructions/` or as Conductor's `[prompts]`, and that wins; below it
+`.octopus/instructions/`, and that wins; below it
 the files under a project's directory are the project's own; below that the same
 names under the data root's `instructions/` are the installation's.
 `effectiveInstruction` in `instructions.ts` writes down the lower two, and
@@ -611,7 +611,7 @@ they are worth reading in a diff, and they can be run or edited outside the app 
 which is the point of not owning the workflow (§4).
 
 They live under the data root, and that is the **last** place looked. A checkout
-carrying `.octopus/scripts/` or a `.conductor/` wins over both, so a clone runs
+carrying `.octopus/scripts/` wins over both, so a clone runs
 with nothing configured — and so a script can arrive with a `git pull`, which is
 why the version is shown once before it runs.
 [repo-config.md](repo-config.md) has the chain and the gate.
@@ -731,11 +731,10 @@ which is how "nothing to approve" is told apart from "approved" without a second
 field.
 
 `approvedScripts` beside it holds the same shape of digest over the scripts the
-**repository** supplies — `.octopus/scripts/*` or the command lines in
-`.conductor/settings.toml`. A separate list on purpose: what the agent may load
+**repository** supplies — `.octopus/scripts/*`. A separate list on purpose: what the agent may load
 and what the Run button may execute are different questions, and one list would
 mean reading a hook file quietly approved a build script. The kind goes into it
-beside the text, so allowing a line as the cleanup script is not allowing it as
+beside the text, so allowing a body as the cleanup script is not allowing it as
 the one that runs on every build. A script the user wrote in Project settings is
 never in it — approving your own text is a dialog people learn to click through.
 

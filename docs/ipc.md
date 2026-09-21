@@ -335,14 +335,10 @@ Two related rules, both learned the hard way:
   `exec` — a branch name reaching a shell is command injection;
 - nothing is interpolated into a shell command or AppleScript source.
 
-There is exactly one deliberate exception, and it is worth knowing rather than
-tripping over. A terminal opened for a script may be given a `commandLine`
-instead of an argv, and that string reaches `zsh -i -c` **as written** — because
-what it carries is a command line, and quoting `bin/rails s -p $OCTOPUS_PORT`
-would make the whole line the name of a program. It is not a hole in the rule
-above so much as the reason the rule has a shape: the only strings that go that
-way are ones a person or a repository wrote as a command, and a repository's is
-shown before it runs (see [repo-config.md](repo-config.md)).
+A terminal opened for a script is given an argv, and each argument is quoted on
+its way to `zsh -i -c`: a script's path contains a project id taken from a
+repository's directory name, so an unquoted join would run whatever its author
+put there.
 
 ## Adding a channel
 

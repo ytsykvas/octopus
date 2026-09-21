@@ -23,9 +23,9 @@ draw its own, which pushed the tab strip's fill up behind the traffic lights and
 put the project name under them. Its left padding clears the buttons outright,
 so nothing depends on how wide the tab strip happens to be.
 
-**Projects are a tab strip**; workspaces are a list of the active one. Conductor
-puts both in one tree, which outgrows the window and makes a click mean two
-things — select and fold. Splitting them means neither list grows with the other.
+**Projects are a tab strip**; workspaces are a list of the active one. Putting
+both in one tree outgrows the window and makes a click mean two things — select
+and fold. Splitting them means neither list grows with the other.
 
 **The fold sits at the foot of the strip**, as an icon. The strip is the part of
 that column which survives folding, so the control that brings the list back
@@ -727,11 +727,10 @@ somebody's script must not block them.
 **A run outlives the project being left, and unmounting is the only thing that
 ends one.** The pane draws a runner for every workspace it is given, not the
 open project's — which it used to, and the effect was that a dev server in one
-project died the moment another was opened. The filter had a real reason: three
-things reached every runner as the open project's, `$OCTOPUS_ROOT_PATH`,
-`CONDUCTOR_DEFAULT_BRANCH` and the env set a workspace falls back to, so a
-runner left standing would have built against a checkout that never asked for
-it. They are answered per workspace now, from its own project's record, and
+project died the moment another was opened. The filter had a real reason: two
+things reached every runner as the open project's, `$OCTOPUS_ROOT_PATH` and the
+env set a workspace falls back to, so a runner left standing would have built
+against a checkout that never asked for it. They are answered per workspace now, from its own project's record, and
 nothing is shared for the filter to protect.
 
 A workspace whose directory has gone loses all of them, `Run` included.
@@ -854,10 +853,9 @@ question a project answers once and the block is the one it keeps editing.
 ### What a repository is allowed to run
 
 **The Scripts tab shows the panel when there is something to read.** A checkout
-supplying its own scripts has them listed there — grouped by the file they came
-from, since all three of Conductor's live in one `settings.toml` and naming it
-three times reads as three files — with every byte of what would run, and `Run`
-disabled until it is allowed. This is where it belongs because it is the answer
+supplying its own scripts has them listed there — each under the file it came
+from — with every byte of what would run, and `Run` disabled until it is
+allowed. This is where it belongs because it is the answer
 to "why is Run doing nothing", and that question is asked in front of `Run`.
 
 After it is allowed the panel goes quiet, and the place to look is **Project
@@ -869,8 +867,8 @@ and is gone.
 
 **The Scripts section of that dialog names the source above each editor**, and
 makes it read-only where the repository supplies the script. It used to be three
-plain editors: with a `.conductor` present, editing Build there saved happily
-and changed nothing that runs. A box that takes an edit it will not honour is
+plain editors: with a repository script present, editing Build there saved
+happily and changed nothing that runs. A box that takes an edit it will not honour is
 worse than no box.
 
 **It asks about the workspace the dialog was opened from**, and about the

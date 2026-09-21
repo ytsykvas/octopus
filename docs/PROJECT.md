@@ -17,7 +17,7 @@ Instead of waiting for the agent to finish one task, the developer starts severa
 
 ## 2. The problem
 
-This way of working is already in use through [Conductor](https://www.conductor.build/), and the model itself has proven its worth. The implementation is what falls short:
+This way of working is already in use through existing tools, and the model itself has proven its worth. The implementation is what falls short:
 
 | Problem                                         | Consequence                                                            |
 | ----------------------------------------------- | ---------------------------------------------------------------------- |
@@ -39,7 +39,7 @@ makes it consistent rather than a hole is who is asking — the user, in a panel
 they opened, about one conversation. The app still withholds nothing on its
 own initiative.
 
-**Conductor's UI draws no complaints** — its layout is considered good and is taken as the model (§10.8).
+**The layout of the existing tools draws no complaints** — it is considered good and is taken as the model (§10.8).
 
 ---
 
@@ -98,7 +98,7 @@ The skills feature is the one place both halves need a sentence, because it look
 - Not an IDE replacement, not a terminal replacement.
 - Not for the App Store.
 
-- Not sold. Monetisation was designed in detail — tiers, a licence token, trial accounting — and then dropped, along with the section describing it. Two things killed it. A client-side licence check in an Electron app is bypassed by patching one file, so it can only ever be a convenience for honest people rather than protection; and Conductor, the direct comparison, gives its local application away and charges for cloud work this project does not do. Selling a local wrapper against a free one was a hard position for a benefit that was never real. The app is MIT-licensed and built from source.
+- Not sold. Monetisation was designed in detail — tiers, a licence token, trial accounting — and then dropped, along with the section describing it. Two things killed it. A client-side licence check in an Electron app is bypassed by patching one file, so it can only ever be a convenience for honest people rather than protection; and the closest existing tools give their local application away and charge for cloud work this project does not do. Selling a local wrapper against free ones was a hard position for a benefit that was never real. The app is MIT-licensed and built from source.
 
 **Not now:**
 
@@ -114,7 +114,7 @@ The skills feature is the one place both halves need a sentence, because it look
 | --------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Agent — Claude Code only                      | direct integration through the Agent SDK instead of an abstraction over several agents                                                                                                                                                                                          |
 | Distribution outside the App Store            | the sandbox (Guideline 2.4.5) forbids executing third-party binaries and writing outside the container (2.5.2); child processes do not inherit security-scoped access. Built from source and unsigned — a self-built app carries no quarantine flag, so it needs no certificate |
-| Layout — a project tab strip plus three panes | Conductor's UI is proven by daily use; the structure of the space is copied, the visual style is our own. Projects moved to a strip because one tree for projects and workspaces outgrows the window (§10.8)                                                                    |
+| Layout — a project tab strip plus three panes | That layout is proven by daily use in the existing tools; the structure of the space is copied, the visual style is our own. Projects moved to a strip because one tree for projects and workspaces outgrows the window (§10.8)                                                 |
 | Stack — Electron + TS + React                 | see sections 7–9                                                                                                                                                                                                                                                                |
 | Repository language — English                 | code, comments, tests, documentation; user-facing strings are localised, English being the default (§10.9)                                                                                                                                                                      |
 
@@ -306,7 +306,7 @@ Colours always go through tokens, never raw hex, otherwise the dark theme breaks
 
 ### 10.8 Screen layout
 
-Conductor's layout is the model — proven by daily use and free of complaints. What is copied is the **structure of the space**, not the styling.
+The layout of the existing tools is the model — proven by daily use and free of complaints. What is copied is the **structure of the space**, not the styling.
 
 ```
 ┌────┬──────────────┬──────────────────────────┬─────────────────────┐
@@ -449,7 +449,7 @@ Further rules:
 
 - Conventional Commits (`feat:`, `fix:`, `refactor:`, `test:`, `chore:`) — a readable history and a basis for changelog automation later.
 - Atomic commits: one logical change each.
-- Every substantial change reaches `main` through a branch and a pull request, which CI gates. While the repository is private and one person is developing in it, `main` also accepts direct pushes and **the remote enforces nothing** — branch protection is unavailable for a private repository on this plan. Protection goes back on when the repository goes public, administrators included; `CLAUDE.md` holds the reasoning and the story that produced it.
+- Every substantial change reaches `main` through a branch and a pull request, which CI gates. `main` is protected and refuses direct pushes, administrators included: a protection the only person who commits here can step over is decoration.
 
 ---
 
@@ -490,12 +490,12 @@ Further rules:
 - **Which set is a choice, not a comment.** A project keeps several — a dev one and a production one, say — one of them is its default, and any workspace may sit on another; `null` on a workspace means it follows the project, which is a third state rather than a copy taken at creation. This exists because the alternative was watched failing: a checkout whose `.env` carries both and switches by commenting a block out, copied into the settings while it happened to be on production, pointed every workspace at production — past a setup script written to prevent exactly that, because the block is written last and always wins. A set whose file has gone resolves to **nothing**, never to the default: a workspace pinned to production must not silently receive dev credentials, and an empty block fails loudly on a variable nobody wrote.
 - The sets are files under `envs/`, mode `0600` in a directory that is `0700` — at `0755` the _names_ are world-readable, and "prod" is information. A name is therefore a boundary rather than a label: lowercase letters, digits and dashes, enforced because macOS is case-insensitive by default and `Prod` and `prod` would be one file under two names.
 - All three scripts are given `$OCTOPUS_ROOT_PATH` (the checkout), `$OCTOPUS_WORKSPACE_NAME` and `$OCTOPUS_WORKSPACE_SLUG`; only the server also gets `$OCTOPUS_PORT`.
-- **The slug is the name in a form an identifier can hold** — lowercased, every other character an underscore, truncated to 30 so a prefix still fits inside Postgres' 63. The name is the label as typed and renaming only trims it, so `myapp_development_$OCTOPUS_WORKSPACE_NAME` writes `myapp_development_Fix login bug` the moment somebody renames a workspace to a sentence; dotenv reads to the first space and nothing says so. A script could slugify what it is given, but the env block is static text with no shell around it — and a per-workspace database is the main thing the block exists for. The rule is the one the shell pipelines in Conductor's own setup scripts use, so a slug built here and one built there are the same string, and the script that creates a database and the script that drops it cannot disagree.
-- **The scripts may come from the repository, and they win.** The chain for each of the three, in order: `.octopus/scripts/` in the worktree, then `.conductor/settings.toml`, then the project's own settings. A clone therefore works with nothing configured, which is the point — a second developer, or the same one on a second machine, does not write the same three scripts again. It is per script rather than per repository: a checkout naming only a server script leaves the other two to the project. `.conductor` is read because a repository already set up for the tool octopus is modelled on should work here unchanged; its scripts are **command lines** rather than files, so they go to a shell as written, and a script resolved from there is also given `CONDUCTOR_ROOT_PATH`, `CONDUCTOR_WORKSPACE_NAME`, `CONDUCTOR_DEFAULT_BRANCH` and — for the server — `CONDUCTOR_PORT`. The workspace name it receives is the **slug**, so the repository's own slugify is a no-op and the database its build script creates is the one its cleanup script drops.
+- **The slug is the name in a form an identifier can hold** — lowercased, every other character an underscore, truncated to 30 so a prefix still fits inside Postgres' 63. The name is the label as typed and renaming only trims it, so `myapp_development_$OCTOPUS_WORKSPACE_NAME` writes `myapp_development_Fix login bug` the moment somebody renames a workspace to a sentence; dotenv reads to the first space and nothing says so. A script could slugify what it is given, but the env block is static text with no shell around it — and a per-workspace database is the main thing the block exists for. The rule is the one shell pipelines commonly use, so a slug built here and one built in a script are the same string, and the script that creates a database and the script that drops it cannot disagree.
+- **The scripts may come from the repository, and they win.** The chain for each of the three, in order: `.octopus/scripts/` in the worktree, then the project's own settings. A clone therefore works with nothing configured, which is the point — a second developer, or the same one on a second machine, does not write the same three scripts again. It is per script rather than per repository: a checkout naming only a server script leaves the other two to the project.
 - **A repository's script does not run until somebody has read it.** Its text is shown in full on the Scripts tab — every byte, because an approval over a summary is an approval of the summary — and Run stays disabled until it is allowed. Approval is a digest, so a `git pull` that rewrites the script asks again, and it is kept in `approvedScripts`, a list of its own: what the agent may load and what the Run button may execute are different questions, and one list would mean reading a hook file quietly approved a build script. A script the user wrote in Project settings is never gated — asking somebody to approve their own text is a dialog they learn to click through. **Cleanup is the one exception**: nothing may stop a workspace being removed, so an unapproved script there is skipped rather than refused, which leaves a database behind and is the lesser of the two.
 - **The environment never comes from the repository.** Variables are credentials and stay on this machine. That is the line the whole arrangement rests on: the repository decides _what runs_, the machine decides _what it runs against_. A pull can change the build script; it cannot point a workspace at production.
 - **A repository may also carry a copy of the settings themselves.** Everything above lives under `~/.octopus`, which is one directory on one machine; a project's repository can hold the same scripts, carry list, instructions and fields in `.octopus/`, so a wiped installation is rebuilt from the repository rather than from memory.
-- **Import and Export are still how that copy moves** — Import shows every byte of a file before writing it, Export writes the directory from what the app holds. Which side is newer is deliberately never guessed: contents are all there is to go on after a clone, so the panel says the two differ and offers both directions. Nothing is written into `.conductor/`, ever; it is read and nothing else.
+- **Import and Export are still how that copy moves** — Import shows every byte of a file before writing it, Export writes the directory from what the app holds. Which side is newer is deliberately never guessed: contents are all there is to go on after a clone, so the panel says the two differ and offers both directions.
 - The env overrides are the one thing that never travels: they are credentials, and a secret pushed to a public remote has been published whatever the next commit does. Exporting is also the only write octopus makes inside a checkout, which is why `SECURITY.md` names the directory and a test walks the path constants. [repo-config.md](repo-config.md) is the whole of it.
 
 ### 12.3 The agent — the key requirement
@@ -534,7 +534,7 @@ dialog that fires on every edit is one people learn to click through.
 
 What octopus does **not** do is add: no text is appended to the system prompt, and no skill it wrote is bundled — the two stores it hands over hold what the user put in them. The prose the app sends is seven instruction files — describing a change for a pull request, writing a commit message, fixing failing checks, answering a review, reviewing one, reviewing it with several subagents, resolving a conflict — and each goes as a visible user message in the log. They are files rather than strings in the app precisely because of this section: a prompt nobody can read is a prompt nobody can correct, so each ships with a written template, is edited in Settings, and is overridden per project. Emptying one is how a project says it adds nothing.
 
-**A repository may supply that prose too**, through the same chain the scripts use: `.octopus/instructions/` in the worktree, then the four `[prompts]` in `.conductor/settings.toml` that have a counterpart here, then the project's, the installation's, and the written template. Unlike a script it is **not** gated — this text goes into the log as a visible user message, where it is read before it does anything, and a dialog in front of every one would be friction for no gain. `general` is deliberately not among the four: octopus adds nothing to the system prompt, and importing a general prompt would make it start doing so without saying it had.
+**A repository may supply that prose too**, through the same chain the scripts use: `.octopus/instructions/` in the worktree, then the project's, the installation's, and the written template. Unlike a script it is **not** gated — this text goes into the log as a visible user message, where it is read before it does anything, and a dialog in front of every one would be friction for no gain.
 
 The project settings dialog lists what the agent picked up on its own, so "what is it working from" is a question the app can answer.
 
@@ -643,7 +643,7 @@ per row would be a network call per row on every refresh.
 
 ### 12.5 On-disk layout
 
-Everything under one directory (Conductor spreads across `~/conductor` and `~/.conductor`):
+Everything under one directory:
 
 ```
 ~/.octopus/
@@ -724,14 +724,14 @@ The terminal moved into scope early: account sign-in needs an interactive sessio
 - **Workspace naming** — given names drawn at random from a pool of 256, task-derived names, or generated from the prompt text.
 - **Tool permissions** — settled for now: the read-only tools are automatic, everything else prompts in the chat, and an answer of "always" is stored per tool in the config where it can be taken back. The mode a new chat starts in is a global setting, so the question is not asked again on each new branch. Open: whether per-project profiles are needed, and whether "always" should narrow to an argument (`Bash(npm test:*)`) rather than a whole tool.
 - **Cross-platform** — whether Linux stays in the plans (affects CI only, not architecture).
-- **Task sources** — creating a workspace from a GitHub issue or a Linear ticket, as Conductor does.
+- **Task sources** — creating a workspace from a GitHub issue or a Linear ticket.
 - **Code review** — answered twice over. A note against a line rides out inside
   the next message, as readable text rather than as anything hidden (§4); and
   GitHub's review threads now appear on the same surface, with **Add to chat**
   putting a remark into the same composer strip the diff's own notes use. Still
   open is the other direction: a thread can be read here and not replied to, so
   the answer goes back as a commit or in a browser.
-- **Several agents per workspace** — half answered. The interface offers it: up to three conversations per workspace, no locking between them (§10.8). Still open is what two agents editing the same files at once actually does — the changes pane shows one diff for the workspace, with no way to tell whose work is whose, and a review note against a line may be about a line another conversation has since moved. Conductor allows it and warns about exactly that. `agent` is still an enum with one member, so a second _kind_ of agent remains a widened enum rather than a migration.
+- **Several agents per workspace** — half answered. The interface offers it: up to three conversations per workspace, no locking between them (§10.8). Still open is what two agents editing the same files at once actually does — the changes pane shows one diff for the workspace, with no way to tell whose work is whose, and a review note against a line may be about a line another conversation has since moved. `agent` is still an enum with one member, so a second _kind_ of agent remains a widened enum rather than a migration.
 - **What the list shows** — agent status, change count, CI state. Not session cost: the SDK's `total_cost_usd` is what the same tokens would have cost through the API, which a subscription never pays, and its own documentation calls it "an estimate, not a billing statement". Shown beside a workspace name it is a made-up number in a currency, and the second half of this stands — usage belongs on the list as tokens or as distance to a rate limit, if at all.
 
   Narrowed once, and the boundary is worth stating: the figure appears in exactly one place, the card `/usage` draws (§12.3). There it is not a number volunteered beside something else but the answer to the question that was asked — the command's own subject is what the session cost, and a card answering everything except that would be hiding it rather than declining to guess. Nowhere else: not the list, not the turn footer, not the composer's strip.
