@@ -44,6 +44,13 @@ allowed-tools: Bash(npm run:*), Bash(git status:*), Bash(git diff:*), Bash(git l
    One commit, one logical change. If the diff holds two unrelated things,
    split it.
 
+   Splitting a **file** is the awkward case, because `git add -p` is
+   interactive and an agent cannot drive it. Take `git show HEAD:<file>` into a
+   scratch copy, apply only this change's edits to it, and stage that with
+   `git update-index --cacheinfo 100644,$(git hash-object -w <copy>),<file>`;
+   the working tree keeps both changes. Then `git diff --cached --stat` must
+   name exactly this change's files, and nothing else, before committing.
+
 5. **Report.** Tell the user in plain Ukrainian what was recorded, and say the
    branch is waiting to be pushed and opened. Do not recite the diff.
 

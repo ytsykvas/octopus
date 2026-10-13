@@ -690,11 +690,12 @@ out for as long as planning lasts, and gives it back afterwards.
 **The three settings in the row do not all behave the same way, on purpose.**
 The **model** is read back: the context reading names what the session is
 running, so `/model opus` moves the chip and the record stays what was chosen
-here — `/model opusplan` aside, which the record follows (below). The **mode** and the **effort** are re-asserted on every message instead,
-because neither can be read — no SDK message reports the effort, and
-`applyFlagSettings` answers nothing. So `/effort high` and `/permissions` last
-one turn each: the control names the level the next message will run at, which
-is the reading that matters at the moment anyone consults it.
+here — `/model opusplan` aside, which the record follows (below). The **mode**
+and the **effort** are re-asserted on every message instead, because neither can
+be read — no SDK message reports the effort, and `applyFlagSettings` answers
+nothing. So `/effort high` and `/permissions` last one turn each: the control
+names the level the next message will run at, which is the reading that matters
+at the moment anyone consults it.
 
 **Every row of the panel names a model.** The catalogue's first entry does not:
 the CLI calls it `Default (recommended)`, which tells a reader nothing about
@@ -727,6 +728,10 @@ the panel shows it: the plan column ticks Opus and the code column Sonnet. Which
 rows those are is the catalogue's to say (`opus[1m]` where there is no plain
 `opus`), and where it cannot express the pair nothing changes. Any other
 `/model` still moves only the chip.
+
+The pair is written planning first and stops at a refusal, so a failed write
+never leaves half of it: the panel is either as it was or has the planning model
+set and the writing one on the default, with the error on the banner.
 
 **The footer's mode is one control over two stored fields.** `plan` is not a
 third degree of permission but a state the conversation is in: the agent runs
@@ -1587,11 +1592,11 @@ turn has stopped and is waiting on you.
 ### What is left of the account, at the foot of the left column
 
 The account's plan windows sit at the foot of the left column — under the tab
-strip as well as the workspace list, in the footer beside Settings — rather
-than above the composer, where they used to be. They say nothing about the conversation they
-were sitting in: the same set applies to every workspace, and the decision they
-inform is whether to start something at all, which is made looking at the list
-rather than at a chat.
+strip as well as the workspace list, in the footer beside Settings — rather than
+above the composer, where they used to be. They say nothing about the
+conversation they were sitting in: the same set applies to every workspace, and
+the decision they inform is whether to start something at all, which is made
+looking at the list rather than at a chat.
 
 **They are there before the first message.** The service keeps the last reading
 in `state.json`, beside the model catalogue and for the reason already written
@@ -1618,6 +1623,12 @@ than a turn. Three things keep the figures current:
 
 The control stays, because a press is still the right way to ask _now_. What it
 no longer is, is the only way.
+
+**None of the three runs while the list is folded away.** The block is drawn by
+a component that exists only while the list is open, so folding stops the timer
+and the focus listener with it, and unfolding is a coming back: it asks at once.
+`SidebarFooter` is where that is arranged — the footer itself is always there,
+because Settings and the fold are, and only the block inside it comes and goes.
 
 **Reads are coalesced, and a session started to answer is closed again.** All
 four askers can land at once, and each starting its own read would spawn its own

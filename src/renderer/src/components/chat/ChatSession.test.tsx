@@ -1035,6 +1035,80 @@ describe('the permission mode', () => {
     expect(ticked(planColumn())).toEqual(['Opus (1M context)'])
   })
 
+  /*
+   * Planning first, and the order is the point rather than a habit. Each write
+   * pushes the effective model to the running session, and with the writing
+   * model first a chat that was planning was told Sonnet for the moment before
+   * the plan model arrived. It also decides what a refusal leaves behind — see
+   * the two tests that follow.
+   */
+  it('writes the planning model before the writing model', async () => {
+    const user = userEvent.setup()
+    givenLiveCatalogue()
+    givenChat()
+    await openLoadedChat()
+    await screen.findByRole('button', { name: 'Model' })
+
+    await user.type(field(), '/model opusplan{Enter}')
+
+    await waitFor(() => {
+      expect(octopus().chats.setModel).toHaveBeenCalled()
+    })
+    const planned = vi.mocked(octopus().chats.setPlanModel).mock.invocationCallOrder[0] ?? 0
+    const written = vi.mocked(octopus().chats.setModel).mock.invocationCallOrder[0] ?? 0
+
+    expect(planned).toBeGreaterThan(0)
+    expect(planned).toBeLessThan(written)
+  })
+
+  /*
+   * Half a split is neither the old state nor the one asked for, and it needs
+   * only one refusal to happen. The first write is the one that says whether
+   * the bridge is there, so a refusal stops the second.
+   */
+  it('stops at a refused planning model rather than writing the other half', async () => {
+    const user = userEvent.setup()
+    givenLiveCatalogue()
+    givenChat()
+    await openLoadedChat()
+    await screen.findByRole('button', { name: 'Model' })
+    vi.mocked(octopus().chats.setPlanModel).mockResolvedValue({ ok: false, error: 'no such chat' })
+
+    await user.type(field(), '/model opusplan{Enter}')
+
+    expect(await screen.findByText(/no such chat/)).toBeInTheDocument()
+    expect(octopus().chats.setPlanModel).toHaveBeenCalledWith(CHAT_ID, 'opus[1m]')
+    expect(octopus().chats.setModel).not.toHaveBeenCalled()
+
+    await user.click(screen.getByRole('button', { name: 'Model' }))
+    expect(ticked(planColumn())[0]).toContain('Same as writing code')
+    expect(ticked(codeColumn()).join()).not.toContain('Sonnet')
+  })
+
+  /*
+   * The order is also what makes this failure harmless. With the writing model
+   * first, a refused second write left Sonnet for both jobs — and the session
+   * had been told, so planning would have run on it. Planning first leaves the
+   * writing model on the default, which is what the panel showed before.
+   */
+  it('keeps the planning model, and puts Sonnet nowhere, when the writing model is refused', async () => {
+    const user = userEvent.setup()
+    givenLiveCatalogue()
+    givenChat()
+    await openLoadedChat()
+    await screen.findByRole('button', { name: 'Model' })
+    vi.mocked(octopus().chats.setModel).mockResolvedValue({ ok: false, error: 'no such chat' })
+
+    await user.type(field(), '/model opusplan{Enter}')
+
+    expect(await screen.findByText(/no such chat/)).toBeInTheDocument()
+    expect(octopus().chats.setPlanModel).toHaveBeenCalledWith(CHAT_ID, 'opus[1m]')
+
+    await user.click(screen.getByRole('button', { name: 'Model' }))
+    expect(ticked(planColumn())).toEqual(['Opus (1M context)'])
+    expect(ticked(codeColumn()).join()).not.toContain('Sonnet')
+  })
+
   // The command goes to the CLI first and the panel follows it, so a message
   // that was refused cannot leave a split behind for a command that never ran.
   it('leaves the panel alone when the command was not accepted', async () => {

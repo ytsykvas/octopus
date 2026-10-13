@@ -518,7 +518,7 @@ reaching the window carries the lot.
 cached beside the rate limit and go no further, on the reasoning above — a
 reading restored after a night would be drawn with full confidence and be
 wrong. They are written to `state.json` as `usageWindows`, because they moved
-out of the composer and into the sidebar, where they are on screen from the
+out of the composer and into the left column's footer, where they are on screen from the
 moment the window opens. The block fills within a second of the window taking
 focus now, so what this buys is that second rather than a whole launch — and a
 block drawn empty for it would flicker on every start.
@@ -544,7 +544,7 @@ per read would put the busiest path in the app on the state
 file to record a number that had not moved.
 
 Three things write it now — a turn ending, a `/usage` somebody typed, and the
-sidebar's own refresh — through one function, so they cannot drift about when a
+limits block's own refresh — through one function, so they cannot drift about when a
 reading counts as new.
 
 The `usage` event in a transcript is not an exception to any of that, though it

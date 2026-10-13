@@ -124,8 +124,17 @@ export interface ChatController {
   readonly setMode: (mode: ChatMode) => Promise<void>
   readonly setEffort: (effort: EffortChoice) => Promise<void>
   readonly setPlanEffort: (effort: EffortChoice | null) => Promise<void>
-  readonly setModel: (model: string | null) => Promise<void>
-  readonly setPlanModel: (model: string | null) => Promise<void>
+  /**
+   * The model for writing code. Resolves `true` once the core has taken it and
+   * `false` when it was not — the reason is on the error banner already.
+   *
+   * These two say so, unlike the other settings, because `/model opusplan`
+   * writes a pair and has to stop at the first refusal rather than leave half
+   * of it behind.
+   */
+  readonly setModel: (model: string | null) => Promise<boolean>
+  /** The model for planning; resolves as `setModel` does. */
+  readonly setPlanModel: (model: string | null) => Promise<boolean>
   /**
    * The conversation's record, created if this is the first thing to need one.
    *
@@ -492,18 +501,25 @@ export function useChat(
   )
 
   /**
-   * One of the chat's settings, changed.
+   * One of the chat's settings, changed — and whether it was.
    *
-   * All three go the same way — make sure there is a record, tell the core,
-   * then move the local copy or report why not — and written out three times
-   * the differences would be where the bugs hid. `patch` is applied only after
-   * the core agrees, so a refused change leaves the picker showing what is
-   * actually in force.
+   * All of them go the same way — make sure there is a record, tell the core,
+   * then move the local copy or report why not — and written out each time the
+   * differences would be where the bugs hid. `patch` is applied only after the
+   * core agrees, so a refused change leaves the picker showing what is actually
+   * in force.
+   *
+   * Answers `false` when no record could be made or the core refused, and the
+   * reason is on the banner either way. Most callers have no use for the answer
+   * and go through `change`; the two that write a pair do.
    */
-  const change = useCallback(
-    async (patch: Partial<Chat>, send: (chatId: string) => Promise<Result<void>>) => {
+  const apply = useCallback(
+    async (
+      patch: Partial<Chat>,
+      send: (chatId: string) => Promise<Result<void>>
+    ): Promise<boolean> => {
       const target = await ensureChat()
-      if (!target) return
+      if (!target) return false
 
       const changed = await send(target.id)
 
@@ -515,11 +531,23 @@ export function useChat(
       // `current` is null only after the reset, and the guard above returns
       // whenever that has happened. Ignored for coverage the way `at` in
       // `core/diff.ts` is, and for the same reason.
+      if (!changed.ok) {
+        setError(describeFailure(changed))
+        return false
+      }
+
       /* v8 ignore next */
-      if (changed.ok) setChat((current) => ({ ...(current ?? target), ...patch }))
-      else setError(describeFailure(changed))
+      setChat((current) => ({ ...(current ?? target), ...patch }))
+      return true
     },
     [ensureChat, describeFailure]
+  )
+
+  const change = useCallback(
+    async (patch: Partial<Chat>, send: (chatId: string) => Promise<Result<void>>) => {
+      await apply(patch, send)
+    },
+    [apply]
   )
 
   const setWorkingMode = useCallback(
@@ -557,14 +585,14 @@ export function useChat(
 
   const setModel = useCallback(
     (model: string | null) =>
-      change({ model }, (chatId) => window.octopus.chats.setModel(chatId, model)),
-    [change]
+      apply({ model }, (chatId) => window.octopus.chats.setModel(chatId, model)),
+    [apply]
   )
 
   const setPlanModel = useCallback(
     (planModel: string | null) =>
-      change({ planModel }, (chatId) => window.octopus.chats.setPlanModel(chatId, planModel)),
-    [change]
+      apply({ planModel }, (chatId) => window.octopus.chats.setPlanModel(chatId, planModel)),
+    [apply]
   )
 
   const setEffort = useCallback(
