@@ -263,6 +263,23 @@ describe('RightPanel', () => {
     }
   })
 
+  /*
+   * Pinned to the pane's right edge, so dragging the pane wider grows only the
+   * empty part of the row and the tabs stay where they were. The handle is on
+   * the pane's left edge, which is the other reason it reads right.
+   *
+   * It is `justify-end` on the row and not a spacer or an `ml-auto` on a tab:
+   * either adds or moves a child, and the pane's floor is measured from the
+   * row's children. jsdom does no layout, so the class is the only handle.
+   */
+  it('pins its tabs to the right edge of the pane', () => {
+    renderPanel()
+
+    const row = screen.getByRole('button', { name: 'Terminal' }).parentElement
+
+    expect(row).toHaveClass('justify-end')
+  })
+
   it('opens on the tab it was given rather than on the first one', () => {
     renderPanel({ tab: 'terminal' })
 
