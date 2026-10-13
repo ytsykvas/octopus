@@ -47,9 +47,10 @@ The branch used to be here, marked with a branch icon, and has moved to the
 title bar beside the project's directory: it says where the work lands, which is
 a fact about the window rather than about any one conversation, and it was
 spending a 36px row on one short string. The centre is the narrowest pane in the
-window, so a row is worth having. The header's contents are capped at the same
-72rem as everything below, or the strip would not line up with the log it
-labels.
+window, so a row is worth having. The strip starts at the pane's left edge
+rather than at the 72rem column everything below is capped to: lined up with the
+log, it drifted to the middle of a wide window, and tabs are found by where they
+start.
 
 The tabs are **underlined rather than boxed**, unlike the right pane's. Those
 switch between three different kinds of thing, so each wants an edge of its own;
