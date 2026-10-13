@@ -1785,6 +1785,13 @@ squashed them again — a measurement taken from its own consequence. `Pull
 request` is where it showed: the label broke across two lines inside a row 32px
 tall. `shrink-0` and `whitespace-nowrap` on each tab are the whole fix.
 
+**The tabs are pinned to the pane's right edge.** The pane is dragged by its
+left edge, so widening it only adds empty row on the tabs' left and they stay
+where they were. It is `justify-end` on the row, not a spacer or an `ml-auto`
+on a tab, because the floor above is measured from the row's children and a
+spacer would be counted as one. At the floor the row is exactly as wide as its
+content, so nothing there looks different.
+
 The right pane's ceiling
 is whatever the window has left after the left column and a usable centre, so it
 grows on a large display without a number to maintain. That column is passed
@@ -2211,6 +2218,8 @@ The right pane's tabs are built the same way and for the same reason. They sit
 on the line that closes their row, and the chosen one breaks through it —
 `items-end` puts them on the line, `-mb-px` and a transparent border let the
 tab's own fill paint over it — so the tab reads as the view below reaching up.
+They are pinned to the row's right end, so the part of the line left of them is
+what a wider pane gains.
 The fill is the open project's colour and there is no outline: a drawn edge made
 the tab look like a box resting on the row rather than part of it.
 

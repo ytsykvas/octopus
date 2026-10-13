@@ -630,8 +630,16 @@ export function RightPanel({
           that closes the row, and the chosen one breaks through it, so it reads
           as the view below reaching up — the same relationship the project
           strip has with the sidebar. `items-end` and `-mb-px` are what put them
-          on the line rather than above it. */}
-      <div ref={tabs} className="border-line flex h-11 shrink-0 items-end gap-0.5 border-b px-2">
+          on the line rather than above it.
+
+          Pinned to the right edge with `justify-end`: the pane is dragged by
+          its left edge, so the tabs stay put and widening it only adds empty
+          row on their left. Not a spacer or an `ml-auto` — the floor below is
+          measured from this row's children, and neither may add or move one. */}
+      <div
+        ref={tabs}
+        className="border-line flex h-11 shrink-0 items-end justify-end gap-0.5 border-b px-2"
+      >
         {TABS.map((item) => (
           <button
             key={item.id}
