@@ -20,7 +20,17 @@ import { chatTranscript } from './paths.js'
 import type { ChatId } from './types.js'
 
 export const ChatEntrySchema = z.discriminatedUnion('role', [
-  z.object({ role: z.literal('user'), at: z.iso.datetime(), text: z.string() }),
+  z.object({
+    role: z.literal('user'),
+    at: z.iso.datetime(),
+    text: z.string(),
+    /**
+     * The id the agent knows this message by, which is what putting the files
+     * back to it is asked with. Absent on a message sent before it was kept, and
+     * such a message simply offers no rewind.
+     */
+    uuid: z.string().optional()
+  }),
   z.object({ role: z.literal('agent'), at: z.iso.datetime(), event: AgentEventSchema })
 ])
 

@@ -321,6 +321,12 @@ describe('channel names', () => {
     ['chats.fork', () => method('chats', 'fork')('c' as never), 'chats:fork'],
     ['chats.close', () => method('chats', 'close')('c' as never), 'chats:close'],
     ['chats.closed', () => method('chats', 'closed')('w' as never), 'chats:closed'],
+    [
+      'chats.rewindPreview',
+      () => method('chats', 'rewindPreview')('c' as never, 'm' as never),
+      'chats:rewindPreview'
+    ],
+    ['chats.rewind', () => method('chats', 'rewind')('c' as never, 'm' as never), 'chats:rewind'],
     ['chats.reopen', () => method('chats', 'reopen')('c' as never), 'chats:reopen'],
     [
       'chats.rename',

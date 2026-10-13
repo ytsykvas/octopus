@@ -422,6 +422,8 @@ describe('channel table', () => {
     'chats:close',
     'chats:closed',
     'chats:reopen',
+    'chats:rewindPreview',
+    'chats:rewind',
     'chats:rename',
     'chats:history',
     'chats:send',
@@ -2108,6 +2110,44 @@ describe('the agent chat', () => {
 
   // Closing is not deleting: the conversation leaves the strip and waits to be
   // brought back, with the same record.
+  describe('putting the files back to a message', () => {
+    // The id names a point in a conversation, and comes from the window.
+    it('refuses an id that is not a uuid', async () => {
+      const projectId = await addProject()
+      const workspace = await createWorkspace(projectId)
+      const opened = (await invoke('chats:open', workspace.id)) as {
+        ok: true
+        value: { id: string }
+      }
+
+      expect(await invoke('chats:rewind', opened.value.id, 'not-a-uuid')).toMatchObject({
+        ok: false
+      })
+      expect(await invoke('chats:rewindPreview', opened.value.id, 42)).toMatchObject({
+        ok: false
+      })
+    })
+
+    // Well formed, and still not one this conversation recorded.
+    it('refuses a message the conversation never sent', async () => {
+      const projectId = await addProject()
+      const workspace = await createWorkspace(projectId)
+      const opened = (await invoke('chats:open', workspace.id)) as {
+        ok: true
+        value: { id: string }
+      }
+      const stranger = '00000000-0000-4000-8000-000000000000'
+
+      await expect(invoke('chats:rewind', opened.value.id, stranger)).resolves.toMatchObject({
+        ok: false,
+        code: 'rewindUnavailable'
+      })
+      await expect(invoke('chats:rewindPreview', opened.value.id, stranger)).resolves.toMatchObject(
+        { ok: false, code: 'rewindUnavailable' }
+      )
+    })
+  })
+
   it('closes a conversation into the history and brings it back', async () => {
     const projectId = await addProject()
     const workspace = await createWorkspace(projectId)

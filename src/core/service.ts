@@ -35,6 +35,7 @@ import {
   type Chat,
   ChatError,
   type ClosedChat,
+  type FileRewind,
   type ChatStatus,
   DEFAULT_AGENT,
   DEFAULT_EFFORT,
@@ -1021,6 +1022,22 @@ export interface OctopusService {
    * leave the workspace with none, and emptying it is `/clear`.
    */
   closeChat(chatId: string): Promise<void>
+  /**
+   * What putting the files back to a message would do, without doing it.
+   *
+   * Asked before the real thing so the user can be told how much it undoes
+   * before agreeing to it.
+   */
+  previewRewind(chatId: string, messageId: string): Promise<FileRewind>
+  /**
+   * Puts the files back to how they were when a message was sent.
+   *
+   * Refused while a turn is running — the agent would be changing the files the
+   * same moment they were being restored — and for a message that is not one of
+   * this conversation's own. The result is also written to the log as an event,
+   * since it changed the tree without the agent doing anything.
+   */
+  rewindChat(chatId: string, messageId: string): Promise<FileRewind>
   /**
    * The workspace's closed conversations, most recently closed first, each with
    * the opening message it is recognised by.
@@ -2279,6 +2296,66 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
     // Best effort: a session that fails to close must not stop the workspace
     // from being removed, nor the tab from closing.
     await session?.close().catch(() => undefined)
+  }
+
+  /**
+   * Asks the agent to put the files back to a message, or to say what that
+   * would do.
+   *
+   * Three things are checked before the agent is asked at all. The conversation
+   * is not mid-turn, because a rewind under a running agent is a race for the
+   * same files. The message is one **this** conversation recorded: the id comes
+   * from the window, and the agent will happily rewind to any it has heard of.
+   * And there is a session to ask — started from the stored id if the
+   * application has been restarted since, which is what makes a rewind
+   * possible long after the turn it undoes.
+   */
+  async function rewind(chatId: string, messageId: string, dryRun: boolean): Promise<FileRewind> {
+    const chat = requireChat(chatId)
+
+    if (chat.status === 'running' || chat.status === 'waiting_permission') {
+      throw new ChatError(
+        'rewindBusy',
+        { chatId },
+        `Chat ${chatId} is working; its files cannot be rewound now.`
+      )
+    }
+
+    const known = (await readTranscript(chatId, dataRoot)).some(
+      (entry) => entry.role === 'user' && entry.uuid === messageId
+    )
+    if (!known || chat.sessionId === null) {
+      throw new ChatError(
+        'rewindUnavailable',
+        { chatId, reason: '' },
+        `Chat ${chatId} cannot be rewound to ${messageId}.`
+      )
+    }
+
+    const workspace = requireWorkspace(chat.workspaceId)
+    const session =
+      sessions.get(chatId) ?? (await startFor(chat, workspace, await sourcesFor(workspace)))
+
+    const result = await session.rewindFiles(messageId, dryRun)
+    if (!result.canRewind) {
+      throw new ChatError(
+        'rewindUnavailable',
+        { chatId, reason: result.error ?? '' },
+        result.error ?? `Chat ${chatId} cannot be rewound to ${messageId}.`
+      )
+    }
+
+    if (!dryRun) {
+      handleEvent(chat, {
+        type: 'files_rewound',
+        messageId,
+        files: result.filesChanged.length,
+        insertions: result.insertions,
+        deletions: result.deletions
+      })
+    }
+
+    return result
   }
 
   /**
@@ -4181,6 +4258,14 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
       await discardHistories(expired)
     },
 
+    previewRewind(chatId, messageId) {
+      return rewind(chatId, messageId, true)
+    },
+
+    rewindChat(chatId, messageId) {
+      return rewind(chatId, messageId, false)
+    },
+
     listClosedChats(workspaceId) {
       return Promise.all(
         closedChatsOfWorkspace(state, workspaceId).map(async ({ chat, closedAt }) => ({
@@ -4227,7 +4312,11 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
       // Written before the agent is asked anything: if starting the session
       // fails, the message the user typed is still in their history rather
       // than lost along with the failure.
-      await appendEntry(chatId, { role: 'user', at: now(), text }, dataRoot)
+      //
+      // With the id the agent will know it by, so the files can be put back to
+      // this point later: nothing in the stream says it back.
+      const messageId = randomUUID()
+      await appendEntry(chatId, { role: 'user', at: now(), text, uuid: messageId }, dataRoot)
 
       /*
        * The record is what the session runs under, re-asserted rather than
@@ -4336,7 +4425,7 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
         return
       }
 
-      session.send(text)
+      session.send(text, messageId)
 
       await setChatStatus(chatId, 'running')
     },

@@ -27,11 +27,13 @@ function renderLog(overrides: Partial<React.ComponentProps<typeof ChatLog>> = {}
   onAnswerElicitation: ReturnType<typeof vi.fn>
   onAnswerQuestions: ReturnType<typeof vi.fn>
   onExecutePlan: ReturnType<typeof vi.fn>
+  onRewind: ReturnType<typeof vi.fn>
 } {
   const onAnswer = vi.fn()
   const onAnswerElicitation = vi.fn()
   const onAnswerQuestions = vi.fn()
   const onExecutePlan = vi.fn()
+  const onRewind = vi.fn()
 
   render(
     <ChatLog
@@ -44,12 +46,71 @@ function renderLog(overrides: Partial<React.ComponentProps<typeof ChatLog>> = {}
       onAnswerElicitation={onAnswerElicitation}
       onAnswerQuestions={onAnswerQuestions}
       onExecutePlan={onExecutePlan}
+      onRewind={onRewind}
       {...overrides}
     />
   )
 
-  return { onAnswer, onAnswerElicitation, onAnswerQuestions, onExecutePlan }
+  return { onAnswer, onAnswerElicitation, onAnswerQuestions, onExecutePlan, onRewind }
 }
+
+describe('putting the files back from a message', () => {
+  const MESSAGE = '11111111-1111-4111-8111-111111111111'
+
+  // The log only offers it; the pane asks the question and does the work.
+  it('offers it on a message that has an id, and hands the id up', async () => {
+    const user = userEvent.setup()
+    const { onRewind } = renderLog({
+      entries: [{ role: 'user', at: AT, text: 'rename the helper', uuid: MESSAGE }]
+    })
+
+    await user.click(
+      screen.getByRole('button', { name: 'Put the files back to before this message' })
+    )
+
+    expect(onRewind).toHaveBeenCalledExactlyOnceWith(MESSAGE)
+  })
+
+  // Sent before ids were kept: there is nothing to rewind to.
+  it('offers nothing on a message that has none', () => {
+    renderLog({ entries: [{ role: 'user', at: AT, text: 'an old message' }] })
+
+    expect(
+      screen.queryByRole('button', { name: 'Put the files back to before this message' })
+    ).not.toBeInTheDocument()
+  })
+
+  // The core would refuse it, and a button that can only fail is a promise the
+  // interface does not keep.
+  it('offers nothing while the agent is working', () => {
+    renderLog({
+      busy: true,
+      entries: [{ role: 'user', at: AT, text: 'rename the helper', uuid: MESSAGE }]
+    })
+
+    expect(
+      screen.queryByRole('button', { name: 'Put the files back to before this message' })
+    ).not.toBeInTheDocument()
+  })
+
+  it('records that it happened, with how much', () => {
+    renderLog({
+      entries: [
+        fromAgent({
+          type: 'files_rewound',
+          messageId: MESSAGE,
+          files: 3,
+          insertions: 12,
+          deletions: 4
+        })
+      ]
+    })
+
+    expect(
+      screen.getByText('Files put back to an earlier message: 3 changed, +12 −4')
+    ).toBeInTheDocument()
+  })
+})
 
 describe('what the log shows', () => {
   it('shows what the user said and what came back', () => {
@@ -86,6 +147,7 @@ describe('what the log shows', () => {
         onAnswerElicitation={vi.fn()}
         onAnswerQuestions={vi.fn()}
         onExecutePlan={vi.fn()}
+        onRewind={vi.fn()}
       />
     )
 
@@ -117,6 +179,7 @@ describe('what the log shows', () => {
         onAnswerElicitation={vi.fn()}
         onAnswerQuestions={vi.fn()}
         onExecutePlan={vi.fn()}
+        onRewind={vi.fn()}
       />
     )
 

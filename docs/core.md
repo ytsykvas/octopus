@@ -576,6 +576,18 @@ workspace nobody has spoken to gets no record from it being looked at.
 asks for. A flag on the first would have made every caller say which of the two
 it meant.
 
+**Putting the files back** (`rewindChat`, `previewRewind`) asks the agent to
+restore tracked files to how they were when a given user message was sent. It
+rests on three things. Sessions are started with `enableFileCheckpointing`,
+because a checkpoint cannot be taken for work already done. Every message is
+sent with an id octopus makes (`randomUUID`, kept in the transcript as `uuid`),
+since nothing in the stream says it back and the id is the only handle on that
+point. And three checks run before the agent is asked: the conversation is not
+mid-turn — a rewind under a running agent is a race for the same files — the
+message is one this conversation recorded, and there is a session, started from
+the stored id if the application was restarted since. A real rewind is also
+written to the transcript as `files_rewound`. A preview writes nothing.
+
 `closeChat` ends a conversation's session and **keeps** it: the record gets a
 `closedAt` and its `status` goes back to `idle`, and the transcript stays where
 it is. It refuses the last open conversation of a workspace: emptying the only

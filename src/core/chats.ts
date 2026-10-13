@@ -79,7 +79,27 @@ export const MAX_CHATS_PER_WORKSPACE = 3
  */
 export const MAX_CLOSED_CHATS_PER_WORKSPACE = 20
 
-export type ChatErrorCode = 'tooManyChats' | 'lastChat' | 'nothingToFork' | 'forkFailed'
+export type ChatErrorCode =
+  'tooManyChats' | 'lastChat' | 'nothingToFork' | 'forkFailed' | 'rewindBusy' | 'rewindUnavailable'
+
+/**
+ * What putting the files back to a message would do, or did.
+ *
+ * Counts rather than the files' contents: the question the user is asked is
+ * "how much will this undo", and the answer fits in a line. `canRewind` is the
+ * agent's own verdict — a message it never checkpointed, or a file changed by
+ * something else since, makes it false with a reason in `error`.
+ */
+export interface FileRewind {
+  readonly canRewind: boolean
+  readonly error: string | null
+  /** Paths as the agent reported them. */
+  readonly filesChanged: readonly string[]
+  readonly insertions: number
+  readonly deletions: number
+  /** Files left alone because a link sat at their path — never followed. */
+  readonly skippedLinks: number
+}
 
 /** A refused operation on a conversation, carrying a code the UI localises. */
 export class ChatError extends CodedError<ChatErrorCode> {

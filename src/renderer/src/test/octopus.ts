@@ -66,6 +66,26 @@ export function installOctopusStub(): Api {
       reopen: vi.fn(() => ok(chatFixture())),
       rename: vi.fn(() => ok(undefined)),
       history: vi.fn(() => ok([])),
+      rewindPreview: vi.fn(() =>
+        ok({
+          canRewind: true,
+          error: null,
+          filesChanged: [],
+          insertions: 0,
+          deletions: 0,
+          skippedLinks: 0
+        })
+      ),
+      rewind: vi.fn(() =>
+        ok({
+          canRewind: true,
+          error: null,
+          filesChanged: [],
+          insertions: 0,
+          deletions: 0,
+          skippedLinks: 0
+        })
+      ),
       send: vi.fn(() => ok(undefined)),
       interrupt: vi.fn(() => ok(undefined)),
       setWorkingMode: vi.fn(() => ok(undefined)),

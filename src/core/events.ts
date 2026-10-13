@@ -355,6 +355,24 @@ export const AgentEventSchema = z.discriminatedUnion('type', [
   }),
 
   /**
+   * The files were put back to how they were when a message was sent.
+   *
+   * A row of its own in the log, and in the transcript: it changed the working
+   * tree without the agent doing anything, and a conversation read back later
+   * would otherwise show the agent's edits with no trace of their being undone.
+   * The counts are what the user was shown before agreeing, kept so the record
+   * says how much it was.
+   */
+  z.object({
+    type: z.literal('files_rewound'),
+    /** The user message the files were restored to. */
+    messageId: z.string(),
+    files: z.number().int().min(0),
+    insertions: z.number().int().min(0),
+    deletions: z.number().int().min(0)
+  }),
+
+  /**
    * What `/usage` was asked and answered.
    *
    * Kept in the transcript, unlike the rate limit two variants up, and the

@@ -8,6 +8,7 @@ import type {
   Chat,
   ClosedChat,
   EffortChoice,
+  FileRewind,
   WorkingMode
 } from '@core/chats.js'
 import type {
@@ -213,6 +214,14 @@ const api = {
     /** Names a chat; an empty name gives it back the one it is given. */
     rename: (chatId: string, title: string): Promise<Result<void>> =>
       ipcRenderer.invoke('chats:rename', chatId, title) as Promise<Result<void>>,
+
+    /** What putting the files back to a message would do, without doing it. */
+    rewindPreview: (chatId: string, messageId: string): Promise<Result<FileRewind>> =>
+      ipcRenderer.invoke('chats:rewindPreview', chatId, messageId) as Promise<Result<FileRewind>>,
+
+    /** Puts the files back to how they were when the message was sent. */
+    rewind: (chatId: string, messageId: string): Promise<Result<FileRewind>> =>
+      ipcRenderer.invoke('chats:rewind', chatId, messageId) as Promise<Result<FileRewind>>,
 
     /** Everything said in this chat before now. */
     history: (chatId: string): Promise<Result<ChatEntry[]>> =>

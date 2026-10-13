@@ -261,6 +261,11 @@ A **chat** is a conversation with one agent inside one workspace: `id`,
 `workingMode`, `planMode`, `knownCommands`, `skillOverrides`, `createdAt`,
 `closedAt`.
 
+**A transcript's user entries carry a `uuid`**: the id the message was sent to
+the agent under, which is what putting the files back to it is asked with. It is
+optional — a message sent before ids were kept has none, and simply offers no
+rewind. The `files_rewound` event records a rewind with how much it undid.
+
 **`closedAt` is null while a conversation is a tab** and the time it was closed
 otherwise. It defaults to null, so a record written before it existed loads as
 open — the reader throws on a mismatch rather than falling back, and the app

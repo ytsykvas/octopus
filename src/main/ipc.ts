@@ -168,6 +168,9 @@ export interface IpcHost {
  */
 const FilePathSchema = z.string().min(1).max(4096)
 
+/** A message of a conversation, by the id it was sent under. */
+const MessageIdSchema = z.uuid()
+
 /** What is typed after an `@`; empty is a real query, meaning "nearest the root". */
 const MentionQuerySchema = z.string().max(256)
 
@@ -838,6 +841,17 @@ export function registerIpc(
   // carrying a pasted paragraph.
   host.handle('chats:rename', (_event, chatId: string, title: unknown) =>
     attempt(() => service.renameChat(chatId, ChatTitleSchema.parse(title)))
+  )
+
+  // The message id comes from the window and names a point in a conversation,
+  // so it is parsed as the uuid it has to be — and the service then proves it is
+  // one this conversation recorded, which is the stronger check.
+  host.handle('chats:rewindPreview', (_event, chatId: string, messageId: unknown) =>
+    attempt(() => service.previewRewind(chatId, MessageIdSchema.parse(messageId)))
+  )
+
+  host.handle('chats:rewind', (_event, chatId: string, messageId: unknown) =>
+    attempt(() => service.rewindChat(chatId, MessageIdSchema.parse(messageId)))
   )
 
   host.handle('chats:history', (_event, chatId: string) =>

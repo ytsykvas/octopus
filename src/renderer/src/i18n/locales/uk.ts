@@ -586,6 +586,23 @@ export const uk: Translation = {
       in_progress: 'виконується',
       completed: 'виконано'
     },
+    rewind: 'Повернути файли до стану перед цим повідомленням',
+    rewindTitle: 'Повернути файли?',
+    rewindMessage_one:
+      'Це поверне {{count}} файл до стану перед цим повідомленням (+{{insertions}} −{{deletions}}).',
+    rewindMessage_few:
+      'Це поверне {{count}} файли до стану перед цим повідомленням (+{{insertions}} −{{deletions}}).',
+    rewindMessage_many:
+      'Це поверне {{count}} файлів до стану перед цим повідомленням (+{{insertions}} −{{deletions}}).',
+    rewindMessage_other:
+      'Це поверне {{count}} файлів до стану перед цим повідомленням (+{{insertions}} −{{deletions}}).',
+    rewindDetail:
+      'Усе, що змінилося в них відтоді — агентом чи вами — буде перезаписано, і повернути це не вийде.',
+    rewindConfirm: 'Повернути файли',
+    rewindCancel: 'Скасувати',
+    rewindNothing: 'Файли вже такі, якими були перед цим повідомленням.',
+    filesRewound:
+      'Файли повернуто до попереднього повідомлення: змінено {{files}}, +{{insertions}} −{{deletions}}',
     history: 'Закриті розмови',
     historyEmpty: 'Нічого ще не закрито',
     historyUntitled: 'Розмова без повідомлень',
@@ -1174,6 +1191,9 @@ export const uk: Translation = {
     lastChat: 'Останню розмову закрити не можна. Щоб почати її спочатку, скористайтеся /clear.',
     nothingToFork: 'Ця розмова ще не почалася, тож продовжувати нема чого.',
     forkFailed: 'Агент не зміг скопіювати цю розмову.',
+    rewindBusy: 'Агент працює. Зупиніть його, перш ніж повертати файли.',
+    rewindUnavailable: 'Повернути файли до цього повідомлення не вийде.',
+    rewindUnavailableReason: 'Повернути файли до цього повідомлення не вийде: {{reason}}',
     repoConfigSymlink:
       '{{path}} — символічне посилання. octopus не читає й не пише через нього, бо воно може вести куди завгодно поза репозиторієм.',
     repoConfigTooLarge: '{{path}} більший, ніж дозволено файлу такого роду.',

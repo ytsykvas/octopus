@@ -771,6 +771,24 @@ export const en = {
       in_progress: 'in progress',
       completed: 'done'
     },
+    /* Putting the files back to how they were when a message was sent. */
+    rewind: 'Put the files back to before this message',
+    rewindTitle: 'Put the files back?',
+    rewindMessage_one:
+      'This puts {{count}} file back to how it was before this message (+{{insertions}} −{{deletions}}).',
+    rewindMessage_few:
+      'This puts {{count}} files back to how they were before this message (+{{insertions}} −{{deletions}}).',
+    rewindMessage_many:
+      'This puts {{count}} files back to how they were before this message (+{{insertions}} −{{deletions}}).',
+    rewindMessage_other:
+      'This puts {{count}} files back to how they were before this message (+{{insertions}} −{{deletions}}).',
+    rewindDetail:
+      'Anything changed in them since — by the agent or by you — is overwritten, and cannot be brought back.',
+    rewindConfirm: 'Put files back',
+    rewindCancel: 'Cancel',
+    rewindNothing: 'The files are already as they were before that message.',
+    filesRewound:
+      'Files put back to an earlier message: {{files}} changed, +{{insertions}} −{{deletions}}',
     history: 'Closed conversations',
     historyEmpty: 'Nothing closed yet',
     historyUntitled: 'Conversation with no messages',
@@ -1540,6 +1558,9 @@ export const en = {
     lastChat: 'The last conversation cannot be closed. Use /clear to start it again.',
     nothingToFork: 'This conversation has not started yet, so there is nothing to continue.',
     forkFailed: 'The agent could not copy this conversation.',
+    rewindBusy: 'The agent is working. Stop it before putting the files back.',
+    rewindUnavailable: 'The files cannot be put back to that message.',
+    rewindUnavailableReason: 'The files cannot be put back to that message: {{reason}}',
     repoConfigSymlink:
       '{{path}} is a symbolic link. octopus will not read or write through one, because it can point anywhere outside the repository.',
     repoConfigTooLarge: '{{path}} is larger than this kind of file is allowed to be.',

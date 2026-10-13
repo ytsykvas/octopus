@@ -10,6 +10,7 @@ import {
   Repeat,
   ShieldAlert,
   TriangleAlert,
+  Undo2,
   Wrench
 } from 'lucide-react'
 import { useMemo } from 'react'
@@ -83,6 +84,13 @@ interface ChatLogProps {
   readonly onAnswerQuestions: (requestId: string, answers: readonly QuestionAnswer[]) => void
   /** Asks for a plan already in the log to be carried out. */
   readonly onExecutePlan: (plan: string) => void
+  /**
+   * Asks for the files to be put back to how they were when a message was sent.
+   *
+   * The log only offers it; the pane asks the question and does the work, since
+   * there is a dialog in between and a bridge call either side of it.
+   */
+  readonly onRewind: (messageId: string) => void
 }
 
 /**
@@ -101,7 +109,8 @@ export function ChatLog({
   onAnswer,
   onAnswerElicitation,
   onAnswerQuestions,
-  onExecutePlan
+  onExecutePlan,
+  onRewind
 }: ChatLogProps): React.JSX.Element {
   const { t } = useTranslation()
   const streamingAnything = streaming.text !== '' || streaming.thinking !== ''
@@ -161,6 +170,7 @@ export function ChatLog({
             onAnswer={onAnswer}
             onAnswerQuestions={onAnswerQuestions}
             onExecutePlan={onExecutePlan}
+            onRewind={onRewind}
           />
         )
       })}
@@ -196,6 +206,7 @@ interface AnswerProps {
   onAnswer: (requestId: string, answer: PermissionAnswer) => void
   onAnswerQuestions: (requestId: string, answers: readonly QuestionAnswer[]) => void
   onExecutePlan: (plan: string) => void
+  onRewind: (messageId: string) => void
 }
 
 /** Everything a row needs on top of the entry itself. */
@@ -212,7 +223,26 @@ function EntryRow({
 }: { entry: ChatEntry } & RowProps): React.JSX.Element | null {
   const { t } = useTranslation()
 
-  if (entry.role === 'user') return <UserMessage text={entry.text} />
+  if (entry.role === 'user') {
+    const messageId = entry.uuid
+
+    return (
+      <UserMessage
+        text={entry.text}
+        // Offered only for a message that has an id to rewind to — those sent
+        // before ids were kept have none — and not while the agent is working,
+        // which the core would refuse anyway: a button that can only fail is a
+        // promise the interface does not keep.
+        onRewind={
+          messageId === undefined || answering.busy
+            ? null
+            : () => {
+                answering.onRewind(messageId)
+              }
+        }
+      />
+    )
+  }
 
   const row = <AgentRow event={entry.event} {...answering} />
 
@@ -382,6 +412,15 @@ function AgentRow({
     case 'conversation_compacted':
       return <CompactedRow preTokens={event.preTokens} postTokens={event.postTokens} />
 
+    case 'files_rewound':
+      return (
+        <FilesRewoundRow
+          files={event.files}
+          insertions={event.insertions}
+          deletions={event.deletions}
+        />
+      )
+
     case 'model_refusal_fallback':
       return <RefusalFallbackRow event={event} />
 
@@ -408,7 +447,37 @@ function AgentRow({
  * person wrote — the agent's prose is the model's output to render, this is the
  * user's own words to quote.
  */
-function UserMessage({ text }: { text: string }): React.JSX.Element {
+function UserMessage({
+  text,
+  onRewind
+}: {
+  text: string
+  onRewind: (() => void) | null
+}): React.JSX.Element {
+  const { t } = useTranslation()
+
+  return (
+    <div className="group flex max-w-full items-center gap-1 self-end">
+      {onRewind !== null && (
+        // Held in the layout and revealed on hover, so the bubble does not jump
+        // under the pointer as it crosses a message — the same arrangement as
+        // the tab's menu.
+        <button
+          type="button"
+          onClick={onRewind}
+          title={t('chat.rewind')}
+          aria-label={t('chat.rewind')}
+          className="text-ink-faint hover:text-ink focus-ring flex size-6 shrink-0 items-center justify-center rounded transition-opacity focus:opacity-100 opacity-0 group-hover:opacity-100"
+        >
+          <Undo2 aria-hidden size={13} />
+        </button>
+      )}
+      <UserBubble text={text} />
+    </div>
+  )
+}
+
+function UserBubble({ text }: { text: string }): React.JSX.Element {
   return (
     /*
      * `max-w-full` and `wrap-anywhere` are what keeps a long message inside the
@@ -933,6 +1002,32 @@ function ResetRow(): React.JSX.Element {
  * The figures are drawn when they are there and the row stands without them:
  * the reader's question is whether this was compacted, not by how much.
  */
+/**
+ * The line where the files were put back to an earlier message.
+ *
+ * In the quiet register of the compaction and reset lines: the working tree
+ * changed without the agent doing anything, and the edits drawn above would
+ * otherwise read as though they still stood.
+ */
+function FilesRewoundRow({
+  files,
+  insertions,
+  deletions
+}: {
+  files: number
+  insertions: number
+  deletions: number
+}): React.JSX.Element {
+  const { t } = useTranslation()
+
+  return (
+    <p className="text-ink-faint border-line flex items-center gap-2 border-t pt-2 text-[11px]">
+      <Undo2 aria-hidden size={12} />
+      {t('chat.filesRewound', { files, insertions, deletions })}
+    </p>
+  )
+}
+
 function CompactedRow({
   preTokens,
   postTokens

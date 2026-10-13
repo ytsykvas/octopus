@@ -203,6 +203,22 @@ the event that ends a turn is filtered by the open chat's id and there is no
 chat until its history has loaded, so one arriving in that window is dropped and
 a seeded flag would stay stuck on.
 
+**A message offers to put the files back to before it.** Hovering a message the
+user sent reveals a small undo mark beside it. It is not a conversation rewind —
+what was said stays — it restores the **files** to how they were when that
+message was sent, which is the safety net for letting an agent run unattended.
+Two steps, and the first changes nothing: the agent is asked what it _would_
+do, so the question has the numbers in it ("puts 3 files back … +12 −4"), and
+only the second call does it. The dialog says what the numbers cannot: anything
+changed in those files since — by the agent or by the user — is overwritten.
+Nothing to undo is an answer rather than a question, and says so in the banner.
+The log gains a quiet row afterwards, because the tree changed without the agent
+doing anything. The mark is absent while the agent is working (the core would
+refuse it, and a button that can only fail is a promise the interface does not
+keep) and on messages sent before their ids were kept. It needs checkpointing,
+which every session is started with from now on — a checkpoint cannot be taken
+for work already done, so conversations that ran before this have none.
+
 **Escape stops a running turn**, as it does in Claude Code, and the button's
 tooltip says so. Only once neither suggestion list has taken the key — those
 return first, so the Escape that closes a list never also interrupts the agent —
