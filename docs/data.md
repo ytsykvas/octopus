@@ -269,7 +269,8 @@ from before it reads the same as one after.
 **A transcript's user entries carry a `uuid`**: the id the message was sent to
 the agent under, which is what putting the files back to it is asked with. It is
 optional — a message sent before ids were kept has none, and simply offers no
-rewind. The `files_rewound` event records a rewind with how much it undid.
+rewind. The `files_rewound` event records a rewind with how much it undid and how many
+files a link kept it from restoring (`skippedLinks`, defaulting to 0).
 
 **`closedAt` is null while a conversation is a tab** and the time it was closed
 otherwise. It defaults to null, so a record written before it existed loads as

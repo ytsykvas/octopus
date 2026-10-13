@@ -582,11 +582,23 @@ rests on three things. Sessions are started with `enableFileCheckpointing`,
 because a checkpoint cannot be taken for work already done. Every message is
 sent with an id octopus makes (`randomUUID`, kept in the transcript as `uuid`),
 since nothing in the stream says it back and the id is the only handle on that
-point. And three checks run before the agent is asked: the conversation is not
-mid-turn — a rewind under a running agent is a race for the same files — the
-message is one this conversation recorded, and there is a session, started from
-the stored id if the application was restarted since. A real rewind is also
-written to the transcript as `files_rewound`. A preview writes nothing.
+point. And three checks run before the agent is asked: the **workspace** is
+quiet (the worktree is shared by up to three conversations and a rewind restores
+whatever this one's checkpoint tracked, so it is not enough that this tab is
+idle), the message is one this conversation recorded, and there is a session,
+started from the stored id if the application was restarted since. The quiet is
+checked again after the session is started, since starting took time and a
+message sent in that window began a turn. A real rewind is also written to the
+transcript as `files_rewound`, with the count of files a link kept it from
+restoring. A preview writes nothing.
+
+`sessionFor` is the one way a session is started: a message being sent and a
+rewind that needs a session both reach for one, and without it each would start
+its own, the second registered over the first and the first's child process left
+running with nothing holding it. `requireOpenChat` is what sending and rewinding
+ask for instead of `requireChat`, since a closed conversation has no tab and no
+status to show a session at it; and `setChatStatus` skips a closed one, so the
+late `result` of the session that has just ended cannot leave it `error`.
 
 `closeChat` ends a conversation's session and **keeps** it: the record gets a
 `closedAt` and its `status` goes back to `idle`, and the transcript stays where

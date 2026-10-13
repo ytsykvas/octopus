@@ -106,8 +106,11 @@ longer holds, and "Claude 2" would tell nobody which one it was. Choosing one
 reopens it with its history and its session. `⌘⇧T` reopens the one closed last,
 the browser's key for the same slip. At the cap the entries cannot be chosen
 and say why, rather than failing after the click. The list is read when opened,
-not kept live: each entry costs a read of its transcript. Twenty are kept per
-workspace; closing one more discards the oldest.
+not kept live: each entry costs a read of its transcript, so it is read when the
+menu is opened and not on every close or reopen, and only as far as the first
+message. Twenty are kept per workspace; closing one more discards the oldest.
+Sending to a closed conversation is refused, for a window that has not heard it
+was closed would otherwise start a session no tab and no status shows.
 
 **Every conversation stays mounted** while its workspace is open, hidden with a
 class the way the right pane hides its tabs — one that unmounted would lose its
@@ -248,7 +251,11 @@ than vanishing.
 
 **The plan can be rewritten before it is approved.** The dialog's `Edit the plan`
 swaps the rendered plan for its markdown, in a monospace field, and back; the
-edits are kept when the field is closed to look at the result. Executing then
+edits are kept when the field is closed to look at the result, and held by the
+pane keyed by the request, so a plan the agent replaces mid-edit does not
+inherit them. Execute is disabled while the field is empty: an emptied editor is
+not a plan, and approving the original under it would do something the field
+plainly says it is not doing. Executing then
 sends the user's own text, and the agent works from it rather than from the
 words it wrote — it rides the reply that releases the tool call, since nothing
 else reaches the plan. An untouched plan, or one put back as it was, goes as
@@ -268,7 +275,11 @@ only the second call does it. The dialog says what the numbers cannot: anything
 changed in those files since — by the agent or by the user — is overwritten.
 Nothing to undo is an answer rather than a question, and says so in the banner.
 The log gains a quiet row afterwards, because the tree changed without the agent
-doing anything. The mark is absent while the agent is working (the core would
+doing anything, and it says how many files a link kept it from restoring, since
+the rewind never follows one and a bare count would read as though everything
+tracked had come back. It is refused while **any** conversation of the workspace
+is working, not only this one: the worktree is shared, and the checkpoint
+restores whatever it tracked, which can be a file another is editing. The mark is absent while the agent is working (the core would
 refuse it, and a button that can only fail is a promise the interface does not
 keep) and on messages sent before their ids were kept. It needs checkpointing,
 which every session is started with from now on — a checkpoint cannot be taken
@@ -380,9 +391,10 @@ from the log that progress is a scatter of tool rows. The panel is the same list
 as one line — "Tasks · 3 of 7 · Running the tests" — that opens to the whole of
 it, each item with a mark and, for a reader who cannot see the mark, its state
 in words. It reads the newest readable `TodoWrite` call, since the tool always
-sends the whole list, and goes away once everything is done: a finished list
-would be a standing report on work already in the log, taking the line the next
-message needs. The log's own `TodoWrite` row says how far it had got ("1 of 3")
+sends the whole list, and is shown **only while the agent is working**: a list
+left with items pending (interrupted, errored, abandoned) would otherwise stay
+pinned across every later turn and every restart, describing work nobody is
+doing, and the log still holds it. The log's own `TodoWrite` row says how far it had got ("1 of 3")
 instead of showing a bare tool name. Only `TodoWrite` is read; the newer
 `TaskCreate`/`TaskUpdate` tools are not. A list written by a subagent is
 skipped — it is its own task's, and the newest one written would otherwise
@@ -397,8 +409,11 @@ rather than at the end of the draft, because "look at @auth.ts and fix the
 expiry" has the file in the middle, and only when the `@` starts a word — inside
 an email address it would be noise. The list is the worktree's, asked of git
 (`.gitignore` applies, a file made a minute ago is found), searched as the user
-types with a short debounce, and an answer is tied to the query it was for so a
-late reply for `co` never shows under `comp`. Arrows, Enter and Tab work as in
+types with a short debounce. The last answer stays up while the next is on its
+way: the list used to vanish on every keystroke, and the Enter pressed in that
+gap sent the message with `@aut` in it. A reply that arrives after a newer one
+is already in is dropped, so the slow answer for `a` never takes the place of
+the quick one for `ab`. Arrows, Enter and Tab work as in
 the command list, Escape dismisses until the next keystroke, and the caret goes
 back to where the token was. A refused search is no suggestions rather than an
 error banner: the list is a convenience. Line ranges (`@file#10-20`) are not
