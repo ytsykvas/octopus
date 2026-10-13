@@ -310,6 +310,11 @@ describe('channel names', () => {
       'instructions:effective'
     ],
     ['files.open', () => method('files', 'open')('w' as never, 'a.ts' as never), 'files:open'],
+    [
+      'files.search',
+      () => method('files', 'search')('w' as never, 'comp' as never),
+      'files:search'
+    ],
     ['chats.list', () => method('chats', 'list')('w' as never), 'chats:list'],
     ['chats.open', () => method('chats', 'open')('w' as never), 'chats:open'],
     ['chats.create', () => method('chats', 'create')('w' as never), 'chats:create'],

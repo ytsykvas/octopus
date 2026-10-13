@@ -297,6 +297,22 @@ conversation away. Neither is dispatched: they go out as the text of an ordinary
 message, which is what a slash command is in this app, so the menu hands them to
 the same `onSend` the field uses.
 
+**Typing `@` offers the workspace's files.** The fourth way to attach one — the
+paperclip, a drop and a paste being the others — and it lands in the same place:
+choosing a file adds its **path** as an attachment chip and takes the token out
+of the text, so the message still names the file once and the message the user
+reads back is still the whole of what was sent. It is read at the **caret**
+rather than at the end of the draft, because "look at @auth.ts and fix the
+expiry" has the file in the middle, and only when the `@` starts a word — inside
+an email address it would be noise. The list is the worktree's, asked of git
+(`.gitignore` applies, a file made a minute ago is found), searched as the user
+types with a short debounce, and an answer is tied to the query it was for so a
+late reply for `co` never shows under `comp`. Arrows, Enter and Tab work as in
+the command list, Escape dismisses until the next keystroke, and the caret goes
+back to where the token was. A refused search is no suggestions rather than an
+error banner: the list is a convenience. Line ranges (`@file#10-20`) are not
+supported yet; a file is attached whole.
+
 **A command name is not unique**, and both places that use one had assumed it
 was. The agent can report two under one name — seen live, twice for
 `code-review` — so the menu keys a row by its name _and_ its place in the list,

@@ -178,9 +178,10 @@ the row redraws itself from the write rather than from a second read.
 
 ### Files
 
-| Channel      | Arguments    | Notes                                                |
-| ------------ | ------------ | ---------------------------------------------------- |
-| `files:open` | `id`, `path` | the path is validated and proved inside the worktree |
+| Channel        | Arguments     | Notes                                                                                                                                                                                                                                                                                                                                                  |
+| -------------- | ------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `files:open`   | `id`, `path`  | the path is validated and proved inside the worktree                                                                                                                                                                                                                                                                                                   |
+| `files:search` | `id`, `query` | the workspace's files matching what is typed after an `@`, best first, each as the relative path the list shows and the absolute one an attachment is. Asked of git, so `.gitignore` applies and a file nobody has added yet is found; the listing is held five seconds. The query is bounded at 256 characters, and may be empty — "nearest the root" |
 
 ### The agent chat
 

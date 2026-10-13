@@ -779,6 +779,66 @@ describe('workspaces', () => {
     )
   })
 
+  describe('searching a workspace for a mention', () => {
+    it('finds tracked files, with the absolute path an attachment needs', async () => {
+      const { service, projectId } = await withProject()
+      const workspace = await service.createWorkspaceIn(projectId)
+
+      await expect(service.searchFiles(workspace.id, 'readme')).resolves.toEqual([
+        { path: 'README.md', absolute: join(workspace.path, 'README.md') }
+      ])
+    })
+
+    // The file somebody made a minute ago is the likeliest thing to mention,
+    // and is not in the index.
+    it('finds a file git has not been told about yet', async () => {
+      const { service, projectId } = await withProject()
+      const workspace = await service.createWorkspaceIn(projectId)
+      await writeFile(join(workspace.path, 'scratch-notes.md'), 'x\n', 'utf8')
+
+      const found = await service.searchFiles(workspace.id, 'scratch')
+
+      expect(found.map(({ path }) => path)).toEqual(['scratch-notes.md'])
+    })
+
+    it('leaves out what .gitignore says to', async () => {
+      const { service, projectId } = await withProject()
+      const workspace = await service.createWorkspaceIn(projectId)
+      await writeFile(join(workspace.path, '.gitignore'), 'secret.env\n', 'utf8')
+      await writeFile(join(workspace.path, 'secret.env'), 'TOKEN=x\n', 'utf8')
+
+      await expect(service.searchFiles(workspace.id, 'secret')).resolves.toEqual([])
+    })
+
+    // A query is asked on every keystroke, and the listing is not free. Held
+    // for a few seconds, then read again.
+    it('holds the listing briefly, then looks again', async () => {
+      vi.useFakeTimers({ toFake: ['Date'] })
+      try {
+        const { service, projectId } = await withProject()
+        const workspace = await service.createWorkspaceIn(projectId)
+        vi.setSystemTime(new Date('2026-08-20T10:00:00.000Z'))
+        await expect(service.searchFiles(workspace.id, 'later')).resolves.toEqual([])
+
+        await writeFile(join(workspace.path, 'later.md'), 'x\n', 'utf8')
+        vi.setSystemTime(new Date('2026-08-20T10:00:01.000Z'))
+        await expect(service.searchFiles(workspace.id, 'later')).resolves.toEqual([])
+
+        vi.setSystemTime(new Date('2026-08-20T10:00:06.000Z'))
+        const found = await service.searchFiles(workspace.id, 'later')
+        expect(found.map(({ path }) => path)).toEqual(['later.md'])
+      } finally {
+        vi.useRealTimers()
+      }
+    })
+
+    it('refuses a workspace that does not exist', async () => {
+      const { service } = await withProject()
+
+      await expect(service.searchFiles('missing', 'a')).rejects.toThrow()
+    })
+  })
+
   it('refuses to remove a workspace holding uncommitted work', async () => {
     const { service, projectId } = await withProject()
     const workspace = await service.createWorkspaceIn(projectId)

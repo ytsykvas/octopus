@@ -3,6 +3,7 @@ import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import type { AgentCommand, AgentModel } from '@core/chats.js'
+import type { MentionFile } from '@core/fileSearch.js'
 
 import { Composer } from './Composer.js'
 
@@ -20,6 +21,8 @@ function renderComposer(overrides: Partial<ComposerProps> = {}): {
   onModel: ReturnType<typeof vi.fn>
   onPlanModel: ReturnType<typeof vi.fn>
   onRemoveFile: ReturnType<typeof vi.fn>
+  onSearchFiles: ReturnType<typeof vi.fn<(query: string) => Promise<MentionFile[]>>>
+  onAttachPaths: ReturnType<typeof vi.fn>
   onDropFiles: ReturnType<typeof vi.fn>
   onPasteImage: ReturnType<typeof vi.fn>
   rerender: (next: Partial<ComposerProps>) => void
@@ -34,6 +37,8 @@ function renderComposer(overrides: Partial<ComposerProps> = {}): {
   const onModel = vi.fn()
   const onPlanModel = vi.fn()
   const onRemoveFile = vi.fn()
+  const onSearchFiles = vi.fn<(query: string) => Promise<MentionFile[]>>(() => Promise.resolve([]))
+  const onAttachPaths = vi.fn()
   const onDropFiles = vi.fn()
   const onPasteImage = vi.fn()
 
@@ -52,6 +57,8 @@ function renderComposer(overrides: Partial<ComposerProps> = {}): {
       files={[]}
       onRemoveFile={onRemoveFile}
       onAttachFiles={vi.fn()}
+      onSearchFiles={onSearchFiles}
+      onAttachPaths={onAttachPaths}
       onDropFiles={onDropFiles}
       onPasteImage={onPasteImage}
       model={null}
@@ -86,6 +93,8 @@ function renderComposer(overrides: Partial<ComposerProps> = {}): {
     onModel,
     onPlanModel,
     onRemoveFile,
+    onSearchFiles,
+    onAttachPaths,
     onDropFiles,
     onPasteImage,
     // For the settings that have to be watched *changing* — the chip follows
@@ -1174,5 +1183,180 @@ describe('the model the session is running', () => {
     await user.click(screen.getByRole('button', { name: 'Take this file back' }))
 
     expect(onRemoveFile).toHaveBeenCalledWith('/a/shot.png')
+  })
+})
+
+describe('mentioning a file', () => {
+  const AUTH: MentionFile = { path: 'src/core/auth.ts', absolute: '/work/anna/src/core/auth.ts' }
+  const ROUTES: MentionFile = { path: 'src/routes.ts', absolute: '/work/anna/src/routes.ts' }
+
+  function mentioning(): ReturnType<typeof renderComposer> {
+    const rendered = renderComposer()
+    rendered.onSearchFiles.mockImplementation((query: string) =>
+      Promise.resolve(query === '' || 'auth'.startsWith(query) ? [AUTH, ROUTES] : [])
+    )
+    return rendered
+  }
+
+  it('offers the workspace files once an @ starts a word', async () => {
+    const user = userEvent.setup()
+    const { onSearchFiles } = mentioning()
+
+    await user.type(field(), 'look at @au')
+
+    expect(await screen.findByRole('option', { name: /auth\.ts/ })).toBeInTheDocument()
+    expect(onSearchFiles).toHaveBeenLastCalledWith('au')
+  })
+
+  // An email address is not a file, and a search for it would be noise.
+  it('offers nothing inside a word', async () => {
+    const user = userEvent.setup()
+    const { onSearchFiles } = mentioning()
+
+    await user.type(field(), 'mail me@example')
+    // Past the debounce. Asserted straight away the search has not been asked
+    // for yet either way, and the test would pass over the bug it is for.
+    await new Promise((resolve) => setTimeout(resolve, 200))
+
+    expect(onSearchFiles).not.toHaveBeenCalled()
+    expect(screen.queryByRole('option')).not.toBeInTheDocument()
+  })
+
+  it('attaches the file and takes the token out of the text when one is clicked', async () => {
+    const user = userEvent.setup()
+    const { onAttachPaths } = mentioning()
+
+    await user.type(field(), 'fix @au now')
+    await user.keyboard('{ArrowLeft}{ArrowLeft}{ArrowLeft}{ArrowLeft}')
+    await user.click(await screen.findByRole('option', { name: /auth\.ts/ }))
+
+    expect(onAttachPaths).toHaveBeenCalledExactlyOnceWith(['/work/anna/src/core/auth.ts'])
+    expect(field()).toHaveValue('fix  now')
+    expect(field()).toHaveFocus()
+    // Where the token was, so the next word goes where the mention was.
+    expect((field() as HTMLTextAreaElement).selectionStart).toBe(4)
+  })
+
+  it('takes the highlighted file on Enter, without sending', async () => {
+    const user = userEvent.setup()
+    const { onAttachPaths, onSend } = mentioning()
+
+    await user.type(field(), '@')
+    await screen.findByRole('option', { name: /auth\.ts/ })
+    await user.keyboard('{ArrowDown}{Enter}')
+
+    expect(onAttachPaths).toHaveBeenCalledExactlyOnceWith(['/work/anna/src/routes.ts'])
+    expect(onSend).not.toHaveBeenCalled()
+  })
+
+  // What a shell does, and without `preventDefault` it would take the focus.
+  it('takes the highlighted file on Tab as well', async () => {
+    const user = userEvent.setup()
+    const { onAttachPaths } = mentioning()
+
+    await user.type(field(), '@')
+    await screen.findByRole('option', { name: /auth\.ts/ })
+    await user.keyboard('{Tab}')
+
+    expect(onAttachPaths).toHaveBeenCalledExactlyOnceWith(['/work/anna/src/core/auth.ts'])
+    expect(field()).toHaveFocus()
+  })
+
+  it('wraps from the top of the list to the bottom', async () => {
+    const user = userEvent.setup()
+    const { onAttachPaths } = mentioning()
+
+    await user.type(field(), '@')
+    await screen.findByRole('option', { name: /auth\.ts/ })
+    await user.keyboard('{ArrowUp}{Enter}')
+
+    expect(onAttachPaths).toHaveBeenCalledExactlyOnceWith(['/work/anna/src/routes.ts'])
+  })
+
+  it('moves the highlight under the pointer', async () => {
+    const user = userEvent.setup()
+    mentioning()
+
+    await user.type(field(), '@')
+    await user.hover(await screen.findByRole('option', { name: /routes\.ts/ }))
+
+    expect(screen.getByRole('option', { name: /routes\.ts/ })).toHaveAttribute(
+      'aria-selected',
+      'true'
+    )
+  })
+
+  // Letters are not keys the list takes: they refine the query and the list
+  // goes on being offered.
+  it('keeps the list while the query is being typed', async () => {
+    const user = userEvent.setup()
+    const { onSearchFiles } = mentioning()
+
+    await user.type(field(), '@a')
+    await screen.findByRole('option', { name: /auth\.ts/ })
+    await user.keyboard('u')
+
+    await vi.waitFor(() => {
+      expect(onSearchFiles).toHaveBeenLastCalledWith('au')
+    })
+    expect(screen.getByRole('option', { name: /auth\.ts/ })).toBeInTheDocument()
+  })
+
+  it('closes on Escape and leaves the draft alone', async () => {
+    const user = userEvent.setup()
+    const { onAttachPaths } = mentioning()
+
+    await user.type(field(), 'see @au')
+    await screen.findByRole('option', { name: /auth\.ts/ })
+    await user.keyboard('{Escape}')
+
+    expect(screen.queryByRole('option')).not.toBeInTheDocument()
+    expect(field()).toHaveValue('see @au')
+    expect(onAttachPaths).not.toHaveBeenCalled()
+  })
+
+  it('comes back when typing carries on', async () => {
+    const user = userEvent.setup()
+    mentioning()
+
+    await user.type(field(), '@a')
+    await screen.findByRole('option', { name: /auth\.ts/ })
+    await user.keyboard('{Escape}')
+    await user.keyboard('u')
+
+    expect(await screen.findByRole('option', { name: /auth\.ts/ })).toBeInTheDocument()
+  })
+
+  it('closes when a click lands outside', async () => {
+    const user = userEvent.setup()
+    mentioning()
+
+    await user.type(field(), '@')
+    await screen.findByRole('option', { name: /auth\.ts/ })
+    await user.click(document.body)
+
+    expect(screen.queryByRole('option')).not.toBeInTheDocument()
+  })
+
+  it('offers nothing for a query nothing matches', async () => {
+    const user = userEvent.setup()
+    const { onSearchFiles } = mentioning()
+
+    await user.type(field(), '@zzz')
+    await vi.waitFor(() => {
+      expect(onSearchFiles).toHaveBeenLastCalledWith('zzz')
+    })
+
+    expect(screen.queryByRole('option')).not.toBeInTheDocument()
+  })
+
+  // Enter means what it always means when there is nothing to take.
+  it('sends on Enter when no file is being offered', async () => {
+    const user = userEvent.setup()
+    const { onSend } = mentioning()
+
+    await user.type(field(), 'plain text{Enter}')
+
+    expect(onSend).toHaveBeenCalledWith('plain text')
   })
 })

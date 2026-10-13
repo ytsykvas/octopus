@@ -1004,6 +1004,55 @@ describe('the permission mode', () => {
     })
   })
 
+  /*
+   * The fourth way in: typing `@` and choosing a file. It lands exactly where
+   * the other three do — an attachment named by its path in the message — so
+   * the message the user reads back is still the whole of what was sent.
+   */
+  it('attaches a file chosen from the mention list, named by its path', async () => {
+    const user = userEvent.setup()
+    // jsdom has no layout, so the list's scroll-into-view is not there to call.
+    Element.prototype.scrollIntoView = vi.fn()
+    vi.mocked(octopus().files.search).mockResolvedValue({
+      ok: true,
+      value: [{ path: 'src/auth.ts', absolute: '/work/anna/src/auth.ts' }]
+    })
+    givenChat()
+    await openLoadedChat()
+
+    await user.type(screen.getByRole('textbox'), 'look at @au')
+    await user.click(await screen.findByRole('option', { name: /auth\.ts/ }))
+
+    expect(octopus().files.search).toHaveBeenCalledWith('planner/anna', 'au')
+    expect(await screen.findByText('auth.ts')).toBeInTheDocument()
+    expect(screen.getByRole('textbox')).toHaveValue('look at ')
+
+    await user.click(screen.getByRole('button', { name: 'Send' }))
+
+    await waitFor(() => {
+      expect(octopus().chats.send).toHaveBeenCalledWith(
+        CHAT_ID,
+        'Files I am pointing you at:\n\n/work/anna/src/auth.ts\n\nlook at'
+      )
+    })
+  })
+
+  // A list that cannot be read is a lost convenience, not a message to show.
+  it('offers no files when the search is refused', async () => {
+    const user = userEvent.setup()
+    vi.mocked(octopus().files.search).mockResolvedValue({ ok: false, error: 'no such worktree' })
+    givenChat()
+    await openLoadedChat()
+
+    await user.type(screen.getByRole('textbox'), '@au')
+    await waitFor(() => {
+      expect(octopus().files.search).toHaveBeenCalled()
+    })
+
+    expect(screen.queryByRole('option')).not.toBeInTheDocument()
+    expect(screen.queryByText('no such worktree')).not.toBeInTheDocument()
+  })
+
   /* A refused paste is news about the message being written, so it goes in the
      conversation's own banner rather than a second one beside it. */
   it('says so in the conversation when an attachment is refused', async () => {

@@ -103,6 +103,7 @@ import {
   toSdkSettingSources
 } from './config.js'
 import { type AgentEvent, forTranscript, isEphemeral } from './events.js'
+import { listFiles, type MentionFile, rankFiles } from './fileSearch.js'
 import {
   cloneRepository,
   listRepositories,
@@ -970,6 +971,15 @@ export interface OctopusService {
   resolveWorkspaceFile(workspaceId: string, path: string): Promise<string>
 
   /**
+   * The files of a workspace that match what is being typed after an `@`.
+   *
+   * Asked of git rather than walked, so `.gitignore` applies and a file made a
+   * minute ago is found. The listing is held for a few seconds: a query is
+   * asked on every keystroke and the worktree does not change that fast.
+   */
+  searchFiles(workspaceId: string, query: string): Promise<MentionFile[]>
+
+  /**
    * The workspace's chat, created on first use.
    *
    * Lazy on purpose: a workspace nobody has spoken to gets no record and no
@@ -1200,6 +1210,11 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
   const stateTempPath = options.stateTempFilePath ?? stateTempFile()
   const configPath = options.configFilePath ?? configFile()
   const makeExec = options.makeExec ?? gitIn
+
+  // What a worktree held when it was last listed. A mention is searched on every
+  // keystroke, and `git ls-files` over a large checkout is not free.
+  const FILE_LIST_TTL_MS = 5000
+  const fileLists = new Map<string, { at: number; files: string[] }>()
   const commandExec = options.commandExec ?? defaultExec
   const makeGh = options.makeGh ?? ghIn
   const dataRoot = options.dataRoot ?? rootDir()
@@ -3956,6 +3971,22 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
       // From the checkout rather than from a worktree: this is a question about
       // the repository, and a project can be open with no workspace in it.
       return readBranchRequests(makeGh(project.repoPath))
+    },
+
+    async searchFiles(workspaceId, query) {
+      const workspace = requireWorkspace(workspaceId)
+
+      const offered = (files: readonly string[]): MentionFile[] =>
+        rankFiles(files, query).map((path) => ({ path, absolute: join(workspace.path, path) }))
+
+      const held = fileLists.get(workspaceId)
+      if (held !== undefined && Date.now() - held.at < FILE_LIST_TTL_MS) {
+        return offered(held.files)
+      }
+
+      const files = await listFiles(makeExec(workspace.path))
+      fileLists.set(workspaceId, { at: Date.now(), files })
+      return offered(files)
     },
 
     async resolveWorkspaceFile(workspaceId, path) {

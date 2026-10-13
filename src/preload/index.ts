@@ -1,6 +1,7 @@
 import { contextBridge, ipcRenderer, webUtils } from 'electron'
 
 import type { AccountKind, AccountsStatus, GitHubAccount } from '@core/accounts.js'
+import type { MentionFile } from '@core/fileSearch.js'
 import type {
   AgentCommand,
   AgentModel,
@@ -619,7 +620,11 @@ const api = {
   files: {
     /** Hands a file in a workspace to whatever the system opens it with. */
     open: (workspaceId: string, path: string): Promise<Result<void>> =>
-      ipcRenderer.invoke('files:open', workspaceId, path) as Promise<Result<void>>
+      ipcRenderer.invoke('files:open', workspaceId, path) as Promise<Result<void>>,
+
+    /** The workspace's files matching what is typed after an `@`, best first. */
+    search: (workspaceId: string, query: string): Promise<Result<MentionFile[]>> =>
+      ipcRenderer.invoke('files:search', workspaceId, query) as Promise<Result<MentionFile[]>>
   },
 
   attachments: {

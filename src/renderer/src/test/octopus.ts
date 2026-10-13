@@ -145,7 +145,8 @@ export function installOctopusStub(): Api {
       port: vi.fn(() => ok(3111))
     },
     files: {
-      open: vi.fn(() => ok(undefined))
+      open: vi.fn(() => ok(undefined)),
+      search: vi.fn(() => ok([]))
     },
     attachments: {
       paste: vi.fn(() => ok('/tmp/paste.png')),

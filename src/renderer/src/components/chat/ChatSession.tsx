@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import type { Chat, Effort, WorkingMode } from '@core/chats.js'
@@ -102,6 +102,18 @@ export function ChatSession({
   const attachments = useAttachments(setAttachmentError)
   const describeFailure = useErrorMessage()
   const chat = useChat(tab.record, workspace.id, tab.status, describeFailure, onOpened)
+
+  // A refusal is no suggestions rather than a message: the list is a
+  // convenience, and an error banner over a half-typed `@` would be the louder
+  // of the two problems.
+  const workspaceId = workspace.id
+  const searchFiles = useCallback(
+    async (query: string) => {
+      const found = await window.octopus.files.search(workspaceId, query)
+      return found.ok ? found.value : []
+    },
+    [workspaceId]
+  )
   const rateLimit = useRateLimit()
   const models = useModels()
   const commands = useCommands(chat.chat?.id ?? null)
@@ -286,6 +298,8 @@ export function ChatSession({
           setAttachmentError(null)
           void attachments.choose(t('chat.attach'))
         }}
+        onSearchFiles={searchFiles}
+        onAttachPaths={attachments.attach}
         onDropFiles={attachments.drop}
         onPasteImage={(image) => {
           setAttachmentError(null)

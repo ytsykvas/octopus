@@ -16,6 +16,8 @@ export interface AttachmentController {
   readonly drop: (files: readonly File[]) => void
   /** Writes a pasted image and adds where it landed. */
   readonly paste: (item: Blob) => Promise<void>
+  /** Adds files by their paths — what choosing a mention does. */
+  readonly attach: (paths: readonly string[]) => void
   readonly remove: (path: string) => void
   readonly clear: () => void
 }
@@ -85,5 +87,5 @@ export function useAttachments(onError: (message: string) => void): AttachmentCo
     setFiles([])
   }, [])
 
-  return { files, choose, drop, paste, remove, clear }
+  return { files, choose, drop, paste, attach: add, remove, clear }
 }

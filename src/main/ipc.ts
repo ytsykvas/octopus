@@ -168,6 +168,9 @@ export interface IpcHost {
  */
 const FilePathSchema = z.string().min(1).max(4096)
 
+/** What is typed after an `@`; empty is a real query, meaning "nearest the root". */
+const MentionQuerySchema = z.string().max(256)
+
 /**
  * Writes the config and tells every window, from the one place that writes it.
  *
@@ -785,6 +788,12 @@ export function registerIpc(
       const refusal = await host.openPath(absolute)
       if (refusal !== '') throw new Error(refusal)
     })
+  )
+
+  // Typed after an `@`, so it is bounded: the query is a few letters and a
+  // path fragment, and a pasted paragraph is not one.
+  host.handle('files:search', (_event, workspaceId: string, query: unknown) =>
+    attempt(() => service.searchFiles(workspaceId, MentionQuerySchema.parse(query)))
   )
 
   // The agent chat. Everything the renderer sends here reaches a model or a

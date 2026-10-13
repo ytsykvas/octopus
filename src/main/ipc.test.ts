@@ -414,6 +414,7 @@ describe('channel table', () => {
     'workspaces:replyToReviewThread',
     'workspaces:resolveReviewThread',
     'files:open',
+    'files:search',
     'chats:list',
     'chats:open',
     'chats:create',
@@ -1934,6 +1935,26 @@ describe('workspaces of a real project', () => {
       ok: false
     })
     expect(bench.opened).toEqual([])
+  })
+
+  it('finds files of a workspace for a mention', async () => {
+    const projectId = await addProject()
+    const workspace = await createWorkspace(projectId)
+
+    await expect(invoke('files:search', workspace.id, 'readme')).resolves.toMatchObject({
+      ok: true,
+      value: [{ path: 'README.md', absolute: join(workspace.path, 'README.md') }]
+    })
+  })
+
+  it('refuses a mention query that is not a short string', async () => {
+    const projectId = await addProject()
+    const workspace = await createWorkspace(projectId)
+
+    expect(await invoke('files:search', workspace.id, 42)).toMatchObject({ ok: false })
+    expect(await invoke('files:search', workspace.id, 'x'.repeat(257))).toMatchObject({
+      ok: false
+    })
   })
 
   it('refuses a path that is not a string at all', async () => {
