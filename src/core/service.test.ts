@@ -7673,6 +7673,31 @@ describe('the agent chat', () => {
       expect(outcomes[1].status).toBe('fulfilled')
     })
 
+    // A rewind starts a session from the record as it was when it began, and
+    // what the user changes while that start is under way went to a session not
+    // yet registered — so it reached nothing. The session is built from the
+    // record as it is by the time it is registered.
+    it('starts a session in the mode the record names by then', async () => {
+      const { service, workspaceId, chatId, messageId } = await spoken()
+      await service.closeChats()
+      const before = agents.length
+
+      const previewing = service.previewRewind(chatId, messageId)
+      await service.setChatWorkingMode(chatId, 'acceptEdits')
+      await previewing
+
+      // Whichever way the race fell, the session ends up in the mode the record
+      // names: built with it, or told it once registered. What must not happen
+      // is the third outcome, where it was built from the snapshot and the
+      // change went nowhere. Whether the race lands in that window is down to
+      // timing, so with the fix reverted this fails often rather than always.
+      const started = agents[before]
+      const built = started?.options().permissionMode === 'acceptEdits'
+      const told = started?.modes().includes('acceptEdits') === true
+      expect(built || told).toBe(true)
+      expect(service.listChats(workspaceId)[0]?.workingMode).toBe('acceptEdits')
+    })
+
     // The files a link sat on were left alone, and the log must not read as
     // though everything the checkpoint tracked had come back.
     it('records how many files a link kept it from restoring', async () => {

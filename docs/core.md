@@ -592,6 +592,12 @@ message sent in that window began a turn. A real rewind is also written to the
 transcript as `files_rewound`, with the count of files a link kept it from
 restoring. A preview writes nothing.
 
+A session is built from the record **as it is by the time it is registered**,
+not from the snapshot its starter held: starting takes several awaits, and a
+mode, an effort or a model changed while they ran went to a session that was not
+registered yet, so it reached nothing and the conversation began on what it had
+been.
+
 `sessionFor` is the one way a session is started: a message being sent and a
 rewind that needs a session both reach for one, and without it each would start
 its own, the second registered over the first and the first's child process left

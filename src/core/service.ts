@@ -2882,14 +2882,14 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
   }
 
   async function startFor(
-    chat: Chat,
+    asked: Chat,
     workspace: Workspace,
     settingSources: readonly SettingSourceName[]
   ): Promise<AgentSession> {
     const skills = await sessionSkills(
       requireProject(workspace.projectId),
       workspace,
-      chat,
+      asked,
       settingSources
     )
 
@@ -2923,6 +2923,15 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
         ensureLibrary(root, 'subagent')
       ])
     ])
+
+    // The record as it is **now**, read after the last await and before the
+    // session is registered, with nothing in between. What was asked for is a
+    // snapshot from before all of the above, and a mode, an effort or a model
+    // changed while they ran went to a session that was not registered yet —
+    // so it reached nothing, and the conversation started on what it had been.
+    // Two things reach here that did not before a rewind could start one: a
+    // message joining a start somebody else began.
+    const chat = requireChat(asked.id)
 
     const session = startSession(
       {
