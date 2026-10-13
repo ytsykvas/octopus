@@ -17,7 +17,13 @@ function renderDialog(overrides: Partial<React.ComponentProps<typeof PlanDialog>
   const onKeepPlanning = vi.fn()
 
   render(
-    <PlanDialog plan={PLAN} onExecute={onExecute} onKeepPlanning={onKeepPlanning} {...overrides} />
+    <PlanDialog
+      plan={PLAN}
+      accepting
+      onExecute={onExecute}
+      onKeepPlanning={onKeepPlanning}
+      {...overrides}
+    />
   )
 
   return { onExecute, onKeepPlanning }
@@ -36,6 +42,24 @@ describe('the plan itself', () => {
 })
 
 describe('the two ways out', () => {
+  // Executing out of planning widens what the agent may do — it goes on in
+  // Auto mode — so the dialog says it before the click, not after.
+  it('says executing runs in Auto mode', () => {
+    renderDialog()
+
+    expect(
+      screen.getByText('Runs in Auto mode — edits go ahead without asking.')
+    ).toBeInTheDocument()
+  })
+
+  // A plan the agent offered unasked changes no mode, so there is nothing to
+  // warn about — and a warning that is not true is one nobody reads twice.
+  it('says nothing about Auto mode when executing changes no mode', () => {
+    renderDialog({ accepting: false })
+
+    expect(screen.queryByText(/Runs in Auto mode/)).not.toBeInTheDocument()
+  })
+
   it('executes when that is what was chosen', async () => {
     const user = userEvent.setup()
     const { onExecute, onKeepPlanning } = renderDialog()

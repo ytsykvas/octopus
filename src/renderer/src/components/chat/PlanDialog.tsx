@@ -7,6 +7,11 @@ import { Markdown } from './Markdown.js'
 
 interface PlanDialogProps {
   readonly plan: string
+  /**
+   * Whether executing moves the conversation to `acceptEdits` — true only out
+   * of planning, since a plan the agent offered unasked changes no mode.
+   */
+  readonly accepting: boolean
   readonly onExecute: () => void
   /** Sends the plan back with the user's note, which may be empty. */
   readonly onKeepPlanning: (feedback: string) => void
@@ -23,12 +28,16 @@ interface PlanDialogProps {
  * One button, and a field. Writing in the field *is* carrying on planning, so a
  * button saying so was the same decision offered twice; the note travels to the
  * agent as the refusal's reason, and the plan it comes back with raises this
- * dialog again. Nor does the button name a mode any more: that is chosen in the
- * composer's footer, which is what the session actually runs under and is on
- * screen behind the backdrop.
+ * dialog again.
+ *
+ * Executing out of planning goes on in `acceptEdits`, whatever the
+ * conversation was asking before — the composer's one mode control has no
+ * second half left to say otherwise. That widens what the agent may do, so the line beside the
+ * button says it before the click rather than the footer after it.
  */
 export function PlanDialog({
   plan,
+  accepting,
   onExecute,
   onKeepPlanning
 }: PlanDialogProps): React.JSX.Element {
@@ -48,9 +57,14 @@ export function PlanDialog({
       // — and this dialog would simply reopen on the next render.
       onClose={keepPlanning}
       footer={
-        <Button variant="accent" onClick={onExecute}>
-          {t('chat.planExecute')}
-        </Button>
+        <>
+          {accepting && (
+            <span className="text-ink-soft mr-auto text-[11px]">{t('chat.planExecuteHint')}</span>
+          )}
+          <Button variant="accent" onClick={onExecute}>
+            {t('chat.planExecute')}
+          </Button>
+        </>
       }
     >
       <div className="min-h-0 flex-1 overflow-auto px-4 py-3">

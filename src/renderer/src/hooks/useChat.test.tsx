@@ -35,8 +35,8 @@ describe('without a workspace', () => {
     await act(async () => {
       await result.current.send('hello')
       await result.current.interrupt()
-      await result.current.setWorkingMode('acceptEdits')
-      await result.current.setPlanMode(true)
+      await result.current.setMode('acceptEdits')
+      await result.current.setMode('plan')
     })
 
     expect(octopus().chats.open).not.toHaveBeenCalled()

@@ -4396,7 +4396,21 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
       if (leaving) {
         const before = sessionModel(requireChat(request.chatId))
         const beforeEffort = effortInForce(requireChat(request.chatId))
-        await commit((current) => updateChat(current, request.chatId, { planMode: false }))
+        // An approved plan goes on in `acceptEdits`. The composer holds one
+        // control that cycles through asking, accepting and planning, so there
+        // is no second one left to say what should follow a plan — and a plan
+        // read and approved is the edits accepted in advance.
+        //
+        // Only out of planning, though. The agent may call the plan tool from
+        // any mode, and handing over there would let it raise a conversation
+        // the user set to ask first into one that does not, by asking once.
+        const planning = requireChat(request.chatId).planMode
+        await commit((current) =>
+          updateChat(current, request.chatId, {
+            planMode: false,
+            ...(planning && { workingMode: 'acceptEdits' as const })
+          })
+        )
 
         // The model leaves planning with the record. Before the reply, never
         // after it: the reply is what releases the tool call, so a model sent

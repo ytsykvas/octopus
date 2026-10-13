@@ -657,9 +657,8 @@ export const uk: Translation = {
     modeToggle: 'Дозволи: {{mode}}',
     modeDefault: 'Питати',
     modeAcceptEdits: 'Auto mode',
-    modeAfterPlan: 'Що агент робитиме, коли план буде схвалено.',
     planMode: 'План',
-    planModeHint: 'Спершу продумати підхід. Доки ви його не схвалите, агент нічого не виконує.',
+    modeCycle: 'Змінити режим — Питати, Auto mode, План (Shift+Tab)',
 
     toolSteps_one: '{{count}} дія',
     toolSteps_few: '{{count}} дії',
@@ -676,6 +675,7 @@ export const uk: Translation = {
     copyFailed: 'Не вдалося',
     planReady: 'План готовий',
     planExecute: 'Виконати',
+    planExecuteHint: 'Виконується в Auto mode — зміни вносяться без запитів.',
     planFeedback: 'Щось іще треба уточнити?',
     planFeedbackPlaceholder: 'Напишіть, і агент доопрацює план',
     questionTitle: 'Агент запитує',

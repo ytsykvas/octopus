@@ -429,10 +429,10 @@ way to one; what the agent did next was start editing files.
 
 **One button and a field**, which is what the question actually has:
 
-- **Execute** runs it, in the mode the composer's footer names. The button used
-  to name that mode as well, and no longer does: the footer is what the session
-  actually runs under, it is on screen behind the backdrop, and a second place
-  for the same fact is a second place for it to go stale.
+- **Execute** runs it, in `Auto mode` out of planning — see the footer's mode above for
+  why. A line beside the button says so, because the click widens what the
+  agent may do and that is worth reading before it rather than in the footer
+  after it.
 - **The field is how you carry on planning.** Writing in it _is_ that, so a
   button saying so was the same decision offered twice. `Enter` sends and
   `⇧Enter` breaks the line — the composer's keys, one convention rather than
@@ -577,20 +577,40 @@ session only"), so it moves what is running without moving what this chat chose
 reaches the footer with the context reading, which is already refreshed on every
 `result`, so the chip moves as soon as the command's turn ends.
 
-**The footer's permission control is two things, not one**, and they are two
-stored fields. `plan` is not a third degree of permission but a state the
-conversation is in: the agent runs no tools at all in it, so `Auto mode` has
-nothing to accept. Held as one field they could not both be true, which is why
-approving a plan had no mode to return to — and why the toggle stayed lit over
-an agent that had started editing.
+**The footer's mode is one control over two stored fields.** `plan` is not a
+third degree of permission but a state the conversation is in: the agent runs
+no tools at all in it, so `Auto mode` has nothing to accept. Held as one field
+they could not both be true, which is why approving a plan once had no mode to
+return to — and why a toggle stayed lit over an agent that had started editing.
+So the record keeps `planMode` beside `workingMode`, and the composer shows the
+two as one control beside send: `planMode` wins when it is on, and the working
+mode is what shows otherwise.
 
-That leaves the mode itself with two values, so it **switches in place** rather
-than opening a menu. A list of two was a click to open it, a list in which one
-of the two visible rows was already in force, and a click to choose the other —
-three steps to say what one click says. The pickers beside it keep their menus,
-because their lists are open-ended. The chip is tinted while `Auto mode` is on,
-the same treatment the plan toggle gets: of the settings in that row, the one
-where the agent writes unasked is the one worth noticing without looking for it.
+It **switches in place**, going round ask first → `Auto mode` → plan → ask
+first: the ring Claude Code's own shift+tab goes round, and Shift+Tab in the
+field does the same here. There used to be two controls — the permission chip
+among the pickers and a plan toggle by send — and each said half of what this
+says. The pickers beside it keep their menus, because their lists are
+open-ended. It is tinted for `Auto mode` and for plan, the two states where the
+agent does something other than ask.
+
+Leaving plan for ask first moves the working mode **before** planning ends.
+Planning was holding `acceptEdits` underneath — the ring reaches plan through
+it — so turned the other way round the session would pass through it, and an
+edit landing then would go through unasked. `setMode` in `useChat.ts` owns that
+order so no caller has to know it.
+
+**A plan approved out of planning goes on in `Auto mode`**, whatever the
+conversation was asking before — the core writes both fields when the plan tool
+is allowed, and executing a plan from the log does the same. With one control
+there is no second one left to say what should follow a plan, and a plan read
+and approved is the edits accepted in advance. Because that widens what the
+agent may do, the plan dialog says so beside its button, before the click.
+
+**Only out of planning.** The agent may call the plan tool from any mode, and
+handing over there would let it raise a conversation set to ask first into one
+that does not, by asking once. Outside planning, approving changes no mode and
+the dialog carries no such line.
 
 `Auto mode` keeps its English name in every locale — it is what the agent's own
 interfaces call it, and a translated name for a borrowed one reads as a second
@@ -1652,6 +1672,9 @@ the hole threading a handful of booleans through `App` would have left. Before
 this, ⌃2 pressed behind Project settings changed the selected workspace, which
 re-read the checkout's scripts into the list sitting above the trust checkbox.
 The `role="dialog"` popovers are dismissable and deliberately not matched.
+
+**Shift+Tab in the composer moves to the next mode**, ahead of the command list
+that completes on plain Tab, and an IME composition is left alone as with Enter.
 
 **Enter sends, Shift+Enter breaks the line, and an Enter that is composing does
 neither.** For anyone typing through an input method — Japanese, Chinese,

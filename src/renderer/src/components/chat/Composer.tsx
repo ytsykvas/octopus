@@ -14,6 +14,7 @@ import {
 import type { RateLimit, SessionUsage } from '@core/service.js'
 import type { SkillListing } from '@core/skills.js'
 
+import type { ChatMode } from '../../hooks/useChat.js'
 import { useDismiss } from '../../hooks/useDismiss.js'
 import { CommandMenu } from './CommandMenu.js'
 import { completeCommand, matchCommands, readCommandQuery } from './commandMatch.js'
@@ -38,10 +39,10 @@ interface ComposerProps {
   readonly busy: boolean
   /** What the agent may do without asking, once it is doing anything. */
   readonly workingMode: WorkingMode
-  readonly onWorkingMode: (mode: WorkingMode) => void
   /** Whether the next message is asked for a plan first. */
   readonly planMode: boolean
-  readonly onPlanMode: (planning: boolean) => void
+  /** The two above, moved together as the one control presents them. */
+  readonly onMode: (mode: ChatMode) => void
   /** How much thinking the next message asks for; always answered. */
   readonly effort: EffortChoice
   readonly onEffort: (effort: EffortChoice) => void
@@ -113,10 +114,12 @@ interface ComposerProps {
   readonly onNotesSent: () => void
 }
 
-const MODE_LABELS: Record<WorkingMode, 'chat.modeDefault' | 'chat.modeAcceptEdits'> = {
-  default: 'chat.modeDefault',
-  acceptEdits: 'chat.modeAcceptEdits'
-}
+const MODE_LABELS: Record<ChatMode, 'chat.modeDefault' | 'chat.modeAcceptEdits' | 'chat.planMode'> =
+  {
+    default: 'chat.modeDefault',
+    acceptEdits: 'chat.modeAcceptEdits',
+    plan: 'chat.planMode'
+  }
 
 /**
  * The mode's own icon rather than one for the control, because the row is
@@ -127,21 +130,23 @@ const MODE_LABELS: Record<WorkingMode, 'chat.modeDefault' | 'chat.modeAcceptEdit
  * setting" — the icon of the control rather than of what it says. The double
  * tick is what the mode does: answering yes before being asked.
  */
-const MODE_ICONS: Record<WorkingMode, React.ReactNode> = {
+const MODE_ICONS: Record<ChatMode, React.ReactNode> = {
   default: <Shield aria-hidden size={12} />,
-  acceptEdits: <CheckCheck aria-hidden size={12} />
+  acceptEdits: <CheckCheck aria-hidden size={12} />,
+  plan: <Map aria-hidden size={12} />
 }
 
 /**
- * What a click on the mode lands on.
+ * What a click or shift+tab lands on.
  *
- * Written out rather than derived from `WORKING_MODES` by rotation: a third
- * mode would make "the next one" a decision rather than an inevitability, and
- * this is where that decision would have to be taken.
+ * The order Claude Code's own shift+tab goes in, so a hand that learned it
+ * there does not have to learn it again. Written out rather than derived by
+ * rotation: "the next one" is a decision, and this is where it is taken.
  */
-const NEXT_MODE: Record<WorkingMode, WorkingMode> = {
+const NEXT_MODE: Record<ChatMode, ChatMode> = {
   default: 'acceptEdits',
-  acceptEdits: 'default'
+  acceptEdits: 'plan',
+  plan: 'default'
 }
 
 /**
@@ -160,9 +165,8 @@ const NEXT_MODE: Record<WorkingMode, WorkingMode> = {
 export function Composer({
   busy,
   workingMode,
-  onWorkingMode,
   planMode,
-  onPlanMode,
+  onMode,
   effort,
   onEffort,
   planEffort,
@@ -299,6 +303,11 @@ export function Composer({
   useDismiss(suggesting, field, () => {
     setDismissed(true)
   })
+
+  const mode: ChatMode = planMode ? 'plan' : workingMode
+  const nextMode = (): void => {
+    onMode(NEXT_MODE[mode])
+  }
 
   const submit = (): void => {
     // A message that is only notes is still a message: the field may be empty
@@ -440,6 +449,16 @@ export function Composer({
             }
           }}
           onKeyDown={(event) => {
+            // Ahead of the list, which completes on Tab: with shift held it is
+            // the mode, as in Claude Code, whatever else is open. Only here in
+            // the field — anywhere else in the window shift+tab still moves the
+            // focus back, which is what a keyboard reader relies on it for.
+            if (event.key === 'Tab' && event.shiftKey && !event.nativeEvent.isComposing) {
+              event.preventDefault()
+              nextMode()
+              return
+            }
+
             // The list gets first refusal on the keys it uses, because it is
             // the thing the user is looking at. When it is closed every one of
             // these falls through to the field's own behaviour.
@@ -512,62 +531,34 @@ export function Composer({
             model={modelInForce}
           />
 
-          {/* Last of the three, and the only one that is not a menu. Model and
-              effort are two halves of one question — which brain, and how hard
-              it thinks — so they sit together, and what the agent is allowed to
-              do without asking is a different question altogether.
+          {/* Beside send rather than among the pickers on the left. Those
+              two are settings, changed rarely and left alone; this is turned
+              for the message being written, so it belongs next to the button
+              that sends it.
 
-              Switched in place rather than picked from a menu: there are two
-              modes, so the list was a click to open it, a list in which one of
-              the two visible rows was already in force, and a click to choose
-              the other — three steps to say the thing the button says in one.
-              The pickers before it keep their menus, their lists being
-              open-ended.
-
-              Planning is a third state and still not a third mode: the agent
-              runs no tools at all in it, so this stays usable while planning —
-              what it names is what happens once the plan is approved, which is
-              exactly when it is worth deciding. */}
-          <button
-            type="button"
-            aria-label={t('chat.modeToggle', { mode: t(MODE_LABELS[workingMode]) })}
-            {...(planMode && { title: t('chat.modeAfterPlan') })}
-            onClick={() => {
-              onWorkingMode(NEXT_MODE[workingMode])
-            }}
-            // Tinted while the agent may write unasked, the same treatment the
-            // plan toggle uses when it is on: of the settings in this row, that
-            // is the one worth noticing without being looked for.
-            className={`focus-ring inline-flex h-6 min-w-0 items-center gap-1 rounded-[var(--radius-control)] px-1.5 text-[11px] transition-colors ${
-              workingMode === 'acceptEdits'
-                ? 'bg-accent/12 text-accent'
-                : 'text-ink-soft hover:bg-muted hover:text-ink'
-            }`}
-          >
-            <span className="shrink-0">{MODE_ICONS[workingMode]}</span>
-            <span className="truncate">{t(MODE_LABELS[workingMode])}</span>
-          </button>
-
-          {/* Beside send rather than among the pickers on the left. Those three
-              are settings, changed rarely and left alone; this is turned on for
-              the message being written, so it belongs next to the button that
-              sends it. */}
+              One control for what is stored as two fields. Planning is not a
+              degree of permission — the agent runs no tools in it — but the
+              three are what Claude Code cycles through on shift+tab, and one
+              place to look beats two that each say half of it. Switched in
+              place rather than picked from a menu: three states in a fixed
+              ring are a click each, and a list would be two. */}
           <span className="ml-auto flex items-center gap-2">
             <button
               type="button"
-              aria-pressed={planMode}
-              title={t('chat.planModeHint')}
-              onClick={() => {
-                onPlanMode(!planMode)
-              }}
+              aria-label={t('chat.modeToggle', { mode: t(MODE_LABELS[mode]) })}
+              title={t('chat.modeCycle')}
+              onClick={nextMode}
+              // Tinted for the two modes that change what the agent does
+              // unasked or at all: of the settings in this row, those are the
+              // ones worth noticing without being looked for.
               className={`focus-ring inline-flex h-6 shrink-0 items-center gap-1 rounded-[var(--radius-control)] px-1.5 text-[11px] transition-colors ${
-                planMode
-                  ? 'bg-accent/12 text-accent'
-                  : 'text-ink-soft hover:bg-muted hover:text-ink'
+                mode === 'default'
+                  ? 'text-ink-soft hover:bg-muted hover:text-ink'
+                  : 'bg-accent/12 text-accent'
               }`}
             >
-              <Map aria-hidden size={12} />
-              {t('chat.planMode')}
+              {MODE_ICONS[mode]}
+              {t(MODE_LABELS[mode])}
             </button>
 
             {busy ? (
