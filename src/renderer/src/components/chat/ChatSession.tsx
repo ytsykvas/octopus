@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
-import type { Chat, Effort, WorkingMode } from '@core/chats.js'
+import { type Chat, type Effort, opusPlanSplit, type WorkingMode } from '@core/chats.js'
 import { latestTodos } from '@core/todos.js'
 import type { WorkspaceView } from '@core/workspaces.js'
 
@@ -134,6 +134,34 @@ export function ChatSession({
   const commands = useCommands(chat.chat?.id ?? null)
   const usage = useSessionUsage(chat.chat?.id ?? null)
   const skills = useSkills(chat.chat?.id ?? null, workspace.id, chat.ensure)
+
+  /*
+   * `/model opusplan` is the one `/model` the record follows.
+   *
+   * The CLI scopes the command to the session, so the chat's two model settings
+   * stayed null and the panel drew Opus on both rows over a session running
+   * two. What the alias asks for is exactly a split, so once the message has
+   * gone the same split is written through the calls the panel itself uses —
+   * which is also the only way a window learns a record changed.
+   *
+   * After the send and only when it was accepted: a refused message leaves the
+   * panel as it was rather than showing a command that never ran.
+   */
+  const { send: sendMessage, setModel, setPlanModel } = chat
+  const send = useCallback(
+    async (text: string): Promise<boolean> => {
+      const sent = await sendMessage(text)
+      const split = sent ? opusPlanSplit(text, commands, models) : null
+
+      if (split !== null) {
+        await setModel(split.model)
+        await setPlanModel(split.planModel)
+      }
+
+      return sent
+    },
+    [sendMessage, setModel, setPlanModel, commands, models]
+  )
 
   const scroller = useRef<HTMLDivElement | null>(null)
   const pinnedToBottom = useRef(true)
@@ -362,7 +390,7 @@ export function ChatSession({
         onToggleSkill={skills.toggle}
         onRefreshSkills={skills.refresh}
         onOpenSettings={onOpenSkillSettings}
-        onSend={chat.send}
+        onSend={send}
         onStop={() => void chat.interrupt()}
         /* The two queues become one list here rather than in the composer:
            this is already the layer that adapts a controller to a prop, and the

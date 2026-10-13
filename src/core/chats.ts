@@ -534,6 +534,84 @@ export function isUsageCommand(text: string, commands: readonly AgentCommand[]):
   return isCommand(text, USAGE_COMMAND, commands)
 }
 
+/**
+ * The command that chooses the model for the session.
+ *
+ * A literal for the same reason as `clear`: nothing in the command list says
+ * what a command does, and the name is part of the CLI's contract.
+ */
+const MODEL_COMMAND = 'model'
+
+/**
+ * What the CLI's `opusplan` aliases mean, as the names a catalogue may hold.
+ *
+ * `opusplan` is "Opus in plan mode, else Sonnet", and `opusplan[1m]` the same
+ * on the long-context models. These are facts about the CLI's aliases, written
+ * down like `DEFAULT_MODEL`; which models the account actually has is the
+ * catalogue's to say.
+ *
+ * Lists, tried in order, because the catalogue is not guaranteed to spell Opus
+ * the way the alias does: a live one holds `opus[1m]` and no plain `opus`, and
+ * the row called `default` resolves to the same model without being Opus by
+ * name — on another account it is something else.
+ *
+ * A map rather than an object: the lookup key is whatever the user typed, and
+ * `/model constructor` must not find a function on the prototype.
+ */
+const OPUS_PLAN = new Map<string, { plan: readonly string[]; code: readonly string[] }>([
+  ['opusplan', { plan: ['opus', 'opus[1m]'], code: ['sonnet'] }],
+  ['opusplan[1m]', { plan: ['opus[1m]'], code: ['sonnet[1m]'] }]
+])
+
+/**
+ * The first of these the catalogue lists, by the name it goes by.
+ *
+ * Exact on `value`, deliberately not `findAgentModel`: that one also answers to
+ * the name an entry *resolves to*, which would let `default` stand in for Opus.
+ */
+function firstListed(
+  models: readonly AgentModel[],
+  candidates: readonly string[]
+): string | undefined {
+  return candidates.find((candidate) => models.some((model) => model.value === candidate))
+}
+
+/**
+ * What `/model opusplan` means for a chat's two model settings, or null when
+ * the message is not that.
+ *
+ * `/model` is scoped to the session ("for this session only"), so the chat's
+ * record is left as it was for every other argument. This one is the exception
+ * because the record can say the same thing: a split — Opus planning, Sonnet
+ * writing — is exactly what the alias asks for, and without it the panel drew
+ * Opus on both rows over a session running two models.
+ *
+ * Null whenever the catalogue cannot express the pair, so a record never holds
+ * a name the panel cannot tick. The argument is matched exactly: whether the
+ * CLI accepts other spellings is not measured, and mirroring a command it
+ * refused would put a split in the panel over a session that did not take it.
+ */
+export function opusPlanSplit(
+  text: string,
+  commands: readonly AgentCommand[],
+  models: readonly AgentModel[]
+): { model: string; planModel: string } | null {
+  if (!isCommand(text, MODEL_COMMAND, commands)) return null
+
+  // The command word, then exactly one argument.
+  const [, argument, ...rest] = text.trim().split(/\s+/)
+  if (argument === undefined || rest.length > 0) return null
+
+  const alias = OPUS_PLAN.get(argument)
+  if (alias === undefined) return null
+
+  const planModel = firstListed(models, alias.plan)
+  const model = firstListed(models, alias.code)
+  if (planModel === undefined || model === undefined) return null
+
+  return { model, planModel }
+}
+
 export const ChatSchema = z.object({
   /**
    * A uuid rather than a readable composite.

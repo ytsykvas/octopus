@@ -682,7 +682,7 @@ out for as long as planning lasts, and gives it back afterwards.
 **The three settings in the row do not all behave the same way, on purpose.**
 The **model** is read back: the context reading names what the session is
 running, so `/model opus` moves the chip and the record stays what was chosen
-here. The **mode** and the **effort** are re-asserted on every message instead,
+here — `/model opusplan` aside, which the record follows (below). The **mode** and the **effort** are re-asserted on every message instead,
 because neither can be read — no SDK message reports the effort, and
 `applyFlagSettings` answers nothing. So `/effort high` and `/permissions` last
 one turn each: the control names the level the next message will run at, which
@@ -710,6 +710,15 @@ session only"), so it moves what is running without moving what this chat chose
 — and the record staying put is the truth rather than a compromise. The name
 reaches the footer with the context reading, which is already refreshed on every
 `result`, so the chip moves as soon as the command's turn ends.
+
+**`/model opusplan` is the one command the panel follows.** The alias means Opus
+while planning and Sonnet otherwise, which is precisely a split, and left to the
+rule above the panel ticked Opus on both rows while the session ran two models.
+So once the message is accepted the chat's two models are set to that pair, and
+the panel shows it: the plan column ticks Opus and the code column Sonnet. Which
+rows those are is the catalogue's to say (`opus[1m]` where there is no plain
+`opus`), and where it cannot express the pair nothing changes. Any other
+`/model` still moves only the chip.
 
 **The footer's mode is one control over two stored fields.** `plan` is not a
 third degree of permission but a state the conversation is in: the agent runs
