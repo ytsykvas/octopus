@@ -1360,3 +1360,59 @@ describe('mentioning a file', () => {
     expect(onSend).toHaveBeenCalledWith('plain text')
   })
 })
+
+describe('stopping with Escape', () => {
+  const COMMANDS: AgentCommand[] = [
+    { name: 'clear', description: '', argumentHint: '', aliases: [] },
+    { name: 'compact', description: '', argumentHint: '', aliases: [] }
+  ]
+
+  it('stops a turn that is running', async () => {
+    const user = userEvent.setup()
+    const { onStop } = renderComposer({ busy: true })
+
+    await user.click(field())
+    await user.keyboard('{Escape}')
+
+    expect(onStop).toHaveBeenCalledOnce()
+  })
+
+  // Idle, Escape means nothing — it is not a way to clear the field.
+  it('does nothing when no turn is running', async () => {
+    const user = userEvent.setup()
+    const { onStop } = renderComposer({ busy: false })
+
+    await user.type(field(), 'half a thought{Escape}')
+
+    expect(onStop).not.toHaveBeenCalled()
+    expect(field()).toHaveValue('half a thought')
+  })
+
+  // The same key closes the list, and must not also interrupt the agent.
+  it('closes a suggestion list rather than stopping the turn', async () => {
+    const user = userEvent.setup()
+    const { onStop } = renderComposer({ busy: true, commands: COMMANDS })
+
+    await user.type(field(), '/')
+    expect(screen.getByRole('listbox')).toBeInTheDocument()
+    await user.keyboard('{Escape}')
+
+    expect(screen.queryByRole('listbox')).not.toBeInTheDocument()
+    expect(onStop).not.toHaveBeenCalled()
+  })
+
+  // There Escape cancels the candidate, and is not meant for the application.
+  it('leaves an Escape that cancels an IME candidate alone', () => {
+    const { onStop } = renderComposer({ busy: true })
+
+    fireEvent.keyDown(field(), { key: 'Escape', isComposing: true })
+
+    expect(onStop).not.toHaveBeenCalled()
+  })
+
+  it('names the key on the stop button', () => {
+    renderComposer({ busy: true })
+
+    expect(screen.getByRole('button', { name: 'Stop' })).toHaveAttribute('title', 'Stop (Esc)')
+  })
+})

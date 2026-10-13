@@ -595,6 +595,7 @@ export const uk: Translation = {
     placeholder: 'Попросіть агента щось зробити в цьому воркспейсі…',
     send: 'Надіслати',
     stop: 'Спинити',
+    stopHint: 'Спинити (Esc)',
     working: 'Працює…',
     thinking: 'Міркує',
     memoryReset: 'Звідси агент починає пам’ятати розмову спочатку',

@@ -780,6 +780,8 @@ export const en = {
     placeholder: 'Ask the agent to do something in this workspace…',
     send: 'Send',
     stop: 'Stop',
+    /* The tooltip names the key; the accessible name stays the plain word. */
+    stopHint: 'Stop (Esc)',
     working: 'Working…',
     thinking: 'Thinking',
     memoryReset: 'The agent’s memory of this conversation starts again here',

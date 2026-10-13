@@ -203,6 +203,12 @@ the event that ends a turn is filtered by the open chat's id and there is no
 chat until its history has loaded, so one arriving in that window is dropped and
 a seeded flag would stay stuck on.
 
+**Escape stops a running turn**, as it does in Claude Code, and the button's
+tooltip says so. Only once neither suggestion list has taken the key — those
+return first, so the Escape that closes a list never also interrupts the agent —
+only while a turn is running, since idle it would be a second way to do nothing,
+and not while an input method is composing, where Escape cancels the candidate.
+
 **The composer has an attic**, a strip above the field mirroring the settings
 footer below it: how full this conversation's context window is on the left, and
 on the right the skills it may reach for, the paperclip, and a refusal when the

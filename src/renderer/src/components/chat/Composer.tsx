@@ -594,6 +594,15 @@ export function Composer({
               }
             }
 
+            // Escape stops the turn, as it does in Claude Code, once neither
+            // list has taken it: those return above, so an Escape that closes
+            // a suggestion never also interrupts the agent. Not while a
+            // candidate is being composed — there Escape cancels the candidate.
+            if (event.key === 'Escape' && busy && !event.nativeEvent.isComposing) {
+              onStop()
+              return
+            }
+
             // `isComposing` is the Enter that confirms an IME candidate — how
             // Japanese, Chinese and Korean are typed, among others — and it is
             // not the Enter that sends. Without this every committed word went
@@ -668,7 +677,7 @@ export function Composer({
               <button
                 type="button"
                 onClick={onStop}
-                title={t('chat.stop')}
+                title={t('chat.stopHint')}
                 aria-label={t('chat.stop')}
                 // Filled danger, the same treatment `Button`'s destructive variant
                 // uses: it sits where send sits, and the two have to be told apart
