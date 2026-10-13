@@ -428,7 +428,7 @@ way to one; what the agent did next was start editing files.
 
 **One button and a field**, which is what the question actually has:
 
-- **Execute** runs it, always in `Auto mode` — see the footer's mode above for
+- **Execute** runs it, in `Auto mode` out of planning — see the footer's mode above for
   why. A line beside the button says so, because the click widens what the
   agent may do and that is worth reading before it rather than in the footer
   after it.
@@ -599,12 +599,17 @@ it — so turned the other way round the session would pass through it, and an
 edit landing then would go through unasked. `setMode` in `useChat.ts` owns that
 order so no caller has to know it.
 
-**An approved plan always goes on in `Auto mode`**, whatever the conversation
-was asking before — the core writes both fields when the plan tool is allowed,
-and executing a plan from the log does the same. With one control there is no
-second one left to say what should follow a plan, and a plan read and approved
-is the edits accepted in advance. Because that widens what the agent may do,
-the plan dialog says so beside its button, before the click.
+**A plan approved out of planning goes on in `Auto mode`**, whatever the
+conversation was asking before — the core writes both fields when the plan tool
+is allowed, and executing a plan from the log does the same. With one control
+there is no second one left to say what should follow a plan, and a plan read
+and approved is the edits accepted in advance. Because that widens what the
+agent may do, the plan dialog says so beside its button, before the click.
+
+**Only out of planning.** The agent may call the plan tool from any mode, and
+handing over there would let it raise a conversation set to ask first into one
+that does not, by asking once. Outside planning, approving changes no mode and
+the dialog carries no such line.
 
 `Auto mode` keeps its English name in every locale — it is what the agent's own
 interfaces call it, and a translated name for a borrowed one reads as a second

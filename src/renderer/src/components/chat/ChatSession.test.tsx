@@ -683,6 +683,25 @@ describe('deciding on a plan', () => {
         'Carry out the plan “Normalising the locales”.'
       )
     })
+    // Not planning, so carrying it out changes no mode: a plan the agent
+    // offered unasked does not lift the conversation out of asking first.
+    expect(octopus().chats.setWorkingMode).not.toHaveBeenCalled()
+    expect(octopus().chats.setPlanMode).not.toHaveBeenCalled()
+  })
+
+  // The same rule through the dialog: approving a plan offered outside
+  // planning leaves the conversation asking first, and says nothing otherwise.
+  it('keeps asking first when a plan arrives outside planning', async () => {
+    const user = userEvent.setup()
+    givenChat([], { planMode: false, workingMode: 'default' })
+    await openLoadedChat()
+
+    emitAgentEvent(planRequest)
+    await user.click(await screen.findByRole('button', { name: 'Execute' }))
+
+    expect(octopus().chats.answerPermission).toHaveBeenCalledWith('r-plan', 'allow', undefined)
+    expect(screen.queryByText(/Runs in Auto mode/)).not.toBeInTheDocument()
+    expect(mode()).toHaveTextContent('Ask first')
   })
 
   /*

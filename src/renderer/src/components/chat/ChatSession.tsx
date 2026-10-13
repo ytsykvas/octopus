@@ -209,10 +209,12 @@ export function ChatSession({
             // Without it the message went out while the conversation was still
             // recorded as planning, and the agent worked in whatever mode it
             // happened to fall back to. `acceptEdits`, as an approved plan
-            // gets in the core — this is the same plan, approved later.
+            // gets in the core — this is the same plan, approved later — and,
+            // as there, only out of planning: a plan the agent offered unasked
+            // does not lift a conversation out of asking first.
             onExecutePlan={(plan) => {
               void (async () => {
-                await chat.setMode('acceptEdits')
+                if (record?.planMode === true) await chat.setMode('acceptEdits')
                 await chat.send(t('chat.executePlanMessage', { title: planTitle(plan) }))
               })()
             }}
@@ -229,6 +231,7 @@ export function ChatSession({
       {visible && plan !== null && pending !== null && (
         <PlanDialog
           plan={plan}
+          accepting={record?.planMode === true}
           onExecute={() => void chat.answer(pending.requestId, 'allow')}
           onKeepPlanning={(feedback) => void chat.answer(pending.requestId, 'deny', feedback)}
         />

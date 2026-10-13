@@ -25,6 +25,20 @@ import { onChatEvent } from './chatEvents.js'
  */
 export type ChatMode = WorkingMode | 'plan'
 
+/**
+ * The record once a plan is approved — the same rule the core applies.
+ *
+ * `acceptEdits` only out of planning: the agent may offer a plan from any mode,
+ * and one offered unasked does not lift the conversation out of asking first.
+ */
+function leavePlanning(chat: Chat): Chat {
+  return {
+    ...chat,
+    planMode: false,
+    ...(chat.planMode && { workingMode: 'acceptEdits' as const })
+  }
+}
+
 export interface PendingPermission {
   readonly requestId: string
   readonly toolName: string
@@ -412,9 +426,7 @@ export function useChat(
         // the chat this hook has open, so there is one by the time it can be
         // answered. The guard exists because the state's type says otherwise.
         /* v8 ignore next */
-        setChat((current) =>
-          current === null ? null : { ...current, planMode: false, workingMode: 'acceptEdits' }
-        )
+        setChat((current) => (current === null ? null : leavePlanning(current)))
       }
 
       const sent = await window.octopus.chats.answerPermission(requestId, decision, feedback)

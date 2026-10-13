@@ -5105,6 +5105,26 @@ describe('the agent chat', () => {
       expect(service.listChats(workspaceId)[0]?.workingMode).toBe('acceptEdits')
     })
 
+    /*
+     * The agent may call the plan tool without having been asked to plan.
+     * Handing over to `acceptEdits` there would let it raise a conversation the
+     * user set to ask first, by asking once — so outside planning, approving
+     * leaves the working mode where the user put it.
+     */
+    it('keeps asking first when a plan arrives outside planning', async () => {
+      const { service, workspaceId, events } = await withWorkspace()
+      const chat = await service.openChat(workspaceId)
+      await service.sendToChat(chat.id, 'just do it')
+
+      const decision = agent().ask('ExitPlanMode', { plan: 'a plan' })
+      await service.answerPermission(await waitForRequest(events), 'allow')
+
+      await expect(decision).resolves.toMatchObject({
+        updatedPermissions: [{ type: 'setMode', mode: 'default', destination: 'session' }]
+      })
+      expect(service.listChats(workspaceId)[0]?.workingMode).toBe('default')
+    })
+
     // The stored half is the one that outlived the session and made a
     // conversation revert to planning on its next turn.
     it('writes the end of planning to disk, not only to the session', async () => {

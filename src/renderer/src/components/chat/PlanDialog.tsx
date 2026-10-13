@@ -7,6 +7,11 @@ import { Markdown } from './Markdown.js'
 
 interface PlanDialogProps {
   readonly plan: string
+  /**
+   * Whether executing moves the conversation to `acceptEdits` — true only out
+   * of planning, since a plan the agent offered unasked changes no mode.
+   */
+  readonly accepting: boolean
   readonly onExecute: () => void
   /** Sends the plan back with the user's note, which may be empty. */
   readonly onKeepPlanning: (feedback: string) => void
@@ -25,13 +30,14 @@ interface PlanDialogProps {
  * agent as the refusal's reason, and the plan it comes back with raises this
  * dialog again.
  *
- * Executing always goes on in `acceptEdits`, whatever the conversation was
- * asking before — the composer's one mode control has no second half left to
- * say otherwise. That widens what the agent may do, so the line beside the
+ * Executing out of planning goes on in `acceptEdits`, whatever the
+ * conversation was asking before — the composer's one mode control has no
+ * second half left to say otherwise. That widens what the agent may do, so the line beside the
  * button says it before the click rather than the footer after it.
  */
 export function PlanDialog({
   plan,
+  accepting,
   onExecute,
   onKeepPlanning
 }: PlanDialogProps): React.JSX.Element {
@@ -52,7 +58,9 @@ export function PlanDialog({
       onClose={keepPlanning}
       footer={
         <>
-          <span className="text-ink-soft mr-auto text-[11px]">{t('chat.planExecuteHint')}</span>
+          {accepting && (
+            <span className="text-ink-soft mr-auto text-[11px]">{t('chat.planExecuteHint')}</span>
+          )}
           <Button variant="accent" onClick={onExecute}>
             {t('chat.planExecute')}
           </Button>
