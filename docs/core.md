@@ -427,6 +427,22 @@ model. It briefly did both, on the belief that a `/model` could not be detected;
 once it could, the re-assertion stopped guarding against drift and became an
 undo of an explicit instruction.
 
+**One `/model` argument is followed by the record: `opusplan`.** The CLI scopes
+the command to the session, so the record stayed at `null` and the panel drew
+Opus on both rows over a session running two models. The alias is exactly what a
+split already says — Opus while planning, Sonnet otherwise — so `opusPlanSplit`
+(`chats.ts`) turns the message into the two settings, and the window writes them
+through `setModel` and `setPlanModel` once the send has been accepted. It is the
+window's job rather than the core's because nothing tells a window that a record
+changed; a write made in `sendToChat` would never have reached the panel.
+
+The names come from the catalogue, not from the alias: a live one holds
+`opus[1m]` and no plain `opus`, and `default` resolves to the same model without
+being Opus by name. If the catalogue cannot express the pair the record is left
+alone, which is what happened before. The argument is matched exactly — whether
+the CLI takes `OpusPlan` is not measured — and acceptance is the send's, not the
+CLI's: a command it refuses in its reply still leaves the split in the panel.
+
 ### Two models, and when one replaces the other
 
 A conversation holds two: `model` for writing the code and `planModel` for

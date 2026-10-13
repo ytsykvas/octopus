@@ -2,7 +2,7 @@ import { fireEvent, render, screen, waitFor, within } from '@testing-library/rea
 import userEvent from '@testing-library/user-event'
 import { beforeAll, describe, expect, it, vi } from 'vitest'
 
-import type { Effort, WorkingMode } from '@core/chats.js'
+import type { AgentModel, Effort, WorkingMode } from '@core/chats.js'
 import type { ProjectColor } from '@core/colors.js'
 import type { WorkspaceView } from '@core/workspaces.js'
 import type { ChatEntry } from '@core/transcript.js'
@@ -110,6 +110,39 @@ async function openChat(
 
 /** The panel's coding half; both columns hold the same names. */
 const codeColumn = (): HTMLElement => screen.getByRole('radiogroup', { name: 'Writing code' })
+const planColumn = (): HTMLElement => screen.getByRole('radiogroup', { name: 'Plan and research' })
+
+/** What the radios in one column say they are, ticked ones only. */
+function ticked(column: HTMLElement): string[] {
+  return within(column)
+    .getAllByRole('radio')
+    .filter((radio) => radio.getAttribute('aria-checked') === 'true')
+    .map((radio) => radio.textContent)
+}
+
+/**
+ * The catalogue a live account sent: Opus is `opus[1m]` and there is no plain
+ * `opus`, which is the whole reason `/model opusplan` needs a fallback.
+ */
+function givenLiveCatalogue(): void {
+  const row = (value: string, resolvedModel: string, displayName: string): AgentModel => ({
+    value,
+    resolvedModel,
+    displayName,
+    description: '',
+    supportsEffort: null,
+    supportedEffortLevels: null
+  })
+
+  vi.mocked(octopus().chats.models).mockResolvedValue({
+    ok: true,
+    value: [
+      row('default', 'claude-opus-5[1m]', 'Default (recommended)'),
+      row('opus[1m]', 'claude-opus-5[1m]', 'Opus (1M context)'),
+      row('sonnet', 'claude-sonnet-5', 'Sonnet')
+    ]
+  })
+}
 
 /**
  * Renders a pane whose chat already exists, and waits until it is loaded.
@@ -975,6 +1008,69 @@ describe('the permission mode', () => {
       expect(octopus().chats.setPlanModel).toHaveBeenCalledWith(CHAT_ID, 'claude-opus-5')
     })
     expect(octopus().chats.setModel).not.toHaveBeenCalled()
+  })
+
+  /*
+   * The CLI scopes `/model` to the session, so the record stayed null and the
+   * panel drew Opus on both rows over a session running two models. This one
+   * command is what the panel's own split says, so it is written down.
+   */
+  it('shows /model opusplan as Opus for planning and Sonnet for writing code', async () => {
+    const user = userEvent.setup()
+    givenLiveCatalogue()
+    givenChat()
+    await openLoadedChat()
+    await screen.findByRole('button', { name: 'Model' })
+
+    await user.type(field(), '/model opusplan{Enter}')
+
+    await waitFor(() => {
+      expect(octopus().chats.setPlanModel).toHaveBeenCalledWith(CHAT_ID, 'opus[1m]')
+    })
+    expect(octopus().chats.send).toHaveBeenCalledWith(CHAT_ID, '/model opusplan')
+    expect(octopus().chats.setModel).toHaveBeenCalledWith(CHAT_ID, 'sonnet')
+
+    await user.click(screen.getByRole('button', { name: 'Model' }))
+    expect(ticked(codeColumn())).toEqual(['Sonnet'])
+    expect(ticked(planColumn())).toEqual(['Opus (1M context)'])
+  })
+
+  // The command goes to the CLI first and the panel follows it, so a message
+  // that was refused cannot leave a split behind for a command that never ran.
+  it('leaves the panel alone when the command was not accepted', async () => {
+    const user = userEvent.setup()
+    givenLiveCatalogue()
+    givenChat()
+    await openLoadedChat()
+    await screen.findByRole('button', { name: 'Model' })
+    vi.mocked(octopus().chats.send).mockResolvedValue({ ok: false, error: 'the agent is gone' })
+
+    await user.type(field(), '/model opusplan{Enter}')
+
+    await waitFor(() => {
+      expect(octopus().chats.send).toHaveBeenCalledWith(CHAT_ID, '/model opusplan')
+    })
+    await screen.findByText(/the agent is gone/)
+    expect(octopus().chats.setModel).not.toHaveBeenCalled()
+    expect(octopus().chats.setPlanModel).not.toHaveBeenCalled()
+  })
+
+  // `/model` stays the session's own for everything else; the record is what
+  // was chosen in the panel and the chip says what is running.
+  it('leaves the panel alone for any other /model', async () => {
+    const user = userEvent.setup()
+    givenLiveCatalogue()
+    givenChat()
+    await openLoadedChat()
+    await screen.findByRole('button', { name: 'Model' })
+
+    await user.type(field(), '/model sonnet{Enter}')
+
+    await waitFor(() => {
+      expect(octopus().chats.send).toHaveBeenCalledWith(CHAT_ID, '/model sonnet')
+    })
+    expect(octopus().chats.setModel).not.toHaveBeenCalled()
+    expect(octopus().chats.setPlanModel).not.toHaveBeenCalled()
   })
 
   /*

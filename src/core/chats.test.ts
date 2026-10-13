@@ -21,6 +21,7 @@ import {
   isUsageCommand,
   MAX_CHATS_PER_WORKSPACE,
   newChat,
+  opusPlanSplit,
   PERMISSION_MODES,
   PermissionAnswerSchema,
   sessionEffort,
@@ -792,5 +793,121 @@ describe('a refused operation on a conversation', () => {
     expect(error.name).toBe('ChatError')
     expect(error.code).toBe('tooManyChats')
     expect(error.params).toEqual({ limit: '3' })
+  })
+})
+
+/*
+ * `/model opusplan` is the CLI's own spelling of what the panel calls a split:
+ * Opus while planning, Sonnet while writing code. The command is scoped to the
+ * session and the chat's record stays put, so the panel kept showing Opus on
+ * both rows over a session that was running two models.
+ *
+ * `CATALOGUE` is the live one on purpose. It has `opus[1m]` and no plain `opus`,
+ * so a lookup that asked for `opus` and gave up would have done nothing on the
+ * account that reported this.
+ */
+describe('reading /model opusplan as a split', () => {
+  const NO_COMMANDS: AgentCommand[] = []
+
+  it('names Opus for planning and Sonnet for writing code', () => {
+    expect(opusPlanSplit('/model opusplan', NO_COMMANDS, CATALOGUE)).toEqual({
+      planModel: 'opus[1m]',
+      model: 'sonnet'
+    })
+  })
+
+  // Preferred when the account offers it: the plain alias is the one the
+  // command names, and `opus[1m]` is only what this catalogue happens to hold.
+  it('prefers the plain Opus row when there is one', () => {
+    const withOpus: AgentModel[] = [
+      ...CATALOGUE,
+      {
+        value: 'opus',
+        resolvedModel: 'claude-opus-5',
+        displayName: 'Opus',
+        description: '',
+        supportedEffortLevels: null,
+        supportsEffort: null
+      }
+    ]
+
+    expect(opusPlanSplit('/model opusplan', NO_COMMANDS, withOpus)?.planModel).toBe('opus')
+  })
+
+  // `default` resolves to the same model as `opus[1m]`, but it is not Opus by
+  // name: on another account it is something else, and the split would then be
+  // written against a model nobody asked for.
+  it('does not take the default row for Opus', () => {
+    const noOpus = CATALOGUE.filter((model) => model.value !== 'opus[1m]')
+
+    expect(opusPlanSplit('/model opusplan', NO_COMMANDS, noOpus)).toBeNull()
+  })
+
+  it('asks for the long-context pair under the long-context spelling', () => {
+    const withLong: AgentModel[] = [
+      ...CATALOGUE,
+      {
+        value: 'sonnet[1m]',
+        resolvedModel: 'claude-sonnet-5[1m]',
+        displayName: 'Sonnet (1M context)',
+        description: '',
+        supportedEffortLevels: null,
+        supportsEffort: null
+      }
+    ]
+
+    expect(opusPlanSplit('/model opusplan[1m]', NO_COMMANDS, withLong)).toEqual({
+      planModel: 'opus[1m]',
+      model: 'sonnet[1m]'
+    })
+  })
+
+  // Saying nothing is today's behaviour: a record never holds a name the panel
+  // cannot tick.
+  it('says nothing when the catalogue cannot express the pair', () => {
+    expect(opusPlanSplit('/model opusplan[1m]', NO_COMMANDS, CATALOGUE)).toBeNull()
+    expect(
+      opusPlanSplit(
+        '/model opusplan',
+        NO_COMMANDS,
+        CATALOGUE.filter((model) => model.value !== 'sonnet')
+      )
+    ).toBeNull()
+    expect(opusPlanSplit('/model opusplan', NO_COMMANDS, [])).toBeNull()
+  })
+
+  it('reads the command with whitespace around it', () => {
+    expect(opusPlanSplit('  /model   opusplan  ', NO_COMMANDS, CATALOGUE)).not.toBeNull()
+  })
+
+  // The CLI reaches `/model` under other names too, and the chat's own list is
+  // where those are written down.
+  it('knows the command by the aliases the agent reported', () => {
+    const model: AgentCommand = {
+      name: 'model',
+      description: 'Set the model',
+      argumentHint: '[model]',
+      aliases: ['m']
+    }
+
+    expect(opusPlanSplit('/m opusplan', [model], CATALOGUE)).not.toBeNull()
+  })
+
+  it.each([
+    ['another model', '/model opus'],
+    ['no argument', '/model'],
+    ['a longer command name', '/modelx opusplan'],
+    ['a different command', '/clear opusplan'],
+    ['plain text', 'opusplan'],
+    ['text that merely contains it', 'please /model opusplan'],
+    ['more than the one argument', '/model opusplan extra'],
+    // Not folded: whether the CLI takes another spelling is unmeasured, and a
+    // split mirrored for a command it refused would sit over a session that did
+    // not take it.
+    ['another case', '/model OpusPlan'],
+    // The key is whatever was typed; a prototype property must not answer.
+    ['a property of every object', '/model constructor']
+  ])('does not mistake %s for it', (_what, text) => {
+    expect(opusPlanSplit(text, NO_COMMANDS, CATALOGUE)).toBeNull()
   })
 })

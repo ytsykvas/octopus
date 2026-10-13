@@ -4467,6 +4467,13 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
        * a compromise: it holds what was chosen here, and the footer shows what
        * is running.
        *
+       * One argument is the exception, and it is not made here: `opusplan` is
+       * what a split already says, so the window writes it through the panel's
+       * own two calls once this message has been accepted (`opusPlanSplit`, and
+       * `ChatSession`). Not in this file because nothing tells a window that a
+       * record changed — a write made here would leave the panel drawing the
+       * old one.
+       *
        * A **mode** change is the one thing that does move it, in `applyMode`
        * and on an approved plan — and only for a conversation whose plan and
        * code models differ, where leaving the model alone would run the plan
