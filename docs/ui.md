@@ -203,6 +203,37 @@ the event that ends a turn is filtered by the open chat's id and there is no
 chat until its history has loaded, so one arriving in that window is dropped and
 a seeded flag would stay stuck on.
 
+**The log is drawn through assistant-ui's thread and message primitives.** Each
+turn — what the user said and everything the agent did in answer — is one
+message in an external-store runtime fed from the transcript, and each block
+rides in as a `data` part carrying itself. Nothing is mapped onto the library's
+own `text`, `reasoning` or `tool-call` parts, and that is deliberate: the log is
+one row per event with rules the library has no word for (a run folded into its
+count, an edit drawn as a diff, an answer struck through because the agent took
+it back), all of which live in the block, and translating would encode them a
+second time and be wrong about them in one of the two places. So the library is
+the runtime and the structure — messages, parts, the place later features such
+as per-message actions would attach — and the rows are ours.
+
+What the library is handed has to keep its identity. It caches a message by the
+object it was given and the part renderers by the object they came in, so a map
+or an arrow function rebuilt inside the render makes every row re-render by
+itself: measured under jsdom, 592 ms for one update at a thousand turns with
+them inline and 18 ms with them hoisted. `toThreadMessages` is held against the
+blocks, and the part map, the message renderer and the converter are module
+constants. Token streaming never goes through the runtime — the buffer is drawn
+below the thread, as it always was — which also sidesteps an open upstream issue
+where the cost of each update grows with the thread's length. Dependency pinned
+to an exact version: it is 0.x and its minors have broken things.
+
+**Not moved: the composer.** The slash list and the `@` list were built here, on
+the field's own keys, with the draft kept per tab, an IME guard on every key, a
+pasted image, a dropped file and the caret put back after a mention. The
+library's composer primitives would replace all of that with its own handling of
+each, for no behaviour the field lacks, and the tests that pin those behaviours
+describe this field, not that one. If a feature ever needs what the primitives
+offer, the seam is `ChatSession`: the runtime already lives one level down.
+
 **A subagent's work is folded under the call that started it.** Its messages
 arrive on the conversation's own stream, told apart only by the id of that call
 (`parentToolUseId` on its text, reasoning, calls and results), and drawn at the

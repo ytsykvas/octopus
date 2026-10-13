@@ -13,7 +13,14 @@ import {
   Undo2,
   Wrench
 } from 'lucide-react'
-import { useMemo } from 'react'
+import {
+  AssistantRuntimeProvider,
+  MessagePrimitive,
+  ThreadPrimitive,
+  type ThreadMessageLike,
+  useExternalStoreRuntime
+} from '@assistant-ui/react'
+import { createContext, useContext, useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import type { FormValues } from '@core/elicitation.js'
@@ -30,12 +37,14 @@ import type { Streaming } from '../../hooks/useChat.js'
 import { formatTokens } from './format.js'
 import type { Change, ChangeLine } from './changeSummary.js'
 import { Markdown } from './Markdown.js'
+import { BLOCK_PART, toThreadMessages } from './threadMessages.js'
 import { ElicitationCard } from './ElicitationCard.js'
 import { QuestionCard } from './QuestionCard.js'
 import {
   answersByRequest,
   elicitationsByRequest,
   groupToolRuns,
+  type LogBlock,
   subagentsOf,
   planCalls,
   retractedUuids,
@@ -138,47 +147,47 @@ export function ChatLog({
   // standing above their own replacement as though they still held.
   const retracted = useMemo(() => retractedUuids(entries), [entries])
 
+  // The turns as the library's runtime holds them. Held against the blocks:
+  // it caches each message by the object it was handed, and a list rebuilt on
+  // every render would make it walk the whole thread for every streamed token.
+  const messages = useMemo(() => toThreadMessages(blocks), [blocks])
+  const runtime = useExternalStoreRuntime<ThreadMessageLike>({
+    messages,
+    isRunning: false,
+    convertMessage: asIs,
+    onNew: neverSentHere
+  })
+
   return (
     <div className="mx-auto flex w-full max-w-6xl flex-col gap-3 px-6 py-5">
-      {/* The position is the key because the log is append-only: nothing is
-          ever reordered or removed, so where a block starts identifies it for
-          its whole life. Two identical rows have nothing else to tell apart. */}
-      {blocks.map((block) => {
-        if (block.kind === 'tools') {
-          return <ToolRun key={block.at} entries={block.entries} steps={subagents.steps} />
-        }
-
-        if (block.kind === 'change') {
-          return (
-            <ChangeBlock
-              key={block.at}
-              name={block.name}
-              change={block.change}
-              context={block.context}
-            />
-          )
-        }
-
-        return (
-          <EntryRow
-            key={block.at}
-            entry={block.entry}
-            plans={plans}
-            retracted={retracted}
-            steps={subagents.steps}
-            busy={busy}
-            pendingRequestId={pendingRequestId}
-            pendingElicitationId={pendingElicitationId}
-            elicitationAnswers={elicitationAnswers}
-            onAnswerElicitation={onAnswerElicitation}
-            answers={answers}
-            onAnswer={onAnswer}
-            onAnswerQuestions={onAnswerQuestions}
-            onExecutePlan={onExecutePlan}
-            onRewind={onRewind}
-          />
-        )
-      })}
+      {/* The rows are drawn through the library's thread and message
+          primitives, one message per turn, and every block rides in as a part
+          the row renderer below turns back into what it always was. The
+          wrappers are `contents` so the column's gap still sits between rows
+          and not between a row and its wrapper. */}
+      <AssistantRuntimeProvider runtime={runtime}>
+        <RowsContext.Provider
+          value={{
+            plans,
+            retracted,
+            steps: subagents.steps,
+            busy,
+            pendingRequestId,
+            pendingElicitationId,
+            elicitationAnswers,
+            onAnswerElicitation,
+            answers,
+            onAnswer,
+            onAnswerQuestions,
+            onExecutePlan,
+            onRewind
+          }}
+        >
+          <ThreadPrimitive.Root className="contents">
+            <ThreadPrimitive.Messages>{renderTurn}</ThreadPrimitive.Messages>
+          </ThreadPrimitive.Root>
+        </RowsContext.Provider>
+      </AssistantRuntimeProvider>
 
       {streaming.thinking !== '' && <Thinking text={streaming.thinking} />}
       {streaming.text !== '' && <Prose text={streaming.text} />}
@@ -194,6 +203,60 @@ export function ChatLog({
     </div>
   )
 }
+
+/*
+ * What the library is handed, and none of it is rebuilt per render.
+ *
+ * It caches a message by the object it was given and the part renderers by the
+ * object they came in, so an inline arrow or a fresh components map makes every
+ * row re-render by itself. Measured: 592 ms for one update at a thousand turns
+ * with them inline, 18 ms with them here.
+ */
+const asIs = (message: ThreadMessageLike): ThreadMessageLike => message
+
+/**
+ * Messages are never sent through the runtime: the composer is the way in.
+ *
+ * Required by the library all the same, and nothing here can reach it — the log
+ * draws no input of its own — so there is nothing to call it with.
+ */
+/* v8 ignore next */
+const neverSentHere = (): Promise<void> => Promise.resolve()
+
+/** What every row needs, from the log that holds them. */
+const RowsContext = createContext<RowProps | null>(null)
+
+/** One log block, drawn the way the log has always drawn it. */
+function BlockRow({ block }: { block: LogBlock }): React.JSX.Element | null {
+  const rows = useContext(RowsContext)
+  // Rendered only inside the provider above, which always supplies it. The
+  // guard is for the type, which cannot know that.
+  /* v8 ignore next */
+  if (rows === null) return null
+
+  if (block.kind === 'tools') return <ToolRun entries={block.entries} steps={rows.steps} />
+
+  if (block.kind === 'change') {
+    return <ChangeBlock name={block.name} change={block.change} context={block.context} />
+  }
+
+  return <EntryRow entry={block.entry} {...rows} />
+}
+
+const BLOCK_PARTS = {
+  data: {
+    by_name: {
+      [BLOCK_PART]: ({ data }: { data: unknown }) => <BlockRow block={data as LogBlock} />
+    }
+  }
+} satisfies NonNullable<React.ComponentProps<typeof MessagePrimitive.Parts>['components']>
+
+/** A turn: its blocks are its parts, in the order they happened. */
+const renderTurn = (): React.JSX.Element => (
+  <MessagePrimitive.Root className="contents">
+    <MessagePrimitive.Parts components={BLOCK_PARTS} />
+  </MessagePrimitive.Root>
+)
 
 /** What every row needs to answer whatever the agent is waiting on. */
 interface AnswerProps {
