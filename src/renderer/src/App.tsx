@@ -6,8 +6,7 @@ import {
   GitPullRequest,
   PanelRightClose,
   PanelRightOpen,
-  Plus,
-  Settings as SettingsIcon
+  Plus
 } from 'lucide-react'
 import { useCallback, useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
@@ -29,6 +28,7 @@ import { ProjectTabs } from './components/ProjectTabs.js'
 import { RightPanel } from './components/RightPanel.js'
 import { type SectionId, Settings } from './components/Settings.js'
 import { Sidebar } from './components/Sidebar.js'
+import { SidebarFooter } from './components/SidebarFooter.js'
 import { useConfirm } from './hooks/useConfirm.js'
 import { useErrorMessage } from './hooks/useErrorMessage.js'
 import { DEFAULT_ENV_FILE } from '@core/envBlock.js'
@@ -716,8 +716,9 @@ export function App(): React.JSX.Element {
       </header>
 
       <div className="flex min-h-0 flex-1">
-        {/* Tabs and workspaces are one column, so Settings can sit in the corner
-          of the window rather than inset by the width of the tab strip. */}
+        {/* Tabs and workspaces are one column, so the footer — limits, Settings
+          and the fold — can span the corner of the window rather than be inset
+          by the width of the tab strip. */}
         <div className="flex min-h-0 shrink-0 flex-col">
           <div className="flex min-h-0 flex-1">
             <ProjectTabs
@@ -736,10 +737,6 @@ export function App(): React.JSX.Element {
               onAddFromDisk={() => void addFromDisk()}
               onAddFromGitHub={() => void addFromGitHub()}
               busy={projects.busy || checkingGitHub}
-              sidebarOpen={sidebarOpen}
-              onToggleSidebar={() => {
-                setSidebarOpen((open) => !open)
-              }}
             />
 
             {sidebarOpen && (
@@ -767,24 +764,15 @@ export function App(): React.JSX.Element {
             )}
           </div>
 
-          {/* Folding the list away moved to the foot of the tab strip, which is
-              the part of this column that stays put. What is left here is the
-              one thing that belongs to the window rather than to a project. */}
-          <div className="border-line bg-surface border-t border-r p-2">
-            <button
-              type="button"
-              onClick={() => {
-                setSettingsSection('general')
-              }}
-              title={t('sidebar.settings')}
-              className="row focus-ring text-ink-soft hover:text-ink flex w-full items-center gap-2 px-2 py-1.5"
-            >
-              <SettingsIcon aria-hidden size={14} />
-              {/* Folded, the column is only as wide as the tab strip, so the
-                  label goes and the title carries the meaning. */}
-              {sidebarOpen && t('sidebar.settings')}
-            </button>
-          </div>
+          <SidebarFooter
+            sidebarOpen={sidebarOpen}
+            onToggleSidebar={() => {
+              setSidebarOpen((open) => !open)
+            }}
+            onOpenSettings={() => {
+              setSettingsSection('general')
+            }}
+          />
         </div>
 
         <main className="flex min-w-0 flex-1 flex-col">

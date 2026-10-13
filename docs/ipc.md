@@ -238,7 +238,7 @@ no agent message describes: an interrupt, an answered permission, a closed tab.
 
 **`usage:windows`** carries the account's plan windows whenever the service
 learns they moved. Pushed rather than left to be asked for, and
-that is the whole of what stopped the block at the foot of the sidebar lagging:
+that is the whole of what stopped the block at the foot of the left column lagging:
 it used to watch for a finished turn and then read a cache the chat pane was
 still filling, so it drew the previous turn's figure on every turn.
 

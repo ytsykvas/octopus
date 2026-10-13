@@ -405,6 +405,18 @@ describe('App', () => {
     expect(screen.getByRole('button', { name: 'Show workspaces' })).toBeInTheDocument()
   })
 
+  // The fold is a window-level control like Settings, so it sits beside it in
+  // the footer rather than at the foot of the strip, where it used to be.
+  it('keeps the fold beside Settings, outside the tab strip', async () => {
+    givenTwoProjects()
+    await openApp()
+
+    const fold = await screen.findByRole('button', { name: 'Hide workspaces' })
+
+    expect(fold.closest('nav')).toBeNull()
+    expect(fold.parentElement).toBe(screen.getByRole('button', { name: 'Settings' }).parentElement)
+  })
+
   // Picking a project is asking to see it, and folded away there is nothing to
   // see — so the click must not appear to do nothing.
   it('brings the workspace list back when a project is picked', async () => {

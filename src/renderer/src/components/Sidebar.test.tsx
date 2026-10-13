@@ -109,6 +109,14 @@ describe('Sidebar', () => {
     ).toBeInTheDocument()
   })
 
+  // The limits moved to the footer, which spans the tab strip as well. Left
+  // here they would be drawn twice, once at the list's width.
+  it('leaves the account limits to the footer', () => {
+    renderSidebar()
+
+    expect(screen.queryByRole('button', { name: 'Read the limits now' })).toBeNull()
+  })
+
   it('creates a workspace from the + button', async () => {
     const user = userEvent.setup()
     const props = renderSidebar()

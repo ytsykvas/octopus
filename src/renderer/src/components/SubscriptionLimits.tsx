@@ -32,7 +32,7 @@ const EMPTY_REASONS: Record<
 }
 
 /**
- * What is left of the account's windows, at the foot of the sidebar.
+ * What is left of the account's windows, at the foot of the left column.
  *
  * Here rather than above the composer, where these used to be, because they say
  * nothing about the conversation they were sitting in: the same pair applies to
@@ -136,8 +136,9 @@ export function SubscriptionLimits({ subscription }: SubscriptionLimitsProps): R
                 title={title}
               >
                 <div className="mb-1 flex items-baseline justify-between gap-2 text-[11px]">
-                  {/* Two hundred pixels for the whole row, so the mark is on
-                      the name rather than a word of its own. */}
+                  {/* Still not much for the whole row once the figure and the
+                      reset time are in it, so the mark is on the name rather
+                      than a word of its own. */}
                   <span className="text-ink-faint truncate">
                     {window.binding ? t('limits.binding', { name: label }) : label}
                   </span>

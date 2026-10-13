@@ -11,9 +11,10 @@
 │ OC ├──────────────┤                          │                      │
 │    │  ● anna      │                          │                      │
 │ +  │  ○ maria     │                          │                      │
-│ ⊟  │              │                          │                      │
+│    │              │                          │                      │
 ├────┴──────────────┤                          │                      │
-│ ⚙  Settings       │                          │                      │
+│ Claude   5h 31%   │                          │                      │
+│ ⚙               ⊟ │                          │                      │
 └───────────────────┴──────────────────────────┴──────────────────────┘
   tabs   workspaces           centre                 right pane
 ```
@@ -27,12 +28,19 @@ so nothing depends on how wide the tab strip happens to be.
 both in one tree outgrows the window and makes a click mean two things — select
 and fold. Splitting them means neither list grows with the other.
 
-**The fold sits at the foot of the strip**, as an icon. The strip is the part of
-that column which survives folding, so the control that brings the list back
-belongs to it rather than to the pane it hides — and it sits below the scrolling
-list of projects, or it would scroll out of reach once there are enough of them.
-What stays in the corner underneath is Settings, which belongs to the window
-rather than to any project.
+**The foot of the left column is one footer**, as wide as the strip and the list
+together: the account's limits, and under them a row holding Settings and the
+fold, both icons. The two are the controls that belong to the window rather than
+to any project, so they share a row — Settings at one end, the fold at the
+other. The footer is the part of that column which survives folding, so the
+control that brings the list back belongs to it rather than to the pane it
+hides, and it sits outside the scrolling list of projects or it would scroll
+out of reach once there are enough of them.
+
+Folded, the column is only the strip: the limits are not drawn, and Settings and
+the fold stack instead of sitting side by side. The label on Settings went with
+the move — beside an icon it was a word restating the icon, and the name is
+still there as a tooltip and for assistive technology.
 
 **The centre is the agent chat**, scoped to the selected workspace: its worktree
 is the agent's working directory and its branch is where the work lands. A
@@ -1576,10 +1584,11 @@ the filled dot for uncommitted work when there is not. Two marks side by side wo
 describes, and `warning` is the one worth crossing the window for, because that
 turn has stopped and is waiting on you.
 
-### What is left of the account, at the foot of the list
+### What is left of the account, at the foot of the left column
 
-The account's plan windows sit under the workspace list rather than above the
-composer, where they used to be. They say nothing about the conversation they
+The account's plan windows sit at the foot of the left column — under the tab
+strip as well as the workspace list, in the footer beside Settings — rather
+than above the composer, where they used to be. They say nothing about the conversation they
 were sitting in: the same set applies to every workspace, and the decision they
 inform is whether to start something at all, which is made looking at the list
 rather than at a chat.
@@ -1719,8 +1728,8 @@ withdrawn, while a word nobody has seen cannot invent an alarm.
 window is the one actually stopping the next turn. Three drawn at equal weight
 left the reader to work it out; reordering the list to answer would cost them
 the positions they have learned, and a word costs nothing. The card has room for
-one of its own; the sidebar row has two hundred pixels for everything, so there
-the mark rides on the name.
+one of its own; the footer row is the width of the column and not much more
+than two hundred pixels at its narrowest, so there the mark rides on the name.
 
 The two readings are joined by **reset time**, not by name. The vocabularies do
 not line up — `session` for `five_hour`, `weekly_scoped` for a model's week —
