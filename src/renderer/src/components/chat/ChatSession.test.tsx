@@ -1054,6 +1054,33 @@ describe('the permission mode', () => {
     expect(screen.queryByText('no such worktree')).not.toBeInTheDocument()
   })
 
+  describe('rewriting a plan before approving it', () => {
+    it('approves with the plan the user wrote', async () => {
+      const user = userEvent.setup()
+      givenChat([], { planMode: true })
+      await openLoadedChat()
+
+      emitAgentEvent({
+        type: 'permission_request',
+        requestId: 'r-plan',
+        toolName: 'ExitPlanMode',
+        input: { plan: '# Normalising the locales' }
+      })
+      await user.click(await screen.findByRole('button', { name: 'Edit the plan' }))
+      const editor = screen.getByRole('textbox', { name: 'The plan, as markdown' })
+      await user.clear(editor)
+      await user.type(editor, '# Only English first')
+      await user.click(screen.getByRole('button', { name: 'Execute' }))
+
+      expect(octopus().chats.answerPermission).toHaveBeenCalledWith(
+        'r-plan',
+        'allow',
+        undefined,
+        '# Only English first'
+      )
+    })
+  })
+
   describe('putting the files back from a message', () => {
     const MESSAGE = '11111111-1111-4111-8111-111111111111'
 

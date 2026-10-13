@@ -22,6 +22,7 @@ import {
 import {
   ChatMessageSchema,
   ChatTitleSchema,
+  EditedPlanSchema,
   EffortChoiceSchema,
   PermissionAnswerSchema,
   PlanFeedbackSchema,
@@ -908,14 +909,17 @@ export function registerIpc(
     attempt(() => service.sessionUsage(chatId))
   )
 
-  host.handle('chats:permission', (_event, requestId: string, answer: unknown, feedback: unknown) =>
-    attempt(() =>
-      service.answerPermission(
-        requestId,
-        PermissionAnswerSchema.parse(answer),
-        PlanFeedbackSchema.optional().parse(feedback)
+  host.handle(
+    'chats:permission',
+    (_event, requestId: string, answer: unknown, feedback: unknown, editedPlan: unknown) =>
+      attempt(() =>
+        service.answerPermission(
+          requestId,
+          PermissionAnswerSchema.parse(answer),
+          PlanFeedbackSchema.optional().parse(feedback),
+          EditedPlanSchema.optional().parse(editedPlan)
+        )
       )
-    )
   )
 
   /*

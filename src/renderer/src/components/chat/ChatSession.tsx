@@ -303,7 +303,16 @@ export function ChatSession({
         <PlanDialog
           plan={plan}
           accepting={record?.planMode === true}
-          onExecute={() => void chat.answer(pending.requestId, 'allow')}
+          onExecute={(edited) => {
+            // The `undefined` where feedback goes: an approval has none, and
+            // the plan the user rewrote is the fourth argument.
+            void chat.answer(
+              pending.requestId,
+              'allow',
+              undefined,
+              ...(edited === null ? [] : [edited])
+            )
+          }}
           onKeepPlanning={(feedback) => void chat.answer(pending.requestId, 'deny', feedback)}
         />
       )}

@@ -355,6 +355,15 @@ export const AgentEventSchema = z.discriminatedUnion('type', [
   }),
 
   /**
+   * The plan as the user rewrote it before approving.
+   *
+   * The agent works from this text, not from the one it wrote — so the log has
+   * to say what it was actually told to do. Kept whole: the original is above it
+   * in the same log, and the pair is the record of what was changed.
+   */
+  z.object({ type: z.literal('plan_edited'), plan: z.string() }),
+
+  /**
    * The files were put back to how they were when a message was sent.
    *
    * A row of its own in the log, and in the transcript: it changed the working

@@ -5240,6 +5240,89 @@ describe('the agent chat', () => {
       expect(service.listChats(workspaceId)[0]?.workingMode).toBe('default')
     })
 
+    /*
+     * The user may rewrite the plan before approving it. The agent then works
+     * from the words it was approved with, not the ones it wrote — which rides
+     * the reply that releases the call, since nothing else reaches the tool.
+     */
+    it('approves the plan the user rewrote, and hands the agent those words', async () => {
+      const { service, workspaceId, events } = await withWorkspace()
+      const chat = await service.openChat(workspaceId)
+      await service.setChatPlanMode(chat.id, true)
+      await service.sendToChat(chat.id, 'plan it')
+
+      const decision = agent().ask('ExitPlanMode', { plan: '# The agent wrote this' })
+      await service.answerPermission(
+        await waitForRequest(events),
+        'allow',
+        undefined,
+        '  # The user wrote this instead  '
+      )
+
+      await expect(decision).resolves.toMatchObject({
+        behavior: 'allow',
+        updatedInput: { plan: '# The user wrote this instead' }
+      })
+      expect(service.listChats(workspaceId)[0]?.planMode).toBe(false)
+    })
+
+    // The log has to say what the agent was actually told to do.
+    it('writes the rewritten plan into the log', async () => {
+      const { service, workspaceId, events } = await withWorkspace()
+      const chat = await service.openChat(workspaceId)
+      await service.setChatPlanMode(chat.id, true)
+      await service.sendToChat(chat.id, 'plan it')
+
+      void agent().ask('ExitPlanMode', { plan: '# The agent wrote this' })
+      await service.answerPermission(
+        await waitForRequest(events),
+        'allow',
+        undefined,
+        '# The user wrote this instead'
+      )
+
+      await vi.waitFor(async () => {
+        const history = await service.chatHistory(chat.id)
+        expect(history.at(-1)).toMatchObject({
+          role: 'agent',
+          event: { type: 'plan_edited', plan: '# The user wrote this instead' }
+        })
+      })
+    })
+
+    it('approves the plan as written when nothing was changed', async () => {
+      const { service, workspaceId, events } = await withWorkspace()
+      const chat = await service.openChat(workspaceId)
+      await service.setChatPlanMode(chat.id, true)
+      await service.sendToChat(chat.id, 'plan it')
+
+      const decision = agent().ask('ExitPlanMode', { plan: '# As written' })
+      await service.answerPermission(await waitForRequest(events), 'allow', undefined, '   ')
+
+      await expect(decision).resolves.not.toHaveProperty('updatedInput.plan', '')
+      await expect(decision).resolves.toMatchObject({
+        updatedInput: { plan: '# As written' }
+      })
+    })
+
+    // A tool's arguments are not the user's to change by this route: only the
+    // plan is, and a rewritten one sent for anything else is ignored.
+    it('ignores a rewritten plan sent with any other tool', async () => {
+      const { service, workspaceId, events } = await withWorkspace()
+      const chat = await service.openChat(workspaceId)
+      await service.sendToChat(chat.id, 'go')
+
+      const decision = agent().ask('Bash', { command: 'ls' })
+      await service.answerPermission(
+        await waitForRequest(events),
+        'allow',
+        undefined,
+        '# Not a plan'
+      )
+
+      await expect(decision).resolves.toMatchObject({ updatedInput: { command: 'ls' } })
+    })
+
     // The stored half is the one that outlived the session and made a
     // conversation revert to planning on its next turn.
     it('writes the end of planning to disk, not only to the session', async () => {

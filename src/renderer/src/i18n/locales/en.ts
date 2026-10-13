@@ -950,6 +950,10 @@ export const en = {
     copyFailed: 'Copy failed',
     planReady: 'The plan is ready',
     planExecute: 'Execute',
+    planEdit: 'Edit the plan',
+    planEditDone: 'Back to the plan',
+    planEditLabel: 'The plan, as markdown',
+    planEdited: 'Plan, as you edited it',
     /* Said before the click, because the click widens what the agent may do:
        an approved plan always goes on in Auto mode. */
     planExecuteHint: 'Runs in Auto mode — edits go ahead without asking.',

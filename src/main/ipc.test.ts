@@ -2432,6 +2432,20 @@ describe('the agent chat', () => {
     })
   })
 
+  // It replaces the tool's own argument, which the agent then works from — so
+  // it is bounded like a prompt, and never empty: an empty plan is not an edit.
+  it('refuses a rewritten plan that is empty or enormous', async () => {
+    await expect(invoke('chats:permission', 'r-1', 'allow', undefined, '')).resolves.toMatchObject({
+      ok: false
+    })
+    await expect(
+      invoke('chats:permission', 'r-1', 'allow', undefined, 'x'.repeat(100_001))
+    ).resolves.toMatchObject({ ok: false })
+    await expect(
+      invoke('chats:permission', 'r-1', 'allow', undefined, '# A better plan')
+    ).resolves.toEqual({ ok: true, value: undefined })
+  })
+
   // Unknown means already answered, or the session it belonged to is gone.
   it('accepts an answer to a request nobody is waiting on', async () => {
     await expect(invoke('chats:permission', 'r-1', 'allow')).resolves.toEqual({

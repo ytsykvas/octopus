@@ -1109,7 +1109,12 @@ export interface OctopusService {
    * `feedback` accompanies a refusal and reaches the agent as the reason — the
    * one place the user can steer without waiting for the turn to end.
    */
-  answerPermission(requestId: string, answer: PermissionAnswer, feedback?: string): Promise<void>
+  answerPermission(
+    requestId: string,
+    answer: PermissionAnswer,
+    feedback?: string,
+    editedPlan?: string
+  ): Promise<void>
   /**
    * Answers an MCP server's question, or turns it down.
    *
@@ -4534,7 +4539,7 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
       await Promise.resolve()
     },
 
-    async answerPermission(requestId, answer, feedback) {
+    async answerPermission(requestId, answer, feedback, editedPlan) {
       const request = pending.get(requestId)
       // Unknown means already answered, or the session it belonged to is gone.
       if (!request) return
@@ -4632,6 +4637,13 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
 
       const chat = findChat(state, request.chatId)
 
+      // A plan the user rewrote, and only a plan: any other tool's arguments
+      // are not the user's to change here. It rides the same reply that
+      // releases the call, so the agent works from the words it was approved
+      // with — and the log says what those were.
+      const edited = leaving ? (editedPlan?.trim() ?? '') : ''
+      if (edited !== '' && chat) handleEvent(chat, { type: 'plan_edited', plan: edited })
+
       // Both writes above are behind us, so this is the point the answer is
       // actually given — see the deny path for what removing it any earlier
       // cost. A second answer racing this one changes nothing: the writes are
@@ -4639,6 +4651,7 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
       pending.delete(requestId)
       request.resolve({
         allow: true,
+        ...(edited !== '' && { updatedInput: { plan: edited } }),
         ...(leaving && chat && { setMode: chat.workingMode }),
         /*
          * The rule goes to the session as well as to the config, and it has to

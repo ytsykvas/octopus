@@ -303,13 +303,18 @@ const api = {
      * Answers a pending permission request; the agent is blocked until it arrives.
      *
      * `feedback` accompanies a refusal and reaches the agent as the reason.
+     * `editedPlan` accompanies the approval of a plan the user rewrote, and is
+     * what the agent then works from.
      */
     answerPermission: (
       requestId: string,
       answer: PermissionAnswer,
-      feedback?: string
+      feedback?: string,
+      editedPlan?: string
     ): Promise<Result<void>> =>
-      ipcRenderer.invoke('chats:permission', requestId, answer, feedback) as Promise<Result<void>>,
+      ipcRenderer.invoke('chats:permission', requestId, answer, feedback, editedPlan) as Promise<
+        Result<void>
+      >,
 
     /**
      * Answers an MCP server's question; the server is blocked until it arrives.

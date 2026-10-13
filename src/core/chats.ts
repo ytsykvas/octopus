@@ -711,6 +711,16 @@ export const PermissionAnswerSchema = z.enum(['allow', 'always', 'deny'])
  */
 export const PlanFeedbackSchema = z.string().max(10_000)
 
+/**
+ * A plan the user rewrote before approving it.
+ *
+ * Bounded generously — a plan is several screens — but bounded: it replaces the
+ * tool's own argument, which the agent then reads and works from, so it is a
+ * prompt like the message field is. Never empty: an empty plan is not an edit,
+ * it is a way to approve nothing.
+ */
+export const EditedPlanSchema = z.string().min(1).max(100_000)
+
 export interface NewChatOptions {
   readonly id: string
   readonly agent: AgentKind

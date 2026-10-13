@@ -203,6 +203,18 @@ the event that ends a turn is filtered by the open chat's id and there is no
 chat until its history has loaded, so one arriving in that window is dropped and
 a seeded flag would stay stuck on.
 
+**The plan can be rewritten before it is approved.** The dialog's `Edit the plan`
+swaps the rendered plan for its markdown, in a monospace field, and back; the
+edits are kept when the field is closed to look at the result. Executing then
+sends the user's own text, and the agent works from it rather than from the
+words it wrote — it rides the reply that releases the tool call, since nothing
+else reaches the plan. An untouched plan, or one put back as it was, goes as
+`null`, so the agent is only told a plan is different when it is; an emptied
+field is not a plan and is not sent. A rewritten plan gets a block of its own in
+the log, named "Plan, as you edited it", under the one the agent wrote: the log
+has to say what the agent was actually told to do. Rewriting is the whole-plan
+alternative to the feedback field, which sends the plan back to be reworked.
+
 **A message offers to put the files back to before it.** Hovering a message the
 user sent reveals a small undo mark beside it. It is not a conversation rewind —
 what was said stays — it restores the **files** to how they were when that

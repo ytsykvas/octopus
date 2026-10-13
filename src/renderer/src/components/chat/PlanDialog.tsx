@@ -12,7 +12,12 @@ interface PlanDialogProps {
    * of planning, since a plan the agent offered unasked changes no mode.
    */
   readonly accepting: boolean
-  readonly onExecute: () => void
+  /**
+   * Approves the plan. `editedPlan` is the user's own version when they changed
+   * it, and null when they did not — so the agent is only ever told a plan is
+   * different when it is.
+   */
+  readonly onExecute: (editedPlan: string | null) => void
   /** Sends the plan back with the user's note, which may be empty. */
   readonly onKeepPlanning: (feedback: string) => void
 }
@@ -43,6 +48,14 @@ export function PlanDialog({
 }: PlanDialogProps): React.JSX.Element {
   const { t } = useTranslation()
   const [feedback, setFeedback] = useState('')
+  const [editing, setEditing] = useState(false)
+  // The plan as it stands in the editor. Kept when the editor is closed, so
+  // looking at the rendered plan again does not throw the edits away.
+  const [text, setText] = useState(plan)
+
+  // Null for an untouched plan, and for one edited back to what it was: only a
+  // real difference is worth telling the agent about.
+  const changed = text.trim() !== plan.trim() && text.trim() !== ''
 
   const keepPlanning = (): void => {
     onKeepPlanning(feedback.trim())
@@ -61,14 +74,39 @@ export function PlanDialog({
           {accepting && (
             <span className="text-ink-soft mr-auto text-[11px]">{t('chat.planExecuteHint')}</span>
           )}
-          <Button variant="accent" onClick={onExecute}>
+          <Button
+            onClick={() => {
+              setEditing((current) => !current)
+            }}
+          >
+            {editing ? t('chat.planEditDone') : t('chat.planEdit')}
+          </Button>
+          <Button
+            variant="accent"
+            onClick={() => {
+              onExecute(changed ? text.trim() : null)
+            }}
+          >
             {t('chat.planExecute')}
           </Button>
         </>
       }
     >
       <div className="min-h-0 flex-1 overflow-auto px-4 py-3">
-        <Markdown text={plan} />
+        {editing ? (
+          <textarea
+            aria-label={t('chat.planEditLabel')}
+            value={text}
+            onChange={(event) => {
+              setText(event.target.value)
+            }}
+            // Monospace, because what is being edited is markdown: the markers
+            // are the thing being worked on, and a proportional face hides them.
+            className="focus-ring border-line bg-surface field-sizing-content min-h-[12rem] w-full resize-none rounded-[var(--radius-control)] border px-2.5 py-1.5 font-mono text-[12px] outline-none"
+          />
+        ) : (
+          <Markdown text={text} />
+        )}
       </div>
 
       <div className="border-line shrink-0 border-t px-4 py-3">

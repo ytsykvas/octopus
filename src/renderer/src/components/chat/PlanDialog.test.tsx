@@ -66,8 +66,79 @@ describe('the two ways out', () => {
 
     await user.click(screen.getByRole('button', { name: 'Execute' }))
 
-    expect(onExecute).toHaveBeenCalledOnce()
+    // Nothing was changed, so the agent is not told the plan is different.
+    expect(onExecute).toHaveBeenCalledExactlyOnceWith(null)
     expect(onKeepPlanning).not.toHaveBeenCalled()
+  })
+
+  describe('rewriting the plan before approving it', () => {
+    const editor = (): HTMLElement => screen.getByRole('textbox', { name: 'The plan, as markdown' })
+
+    it('opens the plan as text to edit, and back to the rendered plan', async () => {
+      const user = userEvent.setup()
+      renderDialog()
+
+      await user.click(screen.getByRole('button', { name: 'Edit the plan' }))
+      expect(editor()).toHaveValue(PLAN)
+
+      await user.click(screen.getByRole('button', { name: 'Back to the plan' }))
+      expect(
+        screen.queryByRole('textbox', { name: 'The plan, as markdown' })
+      ).not.toBeInTheDocument()
+      expect(screen.getByText('Normalising the locales')).toBeInTheDocument()
+    })
+
+    it('approves with the words the user wrote', async () => {
+      const user = userEvent.setup()
+      const { onExecute } = renderDialog()
+
+      await user.click(screen.getByRole('button', { name: 'Edit the plan' }))
+      await user.clear(editor())
+      await user.type(editor(), '# Only the tests')
+      await user.click(screen.getByRole('button', { name: 'Execute' }))
+
+      expect(onExecute).toHaveBeenCalledExactlyOnceWith('# Only the tests')
+    })
+
+    // Looking at the rendered plan again must not throw the edits away.
+    it('keeps the edits when the editor is closed and the plan is looked at', async () => {
+      const user = userEvent.setup()
+      const { onExecute } = renderDialog()
+
+      await user.click(screen.getByRole('button', { name: 'Edit the plan' }))
+      await user.clear(editor())
+      await user.type(editor(), '# Rewritten')
+      await user.click(screen.getByRole('button', { name: 'Back to the plan' }))
+
+      expect(screen.getByText('Rewritten')).toBeInTheDocument()
+
+      await user.click(screen.getByRole('button', { name: 'Execute' }))
+      expect(onExecute).toHaveBeenCalledExactlyOnceWith('# Rewritten')
+    })
+
+    // An edit that ends where it began is not an edit.
+    it('does not call it an edit when it was put back as it was', async () => {
+      const user = userEvent.setup()
+      const { onExecute } = renderDialog()
+
+      await user.click(screen.getByRole('button', { name: 'Edit the plan' }))
+      await user.type(editor(), ' ')
+      await user.click(screen.getByRole('button', { name: 'Execute' }))
+
+      expect(onExecute).toHaveBeenCalledExactlyOnceWith(null)
+    })
+
+    // An emptied editor is not a plan, and approving nothing is not the edit.
+    it('does not take an emptied editor for a plan', async () => {
+      const user = userEvent.setup()
+      const { onExecute } = renderDialog()
+
+      await user.click(screen.getByRole('button', { name: 'Edit the plan' }))
+      await user.clear(editor())
+      await user.click(screen.getByRole('button', { name: 'Execute' }))
+
+      expect(onExecute).toHaveBeenCalledExactlyOnceWith(null)
+    })
   })
 
   /*

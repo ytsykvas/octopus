@@ -54,6 +54,23 @@ function renderLog(overrides: Partial<React.ComponentProps<typeof ChatLog>> = {}
   return { onAnswer, onAnswerElicitation, onAnswerQuestions, onExecutePlan, onRewind }
 }
 
+describe('a plan the user rewrote', () => {
+  // What the agent was actually told to do, named so it is not mistaken for the
+  // one it wrote above — and carried out from here like any other.
+  it('is drawn as the plan it is, under its own name', async () => {
+    const user = userEvent.setup()
+    const { onExecutePlan } = renderLog({
+      entries: [fromAgent({ type: 'plan_edited', plan: '# Only the tests' })]
+    })
+
+    expect(screen.getByText('Plan, as you edited it')).toBeInTheDocument()
+    expect(screen.getByText('Only the tests')).toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: 'Execute' }))
+    expect(onExecutePlan).toHaveBeenCalledExactlyOnceWith('# Only the tests')
+  })
+})
+
 describe('putting the files back from a message', () => {
   const MESSAGE = '11111111-1111-4111-8111-111111111111'
 

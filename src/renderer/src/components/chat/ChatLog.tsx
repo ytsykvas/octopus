@@ -412,6 +412,12 @@ function AgentRow({
     case 'conversation_compacted':
       return <CompactedRow preTokens={event.preTokens} postTokens={event.postTokens} />
 
+    // What the agent was actually told to do. Drawn as the plan it is, with the
+    // way back to carrying it out, and named so it is not mistaken for the one
+    // the agent wrote above it.
+    case 'plan_edited':
+      return <Plan text={event.plan} busy={busy} edited onExecute={onExecutePlan} />
+
     case 'files_rewound':
       return (
         <FilesRewoundRow
@@ -728,10 +734,13 @@ function ToolCall({ name, input }: { name: string; input: unknown }): React.JSX.
 function Plan({
   text,
   busy,
+  edited = false,
   onExecute
 }: {
   text: string
   busy: boolean
+  /** The plan as the user rewrote it, rather than as the agent wrote it. */
+  edited?: boolean
   onExecute: (plan: string) => void
 }): React.JSX.Element {
   const { t } = useTranslation()
@@ -744,7 +753,7 @@ function Plan({
           A separator and no fill, as the composer's own strips do. */}
       <div className="border-line flex items-center gap-2 border-b px-3 py-1.5 font-medium">
         <Map aria-hidden className="text-accent shrink-0" size={14} />
-        {t('chat.plan')}
+        {edited ? t('chat.planEdited') : t('chat.plan')}
 
         {/* The way back to a plan that was set aside. The dialog asks once, and
             once it is closed the block in the log is all that is left — so
