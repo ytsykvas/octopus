@@ -579,6 +579,13 @@ export const uk: Translation = {
     forkTab: 'Продовжити в новій розмові',
     forkTabHint: 'Агент збереже те, що пам’ятає з цієї.',
     closeTab: 'Закрити розмову',
+    todos: 'Завдання',
+    todosProgress: '{{done}} з {{total}}',
+    todoStatus: {
+      pending: 'очікує',
+      in_progress: 'виконується',
+      completed: 'виконано'
+    },
     history: 'Закриті розмови',
     historyEmpty: 'Нічого ще не закрито',
     historyUntitled: 'Розмова без повідомлень',

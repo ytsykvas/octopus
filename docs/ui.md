@@ -297,6 +297,19 @@ conversation away. Neither is dispatched: they go out as the text of an ordinary
 message, which is what a slash command is in this app, so the menu hands them to
 the same `onSend` the field uses.
 
+**The agent's task list is pinned above the field while it has work left.** A
+long turn is mostly the agent working through a list it wrote for itself, and
+from the log that progress is a scatter of tool rows. The panel is the same list
+as one line — "Tasks · 3 of 7 · Running the tests" — that opens to the whole of
+it, each item with a mark and, for a reader who cannot see the mark, its state
+in words. It reads the newest readable `TodoWrite` call, since the tool always
+sends the whole list, and goes away once everything is done: a finished list
+would be a standing report on work already in the log, taking the line the next
+message needs. The log's own `TodoWrite` row says how far it had got ("1 of 3")
+instead of showing a bare tool name. Only `TodoWrite` is read; the newer
+`TaskCreate`/`TaskUpdate` tools, and a list written by a subagent — which the
+event stream does not tell apart from the main one's — are not.
+
 **Typing `@` offers the workspace's files.** The fourth way to attach one — the
 paperclip, a drop and a paste being the others — and it lands in the same place:
 choosing a file adds its **path** as an attachment chip and takes the token out

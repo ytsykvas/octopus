@@ -19,6 +19,7 @@ import type { FormValues } from '@core/elicitation.js'
 import { type AgentEvent, type ChangeContext, type TurnOutcome, turnOutcome } from '@core/events.js'
 import { type QuestionAnswer, readQuestions } from '@core/questions.js'
 import type { PermissionAnswer } from '@core/service.js'
+import { readTodos } from '@core/todos.js'
 import type { ChatEntry } from '@core/transcript.js'
 
 import { Button } from '../Button.js'
@@ -612,7 +613,19 @@ function ChangeBlock({
 }
 
 function ToolCall({ name, input }: { name: string; input: unknown }): React.JSX.Element {
-  const target = describeToolInput(input)
+  const { t } = useTranslation()
+
+  // The agent's task list says how far it has got, which is the thing worth
+  // reading on a row that otherwise carries none of the fields the summary
+  // looks for.
+  const todos = readTodos(name, input)
+  const target =
+    todos === null
+      ? describeToolInput(input)
+      : t('chat.todosProgress', {
+          done: todos.filter((todo) => todo.status === 'completed').length,
+          total: todos.length
+        })
 
   return (
     <div className="text-ink-soft flex min-w-0 items-baseline gap-2">

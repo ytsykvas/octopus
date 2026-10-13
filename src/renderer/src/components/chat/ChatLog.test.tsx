@@ -178,6 +178,30 @@ describe('what the log shows', () => {
     expect(screen.getByText('TodoWrite')).toBeInTheDocument()
   })
 
+  // The agent's list says how far it has got, which is what is worth reading
+  // on a row that carries none of the fields the summary looks for.
+  it('says how far the agent has got on a task list', () => {
+    renderLog({
+      entries: [
+        fromAgent({
+          type: 'tool_use',
+          toolUseId: 'c-1',
+          name: 'TodoWrite',
+          input: {
+            todos: [
+              { content: 'a', status: 'completed', activeForm: 'A' },
+              { content: 'b', status: 'in_progress', activeForm: 'B' },
+              { content: 'c', status: 'pending', activeForm: 'C' }
+            ]
+          }
+        })
+      ]
+    })
+
+    expect(screen.getByText('TodoWrite')).toBeInTheDocument()
+    expect(screen.getByText('1 of 3')).toBeInTheDocument()
+  })
+
   /*
    * A rename went through fifty-nine tool calls, and one line each buried the
    * two things worth reading: what the agent said, and what it changed.

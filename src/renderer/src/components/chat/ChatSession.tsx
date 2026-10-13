@@ -1,7 +1,8 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import type { Chat, Effort, WorkingMode } from '@core/chats.js'
+import { latestTodos } from '@core/todos.js'
 import type { WorkspaceView } from '@core/workspaces.js'
 
 import { Placeholder } from '../Placeholder.js'
@@ -20,6 +21,7 @@ import { useSkills } from '../../hooks/useSkills.js'
 import { ChatLog } from './ChatLog.js'
 import { Composer } from './Composer.js'
 import { PlanDialog } from './PlanDialog.js'
+import { TodoPanel } from './TodoPanel.js'
 import { planTitle, readPlan } from './toolSummary.js'
 
 interface ChatSessionProps {
@@ -102,6 +104,11 @@ export function ChatSession({
   const attachments = useAttachments(setAttachmentError)
   const describeFailure = useErrorMessage()
   const chat = useChat(tab.record, workspace.id, tab.status, describeFailure, onOpened)
+
+  // Held against the entries, like the log's own walks: this reads the whole
+  // transcript, and it is asked on every render of a pane that re-renders on
+  // every streamed token.
+  const todos = useMemo(() => latestTodos(chat.entries) ?? [], [chat.entries])
 
   // A refusal is no suggestions rather than a message: the list is a
   // convenience, and an error banner over a half-typed `@` would be the louder
@@ -248,6 +255,8 @@ export function ChatSession({
           onKeepPlanning={(feedback) => void chat.answer(pending.requestId, 'deny', feedback)}
         />
       )}
+
+      <TodoPanel todos={todos} />
 
       <Composer
         initialDraft={draft}

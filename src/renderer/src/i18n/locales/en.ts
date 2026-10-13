@@ -762,6 +762,15 @@ export const en = {
     closeTab: 'Close conversation',
     /* The history of what was closed. Closing keeps a conversation, so this is
        how one comes back — and ⌘⇧T brings back the last. */
+    /* The agent's own task list, pinned above the field while it has work
+       left. The progress reads "3 of 7". */
+    todos: 'Tasks',
+    todosProgress: '{{done}} of {{total}}',
+    todoStatus: {
+      pending: 'to do',
+      in_progress: 'in progress',
+      completed: 'done'
+    },
     history: 'Closed conversations',
     historyEmpty: 'Nothing closed yet',
     historyUntitled: 'Conversation with no messages',

@@ -1053,6 +1053,38 @@ describe('the permission mode', () => {
     expect(screen.queryByText('no such worktree')).not.toBeInTheDocument()
   })
 
+  // The agent's own task list, pinned above the field while it has work left.
+  it('pins the agent task list above the field', async () => {
+    givenChat([
+      {
+        role: 'agent',
+        at: '2026-08-13T09:00:00.000Z',
+        event: {
+          type: 'tool_use',
+          toolUseId: 'call-1',
+          name: 'TodoWrite',
+          input: {
+            todos: [
+              { content: 'Write the test', status: 'completed', activeForm: 'Writing the test' },
+              { content: 'Make it pass', status: 'in_progress', activeForm: 'Making it pass' }
+            ]
+          }
+        }
+      }
+    ])
+    await openLoadedChat()
+
+    expect(await screen.findByRole('button', { name: /Tasks/ })).toBeInTheDocument()
+    expect(screen.getByText('Making it pass')).toBeInTheDocument()
+  })
+
+  it('shows no task list for a conversation without one', async () => {
+    givenChat()
+    await openLoadedChat()
+
+    expect(screen.queryByRole('button', { name: /Tasks/ })).not.toBeInTheDocument()
+  })
+
   /* A refused paste is news about the message being written, so it goes in the
      conversation's own banner rather than a second one beside it. */
   it('says so in the conversation when an attachment is refused', async () => {
