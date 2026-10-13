@@ -17,6 +17,14 @@ import type { Failure, Result } from '../../../preload/index.js'
 import { onChatEvent } from './chatEvents.js'
 
 /** A tool call the agent is blocked on, waiting to be told whether it may run. */
+/**
+ * The three states the composer's mode control cycles through.
+ *
+ * Planning is stored apart from the working mode (`chats.ts` says why), and
+ * this is the one place the two are presented as a single choice.
+ */
+export type ChatMode = WorkingMode | 'plan'
+
 export interface PendingPermission {
   readonly requestId: string
   readonly toolName: string
@@ -69,8 +77,14 @@ export interface ChatController {
   readonly answer: (requestId: string, answer: PermissionAnswer, feedback?: string) => Promise<void>
   /** Answers the questions the agent asked, releasing the tool call. */
   readonly answerQuestions: (requestId: string, answers: readonly QuestionAnswer[]) => Promise<void>
-  readonly setWorkingMode: (mode: WorkingMode) => Promise<void>
-  readonly setPlanMode: (planning: boolean) => Promise<void>
+  /**
+   * Moves the conversation to one of the composer's three modes.
+   *
+   * One call for what is stored as two fields, so the order they change in is
+   * decided here rather than by whoever calls it — see the body for why that
+   * order matters.
+   */
+  readonly setMode: (mode: ChatMode) => Promise<void>
   readonly setEffort: (effort: EffortChoice) => Promise<void>
   readonly setPlanEffort: (effort: EffortChoice | null) => Promise<void>
   readonly setModel: (model: string | null) => Promise<void>
@@ -398,7 +412,9 @@ export function useChat(
         // the chat this hook has open, so there is one by the time it can be
         // answered. The guard exists because the state's type says otherwise.
         /* v8 ignore next */
-        setChat((current) => (current === null ? null : { ...current, planMode: false }))
+        setChat((current) =>
+          current === null ? null : { ...current, planMode: false, workingMode: 'acceptEdits' }
+        )
       }
 
       const sent = await window.octopus.chats.answerPermission(requestId, decision, feedback)
@@ -480,6 +496,25 @@ export function useChat(
     [change]
   )
 
+  const planning = chat?.planMode ?? false
+
+  const setMode = useCallback(
+    async (mode: ChatMode) => {
+      if (mode === 'plan') {
+        await setPlanMode(true)
+        return
+      }
+
+      // The working mode first, while the session is still planning and runs
+      // no tools at all. Turned the other way round, leaving a plan for "ask
+      // first" passed through the `acceptEdits` the plan had been holding, and
+      // an edit landing in that moment would have gone through unasked.
+      await setWorkingMode(mode)
+      if (planning) await setPlanMode(false)
+    },
+    [planning, setWorkingMode, setPlanMode]
+  )
+
   const setModel = useCallback(
     (model: string | null) =>
       change({ model }, (chatId) => window.octopus.chats.setModel(chatId, model)),
@@ -535,8 +570,7 @@ export function useChat(
     answerElicitation,
     pendingElicitation,
     answerQuestions,
-    setWorkingMode,
-    setPlanMode,
+    setMode,
     setEffort,
     setModel,
     setPlanModel,

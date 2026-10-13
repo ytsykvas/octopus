@@ -36,6 +36,16 @@ describe('the plan itself', () => {
 })
 
 describe('the two ways out', () => {
+  // Executing widens what the agent may do — an approved plan always goes on
+  // in Auto mode — so the dialog says it before the click, not after.
+  it('says executing runs in Auto mode', () => {
+    renderDialog()
+
+    expect(
+      screen.getByText('Runs in Auto mode — edits go ahead without asking.')
+    ).toBeInTheDocument()
+  })
+
   it('executes when that is what was chosen', async () => {
     const user = userEvent.setup()
     const { onExecute, onKeepPlanning } = renderDialog()

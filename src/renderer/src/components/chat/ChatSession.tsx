@@ -204,15 +204,15 @@ export function ChatSession({
             // the time anyone comes back to one the conversation may hold
             // several, and "the plan above" would be the agent's guess.
             //
-            // Planning is turned off first, and not only for the toggle's
-            // sake: that is what hands the session the mode named in the
-            // footer. Without it the message went out while the conversation
-            // was still recorded as planning, and the agent worked in whatever
-            // mode it happened to fall back to — asking about every edit under
-            // a footer that said it would not.
+            // Planning is turned off first, and not only for the control's
+            // sake: that is what hands the session the mode the footer names.
+            // Without it the message went out while the conversation was still
+            // recorded as planning, and the agent worked in whatever mode it
+            // happened to fall back to. `acceptEdits`, as an approved plan
+            // gets in the core — this is the same plan, approved later.
             onExecutePlan={(plan) => {
               void (async () => {
-                await chat.setPlanMode(false)
+                await chat.setMode('acceptEdits')
                 await chat.send(t('chat.executePlanMessage', { title: planTitle(plan) }))
               })()
             }}
@@ -239,9 +239,8 @@ export function ChatSession({
         onDraftLeave={onDraftLeave}
         busy={chat.busy}
         workingMode={workingMode}
-        onWorkingMode={(mode) => void chat.setWorkingMode(mode)}
         planMode={record?.planMode ?? false}
-        onPlanMode={(planning) => void chat.setPlanMode(planning)}
+        onMode={(mode) => void chat.setMode(mode)}
         effort={effort}
         onEffort={(level) => void chat.setEffort(level)}
         planEffort={planEffort}

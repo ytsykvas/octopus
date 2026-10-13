@@ -15,8 +15,7 @@ const planColumn = (): HTMLElement => screen.getByRole('radiogroup', { name: 'Pl
 function renderComposer(overrides: Partial<ComposerProps> = {}): {
   onSend: ReturnType<typeof vi.fn>
   onStop: ReturnType<typeof vi.fn>
-  onWorkingMode: ReturnType<typeof vi.fn>
-  onPlanMode: ReturnType<typeof vi.fn>
+  onMode: ReturnType<typeof vi.fn>
   onEffort: ReturnType<typeof vi.fn>
   onModel: ReturnType<typeof vi.fn>
   onPlanModel: ReturnType<typeof vi.fn>
@@ -30,10 +29,9 @@ function renderComposer(overrides: Partial<ComposerProps> = {}): {
   // about clearing would be asserting the failure path by accident.
   const onSend = vi.fn<(text: string) => Promise<boolean>>().mockResolvedValue(true)
   const onStop = vi.fn()
-  const onWorkingMode = vi.fn()
+  const onMode = vi.fn()
   const onEffort = vi.fn()
   const onModel = vi.fn()
-  const onPlanMode = vi.fn()
   const onPlanModel = vi.fn()
   const onRemoveFile = vi.fn()
   const onDropFiles = vi.fn()
@@ -45,9 +43,8 @@ function renderComposer(overrides: Partial<ComposerProps> = {}): {
       onDraftLeave={vi.fn()}
       busy={false}
       workingMode="default"
-      onWorkingMode={onWorkingMode}
       planMode={false}
-      onPlanMode={onPlanMode}
+      onMode={onMode}
       effort="medium"
       onEffort={onEffort}
       planEffort={null}
@@ -84,8 +81,7 @@ function renderComposer(overrides: Partial<ComposerProps> = {}): {
   return {
     onSend,
     onStop,
-    onWorkingMode,
-    onPlanMode,
+    onMode,
     onEffort,
     onModel,
     onPlanModel,
@@ -173,7 +169,6 @@ describe('sending', () => {
     renderComposer({ models: [OPUS], model: OPUS.value })
 
     expect(screen.getByRole('button', { name: 'Send' })).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Plan' })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Model' })).toBeInTheDocument()
     expect(modeButton()).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Effort' })).toBeInTheDocument()
@@ -534,87 +529,83 @@ describe('the settings the next message runs under', () => {
     expect(modeButton()).toHaveAccessibleName('Permissions: Auto mode')
   })
 
+  // Planning is stored apart from the working mode, and wins over it here: the
+  // agent runs no tools at all while planning, so what it would do afterwards
+  // is not what the control should be saying.
+  it('shows planning over whatever the working mode holds', () => {
+    renderComposer({ workingMode: 'acceptEdits', planMode: true })
+
+    expect(modeButton()).toHaveTextContent('Plan')
+    expect(modeButton()).toHaveAccessibleName('Permissions: Plan')
+  })
+
+  // One control rather than two: the left-hand permissions chip and the plan
+  // toggle beside send said half each of what this says.
+  it('is the only mode control in the row', () => {
+    renderComposer()
+
+    expect(screen.getAllByRole('button', { name: /^Permissions:/ })).toHaveLength(1)
+    expect(screen.queryByRole('button', { name: 'Plan' })).not.toBeInTheDocument()
+  })
+
   /*
-   * Switched in place rather than picked from a list. Two modes made the menu
-   * three steps — open it, read a list in which one row was already in force,
-   * click the other — to say what one click says.
+   * Switched in place rather than picked from a list, through the ring Claude
+   * Code's own shift+tab goes round: ask first, accept edits, plan, and back.
    */
-  it('changes the mode on the spot, without a menu', async () => {
+  it.each([
+    ['default', false, 'acceptEdits'],
+    ['acceptEdits', false, 'plan'],
+    ['acceptEdits', true, 'default'],
+    ['default', true, 'default']
+  ] as const)('goes on from %s (planning: %s) to %s', async (workingMode, planMode, next) => {
     const user = userEvent.setup()
-    const { onWorkingMode } = renderComposer({ workingMode: 'default' })
+    const { onMode } = renderComposer({ workingMode, planMode })
 
     await user.click(modeButton())
 
-    expect(onWorkingMode).toHaveBeenCalledExactlyOnceWith('acceptEdits')
-    expect(screen.queryByRole('menuitemradio', { name: 'Auto mode' })).not.toBeInTheDocument()
+    expect(onMode).toHaveBeenCalledExactlyOnceWith(next)
+    expect(screen.queryByRole('menuitemradio')).not.toBeInTheDocument()
   })
 
-  it('switches back the other way', async () => {
-    const user = userEvent.setup()
-    const { onWorkingMode } = renderComposer({ workingMode: 'acceptEdits' })
+  it('says how to switch it from the keyboard', () => {
+    renderComposer()
 
-    await user.click(modeButton())
-
-    expect(onWorkingMode).toHaveBeenCalledExactlyOnceWith('default')
+    expect(modeButton()).toHaveAttribute(
+      'title',
+      'Switch mode — Ask first, Auto mode, Plan (Shift+Tab)'
+    )
   })
 
-  // Planning is a state the conversation is in, not a degree of permission —
-  // the agent runs no tools at all in it. Listing the three together made them
-  // look like peers, which is what this separation is for.
-  describe('planning', () => {
-    const planButton = (): HTMLElement => screen.getByRole('button', { name: 'Plan' })
-
-    it('is off until it is turned on', async () => {
+  describe('shift+tab in the field', () => {
+    it('moves to the next mode and keeps the focus in the field', async () => {
       const user = userEvent.setup()
-      const { onPlanMode } = renderComposer()
+      const { onMode } = renderComposer({ workingMode: 'acceptEdits' })
 
-      expect(planButton()).toHaveAttribute('aria-pressed', 'false')
+      await user.click(field())
+      await user.keyboard('{Shift>}{Tab}{/Shift}')
 
-      await user.click(planButton())
-      expect(onPlanMode).toHaveBeenCalledExactlyOnceWith(true)
+      expect(onMode).toHaveBeenCalledExactlyOnceWith('plan')
+      expect(field()).toHaveFocus()
     })
 
-    it('shows itself as on while the chat is planning', () => {
-      renderComposer({ planMode: true })
-
-      expect(planButton()).toHaveAttribute('aria-pressed', 'true')
-    })
-
-    it('turns itself off again', async () => {
+    it('leaves plain tab to the field', async () => {
       const user = userEvent.setup()
-      const { onPlanMode } = renderComposer({ planMode: true })
+      const { onMode } = renderComposer()
 
-      await user.click(planButton())
-      expect(onPlanMode).toHaveBeenCalledExactlyOnceWith(false)
+      await user.click(field())
+      await user.keyboard('{Tab}')
+
+      expect(onMode).not.toHaveBeenCalled()
     })
 
-    /*
-     * The two settings are stored apart, so choosing permissions while planning
-     * writes through like any other choice — there is no third value crowding
-     * the field and nothing to remember locally until planning ends.
-     *
-     * This used to be component state precisely because there was, and that is
-     * why approving a plan had no mode to return to.
-     */
-    it('stores a permissions choice made while planning', async () => {
-      const user = userEvent.setup()
-      const { onWorkingMode, onPlanMode } = renderComposer({ planMode: true })
+    // The same rule as Enter: a key that confirms an IME candidate is not one
+    // meant for the application.
+    it('does nothing while a character is being composed', () => {
+      const { onMode } = renderComposer()
 
-      await user.click(modeButton())
+      fireEvent.keyDown(field(), { key: 'Tab', shiftKey: true, isComposing: true })
 
-      expect(onWorkingMode).toHaveBeenCalledExactlyOnceWith('acceptEdits')
-      // Choosing what happens afterwards is not a decision to stop planning.
-      expect(onPlanMode).not.toHaveBeenCalled()
-    })
-
-    it('still offers the permissions, for once the plan is approved', () => {
-      renderComposer({ planMode: true })
-
-      expect(modeButton()).toBeEnabled()
-      expect(modeButton()).toHaveAttribute(
-        'title',
-        'What the agent may do once the plan is approved.'
-      )
+      expect(onMode).not.toHaveBeenCalled()
     })
   })
 
@@ -762,13 +753,13 @@ describe('the settings the next message runs under', () => {
   // mode nobody could choose.
   it('can be changed before anything has been sent', async () => {
     const user = userEvent.setup()
-    const { onWorkingMode } = renderComposer()
+    const { onMode } = renderComposer()
 
     expect(modeButton()).toBeEnabled()
 
     await user.click(modeButton())
 
-    expect(onWorkingMode).toHaveBeenCalledExactlyOnceWith('acceptEdits')
+    expect(onMode).toHaveBeenCalledExactlyOnceWith('acceptEdits')
   })
 })
 
@@ -893,6 +884,18 @@ describe('suggesting a command', () => {
 
     expect(field()).toHaveValue('/compact')
     expect(field()).toHaveFocus()
+  })
+
+  // Shift+tab is the mode, as in Claude Code, even with the list open.
+  it('switches the mode on shift+tab rather than completing', async () => {
+    const user = userEvent.setup()
+    const { onMode } = renderComposer({ commands: [CLEAR, COMPACT] })
+
+    await user.type(field(), '/comp')
+    await user.keyboard('{Shift>}{Tab}{/Shift}')
+
+    expect(onMode).toHaveBeenCalledExactlyOnceWith('acceptEdits')
+    expect(field()).toHaveValue('/comp')
   })
 
   // Escape means "stop suggesting", not "undo what I typed".

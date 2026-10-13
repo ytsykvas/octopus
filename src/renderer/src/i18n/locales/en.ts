@@ -803,9 +803,10 @@ export const en = {
        call this, and a translated name for a borrowed one reads as a second
        setting rather than the same one. */
     modeAcceptEdits: 'Auto mode',
-    modeAfterPlan: 'What the agent may do once the plan is approved.',
     planMode: 'Plan',
-    planModeHint: 'Work out an approach first. The agent runs no tools until you approve it.',
+    /* Names the keys rather than the states: the label beside it already
+       says which one is in force, and the ring's order is learned by using it. */
+    modeCycle: 'Switch mode — Ask first, Auto mode, Plan (Shift+Tab)',
 
     context: 'Context',
     contextTitle: 'Context window — {{used}} of {{total}}',
@@ -918,6 +919,9 @@ export const en = {
     copyFailed: 'Copy failed',
     planReady: 'The plan is ready',
     planExecute: 'Execute',
+    /* Said before the click, because the click widens what the agent may do:
+       an approved plan always goes on in Auto mode. */
+    planExecuteHint: 'Runs in Auto mode — edits go ahead without asking.',
     planFeedback: 'Anything to work out first?',
     planFeedbackPlaceholder: 'Write here and the agent will revise the plan',
     questionTitle: 'The agent is asking',

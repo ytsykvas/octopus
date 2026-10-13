@@ -346,6 +346,9 @@ They run in the same worktree with no locking between them, deliberately (§16).
 | `⌘T`        | new conversation    |
 | `⌘⇧D`       | changes             |
 | `⌘⇧P`       | pull request        |
+| `⇧⇥`        | next mode           |
+
+`⇧⇥` works in the composer's field only, and goes round ask first → `Auto mode` → plan, the order Claude Code's own shift+tab uses; anywhere else in the window it still moves the focus back.
 
 `⌘⇧P` opens the pull request tab, which is what it was waiting for. Listing a shortcut that does nothing is worse than listing none: it is read once, tried once, and the rest of the table quietly distrusted along with it — which is what `⌘⇧D` did here for a fortnight, and what `⌘⇧P` did until there was a tab to name.
 

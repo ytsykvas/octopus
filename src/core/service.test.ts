@@ -5079,15 +5079,17 @@ describe('the agent chat', () => {
      * next session does not begin by planning all over again, and the running
      * session, so the work the plan describes can actually start.
      *
-     * The mode it hands over to is the one chosen in the composer's footer —
-     * that is what the footer is for, and until this it was read by nothing.
+     * It hands over to `acceptEdits` whatever the conversation was asking
+     * before. The composer's one control cycles through asking, accepting and
+     * planning, so nothing is left to say what should follow a plan — and a
+     * plan read and approved is the edits accepted in advance.
      */
-    it('leaves planning for the chosen mode when a plan is approved', async () => {
+    it('leaves planning for acceptEdits when a plan is approved', async () => {
       const { service, workspaceId, events } = await withWorkspace()
       const chat = await service.openChat(workspaceId)
-      await service.setChatWorkingMode(chat.id, 'acceptEdits')
       await service.setChatPlanMode(chat.id, true)
       await service.sendToChat(chat.id, 'plan it')
+      expect(service.listChats(workspaceId)[0]?.workingMode).toBe('default')
 
       const decision = agent().ask('ExitPlanMode', { plan: '# Do the thing' })
       await service.answerPermission(await waitForRequest(events), 'allow')
@@ -5098,8 +5100,8 @@ describe('the agent chat', () => {
         updatedPermissions: [{ type: 'setMode', mode: 'acceptEdits', destination: 'session' }]
       })
       expect(service.listChats(workspaceId)[0]?.planMode).toBe(false)
-      // The other half is untouched: leaving planning is not a reason to
-      // forget how freely the agent was told it may work.
+      // Stored as well as sent, so the composer names the mode that is
+      // actually running and the next session starts in it.
       expect(service.listChats(workspaceId)[0]?.workingMode).toBe('acceptEdits')
     })
 
