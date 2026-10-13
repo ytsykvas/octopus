@@ -63,6 +63,25 @@ describe('the list as it stands', () => {
     expect(latestTodos([])).toBeNull()
   })
 
+  // A subagent keeps a list for its own task, and the newest one written must
+  // not replace the conversation's.
+  it('does not take a subagent’s list for the conversation’s', () => {
+    const own = call(LIST)
+    const theirs: ChatEntry = {
+      role: 'agent',
+      at: AT,
+      event: {
+        type: 'tool_use',
+        toolUseId: 'c-2',
+        name: 'TodoWrite',
+        input: { todos: [{ content: 'theirs', status: 'pending', activeForm: '' }] },
+        parentToolUseId: 'toolu_task_1'
+      }
+    }
+
+    expect(latestTodos([own, theirs])).toEqual(LIST)
+  })
+
   it('looks past events that are not tool calls', () => {
     const entries: ChatEntry[] = [
       call(LIST),

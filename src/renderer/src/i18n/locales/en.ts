@@ -789,6 +789,11 @@ export const en = {
     rewindNothing: 'The files are already as they were before that message.',
     filesRewound:
       'Files put back to an earlier message: {{files}} changed, +{{insertions}} −{{deletions}}',
+    /* What a subagent did, folded under the call that started it. */
+    subagentSteps_one: '{{count}} step by the subagent',
+    subagentSteps_few: '{{count}} steps by the subagent',
+    subagentSteps_many: '{{count}} steps by the subagent',
+    subagentSteps_other: '{{count}} steps by the subagent',
     history: 'Closed conversations',
     historyEmpty: 'Nothing closed yet',
     historyUntitled: 'Conversation with no messages',

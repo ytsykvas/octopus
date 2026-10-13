@@ -54,6 +54,127 @@ function renderLog(overrides: Partial<React.ComponentProps<typeof ChatLog>> = {}
   return { onAnswer, onAnswerElicitation, onAnswerQuestions, onExecutePlan, onRewind }
 }
 
+describe('a subagent’s work', () => {
+  const TASK = 'toolu_task'
+
+  const entries: ChatEntry[] = [
+    fromAgent({
+      type: 'tool_use',
+      toolUseId: TASK,
+      name: 'Task',
+      input: { description: 'Look around' }
+    }),
+    fromAgent({
+      type: 'tool_use',
+      toolUseId: 'r-1',
+      name: 'Grep',
+      input: { pattern: 'TODO' },
+      parentToolUseId: TASK
+    }),
+    fromAgent({
+      type: 'text',
+      text: 'Three matches in auth.rb.\nNothing else.',
+      parentToolUseId: TASK
+    }),
+    fromAgent({
+      type: 'tool_result',
+      toolUseId: 'r-1',
+      ok: false,
+      content: 'no such directory',
+      parentToolUseId: TASK
+    }),
+    fromAgent({ type: 'thinking', text: 'Let me think.', parentToolUseId: TASK }),
+    fromAgent({
+      type: 'tool_result',
+      toolUseId: 'r-2',
+      ok: true,
+      content: 'fine',
+      parentToolUseId: TASK
+    })
+  ]
+
+  it('is folded under the call that started it, closed', () => {
+    renderLog({ entries })
+
+    expect(screen.getByText('Task')).toBeInTheDocument()
+    expect(screen.getByText('1 step by the subagent')).toBeInTheDocument()
+    // Inside a closed disclosure: there for whoever opens it.
+    expect(screen.getByText('Grep').closest('details')).not.toHaveAttribute('open')
+  })
+
+  it('shows what it did and said when opened', async () => {
+    const user = userEvent.setup()
+    renderLog({ entries })
+
+    await user.click(screen.getByText('1 step by the subagent'))
+
+    expect(screen.getByText('Grep')).toBeVisible()
+    expect(screen.getByText('TODO')).toBeVisible()
+    // One line of what it said; the whole answer is the call's own result.
+    expect(screen.getByText('Three matches in auth.rb.')).toBeVisible()
+    expect(screen.queryByText(/Nothing else/)).not.toBeInTheDocument()
+    expect(screen.getByText(/no such directory/)).toBeVisible()
+    // Its reasoning and its quiet successes stay its own.
+    expect(screen.queryByText('Let me think.')).not.toBeInTheDocument()
+    expect(screen.queryByText('fine')).not.toBeInTheDocument()
+  })
+
+  it('does not draw them again at the top level', () => {
+    const { container } = render(
+      <ChatLog
+        entries={entries}
+        streaming={{ text: '', thinking: '' }}
+        busy={false}
+        pendingRequestId={null}
+        pendingElicitationId={null}
+        onAnswer={vi.fn()}
+        onAnswerElicitation={vi.fn()}
+        onAnswerQuestions={vi.fn()}
+        onExecutePlan={vi.fn()}
+        onRewind={vi.fn()}
+      />
+    )
+
+    expect(screen.getAllByText('Grep')).toHaveLength(1)
+    expect(container.querySelectorAll('details')).toHaveLength(1)
+  })
+
+  it('folds a run of subagent calls into the count too', async () => {
+    const user = userEvent.setup()
+    renderLog({
+      entries: [
+        fromAgent({
+          type: 'tool_use',
+          toolUseId: TASK,
+          name: 'Task',
+          input: { description: 'Look around' }
+        }),
+        fromAgent({
+          type: 'tool_use',
+          toolUseId: 'inner',
+          name: 'Task',
+          input: { description: 'Dig' },
+          parentToolUseId: TASK
+        }),
+        fromAgent({
+          type: 'tool_use',
+          toolUseId: 'g-1',
+          name: 'Read',
+          input: { file_path: '/deep.ts' },
+          parentToolUseId: 'inner'
+        })
+      ]
+    })
+
+    const [outer] = screen.getAllByText(/step by the subagent/)
+    if (outer) await user.click(outer)
+    const [, inner] = screen.getAllByText(/step by the subagent/)
+    if (inner) await user.click(inner)
+
+    expect(screen.getByText('/deep.ts')).toBeVisible()
+  })
+})
+
 describe('a plan the user rewrote', () => {
   // What the agent was actually told to do, named so it is not mistaken for the
   // one it wrote above — and carried out from here like any other.

@@ -261,6 +261,11 @@ A **chat** is a conversation with one agent inside one workspace: `id`,
 `workingMode`, `planMode`, `knownCommands`, `skillOverrides`, `createdAt`,
 `closedAt`.
 
+**An agent event may name the call whose subagent produced it**
+(`parentToolUseId`, on text, reasoning, tool calls and results): the SDK says
+`null` for the conversation's own and that is stored as nothing, so a transcript
+from before it reads the same as one after.
+
 **A transcript's user entries carry a `uuid`**: the id the message was sent to
 the agent under, which is what putting the files back to it is asked with. It is
 optional — a message sent before ids were kept has none, and simply offers no

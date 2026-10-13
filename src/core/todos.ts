@@ -51,6 +51,10 @@ export function latestTodos(entries: readonly ChatEntry[]): Todo[] | null {
   for (const entry of entries.toReversed()) {
     if (entry.role !== 'agent' || entry.event.type !== 'tool_use') continue
 
+    // A subagent keeps a list of its own for its own task. It is not the
+    // conversation's, and the newest one written would otherwise replace it.
+    if (entry.event.parentToolUseId !== undefined) continue
+
     const todos = readTodos(entry.event.name, entry.event.input)
     if (todos !== null) return todos
   }

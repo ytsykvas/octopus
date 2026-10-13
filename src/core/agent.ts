@@ -891,6 +891,12 @@ function fromAssistant(message: SDKAssistantMessage): AgentEvent[] {
      same thing again, and the SDK calls the two idempotent. */
   events.push(...retraction(message.supersedes, message.uuid))
 
+  // Whose words these are. A subagent's messages arrive on the same stream as
+  // the conversation's own, told apart only by this, and without it a long
+  // delegated task is a scatter of tool rows nothing says belong together.
+  const parent =
+    message.parent_tool_use_id === null ? {} : { parentToolUseId: message.parent_tool_use_id }
+
   for (const block of message.message.content) {
     // A block with nothing in it is not an event. Reasoning arrives that way
     // routinely — the SDK can be asked to summarise it or omit it, and an
@@ -898,10 +904,10 @@ function fromAssistant(message: SDKAssistantMessage): AgentEvent[] {
     // through, each drew a disclosure with nothing behind it and left a record
     // in the transcript that remembers nothing.
     if (block.type === 'text' && block.text.trim() !== '') {
-      events.push({ type: 'text', text: block.text, uuid: message.uuid })
+      events.push({ type: 'text', text: block.text, uuid: message.uuid, ...parent })
     }
     if (block.type === 'thinking' && block.thinking.trim() !== '') {
-      events.push({ type: 'thinking', text: block.thinking, uuid: message.uuid })
+      events.push({ type: 'thinking', text: block.thinking, uuid: message.uuid, ...parent })
     }
     if (block.type === 'tool_use') {
       events.push({
@@ -909,7 +915,8 @@ function fromAssistant(message: SDKAssistantMessage): AgentEvent[] {
         toolUseId: block.id,
         name: block.name,
         input: block.input,
-        uuid: message.uuid
+        uuid: message.uuid,
+        ...parent
       })
     }
   }
@@ -944,6 +951,8 @@ function fromUser(message: SDKUserMessage): AgentEvent[] {
   if (typeof content === 'string') return []
 
   const events: AgentEvent[] = []
+  const parent =
+    message.parent_tool_use_id === null ? {} : { parentToolUseId: message.parent_tool_use_id }
 
   for (const block of content) {
     if (block.type !== 'tool_result') continue
@@ -955,7 +964,8 @@ function fromUser(message: SDKUserMessage): AgentEvent[] {
       content: describeToolResult(block.content),
       // Optional on this message where it is required on an assistant one, so
       // a result that arrives without one simply cannot be retracted.
-      ...(message.uuid === undefined ? {} : { uuid: message.uuid })
+      ...(message.uuid === undefined ? {} : { uuid: message.uuid }),
+      ...parent
     })
   }
 

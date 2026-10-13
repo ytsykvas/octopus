@@ -36,6 +36,7 @@ import {
   answersByRequest,
   elicitationsByRequest,
   groupToolRuns,
+  subagentsOf,
   planCalls,
   retractedUuids,
   toolCount,
@@ -128,7 +129,8 @@ export function ChatLog({
   // it sits further down than the question whose card draws it.
   const answers = useMemo(() => answersByRequest(entries), [entries])
   const elicitationAnswers = useMemo(() => elicitationsByRequest(entries), [entries])
-  const blocks = useMemo(() => groupToolRuns(entries), [entries])
+  const subagents = useMemo(() => subagentsOf(entries), [entries])
+  const blocks = useMemo(() => groupToolRuns(entries, subagents.nested), [entries, subagents])
   // Which calls handed over a plan, so that a plan sent back for another round
   // is not drawn as something that broke.
   const plans = useMemo(() => planCalls(entries), [entries])
@@ -142,7 +144,9 @@ export function ChatLog({
           ever reordered or removed, so where a block starts identifies it for
           its whole life. Two identical rows have nothing else to tell apart. */}
       {blocks.map((block) => {
-        if (block.kind === 'tools') return <ToolRun key={block.at} entries={block.entries} />
+        if (block.kind === 'tools') {
+          return <ToolRun key={block.at} entries={block.entries} steps={subagents.steps} />
+        }
 
         if (block.kind === 'change') {
           return (
@@ -161,6 +165,7 @@ export function ChatLog({
             entry={block.entry}
             plans={plans}
             retracted={retracted}
+            steps={subagents.steps}
             busy={busy}
             pendingRequestId={pendingRequestId}
             pendingElicitationId={pendingElicitationId}
@@ -215,6 +220,8 @@ interface RowProps extends AnswerProps {
   plans: ReadonlySet<string>
   /** Wire ids the agent has taken back. See `retractedUuids`. */
   retracted: ReadonlySet<string>
+  /** What each subagent did, by the call that started it. */
+  steps: ReadonlyMap<string, readonly AgentEvent[]>
 }
 
 function EntryRow({
@@ -264,6 +271,7 @@ function EntryRow({
 function AgentRow({
   event,
   plans,
+  steps,
   busy,
   pendingRequestId,
   pendingElicitationId,
@@ -299,7 +307,14 @@ function AgentRow({
       // A call that changed a file never arrives here: `groupToolRuns` pulls it
       // out into a block of its own, so that it can carry the context recorded
       // for it — which arrives later in the log than the call does.
-      return <ToolCall name={event.name} input={event.input} />
+      return (
+        <ToolCall
+          name={event.name}
+          input={event.input}
+          steps={steps.get(event.toolUseId)}
+          allSteps={steps}
+        />
+      )
     }
 
     case 'tool_result':
@@ -549,15 +564,21 @@ function Thinking({ text }: { text: string }): React.JSX.Element {
  * The same disclosure as reasoning above, for the same reason: available to
  * anyone who wants it, in the way of nobody who does not.
  */
-function ToolRun({ entries }: { entries: readonly ChatEntry[] }): React.JSX.Element {
+function ToolRun({
+  entries,
+  steps
+}: {
+  entries: readonly ChatEntry[]
+  steps: ReadonlyMap<string, readonly AgentEvent[]>
+}): React.JSX.Element {
   const { t } = useTranslation()
-  const steps = toolCount(entries)
+  const count = toolCount(entries)
 
   return (
     <details className="text-ink-faint">
       <summary className="focus-ring cursor-pointer list-none select-none">
         <ChevronRight aria-hidden className="mr-1 inline align-[-2px]" size={12} />
-        {t('chat.toolSteps', { count: steps })}
+        {t('chat.toolSteps', { count })}
       </summary>
 
       {/* The same list the summary counted, not a second reading of the block:
@@ -565,7 +586,13 @@ function ToolRun({ entries }: { entries: readonly ChatEntry[] }): React.JSX.Elem
           and opened on three. */}
       <div className="border-line mt-1 flex flex-col gap-1 border-l pl-3">
         {toolRunRows(entries).map((row, index) => (
-          <ToolCall key={index} name={row.name} input={row.input} />
+          <ToolCall
+            key={index}
+            name={row.name}
+            input={row.input}
+            steps={steps.get(row.toolUseId)}
+            allSteps={steps}
+          />
         ))}
       </div>
     </details>
@@ -687,7 +714,19 @@ function ChangeBlock({
   )
 }
 
-function ToolCall({ name, input }: { name: string; input: unknown }): React.JSX.Element {
+function ToolCall({
+  name,
+  input,
+  steps,
+  allSteps
+}: {
+  name: string
+  input: unknown
+  /** What the subagent this call started did, when it was one. */
+  steps?: readonly AgentEvent[] | undefined
+  /** Every subagent's, for the ones nested a level further down. */
+  allSteps: ReadonlyMap<string, readonly AgentEvent[]>
+}): React.JSX.Element {
   const { t } = useTranslation()
 
   // The agent's task list says how far it has got, which is the thing worth
@@ -703,20 +742,100 @@ function ToolCall({ name, input }: { name: string; input: unknown }): React.JSX.
         })
 
   return (
-    <div className="text-ink-soft flex min-w-0 items-baseline gap-2">
-      <Wrench aria-hidden className="shrink-0 self-center" size={12} />
-      <span className="font-medium">{name}</span>
-      {/* Through `shown`, as the change block below does, and the title through
-          its plain-text sibling: a tooltip is laid out by the same
-          bidirectional algorithm as the row it hangs off, so leaving the raw
-          string there would be the same misreading with a delay. */}
-      {target !== null && (
-        <span className="text-ink-faint truncate font-mono text-[11px]" title={named(target)}>
-          {shown(target)}
-        </span>
-      )}
+    <div className="flex min-w-0 flex-col gap-1">
+      <div className="text-ink-soft flex min-w-0 items-baseline gap-2">
+        <Wrench aria-hidden className="shrink-0 self-center" size={12} />
+        <span className="font-medium">{name}</span>
+        {/* Through `shown`, as the change block below does, and the title
+            through its plain-text sibling: a tooltip is laid out by the same
+            bidirectional algorithm as the row it hangs off, so leaving the raw
+            string there would be the same misreading with a delay. */}
+        {target !== null && (
+          <span className="text-ink-faint truncate font-mono text-[11px]" title={named(target)}>
+            {shown(target)}
+          </span>
+        )}
+      </div>
+
+      {steps !== undefined && <SubagentSteps steps={steps} allSteps={allSteps} />}
     </div>
   )
+}
+
+/**
+ * What a subagent did, under the call that started it.
+ *
+ * A delegated task is a long stretch of the agent's own tool calls and remarks,
+ * and drawn at the top level it buried what the conversation itself said. Folded
+ * into the count of what it did and closed — the same disclosure as a run of
+ * tool calls above, for the same reason — it is there for whoever wants it.
+ *
+ * Its edits are not in here: those are drawn as changes, with their diff, where
+ * they happened, and a subagent's change is the most useful thing it does.
+ */
+function SubagentSteps({
+  steps,
+  allSteps
+}: {
+  steps: readonly AgentEvent[]
+  allSteps: ReadonlyMap<string, readonly AgentEvent[]>
+}): React.JSX.Element {
+  const { t } = useTranslation()
+
+  return (
+    <details className="text-ink-faint ml-5">
+      <summary className="focus-ring cursor-pointer list-none text-[11px] select-none">
+        <ChevronRight aria-hidden className="mr-1 inline align-[-2px]" size={12} />
+        {t('chat.subagentSteps', {
+          count: steps.filter((event) => event.type === 'tool_use').length
+        })}
+      </summary>
+
+      <div className="border-line mt-1 flex flex-col gap-1 border-l pl-3">
+        {steps.map((event, index) => (
+          <SubagentStep key={index} event={event} allSteps={allSteps} />
+        ))}
+      </div>
+    </details>
+  )
+}
+
+function SubagentStep({
+  event,
+  allSteps
+}: {
+  event: AgentEvent
+  allSteps: ReadonlyMap<string, readonly AgentEvent[]>
+}): React.JSX.Element | null {
+  switch (event.type) {
+    case 'tool_use':
+      return (
+        <ToolCall
+          name={event.name}
+          input={event.input}
+          steps={allSteps.get(event.toolUseId)}
+          allSteps={allSteps}
+        />
+      )
+
+    // What the subagent said along the way, one line of it: the whole of its
+    // answer reaches the conversation as the call's own result.
+    case 'text': {
+      const [first = ''] = event.text.trim().split('\n')
+      return (
+        <p className="text-ink-faint truncate text-[11px]" title={named(first)}>
+          {shown(first)}
+        </p>
+      )
+    }
+
+    case 'tool_result':
+      return event.ok ? null : <ToolFailure content={event.content} />
+
+    // Its reasoning stays its own.
+    default:
+      return null
+  }
 }
 
 /**

@@ -633,6 +633,74 @@ describe('mapping SDK messages', () => {
     expect(mapMessage(message)[0]).toEqual({ type: 'retracted', uuids: ['u-1'] })
   })
 
+  /*
+   * A subagent's messages arrive on the conversation's own stream, told apart
+   * only by the call that started it. Without that, a delegated task is a
+   * scatter of tool rows that nothing says belong together.
+   */
+  describe('what a subagent says', () => {
+    const SUBAGENT = 'toolu_task_1'
+
+    it('names the call it belongs to on text, thinking and tool calls', () => {
+      const message = {
+        type: 'assistant',
+        message: {
+          content: [
+            { type: 'thinking', thinking: 'Looking' },
+            { type: 'text', text: 'Found it.' },
+            { type: 'tool_use', id: 'c-1', name: 'Read', input: { file_path: 'a.ts' } }
+          ]
+        },
+        parent_tool_use_id: SUBAGENT,
+        uuid: 'u-5',
+        session_id: 's-1'
+      } as unknown as SDKMessage
+
+      expect(mapMessage(message)).toEqual([
+        { type: 'thinking', text: 'Looking', uuid: 'u-5', parentToolUseId: SUBAGENT },
+        { type: 'text', text: 'Found it.', uuid: 'u-5', parentToolUseId: SUBAGENT },
+        {
+          type: 'tool_use',
+          toolUseId: 'c-1',
+          name: 'Read',
+          input: { file_path: 'a.ts' },
+          uuid: 'u-5',
+          parentToolUseId: SUBAGENT
+        }
+      ])
+    })
+
+    it('names it on a tool result as well', () => {
+      const message = {
+        type: 'user',
+        message: {
+          role: 'user',
+          content: [{ type: 'tool_result', tool_use_id: 'c-1', content: 'ok' }]
+        },
+        parent_tool_use_id: SUBAGENT,
+        session_id: 's-1'
+      } as unknown as SDKMessage
+
+      expect(mapMessage(message)).toEqual([
+        {
+          type: 'tool_result',
+          toolUseId: 'c-1',
+          ok: true,
+          content: 'ok',
+          parentToolUseId: SUBAGENT
+        }
+      ])
+    })
+
+    // The conversation's own events carry nothing, so a transcript written
+    // before this existed reads the same as one written after.
+    it('leaves the conversation’s own events without one', () => {
+      expect(mapMessage(assistant([{ type: 'text', text: 'Hello' }]))).toEqual([
+        { type: 'text', text: 'Hello', uuid: 'u-1' }
+      ])
+    })
+  })
+
   it('reads a tool result out of the user message that carries it', () => {
     const message = {
       type: 'user',

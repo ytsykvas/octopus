@@ -30,6 +30,15 @@ import { UsageReportSchema } from './usage.js'
 const ToolInputSchema = z.unknown()
 
 /**
+ * The tool call whose subagent said or did this, when it was not the main one.
+ *
+ * Absent on the conversation's own events, and optional rather than nullable so
+ * a transcript written before it existed still reads: the SDK says `null` for
+ * the main thread, and that is stored as nothing.
+ */
+const ParentSchema = z.string().optional()
+
+/**
  * The lines an edit landed among, and where they start.
  *
  * `startLine` is the 1-based number of the first line of the changed region in
@@ -58,12 +67,22 @@ export const AgentEventSchema = z.discriminatedUnion('type', [
    * cannot parse — a required field would erase the history of every
    * conversation on the machine without anything saying so.
    */
-  z.object({ type: z.literal('text'), text: z.string(), uuid: z.string().optional() }),
+  z.object({
+    type: z.literal('text'),
+    text: z.string(),
+    uuid: z.string().optional(),
+    parentToolUseId: ParentSchema
+  }),
 
   /** A fragment of prose still being written. Shown, never stored. */
   z.object({ type: z.literal('text_delta'), text: z.string() }),
 
-  z.object({ type: z.literal('thinking'), text: z.string(), uuid: z.string().optional() }),
+  z.object({
+    type: z.literal('thinking'),
+    text: z.string(),
+    uuid: z.string().optional(),
+    parentToolUseId: ParentSchema
+  }),
   z.object({ type: z.literal('thinking_delta'), text: z.string() }),
 
   z.object({
@@ -71,7 +90,8 @@ export const AgentEventSchema = z.discriminatedUnion('type', [
     toolUseId: z.string(),
     name: z.string(),
     input: ToolInputSchema,
-    uuid: z.string().optional()
+    uuid: z.string().optional(),
+    parentToolUseId: ParentSchema
   }),
 
   z.object({
@@ -88,7 +108,8 @@ export const AgentEventSchema = z.discriminatedUnion('type', [
      * live event carries the whole thing.
      */
     truncated: z.boolean().optional(),
-    uuid: z.string().optional()
+    uuid: z.string().optional(),
+    parentToolUseId: ParentSchema
   }),
 
   /**

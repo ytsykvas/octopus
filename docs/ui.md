@@ -203,6 +203,18 @@ the event that ends a turn is filtered by the open chat's id and there is no
 chat until its history has loaded, so one arriving in that window is dropped and
 a seeded flag would stay stuck on.
 
+**A subagent's work is folded under the call that started it.** Its messages
+arrive on the conversation's own stream, told apart only by the id of that call
+(`parentToolUseId` on its text, reasoning, calls and results), and drawn at the
+top level a long delegated task buried what the conversation itself said. Now
+the call's row carries a closed disclosure — "12 steps by the subagent" — which
+opens to its calls, one line of each remark, and its failures; one nested inside
+another nests the same way. Its **edits stay where they happened**, with their
+diff: a subagent's change is the most useful thing it does, and folded into a
+count it would lose what the log draws for every other change. A step whose call
+is not in the log (a conversation cleared halfway) stays at the top level rather
+than vanishing.
+
 **The plan can be rewritten before it is approved.** The dialog's `Edit the plan`
 swaps the rendered plan for its markdown, in a monospace field, and back; the
 edits are kept when the field is closed to look at the result. Executing then
@@ -341,8 +353,9 @@ sends the whole list, and goes away once everything is done: a finished list
 would be a standing report on work already in the log, taking the line the next
 message needs. The log's own `TodoWrite` row says how far it had got ("1 of 3")
 instead of showing a bare tool name. Only `TodoWrite` is read; the newer
-`TaskCreate`/`TaskUpdate` tools, and a list written by a subagent — which the
-event stream does not tell apart from the main one's — are not.
+`TaskCreate`/`TaskUpdate` tools are not. A list written by a subagent is
+skipped — it is its own task's, and the newest one written would otherwise
+replace the conversation's.
 
 **Typing `@` offers the workspace's files.** The fourth way to attach one — the
 paperclip, a drop and a paste being the others — and it lands in the same place:

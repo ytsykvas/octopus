@@ -603,6 +603,10 @@ export const uk: Translation = {
     rewindNothing: 'Файли вже такі, якими були перед цим повідомленням.',
     filesRewound:
       'Файли повернуто до попереднього повідомлення: змінено {{files}}, +{{insertions}} −{{deletions}}',
+    subagentSteps_one: '{{count}} крок субагента',
+    subagentSteps_few: '{{count}} кроки субагента',
+    subagentSteps_many: '{{count}} кроків субагента',
+    subagentSteps_other: '{{count}} кроків субагента',
     history: 'Закриті розмови',
     historyEmpty: 'Нічого ще не закрито',
     historyUntitled: 'Розмова без повідомлень',
