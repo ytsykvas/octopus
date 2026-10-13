@@ -3976,17 +3976,36 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
     async searchFiles(workspaceId, query) {
       const workspace = requireWorkspace(workspaceId)
 
-      const offered = (files: readonly string[]): MentionFile[] =>
-        rankFiles(files, query).map((path) => ({ path, absolute: join(workspace.path, path) }))
+      /*
+       * Each candidate is proved inside the worktree before it is offered — the
+       * gate `resolveWorkspaceFile` puts in front of opening a file, for the
+       * same reason. A repository can hold a symlink called `README.md` that
+       * points at a key in the home directory; offered by name it would be
+       * attached as an ordinary file of the workspace, and the agent would read
+       * it through the link. Eight candidates at most, so eight `realpath`s.
+       *
+       * It also drops what git still lists but the disk no longer has.
+       */
+      const offered = async (files: readonly string[]): Promise<MentionFile[]> => {
+        const checked = await Promise.all(
+          rankFiles(files, query).map(async (path) =>
+            (await fileInWorkspace(workspace, path)) === null
+              ? null
+              : { path, absolute: join(workspace.path, path) }
+          )
+        )
+
+        return checked.filter((file) => file !== null)
+      }
 
       const held = fileLists.get(workspaceId)
       if (held !== undefined && Date.now() - held.at < FILE_LIST_TTL_MS) {
-        return offered(held.files)
+        return await offered(held.files)
       }
 
       const files = await listFiles(makeExec(workspace.path))
       fileLists.set(workspaceId, { at: Date.now(), files })
-      return offered(files)
+      return await offered(files)
     },
 
     async resolveWorkspaceFile(workspaceId, path) {

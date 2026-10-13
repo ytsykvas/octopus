@@ -801,6 +801,36 @@ describe('workspaces', () => {
       expect(found.map(({ path }) => path)).toEqual(['scratch-notes.md'])
     })
 
+    // A repository can hold a link called README.md that points at a key in the
+    // home directory. Offered by name it would be attached as an ordinary file
+    // of the workspace, and read through the link.
+    it('leaves out a symlink that points out of the workspace', async () => {
+      const { service, projectId } = await withProject()
+      const workspace = await service.createWorkspaceIn(projectId)
+      await symlink('/etc/hosts', join(workspace.path, 'hosts-link.txt'))
+
+      await expect(service.searchFiles(workspace.id, 'hosts-link')).resolves.toEqual([])
+    })
+
+    it('still offers a symlink that stays inside it', async () => {
+      const { service, projectId } = await withProject()
+      const workspace = await service.createWorkspaceIn(projectId)
+      await symlink('README.md', join(workspace.path, 'readme-link.md'))
+
+      const found = await service.searchFiles(workspace.id, 'readme-link')
+
+      expect(found.map(({ path }) => path)).toEqual(['readme-link.md'])
+    })
+
+    // Git still lists a tracked file that was deleted from the disk.
+    it('leaves out a file that is listed but gone', async () => {
+      const { service, projectId } = await withProject()
+      const workspace = await service.createWorkspaceIn(projectId)
+      await rm(join(workspace.path, 'README.md'))
+
+      await expect(service.searchFiles(workspace.id, 'readme')).resolves.toEqual([])
+    })
+
     it('leaves out what .gitignore says to', async () => {
       const { service, projectId } = await withProject()
       const workspace = await service.createWorkspaceIn(projectId)
