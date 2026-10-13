@@ -146,6 +146,13 @@ export function ChatSession({
    *
    * After the send and only when it was accepted: a refused message leaves the
    * panel as it was rather than showing a command that never ran.
+   *
+   * Planning first, and the second only if the first took. A pair written in
+   * the other order and left half done put Sonnet under both jobs — and the
+   * session had been told, so planning would have run on it. Planning first, a
+   * refusal at either step leaves the record unchanged or leaves the writing
+   * model on the default, which is what the panel showed before. The error is
+   * on the banner in both cases.
    */
   const { send: sendMessage, setModel, setPlanModel } = chat
   const send = useCallback(
@@ -153,9 +160,8 @@ export function ChatSession({
       const sent = await sendMessage(text)
       const split = sent ? opusPlanSplit(text, commands, models) : null
 
-      if (split !== null) {
+      if (split !== null && (await setPlanModel(split.planModel))) {
         await setModel(split.model)
-        await setPlanModel(split.planModel)
       }
 
       return sent
