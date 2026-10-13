@@ -134,17 +134,16 @@ export function Chat({
       style={{ '--project-color': `var(--project-${color})` } as React.CSSProperties}
     >
       <header className="border-line flex h-9 shrink-0 items-center border-b px-6">
-        {/* Capped like everything below it. The log, the composer and the error
-            banner are all held to this width, and the strip has to line up with
-            the conversation it labels.
+        {/* Held to the pane's left edge rather than to the capped column below
+            it. Lined up with the log, the strip drifted to the middle of a wide
+            window, and tabs are found by where they start, not by what they
+            label.
 
             The row carries the strip alone. The branch used to share it, and
             has moved to the title bar beside the project's directory: it says
             where the work lands, which is a fact about the window rather than
             about any one conversation. */}
-        <div className="mx-auto flex w-full max-w-6xl items-center">
-          <ChatTabs tabs={tabs} />
-        </div>
+        <ChatTabs tabs={tabs} />
       </header>
 
       {/* Pinned under the header rather than inside the scroller, where
