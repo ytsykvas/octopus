@@ -382,6 +382,89 @@ describe('two settings changed in quick succession', () => {
   })
 })
 
+/*
+ * The two model settings say whether they took, so a caller that needs both —
+ * `/model opusplan` writes a pair — can stop at the first refusal instead of
+ * leaving half of it behind. The refusal itself is still reported on the banner;
+ * what the result adds is that a caller can act on it.
+ */
+describe('a model setting that says whether it was applied', () => {
+  async function ready(): Promise<{ current: ReturnType<typeof useChat> }> {
+    givenChat()
+    const { result } = renderHook(() => useChat(...open()))
+    await waitFor(() => {
+      expect(result.current.chat).not.toBeNull()
+    })
+    return result
+  }
+
+  it('answers true once the core has taken the writing model', async () => {
+    const result = await ready()
+
+    let applied: boolean | undefined
+    await act(async () => {
+      applied = await result.current.setModel('claude-opus-5')
+    })
+
+    expect(applied).toBe(true)
+    expect(result.current.chat?.model).toBe('claude-opus-5')
+  })
+
+  it('answers true once the core has taken the planning model', async () => {
+    const result = await ready()
+
+    let applied: boolean | undefined
+    await act(async () => {
+      applied = await result.current.setPlanModel('claude-opus-5')
+    })
+
+    expect(applied).toBe(true)
+    expect(result.current.chat?.planModel).toBe('claude-opus-5')
+  })
+
+  it('answers false, and keeps the record, when the core refuses the writing model', async () => {
+    const result = await ready()
+    vi.mocked(octopus().chats.setModel).mockResolvedValue({ ok: false, error: 'no such chat' })
+
+    let applied: boolean | undefined
+    await act(async () => {
+      applied = await result.current.setModel('claude-opus-5')
+    })
+
+    expect(applied).toBe(false)
+    expect(result.current.chat?.model).toBeNull()
+    expect(result.current.error).toBe('no such chat')
+  })
+
+  it('answers false, and keeps the record, when the core refuses the planning model', async () => {
+    const result = await ready()
+    vi.mocked(octopus().chats.setPlanModel).mockResolvedValue({ ok: false, error: 'no such chat' })
+
+    let applied: boolean | undefined
+    await act(async () => {
+      applied = await result.current.setPlanModel('claude-opus-5')
+    })
+
+    expect(applied).toBe(false)
+    expect(result.current.chat?.planModel).toBeNull()
+    expect(result.current.error).toBe('no such chat')
+  })
+
+  // Nothing to write to: no workspace means no record can be made, which is a
+  // refusal like any other and must not read as one that was applied.
+  it('answers false when there is no conversation to put it on', async () => {
+    const { result } = renderHook(() => useChat(null, null, 'idle', describeFailure, noted))
+
+    let applied: boolean | undefined
+    await act(async () => {
+      applied = await result.current.setModel('claude-opus-5')
+    })
+
+    expect(applied).toBe(false)
+    expect(octopus().chats.setModel).not.toHaveBeenCalled()
+  })
+})
+
 describe('the record the pane creates for itself', () => {
   /*
    * The first conversation of a workspace is written by the first message, so

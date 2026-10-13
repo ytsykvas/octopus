@@ -729,6 +729,10 @@ rows those are is the catalogue's to say (`opus[1m]` where there is no plain
 `opus`), and where it cannot express the pair nothing changes. Any other
 `/model` still moves only the chip.
 
+The pair is written planning first and stops at a refusal, so a failed write
+never leaves half of it: the panel is either as it was or has the planning model
+set and the writing one on the default, with the error on the banner.
+
 **The footer's mode is one control over two stored fields.** `plan` is not a
 third degree of permission but a state the conversation is in: the agent runs
 no tools at all in it, so `Auto mode` has nothing to accept. Held as one field

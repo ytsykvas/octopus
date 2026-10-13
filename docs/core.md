@@ -436,6 +436,16 @@ through `setModel` and `setPlanModel` once the send has been accepted. It is the
 window's job rather than the core's because nothing tells a window that a record
 changed; a write made in `sendToChat` would never have reached the panel.
 
+The pair is written **planning first, and the writing model only if that was
+taken**. Both calls push the effective model to the running session, so the
+order decides what a refusal leaves behind. With the writing model first, a
+refused second write left Sonnet under both jobs and the session had been told,
+so planning would have run on it. Planning first, a refusal at either step leaves
+the record unchanged or the writing model on the default — which is what the
+panel showed before — and the error is on the banner in both. `setModel` and
+`setPlanModel` answer whether they were applied for exactly this reason; the
+other settings do not, having no pair to keep whole.
+
 The names come from the catalogue, not from the alias: a live one holds
 `opus[1m]` and no plain `opus`, and `default` resolves to the same model without
 being Opus by name. If the catalogue cannot express the pair the record is left
