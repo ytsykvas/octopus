@@ -68,7 +68,44 @@ export type ChatStatus = z.infer<typeof ChatStatusSchema>
  */
 export const MAX_CHATS_PER_WORKSPACE = 3
 
-export type ChatErrorCode = 'tooManyChats' | 'lastChat' | 'nothingToFork' | 'forkFailed'
+/**
+ * How many closed conversations a workspace keeps to be reopened.
+ *
+ * Closing a tab used to throw the conversation away, and one stray click lost a
+ * whole session. Keeping them all would be a different leak — a record and a
+ * transcript per tab, for ever — so the oldest go once this many are waiting.
+ * Twenty is a week of closing a tab a day with room to spare, and small enough
+ * that the list can be read rather than searched.
+ */
+export const MAX_CLOSED_CHATS_PER_WORKSPACE = 20
+
+export type ChatErrorCode =
+  | 'tooManyChats'
+  | 'lastChat'
+  | 'nothingToFork'
+  | 'forkFailed'
+  | 'rewindBusy'
+  | 'rewindUnavailable'
+  | 'chatClosed'
+
+/**
+ * What putting the files back to a message would do, or did.
+ *
+ * Counts rather than the files' contents: the question the user is asked is
+ * "how much will this undo", and the answer fits in a line. `canRewind` is the
+ * agent's own verdict — a message it never checkpointed, or a file changed by
+ * something else since, makes it false with a reason in `error`.
+ */
+export interface FileRewind {
+  readonly canRewind: boolean
+  readonly error: string | null
+  /** Paths as the agent reported them. */
+  readonly filesChanged: readonly string[]
+  readonly insertions: number
+  readonly deletions: number
+  /** Files left alone because a link sat at their path — never followed. */
+  readonly skippedLinks: number
+}
 
 /** A refused operation on a conversation, carrying a code the UI localises. */
 export class ChatError extends CodedError<ChatErrorCode> {
@@ -615,10 +652,34 @@ export const ChatSchema = z.object({
    * coming back as a single row. `skillKey` is the one place that says so.
    */
   skillOverrides: z.record(z.string(), z.boolean()).default({}),
-  createdAt: z.iso.datetime()
+  createdAt: z.iso.datetime(),
+  /**
+   * When this conversation was closed, or null while it is open.
+   *
+   * A closed conversation keeps its record and its transcript so it can be
+   * reopened; everything that means "the tabs of this workspace" skips it.
+   *
+   * Defaulted rather than migrated, the convention `StateSchema` states: a
+   * record written before the field existed was open.
+   */
+  closedAt: z.iso.datetime().nullable().default(null)
 })
 
 export type Chat = z.infer<typeof ChatSchema>
+
+/** A closed conversation as the history list draws it. */
+export interface ClosedChat {
+  readonly chat: Chat
+  /** When it was closed; what the list says beside its opening message. */
+  readonly closedAt: string
+  /** Its opening message on one line, empty if it never had one. */
+  readonly preview: string
+}
+
+/** Whether a conversation is one of its workspace's tabs rather than history. */
+export function isOpenChat(chat: { readonly closedAt: string | null }): boolean {
+  return chat.closedAt === null
+}
 
 /**
  * A message as accepted from the renderer.
@@ -655,6 +716,16 @@ export const PermissionAnswerSchema = z.enum(['allow', 'always', 'deny'])
  * agent as the refusal's message, which is a prompt by another name.
  */
 export const PlanFeedbackSchema = z.string().max(10_000)
+
+/**
+ * A plan the user rewrote before approving it.
+ *
+ * Bounded generously — a plan is several screens — but bounded: it replaces the
+ * tool's own argument, which the agent then reads and works from, so it is a
+ * prompt like the message field is. Never empty: an empty plan is not an edit,
+ * it is a way to approve nothing.
+ */
+export const EditedPlanSchema = z.string().min(1).max(100_000)
 
 export interface NewChatOptions {
   readonly id: string
@@ -704,6 +775,7 @@ export function newChat(workspaceId: string, options: NewChatOptions): Chat {
     // has been told nothing and follows the defaults, so a skill switched off
     // for the project after this chat was opened is off here too.
     skillOverrides: {},
+    closedAt: null,
     createdAt: options.createdAt
   }
 }
@@ -753,6 +825,7 @@ export function forkChat(source: Chat, options: ForkChatOptions): Chat {
     effort: source.effort,
     workingMode: source.workingMode,
     planMode: false,
+    closedAt: null,
     knownCommands: source.knownCommands,
     // Carried across with the model and the effort, and for the same reason: a
     // fork is the same work in the same place, and a skill switched off

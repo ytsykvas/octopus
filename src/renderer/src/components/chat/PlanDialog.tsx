@@ -6,8 +6,30 @@ import { Modal } from '../Modal.js'
 import { Markdown } from './Markdown.js'
 
 interface PlanDialogProps {
+  /** The plan as the agent wrote it. */
   readonly plan: string
-  readonly onExecute: () => void
+  /**
+   * The plan as it stands in the editor: the user's own words, or the agent's
+   * until they change them.
+   *
+   * Held by the pane rather than here, and keyed by the request it belongs to:
+   * the dialog is only mounted while its conversation is showing, so state kept
+   * in it was lost on every switch of tab — and a state seeded once would have
+   * gone on describing a plan the agent had since replaced.
+   */
+  readonly text: string
+  readonly onText: (text: string) => void
+  /**
+   * Whether executing moves the conversation to `acceptEdits` — true only out
+   * of planning, since a plan the agent offered unasked changes no mode.
+   */
+  readonly accepting: boolean
+  /**
+   * Approves the plan. `editedPlan` is the user's own version when they changed
+   * it, and null when they did not — so the agent is only ever told a plan is
+   * different when it is.
+   */
+  readonly onExecute: (editedPlan: string | null) => void
   /** Sends the plan back with the user's note, which may be empty. */
   readonly onKeepPlanning: (feedback: string) => void
 }
@@ -23,17 +45,28 @@ interface PlanDialogProps {
  * One button, and a field. Writing in the field *is* carrying on planning, so a
  * button saying so was the same decision offered twice; the note travels to the
  * agent as the refusal's reason, and the plan it comes back with raises this
- * dialog again. Nor does the button name a mode any more: that is chosen in the
- * composer's footer, which is what the session actually runs under and is on
- * screen behind the backdrop.
+ * dialog again.
+ *
+ * Executing out of planning goes on in `acceptEdits`, whatever the
+ * conversation was asking before — the composer's one mode control has no
+ * second half left to say otherwise. That widens what the agent may do, so the line beside the
+ * button says it before the click rather than the footer after it.
  */
 export function PlanDialog({
   plan,
+  text,
+  onText,
+  accepting,
   onExecute,
   onKeepPlanning
 }: PlanDialogProps): React.JSX.Element {
   const { t } = useTranslation()
   const [feedback, setFeedback] = useState('')
+  const [editing, setEditing] = useState(false)
+
+  // Null for an untouched plan, and for one edited back to what it was: only a
+  // real difference is worth telling the agent about.
+  const changed = text.trim() !== plan.trim() && text.trim() !== ''
 
   const keepPlanning = (): void => {
     onKeepPlanning(feedback.trim())
@@ -48,13 +81,46 @@ export function PlanDialog({
       // — and this dialog would simply reopen on the next render.
       onClose={keepPlanning}
       footer={
-        <Button variant="accent" onClick={onExecute}>
-          {t('chat.planExecute')}
-        </Button>
+        <>
+          {accepting && (
+            <span className="text-ink-soft mr-auto text-[11px]">{t('chat.planExecuteHint')}</span>
+          )}
+          <Button
+            onClick={() => {
+              setEditing((current) => !current)
+            }}
+          >
+            {editing ? t('chat.planEditDone') : t('chat.planEdit')}
+          </Button>
+          <Button
+            variant="accent"
+            // An emptied editor is not a plan. Approving the original under it
+            // would do something the field plainly says it is not doing.
+            disabled={text.trim() === ''}
+            onClick={() => {
+              onExecute(changed ? text.trim() : null)
+            }}
+          >
+            {t('chat.planExecute')}
+          </Button>
+        </>
       }
     >
       <div className="min-h-0 flex-1 overflow-auto px-4 py-3">
-        <Markdown text={plan} />
+        {editing ? (
+          <textarea
+            aria-label={t('chat.planEditLabel')}
+            value={text}
+            onChange={(event) => {
+              onText(event.target.value)
+            }}
+            // Monospace, because what is being edited is markdown: the markers
+            // are the thing being worked on, and a proportional face hides them.
+            className="focus-ring border-line bg-surface field-sizing-content min-h-[12rem] w-full resize-none rounded-[var(--radius-control)] border px-2.5 py-1.5 font-mono text-[12px] outline-none"
+          />
+        ) : (
+          <Markdown text={text} />
+        )}
       </div>
 
       <div className="border-line shrink-0 border-t px-4 py-3">

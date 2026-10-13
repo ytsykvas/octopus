@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
+import { appendFile, mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
@@ -10,6 +10,8 @@ import {
   appendEntry,
   type ChatEntry,
   copyTranscript,
+  MAX_PREVIEW,
+  previewOf,
   readTranscript,
   removeTranscript
 } from './transcript.js'
@@ -213,6 +215,84 @@ describe('every kind of event survives being written and read', () => {
       ])
     }
   )
+})
+
+describe('the preview of a conversation', () => {
+  it('is the first thing the user said, on one line', async () => {
+    await appendEntry('chat-1', { role: 'user', at: AT, text: '  fix the\n\nlogin   bug ' }, root)
+    await appendEntry('chat-1', { role: 'user', at: AT, text: 'and then the rest' }, root)
+
+    await expect(previewOf('chat-1', root)).resolves.toBe('fix the login bug')
+  })
+
+  it('skips what the agent said before the user spoke', async () => {
+    await appendEntry(
+      'chat-1',
+      { role: 'agent', at: AT, event: { type: 'text', text: 'hello' } },
+      root
+    )
+    await appendEntry('chat-1', { role: 'user', at: AT, text: 'hi' }, root)
+
+    await expect(previewOf('chat-1', root)).resolves.toBe('hi')
+  })
+
+  it('is cut to a line a list can hold', async () => {
+    await appendEntry('chat-1', { role: 'user', at: AT, text: 'x'.repeat(500) }, root)
+
+    const preview = await previewOf('chat-1', root)
+
+    expect(preview).toHaveLength(MAX_PREVIEW)
+    expect(preview.endsWith('…')).toBe(true)
+  })
+
+  // A file with a blank line in it — an interrupted write, a hand edit — reads
+  // on past it.
+  it('skips a blank line before the first message', async () => {
+    await mkdir(join(root, 'chats'), { recursive: true })
+    await writeFile(
+      chatTranscript('chat-1', root),
+      `\n   \n${JSON.stringify({ role: 'user', at: AT, text: 'after the gap' })}\n`,
+      'utf8'
+    )
+
+    await expect(previewOf('chat-1', root)).resolves.toBe('after the gap')
+  })
+
+  // A line that does not parse is skipped, as reading the whole transcript does.
+  it('skips a damaged line before the first message', async () => {
+    await mkdir(join(root, 'chats'), { recursive: true })
+    await writeFile(
+      chatTranscript('chat-1', root),
+      `{"role":"user","at":\n${JSON.stringify({ role: 'user', at: AT, text: 'the real one' })}\n`,
+      'utf8'
+    )
+
+    await expect(previewOf('chat-1', root)).resolves.toBe('the real one')
+  })
+
+  it('ignores whatever follows the first message', async () => {
+    await appendEntry('chat-1', { role: 'user', at: AT, text: 'first' }, root)
+    // Never reached: a line that would not parse, then the end.
+    await appendFile(chatTranscript('chat-1', root), 'this is not json\n', 'utf8')
+
+    await expect(previewOf('chat-1', root)).resolves.toBe('first')
+  })
+
+  // The file is there and the user never wrote in it — an agent that spoke
+  // first and was never answered.
+  it('is empty for a transcript with nothing from the user in it', async () => {
+    await appendEntry(
+      'chat-1',
+      { role: 'agent', at: AT, event: { type: 'text', text: 'hello' } },
+      root
+    )
+
+    await expect(previewOf('chat-1', root)).resolves.toBe('')
+  })
+
+  it('is empty for a conversation that never had a message', async () => {
+    await expect(previewOf('chat-nothing', root)).resolves.toBe('')
+  })
 })
 
 describe('removal', () => {

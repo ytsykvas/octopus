@@ -14,8 +14,11 @@ import {
   addProject,
   addWorkspace,
   type Chat,
+  allChatsOfWorkspace,
   chatsOfWorkspace,
+  closedChatsOfWorkspace,
   commandsUnchanged,
+  expiredClosedChats,
   EMPTY_STATE,
   findChat,
   findProject,
@@ -93,6 +96,7 @@ function storedChat(overrides: Partial<Chat> = {}): Chat {
     planMode: false,
     knownCommands: [],
     skillOverrides: {},
+    closedAt: null,
     createdAt: '2026-08-07T12:00:00.000Z',
     ...overrides
   }
@@ -588,6 +592,7 @@ describe('chats', () => {
       planMode: false,
       knownCommands: [],
       skillOverrides: {},
+      closedAt: null,
       createdAt: '2026-08-11T09:00:00.000Z',
       ...overrides
     }
@@ -811,6 +816,7 @@ describe('the commands a chat remembers', () => {
     planMode: false,
     knownCommands: [],
     skillOverrides: {},
+    closedAt: null,
     createdAt: '2026-08-11T09:00:00.000Z'
   }
 
@@ -1062,5 +1068,82 @@ describe('the note a workspace carries for its user', () => {
   it('refuses one past the ceiling', () => {
     expect(NotesBodySchema.safeParse('x'.repeat(16_000)).success).toBe(true)
     expect(NotesBodySchema.safeParse('x'.repeat(16_001)).success).toBe(false)
+  })
+})
+
+describe('closed conversations', () => {
+  const workspace = makeWorkspace()
+  const withChats = (...chats: Chat[]): State =>
+    chats.reduce(addChat, addWorkspace(withProject, workspace))
+
+  // The field has a default rather than a migration, so a state file from
+  // before it must still load — `readJsonFile` throws on a mismatch rather than
+  // falling back, and the app would not open at all.
+  it('loads a chat written before conversations could be closed, as open', async () => {
+    const older: Record<string, unknown> = { ...storedChat() }
+    delete older.closedAt
+    await writeFile(
+      file,
+      JSON.stringify({ version: 1, projects: [project], workspaces: [workspace], chats: [older] }),
+      'utf8'
+    )
+
+    const state = await loadState(file)
+
+    expect(state.chats).toMatchObject([{ id: 'chat-1', closedAt: null }])
+    expect(chatsOfWorkspace(state, workspace.id)).toHaveLength(1)
+  })
+
+  it('keeps a closed conversation out of the tabs but not out of the workspace', () => {
+    const state = withChats(
+      storedChat({ id: 'open' }),
+      storedChat({ id: 'shut', closedAt: '2026-08-20T10:00:00.000Z' })
+    )
+
+    expect(chatsOfWorkspace(state, workspace.id).map((chat) => chat.id)).toEqual(['open'])
+    expect(allChatsOfWorkspace(state, workspace.id).map((chat) => chat.id)).toEqual([
+      'open',
+      'shut'
+    ])
+    expect(closedChatsOfWorkspace(state, workspace.id).map(({ chat }) => chat.id)).toEqual(['shut'])
+  })
+
+  // One that ended in an error must not keep the sidebar red for ever.
+  it('does not let a closed conversation colour the workspace', () => {
+    const chats = [
+      storedChat({ id: 'open', status: 'idle' }),
+      storedChat({ id: 'shut', status: 'error', closedAt: '2026-08-20T10:00:00.000Z' })
+    ]
+
+    expect(workspaceStatusFrom(chats)).toBe('idle')
+  })
+
+  it('lists the most recently closed first, and the later record on a tie', () => {
+    const state = withChats(
+      storedChat({ id: 'a', closedAt: '2026-08-20T10:00:00.000Z' }),
+      storedChat({ id: 'b', closedAt: '2026-08-20T12:00:00.000Z' }),
+      storedChat({ id: 'c', closedAt: '2026-08-20T10:00:00.000Z' })
+    )
+
+    expect(closedChatsOfWorkspace(state, workspace.id).map(({ chat }) => chat.id)).toEqual([
+      'b',
+      'c',
+      'a'
+    ])
+  })
+
+  it('expires only the ones past the keep limit, oldest first', () => {
+    const closed = Array.from({ length: 22 }, (_unused, index) =>
+      storedChat({
+        id: `chat-${String(index)}`,
+        closedAt: `2026-08-20T10:${String(index).padStart(2, '0')}:00.000Z`
+      })
+    )
+    const state = withChats(...closed)
+
+    expect(expiredClosedChats(state, workspace.id).map((chat) => chat.id)).toEqual([
+      'chat-1',
+      'chat-0'
+    ])
   })
 })

@@ -1,16 +1,14 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { useTranslation } from 'react-i18next'
 
 import {
-  AGENT_NAMES,
   type AgentKind,
   type Chat,
   type ChatStatus,
+  type ClosedChat,
   DEFAULT_AGENT,
   MAX_CHATS_PER_WORKSPACE
 } from '@core/chats.js'
 
-import type { ConfirmRequest, ConfirmResult } from './useConfirm.js'
 import { useErrorMessage } from './useErrorMessage.js'
 
 /**
@@ -54,6 +52,19 @@ export interface ChatTabsController {
   readonly create: () => Promise<void>
   readonly fork: (chatId: string) => Promise<void>
   readonly close: (chatId: string) => Promise<void>
+  /**
+   * The conversations closed in this workspace, most recently closed first.
+   *
+   * Read when the history is opened rather than kept live: each entry costs a
+   * read of its transcript for the line that names it, which is not worth doing
+   * for a list nobody is looking at.
+   */
+  readonly history: readonly ClosedChat[]
+  readonly refreshHistory: () => Promise<void>
+  /** Brings a closed conversation back as a tab and shows it. */
+  readonly reopen: (chatId: string) => Promise<void>
+  /** Reopens the one closed last, which is what ⌘⇧T asks for. */
+  readonly reopenLast: () => Promise<void>
   /** Names a conversation; an empty name gives it back the one it is given. */
   readonly rename: (chatId: string, title: string) => Promise<void>
   /**
@@ -143,14 +154,13 @@ function keepKeys(chats: readonly Chat[], current: readonly ChatTab[]): ChatTab[
  */
 export function useChatTabs(
   workspaceId: string | null,
-  confirm: (request: ConfirmRequest) => Promise<ConfirmResult>,
   onChats: (workspaceId: string, chats: readonly ChatTab[]) => void,
   onError: (message: string | null) => void
 ): ChatTabsController {
-  const { t } = useTranslation()
   const describeFailure = useErrorMessage()
 
   const [tabs, setTabs] = useState<readonly ChatTab[]>(VIRGIN)
+  const [history, setHistory] = useState<readonly ClosedChat[]>([])
   const [shownWorkspaceId, setShownWorkspaceId] = useState(workspaceId)
 
   /*
@@ -208,6 +218,9 @@ export function useChatTabs(
   if (workspaceId !== shownWorkspaceId) {
     setShownWorkspaceId(workspaceId)
     setTabs(VIRGIN)
+    // The previous workspace's closed conversations would be offered here, and
+    // reopening one would fail against a workspace it does not belong to.
+    setHistory([])
     // A field left open over a conversation that is no longer on screen would
     // rename whichever tab took its place.
     setEditingKey(null)
@@ -390,35 +403,29 @@ export function useChatTabs(
     [load, select, describeFailure]
   )
 
+  const refreshHistory = useCallback(async () => {
+    const id = shown.current
+    /* v8 ignore next */
+    if (id === null) return
+
+    const closed = await window.octopus.chats.closed(id)
+    if (shown.current !== id) return
+
+    if (closed.ok) setHistory(closed.value)
+    else report.current(describeFailure(closed))
+  }, [describeFailure])
+
+  /*
+   * No confirmation. Closing used to discard the conversation, and asking was
+   * the only protection a slip had; it now moves it to the history, where
+   * reopening is the protection — and a dialog saying "this cannot be brought
+   * back" would be untrue.
+   */
   const close = useCallback(
     async (chatId: string) => {
       const id = shown.current
       /* v8 ignore next */
       if (id === null) return
-
-      const index = tabs.findIndex((tab) => tab.id === chatId)
-      const going = tabs[index]
-
-      // Asked only when there is something to lose. Closing deletes the
-      // transcript, and a conversation that has never run has none — while one
-      // that has cannot be brought back by anything the application offers.
-      if (going?.started === true) {
-        // Named as the strip names it, its own name included: a dialog about
-        // "Claude 2" over a tab reading "auth refactor" is a dialog about
-        // something else.
-        const name =
-          going.title ?? t('chat.tab', { agent: AGENT_NAMES[going.agent], number: index + 1 })
-
-        const answer = await confirm({
-          title: t('chat.closeTabTitle'),
-          message: t('chat.closeTabMessage', { name }),
-          detail: t('chat.closeTabDetail'),
-          confirmLabel: t('chat.closeTabConfirm'),
-          cancelLabel: t('chat.closeTabCancel'),
-          destructive: true
-        })
-        if (!answer.confirmed || shown.current !== id) return
-      }
 
       report.current(null)
       const closed = await window.octopus.chats.close(chatId)
@@ -429,10 +436,52 @@ export function useChatTabs(
         return
       }
 
+      // The history is not read here: it is read when it is opened, which is
+      // what the menu does, and each entry costs a read of its transcript.
       await load(id, () => shown.current !== id)
     },
-    [tabs, load, confirm, t, describeFailure]
+    [load, describeFailure]
   )
+
+  const reopen = useCallback(
+    async (chatId: string) => {
+      const id = shown.current
+      /* v8 ignore next */
+      if (id === null) return
+
+      report.current(null)
+      const reopened = await window.octopus.chats.reopen(chatId)
+      if (shown.current !== id) return
+
+      if (!reopened.ok) {
+        report.current(describeFailure(reopened))
+        return
+      }
+
+      await load(id, () => shown.current !== id)
+      select(reopened.value.id)
+    },
+    [load, select, describeFailure]
+  )
+
+  const reopenLast = useCallback(async () => {
+    const id = shown.current
+    /* v8 ignore next */
+    if (id === null) return
+
+    // Asked rather than taken from `history`, which is only as fresh as the
+    // last time the menu was opened.
+    const closed = await window.octopus.chats.closed(id)
+    if (shown.current !== id) return
+
+    if (!closed.ok) {
+      report.current(describeFailure(closed))
+      return
+    }
+
+    const [latest] = closed.value
+    if (latest) await reopen(latest.chat.id)
+  }, [reopen, describeFailure])
 
   const rename = useCallback(
     async (chatId: string, title: string) => {
@@ -467,6 +516,10 @@ export function useChatTabs(
     create,
     fork,
     close,
+    history,
+    refreshHistory,
+    reopen,
+    reopenLast,
     bind
   }
 }

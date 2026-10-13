@@ -22,6 +22,7 @@ import {
 import {
   ChatMessageSchema,
   ChatTitleSchema,
+  EditedPlanSchema,
   EffortChoiceSchema,
   PermissionAnswerSchema,
   PlanFeedbackSchema,
@@ -167,6 +168,12 @@ export interface IpcHost {
  * workspace it claims.
  */
 const FilePathSchema = z.string().min(1).max(4096)
+
+/** A message of a conversation, by the id it was sent under. */
+const MessageIdSchema = z.uuid()
+
+/** What is typed after an `@`; empty is a real query, meaning "nearest the root". */
+const MentionQuerySchema = z.string().max(256)
 
 /**
  * Writes the config and tells every window, from the one place that writes it.
@@ -787,6 +794,12 @@ export function registerIpc(
     })
   )
 
+  // Typed after an `@`, so it is bounded: the query is a few letters and a
+  // path fragment, and a pasted paragraph is not one.
+  host.handle('files:search', (_event, workspaceId: string, query: unknown) =>
+    attempt(() => service.searchFiles(workspaceId, MentionQuerySchema.parse(query)))
+  )
+
   // The agent chat. Everything the renderer sends here reaches a model or a
   // stored record, so each argument is validated rather than trusted.
   service.onAgentEvent(host.broadcastChatEvent)
@@ -816,11 +829,30 @@ export function registerIpc(
 
   host.handle('chats:close', (_event, chatId: string) => attempt(() => service.closeChat(chatId)))
 
+  // Closing keeps the conversation, so these two are how it comes back. Ids
+  // only, proved against the store like the ones above.
+  host.handle('chats:closed', (_event, workspaceId: string) =>
+    attempt(() => service.listClosedChats(workspaceId))
+  )
+
+  host.handle('chats:reopen', (_event, chatId: string) => attempt(() => service.reopenChat(chatId)))
+
   // The one of the four that carries something the user typed, so it is parsed
   // rather than trusted — it is bounded, and the bound is what stops a tab
   // carrying a pasted paragraph.
   host.handle('chats:rename', (_event, chatId: string, title: unknown) =>
     attempt(() => service.renameChat(chatId, ChatTitleSchema.parse(title)))
+  )
+
+  // The message id comes from the window and names a point in a conversation,
+  // so it is parsed as the uuid it has to be — and the service then proves it is
+  // one this conversation recorded, which is the stronger check.
+  host.handle('chats:rewindPreview', (_event, chatId: string, messageId: unknown) =>
+    attempt(() => service.previewRewind(chatId, MessageIdSchema.parse(messageId)))
+  )
+
+  host.handle('chats:rewind', (_event, chatId: string, messageId: unknown) =>
+    attempt(() => service.rewindChat(chatId, MessageIdSchema.parse(messageId)))
   )
 
   host.handle('chats:history', (_event, chatId: string) =>
@@ -877,14 +909,17 @@ export function registerIpc(
     attempt(() => service.sessionUsage(chatId))
   )
 
-  host.handle('chats:permission', (_event, requestId: string, answer: unknown, feedback: unknown) =>
-    attempt(() =>
-      service.answerPermission(
-        requestId,
-        PermissionAnswerSchema.parse(answer),
-        PlanFeedbackSchema.optional().parse(feedback)
+  host.handle(
+    'chats:permission',
+    (_event, requestId: string, answer: unknown, feedback: unknown, editedPlan: unknown) =>
+      attempt(() =>
+        service.answerPermission(
+          requestId,
+          PermissionAnswerSchema.parse(answer),
+          PlanFeedbackSchema.optional().parse(feedback),
+          EditedPlanSchema.optional().parse(editedPlan)
+        )
       )
-    )
   )
 
   /*

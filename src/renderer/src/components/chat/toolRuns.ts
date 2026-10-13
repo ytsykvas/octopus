@@ -1,4 +1,4 @@
-import type { ChangeContext } from '@core/events.js'
+import type { AgentEvent, ChangeContext } from '@core/events.js'
 import { type QuestionAnswer, readQuestions } from '@core/questions.js'
 import type { ChatEntry } from '@core/transcript.js'
 
@@ -193,6 +193,7 @@ function drawsNothing(entry: ChatEntry): boolean {
 
 /** One row inside an opened run: the call, as `ToolCall` wants it. */
 export interface ToolRunRow {
+  readonly toolUseId: string
   readonly name: string
   readonly input: unknown
 }
@@ -214,7 +215,7 @@ export interface ToolRunRow {
 export function toolRunRows(entries: readonly ChatEntry[]): ToolRunRow[] {
   return entries.flatMap((entry) =>
     entry.role === 'agent' && entry.event.type === 'tool_use' && isToolRow(entry)
-      ? [{ name: entry.event.name, input: entry.event.input }]
+      ? [{ toolUseId: entry.event.toolUseId, name: entry.event.name, input: entry.event.input }]
       : []
   )
 }
@@ -227,6 +228,68 @@ export function toolRunRows(entries: readonly ChatEntry[]): ToolRunRow[] {
  */
 export function toolCount(entries: readonly ChatEntry[]): number {
   return toolRunRows(entries).length
+}
+
+/**
+ * What a subagent did, gathered under the call that started it.
+ *
+ * `steps` is by the id of that call; `nested` is the same entries as a set, for
+ * the walk below to leave out of the top level. Only entries whose parent is
+ * actually in the log are nested — one whose call is not there (a conversation
+ * that was cleared halfway) stays where it is rather than vanishing.
+ *
+ * An edit or a write stays out too, with its result. A subagent's change is the
+ * most useful thing it does, and folded into a count it would lose the diff the
+ * log draws for every other change.
+ */
+export interface Subagents {
+  /** The events, not the entries: only the agent's own are ever nested. */
+  readonly steps: ReadonlyMap<string, readonly AgentEvent[]>
+  readonly nested: ReadonlySet<ChatEntry>
+}
+
+export function subagentsOf(entries: readonly ChatEntry[]): Subagents {
+  const started = new Set<string>()
+  const writes = new Set<string>()
+
+  for (const entry of entries) {
+    if (entry.role !== 'agent' || entry.event.type !== 'tool_use') continue
+
+    started.add(entry.event.toolUseId)
+
+    // Asked of the same reader that draws the diff rather than of a list of
+    // names kept here, which would drift from it. Only a subagent's calls: the
+    // reading runs a line diff, and the conversation's own are read once, by
+    // the walk below.
+    if (entry.event.parentToolUseId !== undefined && changeIn(entry) !== null) {
+      writes.add(entry.event.toolUseId)
+    }
+  }
+
+  const steps = new Map<string, AgentEvent[]>()
+  const nested = new Set<ChatEntry>()
+
+  for (const entry of entries) {
+    if (entry.role !== 'agent' || !('parentToolUseId' in entry.event)) continue
+
+    const parent = entry.event.parentToolUseId
+    if (parent === undefined || !started.has(parent)) continue
+
+    const { event } = entry
+    if (
+      (event.type === 'tool_use' || event.type === 'tool_result') &&
+      writes.has(event.toolUseId)
+    ) {
+      continue
+    }
+
+    const so_far = steps.get(parent)
+    if (so_far === undefined) steps.set(parent, [event])
+    else so_far.push(event)
+    nested.add(entry)
+  }
+
+  return { steps, nested }
 }
 
 /**
@@ -243,7 +306,10 @@ export function toolCount(entries: readonly ChatEntry[]): number {
  * permission card and the turn's own footer all stay where they happened,
  * with the work that led to them either side.
  */
-export function groupToolRuns(entries: readonly ChatEntry[]): LogBlock[] {
+export function groupToolRuns(
+  entries: readonly ChatEntry[],
+  nested: ReadonlySet<ChatEntry> = subagentsOf(entries).nested
+): LogBlock[] {
   const contexts = contextsById(entries)
   const blocks: LogBlock[] = []
   let run: ChatEntry[] = []
@@ -286,6 +352,9 @@ export function groupToolRuns(entries: readonly ChatEntry[]): LogBlock[] {
   let nothingDrawnYet = true
 
   for (const [index, entry] of entries.entries()) {
+    // Drawn inside the call that started it, by whoever draws that call.
+    if (nested.has(entry)) continue
+
     if (nothingDrawnYet) {
       if (entry.role === 'agent' && entry.event.type === 'result') continue
       nothingDrawnYet = false

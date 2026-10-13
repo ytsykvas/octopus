@@ -10,15 +10,24 @@ import {
   Repeat,
   ShieldAlert,
   TriangleAlert,
+  Undo2,
   Wrench
 } from 'lucide-react'
-import { useMemo } from 'react'
+import {
+  AssistantRuntimeProvider,
+  MessagePrimitive,
+  ThreadPrimitive,
+  type ThreadMessageLike,
+  useExternalStoreRuntime
+} from '@assistant-ui/react'
+import { createContext, useContext, useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import type { FormValues } from '@core/elicitation.js'
 import { type AgentEvent, type ChangeContext, type TurnOutcome, turnOutcome } from '@core/events.js'
 import { type QuestionAnswer, readQuestions } from '@core/questions.js'
 import type { PermissionAnswer } from '@core/service.js'
+import { readTodos } from '@core/todos.js'
 import type { ChatEntry } from '@core/transcript.js'
 
 import { Button } from '../Button.js'
@@ -28,12 +37,15 @@ import type { Streaming } from '../../hooks/useChat.js'
 import { formatTokens } from './format.js'
 import type { Change, ChangeLine } from './changeSummary.js'
 import { Markdown } from './Markdown.js'
+import { BLOCK_PART, toThreadMessages } from './threadMessages.js'
 import { ElicitationCard } from './ElicitationCard.js'
 import { QuestionCard } from './QuestionCard.js'
 import {
   answersByRequest,
   elicitationsByRequest,
   groupToolRuns,
+  type LogBlock,
+  subagentsOf,
   planCalls,
   retractedUuids,
   toolCount,
@@ -82,6 +94,13 @@ interface ChatLogProps {
   readonly onAnswerQuestions: (requestId: string, answers: readonly QuestionAnswer[]) => void
   /** Asks for a plan already in the log to be carried out. */
   readonly onExecutePlan: (plan: string) => void
+  /**
+   * Asks for the files to be put back to how they were when a message was sent.
+   *
+   * The log only offers it; the pane asks the question and does the work, since
+   * there is a dialog in between and a bridge call either side of it.
+   */
+  readonly onRewind: (messageId: string) => void
 }
 
 /**
@@ -100,7 +119,8 @@ export function ChatLog({
   onAnswer,
   onAnswerElicitation,
   onAnswerQuestions,
-  onExecutePlan
+  onExecutePlan,
+  onRewind
 }: ChatLogProps): React.JSX.Element {
   const { t } = useTranslation()
   const streamingAnything = streaming.text !== '' || streaming.thinking !== ''
@@ -118,7 +138,8 @@ export function ChatLog({
   // it sits further down than the question whose card draws it.
   const answers = useMemo(() => answersByRequest(entries), [entries])
   const elicitationAnswers = useMemo(() => elicitationsByRequest(entries), [entries])
-  const blocks = useMemo(() => groupToolRuns(entries), [entries])
+  const subagents = useMemo(() => subagentsOf(entries), [entries])
+  const blocks = useMemo(() => groupToolRuns(entries, subagents.nested), [entries, subagents])
   // Which calls handed over a plan, so that a plan sent back for another round
   // is not drawn as something that broke.
   const plans = useMemo(() => planCalls(entries), [entries])
@@ -126,43 +147,47 @@ export function ChatLog({
   // standing above their own replacement as though they still held.
   const retracted = useMemo(() => retractedUuids(entries), [entries])
 
+  // The turns as the library's runtime holds them. Held against the blocks:
+  // it caches each message by the object it was handed, and a list rebuilt on
+  // every render would make it walk the whole thread for every streamed token.
+  const messages = useMemo(() => toThreadMessages(blocks), [blocks])
+  const runtime = useExternalStoreRuntime<ThreadMessageLike>({
+    messages,
+    isRunning: false,
+    convertMessage: asIs,
+    onNew: neverSentHere
+  })
+
   return (
     <div className="mx-auto flex w-full max-w-6xl flex-col gap-3 px-6 py-5">
-      {/* The position is the key because the log is append-only: nothing is
-          ever reordered or removed, so where a block starts identifies it for
-          its whole life. Two identical rows have nothing else to tell apart. */}
-      {blocks.map((block) => {
-        if (block.kind === 'tools') return <ToolRun key={block.at} entries={block.entries} />
-
-        if (block.kind === 'change') {
-          return (
-            <ChangeBlock
-              key={block.at}
-              name={block.name}
-              change={block.change}
-              context={block.context}
-            />
-          )
-        }
-
-        return (
-          <EntryRow
-            key={block.at}
-            entry={block.entry}
-            plans={plans}
-            retracted={retracted}
-            busy={busy}
-            pendingRequestId={pendingRequestId}
-            pendingElicitationId={pendingElicitationId}
-            elicitationAnswers={elicitationAnswers}
-            onAnswerElicitation={onAnswerElicitation}
-            answers={answers}
-            onAnswer={onAnswer}
-            onAnswerQuestions={onAnswerQuestions}
-            onExecutePlan={onExecutePlan}
-          />
-        )
-      })}
+      {/* The rows are drawn through the library's thread and message
+          primitives, one message per turn, and every block rides in as a part
+          the row renderer below turns back into what it always was. The
+          wrappers are `contents` so the column's gap still sits between rows
+          and not between a row and its wrapper. */}
+      <AssistantRuntimeProvider runtime={runtime}>
+        <RowsContext.Provider
+          value={{
+            plans,
+            retracted,
+            steps: subagents.steps,
+            busy,
+            pendingRequestId,
+            pendingElicitationId,
+            elicitationAnswers,
+            onAnswerElicitation,
+            answers,
+            onAnswer,
+            onAnswerQuestions,
+            onExecutePlan,
+            onRewind
+          }}
+        >
+          <ThreadPrimitive.Root className="contents">
+            <ThreadPrimitive.Messages>{renderTurn}</ThreadPrimitive.Messages>
+          </ThreadPrimitive.Root>
+        </RowsContext.Provider>
+      </AssistantRuntimeProvider>
 
       {streaming.thinking !== '' && <Thinking text={streaming.thinking} />}
       {streaming.text !== '' && <Prose text={streaming.text} />}
@@ -178,6 +203,65 @@ export function ChatLog({
     </div>
   )
 }
+
+/*
+ * What the library is handed, and what of it is rebuilt per render.
+ *
+ * It caches a message by the object it was given and the part renderers by the
+ * object they came in, so an inline arrow or a fresh components map makes every
+ * row re-render by itself: 592 ms for one update at a thousand turns with them
+ * inline, 18 ms with them hoisted. The converter, the part map and the message
+ * renderer below are module constants for that reason.
+ *
+ * The rows' own props are not: they travel in a context whose value is built
+ * per render, so every row re-renders when the log does — as they did before
+ * the library, and no worse. Holding that value still would need the callbacks
+ * stabilised first, which the pane does not do.
+ */
+const asIs = (message: ThreadMessageLike): ThreadMessageLike => message
+
+/**
+ * Messages are never sent through the runtime: the composer is the way in.
+ *
+ * Required by the library all the same, and nothing here can reach it — the log
+ * draws no input of its own — so there is nothing to call it with.
+ */
+/* v8 ignore next */
+const neverSentHere = (): Promise<void> => Promise.resolve()
+
+/** What every row needs, from the log that holds them. */
+const RowsContext = createContext<RowProps | null>(null)
+
+/** One log block, drawn the way the log has always drawn it. */
+function BlockRow({ block }: { block: LogBlock }): React.JSX.Element | null {
+  const rows = useContext(RowsContext)
+  // Rendered only inside the provider above, which always supplies it. The
+  // guard is for the type, which cannot know that.
+  /* v8 ignore next */
+  if (rows === null) return null
+
+  if (block.kind === 'tools') return <ToolRun entries={block.entries} steps={rows.steps} />
+
+  if (block.kind === 'change') {
+    return <ChangeBlock name={block.name} change={block.change} context={block.context} />
+  }
+
+  return <EntryRow entry={block.entry} {...rows} />
+}
+
+/** The part that carries a block: typed by what `toThreadMessages` puts in it. */
+const BlockPart = ({ data }: { data: LogBlock }): React.JSX.Element => <BlockRow block={data} />
+
+const BLOCK_PARTS = {
+  data: { by_name: { [BLOCK_PART]: BlockPart } }
+} satisfies NonNullable<React.ComponentProps<typeof MessagePrimitive.Parts>['components']>
+
+/** A turn: its blocks are its parts, in the order they happened. */
+const renderTurn = (): React.JSX.Element => (
+  <MessagePrimitive.Root className="contents">
+    <MessagePrimitive.Parts components={BLOCK_PARTS} />
+  </MessagePrimitive.Root>
+)
 
 /** What every row needs to answer whatever the agent is waiting on. */
 interface AnswerProps {
@@ -195,6 +279,7 @@ interface AnswerProps {
   onAnswer: (requestId: string, answer: PermissionAnswer) => void
   onAnswerQuestions: (requestId: string, answers: readonly QuestionAnswer[]) => void
   onExecutePlan: (plan: string) => void
+  onRewind: (messageId: string) => void
 }
 
 /** Everything a row needs on top of the entry itself. */
@@ -203,6 +288,8 @@ interface RowProps extends AnswerProps {
   plans: ReadonlySet<string>
   /** Wire ids the agent has taken back. See `retractedUuids`. */
   retracted: ReadonlySet<string>
+  /** What each subagent did, by the call that started it. */
+  steps: ReadonlyMap<string, readonly AgentEvent[]>
 }
 
 function EntryRow({
@@ -211,7 +298,26 @@ function EntryRow({
 }: { entry: ChatEntry } & RowProps): React.JSX.Element | null {
   const { t } = useTranslation()
 
-  if (entry.role === 'user') return <UserMessage text={entry.text} />
+  if (entry.role === 'user') {
+    const messageId = entry.uuid
+
+    return (
+      <UserMessage
+        text={entry.text}
+        // Offered only for a message that has an id to rewind to — those sent
+        // before ids were kept have none — and not while the agent is working,
+        // which the core would refuse anyway: a button that can only fail is a
+        // promise the interface does not keep.
+        onRewind={
+          messageId === undefined || answering.busy
+            ? null
+            : () => {
+                answering.onRewind(messageId)
+              }
+        }
+      />
+    )
+  }
 
   const row = <AgentRow event={entry.event} {...answering} />
 
@@ -233,6 +339,7 @@ function EntryRow({
 function AgentRow({
   event,
   plans,
+  steps,
   busy,
   pendingRequestId,
   pendingElicitationId,
@@ -268,7 +375,14 @@ function AgentRow({
       // A call that changed a file never arrives here: `groupToolRuns` pulls it
       // out into a block of its own, so that it can carry the context recorded
       // for it — which arrives later in the log than the call does.
-      return <ToolCall name={event.name} input={event.input} />
+      return (
+        <ToolCall
+          name={event.name}
+          input={event.input}
+          steps={steps.get(event.toolUseId)}
+          allSteps={steps}
+        />
+      )
     }
 
     case 'tool_result':
@@ -381,6 +495,22 @@ function AgentRow({
     case 'conversation_compacted':
       return <CompactedRow preTokens={event.preTokens} postTokens={event.postTokens} />
 
+    // What the agent was actually told to do. Drawn as the plan it is, with the
+    // way back to carrying it out, and named so it is not mistaken for the one
+    // the agent wrote above it.
+    case 'plan_edited':
+      return <Plan text={event.plan} busy={busy} edited onExecute={onExecutePlan} />
+
+    case 'files_rewound':
+      return (
+        <FilesRewoundRow
+          files={event.files}
+          insertions={event.insertions}
+          deletions={event.deletions}
+          skipped={event.skippedLinks}
+        />
+      )
+
     case 'model_refusal_fallback':
       return <RefusalFallbackRow event={event} />
 
@@ -407,7 +537,37 @@ function AgentRow({
  * person wrote — the agent's prose is the model's output to render, this is the
  * user's own words to quote.
  */
-function UserMessage({ text }: { text: string }): React.JSX.Element {
+function UserMessage({
+  text,
+  onRewind
+}: {
+  text: string
+  onRewind: (() => void) | null
+}): React.JSX.Element {
+  const { t } = useTranslation()
+
+  return (
+    <div className="group flex max-w-full items-center gap-1 self-end">
+      {onRewind !== null && (
+        // Held in the layout and revealed on hover, so the bubble does not jump
+        // under the pointer as it crosses a message — the same arrangement as
+        // the tab's menu.
+        <button
+          type="button"
+          onClick={onRewind}
+          title={t('chat.rewind')}
+          aria-label={t('chat.rewind')}
+          className="text-ink-faint hover:text-ink focus-ring flex size-6 shrink-0 items-center justify-center rounded transition-opacity focus:opacity-100 opacity-0 group-hover:opacity-100"
+        >
+          <Undo2 aria-hidden size={13} />
+        </button>
+      )}
+      <UserBubble text={text} />
+    </div>
+  )
+}
+
+function UserBubble({ text }: { text: string }): React.JSX.Element {
   return (
     /*
      * `max-w-full` and `wrap-anywhere` are what keeps a long message inside the
@@ -473,15 +633,21 @@ function Thinking({ text }: { text: string }): React.JSX.Element {
  * The same disclosure as reasoning above, for the same reason: available to
  * anyone who wants it, in the way of nobody who does not.
  */
-function ToolRun({ entries }: { entries: readonly ChatEntry[] }): React.JSX.Element {
+function ToolRun({
+  entries,
+  steps
+}: {
+  entries: readonly ChatEntry[]
+  steps: ReadonlyMap<string, readonly AgentEvent[]>
+}): React.JSX.Element {
   const { t } = useTranslation()
-  const steps = toolCount(entries)
+  const count = toolCount(entries)
 
   return (
     <details className="text-ink-faint">
       <summary className="focus-ring cursor-pointer list-none select-none">
         <ChevronRight aria-hidden className="mr-1 inline align-[-2px]" size={12} />
-        {t('chat.toolSteps', { count: steps })}
+        {t('chat.toolSteps', { count })}
       </summary>
 
       {/* The same list the summary counted, not a second reading of the block:
@@ -489,7 +655,13 @@ function ToolRun({ entries }: { entries: readonly ChatEntry[] }): React.JSX.Elem
           and opened on three. */}
       <div className="border-line mt-1 flex flex-col gap-1 border-l pl-3">
         {toolRunRows(entries).map((row, index) => (
-          <ToolCall key={index} name={row.name} input={row.input} />
+          <ToolCall
+            key={index}
+            name={row.name}
+            input={row.input}
+            steps={steps.get(row.toolUseId)}
+            allSteps={steps}
+          />
         ))}
       </div>
     </details>
@@ -611,24 +783,128 @@ function ChangeBlock({
   )
 }
 
-function ToolCall({ name, input }: { name: string; input: unknown }): React.JSX.Element {
-  const target = describeToolInput(input)
+function ToolCall({
+  name,
+  input,
+  steps,
+  allSteps
+}: {
+  name: string
+  input: unknown
+  /** What the subagent this call started did, when it was one. */
+  steps?: readonly AgentEvent[] | undefined
+  /** Every subagent's, for the ones nested a level further down. */
+  allSteps: ReadonlyMap<string, readonly AgentEvent[]>
+}): React.JSX.Element {
+  const { t } = useTranslation()
+
+  // The agent's task list says how far it has got, which is the thing worth
+  // reading on a row that otherwise carries none of the fields the summary
+  // looks for.
+  const todos = readTodos(name, input)
+  const target =
+    todos === null
+      ? describeToolInput(input)
+      : t('chat.todosProgress', {
+          done: todos.filter((todo) => todo.status === 'completed').length,
+          total: todos.length
+        })
 
   return (
-    <div className="text-ink-soft flex min-w-0 items-baseline gap-2">
-      <Wrench aria-hidden className="shrink-0 self-center" size={12} />
-      <span className="font-medium">{name}</span>
-      {/* Through `shown`, as the change block below does, and the title through
-          its plain-text sibling: a tooltip is laid out by the same
-          bidirectional algorithm as the row it hangs off, so leaving the raw
-          string there would be the same misreading with a delay. */}
-      {target !== null && (
-        <span className="text-ink-faint truncate font-mono text-[11px]" title={named(target)}>
-          {shown(target)}
-        </span>
-      )}
+    <div className="flex min-w-0 flex-col gap-1">
+      <div className="text-ink-soft flex min-w-0 items-baseline gap-2">
+        <Wrench aria-hidden className="shrink-0 self-center" size={12} />
+        <span className="font-medium">{name}</span>
+        {/* Through `shown`, as the change block below does, and the title
+            through its plain-text sibling: a tooltip is laid out by the same
+            bidirectional algorithm as the row it hangs off, so leaving the raw
+            string there would be the same misreading with a delay. */}
+        {target !== null && (
+          <span className="text-ink-faint truncate font-mono text-[11px]" title={named(target)}>
+            {shown(target)}
+          </span>
+        )}
+      </div>
+
+      {steps !== undefined && <SubagentSteps steps={steps} allSteps={allSteps} />}
     </div>
   )
+}
+
+/**
+ * What a subagent did, under the call that started it.
+ *
+ * A delegated task is a long stretch of the agent's own tool calls and remarks,
+ * and drawn at the top level it buried what the conversation itself said. Folded
+ * into the count of what it did and closed — the same disclosure as a run of
+ * tool calls above, for the same reason — it is there for whoever wants it.
+ *
+ * Its edits are not in here: those are drawn as changes, with their diff, where
+ * they happened, and a subagent's change is the most useful thing it does.
+ */
+function SubagentSteps({
+  steps,
+  allSteps
+}: {
+  steps: readonly AgentEvent[]
+  allSteps: ReadonlyMap<string, readonly AgentEvent[]>
+}): React.JSX.Element {
+  const { t } = useTranslation()
+
+  return (
+    <details className="text-ink-faint ml-5">
+      <summary className="focus-ring cursor-pointer list-none text-[11px] select-none">
+        <ChevronRight aria-hidden className="mr-1 inline align-[-2px]" size={12} />
+        {t('chat.subagentSteps', {
+          count: steps.filter((event) => event.type === 'tool_use').length
+        })}
+      </summary>
+
+      <div className="border-line mt-1 flex flex-col gap-1 border-l pl-3">
+        {steps.map((event, index) => (
+          <SubagentStep key={index} event={event} allSteps={allSteps} />
+        ))}
+      </div>
+    </details>
+  )
+}
+
+function SubagentStep({
+  event,
+  allSteps
+}: {
+  event: AgentEvent
+  allSteps: ReadonlyMap<string, readonly AgentEvent[]>
+}): React.JSX.Element | null {
+  switch (event.type) {
+    case 'tool_use':
+      return (
+        <ToolCall
+          name={event.name}
+          input={event.input}
+          steps={allSteps.get(event.toolUseId)}
+          allSteps={allSteps}
+        />
+      )
+
+    // What the subagent said along the way, one line of it: the whole of its
+    // answer reaches the conversation as the call's own result.
+    case 'text': {
+      const [first = ''] = event.text.trim().split('\n')
+      return (
+        <p className="text-ink-faint truncate text-[11px]" title={named(first)}>
+          {shown(first)}
+        </p>
+      )
+    }
+
+    case 'tool_result':
+      return event.ok ? null : <ToolFailure content={event.content} />
+
+    // Its reasoning stays its own.
+    default:
+      return null
+  }
 }
 
 /**
@@ -646,10 +922,13 @@ function ToolCall({ name, input }: { name: string; input: unknown }): React.JSX.
 function Plan({
   text,
   busy,
+  edited = false,
   onExecute
 }: {
   text: string
   busy: boolean
+  /** The plan as the user rewrote it, rather than as the agent wrote it. */
+  edited?: boolean
   onExecute: (plan: string) => void
 }): React.JSX.Element {
   const { t } = useTranslation()
@@ -662,7 +941,7 @@ function Plan({
           A separator and no fill, as the composer's own strips do. */}
       <div className="border-line flex items-center gap-2 border-b px-3 py-1.5 font-medium">
         <Map aria-hidden className="text-accent shrink-0" size={14} />
-        {t('chat.plan')}
+        {edited ? t('chat.planEdited') : t('chat.plan')}
 
         {/* The way back to a plan that was set aside. The dialog asks once, and
             once it is closed the block in the log is all that is left — so
@@ -900,6 +1179,38 @@ function ResetRow(): React.JSX.Element {
     <p className="text-ink-faint border-line flex items-center gap-2 border-t pt-2 text-[11px]">
       <Eraser aria-hidden size={12} />
       {t('chat.memoryReset')}
+    </p>
+  )
+}
+
+/**
+ * The line where the files were put back to an earlier message.
+ *
+ * In the quiet register of the compaction and reset lines: the working tree
+ * changed without the agent doing anything, and the edits drawn above would
+ * otherwise read as though they still stood.
+ */
+function FilesRewoundRow({
+  files,
+  insertions,
+  deletions,
+  skipped
+}: {
+  files: number
+  insertions: number
+  deletions: number
+  /** Files left alone because a link sat at their path. */
+  skipped: number
+}): React.JSX.Element {
+  const { t } = useTranslation()
+
+  return (
+    <p className="text-ink-faint border-line flex items-center gap-2 border-t pt-2 text-[11px]">
+      <Undo2 aria-hidden size={12} />
+      {t('chat.filesRewound', { files, insertions, deletions })}
+      {/* Said when it is so: "5 changed" alone reads as though everything the
+          checkpoint tracked had come back. */}
+      {skipped > 0 && ` ${t('chat.filesRewoundSkipped', { count: skipped })}`}
     </p>
   )
 }

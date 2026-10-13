@@ -19,12 +19,7 @@ const WORKSPACE = workspaceView('anna')
 
 /** The pane as `App` assembles it, tab strip and all. */
 function Pane({ workspace = WORKSPACE }: { workspace?: WorkspaceView }): React.JSX.Element {
-  const tabs = useChatTabs(
-    workspace.id,
-    () => Promise.resolve({ confirmed: true, checked: false }),
-    vi.fn(),
-    vi.fn()
-  )
+  const tabs = useChatTabs(workspace.id, vi.fn(), vi.fn())
 
   return (
     <Chat

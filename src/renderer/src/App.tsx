@@ -166,7 +166,7 @@ export function App(): React.JSX.Element {
     [setWorkspaceChats]
   )
 
-  const chatTabs = useChatTabs(selectedWorkspaceId, confirm, publishChats, setError)
+  const chatTabs = useChatTabs(selectedWorkspaceId, publishChats, setError)
 
   /*
    * The conversation a prompt from the right pane would go to.
@@ -380,6 +380,14 @@ export function App(): React.JSX.Element {
       if (event.metaKey && !event.shiftKey && event.key.toLowerCase() === 't') {
         event.preventDefault()
         if (chatTabs.canCreate) void chatTabs.create()
+        return
+      }
+
+      // The browser's and the editor's key for "bring back what I just closed",
+      // for the same reason: a slipped click on a tab is the same slip.
+      if (event.metaKey && event.shiftKey && event.key.toLowerCase() === 't') {
+        event.preventDefault()
+        void chatTabs.reopenLast()
         return
       }
 

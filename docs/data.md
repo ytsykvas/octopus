@@ -258,7 +258,26 @@ type — which is the only reason the second shape is known to exist.
 
 A **chat** is a conversation with one agent inside one workspace: `id`,
 `workspaceId`, `agent`, `sessionId`, `model`, `planModel`, `effort`,
-`workingMode`, `planMode`, `knownCommands`, `skillOverrides`, `createdAt`.
+`workingMode`, `planMode`, `knownCommands`, `skillOverrides`, `createdAt`,
+`closedAt`.
+
+**An agent event may name the call whose subagent produced it**
+(`parentToolUseId`, on text, reasoning, tool calls and results): the SDK says
+`null` for the conversation's own and that is stored as nothing, so a transcript
+from before it reads the same as one after.
+
+**A transcript's user entries carry a `uuid`**: the id the message was sent to
+the agent under, which is what putting the files back to it is asked with. It is
+optional — a message sent before ids were kept has none, and simply offers no
+rewind. The `files_rewound` event records a rewind with how much it undid and how many
+files a link kept it from restoring (`skippedLinks`, defaulting to 0).
+
+**`closedAt` is null while a conversation is a tab** and the time it was closed
+otherwise. It defaults to null, so a record written before it existed loads as
+open — the reader throws on a mismatch rather than falling back, and the app
+would not open. A closed conversation keeps its record and its transcript until
+the workspace goes or it is one of the oldest past
+`MAX_CLOSED_CHATS_PER_WORKSPACE` (twenty).
 
 **`model` and `planModel` are two models for two jobs**, and their nulls do not
 mean the same thing. `model` null is the agent's own default. `planModel` null

@@ -760,15 +760,55 @@ export const en = {
     forkTab: 'Continue in a new conversation',
     forkTabHint: 'The agent keeps what it remembers of this one.',
     closeTab: 'Close conversation',
-    closeTabTitle: 'Close this conversation?',
-    closeTabMessage: '{{name}} and everything said in it.',
-    closeTabDetail: 'The agent’s memory of it goes too, and cannot be brought back.',
-    closeTabConfirm: 'Close',
-    closeTabCancel: 'Cancel',
+    /* The agent's own task list, pinned above the field while it has work
+       left. The progress reads "3 of 7". */
+    todos: 'Tasks',
+    todosProgress: '{{done}} of {{total}}',
+    todoStatus: {
+      pending: 'to do',
+      in_progress: 'in progress',
+      completed: 'done'
+    },
+    /* Putting the files back to how they were when a message was sent. */
+    rewind: 'Put the files back to before this message',
+    rewindTitle: 'Put the files back?',
+    rewindMessage_one:
+      'This puts {{count}} file back to how it was before this message (+{{insertions}} −{{deletions}}).',
+    rewindMessage_few:
+      'This puts {{count}} files back to how they were before this message (+{{insertions}} −{{deletions}}).',
+    rewindMessage_many:
+      'This puts {{count}} files back to how they were before this message (+{{insertions}} −{{deletions}}).',
+    rewindMessage_other:
+      'This puts {{count}} files back to how they were before this message (+{{insertions}} −{{deletions}}).',
+    rewindDetail:
+      'Anything changed in them since — by the agent or by you — is overwritten, and cannot be brought back.',
+    rewindConfirm: 'Put files back',
+    rewindCancel: 'Cancel',
+    rewindNothing: 'The files are already as they were before that message.',
+    filesRewound:
+      'Files put back to an earlier message: {{files}} changed, +{{insertions}} −{{deletions}}',
+    filesRewoundSkipped_one: '({{count}} left alone — a link sat at its path)',
+    filesRewoundSkipped_few: '({{count}} left alone — a link sat at their path)',
+    filesRewoundSkipped_many: '({{count}} left alone — a link sat at their path)',
+    filesRewoundSkipped_other: '({{count}} left alone — a link sat at their path)',
+    /* What a subagent did, folded under the call that started it. */
+    subagentSteps_one: '{{count}} step by the subagent',
+    subagentSteps_few: '{{count}} steps by the subagent',
+    subagentSteps_many: '{{count}} steps by the subagent',
+    subagentSteps_other: '{{count}} steps by the subagent',
+    /* The history of what was closed. Closing keeps a conversation, so this is
+       how one comes back — and ⌘⇧T brings back the last. */
+    history: 'Closed conversations',
+    historyEmpty: 'Nothing closed yet',
+    historyUntitled: 'Conversation with no messages',
+    historyClosed: 'Closed {{when}}',
+    historyFull: 'Close a tab first — {{limit}} are open',
 
     placeholder: 'Ask the agent to do something in this workspace…',
     send: 'Send',
     stop: 'Stop',
+    /* The tooltip names the key; the accessible name stays the plain word. */
+    stopHint: 'Stop (Esc)',
     working: 'Working…',
     thinking: 'Thinking',
     memoryReset: 'The agent’s memory of this conversation starts again here',
@@ -803,9 +843,10 @@ export const en = {
        call this, and a translated name for a borrowed one reads as a second
        setting rather than the same one. */
     modeAcceptEdits: 'Auto mode',
-    modeAfterPlan: 'What the agent may do once the plan is approved.',
     planMode: 'Plan',
-    planModeHint: 'Work out an approach first. The agent runs no tools until you approve it.',
+    /* Names the keys rather than the states: the label beside it already
+       says which one is in force, and the ring's order is learned by using it. */
+    modeCycle: 'Switch mode — Ask first, Auto mode, Plan (Shift+Tab)',
 
     context: 'Context',
     contextTitle: 'Context window — {{used}} of {{total}}',
@@ -918,6 +959,13 @@ export const en = {
     copyFailed: 'Copy failed',
     planReady: 'The plan is ready',
     planExecute: 'Execute',
+    planEdit: 'Edit the plan',
+    planEditDone: 'Back to the plan',
+    planEditLabel: 'The plan, as markdown',
+    planEdited: 'Plan, as you edited it',
+    /* Said before the click, because the click widens what the agent may do:
+       an approved plan always goes on in Auto mode. */
+    planExecuteHint: 'Runs in Auto mode — edits go ahead without asking.',
     planFeedback: 'Anything to work out first?',
     planFeedbackPlaceholder: 'Write here and the agent will revise the plan',
     questionTitle: 'The agent is asking',
@@ -1523,6 +1571,10 @@ export const en = {
     lastChat: 'The last conversation cannot be closed. Use /clear to start it again.',
     nothingToFork: 'This conversation has not started yet, so there is nothing to continue.',
     forkFailed: 'The agent could not copy this conversation.',
+    rewindBusy: 'The agent is working. Stop it before putting the files back.',
+    rewindUnavailable: 'The files cannot be put back to that message.',
+    rewindUnavailableReason: 'The files cannot be put back to that message: {{reason}}',
+    chatClosed: 'That conversation was closed. Reopen it from the history first.',
     repoConfigSymlink:
       '{{path}} is a symbolic link. octopus will not read or write through one, because it can point anywhere outside the repository.',
     repoConfigTooLarge: '{{path}} is larger than this kind of file is allowed to be.',

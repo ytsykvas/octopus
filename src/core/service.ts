@@ -9,6 +9,8 @@
 import { randomUUID } from 'node:crypto'
 import { isAbsolute, join, relative, resolve } from 'node:path'
 
+import { z } from 'zod'
+
 import {
   forkSession as defaultForkSession,
   query as defaultQuery
@@ -34,6 +36,8 @@ import {
   type AgentModel,
   type Chat,
   ChatError,
+  type ClosedChat,
+  type FileRewind,
   type ChatStatus,
   DEFAULT_AGENT,
   DEFAULT_EFFORT,
@@ -43,6 +47,7 @@ import {
   forkChat as forkChatRecord,
   isClearCommand,
   isUsageCommand,
+  isOpenChat,
   MAX_CHATS_PER_WORKSPACE,
   newChat,
   sessionMode,
@@ -101,6 +106,7 @@ import {
   toSdkSettingSources
 } from './config.js'
 import { type AgentEvent, forTranscript, isEphemeral } from './events.js'
+import { listFiles, type MentionFile, rankFiles } from './fileSearch.js'
 import {
   cloneRepository,
   listRepositories,
@@ -195,6 +201,7 @@ import {
   appendEntry,
   type ChatEntry,
   copyTranscript,
+  previewOf,
   readTranscript,
   removeTranscript
 } from './transcript.js'
@@ -234,7 +241,10 @@ import {
   addChat,
   addProject,
   addWorkspace,
+  allChatsOfWorkspace,
   chatsOfWorkspace,
+  closedChatsOfWorkspace,
+  expiredClosedChats,
   findChat,
   findProject,
   loadState,
@@ -500,6 +510,18 @@ interface PendingPermission {
  * older CLI or a question about nothing in particular, the whole tool: which is
  * what every answer of "always" meant before any of this.
  */
+/**
+ * A tool's input as a plain object, or an empty one when it is not.
+ *
+ * Spread under the plan the user rewrote: the tool's input is an open object,
+ * and replacing it whole would drop whatever else the agent put there. The
+ * sibling that answers a question does the same with its answers.
+ */
+function recordOf(input: unknown): Record<string, unknown> {
+  const parsed = z.record(z.string(), z.unknown()).safeParse(input)
+  return parsed.success ? parsed.data : {}
+}
+
 function standingFrom(request: PendingPermission): StandingPermission {
   for (const update of request.suggestions ?? []) {
     if (update.type !== 'addRules' || update.behavior !== 'allow') continue
@@ -964,6 +986,15 @@ export interface OctopusService {
   resolveWorkspaceFile(workspaceId: string, path: string): Promise<string>
 
   /**
+   * The files of a workspace that match what is being typed after an `@`.
+   *
+   * Asked of git rather than walked, so `.gitignore` applies and a file made a
+   * minute ago is found. The listing is held for a few seconds: a query is
+   * asked on every keystroke and the worktree does not change that fast.
+   */
+  searchFiles(workspaceId: string, query: string): Promise<MentionFile[]>
+
+  /**
    * The workspace's chat, created on first use.
    *
    * Lazy on purpose: a workspace nobody has spoken to gets no record and no
@@ -995,12 +1026,44 @@ export interface OctopusService {
    */
   renameChat(chatId: string, title: string): Promise<void>
   /**
-   * Ends a conversation and discards it, transcript included.
+   * Closes a conversation's tab and keeps it, transcript included, to reopen.
    *
-   * Refuses the last one of a workspace: throwing away the only conversation is
-   * `/clear`, which does it without leaving the workspace without one.
+   * The session ends; the record and the history stay, so a click that was a
+   * slip costs a tab rather than a conversation. Past
+   * `MAX_CLOSED_CHATS_PER_WORKSPACE` the oldest are discarded for good.
+   *
+   * Refuses the last one of a workspace: closing the only conversation would
+   * leave the workspace with none, and emptying it is `/clear`.
    */
   closeChat(chatId: string): Promise<void>
+  /**
+   * What putting the files back to a message would do, without doing it.
+   *
+   * Asked before the real thing so the user can be told how much it undoes
+   * before agreeing to it.
+   */
+  previewRewind(chatId: string, messageId: string): Promise<FileRewind>
+  /**
+   * Puts the files back to how they were when a message was sent.
+   *
+   * Refused while a turn is running — the agent would be changing the files the
+   * same moment they were being restored — and for a message that is not one of
+   * this conversation's own. The result is also written to the log as an event,
+   * since it changed the tree without the agent doing anything.
+   */
+  rewindChat(chatId: string, messageId: string): Promise<FileRewind>
+  /**
+   * The workspace's closed conversations, most recently closed first, each with
+   * the opening message it is recognised by.
+   */
+  listClosedChats(workspaceId: string): Promise<ClosedChat[]>
+  /**
+   * Brings a closed conversation back as a tab.
+   *
+   * Refuses past the cap like opening a new one does: a workspace with three
+   * tabs has to close one first.
+   */
+  reopenChat(chatId: string): Promise<Chat>
   /** Every chat of a workspace, in the order they were opened. */
   listChats(workspaceId: string): readonly Chat[]
   /** Everything said in a chat, as it will be redrawn after a restart. */
@@ -1060,7 +1123,12 @@ export interface OctopusService {
    * `feedback` accompanies a refusal and reaches the agent as the reason — the
    * one place the user can steer without waiting for the turn to end.
    */
-  answerPermission(requestId: string, answer: PermissionAnswer, feedback?: string): Promise<void>
+  answerPermission(
+    requestId: string,
+    answer: PermissionAnswer,
+    feedback?: string,
+    editedPlan?: string
+  ): Promise<void>
   /**
    * Answers an MCP server's question, or turns it down.
    *
@@ -1178,6 +1246,11 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
   const stateTempPath = options.stateTempFilePath ?? stateTempFile()
   const configPath = options.configFilePath ?? configFile()
   const makeExec = options.makeExec ?? gitIn
+
+  // What a worktree held when it was last listed. A mention is searched on every
+  // keystroke, and `git ls-files` over a large checkout is not free.
+  const FILE_LIST_TTL_MS = 5000
+  const fileLists = new Map<string, { at: number; files: string[] }>()
   const commandExec = options.commandExec ?? defaultExec
   const makeGh = options.makeGh ?? ghIn
   const dataRoot = options.dataRoot ?? rootDir()
@@ -1211,6 +1284,8 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
   const download = { fetch: options.fetch ?? globalThis.fetch, timeoutMs: DOWNLOAD_TIMEOUT_MS }
 
   const sessions = new Map<string, AgentSession>()
+  /** Sessions being started, so a second asker waits for the first. */
+  const starts = new Map<string, Promise<AgentSession>>()
   const listeners = new Set<(event: ChatEvent) => void>()
   const statusListeners = new Set<(event: WorkspaceStatusEvent) => void>()
   const usageListeners = new Set<(windows: UsageWindows) => void>()
@@ -1595,6 +1670,21 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
   }
 
   /**
+   * A conversation that is a tab, for what only makes sense in one.
+   *
+   * Sending and rewinding change the worktree, and a closed conversation has no
+   * tab and no status to show it at it. A window that has not heard about the
+   * close is exactly who asks.
+   */
+  function requireOpenChat(chatId: string): Chat {
+    const chat = requireChat(chatId)
+    if (!isOpenChat(chat)) {
+      throw new ChatError('chatClosed', { chatId }, `Chat ${chatId} is closed.`)
+    }
+    return chat
+  }
+
+  /**
    * Port settlements, run one after another.
    *
    * The choice has to be serialised, not only the write. `settlePort` reads the
@@ -1788,8 +1878,10 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
   function setChatStatus(chatId: string, status: ChatStatus): Promise<void> {
     const before = findChat(state, chatId)
     // A closing session goes on emitting for a moment after its conversation
-    // was closed, and there is nothing left to record it against.
-    if (!before) return Promise.resolve()
+    // was closed, and there is nothing left to record it against. A closed
+    // conversation is not a tab any more: a late `result` from the session that
+    // has just ended must not leave it `error`, red on the day it is reopened.
+    if (!before || !isOpenChat(before)) return Promise.resolve()
 
     const { workspaceId } = before
 
@@ -2245,6 +2337,82 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
   }
 
   /**
+   * Asks the agent to put the files back to a message, or to say what that
+   * would do.
+   *
+   * Three things are checked before the agent is asked at all. The conversation
+   * is not mid-turn, because a rewind under a running agent is a race for the
+   * same files. The message is one **this** conversation recorded: the id comes
+   * from the window, and the agent will happily rewind to any it has heard of.
+   * And there is a session to ask — started from the stored id if the
+   * application has been restarted since, which is what makes a rewind
+   * possible long after the turn it undoes.
+   */
+  async function rewind(chatId: string, messageId: string, dryRun: boolean): Promise<FileRewind> {
+    const chat = requireOpenChat(chatId)
+
+    // The worktree is shared by every conversation of the workspace, up to
+    // three, and a rewind restores whatever *this* one's checkpoint tracked —
+    // which can be a file another is editing at that moment. So it is the
+    // workspace that has to be quiet, not only this tab.
+    const refuseWhileWorking = (): void => {
+      const working = chatsOfWorkspace(state, chat.workspaceId).some(
+        (other) => other.status === 'running' || other.status === 'waiting_permission'
+      )
+
+      if (working) {
+        throw new ChatError(
+          'rewindBusy',
+          { chatId },
+          `Workspace ${chat.workspaceId} is working; its files cannot be rewound now.`
+        )
+      }
+    }
+
+    refuseWhileWorking()
+
+    const known = (await readTranscript(chatId, dataRoot)).some(
+      (entry) => entry.role === 'user' && entry.uuid === messageId
+    )
+    if (!known || chat.sessionId === null) {
+      throw new ChatError(
+        'rewindUnavailable',
+        { chatId, reason: '' },
+        `Chat ${chatId} cannot be rewound to ${messageId}.`
+      )
+    }
+
+    const workspace = requireWorkspace(chat.workspaceId)
+    const session = await sessionFor(chat, workspace)
+
+    // Asked again: starting the session took time, and a message sent in that
+    // window began a turn this would otherwise have run underneath.
+    refuseWhileWorking()
+
+    const result = await session.rewindFiles(messageId, dryRun)
+    if (!result.canRewind) {
+      throw new ChatError(
+        'rewindUnavailable',
+        { chatId, reason: result.error ?? '' },
+        result.error ?? `Chat ${chatId} cannot be rewound to ${messageId}.`
+      )
+    }
+
+    if (!dryRun) {
+      handleEvent(chat, {
+        type: 'files_rewound',
+        messageId,
+        files: result.filesChanged.length,
+        insertions: result.insertions,
+        deletions: result.deletions,
+        skippedLinks: result.skippedLinks
+      })
+    }
+
+    return result
+  }
+
+  /**
    * Discards the transcripts of chats whose records have already gone.
    *
    * After the commit, and swallowing its own failure — the same order and the
@@ -2689,15 +2857,39 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
     )
   }
 
+  /**
+   * The conversation's session, started if there is none — once.
+   *
+   * Two things reach for one: a message being sent and a rewind that needs a
+   * session to ask. Without this both would start one, the second registered
+   * over the first, and the first's child process left running with nothing
+   * holding it.
+   */
+  function sessionFor(chat: Chat, workspace: Workspace): Promise<AgentSession> {
+    const live = sessions.get(chat.id)
+    if (live) return Promise.resolve(live)
+
+    const starting = starts.get(chat.id)
+    if (starting) return starting
+
+    const started = (async () => startFor(chat, workspace, await sourcesFor(workspace)))().finally(
+      () => {
+        starts.delete(chat.id)
+      }
+    )
+    starts.set(chat.id, started)
+    return started
+  }
+
   async function startFor(
-    chat: Chat,
+    asked: Chat,
     workspace: Workspace,
     settingSources: readonly SettingSourceName[]
   ): Promise<AgentSession> {
     const skills = await sessionSkills(
       requireProject(workspace.projectId),
       workspace,
-      chat,
+      asked,
       settingSources
     )
 
@@ -2731,6 +2923,15 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
         ensureLibrary(root, 'subagent')
       ])
     ])
+
+    // The record as it is **now**, read after the last await and before the
+    // session is registered, with nothing in between. What was asked for is a
+    // snapshot from before all of the above, and a mode, an effort or a model
+    // changed while they ran went to a session that was not registered yet —
+    // so it reached nothing, and the conversation started on what it had been.
+    // Two things reach here that did not before a rewind could start one: a
+    // message joining a start somebody else began.
+    const chat = requireChat(asked.id)
 
     const session = startSession(
       {
@@ -3565,7 +3766,7 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
           // Read before the closing below, which leaves the records in place
           // but is the last moment the chats are reachable from the state that
           // is about to be rewritten.
-          closing.push(...chatsOfWorkspace(state, workspace.id))
+          closing.push(...allChatsOfWorkspace(state, workspace.id))
 
           // The same closing `removeWorkspaceById` does, and for the same
           // reason: a session outliving its worktree holds a child process
@@ -3628,7 +3829,7 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
       const worktrees = await listWorktrees(makeExec(project.repoPath)).catch(() => null)
       const counts = await countChanges(stored, await baseRefOf(project), makeExec)
 
-      return reconcile(stored, worktrees, counts, state.chats)
+      return reconcile(stored, worktrees, counts, state.chats.filter(isOpenChat))
     },
 
     async createWorkspaceIn(projectId) {
@@ -3732,7 +3933,7 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
       // Captured before the chats are closed, because the records go with the
       // workspace at the commit below and the transcripts are discarded after
       // it — by which point there is nothing left to read the ids off.
-      const closing = chatsOfWorkspace(state, workspaceId)
+      const closing = allChatsOfWorkspace(state, workspaceId)
 
       // Before the worktree goes: the session's working directory is about to
       // stop existing, and a live agent would keep a child process pointed at
@@ -3776,6 +3977,9 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
       await discardWorkspace(workspace, execs, removal)
 
       await commit((current) => removeWorkspaceRecord(current, workspaceId))
+      // Nothing is left to search, and the listing would otherwise sit here for
+      // as long as the application runs.
+      fileLists.delete(workspaceId)
       await discardHistories(closing)
     },
 
@@ -3936,6 +4140,42 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
       return readBranchRequests(makeGh(project.repoPath))
     },
 
+    async searchFiles(workspaceId, query) {
+      const workspace = requireWorkspace(workspaceId)
+
+      /*
+       * Each candidate is proved inside the worktree before it is offered — the
+       * gate `resolveWorkspaceFile` puts in front of opening a file, for the
+       * same reason. A repository can hold a symlink called `README.md` that
+       * points at a key in the home directory; offered by name it would be
+       * attached as an ordinary file of the workspace, and the agent would read
+       * it through the link. Eight candidates at most, so eight `realpath`s.
+       *
+       * It also drops what git still lists but the disk no longer has.
+       */
+      const offered = async (files: readonly string[]): Promise<MentionFile[]> => {
+        const checked = await Promise.all(
+          rankFiles(files, query).map(async (path) =>
+            (await fileInWorkspace(workspace, path)) === null
+              ? null
+              : { path, absolute: join(workspace.path, path) }
+          )
+        )
+
+        return checked.filter((file) => file !== null)
+      }
+
+      const asked = Date.parse(now())
+      const held = fileLists.get(workspaceId)
+      if (held !== undefined && asked - held.at < FILE_LIST_TTL_MS) {
+        return await offered(held.files)
+      }
+
+      const files = await listFiles(makeExec(workspace.path))
+      fileLists.set(workspaceId, { at: asked, files })
+      return await offered(files)
+    },
+
     async resolveWorkspaceFile(workspaceId, path) {
       const workspace = requireWorkspace(workspaceId)
       const resolved = await fileInWorkspace(workspace, path)
@@ -4088,11 +4328,61 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
 
       await closeOneChat(chat)
       // Through `commitChats` rather than a plain commit: the workspace's
-      // status is derived from its conversations, and one of them has gone —
-      // closing the tab that was running leaves the workspace idle, and the
-      // list has to hear about it.
-      await commitChats(chat.workspaceId, (current) => removeChat(current, chatId))
-      await discardHistories([chat])
+      // status is derived from its conversations, and one of them has left the
+      // tabs — closing the tab that was running leaves the workspace idle, and
+      // the list has to hear about it.
+      //
+      // Kept rather than removed. `status` goes back to idle with the session,
+      // or a conversation closed mid-turn would reopen claiming to be working.
+      let expired: Chat[] = []
+      await commitChats(chat.workspaceId, (current) => {
+        const closed = updateChat(current, chatId, { closedAt: now(), status: 'idle' })
+        expired = expiredClosedChats(closed, chat.workspaceId)
+        return expired.reduce((next, gone) => removeChat(next, gone.id), closed)
+      })
+
+      // Only the records past the keep limit lose their history, and after the
+      // commit, for the reason `discardHistories` gives.
+      await discardHistories(expired)
+    },
+
+    previewRewind(chatId, messageId) {
+      return rewind(chatId, messageId, true)
+    },
+
+    rewindChat(chatId, messageId) {
+      return rewind(chatId, messageId, false)
+    },
+
+    listClosedChats(workspaceId) {
+      return Promise.all(
+        closedChatsOfWorkspace(state, workspaceId).map(async ({ chat, closedAt }) => ({
+          chat,
+          closedAt,
+          preview: await previewOf(chat.id, dataRoot)
+        }))
+      )
+    },
+
+    async reopenChat(chatId) {
+      const chat = requireChat(chatId)
+      if (isOpenChat(chat)) return chat
+
+      await commitChats(chat.workspaceId, (current) => {
+        // Inside the commit, like `addChatCapped`: two reopenings landing
+        // together would both see room against two tabs.
+        if (chatsOfWorkspace(current, chat.workspaceId).length >= MAX_CHATS_PER_WORKSPACE) {
+          throw new ChatError(
+            'tooManyChats',
+            { limit: String(MAX_CHATS_PER_WORKSPACE) },
+            `Workspace ${chat.workspaceId} already holds ${String(MAX_CHATS_PER_WORKSPACE)} chats.`
+          )
+        }
+
+        return updateChat(current, chatId, { closedAt: null })
+      })
+
+      return requireChat(chatId)
     },
 
     listChats(workspaceId) {
@@ -4104,13 +4394,28 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
     },
 
     async sendToChat(chatId, text) {
-      const chat = requireChat(chatId)
+      // Not to a closed one: a window that has not heard it was closed would
+      // otherwise start a session no tab and no status shows, editing the
+      // worktree with nothing to stop it.
+      const chat = requireOpenChat(chatId)
       const workspace = requireWorkspace(chat.workspaceId)
 
       // Written before the agent is asked anything: if starting the session
       // fails, the message the user typed is still in their history rather
       // than lost along with the failure.
-      await appendEntry(chatId, { role: 'user', at: now(), text }, dataRoot)
+      //
+      // With the id the agent will know it by, so the files can be put back to
+      // this point later: nothing in the stream says it back.
+      //
+      // Not for `/usage`, which is answered here and never reaches the agent: a
+      // rewind mark on it would be a promise nothing could keep.
+      const messageId = randomUUID()
+      const reachesAgent = !isUsageCommand(text, chat.knownCommands)
+      await appendEntry(
+        chatId,
+        { role: 'user', at: now(), text, ...(reachesAgent && { uuid: messageId }) },
+        dataRoot
+      )
 
       /*
        * The record is what the session runs under, re-asserted rather than
@@ -4189,7 +4494,7 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
         await running.setEffort(effortInForce(chat))
       }
 
-      const session = running ?? (await startFor(chat, workspace, await sourcesFor(workspace)))
+      const session = running ?? (await sessionFor(chat, workspace))
 
       /*
        * `/usage` is answered here, and the message is not sent on.
@@ -4219,7 +4524,7 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
         return
       }
 
-      session.send(text)
+      session.send(text, messageId)
 
       await setChatStatus(chatId, 'running')
     },
@@ -4328,7 +4633,7 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
       await Promise.resolve()
     },
 
-    async answerPermission(requestId, answer, feedback) {
+    async answerPermission(requestId, answer, feedback, editedPlan) {
       const request = pending.get(requestId)
       // Unknown means already answered, or the session it belonged to is gone.
       if (!request) return
@@ -4396,7 +4701,21 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
       if (leaving) {
         const before = sessionModel(requireChat(request.chatId))
         const beforeEffort = effortInForce(requireChat(request.chatId))
-        await commit((current) => updateChat(current, request.chatId, { planMode: false }))
+        // An approved plan goes on in `acceptEdits`. The composer holds one
+        // control that cycles through asking, accepting and planning, so there
+        // is no second one left to say what should follow a plan — and a plan
+        // read and approved is the edits accepted in advance.
+        //
+        // Only out of planning, though. The agent may call the plan tool from
+        // any mode, and handing over there would let it raise a conversation
+        // the user set to ask first into one that does not, by asking once.
+        const planning = requireChat(request.chatId).planMode
+        await commit((current) =>
+          updateChat(current, request.chatId, {
+            planMode: false,
+            ...(planning && { workingMode: 'acceptEdits' as const })
+          })
+        )
 
         // The model leaves planning with the record. Before the reply, never
         // after it: the reply is what releases the tool call, so a model sent
@@ -4412,6 +4731,13 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
 
       const chat = findChat(state, request.chatId)
 
+      // A plan the user rewrote, and only a plan: any other tool's arguments
+      // are not the user's to change here. It rides the same reply that
+      // releases the call, so the agent works from the words it was approved
+      // with — and the log says what those were.
+      const edited = leaving ? (editedPlan?.trim() ?? '') : ''
+      if (edited !== '' && chat) handleEvent(chat, { type: 'plan_edited', plan: edited })
+
       // Both writes above are behind us, so this is the point the answer is
       // actually given — see the deny path for what removing it any earlier
       // cost. A second answer racing this one changes nothing: the writes are
@@ -4419,6 +4745,7 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
       pending.delete(requestId)
       request.resolve({
         allow: true,
+        ...(edited !== '' && { updatedInput: { ...recordOf(request.input), plan: edited } }),
         ...(leaving && chat && { setMode: chat.workingMode }),
         /*
          * The rule goes to the session as well as to the config, and it has to

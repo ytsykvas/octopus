@@ -52,6 +52,8 @@ interface FakeQuery {
   readonly skillReloads: () => number
   /** Models asked for mid-session; `undefined` is "back to the default". */
   readonly requestedModels: () => (string | undefined)[]
+  /** Every `rewindFiles` the session issued, with the `dryRun` it passed. */
+  readonly rewinds: () => { messageId: string; dryRun: boolean | undefined }[]
   readonly closed: () => number
 }
 
@@ -65,6 +67,8 @@ function fakeAgent(
     askElicitation?: (ask: ElicitationAsk) => Promise<ElicitationAnswer>
     models?: ModelInfo[]
     commands?: SlashCommand[]
+    /** What the agent answers when asked to rewind files. */
+    rewind?: Record<string, unknown>
   } = {}
 ): { agent: FakeQuery; events: AgentEvent[] } {
   const queued: SDKMessage[] = []
@@ -78,6 +82,7 @@ function fakeAgent(
   const flagSettings: Record<string, unknown>[] = []
   let skillReloads = 0
   const requestedModels: (string | undefined)[] = []
+  const rewinds: { messageId: string; dryRun: boolean | undefined }[] = []
   const offeredModels = hooks.models ?? []
   const offeredCommands = hooks.commands ?? []
   let interrupted = 0
@@ -140,6 +145,10 @@ function fakeAgent(
     setModel: (model: string | undefined) => {
       requestedModels.push(model)
       return Promise.resolve()
+    },
+    rewindFiles: (messageId: string, rewindOptions?: { dryRun?: boolean }) => {
+      rewinds.push({ messageId, dryRun: rewindOptions?.dryRun })
+      return whileOpen(hooks.rewind ?? { canRewind: true })
     },
     supportedModels: () => whileOpen(offeredModels),
     supportedCommands: () => whileOpen(offeredCommands),
@@ -208,6 +217,7 @@ function fakeAgent(
       flagSettings: () => flagSettings,
       skillReloads: () => skillReloads,
       requestedModels: () => requestedModels,
+      rewinds: () => rewinds,
       closed: () => closed
     }
   }
@@ -623,6 +633,74 @@ describe('mapping SDK messages', () => {
     expect(mapMessage(message)[0]).toEqual({ type: 'retracted', uuids: ['u-1'] })
   })
 
+  /*
+   * A subagent's messages arrive on the conversation's own stream, told apart
+   * only by the call that started it. Without that, a delegated task is a
+   * scatter of tool rows that nothing says belong together.
+   */
+  describe('what a subagent says', () => {
+    const SUBAGENT = 'toolu_task_1'
+
+    it('names the call it belongs to on text, thinking and tool calls', () => {
+      const message = {
+        type: 'assistant',
+        message: {
+          content: [
+            { type: 'thinking', thinking: 'Looking' },
+            { type: 'text', text: 'Found it.' },
+            { type: 'tool_use', id: 'c-1', name: 'Read', input: { file_path: 'a.ts' } }
+          ]
+        },
+        parent_tool_use_id: SUBAGENT,
+        uuid: 'u-5',
+        session_id: 's-1'
+      } as unknown as SDKMessage
+
+      expect(mapMessage(message)).toEqual([
+        { type: 'thinking', text: 'Looking', uuid: 'u-5', parentToolUseId: SUBAGENT },
+        { type: 'text', text: 'Found it.', uuid: 'u-5', parentToolUseId: SUBAGENT },
+        {
+          type: 'tool_use',
+          toolUseId: 'c-1',
+          name: 'Read',
+          input: { file_path: 'a.ts' },
+          uuid: 'u-5',
+          parentToolUseId: SUBAGENT
+        }
+      ])
+    })
+
+    it('names it on a tool result as well', () => {
+      const message = {
+        type: 'user',
+        message: {
+          role: 'user',
+          content: [{ type: 'tool_result', tool_use_id: 'c-1', content: 'ok' }]
+        },
+        parent_tool_use_id: SUBAGENT,
+        session_id: 's-1'
+      } as unknown as SDKMessage
+
+      expect(mapMessage(message)).toEqual([
+        {
+          type: 'tool_result',
+          toolUseId: 'c-1',
+          ok: true,
+          content: 'ok',
+          parentToolUseId: SUBAGENT
+        }
+      ])
+    })
+
+    // The conversation's own events carry nothing, so a transcript written
+    // before this existed reads the same as one written after.
+    it('leaves the conversation’s own events without one', () => {
+      expect(mapMessage(assistant([{ type: 'text', text: 'Hello' }]))).toEqual([
+        { type: 'text', text: 'Hello', uuid: 'u-1' }
+      ])
+    })
+  })
+
   it('reads a tool result out of the user message that carries it', () => {
     const message = {
       type: 'user',
@@ -920,6 +998,76 @@ describe('a session', () => {
     const { agent } = fakeAgent({ resume: 'sess-9', model: 'claude-opus-5' })
 
     expect(agent.options()).toMatchObject({ resume: 'sess-9', model: 'claude-opus-5' })
+  })
+
+  // The id is the only handle there is on a point in the conversation: it is
+  // what the files are rewound to, and nothing in the stream says it back.
+  it('stamps the id it was given on the message', async () => {
+    const { agent } = fakeAgent()
+
+    agent.session.send('rename it', '11111111-1111-4111-8111-111111111111')
+    await settle()
+
+    expect(agent.received[0]).toMatchObject({ uuid: '11111111-1111-4111-8111-111111111111' })
+  })
+
+  it('leaves the id for the agent to assign when none was given', async () => {
+    const { agent } = fakeAgent()
+
+    agent.session.send('rename it')
+    await settle()
+
+    expect(agent.received[0]).not.toHaveProperty('uuid')
+  })
+
+  describe('putting the files back', () => {
+    it('is asked with the checkpointing the session was started with', () => {
+      const { agent } = fakeAgent()
+
+      // Without it there is nothing to put back: a checkpoint cannot be taken
+      // for work already done.
+      expect(agent.options()).toMatchObject({ enableFileCheckpointing: true })
+    })
+
+    it('answers what the agent said, in our own shape', async () => {
+      const { agent } = fakeAgent(
+        {},
+        {
+          rewind: {
+            canRewind: true,
+            filesChanged: ['a.ts', 'b.ts'],
+            insertions: 12,
+            deletions: 4,
+            skippedLinks: 1
+          }
+        }
+      )
+
+      await expect(agent.session.rewindFiles('msg-1', false)).resolves.toEqual({
+        canRewind: true,
+        error: null,
+        filesChanged: ['a.ts', 'b.ts'],
+        insertions: 12,
+        deletions: 4,
+        skippedLinks: 1
+      })
+      expect(agent.rewinds()).toEqual([{ messageId: 'msg-1', dryRun: false }])
+    })
+
+    // A dry run says less, and an older agent says less still.
+    it('fills in what the agent left out', async () => {
+      const { agent } = fakeAgent({}, { rewind: { canRewind: false, error: 'no checkpoint' } })
+
+      await expect(agent.session.rewindFiles('msg-1', true)).resolves.toEqual({
+        canRewind: false,
+        error: 'no checkpoint',
+        filesChanged: [],
+        insertions: 0,
+        deletions: 0,
+        skippedLinks: 0
+      })
+      expect(agent.rewinds()).toEqual([{ messageId: 'msg-1', dryRun: true }])
+    })
   })
 
   it('sends a message down the prompt stream', async () => {

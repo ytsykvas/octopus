@@ -19,7 +19,9 @@ import {
   type AgentModel,
   AgentModelSchema,
   type Chat,
-  ChatSchema
+  ChatSchema,
+  isOpenChat,
+  MAX_CLOSED_CHATS_PER_WORKSPACE
 } from './chats.js'
 import { nextProjectColor, type ProjectColor, ProjectColorSchema } from './colors.js'
 import { DEFAULT_ENV_FILE } from './envBlock.js'
@@ -320,7 +322,10 @@ export async function loadState(filePath: string = stateFile()): Promise<State> 
  * The workspace's own status is not consulted, and there is nothing left for it
  * to say: every value the enum holds is something a conversation is doing.
  */
-export function workspaceStatusFrom(chats: readonly Chat[]): Workspace['status'] {
+export function workspaceStatusFrom(all: readonly Chat[]): Workspace['status'] {
+  // A closed conversation is history, not something the workspace is doing —
+  // one that ended in `error` must not keep the sidebar red for ever.
+  const chats = all.filter(isOpenChat)
   if (chats.some((chat) => chat.status === 'waiting_permission')) return 'waiting_permission'
   if (chats.some((chat) => chat.status === 'running')) return 'running'
   if (chats.some((chat) => chat.status === 'error')) return 'error'
@@ -656,8 +661,52 @@ export function removeWorkspace(state: State, workspaceId: string): State {
   }
 }
 
+/**
+ * The tabs of a workspace: its open conversations, in the order they were made.
+ *
+ * Closed ones are not among them — the cap, the strip, the workspace's status
+ * and every "is there a conversation here" question mean the ones being worked
+ * in. Whatever has to reach the history as well, a workspace's removal above
+ * all, asks `allChatsOfWorkspace`.
+ */
 export function chatsOfWorkspace(state: State, workspaceId: string): Chat[] {
+  return state.chats.filter((chat) => chat.workspaceId === workspaceId && isOpenChat(chat))
+}
+
+/** Open and closed alike: what has to go when the workspace does. */
+export function allChatsOfWorkspace(state: State, workspaceId: string): Chat[] {
   return state.chats.filter((chat) => chat.workspaceId === workspaceId)
+}
+
+/** The conversations that were closed and can be reopened, most recent first. */
+export function closedChatsOfWorkspace(
+  state: State,
+  workspaceId: string
+): { chat: Chat; closedAt: string }[] {
+  const closed: { chat: Chat; closedAt: string; index: number }[] = []
+  state.chats.forEach((chat, index) => {
+    if (chat.workspaceId === workspaceId && chat.closedAt !== null) {
+      closed.push({ chat, closedAt: chat.closedAt, index })
+    }
+  })
+
+  // Two closed within one clock tick tie on the time, and the later record is
+  // the later close — without the index the keep limit would expire the newest.
+  return closed
+    .sort((one, other) => other.closedAt.localeCompare(one.closedAt) || other.index - one.index)
+    .map(({ chat, closedAt }) => ({ chat, closedAt }))
+}
+
+/**
+ * The closed conversations past the keep limit, oldest first.
+ *
+ * Returned rather than removed so the caller can drop the transcripts of
+ * exactly the records that went.
+ */
+export function expiredClosedChats(state: State, workspaceId: string): Chat[] {
+  return closedChatsOfWorkspace(state, workspaceId)
+    .slice(MAX_CLOSED_CHATS_PER_WORKSPACE)
+    .map(({ chat }) => chat)
 }
 
 export function findChat(state: State, chatId: string): Chat | undefined {

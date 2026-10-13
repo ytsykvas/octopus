@@ -11,6 +11,8 @@
  * the same reasoning as `makeExec` in the service.
  */
 
+import type { UUID } from 'node:crypto'
+
 import type {
   ModelInfo,
   Options,
@@ -24,13 +26,14 @@ import type {
   SlashCommand
 } from '@anthropic-ai/claude-agent-sdk'
 
-import type { AgentCommand, AgentModel, EffortChoice, PermissionMode } from './chats.js'
+import type { AgentCommand, AgentModel, EffortChoice, FileRewind, PermissionMode } from './chats.js'
 import { sessionEffort } from './chats.js'
 import { type AnswerValue, type ElicitationField, readForm } from './elicitation.js'
 import type { AgentEvent } from './events.js'
 import { describeError } from './persist.js'
 import type { UsageReport } from './usage.js'
 import { toUsageReport } from './usage.js'
+
 import { z } from 'zod'
 
 /** The one function this module needs from the SDK. */
@@ -221,8 +224,19 @@ export type ElicitationAnswer =
   | { readonly action: 'decline' | 'cancel' }
 
 export interface AgentSession {
-  /** Queues a message. Returns immediately — the answer arrives as events. */
-  send: (text: string) => void
+  /**
+   * Queues a message. Returns immediately — the answer arrives as events.
+   *
+   * `messageId` is the id the agent will know it by, kept so the files can be
+   * put back to the point it was sent; without one the message cannot be
+   * rewound to.
+   */
+  send: (text: string, messageId?: UUID) => void
+  /**
+   * What putting the files back to a message would do — or does, without
+   * `dryRun`. Needs the checkpointing the session was started with.
+   */
+  rewindFiles: (messageId: string, dryRun: boolean) => Promise<FileRewind>
   interrupt: () => Promise<void>
   setPermissionMode: (mode: PermissionMode) => Promise<void>
   setEffort: (effort: EffortChoice) => Promise<void>
@@ -482,6 +496,10 @@ export function startSession(options: SessionOptions, hooks: SessionHooks): Agen
       // What makes text appear while it is being written rather than in one
       // block at the end of a turn.
       includePartialMessages: true,
+      // Backs a file up before the agent first changes it in a turn, which is
+      // what makes "put the files back to this message" possible at all. Not
+      // optional afterwards: a checkpoint cannot be taken for work already done.
+      enableFileCheckpointing: true,
       /*
        * An MCP server asking the user something, mid-call.
        *
@@ -586,8 +604,21 @@ export function startSession(options: SessionOptions, hooks: SessionHooks): Agen
   })()
 
   return {
-    send(text) {
-      input.push(userMessage(text))
+    send(text, messageId) {
+      input.push(userMessage(text, messageId))
+    },
+
+    async rewindFiles(messageId, dryRun) {
+      const result = await conversation.rewindFiles(messageId, { dryRun })
+
+      return {
+        canRewind: result.canRewind,
+        error: result.error ?? null,
+        filesChanged: result.filesChanged ?? [],
+        insertions: result.insertions ?? 0,
+        deletions: result.deletions ?? 0,
+        skippedLinks: result.skippedLinks ?? 0
+      }
     },
 
     async interrupt() {
@@ -863,6 +894,12 @@ function fromAssistant(message: SDKAssistantMessage): AgentEvent[] {
      same thing again, and the SDK calls the two idempotent. */
   events.push(...retraction(message.supersedes, message.uuid))
 
+  // Whose words these are. A subagent's messages arrive on the same stream as
+  // the conversation's own, told apart only by this, and without it a long
+  // delegated task is a scatter of tool rows nothing says belong together.
+  const parent =
+    message.parent_tool_use_id === null ? {} : { parentToolUseId: message.parent_tool_use_id }
+
   for (const block of message.message.content) {
     // A block with nothing in it is not an event. Reasoning arrives that way
     // routinely — the SDK can be asked to summarise it or omit it, and an
@@ -870,10 +907,10 @@ function fromAssistant(message: SDKAssistantMessage): AgentEvent[] {
     // through, each drew a disclosure with nothing behind it and left a record
     // in the transcript that remembers nothing.
     if (block.type === 'text' && block.text.trim() !== '') {
-      events.push({ type: 'text', text: block.text, uuid: message.uuid })
+      events.push({ type: 'text', text: block.text, uuid: message.uuid, ...parent })
     }
     if (block.type === 'thinking' && block.thinking.trim() !== '') {
-      events.push({ type: 'thinking', text: block.thinking, uuid: message.uuid })
+      events.push({ type: 'thinking', text: block.thinking, uuid: message.uuid, ...parent })
     }
     if (block.type === 'tool_use') {
       events.push({
@@ -881,7 +918,8 @@ function fromAssistant(message: SDKAssistantMessage): AgentEvent[] {
         toolUseId: block.id,
         name: block.name,
         input: block.input,
-        uuid: message.uuid
+        uuid: message.uuid,
+        ...parent
       })
     }
   }
@@ -916,6 +954,8 @@ function fromUser(message: SDKUserMessage): AgentEvent[] {
   if (typeof content === 'string') return []
 
   const events: AgentEvent[] = []
+  const parent =
+    message.parent_tool_use_id === null ? {} : { parentToolUseId: message.parent_tool_use_id }
 
   for (const block of content) {
     if (block.type !== 'tool_result') continue
@@ -927,7 +967,8 @@ function fromUser(message: SDKUserMessage): AgentEvent[] {
       content: describeToolResult(block.content),
       // Optional on this message where it is required on an assistant one, so
       // a result that arrives without one simply cannot be retracted.
-      ...(message.uuid === undefined ? {} : { uuid: message.uuid })
+      ...(message.uuid === undefined ? {} : { uuid: message.uuid }),
+      ...parent
     })
   }
 
@@ -968,12 +1009,16 @@ function fromStreamEvent(message: SDKPartialAssistantMessage): AgentEvent[] {
   return []
 }
 
-export function userMessage(text: string): SDKUserMessage {
+export function userMessage(text: string, uuid?: UUID): SDKUserMessage {
   return {
     type: 'user',
     message: { role: 'user', content: text },
     parent_tool_use_id: null,
-    session_id: ''
+    session_id: '',
+    // Stamped by us rather than left for the agent to assign, because the id is
+    // the only handle there is on this point in the conversation: it is what
+    // the files are rewound to, and nothing in the stream says it back.
+    ...(uuid !== undefined && { uuid })
   }
 }
 

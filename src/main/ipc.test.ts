@@ -414,11 +414,16 @@ describe('channel table', () => {
     'workspaces:replyToReviewThread',
     'workspaces:resolveReviewThread',
     'files:open',
+    'files:search',
     'chats:list',
     'chats:open',
     'chats:create',
     'chats:fork',
     'chats:close',
+    'chats:closed',
+    'chats:reopen',
+    'chats:rewindPreview',
+    'chats:rewind',
     'chats:rename',
     'chats:history',
     'chats:send',
@@ -1934,6 +1939,26 @@ describe('workspaces of a real project', () => {
     expect(bench.opened).toEqual([])
   })
 
+  it('finds files of a workspace for a mention', async () => {
+    const projectId = await addProject()
+    const workspace = await createWorkspace(projectId)
+
+    await expect(invoke('files:search', workspace.id, 'readme')).resolves.toMatchObject({
+      ok: true,
+      value: [{ path: 'README.md', absolute: join(workspace.path, 'README.md') }]
+    })
+  })
+
+  it('refuses a mention query that is not a short string', async () => {
+    const projectId = await addProject()
+    const workspace = await createWorkspace(projectId)
+
+    expect(await invoke('files:search', workspace.id, 42)).toMatchObject({ ok: false })
+    expect(await invoke('files:search', workspace.id, 'x'.repeat(257))).toMatchObject({
+      ok: false
+    })
+  })
+
   it('refuses a path that is not a string at all', async () => {
     const projectId = await addProject()
     const workspace = await createWorkspace(projectId)
@@ -2081,6 +2106,68 @@ describe('the agent chat', () => {
       ok: true,
       value: [{ workspaceId: workspace.id }]
     })
+  })
+
+  describe('putting the files back to a message', () => {
+    // The id names a point in a conversation, and comes from the window.
+    it('refuses an id that is not a uuid', async () => {
+      const projectId = await addProject()
+      const workspace = await createWorkspace(projectId)
+      const opened = (await invoke('chats:open', workspace.id)) as {
+        ok: true
+        value: { id: string }
+      }
+
+      expect(await invoke('chats:rewind', opened.value.id, 'not-a-uuid')).toMatchObject({
+        ok: false
+      })
+      expect(await invoke('chats:rewindPreview', opened.value.id, 42)).toMatchObject({
+        ok: false
+      })
+    })
+
+    // Well formed, and still not one this conversation recorded.
+    it('refuses a message the conversation never sent', async () => {
+      const projectId = await addProject()
+      const workspace = await createWorkspace(projectId)
+      const opened = (await invoke('chats:open', workspace.id)) as {
+        ok: true
+        value: { id: string }
+      }
+      const stranger = '00000000-0000-4000-8000-000000000000'
+
+      await expect(invoke('chats:rewind', opened.value.id, stranger)).resolves.toMatchObject({
+        ok: false,
+        code: 'rewindUnavailable'
+      })
+      await expect(invoke('chats:rewindPreview', opened.value.id, stranger)).resolves.toMatchObject(
+        { ok: false, code: 'rewindUnavailable' }
+      )
+    })
+  })
+
+  // Closing is not deleting: the conversation leaves the strip and waits to be
+  // brought back, with the same record.
+  it('closes a conversation into the history and brings it back', async () => {
+    const projectId = await addProject()
+    const workspace = await createWorkspace(projectId)
+    await invoke('chats:open', workspace.id)
+    const created = (await invoke('chats:create', workspace.id)) as {
+      ok: true
+      value: { id: string }
+    }
+
+    await invoke('chats:close', created.value.id)
+    await expect(invoke('chats:closed', workspace.id)).resolves.toMatchObject({
+      ok: true,
+      value: [{ chat: { id: created.value.id }, preview: '' }]
+    })
+
+    await expect(invoke('chats:reopen', created.value.id)).resolves.toMatchObject({
+      ok: true,
+      value: { id: created.value.id, closedAt: null }
+    })
+    await expect(invoke('chats:closed', workspace.id)).resolves.toEqual({ ok: true, value: [] })
   })
 
   it('names a conversation, and refuses one longer than a tab can hold', async () => {
@@ -2343,6 +2430,20 @@ describe('the agent chat', () => {
     await expect(invoke('chats:permission', 'r-1', 'perhaps')).resolves.toMatchObject({
       ok: false
     })
+  })
+
+  // It replaces the tool's own argument, which the agent then works from — so
+  // it is bounded like a prompt, and never empty: an empty plan is not an edit.
+  it('refuses a rewritten plan that is empty or enormous', async () => {
+    await expect(invoke('chats:permission', 'r-1', 'allow', undefined, '')).resolves.toMatchObject({
+      ok: false
+    })
+    await expect(
+      invoke('chats:permission', 'r-1', 'allow', undefined, 'x'.repeat(100_001))
+    ).resolves.toMatchObject({ ok: false })
+    await expect(
+      invoke('chats:permission', 'r-1', 'allow', undefined, '# A better plan')
+    ).resolves.toEqual({ ok: true, value: undefined })
   })
 
   // Unknown means already answered, or the session it belonged to is gone.

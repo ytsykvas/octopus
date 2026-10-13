@@ -1,5 +1,6 @@
 import { fireEvent, render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
+import { useState } from 'react'
 import { beforeAll, describe, expect, it, vi } from 'vitest'
 
 import { stubDialogElement } from '../../test/dialog.js'
@@ -9,7 +10,19 @@ beforeAll(stubDialogElement)
 
 const PLAN = '# Normalising the locales\n\n## Context\n\nUse `en.ts` as the source.'
 
-function renderDialog(overrides: Partial<React.ComponentProps<typeof PlanDialog>> = {}): {
+type Props = Omit<React.ComponentProps<typeof PlanDialog>, 'text' | 'onText'>
+
+/**
+ * The pane's half of the contract: it holds the text the dialog shows and takes
+ * back what is typed. The dialog is controlled, and tested the way it is used.
+ */
+function Held(props: Props): React.JSX.Element {
+  const [text, setText] = useState(props.plan)
+
+  return <PlanDialog {...props} text={text} onText={setText} />
+}
+
+function renderDialog(overrides: Partial<Props> = {}): {
   onExecute: ReturnType<typeof vi.fn>
   onKeepPlanning: ReturnType<typeof vi.fn>
 } {
@@ -17,7 +30,13 @@ function renderDialog(overrides: Partial<React.ComponentProps<typeof PlanDialog>
   const onKeepPlanning = vi.fn()
 
   render(
-    <PlanDialog plan={PLAN} onExecute={onExecute} onKeepPlanning={onKeepPlanning} {...overrides} />
+    <Held
+      plan={PLAN}
+      accepting
+      onExecute={onExecute}
+      onKeepPlanning={onKeepPlanning}
+      {...overrides}
+    />
   )
 
   return { onExecute, onKeepPlanning }
@@ -36,14 +55,104 @@ describe('the plan itself', () => {
 })
 
 describe('the two ways out', () => {
+  // Executing out of planning widens what the agent may do — it goes on in
+  // Auto mode — so the dialog says it before the click, not after.
+  it('says executing runs in Auto mode', () => {
+    renderDialog()
+
+    expect(
+      screen.getByText('Runs in Auto mode — edits go ahead without asking.')
+    ).toBeInTheDocument()
+  })
+
+  // A plan the agent offered unasked changes no mode, so there is nothing to
+  // warn about — and a warning that is not true is one nobody reads twice.
+  it('says nothing about Auto mode when executing changes no mode', () => {
+    renderDialog({ accepting: false })
+
+    expect(screen.queryByText(/Runs in Auto mode/)).not.toBeInTheDocument()
+  })
+
   it('executes when that is what was chosen', async () => {
     const user = userEvent.setup()
     const { onExecute, onKeepPlanning } = renderDialog()
 
     await user.click(screen.getByRole('button', { name: 'Execute' }))
 
-    expect(onExecute).toHaveBeenCalledOnce()
+    // Nothing was changed, so the agent is not told the plan is different.
+    expect(onExecute).toHaveBeenCalledExactlyOnceWith(null)
     expect(onKeepPlanning).not.toHaveBeenCalled()
+  })
+
+  describe('rewriting the plan before approving it', () => {
+    const editor = (): HTMLElement => screen.getByRole('textbox', { name: 'The plan, as markdown' })
+
+    it('opens the plan as text to edit, and back to the rendered plan', async () => {
+      const user = userEvent.setup()
+      renderDialog()
+
+      await user.click(screen.getByRole('button', { name: 'Edit the plan' }))
+      expect(editor()).toHaveValue(PLAN)
+
+      await user.click(screen.getByRole('button', { name: 'Back to the plan' }))
+      expect(
+        screen.queryByRole('textbox', { name: 'The plan, as markdown' })
+      ).not.toBeInTheDocument()
+      expect(screen.getByText('Normalising the locales')).toBeInTheDocument()
+    })
+
+    it('approves with the words the user wrote', async () => {
+      const user = userEvent.setup()
+      const { onExecute } = renderDialog()
+
+      await user.click(screen.getByRole('button', { name: 'Edit the plan' }))
+      await user.clear(editor())
+      await user.type(editor(), '# Only the tests')
+      await user.click(screen.getByRole('button', { name: 'Execute' }))
+
+      expect(onExecute).toHaveBeenCalledExactlyOnceWith('# Only the tests')
+    })
+
+    // Looking at the rendered plan again must not throw the edits away.
+    it('keeps the edits when the editor is closed and the plan is looked at', async () => {
+      const user = userEvent.setup()
+      const { onExecute } = renderDialog()
+
+      await user.click(screen.getByRole('button', { name: 'Edit the plan' }))
+      await user.clear(editor())
+      await user.type(editor(), '# Rewritten')
+      await user.click(screen.getByRole('button', { name: 'Back to the plan' }))
+
+      expect(screen.getByText('Rewritten')).toBeInTheDocument()
+
+      await user.click(screen.getByRole('button', { name: 'Execute' }))
+      expect(onExecute).toHaveBeenCalledExactlyOnceWith('# Rewritten')
+    })
+
+    // An edit that ends where it began is not an edit.
+    it('does not call it an edit when it was put back as it was', async () => {
+      const user = userEvent.setup()
+      const { onExecute } = renderDialog()
+
+      await user.click(screen.getByRole('button', { name: 'Edit the plan' }))
+      await user.type(editor(), ' ')
+      await user.click(screen.getByRole('button', { name: 'Execute' }))
+
+      expect(onExecute).toHaveBeenCalledExactlyOnceWith(null)
+    })
+
+    // An emptied editor is not a plan. Approving the original under it would do
+    // something the field plainly says it is not doing.
+    it('will not approve while the editor is empty', async () => {
+      const user = userEvent.setup()
+      const { onExecute } = renderDialog()
+
+      await user.click(screen.getByRole('button', { name: 'Edit the plan' }))
+      await user.clear(editor())
+
+      expect(screen.getByRole('button', { name: 'Execute' })).toBeDisabled()
+      expect(onExecute).not.toHaveBeenCalled()
+    })
   })
 
   /*

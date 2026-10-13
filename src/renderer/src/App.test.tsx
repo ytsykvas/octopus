@@ -1754,6 +1754,38 @@ describe('App', () => {
     })
   })
 
+  // The browser's key for "bring back what I just closed". Closing a tab keeps
+  // the conversation, so a slipped click is one keystroke from undone.
+  it('brings back the conversation closed last with ⌘⇧T', async () => {
+    vi.mocked(window.octopus.chats.closed).mockResolvedValue({
+      ok: true,
+      value: [
+        {
+          chat: chat({ id: 'chat-9', workspaceId: 'planner/anna' }),
+          closedAt: '2026-08-20T10:00:00.000Z',
+          preview: 'fix the login bug'
+        }
+      ]
+    })
+    vi.mocked(window.octopus.chats.reopen).mockResolvedValue({
+      ok: true,
+      value: chat({ id: 'chat-9', workspaceId: 'planner/anna' })
+    })
+    givenTwoProjects()
+    const user = await openApp()
+    await user.click(tab('PL'))
+    await user.click(screen.getByRole('button', { name: /anna/ }))
+    await screen.findByRole('navigation', { name: 'Conversations' })
+
+    fireEvent.keyDown(window, { key: 'T', metaKey: true, shiftKey: true })
+
+    await waitFor(() => {
+      expect(window.octopus.chats.reopen).toHaveBeenCalledWith('chat-9')
+    })
+    // Not ⌘T's job: reopening is not creating.
+    expect(window.octopus.chats.create).not.toHaveBeenCalled()
+  })
+
   /*
    * Sent the way macOS actually sends it. Option rewrites the character —
    * Option-2 arrives as `™` — so a handler reading `event.key` cannot work, and

@@ -1,7 +1,16 @@
 import { contextBridge, ipcRenderer, webUtils } from 'electron'
 
 import type { AccountKind, AccountsStatus, GitHubAccount } from '@core/accounts.js'
-import type { AgentCommand, AgentModel, Chat, EffortChoice, WorkingMode } from '@core/chats.js'
+import type { MentionFile } from '@core/fileSearch.js'
+import type {
+  AgentCommand,
+  AgentModel,
+  Chat,
+  ClosedChat,
+  EffortChoice,
+  FileRewind,
+  WorkingMode
+} from '@core/chats.js'
 import type {
   ChatEvent,
   ChatsChangedEvent,
@@ -190,13 +199,29 @@ const api = {
     fork: (chatId: string): Promise<Result<Chat>> =>
       ipcRenderer.invoke('chats:fork', chatId) as Promise<Result<Chat>>,
 
-    /** Ends a chat and discards it, history included; refuses the last one. */
+    /** Closes a chat's tab and keeps it, history included; refuses the last one. */
     close: (chatId: string): Promise<Result<void>> =>
       ipcRenderer.invoke('chats:close', chatId) as Promise<Result<void>>,
+
+    /** The closed chats of a workspace, most recently closed first. */
+    closed: (workspaceId: string): Promise<Result<ClosedChat[]>> =>
+      ipcRenderer.invoke('chats:closed', workspaceId) as Promise<Result<ClosedChat[]>>,
+
+    /** Brings a closed chat back as a tab; refuses past the cap. */
+    reopen: (chatId: string): Promise<Result<Chat>> =>
+      ipcRenderer.invoke('chats:reopen', chatId) as Promise<Result<Chat>>,
 
     /** Names a chat; an empty name gives it back the one it is given. */
     rename: (chatId: string, title: string): Promise<Result<void>> =>
       ipcRenderer.invoke('chats:rename', chatId, title) as Promise<Result<void>>,
+
+    /** What putting the files back to a message would do, without doing it. */
+    rewindPreview: (chatId: string, messageId: string): Promise<Result<FileRewind>> =>
+      ipcRenderer.invoke('chats:rewindPreview', chatId, messageId) as Promise<Result<FileRewind>>,
+
+    /** Puts the files back to how they were when the message was sent. */
+    rewind: (chatId: string, messageId: string): Promise<Result<FileRewind>> =>
+      ipcRenderer.invoke('chats:rewind', chatId, messageId) as Promise<Result<FileRewind>>,
 
     /** Everything said in this chat before now. */
     history: (chatId: string): Promise<Result<ChatEntry[]>> =>
@@ -278,13 +303,18 @@ const api = {
      * Answers a pending permission request; the agent is blocked until it arrives.
      *
      * `feedback` accompanies a refusal and reaches the agent as the reason.
+     * `editedPlan` accompanies the approval of a plan the user rewrote, and is
+     * what the agent then works from.
      */
     answerPermission: (
       requestId: string,
       answer: PermissionAnswer,
-      feedback?: string
+      feedback?: string,
+      editedPlan?: string
     ): Promise<Result<void>> =>
-      ipcRenderer.invoke('chats:permission', requestId, answer, feedback) as Promise<Result<void>>,
+      ipcRenderer.invoke('chats:permission', requestId, answer, feedback, editedPlan) as Promise<
+        Result<void>
+      >,
 
     /**
      * Answers an MCP server's question; the server is blocked until it arrives.
@@ -604,7 +634,11 @@ const api = {
   files: {
     /** Hands a file in a workspace to whatever the system opens it with. */
     open: (workspaceId: string, path: string): Promise<Result<void>> =>
-      ipcRenderer.invoke('files:open', workspaceId, path) as Promise<Result<void>>
+      ipcRenderer.invoke('files:open', workspaceId, path) as Promise<Result<void>>,
+
+    /** The workspace's files matching what is typed after an `@`, best first. */
+    search: (workspaceId: string, query: string): Promise<Result<MentionFile[]>> =>
+      ipcRenderer.invoke('files:search', workspaceId, query) as Promise<Result<MentionFile[]>>
   },
 
   attachments: {
