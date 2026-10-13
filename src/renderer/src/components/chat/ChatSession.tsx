@@ -107,6 +107,9 @@ export function ChatSession({
   const [notice, setNotice] = useState<string | null>(null)
   const attachments = useAttachments(setNotice)
   const { confirm, dialog: confirmDialog } = useConfirm()
+  // A plan the user is rewriting, by the request it belongs to. Kept here so
+  // that looking at another tab does not throw the edits away.
+  const [planEdit, setPlanEdit] = useState<{ requestId: string; text: string } | null>(null)
   const describeFailure = useErrorMessage()
   const chat = useChat(tab.record, workspace.id, tab.status, describeFailure, onOpened)
 
@@ -301,7 +304,16 @@ export function ChatSession({
           waiting somewhere nobody is looking. */}
       {visible && plan !== null && pending !== null && (
         <PlanDialog
+          // Per request: a plan the agent replaces is a different plan, and the
+          // editor's open-or-closed state belongs to the one it was opened on.
+          key={pending.requestId}
           plan={plan}
+          text={
+            planEdit !== null && planEdit.requestId === pending.requestId ? planEdit.text : plan
+          }
+          onText={(next) => {
+            setPlanEdit({ requestId: pending.requestId, text: next })
+          }}
           accepting={record?.planMode === true}
           onExecute={(edited) => {
             // The `undefined` where feedback goes: an approval has none, and
@@ -317,7 +329,11 @@ export function ChatSession({
         />
       )}
 
-      <TodoPanel todos={todos} />
+      {/* Only while the agent is working. A list it left with items pending —
+          interrupted, errored, or simply abandoned — would otherwise stay
+          pinned across every later turn and every restart, describing work
+          nobody is doing. The log still holds it. */}
+      <TodoPanel todos={chat.busy ? todos : []} />
 
       <Composer
         initialDraft={draft}

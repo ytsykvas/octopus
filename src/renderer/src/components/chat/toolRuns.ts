@@ -231,23 +231,6 @@ export function toolCount(entries: readonly ChatEntry[]): number {
 }
 
 /**
- * Folds runs of tool calls into single blocks.
- *
- * A turn is mostly tool calls — a rename went through fifty-nine greps and
- * edits — and one line each buried the two things worth reading, the prose and
- * what the agent actually changed. Folded, the run is a count that opens.
- *
- * A single call is left alone: "1 step" that has to be opened to say `Read
- * en.ts` is more work than the row it replaced.
- *
- * Anything else breaks a run, which is the point — prose, a failure, a
- * permission card and the turn's own footer all stay where they happened,
- * with the work that led to them either side.
- */
-/** The tools whose calls are drawn as a change of their own, never nested. */
-const WRITING_TOOLS: ReadonlySet<string> = new Set(['Edit', 'Write'])
-
-/**
  * What a subagent did, gathered under the call that started it.
  *
  * `steps` is by the id of that call; `nested` is the same entries as a set, for
@@ -273,7 +256,14 @@ export function subagentsOf(entries: readonly ChatEntry[]): Subagents {
     if (entry.role !== 'agent' || entry.event.type !== 'tool_use') continue
 
     started.add(entry.event.toolUseId)
-    if (WRITING_TOOLS.has(entry.event.name)) writes.add(entry.event.toolUseId)
+
+    // Asked of the same reader that draws the diff rather than of a list of
+    // names kept here, which would drift from it. Only a subagent's calls: the
+    // reading runs a line diff, and the conversation's own are read once, by
+    // the walk below.
+    if (entry.event.parentToolUseId !== undefined && changeIn(entry) !== null) {
+      writes.add(entry.event.toolUseId)
+    }
   }
 
   const steps = new Map<string, AgentEvent[]>()
@@ -302,6 +292,20 @@ export function subagentsOf(entries: readonly ChatEntry[]): Subagents {
   return { steps, nested }
 }
 
+/**
+ * Folds runs of tool calls into single blocks.
+ *
+ * A turn is mostly tool calls — a rename went through fifty-nine greps and
+ * edits — and one line each buried the two things worth reading, the prose and
+ * what the agent actually changed. Folded, the run is a count that opens.
+ *
+ * A single call is left alone: "1 step" that has to be opened to say `Read
+ * en.ts` is more work than the row it replaced.
+ *
+ * Anything else breaks a run, which is the point — prose, a failure, a
+ * permission card and the turn's own footer all stay where they happened,
+ * with the work that led to them either side.
+ */
 export function groupToolRuns(
   entries: readonly ChatEntry[],
   nested: ReadonlySet<ChatEntry> = subagentsOf(entries).nested

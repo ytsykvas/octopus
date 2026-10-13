@@ -11,6 +11,8 @@
  * the same reasoning as `makeExec` in the service.
  */
 
+import type { UUID } from 'node:crypto'
+
 import type {
   ModelInfo,
   Options,
@@ -31,6 +33,7 @@ import type { AgentEvent } from './events.js'
 import { describeError } from './persist.js'
 import type { UsageReport } from './usage.js'
 import { toUsageReport } from './usage.js'
+
 import { z } from 'zod'
 
 /** The one function this module needs from the SDK. */
@@ -228,7 +231,7 @@ export interface AgentSession {
    * put back to the point it was sent; without one the message cannot be
    * rewound to.
    */
-  send: (text: string, messageId?: string) => void
+  send: (text: string, messageId?: UUID) => void
   /**
    * What putting the files back to a message would do — or does, without
    * `dryRun`. Needs the checkpointing the session was started with.
@@ -1006,7 +1009,7 @@ function fromStreamEvent(message: SDKPartialAssistantMessage): AgentEvent[] {
   return []
 }
 
-export function userMessage(text: string, uuid?: string): SDKUserMessage {
+export function userMessage(text: string, uuid?: UUID): SDKUserMessage {
   return {
     type: 'user',
     message: { role: 'user', content: text },
@@ -1015,7 +1018,7 @@ export function userMessage(text: string, uuid?: string): SDKUserMessage {
     // Stamped by us rather than left for the agent to assign, because the id is
     // the only handle there is on this point in the conversation: it is what
     // the files are rewound to, and nothing in the stream says it back.
-    ...(uuid !== undefined && { uuid: uuid as NonNullable<SDKUserMessage['uuid']> })
+    ...(uuid !== undefined && { uuid })
   }
 }
 

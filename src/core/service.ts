@@ -9,6 +9,8 @@
 import { randomUUID } from 'node:crypto'
 import { isAbsolute, join, relative, resolve } from 'node:path'
 
+import { z } from 'zod'
+
 import {
   forkSession as defaultForkSession,
   query as defaultQuery
@@ -508,6 +510,18 @@ interface PendingPermission {
  * older CLI or a question about nothing in particular, the whole tool: which is
  * what every answer of "always" meant before any of this.
  */
+/**
+ * A tool's input as a plain object, or an empty one when it is not.
+ *
+ * Spread under the plan the user rewrote: the tool's input is an open object,
+ * and replacing it whole would drop whatever else the agent put there. The
+ * sibling that answers a question does the same with its answers.
+ */
+function recordOf(input: unknown): Record<string, unknown> {
+  const parsed = z.record(z.string(), z.unknown()).safeParse(input)
+  return parsed.success ? parsed.data : {}
+}
+
 function standingFrom(request: PendingPermission): StandingPermission {
   for (const update of request.suggestions ?? []) {
     if (update.type !== 'addRules' || update.behavior !== 'allow') continue
@@ -1270,6 +1284,8 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
   const download = { fetch: options.fetch ?? globalThis.fetch, timeoutMs: DOWNLOAD_TIMEOUT_MS }
 
   const sessions = new Map<string, AgentSession>()
+  /** Sessions being started, so a second asker waits for the first. */
+  const starts = new Map<string, Promise<AgentSession>>()
   const listeners = new Set<(event: ChatEvent) => void>()
   const statusListeners = new Set<(event: WorkspaceStatusEvent) => void>()
   const usageListeners = new Set<(windows: UsageWindows) => void>()
@@ -1654,6 +1670,21 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
   }
 
   /**
+   * A conversation that is a tab, for what only makes sense in one.
+   *
+   * Sending and rewinding change the worktree, and a closed conversation has no
+   * tab and no status to show it at it. A window that has not heard about the
+   * close is exactly who asks.
+   */
+  function requireOpenChat(chatId: string): Chat {
+    const chat = requireChat(chatId)
+    if (!isOpenChat(chat)) {
+      throw new ChatError('chatClosed', { chatId }, `Chat ${chatId} is closed.`)
+    }
+    return chat
+  }
+
+  /**
    * Port settlements, run one after another.
    *
    * The choice has to be serialised, not only the write. `settlePort` reads the
@@ -1847,8 +1878,10 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
   function setChatStatus(chatId: string, status: ChatStatus): Promise<void> {
     const before = findChat(state, chatId)
     // A closing session goes on emitting for a moment after its conversation
-    // was closed, and there is nothing left to record it against.
-    if (!before) return Promise.resolve()
+    // was closed, and there is nothing left to record it against. A closed
+    // conversation is not a tab any more: a late `result` from the session that
+    // has just ended must not leave it `error`, red on the day it is reopened.
+    if (!before || !isOpenChat(before)) return Promise.resolve()
 
     const { workspaceId } = before
 
@@ -2316,15 +2349,27 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
    * possible long after the turn it undoes.
    */
   async function rewind(chatId: string, messageId: string, dryRun: boolean): Promise<FileRewind> {
-    const chat = requireChat(chatId)
+    const chat = requireOpenChat(chatId)
 
-    if (chat.status === 'running' || chat.status === 'waiting_permission') {
-      throw new ChatError(
-        'rewindBusy',
-        { chatId },
-        `Chat ${chatId} is working; its files cannot be rewound now.`
+    // The worktree is shared by every conversation of the workspace, up to
+    // three, and a rewind restores whatever *this* one's checkpoint tracked —
+    // which can be a file another is editing at that moment. So it is the
+    // workspace that has to be quiet, not only this tab.
+    const refuseWhileWorking = (): void => {
+      const working = chatsOfWorkspace(state, chat.workspaceId).some(
+        (other) => other.status === 'running' || other.status === 'waiting_permission'
       )
+
+      if (working) {
+        throw new ChatError(
+          'rewindBusy',
+          { chatId },
+          `Workspace ${chat.workspaceId} is working; its files cannot be rewound now.`
+        )
+      }
     }
+
+    refuseWhileWorking()
 
     const known = (await readTranscript(chatId, dataRoot)).some(
       (entry) => entry.role === 'user' && entry.uuid === messageId
@@ -2338,8 +2383,11 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
     }
 
     const workspace = requireWorkspace(chat.workspaceId)
-    const session =
-      sessions.get(chatId) ?? (await startFor(chat, workspace, await sourcesFor(workspace)))
+    const session = await sessionFor(chat, workspace)
+
+    // Asked again: starting the session took time, and a message sent in that
+    // window began a turn this would otherwise have run underneath.
+    refuseWhileWorking()
 
     const result = await session.rewindFiles(messageId, dryRun)
     if (!result.canRewind) {
@@ -2356,7 +2404,8 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
         messageId,
         files: result.filesChanged.length,
         insertions: result.insertions,
-        deletions: result.deletions
+        deletions: result.deletions,
+        skippedLinks: result.skippedLinks
       })
     }
 
@@ -2806,6 +2855,30 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
         askElicitation: () => Promise.resolve({ action: 'decline' as const })
       }
     )
+  }
+
+  /**
+   * The conversation's session, started if there is none — once.
+   *
+   * Two things reach for one: a message being sent and a rewind that needs a
+   * session to ask. Without this both would start one, the second registered
+   * over the first, and the first's child process left running with nothing
+   * holding it.
+   */
+  function sessionFor(chat: Chat, workspace: Workspace): Promise<AgentSession> {
+    const live = sessions.get(chat.id)
+    if (live) return Promise.resolve(live)
+
+    const starting = starts.get(chat.id)
+    if (starting) return starting
+
+    const started = (async () => startFor(chat, workspace, await sourcesFor(workspace)))().finally(
+      () => {
+        starts.delete(chat.id)
+      }
+    )
+    starts.set(chat.id, started)
+    return started
   }
 
   async function startFor(
@@ -3895,6 +3968,9 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
       await discardWorkspace(workspace, execs, removal)
 
       await commit((current) => removeWorkspaceRecord(current, workspaceId))
+      // Nothing is left to search, and the listing would otherwise sit here for
+      // as long as the application runs.
+      fileLists.delete(workspaceId)
       await discardHistories(closing)
     },
 
@@ -4080,13 +4156,14 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
         return checked.filter((file) => file !== null)
       }
 
+      const asked = Date.parse(now())
       const held = fileLists.get(workspaceId)
-      if (held !== undefined && Date.now() - held.at < FILE_LIST_TTL_MS) {
+      if (held !== undefined && asked - held.at < FILE_LIST_TTL_MS) {
         return await offered(held.files)
       }
 
       const files = await listFiles(makeExec(workspace.path))
-      fileLists.set(workspaceId, { at: Date.now(), files })
+      fileLists.set(workspaceId, { at: asked, files })
       return await offered(files)
     },
 
@@ -4250,10 +4327,7 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
       // or a conversation closed mid-turn would reopen claiming to be working.
       let expired: Chat[] = []
       await commitChats(chat.workspaceId, (current) => {
-        const closed = updateChat(current, chatId, {
-          closedAt: new Date().toISOString(),
-          status: 'idle'
-        })
+        const closed = updateChat(current, chatId, { closedAt: now(), status: 'idle' })
         expired = expiredClosedChats(closed, chat.workspaceId)
         return expired.reduce((next, gone) => removeChat(next, gone.id), closed)
       })
@@ -4311,7 +4385,10 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
     },
 
     async sendToChat(chatId, text) {
-      const chat = requireChat(chatId)
+      // Not to a closed one: a window that has not heard it was closed would
+      // otherwise start a session no tab and no status shows, editing the
+      // worktree with nothing to stop it.
+      const chat = requireOpenChat(chatId)
       const workspace = requireWorkspace(chat.workspaceId)
 
       // Written before the agent is asked anything: if starting the session
@@ -4320,8 +4397,16 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
       //
       // With the id the agent will know it by, so the files can be put back to
       // this point later: nothing in the stream says it back.
+      //
+      // Not for `/usage`, which is answered here and never reaches the agent: a
+      // rewind mark on it would be a promise nothing could keep.
       const messageId = randomUUID()
-      await appendEntry(chatId, { role: 'user', at: now(), text, uuid: messageId }, dataRoot)
+      const reachesAgent = !isUsageCommand(text, chat.knownCommands)
+      await appendEntry(
+        chatId,
+        { role: 'user', at: now(), text, ...(reachesAgent && { uuid: messageId }) },
+        dataRoot
+      )
 
       /*
        * The record is what the session runs under, re-asserted rather than
@@ -4400,7 +4485,7 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
         await running.setEffort(effortInForce(chat))
       }
 
-      const session = running ?? (await startFor(chat, workspace, await sourcesFor(workspace)))
+      const session = running ?? (await sessionFor(chat, workspace))
 
       /*
        * `/usage` is answered here, and the message is not sent on.
@@ -4651,7 +4736,7 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
       pending.delete(requestId)
       request.resolve({
         allow: true,
-        ...(edited !== '' && { updatedInput: { plan: edited } }),
+        ...(edited !== '' && { updatedInput: { ...recordOf(request.input), plan: edited } }),
         ...(leaving && chat && { setMode: chat.workingMode }),
         /*
          * The rule goes to the session as well as to the config, and it has to

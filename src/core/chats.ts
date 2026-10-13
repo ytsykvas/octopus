@@ -80,7 +80,13 @@ export const MAX_CHATS_PER_WORKSPACE = 3
 export const MAX_CLOSED_CHATS_PER_WORKSPACE = 20
 
 export type ChatErrorCode =
-  'tooManyChats' | 'lastChat' | 'nothingToFork' | 'forkFailed' | 'rewindBusy' | 'rewindUnavailable'
+  | 'tooManyChats'
+  | 'lastChat'
+  | 'nothingToFork'
+  | 'forkFailed'
+  | 'rewindBusy'
+  | 'rewindUnavailable'
+  | 'chatClosed'
 
 /**
  * What putting the files back to a message would do, or did.

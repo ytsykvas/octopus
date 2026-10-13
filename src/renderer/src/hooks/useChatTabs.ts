@@ -436,10 +436,11 @@ export function useChatTabs(
         return
       }
 
+      // The history is not read here: it is read when it is opened, which is
+      // what the menu does, and each entry costs a read of its transcript.
       await load(id, () => shown.current !== id)
-      await refreshHistory()
     },
-    [load, refreshHistory, describeFailure]
+    [load, describeFailure]
   )
 
   const reopen = useCallback(
@@ -459,9 +460,8 @@ export function useChatTabs(
 
       await load(id, () => shown.current !== id)
       select(reopened.value.id)
-      await refreshHistory()
     },
-    [load, select, refreshHistory, describeFailure]
+    [load, select, describeFailure]
   )
 
   const reopenLast = useCallback(async () => {

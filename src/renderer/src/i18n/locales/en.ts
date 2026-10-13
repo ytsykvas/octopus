@@ -760,8 +760,6 @@ export const en = {
     forkTab: 'Continue in a new conversation',
     forkTabHint: 'The agent keeps what it remembers of this one.',
     closeTab: 'Close conversation',
-    /* The history of what was closed. Closing keeps a conversation, so this is
-       how one comes back — and ⌘⇧T brings back the last. */
     /* The agent's own task list, pinned above the field while it has work
        left. The progress reads "3 of 7". */
     todos: 'Tasks',
@@ -789,16 +787,22 @@ export const en = {
     rewindNothing: 'The files are already as they were before that message.',
     filesRewound:
       'Files put back to an earlier message: {{files}} changed, +{{insertions}} −{{deletions}}',
+    filesRewoundSkipped_one: '({{count}} left alone — a link sat at its path)',
+    filesRewoundSkipped_few: '({{count}} left alone — a link sat at their path)',
+    filesRewoundSkipped_many: '({{count}} left alone — a link sat at their path)',
+    filesRewoundSkipped_other: '({{count}} left alone — a link sat at their path)',
     /* What a subagent did, folded under the call that started it. */
     subagentSteps_one: '{{count}} step by the subagent',
     subagentSteps_few: '{{count}} steps by the subagent',
     subagentSteps_many: '{{count}} steps by the subagent',
     subagentSteps_other: '{{count}} steps by the subagent',
+    /* The history of what was closed. Closing keeps a conversation, so this is
+       how one comes back — and ⌘⇧T brings back the last. */
     history: 'Closed conversations',
     historyEmpty: 'Nothing closed yet',
     historyUntitled: 'Conversation with no messages',
     historyClosed: 'Closed {{when}}',
-    historyFull: 'Close a tab first — three are open',
+    historyFull: 'Close a tab first — {{limit}} are open',
 
     placeholder: 'Ask the agent to do something in this workspace…',
     send: 'Send',
@@ -1570,6 +1574,7 @@ export const en = {
     rewindBusy: 'The agent is working. Stop it before putting the files back.',
     rewindUnavailable: 'The files cannot be put back to that message.',
     rewindUnavailableReason: 'The files cannot be put back to that message: {{reason}}',
+    chatClosed: 'That conversation was closed. Reopen it from the history first.',
     repoConfigSymlink:
       '{{path}} is a symbolic link. octopus will not read or write through one, because it can point anywhere outside the repository.',
     repoConfigTooLarge: '{{path}} is larger than this kind of file is allowed to be.',

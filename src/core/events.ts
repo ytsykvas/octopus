@@ -399,7 +399,13 @@ export const AgentEventSchema = z.discriminatedUnion('type', [
     messageId: z.string(),
     files: z.number().int().min(0),
     insertions: z.number().int().min(0),
-    deletions: z.number().int().min(0)
+    deletions: z.number().int().min(0),
+    /**
+     * Files left alone because a link sat at their path. The rewind never
+     * follows one, and a record saying "5 changed" without this would read as
+     * though everything it tracked had come back.
+     */
+    skippedLinks: z.number().int().min(0).default(0)
   }),
 
   /**

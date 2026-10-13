@@ -239,7 +239,8 @@ describe('putting the files back from a message', () => {
           messageId: MESSAGE,
           files: 3,
           insertions: 12,
-          deletions: 4
+          deletions: 4,
+          skippedLinks: 0
         })
       ]
     })
@@ -247,6 +248,25 @@ describe('putting the files back from a message', () => {
     expect(
       screen.getByText('Files put back to an earlier message: 3 changed, +12 −4')
     ).toBeInTheDocument()
+  })
+
+  // "5 changed" alone reads as though everything the checkpoint tracked had come
+  // back, and the rewind never follows a link.
+  it('says how many files a link kept it from restoring', () => {
+    renderLog({
+      entries: [
+        fromAgent({
+          type: 'files_rewound',
+          messageId: MESSAGE,
+          files: 3,
+          insertions: 12,
+          deletions: 4,
+          skippedLinks: 2
+        })
+      ]
+    })
+
+    expect(screen.getByText(/2 left alone — a link sat at their path/)).toBeInTheDocument()
   })
 })
 

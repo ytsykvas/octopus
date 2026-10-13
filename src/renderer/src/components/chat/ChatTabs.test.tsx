@@ -365,7 +365,7 @@ describe('the history of closed conversations', () => {
 
     await user.click(historyButton())
 
-    expect(screen.getByText('Close a tab first — three are open')).toBeInTheDocument()
+    expect(screen.getByText('Close a tab first — 3 are open')).toBeInTheDocument()
     expect(screen.getByRole('menuitem', { name: /fix the login bug/ })).toBeDisabled()
   })
 

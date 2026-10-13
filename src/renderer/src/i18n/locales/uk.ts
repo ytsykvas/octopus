@@ -603,6 +603,10 @@ export const uk: Translation = {
     rewindNothing: 'Файли вже такі, якими були перед цим повідомленням.',
     filesRewound:
       'Файли повернуто до попереднього повідомлення: змінено {{files}}, +{{insertions}} −{{deletions}}',
+    filesRewoundSkipped_one: '({{count}} залишено — на його шляху було посилання)',
+    filesRewoundSkipped_few: '({{count}} залишено — на їхньому шляху були посилання)',
+    filesRewoundSkipped_many: '({{count}} залишено — на їхньому шляху були посилання)',
+    filesRewoundSkipped_other: '({{count}} залишено — на їхньому шляху були посилання)',
     subagentSteps_one: '{{count}} крок субагента',
     subagentSteps_few: '{{count}} кроки субагента',
     subagentSteps_many: '{{count}} кроків субагента',
@@ -611,7 +615,7 @@ export const uk: Translation = {
     historyEmpty: 'Нічого ще не закрито',
     historyUntitled: 'Розмова без повідомлень',
     historyClosed: 'Закрито {{when}}',
-    historyFull: 'Спершу закрийте вкладку — відкриті три',
+    historyFull: 'Спершу закрийте вкладку — відкрито {{limit}}',
 
     placeholder: 'Попросіть агента щось зробити в цьому воркспейсі…',
     send: 'Надіслати',
@@ -1202,6 +1206,7 @@ export const uk: Translation = {
     rewindBusy: 'Агент працює. Зупиніть його, перш ніж повертати файли.',
     rewindUnavailable: 'Повернути файли до цього повідомлення не вийде.',
     rewindUnavailableReason: 'Повернути файли до цього повідомлення не вийде: {{reason}}',
+    chatClosed: 'Цю розмову закрито. Спершу відкрийте її з історії.',
     repoConfigSymlink:
       '{{path}} — символічне посилання. octopus не читає й не пише через нього, бо воно може вести куди завгодно поза репозиторієм.',
     repoConfigTooLarge: '{{path}} більший, ніж дозволено файлу такого роду.',

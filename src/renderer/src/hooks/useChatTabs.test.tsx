@@ -540,12 +540,10 @@ describe('closing a conversation', () => {
     expect(result.current.tabs).toHaveLength(1)
   })
 
-  it('has the history up to date once it is closed', async () => {
+  // Each entry costs a read of its transcript, and the list is read when the
+  // menu is opened — which it is before anything can be chosen from it.
+  it('does not read the history just because a tab was closed', async () => {
     givenChats([chat(), chat({ id: 'chat-2' })])
-    vi.mocked(octopus().chats.closed).mockResolvedValue({
-      ok: true,
-      value: [closedEntry('chat-1')]
-    })
     const { result } = open()
     await waitFor(() => {
       expect(result.current.tabs).toHaveLength(2)
@@ -556,7 +554,7 @@ describe('closing a conversation', () => {
       await result.current.close('chat-1')
     })
 
-    expect(result.current.history.map(({ chat: closed }) => closed.id)).toEqual(['chat-1'])
+    expect(octopus().chats.closed).not.toHaveBeenCalled()
   })
 
   it('says so when the core refuses', async () => {
@@ -575,30 +573,32 @@ describe('closing a conversation', () => {
     expect(onError).toHaveBeenCalledWith(expect.stringContaining('the last one'))
   })
 
-  it('drops a close answered for a workspace no longer shown', async () => {
-    const onChats = vi.fn()
+  // What the guard keeps from the window now showing another workspace is the
+  // refusal of a close that belonged to the one it left.
+  it('does not report a refusal for a workspace no longer shown', async () => {
+    const onError = vi.fn()
     givenChats([chat(), chat({ id: 'chat-2' })])
-    let settle: ((value: { ok: true; value: undefined }) => void) | null = null
+    let settle: ((value: { ok: false; error: string }) => void) | null = null
     vi.mocked(octopus().chats.close).mockReturnValue(
       new Promise((resolve) => {
         settle = resolve
       })
     )
-    const { result, rerender } = open({ onChats })
+    const { result, rerender } = open({ onError })
     await waitFor(() => {
       expect(result.current.tabs).toHaveLength(2)
     })
 
     const closing = result.current.close('chat-1')
     rerender({ id: 'planner/bob' })
-    onChats.mockClear()
+    onError.mockClear()
 
     await act(async () => {
-      settle?.({ ok: true, value: undefined })
+      settle?.({ ok: false, error: 'the last one' })
       await closing
     })
 
-    expect(onChats).not.toHaveBeenCalledWith(WORKSPACE, expect.anything())
+    expect(onError).not.toHaveBeenCalled()
   })
 })
 
@@ -728,30 +728,34 @@ describe('the history of closed conversations', () => {
       expect(result.current.tabs).toHaveLength(1)
     })
 
-    it('drops a reopening answered for a workspace no longer shown', async () => {
-      const onChats = vi.fn()
-      givenChats([chat()])
+    // `select` writes to whichever workspace is showing, so a reopening that
+    // landed after the switch would have moved the tab of another one.
+    it('does not move the tab of the workspace now shown', async () => {
+      givenChats([chat(), chat({ id: 'chat-2' })])
       let settle: ((value: { ok: true; value: Chat }) => void) | null = null
       vi.mocked(octopus().chats.reopen).mockReturnValue(
         new Promise((resolve) => {
           settle = resolve
         })
       )
-      const { result, rerender } = open({ onChats })
+      const { result, rerender } = open()
       await waitFor(() => {
-        expect(result.current.tabs[0]?.id).toBe('chat-1')
+        expect(result.current.tabs).toHaveLength(2)
       })
 
       const reopening = result.current.reopen('chat-2')
       rerender({ id: 'planner/bob' })
-      onChats.mockClear()
+      await waitFor(() => {
+        expect(result.current.tabs).toHaveLength(2)
+      })
 
       await act(async () => {
         settle?.({ ok: true, value: chat({ id: 'chat-2' }) })
         await reopening
       })
 
-      expect(onChats).not.toHaveBeenCalledWith(WORKSPACE, expect.anything())
+      // Still on the first, as a workspace is when it is first looked at.
+      expect(result.current.activeKey).toBe(result.current.tabs[0]?.key)
     })
   })
 

@@ -1,5 +1,6 @@
 import { fireEvent, render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
+import { useState } from 'react'
 import { beforeAll, describe, expect, it, vi } from 'vitest'
 
 import { stubDialogElement } from '../../test/dialog.js'
@@ -9,7 +10,19 @@ beforeAll(stubDialogElement)
 
 const PLAN = '# Normalising the locales\n\n## Context\n\nUse `en.ts` as the source.'
 
-function renderDialog(overrides: Partial<React.ComponentProps<typeof PlanDialog>> = {}): {
+type Props = Omit<React.ComponentProps<typeof PlanDialog>, 'text' | 'onText'>
+
+/**
+ * The pane's half of the contract: it holds the text the dialog shows and takes
+ * back what is typed. The dialog is controlled, and tested the way it is used.
+ */
+function Held(props: Props): React.JSX.Element {
+  const [text, setText] = useState(props.plan)
+
+  return <PlanDialog {...props} text={text} onText={setText} />
+}
+
+function renderDialog(overrides: Partial<Props> = {}): {
   onExecute: ReturnType<typeof vi.fn>
   onKeepPlanning: ReturnType<typeof vi.fn>
 } {
@@ -17,7 +30,7 @@ function renderDialog(overrides: Partial<React.ComponentProps<typeof PlanDialog>
   const onKeepPlanning = vi.fn()
 
   render(
-    <PlanDialog
+    <Held
       plan={PLAN}
       accepting
       onExecute={onExecute}
@@ -128,16 +141,17 @@ describe('the two ways out', () => {
       expect(onExecute).toHaveBeenCalledExactlyOnceWith(null)
     })
 
-    // An emptied editor is not a plan, and approving nothing is not the edit.
-    it('does not take an emptied editor for a plan', async () => {
+    // An emptied editor is not a plan. Approving the original under it would do
+    // something the field plainly says it is not doing.
+    it('will not approve while the editor is empty', async () => {
       const user = userEvent.setup()
       const { onExecute } = renderDialog()
 
       await user.click(screen.getByRole('button', { name: 'Edit the plan' }))
       await user.clear(editor())
-      await user.click(screen.getByRole('button', { name: 'Execute' }))
 
-      expect(onExecute).toHaveBeenCalledExactlyOnceWith(null)
+      expect(screen.getByRole('button', { name: 'Execute' })).toBeDisabled()
+      expect(onExecute).not.toHaveBeenCalled()
     })
   })
 

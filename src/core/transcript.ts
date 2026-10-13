@@ -10,7 +10,7 @@
  * spend most of its time serialising its own past.
  */
 
-import { appendFile, copyFile, mkdir, readFile, rm } from 'node:fs/promises'
+import { appendFile, copyFile, type FileHandle, mkdir, open, readFile, rm } from 'node:fs/promises'
 import { dirname } from 'node:path'
 
 import { z } from 'zod'
@@ -83,10 +83,24 @@ export const MAX_PREVIEW = 80
  * opening message does. Empty for one that never had one.
  */
 export async function previewOf(chatId: ChatId, root?: string): Promise<string> {
-  for (const entry of await readTranscript(chatId, root)) {
-    if (entry.role !== 'user') continue
+  let handle: FileHandle
+  try {
+    handle = await open(chatTranscript(chatId, root), 'r')
+  } catch {
+    return ''
+  }
 
-    const line = entry.text.replace(/\s+/g, ' ').trim()
+  // Read line by line and left at the first message the user wrote: a list of
+  // twenty conversations should not cost twenty whole transcripts, which for a
+  // long one is megabytes read to find a line near the top. `readLines` closes
+  // the handle when the loop is left, early or not.
+  for await (const text of handle.readLines({ encoding: 'utf8' })) {
+    if (text.trim() === '') continue
+
+    const parsed = ChatEntrySchema.safeParse(parseJson(text))
+    if (!parsed.success || parsed.data.role !== 'user') continue
+
+    const line = parsed.data.text.replace(/\s+/g, ' ').trim()
     return line.length > MAX_PREVIEW ? `${line.slice(0, MAX_PREVIEW - 1)}…` : line
   }
 

@@ -1,4 +1,4 @@
-import { createEvent, fireEvent, render, screen, within } from '@testing-library/react'
+import { act, createEvent, fireEvent, render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
@@ -1213,13 +1213,21 @@ describe('mentioning a file', () => {
     const user = userEvent.setup()
     const { onSearchFiles } = mentioning()
 
-    await user.type(field(), 'mail me@example')
-    // Past the debounce. Asserted straight away the search has not been asked
-    // for yet either way, and the test would pass over the bug it is for.
-    await new Promise((resolve) => setTimeout(resolve, 200))
+    vi.useFakeTimers({ shouldAdvanceTime: true })
+    try {
+      await user.type(field(), 'mail me@example')
+      // Past the debounce, on a clock the test holds. Asserted straight away
+      // the search has not been asked for yet either way, and the test would
+      // pass over the bug it is for.
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(500)
+      })
 
-    expect(onSearchFiles).not.toHaveBeenCalled()
-    expect(screen.queryByRole('option')).not.toBeInTheDocument()
+      expect(onSearchFiles).not.toHaveBeenCalled()
+      expect(screen.queryByRole('option')).not.toBeInTheDocument()
+    } finally {
+      vi.useRealTimers()
+    }
   })
 
   it('attaches the file and takes the token out of the text when one is clicked', async () => {
@@ -1300,6 +1308,21 @@ describe('mentioning a file', () => {
       expect(onSearchFiles).toHaveBeenLastCalledWith('au')
     })
     expect(screen.getByRole('option', { name: /auth\.ts/ })).toBeInTheDocument()
+  })
+
+  // The list used to go away on every keystroke until the next answer landed,
+  // and the Enter pressed in that gap sent `see @aut` as the message.
+  it('still takes a file on Enter right after another letter was typed', async () => {
+    const user = userEvent.setup()
+    const { onAttachPaths, onSend } = mentioning()
+
+    await user.type(field(), '@a')
+    await screen.findByRole('option', { name: /auth\.ts/ })
+    // The letter and the Enter in one breath: no answer for `au` has landed.
+    await user.keyboard('u{Enter}')
+
+    expect(onAttachPaths).toHaveBeenCalledExactlyOnceWith(['/work/anna/src/core/auth.ts'])
+    expect(onSend).not.toHaveBeenCalled()
   })
 
   it('closes on Escape and leaves the draft alone', async () => {

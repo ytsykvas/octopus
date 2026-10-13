@@ -105,6 +105,7 @@ const CODE_PARAMETERS: Record<CoreErrorCode, Interpolated> = {
   nothingToFork: null,
   forkFailed: null,
   rewindBusy: null,
+  chatClosed: null,
   rewindUnavailable: { reason: 'No checkpoint for that message' },
   noCommits: { base: 'main' },
   nothingToCommit: null,

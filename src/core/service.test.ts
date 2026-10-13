@@ -843,23 +843,22 @@ describe('workspaces', () => {
     // A query is asked on every keystroke, and the listing is not free. Held
     // for a few seconds, then read again.
     it('holds the listing briefly, then looks again', async () => {
-      vi.useFakeTimers({ toFake: ['Date'] })
-      try {
-        const { service, projectId } = await withProject()
-        const workspace = await service.createWorkspaceIn(projectId)
-        vi.setSystemTime(new Date('2026-08-20T10:00:00.000Z'))
-        await expect(service.searchFiles(workspace.id, 'later')).resolves.toEqual([])
+      let clock = '2026-08-20T10:00:00.000Z'
+      const repo = join(dir, 'planner')
+      await initRepo(repo)
+      const timed = await createService({ ...paths(dir), now: () => clock })
+      const project = await timed.addProjectFromPath(repo)
+      const workspace = await timed.createWorkspaceIn(project.id)
 
-        await writeFile(join(workspace.path, 'later.md'), 'x\n', 'utf8')
-        vi.setSystemTime(new Date('2026-08-20T10:00:01.000Z'))
-        await expect(service.searchFiles(workspace.id, 'later')).resolves.toEqual([])
+      await expect(timed.searchFiles(workspace.id, 'later')).resolves.toEqual([])
 
-        vi.setSystemTime(new Date('2026-08-20T10:00:06.000Z'))
-        const found = await service.searchFiles(workspace.id, 'later')
-        expect(found.map(({ path }) => path)).toEqual(['later.md'])
-      } finally {
-        vi.useRealTimers()
-      }
+      await writeFile(join(workspace.path, 'later.md'), 'x\n', 'utf8')
+      clock = '2026-08-20T10:00:01.000Z'
+      await expect(timed.searchFiles(workspace.id, 'later')).resolves.toEqual([])
+
+      clock = '2026-08-20T10:00:06.000Z'
+      const found = await timed.searchFiles(workspace.id, 'later')
+      expect(found.map(({ path }) => path)).toEqual(['later.md'])
     })
 
     it('refuses a workspace that does not exist', async () => {
@@ -3376,7 +3375,7 @@ describe('the agent chat', () => {
   } as unknown as SDKMessage
 
   /** A service with a project, a workspace and a stubbed agent. */
-  async function withWorkspace(): Promise<{
+  async function withWorkspace(extra: ServiceOptions = {}): Promise<{
     service: OctopusService
     projectId: string
     workspaceId: string
@@ -3385,7 +3384,7 @@ describe('the agent chat', () => {
     const repo = join(dir, 'planner')
     await initRepo(repo)
 
-    const service = await createService({ ...paths(dir), query: fakeQuery() })
+    const service = await createService({ ...paths(dir), query: fakeQuery(), ...extra })
     const project = await service.addProjectFromPath(repo)
     const workspace = await service.createWorkspaceIn(project.id)
 
@@ -5288,6 +5287,37 @@ describe('the agent chat', () => {
           event: { type: 'plan_edited', plan: '# The user wrote this instead' }
         })
       })
+    })
+
+    // The tool's input is an open object, and replacing it whole would drop
+    // whatever else the agent put there.
+    it('keeps the rest of the tool input when the plan is rewritten', async () => {
+      const { service, workspaceId, events } = await withWorkspace()
+      const chat = await service.openChat(workspaceId)
+      await service.setChatPlanMode(chat.id, true)
+      await service.sendToChat(chat.id, 'plan it')
+
+      const decision = agent().ask('ExitPlanMode', {
+        plan: '# The agent wrote this',
+        allowedPrompts: [{ tool: 'Bash', prompt: 'run tests' }]
+      })
+      await service.answerPermission(await waitForRequest(events), 'allow', undefined, '# Mine')
+
+      await expect(decision).resolves.toMatchObject({
+        updatedInput: { plan: '# Mine', allowedPrompts: [{ tool: 'Bash', prompt: 'run tests' }] }
+      })
+    })
+
+    it('still rewrites the plan when the tool input was not an object', async () => {
+      const { service, workspaceId, events } = await withWorkspace()
+      const chat = await service.openChat(workspaceId)
+      await service.setChatPlanMode(chat.id, true)
+      await service.sendToChat(chat.id, 'plan it')
+
+      const decision = agent().ask('ExitPlanMode', 'not an object')
+      await service.answerPermission(await waitForRequest(events), 'allow', undefined, '# Mine')
+
+      await expect(decision).resolves.toMatchObject({ updatedInput: { plan: '# Mine' } })
     })
 
     it('approves the plan as written when nothing was changed', async () => {
@@ -7572,24 +7602,21 @@ describe('the agent chat', () => {
       })
     })
 
-    // The log is written in the background, so reading it straight after would
-    // see nothing either way. A preview followed by the real thing must leave
-    // exactly one row, once everything has had time to land.
+    // Watched on the event stream rather than read back from disk: the log is
+    // written in the background, so reading it straight after sees nothing
+    // either way, and a sleep makes the test about the clock.
     it('writes nothing to the log for a preview', async () => {
       const { service, chatId, messageId } = await spoken()
-      const rewound = async (): Promise<number> =>
-        (await service.chatHistory(chatId)).filter(
-          (entry) => entry.role === 'agent' && entry.event.type === 'files_rewound'
-        ).length
+      const rewound: ChatEvent['event'][] = []
+      service.onAgentEvent((entry) => {
+        if (entry.event.type === 'files_rewound') rewound.push(entry.event)
+      })
 
       await service.previewRewind(chatId, messageId)
-      await service.rewindChat(chatId, messageId)
+      expect(rewound).toEqual([])
 
-      await vi.waitFor(async () => {
-        expect(await rewound()).toBeGreaterThanOrEqual(1)
-      })
-      await new Promise((resolve) => setTimeout(resolve, 50))
-      expect(await rewound()).toBe(1)
+      await service.rewindChat(chatId, messageId)
+      expect(rewound).toHaveLength(1)
     })
 
     // A rewind under a running agent is a race for the same files.
@@ -7606,6 +7633,80 @@ describe('the agent chat', () => {
         code: 'rewindBusy'
       })
       expect(agent().rewinds()).toEqual([])
+    })
+
+    // Three conversations share a worktree, and a rewind restores whatever this
+    // one's checkpoint tracked — which can be a file another is editing.
+    it('refuses while another conversation of the workspace is working', async () => {
+      const { service, workspaceId, chatId, messageId } = await spoken()
+      const other = await service.createChat(workspaceId)
+      await service.sendToChat(other.id, 'keep editing')
+      await vi.waitFor(() => {
+        expect(service.listChats(workspaceId).find((chat) => chat.id === other.id)?.status).toBe(
+          'running'
+        )
+      })
+
+      await expect(service.rewindChat(chatId, messageId)).rejects.toMatchObject({
+        code: 'rewindBusy'
+      })
+      await expect(service.previewRewind(chatId, messageId)).rejects.toMatchObject({
+        code: 'rewindBusy'
+      })
+    })
+
+    // A message sent while the session for a rewind is being started began a
+    // turn the rewind would otherwise have run underneath — and both reaching
+    // for a session started two, the second registered over the first.
+    it('starts one session when a message and a rewind both need one', async () => {
+      const { service, chatId, messageId } = await spoken()
+      await service.closeChats()
+      const before = agents.length
+
+      const outcomes = await Promise.allSettled([
+        service.previewRewind(chatId, messageId),
+        service.sendToChat(chatId, 'and another thing')
+      ])
+
+      expect(agents.length).toBe(before + 1)
+      // One of them won; the preview either ran first or was refused.
+      expect(outcomes[1].status).toBe('fulfilled')
+    })
+
+    // The files a link sat on were left alone, and the log must not read as
+    // though everything the checkpoint tracked had come back.
+    it('records how many files a link kept it from restoring', async () => {
+      const { service, chatId, messageId } = await spoken()
+      rewindAnswer = () =>
+        Promise.resolve({
+          canRewind: true,
+          filesChanged: ['a.ts'],
+          insertions: 1,
+          deletions: 0,
+          skippedLinks: 2
+        })
+
+      await service.rewindChat(chatId, messageId)
+
+      await vi.waitFor(async () => {
+        const history = await service.chatHistory(chatId)
+        expect(history.at(-1)).toMatchObject({
+          event: { type: 'files_rewound', files: 1, skippedLinks: 2 }
+        })
+      })
+    })
+
+    // `/usage` is answered here and never reaches the agent, so a rewind mark on
+    // it would be a promise nothing could keep.
+    it('gives a command the agent never sees no id to rewind to', async () => {
+      const { service, workspaceId } = await withWorkspace()
+      const chat = await service.openChat(workspaceId)
+
+      await service.sendToChat(chat.id, '/usage')
+
+      const [entry] = await service.chatHistory(chat.id)
+      expect(entry).toMatchObject({ role: 'user', text: '/usage' })
+      expect(entry).not.toHaveProperty('uuid')
     })
 
     // The id comes from the window, and the agent will rewind to any it has
@@ -7709,24 +7810,66 @@ describe('the agent chat', () => {
       expect(closed?.chat.status).toBe('idle')
     })
 
+    // A window that has not heard it was closed still shows the tab. Sending
+    // would start a session no tab and no status shows, editing the worktree.
+    it('refuses a message to a closed conversation, and a rewind', async () => {
+      const { service, workspaceId } = await withWorkspace()
+      const first = await service.openChat(workspaceId)
+      await service.createChat(workspaceId)
+      await service.closeChat(first.id)
+
+      await expect(service.sendToChat(first.id, 'still there?')).rejects.toMatchObject({
+        name: 'ChatError',
+        code: 'chatClosed'
+      })
+      await expect(
+        service.rewindChat(first.id, '00000000-0000-4000-8000-000000000000')
+      ).rejects.toMatchObject({ code: 'chatClosed' })
+      expect(agents).toHaveLength(0)
+    })
+
+    // The session that has just ended may still say something. It must not
+    // leave the record `error`, red on the day it is reopened.
+    it('keeps a closed conversation idle when its session speaks late', async () => {
+      const { service, workspaceId } = await withWorkspace()
+      const first = await service.openChat(workspaceId)
+      await service.createChat(workspaceId)
+      await service.sendToChat(first.id, 'go')
+      await service.closeChat(first.id)
+
+      agent().emit({
+        type: 'result',
+        subtype: 'error_during_execution',
+        is_error: true,
+        total_cost_usd: 0,
+        duration_ms: 1,
+        usage: { input_tokens: 1, output_tokens: 1 },
+        terminal_reason: 'aborted',
+        session_id: 'sess-1'
+      } as unknown as SDKMessage)
+      await new Promise((resolve) => setTimeout(resolve, 20))
+
+      const [closed] = await service.listClosedChats(workspaceId)
+      expect(closed?.chat.status).toBe('idle')
+    })
+
     it('lists the most recently closed first', async () => {
-      vi.useFakeTimers({ toFake: ['Date'] })
-      try {
-        const { service, workspaceId } = await withWorkspace()
-        const first = await service.openChat(workspaceId)
-        const second = await service.createChat(workspaceId)
-        await service.createChat(workspaceId)
+      let clock = '2026-08-20T10:00:00.000Z'
+      const { service, workspaceId } = await withWorkspace({ now: () => clock })
+      const first = await service.openChat(workspaceId)
+      const second = await service.createChat(workspaceId)
+      await service.createChat(workspaceId)
 
-        vi.setSystemTime(new Date('2026-08-20T10:00:00.000Z'))
-        await service.closeChat(first.id)
-        vi.setSystemTime(new Date('2026-08-20T11:00:00.000Z'))
-        await service.closeChat(second.id)
+      await service.closeChat(first.id)
+      clock = '2026-08-20T11:00:00.000Z'
+      await service.closeChat(second.id)
 
-        const closed = await service.listClosedChats(workspaceId)
-        expect(closed.map(({ chat }) => chat.id)).toEqual([second.id, first.id])
-      } finally {
-        vi.useRealTimers()
-      }
+      const closed = await service.listClosedChats(workspaceId)
+      expect(closed.map(({ chat }) => chat.id)).toEqual([second.id, first.id])
+      expect(closed.map(({ closedAt }) => closedAt)).toEqual([
+        '2026-08-20T11:00:00.000Z',
+        '2026-08-20T10:00:00.000Z'
+      ])
     })
 
     it('reopens a closed conversation with its history and its session', async () => {
@@ -7791,6 +7934,18 @@ describe('the agent chat', () => {
 
     // History is the workspace's, and goes with it — the closed ones included,
     // which `chatsOfWorkspace` no longer reaches.
+    it('discards the closed conversations with their project', async () => {
+      const { service, workspaceId, projectId } = await withWorkspace()
+      const first = await service.openChat(workspaceId)
+      await service.createChat(workspaceId)
+      await service.sendToChat(first.id, 'go')
+      await service.closeChat(first.id)
+
+      await service.removeProjectById(projectId)
+
+      await expect(service.chatHistory(first.id)).resolves.toEqual([])
+    })
+
     it('discards the closed conversations with their workspace', async () => {
       const { service, workspaceId } = await withWorkspace()
       const first = await service.openChat(workspaceId)

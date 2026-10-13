@@ -6,7 +6,19 @@ import { Modal } from '../Modal.js'
 import { Markdown } from './Markdown.js'
 
 interface PlanDialogProps {
+  /** The plan as the agent wrote it. */
   readonly plan: string
+  /**
+   * The plan as it stands in the editor: the user's own words, or the agent's
+   * until they change them.
+   *
+   * Held by the pane rather than here, and keyed by the request it belongs to:
+   * the dialog is only mounted while its conversation is showing, so state kept
+   * in it was lost on every switch of tab — and a state seeded once would have
+   * gone on describing a plan the agent had since replaced.
+   */
+  readonly text: string
+  readonly onText: (text: string) => void
   /**
    * Whether executing moves the conversation to `acceptEdits` — true only out
    * of planning, since a plan the agent offered unasked changes no mode.
@@ -42,6 +54,8 @@ interface PlanDialogProps {
  */
 export function PlanDialog({
   plan,
+  text,
+  onText,
   accepting,
   onExecute,
   onKeepPlanning
@@ -49,9 +63,6 @@ export function PlanDialog({
   const { t } = useTranslation()
   const [feedback, setFeedback] = useState('')
   const [editing, setEditing] = useState(false)
-  // The plan as it stands in the editor. Kept when the editor is closed, so
-  // looking at the rendered plan again does not throw the edits away.
-  const [text, setText] = useState(plan)
 
   // Null for an untouched plan, and for one edited back to what it was: only a
   // real difference is worth telling the agent about.
@@ -83,6 +94,9 @@ export function PlanDialog({
           </Button>
           <Button
             variant="accent"
+            // An emptied editor is not a plan. Approving the original under it
+            // would do something the field plainly says it is not doing.
+            disabled={text.trim() === ''}
             onClick={() => {
               onExecute(changed ? text.trim() : null)
             }}
@@ -98,7 +112,7 @@ export function PlanDialog({
             aria-label={t('chat.planEditLabel')}
             value={text}
             onChange={(event) => {
-              setText(event.target.value)
+              onText(event.target.value)
             }}
             // Monospace, because what is being edited is markdown: the markers
             // are the thing being worked on, and a proportional face hides them.

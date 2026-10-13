@@ -1,7 +1,7 @@
-import { GitBranchPlus, History, MoreHorizontal, Pencil, Plus, Trash2 } from 'lucide-react'
+import { GitBranchPlus, History, MoreHorizontal, Pencil, Plus, X } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 
-import { AGENT_NAMES, MAX_CHAT_TITLE } from '@core/chats.js'
+import { AGENT_NAMES, MAX_CHAT_TITLE, MAX_CHATS_PER_WORKSPACE } from '@core/chats.js'
 
 import type { ChatTab, ChatTabsController } from '../../hooks/useChatTabs.js'
 import { chatStatusLabel, chatStatusTone } from '../agentStatus.js'
@@ -95,7 +95,7 @@ function HistoryMenu({ tabs }: ChatTabsProps): React.JSX.Element {
           // the time is only ever missing from a row nobody can pick anyway.
           description: tabs.canCreate
             ? t('chat.historyClosed', { when: when(closedAt) })
-            : t('chat.historyFull'),
+            : t('chat.historyFull', { limit: MAX_CHATS_PER_WORKSPACE }),
           disabled: !tabs.canCreate,
           onSelect: () => void tabs.reopen(chat.id)
         }))
@@ -188,8 +188,9 @@ function TabButton({
                 {
                   id: 'close',
                   label: t('chat.closeTab'),
-                  icon: <Trash2 aria-hidden size={13} />,
-                  destructive: true,
+                  // Not a bin and not red: closing keeps the conversation, and
+                  // it is one click and one key from being back.
+                  icon: <X aria-hidden size={13} />,
                   onSelect: () => void controller.close(id)
                 }
               ]

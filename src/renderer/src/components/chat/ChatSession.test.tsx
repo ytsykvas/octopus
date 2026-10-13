@@ -1081,6 +1081,41 @@ describe('the permission mode', () => {
     })
   })
 
+  // The agent may hand over another plan while one is being rewritten. The old
+  // edit describes a plan that is gone, and must not be sent as the new one's.
+  describe('a plan replaced while it is being rewritten', () => {
+    it('does not send the old edit as the new plan', async () => {
+      const user = userEvent.setup()
+      givenChat([], { planMode: true })
+      await openLoadedChat()
+
+      emitAgentEvent({
+        type: 'permission_request',
+        requestId: 'r-1',
+        toolName: 'ExitPlanMode',
+        input: { plan: '# First plan' }
+      })
+      await user.click(await screen.findByRole('button', { name: 'Edit the plan' }))
+      const editor = screen.getByRole('textbox', { name: 'The plan, as markdown' })
+      await user.clear(editor)
+      await user.type(editor, '# My edit of the first')
+
+      emitAgentEvent({
+        type: 'permission_request',
+        requestId: 'r-2',
+        toolName: 'ExitPlanMode',
+        input: { plan: '# Second plan' }
+      })
+
+      // The dialog is for the new request: the plan as the agent wrote it, and
+      // the editor closed.
+      expect(await screen.findByText('Second plan')).toBeInTheDocument()
+      await user.click(screen.getByRole('button', { name: 'Execute' }))
+
+      expect(octopus().chats.answerPermission).toHaveBeenCalledWith('r-2', 'allow', undefined)
+    })
+  })
+
   describe('putting the files back from a message', () => {
     const MESSAGE = '11111111-1111-4111-8111-111111111111'
 
@@ -1228,9 +1263,40 @@ describe('the permission mode', () => {
       }
     ])
     await openLoadedChat()
+    emitChatStatus(CHAT_ID, 'running')
 
     expect(await screen.findByRole('button', { name: /Tasks/ })).toBeInTheDocument()
     expect(screen.getByText('Making it pass')).toBeInTheDocument()
+  })
+
+  // A list left with items pending — interrupted, errored, abandoned — would
+  // otherwise stay pinned across every later turn and every restart.
+  it('lets go of the list once the turn is over', async () => {
+    givenChat([
+      {
+        role: 'agent',
+        at: '2026-08-13T09:00:00.000Z',
+        event: {
+          type: 'tool_use',
+          toolUseId: 'call-1',
+          name: 'TodoWrite',
+          input: {
+            todos: [
+              { content: 'Make it pass', status: 'in_progress', activeForm: 'Making it pass' }
+            ]
+          }
+        }
+      }
+    ])
+    await openLoadedChat()
+    emitChatStatus(CHAT_ID, 'running')
+    expect(await screen.findByRole('button', { name: /Tasks/ })).toBeInTheDocument()
+
+    emitChatStatus(CHAT_ID, 'idle')
+
+    await waitFor(() => {
+      expect(screen.queryByRole('button', { name: /Tasks/ })).not.toBeInTheDocument()
+    })
   })
 
   it('shows no task list for a conversation without one', async () => {

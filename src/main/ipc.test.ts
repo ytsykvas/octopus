@@ -2108,8 +2108,6 @@ describe('the agent chat', () => {
     })
   })
 
-  // Closing is not deleting: the conversation leaves the strip and waits to be
-  // brought back, with the same record.
   describe('putting the files back to a message', () => {
     // The id names a point in a conversation, and comes from the window.
     it('refuses an id that is not a uuid', async () => {
@@ -2148,6 +2146,8 @@ describe('the agent chat', () => {
     })
   })
 
+  // Closing is not deleting: the conversation leaves the strip and waits to be
+  // brought back, with the same record.
   it('closes a conversation into the history and brings it back', async () => {
     const projectId = await addProject()
     const workspace = await createWorkspace(projectId)

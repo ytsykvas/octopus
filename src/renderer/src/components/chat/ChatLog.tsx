@@ -205,12 +205,18 @@ export function ChatLog({
 }
 
 /*
- * What the library is handed, and none of it is rebuilt per render.
+ * What the library is handed, and what of it is rebuilt per render.
  *
  * It caches a message by the object it was given and the part renderers by the
  * object they came in, so an inline arrow or a fresh components map makes every
- * row re-render by itself. Measured: 592 ms for one update at a thousand turns
- * with them inline, 18 ms with them here.
+ * row re-render by itself: 592 ms for one update at a thousand turns with them
+ * inline, 18 ms with them hoisted. The converter, the part map and the message
+ * renderer below are module constants for that reason.
+ *
+ * The rows' own props are not: they travel in a context whose value is built
+ * per render, so every row re-renders when the log does — as they did before
+ * the library, and no worse. Holding that value still would need the callbacks
+ * stabilised first, which the pane does not do.
  */
 const asIs = (message: ThreadMessageLike): ThreadMessageLike => message
 
@@ -243,12 +249,11 @@ function BlockRow({ block }: { block: LogBlock }): React.JSX.Element | null {
   return <EntryRow entry={block.entry} {...rows} />
 }
 
+/** The part that carries a block: typed by what `toThreadMessages` puts in it. */
+const BlockPart = ({ data }: { data: LogBlock }): React.JSX.Element => <BlockRow block={data} />
+
 const BLOCK_PARTS = {
-  data: {
-    by_name: {
-      [BLOCK_PART]: ({ data }: { data: unknown }) => <BlockRow block={data as LogBlock} />
-    }
-  }
+  data: { by_name: { [BLOCK_PART]: BlockPart } }
 } satisfies NonNullable<React.ComponentProps<typeof MessagePrimitive.Parts>['components']>
 
 /** A turn: its blocks are its parts, in the order they happened. */
@@ -502,6 +507,7 @@ function AgentRow({
           files={event.files}
           insertions={event.insertions}
           deletions={event.deletions}
+          skipped={event.skippedLinks}
         />
       )
 
@@ -1178,6 +1184,38 @@ function ResetRow(): React.JSX.Element {
 }
 
 /**
+ * The line where the files were put back to an earlier message.
+ *
+ * In the quiet register of the compaction and reset lines: the working tree
+ * changed without the agent doing anything, and the edits drawn above would
+ * otherwise read as though they still stood.
+ */
+function FilesRewoundRow({
+  files,
+  insertions,
+  deletions,
+  skipped
+}: {
+  files: number
+  insertions: number
+  deletions: number
+  /** Files left alone because a link sat at their path. */
+  skipped: number
+}): React.JSX.Element {
+  const { t } = useTranslation()
+
+  return (
+    <p className="text-ink-faint border-line flex items-center gap-2 border-t pt-2 text-[11px]">
+      <Undo2 aria-hidden size={12} />
+      {t('chat.filesRewound', { files, insertions, deletions })}
+      {/* Said when it is so: "5 changed" alone reads as though everything the
+          checkpoint tracked had come back. */}
+      {skipped > 0 && ` ${t('chat.filesRewoundSkipped', { count: skipped })}`}
+    </p>
+  )
+}
+
+/**
  * The line where the agent's memory of this conversation thins out.
  *
  * `ResetRow`'s twin, and the same event with the memory partly kept rather than
@@ -1193,32 +1231,6 @@ function ResetRow(): React.JSX.Element {
  * The figures are drawn when they are there and the row stands without them:
  * the reader's question is whether this was compacted, not by how much.
  */
-/**
- * The line where the files were put back to an earlier message.
- *
- * In the quiet register of the compaction and reset lines: the working tree
- * changed without the agent doing anything, and the edits drawn above would
- * otherwise read as though they still stood.
- */
-function FilesRewoundRow({
-  files,
-  insertions,
-  deletions
-}: {
-  files: number
-  insertions: number
-  deletions: number
-}): React.JSX.Element {
-  const { t } = useTranslation()
-
-  return (
-    <p className="text-ink-faint border-line flex items-center gap-2 border-t pt-2 text-[11px]">
-      <Undo2 aria-hidden size={12} />
-      {t('chat.filesRewound', { files, insertions, deletions })}
-    </p>
-  )
-}
-
 function CompactedRow({
   preTokens,
   postTokens

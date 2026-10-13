@@ -1,5 +1,5 @@
 import { act, renderHook, waitFor } from '@testing-library/react'
-import { describe, expect, it, vi } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import type { MentionFile } from '@core/fileSearch.js'
 
@@ -8,15 +8,64 @@ import { useFileMentions } from './useFileMentions.js'
 const AUTH: MentionFile = { path: 'src/auth.ts', absolute: '/w/src/auth.ts' }
 const ROUTES: MentionFile = { path: 'src/routes.ts', absolute: '/w/src/routes.ts' }
 
+afterEach(() => {
+  vi.useRealTimers()
+})
+
 describe('searching for what is typed after an @', () => {
+  // Past the debounce on a clock the test holds, so the silence means
+  // something: asserted straight away the search is not due yet either way.
   it('asks for nothing while there is no mention', async () => {
+    vi.useFakeTimers()
     const search = vi.fn(() => Promise.resolve([AUTH]))
 
     const { result } = renderHook(() => useFileMentions(null, search))
-    await new Promise((resolve) => setTimeout(resolve, 150))
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(500)
+    })
 
     expect(search).not.toHaveBeenCalled()
     expect(result.current).toEqual([])
+  })
+
+  // The Enter pressed between a keystroke and its answer found no list to take
+  // and sent the message with the half-typed name in it.
+  it('keeps the last answer up while the next one is on its way', async () => {
+    const settle: Record<string, (files: MentionFile[]) => void> = {}
+    const search = vi.fn(
+      (query: string) =>
+        new Promise<MentionFile[]>((resolve) => {
+          settle[query] = resolve
+        })
+    )
+
+    const { result, rerender } = renderHook(
+      ({ query }: { query: string }) => useFileMentions(query, search),
+      { initialProps: { query: 'a' } }
+    )
+    await waitFor(() => {
+      expect(search).toHaveBeenCalledWith('a')
+    })
+    await act(async () => {
+      settle.a?.([AUTH])
+      await Promise.resolve()
+    })
+    expect(result.current).toEqual([AUTH])
+
+    rerender({ query: 'au' })
+
+    // Asked for and not answered yet — and still there.
+    expect(result.current).toEqual([AUTH])
+    await waitFor(() => {
+      expect(search).toHaveBeenCalledWith('au')
+    })
+    expect(result.current).toEqual([AUTH])
+
+    await act(async () => {
+      settle.au?.([ROUTES])
+      await Promise.resolve()
+    })
+    expect(result.current).toEqual([ROUTES])
   })
 
   it('answers with the files for the query', async () => {
