@@ -258,7 +258,15 @@ type — which is the only reason the second shape is known to exist.
 
 A **chat** is a conversation with one agent inside one workspace: `id`,
 `workspaceId`, `agent`, `sessionId`, `model`, `planModel`, `effort`,
-`workingMode`, `planMode`, `knownCommands`, `skillOverrides`, `createdAt`.
+`workingMode`, `planMode`, `knownCommands`, `skillOverrides`, `createdAt`,
+`closedAt`.
+
+**`closedAt` is null while a conversation is a tab** and the time it was closed
+otherwise. It defaults to null, so a record written before it existed loads as
+open — the reader throws on a mismatch rather than falling back, and the app
+would not open. A closed conversation keeps its record and its transcript until
+the workspace goes or it is one of the oldest past
+`MAX_CLOSED_CHATS_PER_WORKSPACE` (twenty).
 
 **`model` and `planModel` are two models for two jobs**, and their nulls do not
 mean the same thing. `model` null is the agent's own default. `planModel` null

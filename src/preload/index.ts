@@ -1,7 +1,14 @@
 import { contextBridge, ipcRenderer, webUtils } from 'electron'
 
 import type { AccountKind, AccountsStatus, GitHubAccount } from '@core/accounts.js'
-import type { AgentCommand, AgentModel, Chat, EffortChoice, WorkingMode } from '@core/chats.js'
+import type {
+  AgentCommand,
+  AgentModel,
+  Chat,
+  ClosedChat,
+  EffortChoice,
+  WorkingMode
+} from '@core/chats.js'
 import type {
   ChatEvent,
   ChatsChangedEvent,
@@ -190,9 +197,17 @@ const api = {
     fork: (chatId: string): Promise<Result<Chat>> =>
       ipcRenderer.invoke('chats:fork', chatId) as Promise<Result<Chat>>,
 
-    /** Ends a chat and discards it, history included; refuses the last one. */
+    /** Closes a chat's tab and keeps it, history included; refuses the last one. */
     close: (chatId: string): Promise<Result<void>> =>
       ipcRenderer.invoke('chats:close', chatId) as Promise<Result<void>>,
+
+    /** The closed chats of a workspace, most recently closed first. */
+    closed: (workspaceId: string): Promise<Result<ClosedChat[]>> =>
+      ipcRenderer.invoke('chats:closed', workspaceId) as Promise<Result<ClosedChat[]>>,
+
+    /** Brings a closed chat back as a tab; refuses past the cap. */
+    reopen: (chatId: string): Promise<Result<Chat>> =>
+      ipcRenderer.invoke('chats:reopen', chatId) as Promise<Result<Chat>>,
 
     /** Names a chat; an empty name gives it back the one it is given. */
     rename: (chatId: string, title: string): Promise<Result<void>> =>

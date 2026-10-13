@@ -337,16 +337,17 @@ They run in the same worktree with no locking between them, deliberately (§16).
 
 #### Shortcuts
 
-| Combination | Action              |
-| ----------- | ------------------- |
-| `⌘⇧N`       | new workspace       |
-| `⌘1`–`⌘9`   | switch project      |
-| `⌃1`–`⌃9`   | jump to a workspace |
-| `⌥1`–`⌥3`   | switch conversation |
-| `⌘T`        | new conversation    |
-| `⌘⇧D`       | changes             |
-| `⌘⇧P`       | pull request        |
-| `⇧⇥`        | next mode           |
+| Combination | Action                              |
+| ----------- | ----------------------------------- |
+| `⌘⇧N`       | new workspace                       |
+| `⌘1`–`⌘9`   | switch project                      |
+| `⌃1`–`⌃9`   | jump to a workspace                 |
+| `⌥1`–`⌥3`   | switch conversation                 |
+| `⌘T`        | new conversation                    |
+| `⌘⇧T`       | reopen the last closed conversation |
+| `⌘⇧D`       | changes                             |
+| `⌘⇧P`       | pull request                        |
+| `⇧⇥`        | next mode                           |
 
 `⇧⇥` works in the composer's field only, and goes round ask first → `Auto mode` → plan, the order Claude Code's own shift+tab uses; anywhere else in the window it still moves the focus back.
 

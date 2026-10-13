@@ -419,6 +419,8 @@ describe('channel table', () => {
     'chats:create',
     'chats:fork',
     'chats:close',
+    'chats:closed',
+    'chats:reopen',
     'chats:rename',
     'chats:history',
     'chats:send',
@@ -2081,6 +2083,30 @@ describe('the agent chat', () => {
       ok: true,
       value: [{ workspaceId: workspace.id }]
     })
+  })
+
+  // Closing is not deleting: the conversation leaves the strip and waits to be
+  // brought back, with the same record.
+  it('closes a conversation into the history and brings it back', async () => {
+    const projectId = await addProject()
+    const workspace = await createWorkspace(projectId)
+    await invoke('chats:open', workspace.id)
+    const created = (await invoke('chats:create', workspace.id)) as {
+      ok: true
+      value: { id: string }
+    }
+
+    await invoke('chats:close', created.value.id)
+    await expect(invoke('chats:closed', workspace.id)).resolves.toMatchObject({
+      ok: true,
+      value: [{ chat: { id: created.value.id }, preview: '' }]
+    })
+
+    await expect(invoke('chats:reopen', created.value.id)).resolves.toMatchObject({
+      ok: true,
+      value: { id: created.value.id, closedAt: null }
+    })
+    await expect(invoke('chats:closed', workspace.id)).resolves.toEqual({ ok: true, value: [] })
   })
 
   it('names a conversation, and refuses one longer than a tab can hold', async () => {

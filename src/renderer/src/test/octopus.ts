@@ -62,6 +62,8 @@ export function installOctopusStub(): Api {
       create: vi.fn(() => ok(chatFixture())),
       fork: vi.fn(() => ok(chatFixture())),
       close: vi.fn(() => ok(undefined)),
+      closed: vi.fn(() => ok([])),
+      reopen: vi.fn(() => ok(chatFixture())),
       rename: vi.fn(() => ok(undefined)),
       history: vi.fn(() => ok([])),
       send: vi.fn(() => ok(undefined)),
@@ -290,6 +292,7 @@ function chatFixture(): Chat {
     planMode: false,
     knownCommands: [],
     skillOverrides: {},
+    closedAt: null,
     createdAt: '2026-08-08T00:00:00.000Z'
   }
 }

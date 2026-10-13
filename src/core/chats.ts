@@ -68,6 +68,17 @@ export type ChatStatus = z.infer<typeof ChatStatusSchema>
  */
 export const MAX_CHATS_PER_WORKSPACE = 3
 
+/**
+ * How many closed conversations a workspace keeps to be reopened.
+ *
+ * Closing a tab used to throw the conversation away, and one stray click lost a
+ * whole session. Keeping them all would be a different leak — a record and a
+ * transcript per tab, for ever — so the oldest go once this many are waiting.
+ * Twenty is a week of closing a tab a day with room to spare, and small enough
+ * that the list can be read rather than searched.
+ */
+export const MAX_CLOSED_CHATS_PER_WORKSPACE = 20
+
 export type ChatErrorCode = 'tooManyChats' | 'lastChat' | 'nothingToFork' | 'forkFailed'
 
 /** A refused operation on a conversation, carrying a code the UI localises. */
@@ -615,10 +626,34 @@ export const ChatSchema = z.object({
    * coming back as a single row. `skillKey` is the one place that says so.
    */
   skillOverrides: z.record(z.string(), z.boolean()).default({}),
-  createdAt: z.iso.datetime()
+  createdAt: z.iso.datetime(),
+  /**
+   * When this conversation was closed, or null while it is open.
+   *
+   * A closed conversation keeps its record and its transcript so it can be
+   * reopened; everything that means "the tabs of this workspace" skips it.
+   *
+   * Defaulted rather than migrated, the convention `StateSchema` states: a
+   * record written before the field existed was open.
+   */
+  closedAt: z.iso.datetime().nullable().default(null)
 })
 
 export type Chat = z.infer<typeof ChatSchema>
+
+/** A closed conversation as the history list draws it. */
+export interface ClosedChat {
+  readonly chat: Chat
+  /** When it was closed; what the list says beside its opening message. */
+  readonly closedAt: string
+  /** Its opening message on one line, empty if it never had one. */
+  readonly preview: string
+}
+
+/** Whether a conversation is one of its workspace's tabs rather than history. */
+export function isOpenChat(chat: { readonly closedAt: string | null }): boolean {
+  return chat.closedAt === null
+}
 
 /**
  * A message as accepted from the renderer.
@@ -704,6 +739,7 @@ export function newChat(workspaceId: string, options: NewChatOptions): Chat {
     // has been told nothing and follows the defaults, so a skill switched off
     // for the project after this chat was opened is off here too.
     skillOverrides: {},
+    closedAt: null,
     createdAt: options.createdAt
   }
 }
@@ -753,6 +789,7 @@ export function forkChat(source: Chat, options: ForkChatOptions): Chat {
     effort: source.effort,
     workingMode: source.workingMode,
     planMode: false,
+    closedAt: null,
     knownCommands: source.knownCommands,
     // Carried across with the model and the effort, and for the same reason: a
     // fork is the same work in the same place, and a skill switched off

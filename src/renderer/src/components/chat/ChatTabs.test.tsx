@@ -4,7 +4,7 @@ import { describe, expect, it, vi } from 'vitest'
 
 import { chat } from '../../test/chat.js'
 import type { ChatTab, ChatTabsController } from '../../hooks/useChatTabs.js'
-import { MAX_CHAT_TITLE } from '@core/chats.js'
+import { type ClosedChat, MAX_CHAT_TITLE } from '@core/chats.js'
 
 import { ChatTabs } from './ChatTabs.js'
 
@@ -30,6 +30,10 @@ function controller(overrides: Partial<ChatTabsController> = {}): ChatTabsContro
     create: vi.fn(() => Promise.resolve()),
     fork: vi.fn(() => Promise.resolve()),
     close: vi.fn(() => Promise.resolve()),
+    history: [],
+    refreshHistory: vi.fn(() => Promise.resolve()),
+    reopen: vi.fn(() => Promise.resolve()),
+    reopenLast: vi.fn(() => Promise.resolve()),
     rename: vi.fn(() => Promise.resolve()),
     editingKey: null,
     setEditingKey: vi.fn(),
@@ -287,5 +291,93 @@ describe('what a tab’s menu offers', () => {
     )
 
     expect(screen.queryByRole('button', { name: 'Claude 1' })).not.toBeInTheDocument()
+  })
+})
+
+describe('the history of closed conversations', () => {
+  const closed = (id: string, preview: string): ClosedChat => ({
+    chat: chat({ id, closedAt: '2026-08-20T10:00:00.000Z' }),
+    closedAt: '2026-08-20T10:00:00.000Z',
+    preview
+  })
+
+  const historyButton = (): HTMLElement =>
+    screen.getByRole('button', { name: 'Closed conversations' })
+
+  // Read when opened rather than kept live, because each entry costs a read of
+  // its transcript.
+  it('is read when it is opened', async () => {
+    const user = userEvent.setup()
+    const refreshHistory = vi.fn(() => Promise.resolve())
+    render(<ChatTabs tabs={controller({ refreshHistory })} />)
+
+    expect(refreshHistory).not.toHaveBeenCalled()
+    await user.click(historyButton())
+
+    expect(refreshHistory).toHaveBeenCalledOnce()
+  })
+
+  it('names each conversation by what was said first', async () => {
+    const user = userEvent.setup()
+    render(
+      <ChatTabs
+        tabs={controller({
+          history: [closed('chat-8', 'fix the login bug'), closed('chat-7', '')]
+        })}
+      />
+    )
+
+    await user.click(historyButton())
+
+    expect(screen.getByRole('menuitem', { name: /fix the login bug/ })).toBeInTheDocument()
+    expect(
+      screen.getByRole('menuitem', { name: /Conversation with no messages/ })
+    ).toBeInTheDocument()
+  })
+
+  it('brings one back when it is chosen', async () => {
+    const user = userEvent.setup()
+    const reopen = vi.fn(() => Promise.resolve())
+    render(
+      <ChatTabs tabs={controller({ history: [closed('chat-8', 'fix the login bug')], reopen })} />
+    )
+
+    await user.click(historyButton())
+    await user.click(screen.getByRole('menuitem', { name: /fix the login bug/ }))
+
+    expect(reopen).toHaveBeenCalledExactlyOnceWith('chat-8')
+  })
+
+  // Three tabs are open. The row says why it cannot be chosen rather than
+  // failing after the click.
+  it('cannot be chosen from while the strip is full, and says why', async () => {
+    const user = userEvent.setup()
+    const reopen = vi.fn(() => Promise.resolve())
+    render(
+      <ChatTabs
+        tabs={controller({
+          canCreate: false,
+          history: [closed('chat-8', 'fix the login bug')],
+          reopen
+        })}
+      />
+    )
+
+    await user.click(historyButton())
+
+    expect(screen.getByText('Close a tab first — three are open')).toBeInTheDocument()
+    expect(screen.getByRole('menuitem', { name: /fix the login bug/ })).toBeDisabled()
+  })
+
+  it('says when there is nothing, and asks again if the row is chosen', async () => {
+    const user = userEvent.setup()
+    const refreshHistory = vi.fn(() => Promise.resolve())
+    render(<ChatTabs tabs={controller({ refreshHistory })} />)
+
+    await user.click(historyButton())
+    refreshHistory.mockClear()
+    await user.click(screen.getByRole('menuitem', { name: 'Nothing closed yet' }))
+
+    expect(refreshHistory).toHaveBeenCalledOnce()
   })
 })

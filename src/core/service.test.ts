@@ -28,6 +28,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import type { CommandExec } from './accounts.js'
 import { ABANDONED, DENIED, type QueryFn, READ_ONLY_TOOLS } from './agent.js'
+import { MAX_CLOSED_CHATS_PER_WORKSPACE } from './chats.js'
 import type { RemoteRepository } from './github.js'
 import { type GitOptions, gitIn } from './git.js'
 import { WORKSPACE_NAMES } from './names.js'
@@ -7296,7 +7297,9 @@ describe('the agent chat', () => {
   })
 
   describe('closing a conversation', () => {
-    it('ends the session, discards the history and drops the record', async () => {
+    // A click that was a slip used to cost the whole conversation. Closing a
+    // tab ends its session and takes it out of the strip, and keeps the rest.
+    it('ends the session, keeps the history and takes the tab out of the strip', async () => {
       const { service, workspaceId } = await withWorkspace()
       const first = await service.openChat(workspaceId)
       const second = await service.createChat(workspaceId)
@@ -7305,8 +7308,122 @@ describe('the agent chat', () => {
       await service.closeChat(first.id)
 
       expect(agent().closed()).toBe(1)
-      await expect(service.chatHistory(first.id)).resolves.toEqual([])
+      await expect(service.chatHistory(first.id)).resolves.toMatchObject([
+        { role: 'user', text: 'go' }
+      ])
       expect(service.listChats(workspaceId).map((chat) => chat.id)).toEqual([second.id])
+      const closed = await service.listClosedChats(workspaceId)
+      expect(closed.map(({ chat }) => chat.id)).toEqual([first.id])
+      // What it is recognised by in the history list: the opening message.
+      expect(closed[0]?.preview).toBe('go')
+    })
+
+    // Closed mid-turn, the record must not come back claiming to be working.
+    it('puts a running conversation down to idle when it is closed', async () => {
+      const { service, workspaceId } = await withWorkspace()
+      const first = await service.openChat(workspaceId)
+      await service.createChat(workspaceId)
+      await service.sendToChat(first.id, 'go')
+
+      await service.closeChat(first.id)
+
+      const [closed] = await service.listClosedChats(workspaceId)
+      expect(closed?.chat.status).toBe('idle')
+    })
+
+    it('lists the most recently closed first', async () => {
+      vi.useFakeTimers({ toFake: ['Date'] })
+      try {
+        const { service, workspaceId } = await withWorkspace()
+        const first = await service.openChat(workspaceId)
+        const second = await service.createChat(workspaceId)
+        await service.createChat(workspaceId)
+
+        vi.setSystemTime(new Date('2026-08-20T10:00:00.000Z'))
+        await service.closeChat(first.id)
+        vi.setSystemTime(new Date('2026-08-20T11:00:00.000Z'))
+        await service.closeChat(second.id)
+
+        const closed = await service.listClosedChats(workspaceId)
+        expect(closed.map(({ chat }) => chat.id)).toEqual([second.id, first.id])
+      } finally {
+        vi.useRealTimers()
+      }
+    })
+
+    it('reopens a closed conversation with its history and its session', async () => {
+      const { service, workspaceId } = await withWorkspace()
+      const first = await service.openChat(workspaceId)
+      await service.createChat(workspaceId)
+      await service.sendToChat(first.id, 'go')
+      await service.closeChat(first.id)
+
+      const reopened = await service.reopenChat(first.id)
+
+      expect(reopened.closedAt).toBeNull()
+      expect(service.listChats(workspaceId).map((chat) => chat.id)).toContain(first.id)
+      await expect(service.listClosedChats(workspaceId)).resolves.toEqual([])
+      await expect(service.chatHistory(first.id)).resolves.toMatchObject([
+        { role: 'user', text: 'go' }
+      ])
+    })
+
+    // The cap counts tabs, and a conversation coming back is one more.
+    it('refuses to reopen into a full workspace', async () => {
+      const { service, workspaceId } = await withWorkspace()
+      const first = await service.openChat(workspaceId)
+      await service.createChat(workspaceId)
+      await service.createChat(workspaceId)
+      await service.closeChat(first.id)
+      await service.createChat(workspaceId)
+
+      await expect(service.reopenChat(first.id)).rejects.toMatchObject({
+        name: 'ChatError',
+        code: 'tooManyChats'
+      })
+      await expect(service.listClosedChats(workspaceId)).resolves.toHaveLength(1)
+    })
+
+    it('answers with the conversation itself when it is already open', async () => {
+      const { service, workspaceId } = await withWorkspace()
+      const only = await service.openChat(workspaceId)
+
+      await expect(service.reopenChat(only.id)).resolves.toMatchObject({ id: only.id })
+    })
+
+    // A record and a transcript per closed tab, for ever, would be a leak of
+    // its own. The oldest go once the limit is passed — records and files both.
+    it('discards the oldest closed conversations past the keep limit', async () => {
+      const { service, workspaceId } = await withWorkspace()
+      const oldest = await service.openChat(workspaceId)
+      await service.sendToChat(oldest.id, 'the first one')
+
+      let previous = oldest
+      for (let closed = 0; closed <= MAX_CLOSED_CHATS_PER_WORKSPACE; closed += 1) {
+        const next = await service.createChat(workspaceId)
+        await service.closeChat(previous.id)
+        previous = next
+      }
+
+      const kept = await service.listClosedChats(workspaceId)
+      expect(kept).toHaveLength(MAX_CLOSED_CHATS_PER_WORKSPACE)
+      expect(kept.map(({ chat }) => chat.id)).not.toContain(oldest.id)
+      await expect(service.chatHistory(oldest.id)).resolves.toEqual([])
+    })
+
+    // History is the workspace's, and goes with it — the closed ones included,
+    // which `chatsOfWorkspace` no longer reaches.
+    it('discards the closed conversations with their workspace', async () => {
+      const { service, workspaceId } = await withWorkspace()
+      const first = await service.openChat(workspaceId)
+      await service.createChat(workspaceId)
+      await service.sendToChat(first.id, 'go')
+      await service.closeChat(first.id)
+
+      await service.removeWorkspaceById(workspaceId, { force: true })
+
+      await expect(service.chatHistory(first.id)).resolves.toEqual([])
+      await expect(service.listClosedChats(workspaceId)).resolves.toEqual([])
     })
 
     it('leaves the other conversations’ history alone', async () => {

@@ -94,8 +94,20 @@ alone, and two answers to one question is a disagreement rather than a
 convenience. An item that could not work is absent rather than disabled: nothing
 to continue before a session has run, and the last conversation cannot be closed
 at all — a workspace with none has no way back to one but the first message, and
-emptying the only one is `/clear`. Closing a conversation that has said
-something asks first, because it deletes a transcript nothing can bring back.
+emptying the only one is `/clear`.
+
+**Closing keeps the conversation, so it does not ask.** It used to delete the
+transcript, and a confirmation was the only protection a slip had; now the tab
+leaves the strip and the conversation waits in the history, which is the
+protection, and a dialog saying "this cannot be brought back" would be untrue.
+The clock beside the new-tab button opens that history, newest first, each entry
+named by its opening message — the automatic name is a place in a strip it no
+longer holds, and "Claude 2" would tell nobody which one it was. Choosing one
+reopens it with its history and its session. `⌘⇧T` reopens the one closed last,
+the browser's key for the same slip. At the cap the entries cannot be chosen
+and say why, rather than failing after the click. The list is read when opened,
+not kept live: each entry costs a read of its transcript. Twenty are kept per
+workspace; closing one more discards the oldest.
 
 **Every conversation stays mounted** while its workspace is open, hidden with a
 class the way the right pane hides its tabs — one that unmounted would lose its

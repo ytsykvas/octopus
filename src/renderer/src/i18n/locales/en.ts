@@ -760,11 +760,13 @@ export const en = {
     forkTab: 'Continue in a new conversation',
     forkTabHint: 'The agent keeps what it remembers of this one.',
     closeTab: 'Close conversation',
-    closeTabTitle: 'Close this conversation?',
-    closeTabMessage: '{{name}} and everything said in it.',
-    closeTabDetail: 'The agent’s memory of it goes too, and cannot be brought back.',
-    closeTabConfirm: 'Close',
-    closeTabCancel: 'Cancel',
+    /* The history of what was closed. Closing keeps a conversation, so this is
+       how one comes back — and ⌘⇧T brings back the last. */
+    history: 'Closed conversations',
+    historyEmpty: 'Nothing closed yet',
+    historyUntitled: 'Conversation with no messages',
+    historyClosed: 'Closed {{when}}',
+    historyFull: 'Close a tab first — three are open',
 
     placeholder: 'Ask the agent to do something in this workspace…',
     send: 'Send',

@@ -574,10 +574,23 @@ workspace nobody has spoken to gets no record from it being looked at.
 asks for. A flag on the first would have made every caller say which of the two
 it meant.
 
-`closeChat` ends a conversation and discards it, and refuses the last one of a
-workspace: emptying the only conversation is `/clear`, which does it without
-leaving the pane with nothing to draw — and does it with a confirmation, which a
-second route through the tab's menu would not have carried.
+`closeChat` ends a conversation's session and **keeps** it: the record gets a
+`closedAt` and its `status` goes back to `idle`, and the transcript stays where
+it is. It refuses the last open conversation of a workspace: emptying the only
+conversation is `/clear`, which does it without leaving the pane with nothing to
+draw — and does it with a confirmation, which a second route through the tab's
+menu would not have carried.
+
+A closed conversation is invisible to everything that means "the tabs of this
+workspace" — `chatsOfWorkspace` skips it, so the cap, the strip, the workspace's
+status and `openChat` never see it. Whatever has to reach the history as well —
+removing a workspace or a project, which must discard the transcripts — asks
+`allChatsOfWorkspace`; using the first there would have left every closed
+conversation's file behind with nothing pointing at it. `reopenChat` checks the
+cap inside the commit, as `addChatCapped` does. Past
+`MAX_CLOSED_CHATS_PER_WORKSPACE` the oldest are removed, record and transcript,
+after the commit and swallowing their own failure, for the reason
+`discardHistories` gives.
 
 The sequence a closing conversation goes through — abandon its questions and its
 edits in flight, drop its `clearRequests` and `clearedTurns`, close the session —

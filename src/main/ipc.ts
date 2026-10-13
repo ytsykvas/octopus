@@ -816,6 +816,14 @@ export function registerIpc(
 
   host.handle('chats:close', (_event, chatId: string) => attempt(() => service.closeChat(chatId)))
 
+  // Closing keeps the conversation, so these two are how it comes back. Ids
+  // only, proved against the store like the ones above.
+  host.handle('chats:closed', (_event, workspaceId: string) =>
+    attempt(() => service.listClosedChats(workspaceId))
+  )
+
+  host.handle('chats:reopen', (_event, chatId: string) => attempt(() => service.reopenChat(chatId)))
+
   // The one of the four that carries something the user typed, so it is parsed
   // rather than trusted — it is bounded, and the bound is what stops a tab
   // carrying a pasted paragraph.

@@ -1,4 +1,4 @@
-import { GitBranchPlus, MoreHorizontal, Pencil, Plus, Trash2 } from 'lucide-react'
+import { GitBranchPlus, History, MoreHorizontal, Pencil, Plus, Trash2 } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 
 import { AGENT_NAMES, MAX_CHAT_TITLE } from '@core/chats.js'
@@ -54,7 +54,72 @@ export function ChatTabs({ tabs }: ChatTabsProps): React.JSX.Element {
           <Plus aria-hidden size={13} />
         </button>
       )}
+
+      <HistoryMenu tabs={tabs} />
     </nav>
+  )
+}
+
+/**
+ * What was closed, and the way back to it.
+ *
+ * Closing a tab keeps the conversation, so this is where it waits. Each entry is
+ * named by its opening message — the automatic name is a place in a strip it no
+ * longer holds, and "Claude 2" would tell nobody which one it was.
+ *
+ * Read when opened rather than kept live: the list costs a read of each
+ * transcript, which is not worth paying for while nobody is looking at it.
+ */
+function HistoryMenu({ tabs }: ChatTabsProps): React.JSX.Element {
+  const { t, i18n } = useTranslation()
+
+  const when = (closedAt: string): string =>
+    new Date(closedAt).toLocaleString(i18n.language, { dateStyle: 'medium', timeStyle: 'short' })
+
+  const actions =
+    tabs.history.length === 0
+      ? [
+          {
+            id: 'empty',
+            label: t('chat.historyEmpty'),
+            // Asking again is the one thing a row that says "nothing" can do:
+            // the list is read on opening, and a conversation closed in another
+            // window since would otherwise be invisible until the next open.
+            onSelect: () => void tabs.refreshHistory()
+          }
+        ]
+      : tabs.history.map(({ chat, closedAt, preview }) => ({
+          id: chat.id,
+          label: preview === '' ? t('chat.historyUntitled') : preview,
+          // The reason it cannot be chosen is worth more than the time, and
+          // the time is only ever missing from a row nobody can pick anyway.
+          description: tabs.canCreate
+            ? t('chat.historyClosed', { when: when(closedAt) })
+            : t('chat.historyFull'),
+          disabled: !tabs.canCreate,
+          onSelect: () => void tabs.reopen(chat.id)
+        }))
+
+  return (
+    <DropdownMenu
+      align="left"
+      actions={actions}
+      trigger={({ onClick, open }) => (
+        <button
+          type="button"
+          onClick={(event) => {
+            void tabs.refreshHistory()
+            onClick(event)
+          }}
+          title={t('chat.history')}
+          aria-label={t('chat.history')}
+          aria-expanded={open}
+          className="text-ink-faint hover:text-ink focus-ring ml-0.5 flex size-6 items-center justify-center rounded-[var(--radius-control)] transition-colors"
+        >
+          <History aria-hidden size={13} />
+        </button>
+      )}
+    />
   )
 }
 

@@ -55,12 +55,7 @@ function ChatPane({
   defaultPlanModel = null,
   onError = vi.fn()
 }: PaneProps): React.JSX.Element {
-  const tabs = useChatTabs(
-    target.id,
-    () => Promise.resolve({ confirmed: true, checked: false }),
-    vi.fn(),
-    onError
-  )
+  const tabs = useChatTabs(target.id, vi.fn(), onError)
 
   return (
     <Chat

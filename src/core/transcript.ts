@@ -61,6 +61,28 @@ export async function readTranscript(chatId: ChatId, root?: string): Promise<Cha
   return entries
 }
 
+/** How much of a conversation's first message a list of them shows. */
+export const MAX_PREVIEW = 80
+
+/**
+ * The first thing the user said, as one short line — what a closed
+ * conversation is recognised by.
+ *
+ * A name is rarely given and the automatic one is a place in a strip it no
+ * longer holds, so "Claude 2" tells nobody which conversation it was. The
+ * opening message does. Empty for one that never had one.
+ */
+export async function previewOf(chatId: ChatId, root?: string): Promise<string> {
+  for (const entry of await readTranscript(chatId, root)) {
+    if (entry.role !== 'user') continue
+
+    const line = entry.text.replace(/\s+/g, ' ').trim()
+    return line.length > MAX_PREVIEW ? `${line.slice(0, MAX_PREVIEW - 1)}…` : line
+  }
+
+  return ''
+}
+
 /**
  * Copies one chat's history onto another — what forking a conversation needs.
  *

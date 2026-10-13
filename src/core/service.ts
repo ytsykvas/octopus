@@ -34,6 +34,7 @@ import {
   type AgentModel,
   type Chat,
   ChatError,
+  type ClosedChat,
   type ChatStatus,
   DEFAULT_AGENT,
   DEFAULT_EFFORT,
@@ -43,6 +44,7 @@ import {
   forkChat as forkChatRecord,
   isClearCommand,
   isUsageCommand,
+  isOpenChat,
   MAX_CHATS_PER_WORKSPACE,
   newChat,
   sessionMode,
@@ -195,6 +197,7 @@ import {
   appendEntry,
   type ChatEntry,
   copyTranscript,
+  previewOf,
   readTranscript,
   removeTranscript
 } from './transcript.js'
@@ -234,7 +237,10 @@ import {
   addChat,
   addProject,
   addWorkspace,
+  allChatsOfWorkspace,
   chatsOfWorkspace,
+  closedChatsOfWorkspace,
+  expiredClosedChats,
   findChat,
   findProject,
   loadState,
@@ -995,12 +1001,28 @@ export interface OctopusService {
    */
   renameChat(chatId: string, title: string): Promise<void>
   /**
-   * Ends a conversation and discards it, transcript included.
+   * Closes a conversation's tab and keeps it, transcript included, to reopen.
    *
-   * Refuses the last one of a workspace: throwing away the only conversation is
-   * `/clear`, which does it without leaving the workspace without one.
+   * The session ends; the record and the history stay, so a click that was a
+   * slip costs a tab rather than a conversation. Past
+   * `MAX_CLOSED_CHATS_PER_WORKSPACE` the oldest are discarded for good.
+   *
+   * Refuses the last one of a workspace: closing the only conversation would
+   * leave the workspace with none, and emptying it is `/clear`.
    */
   closeChat(chatId: string): Promise<void>
+  /**
+   * The workspace's closed conversations, most recently closed first, each with
+   * the opening message it is recognised by.
+   */
+  listClosedChats(workspaceId: string): Promise<ClosedChat[]>
+  /**
+   * Brings a closed conversation back as a tab.
+   *
+   * Refuses past the cap like opening a new one does: a workspace with three
+   * tabs has to close one first.
+   */
+  reopenChat(chatId: string): Promise<Chat>
   /** Every chat of a workspace, in the order they were opened. */
   listChats(workspaceId: string): readonly Chat[]
   /** Everything said in a chat, as it will be redrawn after a restart. */
@@ -3565,7 +3587,7 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
           // Read before the closing below, which leaves the records in place
           // but is the last moment the chats are reachable from the state that
           // is about to be rewritten.
-          closing.push(...chatsOfWorkspace(state, workspace.id))
+          closing.push(...allChatsOfWorkspace(state, workspace.id))
 
           // The same closing `removeWorkspaceById` does, and for the same
           // reason: a session outliving its worktree holds a child process
@@ -3628,7 +3650,7 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
       const worktrees = await listWorktrees(makeExec(project.repoPath)).catch(() => null)
       const counts = await countChanges(stored, await baseRefOf(project), makeExec)
 
-      return reconcile(stored, worktrees, counts, state.chats)
+      return reconcile(stored, worktrees, counts, state.chats.filter(isOpenChat))
     },
 
     async createWorkspaceIn(projectId) {
@@ -3732,7 +3754,7 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
       // Captured before the chats are closed, because the records go with the
       // workspace at the commit below and the transcripts are discarded after
       // it — by which point there is nothing left to read the ids off.
-      const closing = chatsOfWorkspace(state, workspaceId)
+      const closing = allChatsOfWorkspace(state, workspaceId)
 
       // Before the worktree goes: the session's working directory is about to
       // stop existing, and a live agent would keep a child process pointed at
@@ -4088,11 +4110,56 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
 
       await closeOneChat(chat)
       // Through `commitChats` rather than a plain commit: the workspace's
-      // status is derived from its conversations, and one of them has gone —
-      // closing the tab that was running leaves the workspace idle, and the
-      // list has to hear about it.
-      await commitChats(chat.workspaceId, (current) => removeChat(current, chatId))
-      await discardHistories([chat])
+      // status is derived from its conversations, and one of them has left the
+      // tabs — closing the tab that was running leaves the workspace idle, and
+      // the list has to hear about it.
+      //
+      // Kept rather than removed. `status` goes back to idle with the session,
+      // or a conversation closed mid-turn would reopen claiming to be working.
+      let expired: Chat[] = []
+      await commitChats(chat.workspaceId, (current) => {
+        const closed = updateChat(current, chatId, {
+          closedAt: new Date().toISOString(),
+          status: 'idle'
+        })
+        expired = expiredClosedChats(closed, chat.workspaceId)
+        return expired.reduce((next, gone) => removeChat(next, gone.id), closed)
+      })
+
+      // Only the records past the keep limit lose their history, and after the
+      // commit, for the reason `discardHistories` gives.
+      await discardHistories(expired)
+    },
+
+    listClosedChats(workspaceId) {
+      return Promise.all(
+        closedChatsOfWorkspace(state, workspaceId).map(async ({ chat, closedAt }) => ({
+          chat,
+          closedAt,
+          preview: await previewOf(chat.id, dataRoot)
+        }))
+      )
+    },
+
+    async reopenChat(chatId) {
+      const chat = requireChat(chatId)
+      if (isOpenChat(chat)) return chat
+
+      await commitChats(chat.workspaceId, (current) => {
+        // Inside the commit, like `addChatCapped`: two reopenings landing
+        // together would both see room against two tabs.
+        if (chatsOfWorkspace(current, chat.workspaceId).length >= MAX_CHATS_PER_WORKSPACE) {
+          throw new ChatError(
+            'tooManyChats',
+            { limit: String(MAX_CHATS_PER_WORKSPACE) },
+            `Workspace ${chat.workspaceId} already holds ${String(MAX_CHATS_PER_WORKSPACE)} chats.`
+          )
+        }
+
+        return updateChat(current, chatId, { closedAt: null })
+      })
+
+      return requireChat(chatId)
     },
 
     listChats(workspaceId) {

@@ -315,6 +315,8 @@ describe('channel names', () => {
     ['chats.create', () => method('chats', 'create')('w' as never), 'chats:create'],
     ['chats.fork', () => method('chats', 'fork')('c' as never), 'chats:fork'],
     ['chats.close', () => method('chats', 'close')('c' as never), 'chats:close'],
+    ['chats.closed', () => method('chats', 'closed')('w' as never), 'chats:closed'],
+    ['chats.reopen', () => method('chats', 'reopen')('c' as never), 'chats:reopen'],
     [
       'chats.rename',
       () => method('chats', 'rename')('c' as never, 'auth' as never),

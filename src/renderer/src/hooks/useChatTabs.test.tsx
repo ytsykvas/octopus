@@ -1,20 +1,15 @@
 import { act, renderHook, waitFor } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
 
-import type { Chat } from '@core/chats.js'
+import type { Chat, ClosedChat } from '@core/chats.js'
 
-import type { ConfirmRequest, ConfirmResult } from './useConfirm.js'
 import { chat, emitChatsChanged, emitChatStatus, givenChats } from '../test/chat.js'
 import { octopus } from '../test/octopus.js'
 import { type ChatTab, useChatTabs } from './useChatTabs.js'
 
 const WORKSPACE = 'planner/anna'
 
-const agreed = (): Promise<ConfirmResult> => Promise.resolve({ confirmed: true, checked: false })
-const refused = (): Promise<ConfirmResult> => Promise.resolve({ confirmed: false, checked: false })
-
 interface Options {
-  readonly confirm?: (request: ConfirmRequest) => Promise<ConfirmResult>
   readonly onChats?: (workspaceId: string, tabs: readonly ChatTab[]) => void
   readonly onError?: (message: string | null) => void
 }
@@ -29,13 +24,7 @@ function open(
   const initialProps: Shown = { id: WORKSPACE }
 
   return renderHook(
-    ({ id }: Shown) =>
-      useChatTabs(
-        id,
-        options.confirm ?? agreed,
-        options.onChats ?? vi.fn(),
-        options.onError ?? vi.fn()
-      ),
+    ({ id }: Shown) => useChatTabs(id, options.onChats ?? vi.fn(), options.onError ?? vi.fn()),
     { initialProps }
   )
 }
@@ -53,7 +42,7 @@ describe('a workspace nobody has spoken to', () => {
   })
 
   it('asks for nothing at all without a workspace', () => {
-    renderHook(() => useChatTabs(null, agreed, vi.fn(), vi.fn()))
+    renderHook(() => useChatTabs(null, vi.fn(), vi.fn()))
 
     expect(octopus().chats.list).not.toHaveBeenCalled()
   })
@@ -522,11 +511,22 @@ describe('which tab is showing', () => {
   })
 })
 
+function closedEntry(id: string, preview = 'fix the login bug'): ClosedChat {
+  return {
+    chat: chat({ id, closedAt: '2026-08-20T10:00:00.000Z' }),
+    closedAt: '2026-08-20T10:00:00.000Z',
+    preview
+  }
+}
+
 describe('closing a conversation', () => {
-  it('asks first when there is a conversation to lose', async () => {
-    const confirm = vi.fn(agreed)
+  /*
+   * No question. Closing moves the conversation to the history, so a slip costs
+   * a tab, and a dialog saying it "cannot be brought back" would be untrue.
+   */
+  it('closes without asking, even a conversation that has run', async () => {
     givenChats([chat({ sessionId: 'sess-1' }), chat({ id: 'chat-2' })])
-    const { result } = open({ confirm })
+    const { result } = open()
     await waitFor(() => {
       expect(result.current.tabs).toHaveLength(2)
     })
@@ -536,17 +536,17 @@ describe('closing a conversation', () => {
       await result.current.close('chat-1')
     })
 
-    expect(confirm).toHaveBeenCalledWith(
-      expect.objectContaining({ message: 'Claude 1 and everything said in it.' })
-    )
     expect(octopus().chats.close).toHaveBeenCalledWith('chat-1')
+    expect(result.current.tabs).toHaveLength(1)
   })
 
-  // A conversation that has never run has no transcript, and nothing to lose.
-  it('closes a conversation that never started without asking', async () => {
-    const confirm = vi.fn(agreed)
+  it('has the history up to date once it is closed', async () => {
     givenChats([chat(), chat({ id: 'chat-2' })])
-    const { result } = open({ confirm })
+    vi.mocked(octopus().chats.closed).mockResolvedValue({
+      ok: true,
+      value: [closedEntry('chat-1')]
+    })
+    const { result } = open()
     await waitFor(() => {
       expect(result.current.tabs).toHaveLength(2)
     })
@@ -556,23 +556,7 @@ describe('closing a conversation', () => {
       await result.current.close('chat-1')
     })
 
-    expect(confirm).not.toHaveBeenCalled()
-    expect(octopus().chats.close).toHaveBeenCalledWith('chat-1')
-  })
-
-  it('leaves the tab alone when the question is answered no', async () => {
-    givenChats([chat({ sessionId: 'sess-1' }), chat({ id: 'chat-2' })])
-    const { result } = open({ confirm: refused })
-    await waitFor(() => {
-      expect(result.current.tabs).toHaveLength(2)
-    })
-
-    await act(async () => {
-      await result.current.close('chat-1')
-    })
-
-    expect(octopus().chats.close).not.toHaveBeenCalled()
-    expect(result.current.tabs).toHaveLength(2)
+    expect(result.current.history.map(({ chat: closed }) => closed.id)).toEqual(['chat-1'])
   })
 
   it('says so when the core refuses', async () => {
@@ -589,6 +573,266 @@ describe('closing a conversation', () => {
     })
 
     expect(onError).toHaveBeenCalledWith(expect.stringContaining('the last one'))
+  })
+
+  it('drops a close answered for a workspace no longer shown', async () => {
+    const onChats = vi.fn()
+    givenChats([chat(), chat({ id: 'chat-2' })])
+    let settle: ((value: { ok: true; value: undefined }) => void) | null = null
+    vi.mocked(octopus().chats.close).mockReturnValue(
+      new Promise((resolve) => {
+        settle = resolve
+      })
+    )
+    const { result, rerender } = open({ onChats })
+    await waitFor(() => {
+      expect(result.current.tabs).toHaveLength(2)
+    })
+
+    const closing = result.current.close('chat-1')
+    rerender({ id: 'planner/bob' })
+    onChats.mockClear()
+
+    await act(async () => {
+      settle?.({ ok: true, value: undefined })
+      await closing
+    })
+
+    expect(onChats).not.toHaveBeenCalledWith(WORKSPACE, expect.anything())
+  })
+})
+
+describe('the history of closed conversations', () => {
+  it('is read when asked for, and starts empty', async () => {
+    vi.mocked(octopus().chats.closed).mockResolvedValue({
+      ok: true,
+      value: [closedEntry('chat-9', 'add a retry')]
+    })
+    givenChats([chat()])
+    const { result } = open()
+    await waitFor(() => {
+      expect(result.current.tabs[0]?.id).toBe('chat-1')
+    })
+    expect(result.current.history).toEqual([])
+    expect(octopus().chats.closed).not.toHaveBeenCalled()
+
+    await act(async () => {
+      await result.current.refreshHistory()
+    })
+
+    expect(result.current.history).toMatchObject([{ preview: 'add a retry' }])
+  })
+
+  it('says so when it cannot be read', async () => {
+    const onError = vi.fn()
+    vi.mocked(octopus().chats.closed).mockResolvedValue({ ok: false, error: 'unreadable' })
+    givenChats([chat()])
+    const { result } = open({ onError })
+    await waitFor(() => {
+      expect(result.current.tabs[0]?.id).toBe('chat-1')
+    })
+
+    await act(async () => {
+      await result.current.refreshHistory()
+    })
+
+    expect(onError).toHaveBeenCalledWith(expect.stringContaining('unreadable'))
+  })
+
+  // Another workspace's closed conversation would be offered here, and
+  // reopening it would fail against a workspace it does not belong to.
+  it('is dropped when the workspace changes', async () => {
+    vi.mocked(octopus().chats.closed).mockResolvedValue({
+      ok: true,
+      value: [closedEntry('chat-9')]
+    })
+    givenChats([chat()])
+    const { result, rerender } = open()
+    await waitFor(() => {
+      expect(result.current.tabs[0]?.id).toBe('chat-1')
+    })
+    await act(async () => {
+      await result.current.refreshHistory()
+    })
+    expect(result.current.history).toHaveLength(1)
+
+    vi.mocked(octopus().chats.closed).mockResolvedValue({ ok: true, value: [] })
+    rerender({ id: 'planner/bob' })
+
+    await waitFor(() => {
+      expect(result.current.history).toEqual([])
+    })
+  })
+
+  it('drops a reading answered for a workspace no longer shown', async () => {
+    let settle: ((value: { ok: true; value: ClosedChat[] }) => void) | null = null
+    vi.mocked(octopus().chats.closed).mockReturnValue(
+      new Promise((resolve) => {
+        settle = resolve
+      })
+    )
+    givenChats([chat()])
+    const { result, rerender } = open()
+    await waitFor(() => {
+      expect(result.current.tabs[0]?.id).toBe('chat-1')
+    })
+
+    const reading = result.current.refreshHistory()
+    rerender({ id: 'planner/bob' })
+
+    await act(async () => {
+      settle?.({ ok: true, value: [closedEntry('chat-9')] })
+      await reading
+    })
+
+    expect(result.current.history).toEqual([])
+  })
+
+  describe('reopening', () => {
+    it('brings the conversation back as a tab and shows it', async () => {
+      givenChats([chat()])
+      const { result } = open()
+      await waitFor(() => {
+        expect(result.current.tabs[0]?.id).toBe('chat-1')
+      })
+
+      vi.mocked(octopus().chats.reopen).mockResolvedValue({
+        ok: true,
+        value: chat({ id: 'chat-2', sessionId: 'sess-2' })
+      })
+      givenChats([chat(), chat({ id: 'chat-2', sessionId: 'sess-2' })])
+      await act(async () => {
+        await result.current.reopen('chat-2')
+      })
+
+      expect(octopus().chats.reopen).toHaveBeenCalledWith('chat-2')
+      expect(result.current.tabs).toHaveLength(2)
+      expect(result.current.activeKey).toBe('chat-2')
+    })
+
+    // Three tabs are open, and the core says so.
+    it('says so when there is no room', async () => {
+      const onError = vi.fn()
+      givenChats([chat()])
+      vi.mocked(octopus().chats.reopen).mockResolvedValue({ ok: false, error: 'too many' })
+      const { result } = open({ onError })
+      await waitFor(() => {
+        expect(result.current.tabs[0]?.id).toBe('chat-1')
+      })
+
+      await act(async () => {
+        await result.current.reopen('chat-2')
+      })
+
+      expect(onError).toHaveBeenCalledWith(expect.stringContaining('too many'))
+      expect(result.current.tabs).toHaveLength(1)
+    })
+
+    it('drops a reopening answered for a workspace no longer shown', async () => {
+      const onChats = vi.fn()
+      givenChats([chat()])
+      let settle: ((value: { ok: true; value: Chat }) => void) | null = null
+      vi.mocked(octopus().chats.reopen).mockReturnValue(
+        new Promise((resolve) => {
+          settle = resolve
+        })
+      )
+      const { result, rerender } = open({ onChats })
+      await waitFor(() => {
+        expect(result.current.tabs[0]?.id).toBe('chat-1')
+      })
+
+      const reopening = result.current.reopen('chat-2')
+      rerender({ id: 'planner/bob' })
+      onChats.mockClear()
+
+      await act(async () => {
+        settle?.({ ok: true, value: chat({ id: 'chat-2' }) })
+        await reopening
+      })
+
+      expect(onChats).not.toHaveBeenCalledWith(WORKSPACE, expect.anything())
+    })
+  })
+
+  describe('reopening the one closed last', () => {
+    it('asks the core rather than trusting a list that may be stale', async () => {
+      givenChats([chat()])
+      vi.mocked(octopus().chats.closed).mockResolvedValue({
+        ok: true,
+        value: [closedEntry('chat-8'), closedEntry('chat-7')]
+      })
+      vi.mocked(octopus().chats.reopen).mockResolvedValue({
+        ok: true,
+        value: chat({ id: 'chat-8' })
+      })
+      const { result } = open()
+      await waitFor(() => {
+        expect(result.current.tabs[0]?.id).toBe('chat-1')
+      })
+
+      await act(async () => {
+        await result.current.reopenLast()
+      })
+
+      expect(octopus().chats.reopen).toHaveBeenCalledExactlyOnceWith('chat-8')
+    })
+
+    it('does nothing when nothing was closed', async () => {
+      givenChats([chat()])
+      vi.mocked(octopus().chats.closed).mockResolvedValue({ ok: true, value: [] })
+      const { result } = open()
+      await waitFor(() => {
+        expect(result.current.tabs[0]?.id).toBe('chat-1')
+      })
+
+      await act(async () => {
+        await result.current.reopenLast()
+      })
+
+      expect(octopus().chats.reopen).not.toHaveBeenCalled()
+    })
+
+    it('says so when the history cannot be read', async () => {
+      const onError = vi.fn()
+      givenChats([chat()])
+      vi.mocked(octopus().chats.closed).mockResolvedValue({ ok: false, error: 'unreadable' })
+      const { result } = open({ onError })
+      await waitFor(() => {
+        expect(result.current.tabs[0]?.id).toBe('chat-1')
+      })
+
+      await act(async () => {
+        await result.current.reopenLast()
+      })
+
+      expect(onError).toHaveBeenCalledWith(expect.stringContaining('unreadable'))
+      expect(octopus().chats.reopen).not.toHaveBeenCalled()
+    })
+
+    it('drops an answer for a workspace no longer shown', async () => {
+      givenChats([chat()])
+      let settle: ((value: { ok: true; value: ClosedChat[] }) => void) | null = null
+      vi.mocked(octopus().chats.closed).mockReturnValue(
+        new Promise((resolve) => {
+          settle = resolve
+        })
+      )
+      const { result, rerender } = open()
+      await waitFor(() => {
+        expect(result.current.tabs[0]?.id).toBe('chat-1')
+      })
+
+      const reopening = result.current.reopenLast()
+      rerender({ id: 'planner/bob' })
+
+      await act(async () => {
+        settle?.({ ok: true, value: [closedEntry('chat-8')] })
+        await reopening
+      })
+
+      expect(octopus().chats.reopen).not.toHaveBeenCalled()
+    })
   })
 })
 
