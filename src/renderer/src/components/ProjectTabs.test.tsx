@@ -36,8 +36,6 @@ function renderTabs(overrides: Partial<ProjectTabsProps> = {}): ProjectTabsProps
     onAddFromDisk: vi.fn(),
     onAddFromGitHub: vi.fn(),
     busy: false,
-    sidebarOpen: true,
-    onToggleSidebar: vi.fn(),
     ...overrides
   }
 
@@ -208,37 +206,13 @@ describe('ProjectTabs', () => {
     expect(props.onRemove).toHaveBeenCalledWith('ledger')
   })
 
-  // The strip is what survives the fold, so the way back has to live here
-  // rather than in the column it hides.
-  it('folds the workspace list away', async () => {
-    const user = userEvent.setup()
-    const props = renderTabs({ sidebarOpen: true })
-
-    await user.click(screen.getByRole('button', { name: 'Hide workspaces' }))
-
-    expect(props.onToggleSidebar).toHaveBeenCalledTimes(1)
-  })
-
-  it('offers to bring the workspace list back once it is folded away', async () => {
-    const user = userEvent.setup()
-    const props = renderTabs({ sidebarOpen: false })
-
-    expect(screen.queryByRole('button', { name: 'Hide workspaces' })).toBeNull()
-    await user.click(screen.getByRole('button', { name: 'Show workspaces' }))
-
-    expect(props.onToggleSidebar).toHaveBeenCalledTimes(1)
-  })
-
-  // The list of projects scrolls once there are more than fit; a control inside
-  // that box would scroll out of reach along with them.
-  it('keeps the fold out of the scrolling list of projects', () => {
+  // The fold moved to the footer, beside Settings. A copy left in the strip
+  // would be two controls for one thing, one of them scrolling with the tabs.
+  it('does not carry the fold, which lives in the footer now', () => {
     renderTabs()
 
-    const fold = screen.getByRole('button', { name: 'Hide workspaces' })
-    const strip = fold.closest('nav')
-
-    expect(fold.parentElement).toBe(strip)
-    expect(screen.getByRole('button', { name: 'PL' }).parentElement).not.toBe(strip)
+    expect(screen.queryByRole('button', { name: 'Hide workspaces' })).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Show workspaces' })).toBeNull()
   })
 
   it('still offers to add a repository when there are no projects', () => {

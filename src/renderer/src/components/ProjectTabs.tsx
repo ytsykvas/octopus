@@ -1,12 +1,4 @@
-import {
-  CloudDownload,
-  FolderOpen,
-  PanelLeftClose,
-  PanelLeftOpen,
-  Pencil,
-  Plus,
-  Trash2
-} from 'lucide-react'
+import { CloudDownload, FolderOpen, Pencil, Plus, Trash2 } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 
 import { initials } from '@core/initials.js'
@@ -24,9 +16,6 @@ interface ProjectTabsProps {
   readonly onAddFromDisk: () => void
   readonly onAddFromGitHub: () => void
   readonly busy: boolean
-  /** Whether the workspace list beside the strip is showing. */
-  readonly sidebarOpen: boolean
-  readonly onToggleSidebar: () => void
 }
 
 /**
@@ -50,9 +39,7 @@ export function ProjectTabs({
   onRemove,
   onAddFromDisk,
   onAddFromGitHub,
-  busy,
-  sidebarOpen,
-  onToggleSidebar
+  busy
 }: ProjectTabsProps): React.JSX.Element {
   const { t } = useTranslation()
 
@@ -107,24 +94,6 @@ export function ProjectTabs({
           ]}
         />
       </div>
-
-      {/* Folding the list away is about the column beside this one, and this is
-          the part of the window that survives the fold — so the control that
-          brings it back is here rather than in the pane it hides. Outside the
-          scrolling list above, so it stays reachable however many projects
-          there are. */}
-      <button
-        type="button"
-        onClick={onToggleSidebar}
-        title={sidebarOpen ? t('sidebar.collapse') : t('sidebar.expand')}
-        className="text-ink-faint hover:bg-muted hover:text-ink focus-ring mb-2 ml-2.5 flex size-9 shrink-0 items-center justify-center rounded-[10px] transition-colors"
-      >
-        {sidebarOpen ? (
-          <PanelLeftClose aria-hidden size={16} />
-        ) : (
-          <PanelLeftOpen aria-hidden size={16} />
-        )}
-      </button>
     </nav>
   )
 }
