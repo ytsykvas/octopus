@@ -144,6 +144,16 @@ export function useErrorMessage(): (failure: Failure) => string {
           return t('errors.repoConfigMalformed', { path: failure.params?.path ?? '' })
         case 'forkFailed':
           return t('errors.forkFailed')
+        case 'rewindBusy':
+          return t('errors.rewindBusy')
+        case 'chatClosed':
+          return t('errors.chatClosed')
+        case 'rewindUnavailable':
+          // The agent's own reason, when it gave one: "no checkpoint for that
+          // message" is the answer to *why*, and the generic line is not.
+          return failure.params?.reason
+            ? t('errors.rewindUnavailableReason', { reason: failure.params.reason })
+            : t('errors.rewindUnavailable')
         case 'skillNameInvalid':
           return t('errors.skillNameInvalid', { name: failure.params?.name ?? '' })
         case 'skillNameMismatch':

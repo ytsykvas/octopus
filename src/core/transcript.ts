@@ -10,7 +10,7 @@
  * spend most of its time serialising its own past.
  */
 
-import { appendFile, copyFile, mkdir, readFile, rm } from 'node:fs/promises'
+import { appendFile, copyFile, type FileHandle, mkdir, open, readFile, rm } from 'node:fs/promises'
 import { dirname } from 'node:path'
 
 import { z } from 'zod'
@@ -20,7 +20,17 @@ import { chatTranscript } from './paths.js'
 import type { ChatId } from './types.js'
 
 export const ChatEntrySchema = z.discriminatedUnion('role', [
-  z.object({ role: z.literal('user'), at: z.iso.datetime(), text: z.string() }),
+  z.object({
+    role: z.literal('user'),
+    at: z.iso.datetime(),
+    text: z.string(),
+    /**
+     * The id the agent knows this message by, which is what putting the files
+     * back to it is asked with. Absent on a message sent before it was kept, and
+     * such a message simply offers no rewind.
+     */
+    uuid: z.string().optional()
+  }),
   z.object({ role: z.literal('agent'), at: z.iso.datetime(), event: AgentEventSchema })
 ])
 
@@ -59,6 +69,42 @@ export async function readTranscript(chatId: ChatId, root?: string): Promise<Cha
   }
 
   return entries
+}
+
+/** How much of a conversation's first message a list of them shows. */
+export const MAX_PREVIEW = 80
+
+/**
+ * The first thing the user said, as one short line — what a closed
+ * conversation is recognised by.
+ *
+ * A name is rarely given and the automatic one is a place in a strip it no
+ * longer holds, so "Claude 2" tells nobody which conversation it was. The
+ * opening message does. Empty for one that never had one.
+ */
+export async function previewOf(chatId: ChatId, root?: string): Promise<string> {
+  let handle: FileHandle
+  try {
+    handle = await open(chatTranscript(chatId, root), 'r')
+  } catch {
+    return ''
+  }
+
+  // Read line by line and left at the first message the user wrote: a list of
+  // twenty conversations should not cost twenty whole transcripts, which for a
+  // long one is megabytes read to find a line near the top. `readLines` closes
+  // the handle when the loop is left, early or not.
+  for await (const text of handle.readLines({ encoding: 'utf8' })) {
+    if (text.trim() === '') continue
+
+    const parsed = ChatEntrySchema.safeParse(parseJson(text))
+    if (!parsed.success || parsed.data.role !== 'user') continue
+
+    const line = parsed.data.text.replace(/\s+/g, ' ').trim()
+    return line.length > MAX_PREVIEW ? `${line.slice(0, MAX_PREVIEW - 1)}…` : line
+  }
+
+  return ''
 }
 
 /**

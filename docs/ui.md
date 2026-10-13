@@ -95,8 +95,23 @@ alone, and two answers to one question is a disagreement rather than a
 convenience. An item that could not work is absent rather than disabled: nothing
 to continue before a session has run, and the last conversation cannot be closed
 at all — a workspace with none has no way back to one but the first message, and
-emptying the only one is `/clear`. Closing a conversation that has said
-something asks first, because it deletes a transcript nothing can bring back.
+emptying the only one is `/clear`.
+
+**Closing keeps the conversation, so it does not ask.** It used to delete the
+transcript, and a confirmation was the only protection a slip had; now the tab
+leaves the strip and the conversation waits in the history, which is the
+protection, and a dialog saying "this cannot be brought back" would be untrue.
+The clock beside the new-tab button opens that history, newest first, each entry
+named by its opening message — the automatic name is a place in a strip it no
+longer holds, and "Claude 2" would tell nobody which one it was. Choosing one
+reopens it with its history and its session. `⌘⇧T` reopens the one closed last,
+the browser's key for the same slip. At the cap the entries cannot be chosen
+and say why, rather than failing after the click. The list is read when opened,
+not kept live: each entry costs a read of its transcript, so it is read when the
+menu is opened and not on every close or reopen, and only as far as the first
+message. Twenty are kept per workspace; closing one more discards the oldest.
+Sending to a closed conversation is refused, for a window that has not heard it
+was closed would otherwise start a session no tab and no status shows.
 
 **Every conversation stays mounted** while its workspace is open, hidden with a
 class the way the right pane hides its tabs — one that unmounted would lose its
@@ -192,6 +207,91 @@ the event that ends a turn is filtered by the open chat's id and there is no
 chat until its history has loaded, so one arriving in that window is dropped and
 a seeded flag would stay stuck on.
 
+**The log is drawn through assistant-ui's thread and message primitives.** Each
+turn — what the user said and everything the agent did in answer — is one
+message in an external-store runtime fed from the transcript, and each block
+rides in as a `data` part carrying itself. Nothing is mapped onto the library's
+own `text`, `reasoning` or `tool-call` parts, and that is deliberate: the log is
+one row per event with rules the library has no word for (a run folded into its
+count, an edit drawn as a diff, an answer struck through because the agent took
+it back), all of which live in the block, and translating would encode them a
+second time and be wrong about them in one of the two places. So the library is
+the runtime and the structure — messages, parts, the place later features such
+as per-message actions would attach — and the rows are ours.
+
+What the library is handed has to keep its identity. It caches a message by the
+object it was given and the part renderers by the object they came in, so a map
+or an arrow function rebuilt inside the render makes every row re-render by
+itself: measured under jsdom, 592 ms for one update at a thousand turns with
+them inline and 18 ms with them hoisted. `toThreadMessages` is held against the
+blocks, and the part map, the message renderer and the converter are module
+constants. Token streaming never goes through the runtime — the buffer is drawn
+below the thread, as it always was — which also sidesteps an open upstream issue
+where the cost of each update grows with the thread's length. Dependency pinned
+to an exact version: it is 0.x and its minors have broken things.
+
+**Not moved: the composer.** The slash list and the `@` list were built here, on
+the field's own keys, with the draft kept per tab, an IME guard on every key, a
+pasted image, a dropped file and the caret put back after a mention. The
+library's composer primitives would replace all of that with its own handling of
+each, for no behaviour the field lacks, and the tests that pin those behaviours
+describe this field, not that one. If a feature ever needs what the primitives
+offer, the seam is `ChatSession`: the runtime already lives one level down.
+
+**A subagent's work is folded under the call that started it.** Its messages
+arrive on the conversation's own stream, told apart only by the id of that call
+(`parentToolUseId` on its text, reasoning, calls and results), and drawn at the
+top level a long delegated task buried what the conversation itself said. Now
+the call's row carries a closed disclosure — "12 steps by the subagent" — which
+opens to its calls, one line of each remark, and its failures; one nested inside
+another nests the same way. Its **edits stay where they happened**, with their
+diff: a subagent's change is the most useful thing it does, and folded into a
+count it would lose what the log draws for every other change. A step whose call
+is not in the log (a conversation cleared halfway) stays at the top level rather
+than vanishing.
+
+**The plan can be rewritten before it is approved.** The dialog's `Edit the plan`
+swaps the rendered plan for its markdown, in a monospace field, and back; the
+edits are kept when the field is closed to look at the result, and held by the
+pane keyed by the request, so a plan the agent replaces mid-edit does not
+inherit them. Execute is disabled while the field is empty: an emptied editor is
+not a plan, and approving the original under it would do something the field
+plainly says it is not doing. Executing then
+sends the user's own text, and the agent works from it rather than from the
+words it wrote — it rides the reply that releases the tool call, since nothing
+else reaches the plan. An untouched plan, or one put back as it was, goes as
+`null`, so the agent is only told a plan is different when it is; an emptied
+field is not a plan and is not sent. A rewritten plan gets a block of its own in
+the log, named "Plan, as you edited it", under the one the agent wrote: the log
+has to say what the agent was actually told to do. Rewriting is the whole-plan
+alternative to the feedback field, which sends the plan back to be reworked.
+
+**A message offers to put the files back to before it.** Hovering a message the
+user sent reveals a small undo mark beside it. It is not a conversation rewind —
+what was said stays — it restores the **files** to how they were when that
+message was sent, which is the safety net for letting an agent run unattended.
+Two steps, and the first changes nothing: the agent is asked what it _would_
+do, so the question has the numbers in it ("puts 3 files back … +12 −4"), and
+only the second call does it. The dialog says what the numbers cannot: anything
+changed in those files since — by the agent or by the user — is overwritten.
+Nothing to undo is an answer rather than a question, and says so in the banner.
+The log gains a quiet row afterwards, because the tree changed without the agent
+doing anything, and it says how many files a link kept it from restoring, since
+the rewind never follows one and a bare count would read as though everything
+tracked had come back. It is refused while **any** conversation of the workspace
+is working, not only this one: the worktree is shared, and the checkpoint
+restores whatever it tracked, which can be a file another is editing. The mark is absent while the agent is working (the core would
+refuse it, and a button that can only fail is a promise the interface does not
+keep) and on messages sent before their ids were kept. It needs checkpointing,
+which every session is started with from now on — a checkpoint cannot be taken
+for work already done, so conversations that ran before this have none.
+
+**Escape stops a running turn**, as it does in Claude Code, and the button's
+tooltip says so. Only once neither suggestion list has taken the key — those
+return first, so the Escape that closes a list never also interrupts the agent —
+only while a turn is running, since idle it would be a second way to do nothing,
+and not while an input method is composing, where Escape cancels the candidate.
+
 **The composer has an attic**, a strip above the field mirroring the settings
 footer below it: how full this conversation's context window is on the left, and
 on the right the skills it may reach for, the paperclip, and a refusal when the
@@ -285,6 +385,40 @@ clock nobody here controls — and what acts on a full context window is
 conversation away. Neither is dispatched: they go out as the text of an ordinary
 message, which is what a slash command is in this app, so the menu hands them to
 the same `onSend` the field uses.
+
+**The agent's task list is pinned above the field while it has work left.** A
+long turn is mostly the agent working through a list it wrote for itself, and
+from the log that progress is a scatter of tool rows. The panel is the same list
+as one line — "Tasks · 3 of 7 · Running the tests" — that opens to the whole of
+it, each item with a mark and, for a reader who cannot see the mark, its state
+in words. It reads the newest readable `TodoWrite` call, since the tool always
+sends the whole list, and is shown **only while the agent is working**: a list
+left with items pending (interrupted, errored, abandoned) would otherwise stay
+pinned across every later turn and every restart, describing work nobody is
+doing, and the log still holds it. The log's own `TodoWrite` row says how far it had got ("1 of 3")
+instead of showing a bare tool name. Only `TodoWrite` is read; the newer
+`TaskCreate`/`TaskUpdate` tools are not. A list written by a subagent is
+skipped — it is its own task's, and the newest one written would otherwise
+replace the conversation's.
+
+**Typing `@` offers the workspace's files.** The fourth way to attach one — the
+paperclip, a drop and a paste being the others — and it lands in the same place:
+choosing a file adds its **path** as an attachment chip and takes the token out
+of the text, so the message still names the file once and the message the user
+reads back is still the whole of what was sent. It is read at the **caret**
+rather than at the end of the draft, because "look at @auth.ts and fix the
+expiry" has the file in the middle, and only when the `@` starts a word — inside
+an email address it would be noise. The list is the worktree's, asked of git
+(`.gitignore` applies, a file made a minute ago is found), searched as the user
+types with a short debounce. The last answer stays up while the next is on its
+way: the list used to vanish on every keystroke, and the Enter pressed in that
+gap sent the message with `@aut` in it. A reply that arrives after a newer one
+is already in is dropped, so the slow answer for `a` never takes the place of
+the quick one for `ab`. Arrows, Enter and Tab work as in
+the command list, Escape dismisses until the next keystroke, and the caret goes
+back to where the token was. A refused search is no suggestions rather than an
+error banner: the list is a convenience. Line ranges (`@file#10-20`) are not
+supported yet; a file is attached whole.
 
 **A command name is not unique**, and both places that use one had assumed it
 was. The agent can report two under one name — seen live, twice for

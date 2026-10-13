@@ -62,8 +62,30 @@ export function installOctopusStub(): Api {
       create: vi.fn(() => ok(chatFixture())),
       fork: vi.fn(() => ok(chatFixture())),
       close: vi.fn(() => ok(undefined)),
+      closed: vi.fn(() => ok([])),
+      reopen: vi.fn(() => ok(chatFixture())),
       rename: vi.fn(() => ok(undefined)),
       history: vi.fn(() => ok([])),
+      rewindPreview: vi.fn(() =>
+        ok({
+          canRewind: true,
+          error: null,
+          filesChanged: [],
+          insertions: 0,
+          deletions: 0,
+          skippedLinks: 0
+        })
+      ),
+      rewind: vi.fn(() =>
+        ok({
+          canRewind: true,
+          error: null,
+          filesChanged: [],
+          insertions: 0,
+          deletions: 0,
+          skippedLinks: 0
+        })
+      ),
       send: vi.fn(() => ok(undefined)),
       interrupt: vi.fn(() => ok(undefined)),
       setWorkingMode: vi.fn(() => ok(undefined)),
@@ -143,7 +165,8 @@ export function installOctopusStub(): Api {
       port: vi.fn(() => ok(3111))
     },
     files: {
-      open: vi.fn(() => ok(undefined))
+      open: vi.fn(() => ok(undefined)),
+      search: vi.fn(() => ok([]))
     },
     attachments: {
       paste: vi.fn(() => ok('/tmp/paste.png')),
@@ -290,6 +313,7 @@ function chatFixture(): Chat {
     planMode: false,
     knownCommands: [],
     skillOverrides: {},
+    closedAt: null,
     createdAt: '2026-08-08T00:00:00.000Z'
   }
 }

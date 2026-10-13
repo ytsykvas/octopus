@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest'
 import type { AgentEvent } from '@core/events.js'
 import type { ChatEntry } from '@core/transcript.js'
 
-import { groupToolRuns, toolCount } from './toolRuns.js'
+import { groupToolRuns, subagentsOf, toolCount } from './toolRuns.js'
 
 const AT = '2026-08-13T09:00:00.000Z'
 
@@ -268,5 +268,101 @@ describe('a footer with no turn above it', () => {
     const blocks = groupToolRuns([said('done'), footer()])
 
     expect(blocks.map((block) => block.kind)).toEqual(['entry', 'entry'])
+  })
+})
+
+describe('what a subagent did', () => {
+  const TASK = 'toolu_task'
+
+  const task = (): ChatEntry =>
+    agent({
+      type: 'tool_use',
+      toolUseId: TASK,
+      name: 'Task',
+      input: { description: 'Look around' }
+    })
+
+  const inside = (event: AgentEvent): ChatEntry =>
+    agent({ ...event, parentToolUseId: TASK } as AgentEvent)
+
+  const read = (id: string): ChatEntry =>
+    inside({ type: 'tool_use', toolUseId: id, name: 'Read', input: { file_path: '/a.ts' } })
+
+  it('gathers its steps under the call that started it', () => {
+    const call = task()
+    const step = read('r-1')
+    const remark = inside({ type: 'text', text: 'Found it.' })
+
+    const { steps, nested } = subagentsOf([call, step, remark])
+
+    // The events, in the order they happened.
+    expect(steps.get(TASK)).toEqual([
+      step.role === 'agent' ? step.event : null,
+      remark.role === 'agent' ? remark.event : null
+    ])
+    expect(nested.has(step)).toBe(true)
+    expect(nested.has(call)).toBe(false)
+  })
+
+  it('leaves them out of the top level of the log', () => {
+    const entries = [task(), read('r-1'), read('r-2'), said('Done.')]
+
+    const blocks = groupToolRuns(entries)
+
+    // The call and the closing remark; the two reads are inside the call.
+    expect(blocks.map((block) => block.kind)).toEqual(['entry', 'entry'])
+  })
+
+  // The most useful thing a subagent does, and folded into a count it would
+  // lose the diff the log draws for every other change.
+  it('leaves its edits where they happened, with their results', () => {
+    const edit = inside({
+      type: 'tool_use',
+      toolUseId: 'e-1',
+      name: 'Edit',
+      input: { file_path: '/a.ts', old_string: 'one', new_string: 'two' }
+    })
+    const done = inside({ type: 'tool_result', toolUseId: 'e-1', ok: true, content: 'fine' })
+
+    const { steps, nested } = subagentsOf([task(), edit, done])
+
+    expect(steps.size).toBe(0)
+    expect(nested.size).toBe(0)
+    // The result is the quiet third block, which draws nothing.
+    expect(groupToolRuns([task(), edit, done]).map((block) => block.kind)).toEqual([
+      'entry',
+      'change',
+      'entry'
+    ])
+  })
+
+  // A conversation cleared halfway can leave a step whose call is gone. It
+  // stays where it is rather than vanishing.
+  it('does not hide a step whose call is not in the log', () => {
+    const entries = [read('r-1')]
+
+    expect(subagentsOf(entries).nested.size).toBe(0)
+    expect(groupToolRuns(entries)).toHaveLength(1)
+  })
+
+  it('nests one subagent inside another', () => {
+    const child = inside({
+      type: 'tool_use',
+      toolUseId: 'toolu_inner',
+      name: 'Task',
+      input: { description: 'Dig' }
+    })
+    const grandchild = agent({
+      type: 'tool_use',
+      toolUseId: 'g-1',
+      name: 'Grep',
+      input: { pattern: 'x' },
+      parentToolUseId: 'toolu_inner'
+    })
+
+    const { steps } = subagentsOf([task(), child, grandchild])
+
+    expect(steps.get(TASK)).toHaveLength(1)
+    expect(steps.get('toolu_inner')).toHaveLength(1)
   })
 })

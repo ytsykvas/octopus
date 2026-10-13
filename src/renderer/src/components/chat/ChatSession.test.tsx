@@ -5,6 +5,7 @@ import { beforeAll, describe, expect, it, vi } from 'vitest'
 import type { Effort, WorkingMode } from '@core/chats.js'
 import type { ProjectColor } from '@core/colors.js'
 import type { WorkspaceView } from '@core/workspaces.js'
+import type { ChatEntry } from '@core/transcript.js'
 
 import { useChatTabs } from '../../hooks/useChatTabs.js'
 import type { DiffCommentController } from '../../hooks/useDiffComments.js'
@@ -55,12 +56,7 @@ function ChatPane({
   defaultPlanModel = null,
   onError = vi.fn()
 }: PaneProps): React.JSX.Element {
-  const tabs = useChatTabs(
-    target.id,
-    () => Promise.resolve({ confirmed: true, checked: false }),
-    vi.fn(),
-    onError
-  )
+  const tabs = useChatTabs(target.id, vi.fn(), onError)
 
   return (
     <Chat
@@ -1007,6 +1003,307 @@ describe('the permission mode', () => {
         'Files I am pointing you at:\n\n/a/shot.png\n\nhave a look'
       )
     })
+  })
+
+  /*
+   * The fourth way in: typing `@` and choosing a file. It lands exactly where
+   * the other three do — an attachment named by its path in the message — so
+   * the message the user reads back is still the whole of what was sent.
+   */
+  it('attaches a file chosen from the mention list, named by its path', async () => {
+    const user = userEvent.setup()
+    // jsdom has no layout, so the list's scroll-into-view is not there to call.
+    Element.prototype.scrollIntoView = vi.fn()
+    vi.mocked(octopus().files.search).mockResolvedValue({
+      ok: true,
+      value: [{ path: 'src/auth.ts', absolute: '/work/anna/src/auth.ts' }]
+    })
+    givenChat()
+    await openLoadedChat()
+
+    await user.type(screen.getByRole('textbox'), 'look at @au')
+    await user.click(await screen.findByRole('option', { name: /auth\.ts/ }))
+
+    expect(octopus().files.search).toHaveBeenCalledWith('planner/anna', 'au')
+    expect(await screen.findByText('auth.ts')).toBeInTheDocument()
+    expect(screen.getByRole('textbox')).toHaveValue('look at ')
+
+    await user.click(screen.getByRole('button', { name: 'Send' }))
+
+    await waitFor(() => {
+      expect(octopus().chats.send).toHaveBeenCalledWith(
+        CHAT_ID,
+        'Files I am pointing you at:\n\n/work/anna/src/auth.ts\n\nlook at'
+      )
+    })
+  })
+
+  // A list that cannot be read is a lost convenience, not a message to show.
+  it('offers no files when the search is refused', async () => {
+    const user = userEvent.setup()
+    vi.mocked(octopus().files.search).mockResolvedValue({ ok: false, error: 'no such worktree' })
+    givenChat()
+    await openLoadedChat()
+
+    await user.type(screen.getByRole('textbox'), '@au')
+    await waitFor(() => {
+      expect(octopus().files.search).toHaveBeenCalled()
+    })
+
+    expect(screen.queryByRole('option')).not.toBeInTheDocument()
+    expect(screen.queryByText('no such worktree')).not.toBeInTheDocument()
+  })
+
+  describe('rewriting a plan before approving it', () => {
+    it('approves with the plan the user wrote', async () => {
+      const user = userEvent.setup()
+      givenChat([], { planMode: true })
+      await openLoadedChat()
+
+      emitAgentEvent({
+        type: 'permission_request',
+        requestId: 'r-plan',
+        toolName: 'ExitPlanMode',
+        input: { plan: '# Normalising the locales' }
+      })
+      await user.click(await screen.findByRole('button', { name: 'Edit the plan' }))
+      const editor = screen.getByRole('textbox', { name: 'The plan, as markdown' })
+      await user.clear(editor)
+      await user.type(editor, '# Only English first')
+      await user.click(screen.getByRole('button', { name: 'Execute' }))
+
+      expect(octopus().chats.answerPermission).toHaveBeenCalledWith(
+        'r-plan',
+        'allow',
+        undefined,
+        '# Only English first'
+      )
+    })
+  })
+
+  // The agent may hand over another plan while one is being rewritten. The old
+  // edit describes a plan that is gone, and must not be sent as the new one's.
+  describe('a plan replaced while it is being rewritten', () => {
+    it('does not send the old edit as the new plan', async () => {
+      const user = userEvent.setup()
+      givenChat([], { planMode: true })
+      await openLoadedChat()
+
+      emitAgentEvent({
+        type: 'permission_request',
+        requestId: 'r-1',
+        toolName: 'ExitPlanMode',
+        input: { plan: '# First plan' }
+      })
+      await user.click(await screen.findByRole('button', { name: 'Edit the plan' }))
+      const editor = screen.getByRole('textbox', { name: 'The plan, as markdown' })
+      await user.clear(editor)
+      await user.type(editor, '# My edit of the first')
+
+      emitAgentEvent({
+        type: 'permission_request',
+        requestId: 'r-2',
+        toolName: 'ExitPlanMode',
+        input: { plan: '# Second plan' }
+      })
+
+      // The dialog is for the new request: the plan as the agent wrote it, and
+      // the editor closed.
+      expect(await screen.findByText('Second plan')).toBeInTheDocument()
+      await user.click(screen.getByRole('button', { name: 'Execute' }))
+
+      expect(octopus().chats.answerPermission).toHaveBeenCalledWith('r-2', 'allow', undefined)
+    })
+  })
+
+  describe('putting the files back from a message', () => {
+    const MESSAGE = '11111111-1111-4111-8111-111111111111'
+
+    const SAID: ChatEntry[] = [
+      { role: 'user', at: '2026-08-13T09:00:00.000Z', text: 'rename it', uuid: MESSAGE }
+    ]
+
+    // Two steps, and the first changes nothing: the question the user answers
+    // has the numbers in it, because the agent was asked what it would do.
+    it('asks what it would do, says so, and does it once agreed', async () => {
+      const user = userEvent.setup()
+      vi.mocked(octopus().chats.rewindPreview).mockResolvedValue({
+        ok: true,
+        value: {
+          canRewind: true,
+          error: null,
+          filesChanged: ['a.ts', 'b.ts'],
+          insertions: 12,
+          deletions: 4,
+          skippedLinks: 0
+        }
+      })
+      givenChat(SAID)
+      await openLoadedChat()
+
+      await user.click(await screen.findByRole('button', { name: /Put the files back to before/ }))
+
+      expect(
+        await screen.findByText(
+          'This puts 2 files back to how they were before this message (+12 −4).'
+        )
+      ).toBeInTheDocument()
+      expect(octopus().chats.rewind).not.toHaveBeenCalled()
+
+      await user.click(screen.getByRole('button', { name: 'Put files back' }))
+
+      await waitFor(() => {
+        expect(octopus().chats.rewind).toHaveBeenCalledWith(CHAT_ID, MESSAGE)
+      })
+    })
+
+    it('does nothing when the question is answered no', async () => {
+      const user = userEvent.setup()
+      vi.mocked(octopus().chats.rewindPreview).mockResolvedValue({
+        ok: true,
+        value: {
+          canRewind: true,
+          error: null,
+          filesChanged: ['a.ts'],
+          insertions: 1,
+          deletions: 0,
+          skippedLinks: 0
+        }
+      })
+      givenChat(SAID)
+      await openLoadedChat()
+
+      await user.click(await screen.findByRole('button', { name: /Put the files back to before/ }))
+      await user.click(await screen.findByRole('button', { name: 'Cancel' }))
+
+      expect(octopus().chats.rewind).not.toHaveBeenCalled()
+    })
+
+    // Nothing to undo is an answer, not a question.
+    it('says so rather than asking when nothing would change', async () => {
+      const user = userEvent.setup()
+      givenChat(SAID)
+      await openLoadedChat()
+
+      await user.click(await screen.findByRole('button', { name: /Put the files back to before/ }))
+
+      expect(
+        await screen.findByText('The files are already as they were before that message.')
+      ).toBeInTheDocument()
+      expect(octopus().chats.rewind).not.toHaveBeenCalled()
+    })
+
+    it('says why when the agent cannot', async () => {
+      const user = userEvent.setup()
+      vi.mocked(octopus().chats.rewindPreview).mockResolvedValue({
+        ok: false,
+        error: 'No checkpoint for that message',
+        code: 'rewindUnavailable',
+        params: { reason: 'No checkpoint for that message' }
+      })
+      givenChat(SAID)
+      await openLoadedChat()
+
+      await user.click(await screen.findByRole('button', { name: /Put the files back to before/ }))
+
+      expect(
+        await screen.findByText(
+          'The files cannot be put back to that message: No checkpoint for that message'
+        )
+      ).toBeInTheDocument()
+    })
+
+    it('says so when the real rewind is refused after agreeing', async () => {
+      const user = userEvent.setup()
+      vi.mocked(octopus().chats.rewindPreview).mockResolvedValue({
+        ok: true,
+        value: {
+          canRewind: true,
+          error: null,
+          filesChanged: ['a.ts'],
+          insertions: 1,
+          deletions: 0,
+          skippedLinks: 0
+        }
+      })
+      vi.mocked(octopus().chats.rewind).mockResolvedValue({
+        ok: false,
+        error: 'busy',
+        code: 'rewindBusy'
+      })
+      givenChat(SAID)
+      await openLoadedChat()
+
+      await user.click(await screen.findByRole('button', { name: /Put the files back to before/ }))
+      await user.click(await screen.findByRole('button', { name: 'Put files back' }))
+
+      expect(
+        await screen.findByText('The agent is working. Stop it before putting the files back.')
+      ).toBeInTheDocument()
+    })
+  })
+
+  // The agent's own task list, pinned above the field while it has work left.
+  it('pins the agent task list above the field', async () => {
+    givenChat([
+      {
+        role: 'agent',
+        at: '2026-08-13T09:00:00.000Z',
+        event: {
+          type: 'tool_use',
+          toolUseId: 'call-1',
+          name: 'TodoWrite',
+          input: {
+            todos: [
+              { content: 'Write the test', status: 'completed', activeForm: 'Writing the test' },
+              { content: 'Make it pass', status: 'in_progress', activeForm: 'Making it pass' }
+            ]
+          }
+        }
+      }
+    ])
+    await openLoadedChat()
+    emitChatStatus(CHAT_ID, 'running')
+
+    expect(await screen.findByRole('button', { name: /Tasks/ })).toBeInTheDocument()
+    expect(screen.getByText('Making it pass')).toBeInTheDocument()
+  })
+
+  // A list left with items pending — interrupted, errored, abandoned — would
+  // otherwise stay pinned across every later turn and every restart.
+  it('lets go of the list once the turn is over', async () => {
+    givenChat([
+      {
+        role: 'agent',
+        at: '2026-08-13T09:00:00.000Z',
+        event: {
+          type: 'tool_use',
+          toolUseId: 'call-1',
+          name: 'TodoWrite',
+          input: {
+            todos: [
+              { content: 'Make it pass', status: 'in_progress', activeForm: 'Making it pass' }
+            ]
+          }
+        }
+      }
+    ])
+    await openLoadedChat()
+    emitChatStatus(CHAT_ID, 'running')
+    expect(await screen.findByRole('button', { name: /Tasks/ })).toBeInTheDocument()
+
+    emitChatStatus(CHAT_ID, 'idle')
+
+    await waitFor(() => {
+      expect(screen.queryByRole('button', { name: /Tasks/ })).not.toBeInTheDocument()
+    })
+  })
+
+  it('shows no task list for a conversation without one', async () => {
+    givenChat()
+    await openLoadedChat()
+
+    expect(screen.queryByRole('button', { name: /Tasks/ })).not.toBeInTheDocument()
   })
 
   /* A refused paste is news about the message being written, so it goes in the

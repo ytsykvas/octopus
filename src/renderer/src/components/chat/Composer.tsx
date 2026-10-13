@@ -15,13 +15,18 @@ import type { RateLimit, SessionUsage } from '@core/service.js'
 import type { SkillListing } from '@core/skills.js'
 
 import type { ChatMode } from '../../hooks/useChat.js'
+import type { MentionFile } from '@core/fileSearch.js'
+
 import { useDismiss } from '../../hooks/useDismiss.js'
+import { useFileMentions } from '../../hooks/useFileMentions.js'
 import { CommandMenu } from './CommandMenu.js'
 import { completeCommand, matchCommands, readCommandQuery } from './commandMatch.js'
 import { type ChatNote, withNotes } from './attachments.js'
 import { ComposerAttachments } from './ComposerAttachments.js'
 import { ComposerAttic } from './ComposerAttic.js'
 import { EffortPicker } from './EffortPicker.js'
+import { MentionMenu } from './MentionMenu.js'
+import { type Mention, readMention, withoutMention } from './mentionMatch.js'
 import { modelRows } from './modelRows.js'
 import { ModelPicker } from './ModelPicker.js'
 
@@ -60,6 +65,15 @@ interface ComposerProps {
   readonly onRemoveFile: (path: string) => void
   /** The paperclip. One of three ways in, and the only visible one. */
   readonly onAttachFiles: () => void
+  /**
+   * Files matching what is typed after an `@`, best first.
+   *
+   * Asked of the workspace rather than computed here: the list is the
+   * worktree's, which the window has no way to read.
+   */
+  readonly onSearchFiles: (query: string) => Promise<readonly MentionFile[]>
+  /** Attaches by path — the fourth way in, which a chosen mention takes. */
+  readonly onAttachPaths: (paths: readonly string[]) => void
   /** Files dropped on the composer, whose paths the window cannot read itself. */
   readonly onDropFiles: (files: readonly File[]) => void
   /** An image pasted into the field, which has no path until one is made. */
@@ -174,6 +188,8 @@ export function Composer({
   files,
   onRemoveFile,
   onAttachFiles,
+  onSearchFiles,
+  onAttachPaths,
   onDropFiles,
   onPasteImage,
   model,
@@ -233,6 +249,17 @@ export function Composer({
   }
 
   const field = useRef<HTMLDivElement>(null)
+  const textarea = useRef<HTMLTextAreaElement>(null)
+  /** Where the caret goes once the next value has been written, or null. */
+  const caretAfterWrite = useRef<number | null>(null)
+  const [caret, setCaret] = useState(initialDraft.length)
+
+  useEffect(() => {
+    if (caretAfterWrite.current === null) return
+
+    textarea.current?.setSelectionRange(caretAfterWrite.current, caretAfterWrite.current)
+    caretAfterWrite.current = null
+  }, [draft])
   /** Which suggestion Enter would take. */
   const [active, setActive] = useState(0)
   /**
@@ -303,6 +330,38 @@ export function Composer({
   useDismiss(suggesting, field, () => {
     setDismissed(true)
   })
+
+  /*
+   * A file being mentioned. Read at the caret rather than at the end of the
+   * draft, because it may sit anywhere in a sentence — and the two lists cannot
+   * both be open: a command is the *whole* draft starting with a slash, while a
+   * mention is a word with an `@` on it.
+   */
+  const mention = readMention(draft, caret)
+  const found = useFileMentions(mention?.query ?? null, onSearchFiles)
+  const [mentionActive, setMentionActive] = useState(0)
+  const [mentionDismissed, setMentionDismissed] = useState(false)
+  // The mention itself rather than a flag about it, so everything below that
+  // acts on one holds it and has no null to answer for.
+  const shownMention = !mentionDismissed && found.length > 0 ? mention : null
+
+  useDismiss(shownMention !== null, field, () => {
+    setMentionDismissed(true)
+  })
+
+  /**
+   * Takes the file as an attachment and the token out of the text.
+   *
+   * The caret goes where the token was, once React has written the new value:
+   * setting it before would be undone by the render that follows.
+   */
+  const mentionFile = (taken: Mention, file: MentionFile): void => {
+    onAttachPaths([file.absolute])
+    write(withoutMention(draft, taken, caret))
+    setCaret(taken.start)
+    setMentionActive(0)
+    caretAfterWrite.current = taken.start
+  }
 
   const mode: ChatMode = planMode ? 'plan' : workingMode
   const nextMode = (): void => {
@@ -400,6 +459,17 @@ export function Composer({
           <CommandMenu commands={matches} active={active} onActive={setActive} onPick={complete} />
         )}
 
+        {shownMention !== null && (
+          <MentionMenu
+            files={found}
+            active={mentionActive}
+            onActive={setMentionActive}
+            onPick={(file) => {
+              mentionFile(shownMention, file)
+            }}
+          />
+        )}
+
         {/* The strip's own menu sends slash commands, and it sends them the
             way the field does — a slash command here is the text of an
             ordinary message, so there is one channel and not two. */}
@@ -422,15 +492,24 @@ export function Composer({
         />
 
         <textarea
+          ref={textarea}
           value={draft}
           placeholder={t('chat.placeholder')}
           onChange={(event) => {
             write(event.target.value)
+            setCaret(event.target.selectionStart)
             // Typing brings the list back — dismissing was about the draft as
             // it stood — and returns the highlight to the top, since filtering
             // has moved what sits at each index.
             setDismissed(false)
             setActive(0)
+            setMentionDismissed(false)
+            setMentionActive(0)
+          }}
+          // The caret also moves without the text changing — arrows, a click —
+          // and the mention is read at it.
+          onSelect={(event) => {
+            setCaret(event.currentTarget.selectionStart)
           }}
           onPaste={(event) => {
             /* A screenshot on the clipboard is a picture, not a file, so this
@@ -457,6 +536,30 @@ export function Composer({
               event.preventDefault()
               nextMode()
               return
+            }
+
+            // The files, under the same rules as the commands below: the list
+            // gets first refusal on the keys it uses, and closed it takes none.
+            if (shownMention !== null) {
+              if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+                event.preventDefault()
+                const step = event.key === 'ArrowDown' ? 1 : -1
+                setMentionActive((current) => (current + step + found.length) % found.length)
+                return
+              }
+
+              if (event.key === 'Enter' || event.key === 'Tab') {
+                event.preventDefault()
+                for (const chosen of found.slice(mentionActive, mentionActive + 1)) {
+                  mentionFile(shownMention, chosen)
+                }
+                return
+              }
+
+              if (event.key === 'Escape') {
+                setMentionDismissed(true)
+                return
+              }
             }
 
             // The list gets first refusal on the keys it uses, because it is
@@ -489,6 +592,15 @@ export function Composer({
                 setDismissed(true)
                 return
               }
+            }
+
+            // Escape stops the turn, as it does in Claude Code, once neither
+            // list has taken it: those return above, so an Escape that closes
+            // a suggestion never also interrupts the agent. Not while a
+            // candidate is being composed — there Escape cancels the candidate.
+            if (event.key === 'Escape' && busy && !event.nativeEvent.isComposing) {
+              onStop()
+              return
             }
 
             // `isComposing` is the Enter that confirms an IME candidate — how
@@ -565,7 +677,7 @@ export function Composer({
               <button
                 type="button"
                 onClick={onStop}
-                title={t('chat.stop')}
+                title={t('chat.stopHint')}
                 aria-label={t('chat.stop')}
                 // Filled danger, the same treatment `Button`'s destructive variant
                 // uses: it sits where send sits, and the two have to be told apart

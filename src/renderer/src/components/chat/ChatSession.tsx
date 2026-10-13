@@ -1,7 +1,8 @@
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import type { Chat, Effort, WorkingMode } from '@core/chats.js'
+import { latestTodos } from '@core/todos.js'
 import type { WorkspaceView } from '@core/workspaces.js'
 
 import { Placeholder } from '../Placeholder.js'
@@ -13,6 +14,7 @@ import type { PullRequestQuoteController } from '../../hooks/usePullRequestQuote
 import { type ChatNote, mergeNotes } from './attachments.js'
 import { useErrorMessage } from '../../hooks/useErrorMessage.js'
 import { useCommands } from '../../hooks/useCommands.js'
+import { useConfirm } from '../../hooks/useConfirm.js'
 import { useModels } from '../../hooks/useModels.js'
 import { useRateLimit } from '../../hooks/useRateLimit.js'
 import { useSessionUsage } from '../../hooks/useSessionUsage.js'
@@ -20,6 +22,7 @@ import { useSkills } from '../../hooks/useSkills.js'
 import { ChatLog } from './ChatLog.js'
 import { Composer } from './Composer.js'
 import { PlanDialog } from './PlanDialog.js'
+import { TodoPanel } from './TodoPanel.js'
 import { planTitle, readPlan } from './toolSummary.js'
 
 interface ChatSessionProps {
@@ -98,10 +101,34 @@ export function ChatSession({
   /* An attachment that could not be taken — a paste too large, a dialog that
      failed — shown in the conversation's own banner rather than a second one:
      it is the same kind of news about the same message. */
-  const [attachmentError, setAttachmentError] = useState<string | null>(null)
-  const attachments = useAttachments(setAttachmentError)
+  // A refusal that is news about the message being written, or about something
+  // done to the conversation from its log — one banner for both, as the log has
+  // one place it says things.
+  const [notice, setNotice] = useState<string | null>(null)
+  const attachments = useAttachments(setNotice)
+  const { confirm, dialog: confirmDialog } = useConfirm()
+  // A plan the user is rewriting, by the request it belongs to. Kept here so
+  // that looking at another tab does not throw the edits away.
+  const [planEdit, setPlanEdit] = useState<{ requestId: string; text: string } | null>(null)
   const describeFailure = useErrorMessage()
   const chat = useChat(tab.record, workspace.id, tab.status, describeFailure, onOpened)
+
+  // Held against the entries, like the log's own walks: this reads the whole
+  // transcript, and it is asked on every render of a pane that re-renders on
+  // every streamed token.
+  const todos = useMemo(() => latestTodos(chat.entries) ?? [], [chat.entries])
+
+  // A refusal is no suggestions rather than a message: the list is a
+  // convenience, and an error banner over a half-typed `@` would be the louder
+  // of the two problems.
+  const workspaceId = workspace.id
+  const searchFiles = useCallback(
+    async (query: string) => {
+      const found = await window.octopus.files.search(workspaceId, query)
+      return found.ok ? found.value : []
+    },
+    [workspaceId]
+  )
   const rateLimit = useRateLimit()
   const models = useModels()
   const commands = useCommands(chat.chat?.id ?? null)
@@ -120,6 +147,52 @@ export function ChatSession({
   // The record wins wherever there is one, and the settings answer for the
   // conversation that does not exist yet.
   const record = chat.chat
+
+  /*
+   * Puts the files back to how they were when a message was sent.
+   *
+   * Asked in two steps, and the first changes nothing: the agent is asked what
+   * it *would* do, so the question the user answers has the numbers in it. The
+   * second repeats the call for real. A rewind overwrites files — including any
+   * the user edited since — so it is never taken on a click alone.
+   */
+  const recordId = record?.id ?? null
+  const rewind = async (messageId: string): Promise<void> => {
+    // The log draws a message's mark only once there is a conversation record,
+    // so this cannot be reached without one; the guard is for the type.
+    /* v8 ignore next */
+    if (recordId === null) return
+
+    setNotice(null)
+    const preview = await window.octopus.chats.rewindPreview(recordId, messageId)
+    if (!preview.ok) {
+      setNotice(describeFailure(preview))
+      return
+    }
+
+    const files = preview.value.filesChanged.length
+    if (files === 0) {
+      setNotice(t('chat.rewindNothing'))
+      return
+    }
+
+    const answer = await confirm({
+      title: t('chat.rewindTitle'),
+      message: t('chat.rewindMessage', {
+        count: files,
+        insertions: preview.value.insertions,
+        deletions: preview.value.deletions
+      }),
+      detail: t('chat.rewindDetail'),
+      confirmLabel: t('chat.rewindConfirm'),
+      cancelLabel: t('chat.rewindCancel'),
+      destructive: true
+    })
+    if (!answer.confirmed) return
+
+    const done = await window.octopus.chats.rewind(recordId, messageId)
+    if (!done.ok) setNotice(describeFailure(done))
+  }
   const workingMode = record?.workingMode ?? defaultWorkingMode
   const effort = record?.effort ?? defaultEffort
   /* Null until a conversation says otherwise, which is most of them: there is
@@ -166,10 +239,10 @@ export function ChatSession({
         }}
         className="min-h-0 flex-1 overflow-auto"
       >
-        {(chat.error ?? attachmentError) !== null && (
+        {(chat.error ?? notice) !== null && (
           <div className="mx-auto w-full max-w-6xl px-6 pt-5">
             <p className="bg-danger-bg text-danger border-danger/25 rounded-[var(--radius-control)] border px-3 py-2">
-              {chat.error ?? attachmentError}
+              {chat.error ?? notice}
             </p>
           </div>
         )}
@@ -212,6 +285,7 @@ export function ChatSession({
             // gets in the core — this is the same plan, approved later — and,
             // as there, only out of planning: a plan the agent offered unasked
             // does not lift a conversation out of asking first.
+            onRewind={(messageId) => void rewind(messageId)}
             onExecutePlan={(plan) => {
               void (async () => {
                 if (record?.planMode === true) await chat.setMode('acceptEdits')
@@ -230,12 +304,36 @@ export function ChatSession({
           waiting somewhere nobody is looking. */}
       {visible && plan !== null && pending !== null && (
         <PlanDialog
+          // Per request: a plan the agent replaces is a different plan, and the
+          // editor's open-or-closed state belongs to the one it was opened on.
+          key={pending.requestId}
           plan={plan}
+          text={
+            planEdit !== null && planEdit.requestId === pending.requestId ? planEdit.text : plan
+          }
+          onText={(next) => {
+            setPlanEdit({ requestId: pending.requestId, text: next })
+          }}
           accepting={record?.planMode === true}
-          onExecute={() => void chat.answer(pending.requestId, 'allow')}
+          onExecute={(edited) => {
+            // The `undefined` where feedback goes: an approval has none, and
+            // the plan the user rewrote is the fourth argument.
+            void chat.answer(
+              pending.requestId,
+              'allow',
+              undefined,
+              ...(edited === null ? [] : [edited])
+            )
+          }}
           onKeepPlanning={(feedback) => void chat.answer(pending.requestId, 'deny', feedback)}
         />
       )}
+
+      {/* Only while the agent is working. A list it left with items pending —
+          interrupted, errored, or simply abandoned — would otherwise stay
+          pinned across every later turn and every restart, describing work
+          nobody is doing. The log still holds it. */}
+      <TodoPanel todos={chat.busy ? todos : []} />
 
       <Composer
         initialDraft={draft}
@@ -283,15 +381,19 @@ export function ChatSession({
         files={attachments.files}
         onRemoveFile={attachments.remove}
         onAttachFiles={() => {
-          setAttachmentError(null)
+          setNotice(null)
           void attachments.choose(t('chat.attach'))
         }}
+        onSearchFiles={searchFiles}
+        onAttachPaths={attachments.attach}
         onDropFiles={attachments.drop}
         onPasteImage={(image) => {
-          setAttachmentError(null)
+          setNotice(null)
           void attachments.paste(image)
         }}
       />
+
+      {confirmDialog}
     </div>
   )
 }

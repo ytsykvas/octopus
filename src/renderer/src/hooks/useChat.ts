@@ -39,6 +39,24 @@ function leavePlanning(chat: Chat): Chat {
   }
 }
 
+/**
+ * Sends an answer, with the plan the user rewrote only when there is one.
+ *
+ * So an ordinary answer goes out exactly as it did before a plan could be
+ * rewritten — three arguments — and the bridge sees a fourth only when it has
+ * something to say.
+ */
+function sendAnswer(
+  requestId: string,
+  decision: PermissionAnswer,
+  feedback: string | undefined,
+  editedPlan: string | undefined
+): Promise<Result<void>> {
+  return editedPlan === undefined
+    ? window.octopus.chats.answerPermission(requestId, decision, feedback)
+    : window.octopus.chats.answerPermission(requestId, decision, feedback, editedPlan)
+}
+
 export interface PendingPermission {
   readonly requestId: string
   readonly toolName: string
@@ -88,7 +106,12 @@ export interface ChatController {
   readonly send: (text: string) => Promise<boolean>
   readonly interrupt: () => Promise<void>
   /** `feedback` accompanies a refusal and reaches the agent as the reason. */
-  readonly answer: (requestId: string, answer: PermissionAnswer, feedback?: string) => Promise<void>
+  readonly answer: (
+    requestId: string,
+    answer: PermissionAnswer,
+    feedback?: string,
+    editedPlan?: string
+  ) => Promise<void>
   /** Answers the questions the agent asked, releasing the tool call. */
   readonly answerQuestions: (requestId: string, answers: readonly QuestionAnswer[]) => Promise<void>
   /**
@@ -411,7 +434,12 @@ export function useChat(
   }, [chat, describeFailure])
 
   const answer = useCallback(
-    async (requestId: string, decision: PermissionAnswer, feedback?: string) => {
+    async (
+      requestId: string,
+      decision: PermissionAnswer,
+      feedback?: string,
+      editedPlan?: string
+    ) => {
       // Cleared first: the agent is unblocked either way, and leaving the card
       // on screen while it works reads as though the click did nothing.
       const answered = pending
@@ -429,7 +457,7 @@ export function useChat(
         setChat((current) => (current === null ? null : leavePlanning(current)))
       }
 
-      const sent = await window.octopus.chats.answerPermission(requestId, decision, feedback)
+      const sent = await sendAnswer(requestId, decision, feedback, editedPlan)
       if (!sent.ok) setError(describeFailure(sent))
     },
     [pending, describeFailure]

@@ -27,11 +27,13 @@ function renderLog(overrides: Partial<React.ComponentProps<typeof ChatLog>> = {}
   onAnswerElicitation: ReturnType<typeof vi.fn>
   onAnswerQuestions: ReturnType<typeof vi.fn>
   onExecutePlan: ReturnType<typeof vi.fn>
+  onRewind: ReturnType<typeof vi.fn>
 } {
   const onAnswer = vi.fn()
   const onAnswerElicitation = vi.fn()
   const onAnswerQuestions = vi.fn()
   const onExecutePlan = vi.fn()
+  const onRewind = vi.fn()
 
   render(
     <ChatLog
@@ -44,12 +46,229 @@ function renderLog(overrides: Partial<React.ComponentProps<typeof ChatLog>> = {}
       onAnswerElicitation={onAnswerElicitation}
       onAnswerQuestions={onAnswerQuestions}
       onExecutePlan={onExecutePlan}
+      onRewind={onRewind}
       {...overrides}
     />
   )
 
-  return { onAnswer, onAnswerElicitation, onAnswerQuestions, onExecutePlan }
+  return { onAnswer, onAnswerElicitation, onAnswerQuestions, onExecutePlan, onRewind }
 }
+
+describe('a subagent’s work', () => {
+  const TASK = 'toolu_task'
+
+  const entries: ChatEntry[] = [
+    fromAgent({
+      type: 'tool_use',
+      toolUseId: TASK,
+      name: 'Task',
+      input: { description: 'Look around' }
+    }),
+    fromAgent({
+      type: 'tool_use',
+      toolUseId: 'r-1',
+      name: 'Grep',
+      input: { pattern: 'TODO' },
+      parentToolUseId: TASK
+    }),
+    fromAgent({
+      type: 'text',
+      text: 'Three matches in auth.rb.\nNothing else.',
+      parentToolUseId: TASK
+    }),
+    fromAgent({
+      type: 'tool_result',
+      toolUseId: 'r-1',
+      ok: false,
+      content: 'no such directory',
+      parentToolUseId: TASK
+    }),
+    fromAgent({ type: 'thinking', text: 'Let me think.', parentToolUseId: TASK }),
+    fromAgent({
+      type: 'tool_result',
+      toolUseId: 'r-2',
+      ok: true,
+      content: 'fine',
+      parentToolUseId: TASK
+    })
+  ]
+
+  it('is folded under the call that started it, closed', () => {
+    renderLog({ entries })
+
+    expect(screen.getByText('Task')).toBeInTheDocument()
+    expect(screen.getByText('1 step by the subagent')).toBeInTheDocument()
+    // Inside a closed disclosure: there for whoever opens it.
+    expect(screen.getByText('Grep').closest('details')).not.toHaveAttribute('open')
+  })
+
+  it('shows what it did and said when opened', async () => {
+    const user = userEvent.setup()
+    renderLog({ entries })
+
+    await user.click(screen.getByText('1 step by the subagent'))
+
+    expect(screen.getByText('Grep')).toBeVisible()
+    expect(screen.getByText('TODO')).toBeVisible()
+    // One line of what it said; the whole answer is the call's own result.
+    expect(screen.getByText('Three matches in auth.rb.')).toBeVisible()
+    expect(screen.queryByText(/Nothing else/)).not.toBeInTheDocument()
+    expect(screen.getByText(/no such directory/)).toBeVisible()
+    // Its reasoning and its quiet successes stay its own.
+    expect(screen.queryByText('Let me think.')).not.toBeInTheDocument()
+    expect(screen.queryByText('fine')).not.toBeInTheDocument()
+  })
+
+  it('does not draw them again at the top level', () => {
+    const { container } = render(
+      <ChatLog
+        entries={entries}
+        streaming={{ text: '', thinking: '' }}
+        busy={false}
+        pendingRequestId={null}
+        pendingElicitationId={null}
+        onAnswer={vi.fn()}
+        onAnswerElicitation={vi.fn()}
+        onAnswerQuestions={vi.fn()}
+        onExecutePlan={vi.fn()}
+        onRewind={vi.fn()}
+      />
+    )
+
+    expect(screen.getAllByText('Grep')).toHaveLength(1)
+    expect(container.querySelectorAll('details')).toHaveLength(1)
+  })
+
+  it('folds a run of subagent calls into the count too', async () => {
+    const user = userEvent.setup()
+    renderLog({
+      entries: [
+        fromAgent({
+          type: 'tool_use',
+          toolUseId: TASK,
+          name: 'Task',
+          input: { description: 'Look around' }
+        }),
+        fromAgent({
+          type: 'tool_use',
+          toolUseId: 'inner',
+          name: 'Task',
+          input: { description: 'Dig' },
+          parentToolUseId: TASK
+        }),
+        fromAgent({
+          type: 'tool_use',
+          toolUseId: 'g-1',
+          name: 'Read',
+          input: { file_path: '/deep.ts' },
+          parentToolUseId: 'inner'
+        })
+      ]
+    })
+
+    const [outer] = screen.getAllByText(/step by the subagent/)
+    if (outer) await user.click(outer)
+    const [, inner] = screen.getAllByText(/step by the subagent/)
+    if (inner) await user.click(inner)
+
+    expect(screen.getByText('/deep.ts')).toBeVisible()
+  })
+})
+
+describe('a plan the user rewrote', () => {
+  // What the agent was actually told to do, named so it is not mistaken for the
+  // one it wrote above — and carried out from here like any other.
+  it('is drawn as the plan it is, under its own name', async () => {
+    const user = userEvent.setup()
+    const { onExecutePlan } = renderLog({
+      entries: [fromAgent({ type: 'plan_edited', plan: '# Only the tests' })]
+    })
+
+    expect(screen.getByText('Plan, as you edited it')).toBeInTheDocument()
+    expect(screen.getByText('Only the tests')).toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: 'Execute' }))
+    expect(onExecutePlan).toHaveBeenCalledExactlyOnceWith('# Only the tests')
+  })
+})
+
+describe('putting the files back from a message', () => {
+  const MESSAGE = '11111111-1111-4111-8111-111111111111'
+
+  // The log only offers it; the pane asks the question and does the work.
+  it('offers it on a message that has an id, and hands the id up', async () => {
+    const user = userEvent.setup()
+    const { onRewind } = renderLog({
+      entries: [{ role: 'user', at: AT, text: 'rename the helper', uuid: MESSAGE }]
+    })
+
+    await user.click(
+      screen.getByRole('button', { name: 'Put the files back to before this message' })
+    )
+
+    expect(onRewind).toHaveBeenCalledExactlyOnceWith(MESSAGE)
+  })
+
+  // Sent before ids were kept: there is nothing to rewind to.
+  it('offers nothing on a message that has none', () => {
+    renderLog({ entries: [{ role: 'user', at: AT, text: 'an old message' }] })
+
+    expect(
+      screen.queryByRole('button', { name: 'Put the files back to before this message' })
+    ).not.toBeInTheDocument()
+  })
+
+  // The core would refuse it, and a button that can only fail is a promise the
+  // interface does not keep.
+  it('offers nothing while the agent is working', () => {
+    renderLog({
+      busy: true,
+      entries: [{ role: 'user', at: AT, text: 'rename the helper', uuid: MESSAGE }]
+    })
+
+    expect(
+      screen.queryByRole('button', { name: 'Put the files back to before this message' })
+    ).not.toBeInTheDocument()
+  })
+
+  it('records that it happened, with how much', () => {
+    renderLog({
+      entries: [
+        fromAgent({
+          type: 'files_rewound',
+          messageId: MESSAGE,
+          files: 3,
+          insertions: 12,
+          deletions: 4,
+          skippedLinks: 0
+        })
+      ]
+    })
+
+    expect(
+      screen.getByText('Files put back to an earlier message: 3 changed, +12 −4')
+    ).toBeInTheDocument()
+  })
+
+  // "5 changed" alone reads as though everything the checkpoint tracked had come
+  // back, and the rewind never follows a link.
+  it('says how many files a link kept it from restoring', () => {
+    renderLog({
+      entries: [
+        fromAgent({
+          type: 'files_rewound',
+          messageId: MESSAGE,
+          files: 3,
+          insertions: 12,
+          deletions: 4,
+          skippedLinks: 2
+        })
+      ]
+    })
+
+    expect(screen.getByText(/2 left alone — a link sat at their path/)).toBeInTheDocument()
+  })
+})
 
 describe('what the log shows', () => {
   it('shows what the user said and what came back', () => {
@@ -86,6 +305,7 @@ describe('what the log shows', () => {
         onAnswerElicitation={vi.fn()}
         onAnswerQuestions={vi.fn()}
         onExecutePlan={vi.fn()}
+        onRewind={vi.fn()}
       />
     )
 
@@ -117,6 +337,7 @@ describe('what the log shows', () => {
         onAnswerElicitation={vi.fn()}
         onAnswerQuestions={vi.fn()}
         onExecutePlan={vi.fn()}
+        onRewind={vi.fn()}
       />
     )
 
@@ -176,6 +397,30 @@ describe('what the log shows', () => {
     })
 
     expect(screen.getByText('TodoWrite')).toBeInTheDocument()
+  })
+
+  // The agent's list says how far it has got, which is what is worth reading
+  // on a row that carries none of the fields the summary looks for.
+  it('says how far the agent has got on a task list', () => {
+    renderLog({
+      entries: [
+        fromAgent({
+          type: 'tool_use',
+          toolUseId: 'c-1',
+          name: 'TodoWrite',
+          input: {
+            todos: [
+              { content: 'a', status: 'completed', activeForm: 'A' },
+              { content: 'b', status: 'in_progress', activeForm: 'B' },
+              { content: 'c', status: 'pending', activeForm: 'C' }
+            ]
+          }
+        })
+      ]
+    })
+
+    expect(screen.getByText('TodoWrite')).toBeInTheDocument()
+    expect(screen.getByText('1 of 3')).toBeInTheDocument()
   })
 
   /*

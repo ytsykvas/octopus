@@ -1,8 +1,9 @@
-import { createEvent, fireEvent, render, screen, within } from '@testing-library/react'
+import { act, createEvent, fireEvent, render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import type { AgentCommand, AgentModel } from '@core/chats.js'
+import type { MentionFile } from '@core/fileSearch.js'
 
 import { Composer } from './Composer.js'
 
@@ -20,6 +21,8 @@ function renderComposer(overrides: Partial<ComposerProps> = {}): {
   onModel: ReturnType<typeof vi.fn>
   onPlanModel: ReturnType<typeof vi.fn>
   onRemoveFile: ReturnType<typeof vi.fn>
+  onSearchFiles: ReturnType<typeof vi.fn<(query: string) => Promise<MentionFile[]>>>
+  onAttachPaths: ReturnType<typeof vi.fn>
   onDropFiles: ReturnType<typeof vi.fn>
   onPasteImage: ReturnType<typeof vi.fn>
   rerender: (next: Partial<ComposerProps>) => void
@@ -34,6 +37,8 @@ function renderComposer(overrides: Partial<ComposerProps> = {}): {
   const onModel = vi.fn()
   const onPlanModel = vi.fn()
   const onRemoveFile = vi.fn()
+  const onSearchFiles = vi.fn<(query: string) => Promise<MentionFile[]>>(() => Promise.resolve([]))
+  const onAttachPaths = vi.fn()
   const onDropFiles = vi.fn()
   const onPasteImage = vi.fn()
 
@@ -52,6 +57,8 @@ function renderComposer(overrides: Partial<ComposerProps> = {}): {
       files={[]}
       onRemoveFile={onRemoveFile}
       onAttachFiles={vi.fn()}
+      onSearchFiles={onSearchFiles}
+      onAttachPaths={onAttachPaths}
       onDropFiles={onDropFiles}
       onPasteImage={onPasteImage}
       model={null}
@@ -86,6 +93,8 @@ function renderComposer(overrides: Partial<ComposerProps> = {}): {
     onModel,
     onPlanModel,
     onRemoveFile,
+    onSearchFiles,
+    onAttachPaths,
     onDropFiles,
     onPasteImage,
     // For the settings that have to be watched *changing* — the chip follows
@@ -1174,5 +1183,259 @@ describe('the model the session is running', () => {
     await user.click(screen.getByRole('button', { name: 'Take this file back' }))
 
     expect(onRemoveFile).toHaveBeenCalledWith('/a/shot.png')
+  })
+})
+
+describe('mentioning a file', () => {
+  const AUTH: MentionFile = { path: 'src/core/auth.ts', absolute: '/work/anna/src/core/auth.ts' }
+  const ROUTES: MentionFile = { path: 'src/routes.ts', absolute: '/work/anna/src/routes.ts' }
+
+  function mentioning(): ReturnType<typeof renderComposer> {
+    const rendered = renderComposer()
+    rendered.onSearchFiles.mockImplementation((query: string) =>
+      Promise.resolve(query === '' || 'auth'.startsWith(query) ? [AUTH, ROUTES] : [])
+    )
+    return rendered
+  }
+
+  it('offers the workspace files once an @ starts a word', async () => {
+    const user = userEvent.setup()
+    const { onSearchFiles } = mentioning()
+
+    await user.type(field(), 'look at @au')
+
+    expect(await screen.findByRole('option', { name: /auth\.ts/ })).toBeInTheDocument()
+    expect(onSearchFiles).toHaveBeenLastCalledWith('au')
+  })
+
+  // An email address is not a file, and a search for it would be noise.
+  it('offers nothing inside a word', async () => {
+    const user = userEvent.setup()
+    const { onSearchFiles } = mentioning()
+
+    vi.useFakeTimers({ shouldAdvanceTime: true })
+    try {
+      await user.type(field(), 'mail me@example')
+      // Past the debounce, on a clock the test holds. Asserted straight away
+      // the search has not been asked for yet either way, and the test would
+      // pass over the bug it is for.
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(500)
+      })
+
+      expect(onSearchFiles).not.toHaveBeenCalled()
+      expect(screen.queryByRole('option')).not.toBeInTheDocument()
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('attaches the file and takes the token out of the text when one is clicked', async () => {
+    const user = userEvent.setup()
+    const { onAttachPaths } = mentioning()
+
+    await user.type(field(), 'fix @au now')
+    await user.keyboard('{ArrowLeft}{ArrowLeft}{ArrowLeft}{ArrowLeft}')
+    await user.click(await screen.findByRole('option', { name: /auth\.ts/ }))
+
+    expect(onAttachPaths).toHaveBeenCalledExactlyOnceWith(['/work/anna/src/core/auth.ts'])
+    expect(field()).toHaveValue('fix  now')
+    expect(field()).toHaveFocus()
+    // Where the token was, so the next word goes where the mention was.
+    expect((field() as HTMLTextAreaElement).selectionStart).toBe(4)
+  })
+
+  it('takes the highlighted file on Enter, without sending', async () => {
+    const user = userEvent.setup()
+    const { onAttachPaths, onSend } = mentioning()
+
+    await user.type(field(), '@')
+    await screen.findByRole('option', { name: /auth\.ts/ })
+    await user.keyboard('{ArrowDown}{Enter}')
+
+    expect(onAttachPaths).toHaveBeenCalledExactlyOnceWith(['/work/anna/src/routes.ts'])
+    expect(onSend).not.toHaveBeenCalled()
+  })
+
+  // What a shell does, and without `preventDefault` it would take the focus.
+  it('takes the highlighted file on Tab as well', async () => {
+    const user = userEvent.setup()
+    const { onAttachPaths } = mentioning()
+
+    await user.type(field(), '@')
+    await screen.findByRole('option', { name: /auth\.ts/ })
+    await user.keyboard('{Tab}')
+
+    expect(onAttachPaths).toHaveBeenCalledExactlyOnceWith(['/work/anna/src/core/auth.ts'])
+    expect(field()).toHaveFocus()
+  })
+
+  it('wraps from the top of the list to the bottom', async () => {
+    const user = userEvent.setup()
+    const { onAttachPaths } = mentioning()
+
+    await user.type(field(), '@')
+    await screen.findByRole('option', { name: /auth\.ts/ })
+    await user.keyboard('{ArrowUp}{Enter}')
+
+    expect(onAttachPaths).toHaveBeenCalledExactlyOnceWith(['/work/anna/src/routes.ts'])
+  })
+
+  it('moves the highlight under the pointer', async () => {
+    const user = userEvent.setup()
+    mentioning()
+
+    await user.type(field(), '@')
+    await user.hover(await screen.findByRole('option', { name: /routes\.ts/ }))
+
+    expect(screen.getByRole('option', { name: /routes\.ts/ })).toHaveAttribute(
+      'aria-selected',
+      'true'
+    )
+  })
+
+  // Letters are not keys the list takes: they refine the query and the list
+  // goes on being offered.
+  it('keeps the list while the query is being typed', async () => {
+    const user = userEvent.setup()
+    const { onSearchFiles } = mentioning()
+
+    await user.type(field(), '@a')
+    await screen.findByRole('option', { name: /auth\.ts/ })
+    await user.keyboard('u')
+
+    await vi.waitFor(() => {
+      expect(onSearchFiles).toHaveBeenLastCalledWith('au')
+    })
+    expect(screen.getByRole('option', { name: /auth\.ts/ })).toBeInTheDocument()
+  })
+
+  // The list used to go away on every keystroke until the next answer landed,
+  // and the Enter pressed in that gap sent `see @aut` as the message.
+  it('still takes a file on Enter right after another letter was typed', async () => {
+    const user = userEvent.setup()
+    const { onAttachPaths, onSend } = mentioning()
+
+    await user.type(field(), '@a')
+    await screen.findByRole('option', { name: /auth\.ts/ })
+    // The letter and the Enter in one breath: no answer for `au` has landed.
+    await user.keyboard('u{Enter}')
+
+    expect(onAttachPaths).toHaveBeenCalledExactlyOnceWith(['/work/anna/src/core/auth.ts'])
+    expect(onSend).not.toHaveBeenCalled()
+  })
+
+  it('closes on Escape and leaves the draft alone', async () => {
+    const user = userEvent.setup()
+    const { onAttachPaths } = mentioning()
+
+    await user.type(field(), 'see @au')
+    await screen.findByRole('option', { name: /auth\.ts/ })
+    await user.keyboard('{Escape}')
+
+    expect(screen.queryByRole('option')).not.toBeInTheDocument()
+    expect(field()).toHaveValue('see @au')
+    expect(onAttachPaths).not.toHaveBeenCalled()
+  })
+
+  it('comes back when typing carries on', async () => {
+    const user = userEvent.setup()
+    mentioning()
+
+    await user.type(field(), '@a')
+    await screen.findByRole('option', { name: /auth\.ts/ })
+    await user.keyboard('{Escape}')
+    await user.keyboard('u')
+
+    expect(await screen.findByRole('option', { name: /auth\.ts/ })).toBeInTheDocument()
+  })
+
+  it('closes when a click lands outside', async () => {
+    const user = userEvent.setup()
+    mentioning()
+
+    await user.type(field(), '@')
+    await screen.findByRole('option', { name: /auth\.ts/ })
+    await user.click(document.body)
+
+    expect(screen.queryByRole('option')).not.toBeInTheDocument()
+  })
+
+  it('offers nothing for a query nothing matches', async () => {
+    const user = userEvent.setup()
+    const { onSearchFiles } = mentioning()
+
+    await user.type(field(), '@zzz')
+    await vi.waitFor(() => {
+      expect(onSearchFiles).toHaveBeenLastCalledWith('zzz')
+    })
+
+    expect(screen.queryByRole('option')).not.toBeInTheDocument()
+  })
+
+  // Enter means what it always means when there is nothing to take.
+  it('sends on Enter when no file is being offered', async () => {
+    const user = userEvent.setup()
+    const { onSend } = mentioning()
+
+    await user.type(field(), 'plain text{Enter}')
+
+    expect(onSend).toHaveBeenCalledWith('plain text')
+  })
+})
+
+describe('stopping with Escape', () => {
+  const COMMANDS: AgentCommand[] = [
+    { name: 'clear', description: '', argumentHint: '', aliases: [] },
+    { name: 'compact', description: '', argumentHint: '', aliases: [] }
+  ]
+
+  it('stops a turn that is running', async () => {
+    const user = userEvent.setup()
+    const { onStop } = renderComposer({ busy: true })
+
+    await user.click(field())
+    await user.keyboard('{Escape}')
+
+    expect(onStop).toHaveBeenCalledOnce()
+  })
+
+  // Idle, Escape means nothing — it is not a way to clear the field.
+  it('does nothing when no turn is running', async () => {
+    const user = userEvent.setup()
+    const { onStop } = renderComposer({ busy: false })
+
+    await user.type(field(), 'half a thought{Escape}')
+
+    expect(onStop).not.toHaveBeenCalled()
+    expect(field()).toHaveValue('half a thought')
+  })
+
+  // The same key closes the list, and must not also interrupt the agent.
+  it('closes a suggestion list rather than stopping the turn', async () => {
+    const user = userEvent.setup()
+    const { onStop } = renderComposer({ busy: true, commands: COMMANDS })
+
+    await user.type(field(), '/')
+    expect(screen.getByRole('listbox')).toBeInTheDocument()
+    await user.keyboard('{Escape}')
+
+    expect(screen.queryByRole('listbox')).not.toBeInTheDocument()
+    expect(onStop).not.toHaveBeenCalled()
+  })
+
+  // There Escape cancels the candidate, and is not meant for the application.
+  it('leaves an Escape that cancels an IME candidate alone', () => {
+    const { onStop } = renderComposer({ busy: true })
+
+    fireEvent.keyDown(field(), { key: 'Escape', isComposing: true })
+
+    expect(onStop).not.toHaveBeenCalled()
+  })
+
+  it('names the key on the stop button', () => {
+    renderComposer({ busy: true })
+
+    expect(screen.getByRole('button', { name: 'Stop' })).toHaveAttribute('title', 'Stop (Esc)')
   })
 })

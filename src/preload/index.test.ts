@@ -310,11 +310,24 @@ describe('channel names', () => {
       'instructions:effective'
     ],
     ['files.open', () => method('files', 'open')('w' as never, 'a.ts' as never), 'files:open'],
+    [
+      'files.search',
+      () => method('files', 'search')('w' as never, 'comp' as never),
+      'files:search'
+    ],
     ['chats.list', () => method('chats', 'list')('w' as never), 'chats:list'],
     ['chats.open', () => method('chats', 'open')('w' as never), 'chats:open'],
     ['chats.create', () => method('chats', 'create')('w' as never), 'chats:create'],
     ['chats.fork', () => method('chats', 'fork')('c' as never), 'chats:fork'],
     ['chats.close', () => method('chats', 'close')('c' as never), 'chats:close'],
+    ['chats.closed', () => method('chats', 'closed')('w' as never), 'chats:closed'],
+    [
+      'chats.rewindPreview',
+      () => method('chats', 'rewindPreview')('c' as never, 'm' as never),
+      'chats:rewindPreview'
+    ],
+    ['chats.rewind', () => method('chats', 'rewind')('c' as never, 'm' as never), 'chats:rewind'],
+    ['chats.reopen', () => method('chats', 'reopen')('c' as never), 'chats:reopen'],
     [
       'chats.rename',
       () => method('chats', 'rename')('c' as never, 'auth' as never),

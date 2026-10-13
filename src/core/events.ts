@@ -30,6 +30,15 @@ import { UsageReportSchema } from './usage.js'
 const ToolInputSchema = z.unknown()
 
 /**
+ * The tool call whose subagent said or did this, when it was not the main one.
+ *
+ * Absent on the conversation's own events, and optional rather than nullable so
+ * a transcript written before it existed still reads: the SDK says `null` for
+ * the main thread, and that is stored as nothing.
+ */
+const ParentSchema = z.string().optional()
+
+/**
  * The lines an edit landed among, and where they start.
  *
  * `startLine` is the 1-based number of the first line of the changed region in
@@ -58,12 +67,22 @@ export const AgentEventSchema = z.discriminatedUnion('type', [
    * cannot parse — a required field would erase the history of every
    * conversation on the machine without anything saying so.
    */
-  z.object({ type: z.literal('text'), text: z.string(), uuid: z.string().optional() }),
+  z.object({
+    type: z.literal('text'),
+    text: z.string(),
+    uuid: z.string().optional(),
+    parentToolUseId: ParentSchema
+  }),
 
   /** A fragment of prose still being written. Shown, never stored. */
   z.object({ type: z.literal('text_delta'), text: z.string() }),
 
-  z.object({ type: z.literal('thinking'), text: z.string(), uuid: z.string().optional() }),
+  z.object({
+    type: z.literal('thinking'),
+    text: z.string(),
+    uuid: z.string().optional(),
+    parentToolUseId: ParentSchema
+  }),
   z.object({ type: z.literal('thinking_delta'), text: z.string() }),
 
   z.object({
@@ -71,7 +90,8 @@ export const AgentEventSchema = z.discriminatedUnion('type', [
     toolUseId: z.string(),
     name: z.string(),
     input: ToolInputSchema,
-    uuid: z.string().optional()
+    uuid: z.string().optional(),
+    parentToolUseId: ParentSchema
   }),
 
   z.object({
@@ -88,7 +108,8 @@ export const AgentEventSchema = z.discriminatedUnion('type', [
      * live event carries the whole thing.
      */
     truncated: z.boolean().optional(),
-    uuid: z.string().optional()
+    uuid: z.string().optional(),
+    parentToolUseId: ParentSchema
   }),
 
   /**
@@ -352,6 +373,39 @@ export const AgentEventSchema = z.discriminatedUnion('type', [
     trigger: z.enum(['manual', 'auto']).nullable(),
     preTokens: z.number().nullable(),
     postTokens: z.number().nullable()
+  }),
+
+  /**
+   * The plan as the user rewrote it before approving.
+   *
+   * The agent works from this text, not from the one it wrote — so the log has
+   * to say what it was actually told to do. Kept whole: the original is above it
+   * in the same log, and the pair is the record of what was changed.
+   */
+  z.object({ type: z.literal('plan_edited'), plan: z.string() }),
+
+  /**
+   * The files were put back to how they were when a message was sent.
+   *
+   * A row of its own in the log, and in the transcript: it changed the working
+   * tree without the agent doing anything, and a conversation read back later
+   * would otherwise show the agent's edits with no trace of their being undone.
+   * The counts are what the user was shown before agreeing, kept so the record
+   * says how much it was.
+   */
+  z.object({
+    type: z.literal('files_rewound'),
+    /** The user message the files were restored to. */
+    messageId: z.string(),
+    files: z.number().int().min(0),
+    insertions: z.number().int().min(0),
+    deletions: z.number().int().min(0),
+    /**
+     * Files left alone because a link sat at their path. The rewind never
+     * follows one, and a record saying "5 changed" without this would read as
+     * though everything it tracked had come back.
+     */
+    skippedLinks: z.number().int().min(0).default(0)
   }),
 
   /**
