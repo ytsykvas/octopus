@@ -1598,7 +1598,9 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
    */
   /** One session's answer, narrowed to what the sidebar draws and dated. */
   async function readWindows(session: AgentSession): Promise<UsageOutcome> {
-    const report = await session.usageReport()
+    // The block draws windows and nothing of what contributed to them, so the
+    // scan of local transcripts that fills `contributing` is left undone.
+    const report = await session.usageReport({ skipBehaviors: true })
     if (report === null) return { kind: 'failed' }
     if (!report.limitsApply) return { kind: 'noPlan' }
 

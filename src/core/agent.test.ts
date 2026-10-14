@@ -1985,6 +1985,27 @@ describe('reading everything /usage answers', () => {
     expect(report?.limits.map((limit) => limit.key)).toEqual(['five_hour', 'seven_day'])
   })
 
+  /*
+   * The sidebar asks every few minutes and draws none of the transcript scan, so
+   * it says so. What matters here is that the request actually carries it: a
+   * flag taken and dropped would leave the scan running on every read with
+   * nothing to show for it.
+   */
+  it('passes on what the caller wants left out', async () => {
+    const received: unknown[] = []
+    const recording = queryAnswering({
+      usage_EXPERIMENTAL_MAY_CHANGE_DO_NOT_RELY_ON_THIS_API_YET: (options?: unknown) => {
+        received.push(options)
+        return Promise.resolve(USAGE_RESPONSE)
+      }
+    })
+
+    await readUsageReport(recording, { skipBehaviors: true })
+    await readUsageReport(recording)
+
+    expect(received).toEqual([{ skipBehaviors: true }, undefined])
+  })
+
   it('says nothing when the CLI has no such control request', async () => {
     await expect(readUsageReport(queryAnswering({}))).resolves.toBeNull()
   })

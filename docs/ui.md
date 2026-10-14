@@ -1610,7 +1610,9 @@ the thing that reversed it is a measurement. The rule was written on the
 assumption that answering costs an agent; a cold read — spawn the CLI, ask,
 answer — is **720–850ms**, one against a session already running is about
 **260ms**, and neither costs a token, because it is a control request rather
-than a turn. Three things keep the figures current:
+than a turn. (Measured on SDK 0.3.224. See the note on `skipBehaviors` below
+for what a read costs today and why it is a different number.) Three things
+keep the figures current:
 
 - **the service announces a reading that moved**, so a finished turn reaches the
   block on that turn;
@@ -1629,6 +1631,28 @@ a component that exists only while the list is open, so folding stops the timer
 and the focus listener with it, and unfolding is a coming back: it asks at once.
 `SidebarFooter` is where that is arranged — the footer itself is always there,
 because Settings and the fold are, and only the block inside it comes and goes.
+
+**The block asks for the windows and nothing else.** The same control request
+also scans the machine's local transcripts to say what has been eating the
+limit — the card's `contributing` section — and a read of a heavy user's
+history is most of its cost. Measured on SDK 0.3.299, against a session already
+running: **~515ms** a read with the scan and **2–16ms** without it, the
+endpoint's own answer being kept for about a minute by the CLI. So the block
+passes `skipBehaviors: true` and a typed `/usage`, the one place that section is
+drawn, does not. The 260ms above predates this and is no longer what a read
+costs.
+
+**Which CLI answers is the SDK's, not the terminal's.** The app sets no
+`pathToClaudeCodeExecutable`, so the binary that runs is the platform package
+beside the SDK — `claude-agent-sdk-darwin-arm64`, of the SDK's own version —
+and a `claude` installed on the machine is a different build that may behave
+differently. Between 0.3.224 and 2.1.299 the usage client changed in ways that
+matter here: 2.1.299 keeps a successful answer for about a minute and says so
+("answered from a snapshot … endpoint not asked"), honours a 429's
+`Retry-After` and does not ask again for 3–5 minutes, and logs which of those
+happened. 0.3.224 asked every time and met refusals as an empty 200. Both still
+fall back silently when the endpoint refuses — the SDK's response carries no
+provenance in either — so the rest of this section holds on both.
 
 **Reads are coalesced, and a session started to answer is closed again.** All
 four askers can land at once, and each starting its own read would spawn its own
