@@ -287,7 +287,22 @@ export const UsageWindowsSchema = z.object({
    * an empty list is a different statement from a session that has no plan.
    */
   limitsApply: z.boolean(),
-  readAt: z.iso.datetime()
+  readAt: z.iso.datetime(),
+  /**
+   * The moment these figures describe, when it is not the moment they were read.
+   *
+   * `readAt` is when this app asked, and says nothing about the answer: the
+   * account's endpoint admits roughly one request in two minutes, and when it
+   * refuses the CLI answers from a fallback — the headers of a model response
+   * that may have been an hour ago, or a copy of its last successful fetch —
+   * without saying so. Null means the figures are live, or not old enough to be
+   * worth a footnote; the service decides where the line is.
+   *
+   * **Defaulted, because this is stored.** `state.json` keeps the last reading
+   * so the sidebar has something to draw before the agent answers, and one
+   * written before this field existed must still load.
+   */
+  asOf: z.iso.datetime().nullable().default(null)
 })
 
 export type UsageWindows = z.infer<typeof UsageWindowsSchema>
@@ -301,13 +316,19 @@ export type UsageWindows = z.infer<typeof UsageWindowsSchema>
 export function windowsFrom(
   report: UsageReport,
   readAt: string,
-  previous: UsageWindows | null = null
+  previous: UsageWindows | null = null,
+  asOf: string | null = null
 ): UsageWindows {
   const carried = report.modelWindowsKnown
     ? []
     : (previous?.limits.filter((limit) => limit.key === MODEL_SCOPED) ?? [])
 
-  return { limits: [...report.limits, ...carried], limitsApply: report.limitsApply, readAt }
+  return {
+    limits: [...report.limits, ...carried],
+    limitsApply: report.limitsApply,
+    readAt,
+    asOf
+  }
 }
 
 export type UsageContributing = z.infer<typeof ContributingSchema>

@@ -26,7 +26,8 @@ const READING: UsageWindows = {
     }
   ],
   limitsApply: true,
-  readAt: '2026-08-11T16:00:00.000Z'
+  readAt: '2026-08-11T16:00:00.000Z',
+  asOf: null
 }
 
 describe('what the sidebar knows about the account', () => {

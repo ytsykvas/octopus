@@ -1666,6 +1666,26 @@ remaining way for the block to lag, and it is a property of the CLI.
 promise already settled, and every later caller was handed that one sentence for
 the rest of the run.
 
+**A figure that is not live says how old it is.** The answer carries no
+provenance, so it is worked out from what each source guarantees. An answer
+with no per-model section was built from the headers of that session's last
+model response, and is as old as it (`modelHeardAt`, set only by events that
+mean the model spoke — a session that has only announced its commands has heard
+nothing). Any other answer is the endpoint's or the CLI's copy of it, and the
+copy's date is read from the CLI's config file (`cliUsageCache.ts`): it is
+rewritten on every successful fetch at most every few minutes, so one older than
+six minutes means no fetch has succeeded since and the figures are that old.
+Younger, or live, says nothing — a footnote on every read would be the one
+everybody learns to skip. The line is a sentence under the bars, `As of 25m
+ago`, with the reason in its tooltip.
+
+It rests on a file the CLI does not document, which is why it can only ever
+_add_ a line: a file that is missing, unreadable or shaped differently reads as
+null and the block is drawn as it was. One thing it cannot rule out is the
+CLI's process holding its config in memory while another process rewrites the
+file, which would make a figure look fresher than the session's copy; the
+failure is the one the block had before, not a new one.
+
 **A probe is the app's own session, not the conversation's.** It borrowed one at
 first — started through the same function a message uses, which registers it in
 the session map under a real conversation's id. Three things followed, and the
