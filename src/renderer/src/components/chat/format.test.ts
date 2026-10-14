@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 
 import {
+  formatAge,
   formatCountdown,
   formatDuration,
   formatResetAt,
@@ -35,6 +36,26 @@ describe('token counts', () => {
   it('never shows a fraction of a token or a negative one', () => {
     expect(formatTokens(12.4)).toBe('12')
     expect(formatTokens(-5)).toBe('0')
+  })
+})
+
+describe('how long ago a figure was', () => {
+  const labels = { hours: 'h', minutes: 'm' }
+  const from = new Date('2026-08-11T12:00:00.000Z')
+
+  it('reads in hours and minutes', () => {
+    expect(formatAge('2026-08-11T10:55:00.000Z', labels, from)).toBe('1h 5m')
+  })
+
+  it('drops the hours when there are none', () => {
+    expect(formatAge('2026-08-11T11:13:00.000Z', labels, from)).toBe('47m')
+  })
+
+  // A figure from the future is not a negative age, and neither is a stamp
+  // that cannot be read: a footnote about staleness should not claim any.
+  it('says nothing is old rather than counting backwards or guessing', () => {
+    expect(formatAge('2026-08-11T12:30:00.000Z', labels, from)).toBe('0m')
+    expect(formatAge('not a date', labels, from)).toBe('0m')
   })
 })
 

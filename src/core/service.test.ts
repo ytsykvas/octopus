@@ -85,7 +85,9 @@ function paths(root: string): Parameters<typeof createService>[0] {
     stateTempFilePath: join(root, 'state.json.tmp'),
     configFilePath: join(root, 'config.json'),
     // Without this, worktrees would land in the real ~/.octopus.
-    dataRoot: join(root, 'data')
+    dataRoot: join(root, 'data'),
+    // Without this, a usage read would look at the real CLI's config.
+    cliConfigDir: join(root, 'cli')
   }
 }
 
@@ -3009,7 +3011,8 @@ describe('whether two account readings say the same thing', () => {
   const reading = (limits: UsageLimit[], readAt = 'a'): UsageWindows => ({
     limits,
     limitsApply: true,
-    readAt
+    readAt,
+    asOf: null
   })
 
   it('is true for two readings of the same figures', () => {
@@ -3019,6 +3022,19 @@ describe('whether two account readings say the same thing', () => {
         reading([window('five_hour', 31, 'x'), window('seven_day', 84)])
       )
     ).toBe(true)
+  })
+
+  // The figures can be the same number twice and one of them an hour old; the
+  // footnote saying so has to be redrawn, or it stays on a figure that is live.
+  it('is false when the same figures have a different age', () => {
+    const limits = [window('five_hour', 31, 'x')]
+
+    expect(
+      sameWindows(
+        { ...reading(limits), asOf: '2026-08-12T10:00:00.000Z' },
+        { ...reading(limits), asOf: null }
+      )
+    ).toBe(false)
   })
 
   /*
@@ -3066,7 +3082,9 @@ describe('whether two account readings say the same thing', () => {
   // that stops reporting windows is not the same answer as one that never had
   // any.
   it('is false when one side has no plan and the other does', () => {
-    expect(sameWindows(reading([]), { limits: [], limitsApply: false, readAt: 'a' })).toBe(false)
+    expect(
+      sameWindows(reading([]), { limits: [], limitsApply: false, readAt: 'a', asOf: null })
+    ).toBe(false)
   })
 
   it('is true when both sides report no windows at all', () => {
@@ -3892,6 +3910,140 @@ describe('the agent chat', () => {
       await service.sendToChat(chat.id, '/usage')
 
       expect(agent().usageOptions()).toEqual([{ skipBehaviors: true }, undefined])
+    })
+
+    /*
+     * The account's endpoint refuses most requests and the CLI then answers from
+     * a copy it keeps, without saying so. The copy has a date, and that date is
+     * what the figures are as of. Older than a few minutes means no fetch has
+     * succeeded since — younger can be live, and says nothing.
+     */
+    describe('how old the figures are', () => {
+      const cliFile = (): string => join(dir, 'cli', '.claude.json')
+
+      const cached = async (ageMs: number): Promise<string> => {
+        const at = Date.now() - ageMs
+        await mkdir(join(dir, 'cli'), { recursive: true })
+        await writeFile(cliFile(), JSON.stringify({ cachedUsageUtilization: { fetchedAtMs: at } }))
+        return new Date(at).toISOString()
+      }
+
+      /** An answer with the per-model section, as one from the endpoint has. */
+      const fromEndpoint = (): void => {
+        usageAnswer = () =>
+          Promise.resolve({
+            ...USAGE_RESPONSE,
+            rate_limits: { ...USAGE_RESPONSE.rate_limits, model_scoped: [] }
+          })
+      }
+
+      it('says when the copy the CLI answered from was made', async () => {
+        fromEndpoint()
+        const asOf = await cached(30 * 60_000)
+        const { service, workspaceId } = await withWorkspace()
+        const chat = await service.openChat(workspaceId)
+        await service.sendToChat(chat.id, 'work')
+
+        await service.refreshSubscriptionUsage()
+
+        expect(service.getUsageWindows()?.asOf).toBe(asOf)
+      })
+
+      it('says nothing about a copy young enough to be a live read', async () => {
+        fromEndpoint()
+        await cached(60_000)
+        const { service, workspaceId } = await withWorkspace()
+        const chat = await service.openChat(workspaceId)
+        await service.sendToChat(chat.id, 'work')
+
+        await service.refreshSubscriptionUsage()
+
+        expect(service.getUsageWindows()?.asOf).toBeNull()
+      })
+
+      // A machine that has never run the CLI has no file, and a gauge's
+      // footnote is no reason to fail the gauge.
+      it('says nothing when the CLI has left nothing to read', async () => {
+        fromEndpoint()
+        const { service, workspaceId } = await withWorkspace()
+        const chat = await service.openChat(workspaceId)
+        await service.sendToChat(chat.id, 'work')
+
+        await service.refreshSubscriptionUsage()
+
+        expect(service.getUsageWindows()?.asOf).toBeNull()
+      })
+
+      /*
+       * An answer with no per-model section was built from the headers of the
+       * session's last model response, so the file says nothing about it — the
+       * moment is when that response came.
+       */
+      it('dates a figure built from headers by the last model response', async () => {
+        await cached(5 * 60_000)
+        let clock = '2026-08-12T10:00:00.000Z'
+        const { service, workspaceId } = await withWorkspace({ now: () => clock })
+        const chat = await service.openChat(workspaceId)
+        await service.sendToChat(chat.id, 'work')
+
+        agent().emit(textMessage('thinking out loud'))
+        await vi.waitFor(async () => {
+          expect(await service.chatHistory(chat.id)).not.toHaveLength(0)
+        })
+        clock = '2026-08-12T10:40:00.000Z'
+
+        await service.refreshSubscriptionUsage()
+
+        expect(service.getUsageWindows()?.asOf).toBe('2026-08-12T10:00:00.000Z')
+      })
+
+      it('says nothing of headers that are minutes old', async () => {
+        let clock = '2026-08-12T10:00:00.000Z'
+        const { service, workspaceId } = await withWorkspace({ now: () => clock })
+        const chat = await service.openChat(workspaceId)
+        await service.sendToChat(chat.id, 'work')
+
+        agent().emit(textMessage('thinking out loud'))
+        await vi.waitFor(async () => {
+          expect(await service.chatHistory(chat.id)).not.toHaveLength(0)
+        })
+        clock = '2026-08-12T10:02:00.000Z'
+
+        await service.refreshSubscriptionUsage()
+
+        expect(service.getUsageWindows()?.asOf).toBeNull()
+      })
+
+      // A session that has only announced itself has heard nothing from the
+      // model, so there is no headers moment to date anything by.
+      it('does not count a session that has not heard from the model', async () => {
+        let clock = '2026-08-12T10:00:00.000Z'
+        const { service, workspaceId } = await withWorkspace({ now: () => clock })
+        const chat = await service.openChat(workspaceId)
+        await service.sendToChat(chat.id, 'work')
+
+        agent().emit(initMessage)
+        await vi.waitFor(() => {
+          expect(service.listChats(workspaceId)[0]?.sessionId).toBe('sess-1')
+        })
+        clock = '2026-08-12T10:40:00.000Z'
+
+        await service.refreshSubscriptionUsage()
+
+        expect(service.getUsageWindows()?.asOf).toBeNull()
+      })
+
+      // Typed `/usage` fills the block as well, and its answer is as old as any.
+      it('dates what a typed /usage kept just the same', async () => {
+        fromEndpoint()
+        const asOf = await cached(45 * 60_000)
+        const { service, workspaceId } = await withWorkspace()
+        const chat = await service.openChat(workspaceId)
+
+        await service.sendToChat(chat.id, '/usage')
+
+        expect(service.getUsageWindows()?.asOf).toBe(asOf)
+      })
     })
 
     // An API-key, Bedrock or Vertex session. A different sentence from "not

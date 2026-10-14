@@ -54,6 +54,7 @@ import {
   sessionModel,
   type WorkingMode
 } from './chats.js'
+import { cliConfigDir, readCachedUsageAt } from './cliUsageCache.js'
 import { type EditTarget, readChangeContext, readEditTarget, writtenPath } from './changeContext.js'
 import {
   type FileSides,
@@ -96,7 +97,7 @@ import {
   writeProfile
 } from './envProfiles.js'
 import { runArchiveScript } from './archive.js'
-import { type UsageWindows, windowsFrom } from './usage.js'
+import { type UsageReport, type UsageWindows, windowsFrom } from './usage.js'
 import {
   type Config,
   ConfigSchema,
@@ -283,6 +284,30 @@ import {
 } from './workspaces.js'
 
 /**
+ * How old a CLI-side copy of the usage has to be before the block says so.
+ *
+ * The CLI rewrites its copy on a successful fetch at most every five minutes in
+ * the builds measured, so one older than this cannot belong to a live read; one
+ * younger can, and a footnote about a figure a minute old is noise. A little
+ * over five minutes rather than exactly, so a copy about to be rewritten is not
+ * called stale at the instant it would have been replaced.
+ */
+const STALE_AFTER_MS = 6 * 60_000
+
+/**
+ * The events that mean the model itself spoke — what a session's headers are
+ * refreshed by. Deltas count: they are the response in progress.
+ */
+const MODEL_EVENTS: ReadonlySet<string> = new Set([
+  'text',
+  'text_delta',
+  'thinking',
+  'thinking_delta',
+  'tool_use',
+  'result'
+])
+
+/**
  * The SDK's `forkSession`, narrowed to what this service asks of it.
  *
  * Ours rather than the SDK's own signature, so the injected stand-in in tests
@@ -345,6 +370,12 @@ export interface ServiceOptions {
   readonly uuid?: () => string
   /** Current time as an ISO string; a parameter so records are predictable in tests. */
   readonly now?: () => string
+  /**
+   * Where the CLI keeps its own config, read for one thing: when it last
+   * fetched the account's usage. Defaults to `$CLAUDE_CONFIG_DIR` or the home
+   * directory — a parameter so a test never reads the machine's real one.
+   */
+  readonly cliConfigDir?: string
 }
 
 /** An agent event together with where it came from. */
@@ -422,6 +453,7 @@ export type RateLimit = Extract<AgentEvent, { type: 'rate_limit' }>
  */
 export function sameWindows(left: UsageWindows, right: UsageWindows | null): boolean {
   if (left.limitsApply !== right?.limitsApply) return false
+  if (left.asOf !== right.asOf) return false
   if (left.limits.length !== right.limits.length) return false
 
   // `readAt` is deliberately not compared: it moves on every read and is the
@@ -1254,6 +1286,7 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
   const commandExec = options.commandExec ?? defaultExec
   const makeGh = options.makeGh ?? ghIn
   const dataRoot = options.dataRoot ?? rootDir()
+  const cliDir = options.cliConfigDir ?? cliConfigDir()
   const runQuery = options.query ?? defaultQuery
   const runForkSession = options.forkSession ?? defaultForkSession
   const uuid = options.uuid ?? randomUUID
@@ -1297,6 +1330,15 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
    */
   const spoke = new WeakMap<AgentSession, number>()
   let spokenCount = 0
+  /**
+   * When each session last heard from the model, in epoch milliseconds.
+   *
+   * What the headers a session falls back on are *as of*. Distinct from `spoke`
+   * on purpose: that orders sessions by any event, and a session that has only
+   * announced its commands has heard nothing from the model, so counting it
+   * would call a figure from an hour ago fresh.
+   */
+  const modelHeardAt = new WeakMap<AgentSession, number>()
   /** Sessions being started, so a second asker waits for the first. */
   const starts = new Map<string, Promise<AgentSession>>()
   const listeners = new Set<(event: ChatEvent) => void>()
@@ -1604,10 +1646,32 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
     if (report === null) return { kind: 'failed' }
     if (!report.limitsApply) return { kind: 'noPlan' }
 
-    const windows = windowsFrom(report, now(), usageWindows)
+    const windows = windowsFrom(report, now(), usageWindows, await asOfFor(report, session))
     await keepWindows(windows)
 
     return { kind: 'read', windows }
+  }
+
+  /**
+   * How old a figure is, when it is old enough to say so.
+   *
+   * The answer carries no provenance, so it is worked out from what each source
+   * guarantees. Headers (`modelWindowsKnown` false) are as old as the session's
+   * last model response. Otherwise the answer is the endpoint's own or the
+   * CLI's copy of it, and the copy is rewritten on every successful fetch at
+   * most every few minutes — so a copy older than `STALE_AFTER_MS` means no
+   * fetch has succeeded since, and the figures are that old. A younger one is
+   * live or close enough that a footnote would be noise.
+   */
+  async function asOfFor(report: UsageReport, session: AgentSession): Promise<string | null> {
+    const nowMs = Date.parse(now())
+    const moment = report.modelWindowsKnown
+      ? await readCachedUsageAt(cliDir)
+      : (modelHeardAt.get(session) ?? null)
+
+    return moment !== null && nowMs - moment > STALE_AFTER_MS
+      ? new Date(moment).toISOString()
+      : null
   }
 
   /**
@@ -1998,7 +2062,10 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
     const event = answerReset(chat, incoming)
 
     const speaker = sessions.get(chat.id)
-    if (speaker) spoke.set(speaker, ++spokenCount)
+    if (speaker) {
+      spoke.set(speaker, ++spokenCount)
+      if (MODEL_EVENTS.has(event.type)) modelHeardAt.set(speaker, Date.parse(now()))
+    }
 
     // A conversation the user asked to forget keeps no record of itself. The
     // delete goes in before the append that would otherwise write this very
@@ -4575,7 +4642,11 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
         // The card and the sidebar draw the same windows out of the same
         // answer. Reading them and letting them go would leave the block stale
         // beside a card that had just drawn them fresh.
-        if (report?.limitsApply) await keepWindows(windowsFrom(report, now(), usageWindows))
+        if (report?.limitsApply) {
+          await keepWindows(
+            windowsFrom(report, now(), usageWindows, await asOfFor(report, session))
+          )
+        }
         return
       }
 

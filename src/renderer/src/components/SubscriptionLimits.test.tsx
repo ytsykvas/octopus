@@ -49,7 +49,7 @@ function window(
 
 /** A reading of exactly these windows. */
 function reading(limits: UsageLimit[]): UsageWindows {
-  return { limits, limitsApply: true, readAt: '2026-08-11T16:00:00.000Z' }
+  return { limits, limitsApply: true, readAt: '2026-08-11T16:00:00.000Z', asOf: null }
 }
 
 // `.000000` rather than a measured fraction: the microseconds are the shape the
@@ -59,6 +59,32 @@ const BOTH = reading([
   window('five_hour', 31, '2026-08-11T19:50:00.000000+00:00'),
   window('seven_day', 84, '2026-08-14T04:00:00.000000+00:00')
 ])
+
+describe('how old the figures are', () => {
+  // The line exists for the reading that is not live. Drawn on every read it
+  // would be the footnote everybody learns to skip.
+  it('says nothing about a live reading', () => {
+    render(<SubscriptionLimits subscription={controller({ usage: BOTH })} />)
+
+    expect(screen.queryByText(/As of/)).not.toBeInTheDocument()
+  })
+
+  it('says how long ago the figures were, when they are not live', () => {
+    const old = { ...BOTH, asOf: '2026-08-11T14:55:00.000Z' }
+
+    render(<SubscriptionLimits subscription={controller({ usage: old })} />)
+
+    expect(screen.getByText('As of 1h 5m ago')).toBeInTheDocument()
+  })
+
+  it('explains what that means on hover', () => {
+    const old = { ...BOTH, asOf: '2026-08-11T14:55:00.000Z' }
+
+    render(<SubscriptionLimits subscription={controller({ usage: old })} />)
+
+    expect(screen.getByTitle(/did not answer a fresh read/)).toBeInTheDocument()
+  })
+})
 
 describe('the account block', () => {
   it('draws a row for each window the account reported', () => {

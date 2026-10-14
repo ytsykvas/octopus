@@ -4,7 +4,7 @@ import { useTranslation } from 'react-i18next'
 import { MODEL_SCOPED } from '@core/usage.js'
 
 import type { SubscriptionController, SubscriptionOutcome } from '../hooks/useSubscriptionUsage.js'
-import { formatCountdown, formatResetAt, usageTone } from './chat/format.js'
+import { formatAge, formatCountdown, formatResetAt, usageTone } from './chat/format.js'
 import { SHORT_WINDOW_NAMES } from './usageWindows.js'
 import { UsageBar } from './UsageBar.js'
 
@@ -156,6 +156,20 @@ export function SubscriptionLimits({ subscription }: SubscriptionLimitsProps): R
               </div>
             )
           })}
+
+          {/* Only when the figures are known to be old. Most reads are live and
+              say nothing here, which is what keeps this from being the line
+              everybody learns to ignore. */}
+          {usage?.asOf != null && (
+            <p className="text-ink-faint text-[11px] leading-snug" title={t('limits.asOfHint')}>
+              {t('limits.asOf', {
+                age: formatAge(usage.asOf, {
+                  hours: t('limits.hours'),
+                  minutes: t('limits.minutes')
+                })
+              })}
+            </p>
+          )}
         </div>
       )}
     </div>

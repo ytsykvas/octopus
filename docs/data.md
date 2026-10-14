@@ -532,6 +532,12 @@ carries **every** window the account reports and the moment it was taken —
 `resetsAt` says a window has since emptied, and cannot say how old the share
 beside it is.
 
+`readAt` is when the app asked, which says nothing of the answer: the CLI falls
+back to older figures when the endpoint refuses, silently. So the reading also
+carries `asOf`, the moment the figures describe, **or null when they are live**.
+It is stored, so it has a default — a reading written before it existed loads as
+"not known to be old", which is what it was.
+
 What makes the trade different from the rate limit's is that the objection is
 answerable here. A window carries `resetsAt`, so a reading can be checked
 against the clock: past that moment it is drawn faded and says so, rather than

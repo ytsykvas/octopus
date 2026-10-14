@@ -150,6 +150,29 @@ export function formatCountdown(
   return `${String(hours)}${labels.hours} ${String(minutes)}${labels.minutes}`
 }
 
+/**
+ * How long ago a moment was, coarsely: `1h 5m`, `47m`.
+ *
+ * The mirror of `formatCountdown`, and the same two units for the same reason:
+ * this says how stale a figure is, and a count of seconds on something read
+ * minutes ago claims a precision nothing in it has. A moment in the future or
+ * one that cannot be read answers `0m` — "not old", which is the safe thing for
+ * a footnote about age to say when it cannot say.
+ */
+export function formatAge(
+  since: string,
+  labels: { readonly hours: string; readonly minutes: string },
+  from: Date = new Date()
+): string {
+  const elapsed = from.getTime() - Date.parse(since)
+  const totalMinutes = Number.isFinite(elapsed) ? Math.max(0, Math.floor(elapsed / 60_000)) : 0
+  const hours = Math.floor(totalMinutes / 60)
+  const minutes = totalMinutes % 60
+
+  if (hours === 0) return `${String(minutes)}${labels.minutes}`
+  return `${String(hours)}${labels.hours} ${String(minutes)}${labels.minutes}`
+}
+
 /** Two digits, so `9:5` never appears where `09:05` is meant. */
 function pad(value: number): string {
   return String(value).padStart(2, '0')
