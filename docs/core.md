@@ -339,9 +339,11 @@ MCP servers.
 
 **And the whole of a read was measured later**, when the account block turned
 out to be lagging: `query()` to answer, including spawning the CLI, is
-**720–850ms** cold and about **260ms** against a session already running. That
-is what makes reading it on a timer reasonable, and it is written down here
-because the block was built on the opposite assumption.
+**720–850ms** cold and about **260ms** against a session already running
+(SDK 0.3.224). That is what makes reading it on a timer reasonable, and it is
+written down here because the block was built on the opposite assumption. On
+0.3.299 a read with the transcript scan is ~515ms and one without it 2–16ms; the
+sidebar asks without, and `docs/ui.md` has the measurement.
 
 Slash commands were measured the same way, and three of the four answers were
 not what the types suggested:

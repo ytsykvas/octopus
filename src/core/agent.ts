@@ -266,10 +266,21 @@ export interface AgentSession {
   commands: () => Promise<AgentCommand[]>
   /** How full this conversation's context window is, or null if it cannot say. */
   contextUsage: () => Promise<ContextUsage | null>
-  /** Everything `/usage` answers, or null if the session cannot say. */
-  usageReport: () => Promise<UsageReport | null>
+  /**
+   * Everything `/usage` answers, or null if the session cannot say.
+   *
+   * `skipBehaviors` leaves out the scan of local transcripts that fills
+   * `contributing`. The sidebar draws none of it and asks every few minutes, so
+   * it says so; the card a typed `/usage` draws wants all of it.
+   */
+  usageReport: (options?: UsageReadOptions) => Promise<UsageReport | null>
   /** Ends the session, killing the process the SDK spawned. */
   close: () => Promise<void>
+}
+
+/** What a usage read may leave out. */
+export interface UsageReadOptions {
+  readonly skipBehaviors?: boolean
 }
 
 /** How full a conversation's context window is, and what is filling it. */
@@ -353,13 +364,16 @@ export async function readContextUsage(conversation: Query): Promise<ContextUsag
  * its own shape may change without notice, so that is a case to expect rather
  * than one to be surprised by.
  */
-export async function readUsageReport(conversation: Query): Promise<UsageReport | null> {
+export async function readUsageReport(
+  conversation: Query,
+  options?: UsageReadOptions
+): Promise<UsageReport | null> {
   const ask = (conversation as UsageCapable)
     .usage_EXPERIMENTAL_MAY_CHANGE_DO_NOT_RELY_ON_THIS_API_YET
   if (typeof ask !== 'function') return null
 
   try {
-    return toUsageReport(await ask.call(conversation))
+    return toUsageReport(await ask.call(conversation, options))
   } catch {
     return null
   }
@@ -647,8 +661,8 @@ export function startSession(options: SessionOptions, hooks: SessionHooks): Agen
       return readContextUsage(conversation)
     },
 
-    usageReport() {
-      return readUsageReport(conversation)
+    usageReport(options) {
+      return readUsageReport(conversation, options)
     },
 
     async setEffort(choice) {

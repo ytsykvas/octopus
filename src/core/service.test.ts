@@ -3108,6 +3108,8 @@ describe('the agent chat', () => {
     readonly rewinds: () => { messageId: string; dryRun: boolean }[]
     readonly interrupted: () => number
     readonly closed: () => number
+    /** The options each ask for what `/usage` answers carried, in order. */
+    readonly usageOptions: () => unknown[]
     /** Permission modes the session was switched to, in order. */
     readonly modes: () => string[]
     /** Settings pushed onto the running session — where effort and skills land. */
@@ -3184,6 +3186,7 @@ describe('the agent chat', () => {
       const requestedModels: (string | undefined)[] = []
       let interrupted = 0
       let closed = 0
+      const usageOptions: unknown[] = []
 
       const options = (params.options ?? {}) as unknown as Record<string, unknown>
 
@@ -3269,6 +3272,7 @@ describe('the agent chat', () => {
         },
         interrupted: () => interrupted,
         closed: () => closed,
+        usageOptions: () => usageOptions,
         flagSettings: () => flagSettings,
         requestedModels: () => requestedModels,
         modes: () => modes,
@@ -3299,7 +3303,10 @@ describe('the agent chat', () => {
         supportedModels: () => offered(),
         supportedCommands: () => offeredCommands(),
         getContextUsage: () => contextAnswer(),
-        usage_EXPERIMENTAL_MAY_CHANGE_DO_NOT_RELY_ON_THIS_API_YET: () => usageAnswer(),
+        usage_EXPERIMENTAL_MAY_CHANGE_DO_NOT_RELY_ON_THIS_API_YET: (options?: unknown) => {
+          usageOptions.push(options)
+          return usageAnswer()
+        },
         setPermissionMode: (mode: string) => {
           modes.push(mode)
           return Promise.resolve()
@@ -3705,6 +3712,23 @@ describe('the agent chat', () => {
       await expect(service.refreshSubscriptionUsage()).resolves.toEqual({
         kind: 'nowhereToAsk'
       })
+    })
+
+    /*
+     * Two readers of one answer that want different amounts of it. The block
+     * draws windows and is asked every few minutes, so it leaves out the scan
+     * of local transcripts; the card a typed `/usage` draws is the one place
+     * that scan is drawn.
+     */
+    it('skips the transcript scan for the block and not for a typed /usage', async () => {
+      const { service, workspaceId } = await withWorkspace()
+      const chat = await service.openChat(workspaceId)
+      await service.sendToChat(chat.id, 'work')
+
+      await service.refreshSubscriptionUsage()
+      await service.sendToChat(chat.id, '/usage')
+
+      expect(agent().usageOptions()).toEqual([{ skipBehaviors: true }, undefined])
     })
 
     // An API-key, Bedrock or Vertex session. A different sentence from "not
