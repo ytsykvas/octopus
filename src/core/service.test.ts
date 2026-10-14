@@ -3820,6 +3820,58 @@ describe('the agent chat', () => {
       ])
     })
 
+    /*
+     * The same slot, the other way out. A read that *throws* — a probe that
+     * cannot spawn, a state write that fails — has to empty it as well, or one
+     * bad moment would leave every later read waiting on a promise that is
+     * never going to be replaced.
+     */
+    it('reads again after a read that threw', async () => {
+      let broken = true
+      const working = fakeQuery()
+      const { service, workspaceId } = await withWorkspace({
+        query: (params) => {
+          if (broken) throw new Error('spawn failed')
+          return working(params)
+        }
+      })
+      await service.openChat(workspaceId)
+
+      await expect(service.refreshSubscriptionUsage()).rejects.toThrow('spawn failed')
+
+      broken = false
+      expect(share(readingOf(await service.refreshSubscriptionUsage()), 'five_hour')).toBe(18)
+    })
+
+    // The card and the block are kept from one answer, so the one that has no
+    // per-model windows has to leave the block's alone there too.
+    it('keeps the per-model windows when a typed /usage answers without them', async () => {
+      const { service, workspaceId } = await withWorkspace()
+      const chat = await service.openChat(workspaceId)
+      await service.sendToChat(chat.id, 'work')
+
+      usageAnswer = () =>
+        Promise.resolve({
+          ...USAGE_RESPONSE,
+          rate_limits: {
+            ...USAGE_RESPONSE.rate_limits,
+            model_scoped: [
+              { display_name: 'Fable', utilization: 12, resets_at: '2026-08-14T04:00:00Z' }
+            ]
+          }
+        })
+      await service.refreshSubscriptionUsage()
+
+      usageAnswer = () => Promise.resolve(USAGE_RESPONSE)
+      await service.sendToChat(chat.id, '/usage')
+
+      expect(service.getUsageWindows()?.limits.map((window) => window.key)).toEqual([
+        'five_hour',
+        'seven_day',
+        'model_scoped'
+      ])
+    })
+
     // An API-key, Bedrock or Vertex session. A different sentence from "not
     // read yet", because no amount of pressing changes it.
     it('says when the account has no plan windows at all', async () => {
