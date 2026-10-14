@@ -145,7 +145,14 @@ export const en = {
     hours: 'h',
     minutes: 'm',
     soon: 'now',
-    stale: 'Read before this window reset, so the share is out of date. The next turn refreshes it.'
+    stale:
+      'Read before this window reset, so the share is out of date. The next turn refreshes it.',
+    /* The account's endpoint refuses most requests and the CLI then answers from
+       the last figures it had, without saying so. Said here, because a number
+       drawn as current that is an hour old is the worse of the two. */
+    asOf: 'As of {{age}} ago',
+    asOfHint:
+      'The account did not answer a fresh read, so these are the last figures known. Press to try again.'
   },
 
   project: {

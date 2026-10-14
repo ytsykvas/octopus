@@ -758,6 +758,9 @@ describe('the remembered model list', () => {
     const state = await loadState(file)
 
     expect(state.usageWindows?.limits[0]).toMatchObject({ severity: null, binding: false })
+    // The same file predates the age of the figures too: no field, and the
+    // answer is "not known to be old", not a refusal to start.
+    expect(state.usageWindows?.asOf).toBeNull()
   })
 
   /*
