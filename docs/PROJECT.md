@@ -207,6 +207,8 @@ moment to reconsider — not before.
 
 **Native modules.** Stage 1 started without them to avoid a build step, and that held until the embedded terminal arrived: `node-pty` is native. A `postinstall` script runs `electron-builder install-app-deps` — the same tool that packages the app, so the two cannot disagree — and `npm install` remains a single step. The binding is built through Node-API rather than against V8 directly, so it is not tied to Electron's ABI: the same binary loads under plain Node and under Electron.
 
+**One override, and when to drop it.** `package.json` pins `global-agent` to `^4.1.3`. `electron-builder` reaches it through `@electron/get@3`, which asks for `^3` as an optional dependency (the proxy support for downloading Electron). Version 3 pulls `roarr`, which pulls `sprintf-js`, and `sprintf-js@1.1.3` has an advisory (unbounded precision specifiers) with no patched release — so the only way to be rid of it is not to install it. Version 4 dropped `roarr`. Nothing here formats strings from outside input and it is a build tool, so the exposure was never real; the override exists so the alert is closed rather than dismissed. Remove it once `electron-builder` moves to an `@electron/get` that no longer wants `global-agent@3`. The one alert still open, `http-cache-semantics` (GHSA-ch52-4w7c-c8xp, through `got`), has no fix to take: its maintainer rejected the report, since the RFC allows sharing responses that set cookies, and it is a shared-cache concern in a client that only downloads Electron.
+
 State is JSON; `node:sqlite` is available (verified on Node 26) and will be added when chat history needs searching.
 
 #### One forced change from the original intent
