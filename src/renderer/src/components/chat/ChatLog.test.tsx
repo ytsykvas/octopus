@@ -1658,6 +1658,7 @@ describe('the answer to /usage', () => {
     },
     subscriptionType: 'max',
     limitsApply: true,
+    modelWindowsKnown: true,
     limits: [
       {
         key: 'five_hour' as const,

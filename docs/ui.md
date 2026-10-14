@@ -1636,6 +1636,36 @@ CLI to ask one question, so the one in flight is shared. And a probe is shut in
 a `finally`, which it was not at first — one press left an agent running for the
 rest of the session, and that would now be one more every three minutes.
 
+**The account's endpoint refuses most requests, and the CLI does not say so.**
+Measured against a live account: `GET /api/oauth/usage` admits about one request
+in two minutes, shared by every process holding the token — this app's polling,
+a turn ending, and a terminal `claude` all draw on the same one. A refused
+request comes back as HTTP 200 with a body that has no windows in it, and the
+CLI answers from a fallback without saying which: the rate-limit headers of the
+last model response _that process_ saw (five-hour and weekly shares only), or a
+copy in `~/.claude.json` that is written at most every five minutes and trusted
+for an hour. The SDK passes on the figures and drops the provenance, so a
+reading cannot be told from a stale one at this end.
+
+Two things follow, and both are in the code. **The session asked is the one
+that spoke last** (`freshestSession`, counted by `spoke`), because that is the
+one whose headers are current; a session that has sat idle falls back to what it
+saw when it last ran, and the first one started was asked every time whatever it
+had been doing. And **a reading silent about per-model windows keeps the ones
+already drawn** (`modelWindowsKnown`, `windowsFrom`): an answer built from
+headers has no `model_scoped` at all, which is not the same as an empty list,
+and drawing it as it stands made the Fable bar vanish until the next full read.
+
+A probe with no session running has made no request, so the headers it could
+fall back on do not exist and it is left with the cached file. That is the
+remaining way for the block to lag, and it is a property of the CLI.
+
+**The slot for the read in flight is emptied from outside the read.** It was a
+`finally` inside it, which for an answer that awaits nothing — "nowhere to ask"
+— ran before the promise was stored: the slot was cleared and then filled with a
+promise already settled, and every later caller was handed that one sentence for
+the rest of the run.
+
 **A probe is the app's own session, not the conversation's.** It borrowed one at
 first — started through the same function a message uses, which registers it in
 the session map under a real conversation's id. Three things followed, and the

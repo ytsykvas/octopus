@@ -3108,6 +3108,8 @@ describe('the agent chat', () => {
     readonly rewinds: () => { messageId: string; dryRun: boolean }[]
     readonly interrupted: () => number
     readonly closed: () => number
+    /** How many times this session was asked what `/usage` answers. */
+    readonly usageAsked: () => number
     /** Permission modes the session was switched to, in order. */
     readonly modes: () => string[]
     /** Settings pushed onto the running session — where effort and skills land. */
@@ -3184,6 +3186,7 @@ describe('the agent chat', () => {
       const requestedModels: (string | undefined)[] = []
       let interrupted = 0
       let closed = 0
+      let usageAsked = 0
 
       const options = (params.options ?? {}) as unknown as Record<string, unknown>
 
@@ -3269,6 +3272,7 @@ describe('the agent chat', () => {
         },
         interrupted: () => interrupted,
         closed: () => closed,
+        usageAsked: () => usageAsked,
         flagSettings: () => flagSettings,
         requestedModels: () => requestedModels,
         modes: () => modes,
@@ -3299,7 +3303,10 @@ describe('the agent chat', () => {
         supportedModels: () => offered(),
         supportedCommands: () => offeredCommands(),
         getContextUsage: () => contextAnswer(),
-        usage_EXPERIMENTAL_MAY_CHANGE_DO_NOT_RELY_ON_THIS_API_YET: () => usageAnswer(),
+        usage_EXPERIMENTAL_MAY_CHANGE_DO_NOT_RELY_ON_THIS_API_YET: () => {
+          usageAsked++
+          return usageAnswer()
+        },
         setPermissionMode: (mode: string) => {
           modes.push(mode)
           return Promise.resolve()
@@ -3705,6 +3712,164 @@ describe('the agent chat', () => {
       await expect(service.refreshSubscriptionUsage()).resolves.toEqual({
         kind: 'nowhereToAsk'
       })
+    })
+
+    /*
+     * The read in flight is shared, and was cleared in a `finally` that ran
+     * *before* the promise it belonged to had been stored — so an answer that
+     * came back without awaiting anything ("nowhere to ask") stayed in the slot
+     * for good. Every later read, from a turn ending or a press, was handed that
+     * one sentence for the rest of the run, and the block never drew a figure
+     * however many conversations were opened afterwards.
+     */
+    it('reads again once there is somewhere to ask, after finding nowhere', async () => {
+      const { service, workspaceId } = await withWorkspace()
+      await expect(service.refreshSubscriptionUsage()).resolves.toEqual({ kind: 'nowhereToAsk' })
+
+      const chat = await service.openChat(workspaceId)
+      await service.sendToChat(chat.id, 'work')
+
+      expect(share(readingOf(await service.refreshSubscriptionUsage()), 'five_hour')).toBe(18)
+    })
+
+    /*
+     * Which session is asked is not a detail. When the usage endpoint refuses,
+     * the CLI answers from the headers of its own last model response — current
+     * in a session that has just worked, stale in one that has sat idle. The
+     * first one started used to be asked every time, whatever it had been doing.
+     */
+    it('asks the session that spoke last, not the first one started', async () => {
+      const { service, workspaceId } = await withWorkspace()
+      const first = await service.openChat(workspaceId)
+      const second = await service.createChat(workspaceId)
+      await service.sendToChat(first.id, 'a')
+      await service.sendToChat(second.id, 'b')
+
+      agents[1]?.emit(textMessage('still going'))
+      await vi.waitFor(async () => {
+        expect(await service.chatHistory(second.id)).not.toHaveLength(0)
+      })
+
+      await service.refreshSubscriptionUsage()
+
+      expect(agents[1]?.usageAsked()).toBe(1)
+      expect(agents[0]?.usageAsked()).toBe(0)
+    })
+
+    it('follows the conversation as the activity moves', async () => {
+      const { service, workspaceId } = await withWorkspace()
+      const first = await service.openChat(workspaceId)
+      const second = await service.createChat(workspaceId)
+      await service.sendToChat(first.id, 'a')
+      await service.sendToChat(second.id, 'b')
+
+      agents[1]?.emit(textMessage('one'))
+      await vi.waitFor(async () => {
+        expect(await service.chatHistory(second.id)).not.toHaveLength(0)
+      })
+      agents[0]?.emit(textMessage('two'))
+      await vi.waitFor(async () => {
+        expect(await service.chatHistory(first.id)).not.toHaveLength(0)
+      })
+
+      await service.refreshSubscriptionUsage()
+
+      expect(agents[0]?.usageAsked()).toBe(1)
+      expect(agents[1]?.usageAsked()).toBe(0)
+    })
+
+    /*
+     * The answer built from response headers has the two shares and nothing per
+     * model. Drawn as it stands it is fresher than anything else available — and
+     * it made the Fable bar disappear until the next full read, which looked
+     * like the account changing.
+     */
+    it('keeps the per-model windows when an answer is silent about them', async () => {
+      const { service, workspaceId } = await withWorkspace()
+      const chat = await service.openChat(workspaceId)
+      await service.sendToChat(chat.id, 'work')
+
+      usageAnswer = () =>
+        Promise.resolve({
+          ...USAGE_RESPONSE,
+          rate_limits: {
+            ...USAGE_RESPONSE.rate_limits,
+            model_scoped: [
+              { display_name: 'Fable', utilization: 12, resets_at: '2026-08-14T04:00:00Z' }
+            ]
+          }
+        })
+      await service.refreshSubscriptionUsage()
+
+      usageAnswer = () =>
+        Promise.resolve({
+          ...USAGE_RESPONSE,
+          rate_limits: {
+            five_hour: { utilization: 21, resets_at: '2026-08-12T19:50:00.149775+00:00' },
+            seven_day: { utilization: 85, resets_at: '2026-08-12T22:00:00.149796+00:00' }
+          }
+        })
+      await service.refreshSubscriptionUsage()
+
+      expect(
+        service.getUsageWindows()?.limits.map((window) => [window.key, window.utilization])
+      ).toEqual([
+        ['five_hour', 21],
+        ['seven_day', 85],
+        ['model_scoped', 12]
+      ])
+    })
+
+    /*
+     * The same slot, the other way out. A read that *throws* — a probe that
+     * cannot spawn, a state write that fails — has to empty it as well, or one
+     * bad moment would leave every later read waiting on a promise that is
+     * never going to be replaced.
+     */
+    it('reads again after a read that threw', async () => {
+      let broken = true
+      const working = fakeQuery()
+      const { service, workspaceId } = await withWorkspace({
+        query: (params) => {
+          if (broken) throw new Error('spawn failed')
+          return working(params)
+        }
+      })
+      await service.openChat(workspaceId)
+
+      await expect(service.refreshSubscriptionUsage()).rejects.toThrow('spawn failed')
+
+      broken = false
+      expect(share(readingOf(await service.refreshSubscriptionUsage()), 'five_hour')).toBe(18)
+    })
+
+    // The card and the block are kept from one answer, so the one that has no
+    // per-model windows has to leave the block's alone there too.
+    it('keeps the per-model windows when a typed /usage answers without them', async () => {
+      const { service, workspaceId } = await withWorkspace()
+      const chat = await service.openChat(workspaceId)
+      await service.sendToChat(chat.id, 'work')
+
+      usageAnswer = () =>
+        Promise.resolve({
+          ...USAGE_RESPONSE,
+          rate_limits: {
+            ...USAGE_RESPONSE.rate_limits,
+            model_scoped: [
+              { display_name: 'Fable', utilization: 12, resets_at: '2026-08-14T04:00:00Z' }
+            ]
+          }
+        })
+      await service.refreshSubscriptionUsage()
+
+      usageAnswer = () => Promise.resolve(USAGE_RESPONSE)
+      await service.sendToChat(chat.id, '/usage')
+
+      expect(service.getUsageWindows()?.limits.map((window) => window.key)).toEqual([
+        'five_hour',
+        'seven_day',
+        'model_scoped'
+      ])
     })
 
     // An API-key, Bedrock or Vertex session. A different sentence from "not
@@ -7653,6 +7818,22 @@ describe('the agent chat', () => {
       await expect(service.previewRewind(chatId, messageId)).rejects.toMatchObject({
         code: 'rewindBusy'
       })
+    })
+
+    /*
+     * The branch that makes a second asker wait for the first start, reached the
+     * plain way: two messages into one conversation before its session exists.
+     * It used to be covered only by the race below, whose outcome depends on how
+     * long a settings read happens to take — green on one machine and a missed
+     * branch on another, with nothing in the change under test to blame.
+     */
+    it('starts one session when two messages arrive before it exists', async () => {
+      const { service, workspaceId } = await withWorkspace()
+      const chat = await service.openChat(workspaceId)
+
+      await Promise.all([service.sendToChat(chat.id, 'one'), service.sendToChat(chat.id, 'two')])
+
+      expect(agents).toHaveLength(1)
     })
 
     // A message sent while the session for a rewind is being started began a
