@@ -7820,6 +7820,22 @@ describe('the agent chat', () => {
       })
     })
 
+    /*
+     * The branch that makes a second asker wait for the first start, reached the
+     * plain way: two messages into one conversation before its session exists.
+     * It used to be covered only by the race below, whose outcome depends on how
+     * long a settings read happens to take — green on one machine and a missed
+     * branch on another, with nothing in the change under test to blame.
+     */
+    it('starts one session when two messages arrive before it exists', async () => {
+      const { service, workspaceId } = await withWorkspace()
+      const chat = await service.openChat(workspaceId)
+
+      await Promise.all([service.sendToChat(chat.id, 'one'), service.sendToChat(chat.id, 'two')])
+
+      expect(agents).toHaveLength(1)
+    })
+
     // A message sent while the session for a rewind is being started began a
     // turn the rewind would otherwise have run underneath — and both reaching
     // for a session started two, the second registered over the first.
