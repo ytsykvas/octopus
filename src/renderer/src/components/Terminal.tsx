@@ -92,7 +92,7 @@ export function Terminal({
     exitHandler.current = onExit
     failedHandler.current = onFailed
     closedHandler.current = onClosed
-  }, [onExit, onClosed])
+  }, [onExit, onClosed, onFailed])
 
   useEffect(() => {
     const container = host.current

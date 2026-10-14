@@ -475,6 +475,34 @@ describe('Terminal', () => {
     expect(emulator().screen.join('')).toContain('no handler registered')
   })
 
+  /*
+   * The start is asynchronous and the owner re-renders while it is under way, so
+   * the handler that has to hear about a failure is the one passed *by then*.
+   * The ref kept the first: `onFailed` was assigned in the same effect as the
+   * other two but left out of its dependency list, which is how the lint rule
+   * came to flag it.
+   */
+  it('tells the newest handler when the start fails after the owner re-rendered', async () => {
+    type Created = Awaited<ReturnType<typeof window.octopus.terminal.create>>
+    let settle: (created: Created) => void = () => undefined
+    vi.mocked(window.octopus.terminal.create).mockReturnValue(
+      new Promise<Created>((resolve) => {
+        settle = resolve
+      })
+    )
+    const first = vi.fn()
+    const second = vi.fn()
+
+    const view = render(<Terminal cwd="/tmp/planner/anna" onFailed={first} />)
+    view.rerender(<Terminal cwd="/tmp/planner/anna" onFailed={second} />)
+    settle({ ok: false, error: 'spawn /bin/zsh ENOENT' })
+
+    await waitFor(() => {
+      expect(second).toHaveBeenCalledWith('spawn /bin/zsh ENOENT')
+    })
+    expect(first).not.toHaveBeenCalled()
+  })
+
   // A rejection is usually an Error and does not have to be. Whatever arrives,
   // the reader gets a sentence rather than `[object Object]`.
   it('says something useful when the failure is not an Error', async () => {
