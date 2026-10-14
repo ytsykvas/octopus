@@ -236,6 +236,22 @@ export const UsageReportSchema = z.object({
    */
   limitsApply: z.boolean(),
   limits: z.array(UsageLimitSchema),
+  /**
+   * Whether the response said anything at all about per-model weekly windows.
+   *
+   * Not the same as there being none. When the account's usage endpoint refuses
+   * a request — it admits roughly one in two minutes, shared by every process
+   * holding the token — the CLI answers from the rate-limit headers of the last
+   * model response instead. Those carry the five-hour and weekly shares and
+   * nothing per model, so `model_scoped` is absent rather than empty. A reading
+   * like that is *fresher* than the cached file the CLI would otherwise fall
+   * back to, and is worth keeping — but only its figures; the windows it is
+   * silent about have not gone anywhere.
+   *
+   * Defaulted, because reports are written into transcripts and an older one
+   * has no such field.
+   */
+  modelWindowsKnown: z.boolean().default(true),
   extraUsage: z
     .object({
       monthlyLimit: z.number().nullable(),
@@ -276,8 +292,22 @@ export const UsageWindowsSchema = z.object({
 
 export type UsageWindows = z.infer<typeof UsageWindowsSchema>
 
-export function windowsFrom(report: UsageReport, readAt: string): UsageWindows {
-  return { limits: report.limits, limitsApply: report.limitsApply, readAt }
+/**
+ * `previous` is what was drawn before, and is consulted for one thing: the
+ * per-model windows a reading was silent about (`modelWindowsKnown`). Without
+ * it an answer built from response headers made the Fable bar vanish and come
+ * back on the next full read, which looked like the account changing.
+ */
+export function windowsFrom(
+  report: UsageReport,
+  readAt: string,
+  previous: UsageWindows | null = null
+): UsageWindows {
+  const carried = report.modelWindowsKnown
+    ? []
+    : (previous?.limits.filter((limit) => limit.key === MODEL_SCOPED) ?? [])
+
+  return { limits: [...report.limits, ...carried], limitsApply: report.limitsApply, readAt }
 }
 
 export type UsageContributing = z.infer<typeof ContributingSchema>
@@ -396,6 +426,7 @@ export function toUsageReport(response: unknown): UsageReport | null {
     subscriptionType: parsed.data.subscription_type,
     limitsApply: parsed.data.rate_limits_available && limits != null,
     limits: limits ? toLimits(limits) : [],
+    modelWindowsKnown: limits?.model_scoped != null,
     // Only when it is switched on: the fields are sent either way, and an
     // off account reads them all as null, which would draw an empty row.
     extraUsage:

@@ -182,6 +182,7 @@ describe('the event schema', () => {
         },
         subscriptionType: 'max',
         limitsApply: true,
+        modelWindowsKnown: false,
         limits: [
           {
             key: 'five_hour',
@@ -265,6 +266,41 @@ describe('the event schema', () => {
         }
       }).success
     ).toBe(false)
+  })
+
+  /*
+   * Reports are written into transcripts, and the ones already on disk predate
+   * `modelWindowsKnown`. Without a default they would be turned down, and
+   * `transcript.ts` drops a line that does not parse — every `/usage` card ever
+   * drawn would be gone from the history on the next launch.
+   */
+  it('reads a stored usage report that predates modelWindowsKnown', () => {
+    const older = {
+      type: 'usage',
+      report: {
+        session: {
+          costUsd: 0,
+          apiDurationMs: 0,
+          wallDurationMs: 0,
+          linesAdded: 0,
+          linesRemoved: 0,
+          inputTokens: 0,
+          outputTokens: 0,
+          cacheReadTokens: 0,
+          cacheWriteTokens: 0
+        },
+        subscriptionType: 'max',
+        limitsApply: true,
+        limits: [],
+        extraUsage: null,
+        contributing: null
+      }
+    }
+
+    const parsed = AgentEventSchema.safeParse(older)
+
+    expect(parsed.success).toBe(true)
+    expect(parsed.data).toMatchObject({ report: { modelWindowsKnown: true } })
   })
 
   /*

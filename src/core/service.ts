@@ -1284,6 +1284,19 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
   const download = { fetch: options.fetch ?? globalThis.fetch, timeoutMs: DOWNLOAD_TIMEOUT_MS }
 
   const sessions = new Map<string, AgentSession>()
+  /**
+   * Which session spoke last, as a count rather than a clock.
+   *
+   * The account's usage is asked of one session, and which one matters: when
+   * the usage endpoint refuses — it admits roughly one request in two minutes,
+   * shared by every process holding the token — the CLI answers from the
+   * rate-limit headers of *its own* last model response. A session that spoke a
+   * moment ago holds the current figures; one that has been idle holds
+   * whatever it saw when it last ran. A counter because only the order is
+   * wanted, and a test then needs no clock to arrange it.
+   */
+  const spoke = new WeakMap<AgentSession, number>()
+  let spokenCount = 0
   /** Sessions being started, so a second asker waits for the first. */
   const starts = new Map<string, Promise<AgentSession>>()
   const listeners = new Set<(event: ChatEvent) => void>()
@@ -1589,7 +1602,7 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
     if (report === null) return { kind: 'failed' }
     if (!report.limitsApply) return { kind: 'noPlan' }
 
-    const windows = windowsFrom(report, now())
+    const windows = windowsFrom(report, now(), usageWindows)
     await keepWindows(windows)
 
     return { kind: 'read', windows }
@@ -1603,8 +1616,11 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
    * would spawn its own CLI. The one in flight is shared instead.
    *
    * A session already running answers for nothing: one control request against
-   * a process that exists, about 260ms. With none, `startProbe` opens one of
-   * its own and closes it again.
+   * a process that exists, about 260ms — and the one that spoke last, because
+   * what it falls back on when the account's endpoint refuses is the headers of
+   * its own last response (see `spoke`). With none running, `startProbe` opens
+   * one of its own and closes it again; it has made no request, so what it can
+   * fall back on is only the CLI's cached file, which may be up to an hour old.
    *
    * A workspace is still needed for its worktree, and it is found through a
    * conversation that already exists, for the reason `openChat` is lazy: a
@@ -1613,27 +1629,54 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
    * nothing more — see `startProbe` for why that distinction is the fix.
    */
   function askAccount(): Promise<UsageOutcome> {
-    reading ??= (async (): Promise<UsageOutcome> => {
+    if (reading !== null) return reading
+
+    const run = (async (): Promise<UsageOutcome> => {
+      const running = freshestSession()
+      if (running) return readWindows(running)
+
+      const chat = state.chats.at(-1)
+      const workspace = state.workspaces.find((item) => item.id === chat?.workspaceId)
+      if (!chat || !workspace) return { kind: 'nowhereToAsk' }
+
+      const probe = startProbe(workspace)
       try {
-        const [running] = sessions.values()
-        if (running) return await readWindows(running)
-
-        const chat = state.chats.at(-1)
-        const workspace = state.workspaces.find((item) => item.id === chat?.workspaceId)
-        if (!chat || !workspace) return { kind: 'nowhereToAsk' }
-
-        const probe = startProbe(workspace)
-        try {
-          return await readWindows(probe)
-        } finally {
-          await probe.close()
-        }
+        return await readWindows(probe)
       } finally {
-        reading = null
+        await probe.close()
       }
     })()
 
-    return reading
+    /*
+     * Cleared from outside the body, after the promise is stored. It was a
+     * `finally` inside it, and an answer that never awaits — "nowhere to ask"
+     * — ran that before the assignment: the slot was emptied and then filled
+     * with a promise already settled, which every later caller was handed for
+     * the rest of the run.
+     */
+    reading = run
+    const clear = (): void => {
+      reading = null
+    }
+    run.then(clear, clear)
+
+    return run
+  }
+
+  /** The session that spoke last, which is the one with the current headers. */
+  function freshestSession(): AgentSession | undefined {
+    let freshest: AgentSession | undefined
+    let at = -1
+
+    for (const candidate of sessions.values()) {
+      const heard = spoke.get(candidate) ?? 0
+      if (heard > at) {
+        freshest = candidate
+        at = heard
+      }
+    }
+
+    return freshest
   }
 
   async function keepWindows(reading: UsageWindows | null): Promise<void> {
@@ -1951,6 +1994,9 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
    */
   function handleEvent(chat: Chat, incoming: AgentEvent): void {
     const event = answerReset(chat, incoming)
+
+    const speaker = sessions.get(chat.id)
+    if (speaker) spoke.set(speaker, ++spokenCount)
 
     // A conversation the user asked to forget keeps no record of itself. The
     // delete goes in before the append that would otherwise write this very
@@ -4527,7 +4573,7 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
         // The card and the sidebar draw the same windows out of the same
         // answer. Reading them and letting them go would leave the block stale
         // beside a card that had just drawn them fresh.
-        if (report?.limitsApply) await keepWindows(windowsFrom(report, now()))
+        if (report?.limitsApply) await keepWindows(windowsFrom(report, now(), usageWindows))
         return
       }
 
