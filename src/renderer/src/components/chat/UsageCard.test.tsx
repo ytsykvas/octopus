@@ -29,6 +29,7 @@ function report(overrides: Partial<UsageReport> = {}): UsageReport {
     },
     subscriptionType: 'max',
     limitsApply: true,
+    modelWindowsKnown: true,
     limits: [
       {
         key: 'five_hour',

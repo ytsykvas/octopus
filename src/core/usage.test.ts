@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { MODEL_SCOPED, toUsageReport, windowsFrom } from './usage.js'
+import { MODEL_SCOPED, toUsageReport, type UsageWindows, windowsFrom } from './usage.js'
 
 /**
  * The response as CLI 2.1.247 actually sent it, trimmed.
@@ -434,6 +434,7 @@ describe('reading the /usage response', () => {
       subscriptionType: null,
       limitsApply: true,
       limits: [],
+      modelWindowsKnown: false,
       extraUsage: null,
       contributing: null
     })
@@ -492,6 +493,67 @@ describe('the windows a report carries', () => {
     const report = reportOf({ five_hour: { utilization: 31, resets_at: null } })
 
     expect(report && windowsFrom(report, READ_AT).readAt).toBe(READ_AT)
+  })
+
+  /*
+   * When the usage endpoint refuses a request the CLI answers from the headers
+   * of its last model response, which say nothing per model. That reading is
+   * the freshest one there is — and drawing it as it stands made the per-model
+   * bar vanish until the next full read, which looked like the account having
+   * changed.
+   */
+  describe('when the answer is silent about per-model windows', () => {
+    const FABLE = { display_name: 'Fable', utilization: 15, resets_at: '2026-08-14T04:00:00Z' }
+
+    const before = (): UsageWindows => {
+      const full = reportOf({
+        five_hour: { utilization: 31, resets_at: '2026-08-11T19:50:00Z' },
+        model_scoped: [FABLE]
+      })
+      if (!full) throw new Error('fixture did not parse')
+      return windowsFrom(full, READ_AT)
+    }
+
+    const headersOnly = (): NonNullable<ReturnType<typeof toUsageReport>> => {
+      const report = reportOf({ five_hour: { utilization: 40, resets_at: '2026-08-11T19:50:00Z' } })
+      if (!report) throw new Error('fixture did not parse')
+      return report
+    }
+
+    it('tells silence from an empty list', () => {
+      expect(headersOnly().modelWindowsKnown).toBe(false)
+      expect(reportOf({ model_scoped: [] })?.modelWindowsKnown).toBe(true)
+      expect(reportOf({ model_scoped: [FABLE] })?.modelWindowsKnown).toBe(true)
+    })
+
+    it('keeps the per-model windows it had, under the figures that are new', () => {
+      const windows = windowsFrom(headersOnly(), READ_AT, before())
+
+      expect(windows.limits.map((limit) => [limit.key, limit.utilization])).toEqual([
+        ['five_hour', 40],
+        ['model_scoped', 15]
+      ])
+    })
+
+    // An empty list is the endpoint saying there are none, and that has to be
+    // believed — carrying them over would pin a window the account lost.
+    it('does not keep them when the answer said there are none', () => {
+      const answered = reportOf({
+        five_hour: { utilization: 40, resets_at: null },
+        model_scoped: []
+      })
+      if (!answered) throw new Error('fixture did not parse')
+
+      expect(windowsFrom(answered, READ_AT, before()).limits.map((limit) => limit.key)).toEqual([
+        'five_hour'
+      ])
+    })
+
+    it('has nothing to keep on the first reading', () => {
+      expect(windowsFrom(headersOnly(), READ_AT, null).limits.map((limit) => limit.key)).toEqual([
+        'five_hour'
+      ])
+    })
   })
 
   /*
