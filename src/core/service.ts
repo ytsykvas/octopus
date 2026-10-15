@@ -228,10 +228,10 @@ import {
   compareRepoItem,
   formatRepoProject,
   instructionKindOf,
-  parseRepoProject,
   REPO_ITEM_IDS,
   REPO_README_FILE,
   readRepoConfig,
+  readStatedCarry,
   readStatedProject,
   type RepoConfigItem,
   type RepoConfigView,
@@ -704,14 +704,11 @@ export interface OctopusService {
   /**
    * The settings this project's repository carries, beside the app's own.
    *
-   * `~/.octopus` lives on one machine and disappears with it, so a repository
-   * may keep a copy under `.octopus/` — a snapshot, never read while the app
-   * works. This is what the Repository section shows, and what the import
-   * dialog reads before writing anything.
+   * What the Repository section's export list compares against, so writing a
+   * file the repository already has says so first. What the app reads from
+   * `.octopus/` while it works is answered by `projectSources`.
    */
   projectRepoConfig(projectId: string): Promise<RepoConfigView>
-  /** Writes the named items into the installation; answers with what it took. */
-  importRepoConfig(projectId: string, ids: readonly RepoItemId[]): Promise<RepoItemId[]>
   /** Writes the named items into the repository; answers with what it wrote. */
   exportRepoConfig(projectId: string, ids: readonly RepoItemId[]): Promise<RepoItemId[]>
   /**
@@ -1671,24 +1668,6 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
 
     // The project's own fields, which it always has.
     return formatRepoProject(exportedFields(project))
-  }
-
-  /**
-   * Applies the fields a repository states, once git agrees they are usable.
-   *
-   * The base branch is checked here rather than trusted, because this value did
-   * not come from the branch picker: a clone stating `develop` while this one
-   * has only `main` would otherwise be stored and surface much later as a
-   * `worktree add` failure that says nothing about settings. The env file is
-   * checked by `updateProject`, which already refuses one that leaves the
-   * worktree.
-   */
-  async function applyRepoProject(project: Project, fields: RepoProject): Promise<void> {
-    if (fields.baseBranch !== undefined) {
-      await assertBranchExists(makeExec(project.repoPath), fields.baseBranch)
-    }
-
-    await commit((current) => updateProject(current, project.id, fields))
   }
 
   /**
@@ -3279,9 +3258,65 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
   }
 
   async function addFromPath(path: string): Promise<Project> {
-    const project = await createProject(path, config.branchPrefix, state, makeExec)
+    const project = await seedFromRepository(
+      await createProject(path, config.branchPrefix, state, makeExec)
+    )
     await commit((current) => addProject(current, project))
+
+    /*
+     * The carry list too, once, without its sources. A source is a path on
+     * somebody's machine — and from a repository, a way to have this one copy
+     * a private key into the worktree, where the agent reads it. What is taken
+     * is the list of files; where they come from is the checkout, as for a
+     * list typed here.
+     *
+     * And only the files git ignores. A carry list is a list of what is not
+     * committed — `.env`, a master key — and a repository naming one it does
+     * not ignore would have this machine's real copy land in the worktree as a
+     * file the next `git add -A` publishes.
+     */
+    const carried = carryListForExport(await readStatedCarry(project.repoPath))
+    if (carried !== null) {
+      const list = await ignoredOnly(carried, makeExec(project.repoPath))
+      await writeCarryList(project.id, list, dataRoot)
+    }
+
     return project
+  }
+
+  /** A carry list with every file line git would commit dropped; comments stay. */
+  async function ignoredOnly(list: string, exec: GitExec): Promise<string> {
+    const kept = await Promise.all(
+      list.split('\n').map(async (line) => {
+        const path = line.trim()
+        if (path === '' || path.startsWith('#')) return line
+        return (await isIgnored(exec, path)) ? line : null
+      })
+    )
+
+    return kept.filter((line): line is string => line !== null).join('\n')
+  }
+
+  /**
+   * A new project with what its repository says about how it looks.
+   *
+   * Name, icon and colour are how one person tells their projects apart, so
+   * they are taken from `.octopus/project.json` once — here — and are the
+   * user's after that. The base branch and env file are not copied: those stay
+   * live (`projectFields.ts`), and copying them would leave a stale value for
+   * "use mine instead" to return to. A file that cannot be read adds the project
+   * as if there were none rather than refusing it.
+   */
+  async function seedFromRepository(project: Project): Promise<Project> {
+    const stated = await readStatedProject(project.repoPath)
+    if (stated === null || stated === 'unreadable') return project
+
+    return {
+      ...project,
+      ...(stated.name !== undefined && { name: stated.name }),
+      ...(stated.icon !== undefined && { icon: stated.icon }),
+      ...(stated.color !== undefined && { color: stated.color })
+    }
   }
 
   return {
@@ -3550,41 +3585,6 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
      * editor reads it. Nothing is executed: the repository's copy is data until
      * somebody presses Run on the copy that has just been written.
      */
-    async importRepoConfig(projectId, ids) {
-      const project = requireProject(projectId)
-      const wanted = new Set(ids)
-      const applied: RepoItemId[] = []
-
-      for (const item of await readRepoConfig(project.repoPath)) {
-        if (!wanted.has(item.id)) continue
-
-        const script = scriptKindOf(item.id)
-        if (script !== undefined) {
-          await writeScript(script, projectId, item.contents, dataRoot)
-          applied.push(item.id)
-          continue
-        }
-
-        const instruction = instructionKindOf(item.id)
-        if (instruction !== undefined) {
-          await writeInstruction(instruction, projectId, item.contents, dataRoot)
-          applied.push(item.id)
-          continue
-        }
-
-        if (item.id === 'carry') {
-          await writeCarryList(projectId, item.contents, dataRoot)
-          applied.push(item.id)
-          continue
-        }
-
-        await applyRepoProject(project, parseRepoProject(item.contents))
-        applied.push(item.id)
-      }
-
-      return applied
-    },
-
     /**
      * Writes named items from this installation into the repository.
      *

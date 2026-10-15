@@ -171,7 +171,7 @@ export const en = {
     sectionDanger: 'Danger zone',
     repoLoading: 'Reading the repository…',
     repoHint:
-      'A project keeps its settings in ~/.octopus, which lives on this machine and goes with it. Its repository can carry a copy in .octopus/, so a fresh installation is rebuilt from the repository rather than from memory. Nothing here is read while the app works, and nothing in it runs on its own.',
+      'A project keeps its settings in ~/.octopus, on this machine. Its repository can carry them in .octopus/, where the app reads them while it works: scripts, instructions, and for a trusted repository the base branch and env file \u2014 each unless you chose your own. Name, icon, colour and the carry list are taken once, when the project is added. Export writes what this installation holds into the checkout, as an ordinary uncommitted change.',
     repoIgnored:
       'git ignores .octopus/, so anything written there stays on this machine. Take it out of .gitignore for the copy to reach anybody else.',
     scriptFromRepo:
@@ -193,12 +193,18 @@ export const en = {
     trustSettingsWaiting:
       'These have not been read yet, so sessions load none of the repository\u2019s own settings \u2014 its CLAUDE.md included \u2014 until they are allowed.',
     trustReview: 'Review and allow',
-    repoIn: 'From the repository',
     repoOut: 'Into the repository',
-    repoImport: 'Import',
     repoExport: 'Export',
-    repoNothingOffered: 'This repository carries nothing yet.',
-    repoShow: 'Show what {{path}} contains',
+    repoOverwrite_one:
+      'The repository already has this file with other contents, and the whole team works from it. Write over it?',
+    repoOverwrite_few:
+      'The repository already has these {{count}} files with other contents, and the whole team works from them. Write over them?',
+    repoOverwrite_many:
+      'The repository already has these {{count}} files with other contents, and the whole team works from them. Write over them?',
+    repoOverwrite_other:
+      'The repository already has these {{count}} files with other contents, and the whole team works from them. Write over them?',
+    repoOverwriteConfirm: 'Write over',
+    repoOverwriteCancel: 'Keep the repository\u2019s',
     repoStateOnlyInRepository: 'not here yet',
     repoStateOnlyInApp: 'not in the repository',
     repoStateSame: 'the same',
@@ -277,7 +283,7 @@ export const en = {
       'Starts the dev server. $OCTOPUS_PORT is set to the workspace\u2019s own port, so several can serve at once. Saved as run.sh.',
     sources: 'What the agent picks up on its own',
     sourcesHint:
-      'octopus loads the same settings as Claude Code in a terminal, so the agent arrives knowing what this repository and this machine have written for it. None of it is sent by octopus.',
+      'octopus loads the same settings as Claude Code in a terminal, so the agent arrives knowing what this repository and this machine have written for it \u2014 the repository\u2019s own once it has been read and allowed. None of it is sent by octopus.',
     /* The permission rules inside those same files. A rule there is honoured
        before octopus is consulted at all, so a question that stopped being
        asked — or a command that stopped running — had no explanation anywhere
@@ -416,8 +422,10 @@ export const en = {
    * `InstructionEditors`, so the difference between the two dialogs is said once.
    */
   instructions: {
-    scopeGlobal: 'A project can write its own, which is used instead of this one.',
-    scopeProject: 'Used instead of the one in Settings; empty means this project adds nothing.',
+    scopeGlobal:
+      'A project can write its own, which is used instead of this one \u2014 and a repository carrying one in .octopus/instructions/ is used before either.',
+    scopeProject:
+      'Used instead of the one in Settings; empty means this project adds nothing. A repository carrying one in .octopus/instructions/ is used first, unless you choose your own.',
 
     pullRequest: 'Pull request descriptions',
     pullRequestHint: 'Sent when you ask the agent to describe a change for a pull request.',
@@ -1151,7 +1159,8 @@ export const en = {
     settingSourcesNoneHint:
       'The agent reads no CLAUDE.md, no commands and no skills. Isolation, at the cost of an agent that knows nothing about the project.',
     settingSourcesProject: 'Project only',
-    settingSourcesProjectHint: "Loads the repository's own CLAUDE.md and settings.",
+    settingSourcesProjectHint:
+      "Loads the repository's own CLAUDE.md and settings, once they have been read and allowed.",
     settingSourcesAll: 'Everything',
     settingSourcesAllHint: 'User, project and local settings — what the plain CLI loads.',
 

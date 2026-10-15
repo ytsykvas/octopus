@@ -265,7 +265,6 @@ export function installOctopusStub(): Api {
       saveScript: vi.fn(() => ok(undefined)),
       scriptPaths: vi.fn(() => ok({ setup: null, run: null, archive: null })),
       repoConfig: vi.fn(() => ok({ present: false, ignored: false, items: [] })),
-      importRepoConfig: vi.fn(() => ok([])),
       exportRepoConfig: vi.fn(() => ok([])),
       readCarryList: vi.fn(() => ok('.env\n')),
       saveCarryList: vi.fn(() => ok(undefined)),

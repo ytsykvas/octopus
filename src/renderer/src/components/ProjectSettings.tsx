@@ -48,11 +48,9 @@ interface ProjectSettingsProps {
   readonly onUpdate: (patch: ProjectPatch) => Promise<boolean>
   readonly onRemove: () => void
   /**
-   * Something was imported from the repository.
-   *
-   * The project's own fields are among what can arrive, and this dialog holds
-   * a copy of the project — so a name or a base branch taken in has to reach
-   * the list, or the form goes on showing what was there before.
+   * The project changed somewhere the dialog's copy cannot see — the checkout
+   * it points at, after which what the repository says about it may differ —
+   * so the list is read again rather than the form going on showing the old.
    */
   readonly onImported: () => void
   readonly onClose: () => void
@@ -857,7 +855,7 @@ export function ProjectSettings({
                   void onUpdate({ trustRepository: trusted, trustRepoScripts: false })
                 }
               />
-              <RepoConfig projectId={project.id} onImported={onImported} />
+              <RepoConfig projectId={project.id} />
             </div>
           )}
 

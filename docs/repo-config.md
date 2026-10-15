@@ -48,8 +48,8 @@ or that switch — the next preparation takes the block out of the file it was i
 because the workspace records where it wrote it.
 
 The carry list and the rest of `project.json` — name, icon, colour, which are how
-one person tells their projects apart — are **not** live: they move only by the
-two actions below, both of which somebody presses.
+one person tells their projects apart — are **not** live: they are taken once,
+when the project is added, and are the user's after that.
 
 An instruction is not gated the way a script is. It becomes a visible user
 message in the log, where it is read before it does anything, and a dialog in
@@ -162,30 +162,30 @@ about this machine.
 published whatever the next commit does — it is mirrored and indexed within
 minutes. There is no version of "commit it carefully" that undoes that.
 
-## Import
+## Taken once, when a project is added
 
-Project settings → **Repository** → the _From the repository_ list.
+A project added from a checkout that carries `.octopus/` takes two things from
+it at that moment and never again:
 
-Every file the repository carries is listed with its path and how it stands
-against the app's copy: **not here yet**, **differs**, or **the same**. Each row
-opens to show **the whole of what would be written** — not a summary, because a
-summary of a script is a summary somebody has to trust instead.
+- **name, icon and colour** from `project.json` — how one person tells their
+  projects apart, so after this they are theirs to change;
+- **the carry list** from `carry`, **without its sources**, and **only the files
+  git ignores**. A source is a path on somebody's machine, and from a repository
+  a way to have this one copy a private key into the worktree, where the agent
+  reads it. And a carry list is a list of what is not committed: a repository
+  naming a file it does not ignore would have this machine's real `.env` land in
+  the worktree as something the next `git add -A` publishes. What is taken is
+  the list of files; they are copied from the checkout, as for a list typed
+  here.
 
-Ticking and pressing Import writes the chosen files through the same writers a
-hand-edit uses, so an imported script lands executable and an imported
-instruction sits where its editor reads it.
+The base branch and env file are not copied: they stay live, and a copy would
+leave a stale value for _use mine instead_ to return to. A `project.json` that
+cannot be read adds the project as though there were none.
 
-`project.json` gets two checks the rest do not need, because its values did not
-come from the app's own pickers:
-
-- **`baseBranch` is put to git first.** A clone stating `develop` while this one
-  has only `main` would otherwise be stored and surface much later as a
-  `worktree add` failure that says nothing about settings.
-- **`envFile` must stay inside the worktree.** `updateProject` already refuses
-  one that climbs out with `..`, since octopus writes credentials into that file.
-
-**Nothing is executed at import.** The repository's copy is data until somebody
-presses Run on the copy that has just been written.
+There used to be an **Import** button. Once scripts, instructions and the two
+fields were read live there was nothing left for it to bring in that the app was
+not already using, and a button that copies a file the app reads anyway is one
+more place for two copies to disagree.
 
 ## Export
 
@@ -193,6 +193,10 @@ Project settings → **Repository** → the _Into the repository_ list.
 
 Writes the app's current settings into `.octopus/`, along with the `README.md`
 that explains the directory to whoever opens the repository without the app.
+
+A file the repository already holds **with other contents** is the whole team's
+setup, so Export lists those first and asks before writing over them; keeping
+the repository's writes nothing at all.
 
 An item nobody has written is skipped rather than exported as its template: a
 file committed to say nothing is a file somebody has to read.
@@ -227,21 +231,20 @@ about the folder answered "not ignored" for a repository that ignores it.
 
 ## Drift, and which side wins
 
-Neither. When the two copies differ, the panel says **differs** and offers both
-directions.
-
-Which side is newer is deliberately not answered. Contents are all there is to
-go on — a modification time says nothing after a clone — and a guess would
-decide for the user in the one place they have to decide for themselves.
+The repository's, wherever it is read live — that is the point of carrying it —
+unless the project chose its own for that item. The settings window shows every
+layer and which one is in effect, so a difference is visible rather than silent.
 
 The practical consequence: **editing a script in Project Settings does not
-update the repository's copy.** The row will say `differs` until somebody
-exports. That is visible rather than silent, which is the trade being made.
+update the repository's copy**, and while the repository supplies one, the
+edited copy is not the one that runs. Export writes it in; _use mine instead_
+runs it without touching the repository.
 
 ## How to start, and how to stop
 
 **To start:** open Project settings → Repository, and press Export. Commit what
-appears. Anybody cloning the repository can then press Import.
+appears. Anybody cloning the repository then works from it the moment they add
+the project.
 
 **To stop:** delete `.octopus/` from the repository and commit that. Nothing in
 the app depends on it, so there is nothing else to undo.
@@ -263,5 +266,5 @@ stays out of the repository.
 | File                                                                                          | What it holds                                                    |
 | --------------------------------------------------------------------------------------------- | ---------------------------------------------------------------- |
 | [`src/core/repoConfig.ts`](../src/core/repoConfig.ts)                                         | the layout, the schema, reading and writing, the symlink refusal |
-| [`src/core/service.ts`](../src/core/service.ts)                                               | `projectRepoConfig`, `importRepoConfig`, `exportRepoConfig`      |
+| [`src/core/service.ts`](../src/core/service.ts)                                               | `projectRepoConfig`, `exportRepoConfig`, `seedFromRepository`    |
 | [`src/renderer/src/components/RepoConfig.tsx`](../src/renderer/src/components/RepoConfig.tsx) | the two lists and the review                                     |

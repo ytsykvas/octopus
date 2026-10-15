@@ -932,18 +932,11 @@ const api = {
     /**
      * The settings this project's repository carries, beside the app's own.
      *
-     * A snapshot in `.octopus/`, so a wiped installation can be rebuilt from
-     * the repository. Read on demand; nothing in it runs on its own.
+     * What `.octopus/` holds beside what the app holds, item by item — what
+     * the export list compares against before writing into the checkout.
      */
     repoConfig: (projectId: string): Promise<Result<RepoConfigView>> =>
       ipcRenderer.invoke('repoConfig:read', projectId) as Promise<Result<RepoConfigView>>,
-
-    /** Takes the named items out of the repository and into the installation. */
-    importRepoConfig: (
-      projectId: string,
-      ids: readonly RepoItemId[]
-    ): Promise<Result<RepoItemId[]>> =>
-      ipcRenderer.invoke('repoConfig:import', projectId, ids) as Promise<Result<RepoItemId[]>>,
 
     /** Writes the named items from the installation into the repository. */
     exportRepoConfig: (

@@ -143,11 +143,6 @@ describe('channel names', () => {
       'repoConfig:read'
     ],
     [
-      'projects.importRepoConfig',
-      () => method('projects', 'importRepoConfig')('p' as never, ['carry'] as never),
-      'repoConfig:import'
-    ],
-    [
       'projects.exportRepoConfig',
       () => method('projects', 'exportRepoConfig')('p' as never, ['carry'] as never),
       'repoConfig:export'
