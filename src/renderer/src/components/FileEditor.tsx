@@ -28,15 +28,6 @@ interface FileEditorProps {
    * parser, and ours cannot be the authority on what that one accepts.
    */
   readonly notes?: (contents: string) => readonly string[]
-  /**
-   * Where the text that actually runs comes from, when it is not this file.
-   *
-   * A repository supplying a script wins over the project's own copy, so
-   * without this the box takes an edit, saves it, and changes nothing that
-   * runs. Read-only rather than hidden: the old text is still worth reading,
-   * and worth copying into the repository's file.
-   */
-  readonly supersededBy?: string | undefined
 }
 
 /**
@@ -53,8 +44,7 @@ export function FileEditor({
   rows = 16,
   read,
   save,
-  notes,
-  supersededBy
+  notes
 }: FileEditorProps): React.JSX.Element {
   const describeFailure = useErrorMessage()
   const [body, setBody] = useState('')
@@ -104,22 +94,17 @@ export function FileEditor({
     <Field label={label} hint={hint}>
       {(id) => (
         <>
-          {supersededBy !== undefined && <p className="text-warning mb-1.5">{supersededBy}</p>}
-
           <textarea
             id={id}
             value={body}
             spellCheck={false}
             rows={rows}
-            readOnly={supersededBy !== undefined}
             onChange={(event) => {
               setBody(event.target.value)
             }}
             onBlur={commit}
             placeholder={placeholder}
-            className={`focus-ring border-line bg-canvas w-full resize-y rounded-[var(--radius-control)] border px-2 py-1.5 font-mono text-[11px] leading-relaxed ${
-              supersededBy === undefined ? '' : 'text-ink-faint'
-            }`}
+            className="focus-ring border-line bg-canvas w-full resize-y rounded-[var(--radius-control)] border px-2 py-1.5 font-mono text-[11px] leading-relaxed"
           />
 
           {/* Under the box rather than at the top of the dialog: the message is

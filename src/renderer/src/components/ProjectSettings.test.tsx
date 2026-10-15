@@ -4,6 +4,7 @@ import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { PROJECT_COLORS } from '@core/colors.js'
 import { PROJECT_ICONS } from '@core/icons.js'
+import type { SourceView } from '@core/sourceItems.js'
 import type { Project } from '@core/store.js'
 
 import type { Result } from '../../../preload/index.js'
@@ -90,6 +91,11 @@ function offerScripts(): void {
   vi.mocked(window.octopus.projects.readScript).mockImplementation((_projectId, kind) =>
     Promise.resolve({ ok: true, value: bodies[kind] })
   )
+}
+
+/** Where each item comes from, as the core would report it. */
+function givenSources(views: SourceView[]): void {
+  vi.mocked(window.octopus.projects.sources).mockResolvedValue({ ok: true, value: views })
 }
 
 beforeAll(stubDialogElement)
@@ -1279,73 +1285,124 @@ describe('ProjectSettings', () => {
     await openSection(user, 'Scripts')
 
     await waitFor(() => {
-      expect(window.octopus.projects.scripts).toHaveBeenCalledWith('planner', 'planner/thea')
+      expect(window.octopus.projects.sources).toHaveBeenCalledWith('planner', 'planner/thea')
     })
   })
 
-  it('names the file a script really comes from, and refuses to be typed into', async () => {
-    // Editing Build here with a repository script present would save happily
-    // and change nothing that runs: `resolveScript` returns the repository's
-    // file regardless of what this one holds.
+  /*
+   * Editing Build here with a repository script present would save happily and
+   * change nothing that runs. So the badge says which one is in effect, the
+   * repository's text is one tab away with the file it lives in, and a switch
+   * takes this project's own instead.
+   */
+  it("shows the repository's script as the one in effect, and takes mine on request", async () => {
     offerScripts()
-    vi.mocked(window.octopus.projects.scripts).mockResolvedValue({
-      ok: true,
-      value: {
-        approved: true,
-        digest: 'digest',
-        scripts: {
-          setup: {
-            kind: 'setup',
-            source: 'repoOctopus',
-            from: '.octopus/scripts/setup.sh',
-            path: '/repo/.octopus/scripts/setup.sh',
-            contents: '#!/bin/sh\nbin/setup\n'
-          }
-        }
+    givenSources([
+      {
+        id: 'script.setup',
+        layers: [
+          { layer: 'repository', from: '.octopus/scripts/setup.sh', body: 'bin/setup' },
+          { layer: 'project', from: '/data/setup.sh', body: 'npm install' },
+          { layer: 'template', from: null, body: '# starts here' }
+        ],
+        effective: 'repository',
+        preferLocal: false,
+        warning: null
       }
+    ])
+    const props = await renderDialog()
+    const user = userEvent.setup()
+
+    await openSection(user, 'Scripts')
+
+    expect(await screen.findByText('In effect: Repository')).toBeInTheDocument()
+    expect(screen.getByText('bin/setup')).toBeInTheDocument()
+    expect(screen.getByText(/From \.octopus\/scripts\/setup\.sh/)).toBeInTheDocument()
+
+    await user.click(screen.getByRole('switch', { name: /Use mine instead/ }))
+    expect(props.onUpdate).toHaveBeenCalledWith({ preferLocal: ['script.setup'] })
+    await waitFor(() => {
+      expect(window.octopus.projects.sources).toHaveBeenCalledTimes(2)
     })
+
+    // This project's own is a tab away, and can be edited.
+    const group = screen.getByRole('group', { name: /Build script/ })
+    await user.click(within(group).getByRole('button', { name: 'This project' }))
+    expect(await screen.findByLabelText('Build script')).toHaveValue('npm install')
+  })
+
+  it('reads again after a save, because a save can change which copy applies', async () => {
+    offerScripts()
+    const user = userEvent.setup()
+    await renderDialog()
+    await openSection(user, 'Scripts')
+
+    const editor = await screen.findByLabelText('Build script')
+    await user.type(editor, ' --frozen')
+    await user.tab()
+
+    await waitFor(() => {
+      expect(window.octopus.projects.sources).toHaveBeenCalledTimes(2)
+    })
+  })
+
+  it('takes the repository back when the switch is turned off', async () => {
+    givenSources([
+      {
+        id: 'script.run',
+        layers: [
+          { layer: 'repository', from: '.octopus/scripts/run.sh', body: 'npm run dev' },
+          { layer: 'template', from: null, body: '# starts here' }
+        ],
+        effective: null,
+        preferLocal: true,
+        warning: null
+      }
+    ])
+    const props = await renderDialog({
+      project: project({ preferLocal: ['script.run', 'instruction.review'] })
+    })
+    const user = userEvent.setup()
+
+    await openSection(user, 'Scripts')
+
+    expect(await screen.findByText('Nothing runs')).toBeInTheDocument()
+    await user.click(screen.getByRole('switch', { name: /Use mine instead/ }))
+    expect(props.onUpdate).toHaveBeenCalledWith({ preferLocal: ['instruction.review'] })
+  })
+
+  it("offers no switch for a script that is the project's own", async () => {
+    offerScripts()
+    givenSources([
+      {
+        id: 'script.setup',
+        layers: [
+          { layer: 'project', from: '/data/setup.sh', body: 'npm install' },
+          { layer: 'template', from: null, body: '# starts here' }
+        ],
+        effective: 'project',
+        preferLocal: false,
+        warning: null
+      }
+    ])
     const user = userEvent.setup()
     await renderDialog()
 
     await openSection(user, 'Scripts')
 
-    expect(await screen.findByText(/\.octopus\/scripts\/setup\.sh/)).toBeInTheDocument()
-    expect(screen.getByLabelText('Build script')).toHaveAttribute('readonly')
-    // The other two are the project's own and stay editable.
-    expect(screen.getByLabelText('Server script')).not.toHaveAttribute('readonly')
+    expect(await screen.findByText('In effect: This project')).toBeInTheDocument()
+    expect(screen.queryByRole('switch')).toBeNull()
+    // The template is shown for what it is: where an editor starts.
+    const group = screen.getByRole('group', { name: /Build script/ })
+    await user.click(within(group).getByRole('button', { name: 'Template' }))
+    expect(screen.getByText(/Nothing runs from it/)).toBeInTheDocument()
   })
 
-  it('says nothing about a source when the script is the project\u2019s own', async () => {
+  it('leaves the editors alone when the sources cannot be read', async () => {
+    // A repository that cannot be read is not a reason to hide somebody's own
+    // script from them.
     offerScripts()
-    vi.mocked(window.octopus.projects.scripts).mockResolvedValue({
-      ok: true,
-      value: {
-        approved: true,
-        digest: 'digest',
-        scripts: {
-          setup: {
-            kind: 'setup',
-            source: 'project',
-            from: '/scripts/setup.sh',
-            path: '/scripts/setup.sh',
-            contents: 'npm install'
-          }
-        }
-      }
-    })
-    const user = userEvent.setup()
-    await renderDialog()
-
-    await openSection(user, 'Scripts')
-
-    expect(await screen.findByLabelText('Build script')).not.toHaveAttribute('readonly')
-  })
-
-  it('leaves the editors alone when the checkout cannot be read', async () => {
-    // A repository that cannot be read is not a reason to tell somebody their
-    // own script does not run.
-    offerScripts()
-    vi.mocked(window.octopus.projects.scripts).mockResolvedValue({
+    vi.mocked(window.octopus.projects.sources).mockResolvedValue({
       ok: false,
       error: 'unparseable'
     })
@@ -1354,7 +1411,209 @@ describe('ProjectSettings', () => {
 
     await openSection(user, 'Scripts')
 
-    expect(await screen.findByLabelText('Build script')).not.toHaveAttribute('readonly')
+    expect(await screen.findByLabelText('Build script')).toHaveValue('npm install')
+  })
+
+  /*
+   * The case that started this: a repository's instruction overrode the text
+   * somebody was editing, and nothing said so. Now the badge does, and the
+   * installation's own is one tab away for a project that wrote none.
+   */
+  it('says when an instruction comes from the repository, with the others a tab away', async () => {
+    givenSources([
+      {
+        id: 'instruction.pullRequest',
+        layers: [
+          {
+            layer: 'repository',
+            from: '.octopus/instructions/pull-request.md',
+            body: 'Repo rules'
+          },
+          { layer: 'global', from: '/data/instructions/pull-request.md', body: 'Global rules' },
+          { layer: 'template', from: null, body: '# Pull requests' }
+        ],
+        effective: 'repository',
+        preferLocal: false,
+        warning: null
+      }
+    ])
+    const user = userEvent.setup()
+    await renderDialog()
+
+    await openSection(user, 'Instructions')
+
+    expect(await screen.findByText('Repo rules')).toBeInTheDocument()
+    const group = screen.getByRole('group', { name: /Pull request descriptions/ })
+    expect(within(group).getByRole('button', { name: 'Repository' })).toHaveAttribute(
+      'aria-pressed',
+      'true'
+    )
+
+    await user.click(within(group).getByRole('button', { name: 'Settings' }))
+    expect(screen.getByText('Global rules')).toBeInTheDocument()
+    expect(screen.getByText(/for every project that writes none/)).toBeInTheDocument()
+
+    await user.click(within(group).getByRole('button', { name: 'Template' }))
+    expect(screen.getByText(/It applies when nothing else is written/)).toBeInTheDocument()
+  })
+
+  it('switches an instruction to the project\u2019s own', async () => {
+    givenSources([
+      {
+        id: 'instruction.review',
+        layers: [
+          { layer: 'repository', from: '.octopus/instructions/review.md', body: 'Repo review' },
+          { layer: 'template', from: null, body: '# Review' }
+        ],
+        effective: 'repository',
+        preferLocal: false,
+        warning: null
+      }
+    ])
+    const props = await renderDialog()
+    const user = userEvent.setup()
+
+    await openSection(user, 'Instructions')
+    await user.click(await screen.findByRole('switch', { name: /Use mine instead/ }))
+
+    expect(props.onUpdate).toHaveBeenCalledWith({ preferLocal: ['instruction.review'] })
+  })
+
+  /*
+   * The base branch a repository names waits until it is trusted. Said under
+   * the picker, because that is where somebody wonders why their choice is not
+   * the one workspaces are cut from.
+   */
+  it('says what the repository sets for the base branch, and why it does not apply', async () => {
+    givenSources([
+      {
+        id: 'project.baseBranch',
+        layers: [
+          { layer: 'repository', from: '.octopus/project.json', body: 'develop' },
+          { layer: 'project', from: null, body: 'main' }
+        ],
+        effective: 'project',
+        preferLocal: false,
+        warning: 'repositoryNotTrusted'
+      }
+    ])
+    const props = await renderDialog()
+    const user = userEvent.setup()
+
+    await openSection(user, 'Git')
+
+    expect(await screen.findByText('The repository sets develop.')).toBeInTheDocument()
+    expect(screen.getByText(/not trusted yet/)).toBeInTheDocument()
+    await user.click(screen.getByRole('switch', { name: /Use mine instead/ }))
+    expect(props.onUpdate).toHaveBeenCalledWith({ preferLocal: ['project.baseBranch'] })
+  })
+
+  it('says nothing under the env file when the repository sets none', async () => {
+    const user = userEvent.setup()
+    await renderDialog()
+
+    await openSection(user, 'Env')
+
+    await waitFor(() => {
+      expect(window.octopus.projects.sources).toHaveBeenCalled()
+    })
+    expect(screen.queryByText(/The repository sets/)).toBeNull()
+  })
+
+  it('says when the repository env file is refused, and why', async () => {
+    givenSources([
+      {
+        id: 'project.envFile',
+        layers: [
+          { layer: 'repository', from: '.octopus/project.json', body: 'config/app.yml' },
+          { layer: 'project', from: null, body: '.env' }
+        ],
+        effective: 'project',
+        preferLocal: false,
+        warning: 'envFileNotIgnored'
+      }
+    ])
+    const props = await renderDialog()
+    const user = userEvent.setup()
+
+    await openSection(user, 'Env')
+
+    expect(await screen.findByText(/git would commit that file/)).toBeInTheDocument()
+    await user.click(screen.getByRole('switch', { name: /Use mine instead/ }))
+    expect(props.onUpdate).toHaveBeenCalledWith({ preferLocal: ['project.envFile'] })
+  })
+
+  it('says when the repository project file could not be read', async () => {
+    givenSources([
+      {
+        id: 'project.baseBranch',
+        layers: [{ layer: 'project', from: null, body: 'main' }],
+        effective: 'project',
+        preferLocal: false,
+        warning: 'projectFileUnreadable'
+      }
+    ])
+    const user = userEvent.setup()
+    await renderDialog()
+
+    await openSection(user, 'Git')
+
+    expect(await screen.findByText(/could not be read/)).toBeInTheDocument()
+  })
+
+  /*
+   * "What is this project working from", on one screen: a row per setting, the
+   * layer in effect marked, and the row's name a way into the section that
+   * edits it.
+   */
+  it('lists every setting with the layer in effect, and opens the one picked', async () => {
+    givenSources([
+      {
+        id: 'script.run',
+        layers: [
+          { layer: 'repository', from: '.octopus/scripts/run.sh', body: 'npm run dev' },
+          { layer: 'template', from: null, body: '# starts here' }
+        ],
+        effective: 'repository',
+        preferLocal: false,
+        warning: null
+      }
+    ])
+    const props = await renderDialog()
+    const user = userEvent.setup()
+
+    await openSection(user, 'Repository')
+
+    expect(
+      await screen.findByRole('img', { name: 'Server script: Repository — In effect' })
+    ).toBeInTheDocument()
+    expect(screen.getByRole('img', { name: 'Server script: Template' })).toBeInTheDocument()
+    // Nothing from the repository is nothing to choose against.
+    expect(
+      screen.getByRole('switch', {
+        name: 'Use mine instead of the repository\u2019s: Build script'
+      })
+    ).toBeDisabled()
+
+    await user.click(screen.getByRole('switch', { name: /: Server script/ }))
+    expect(props.onUpdate).toHaveBeenCalledWith({ preferLocal: ['script.run'] })
+
+    await user.click(screen.getByRole('button', { name: 'Open Base branch' }))
+    expect(screen.getByRole('button', { name: 'Git' })).toHaveAttribute('aria-current')
+  })
+
+  it.each([
+    ['Open Pull request descriptions', 'Instructions'],
+    ['Open Build script', 'Scripts'],
+    ['Open Env file', 'Env']
+  ])('opens the section that edits it: %s', async (link, section) => {
+    const user = userEvent.setup()
+    await renderDialog()
+
+    await openSection(user, 'Repository')
+    await user.click(await screen.findByRole('button', { name: link }))
+
+    expect(screen.getByRole('button', { name: section })).toHaveAttribute('aria-current')
   })
 
   // A file that cannot be read leaves an empty editor rather than one holding

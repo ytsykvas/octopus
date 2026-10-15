@@ -32,6 +32,7 @@ import { Mascot } from './Mascot.js'
 import { Modal } from './Modal.js'
 import { useConfirm } from '../hooks/useConfirm.js'
 import { SectionRail } from './SectionRail.js'
+import { Segmented } from './Segmented.js'
 import { AccountCard } from './settings/AccountCard.js'
 import { AuthTerminal } from './settings/AuthTerminal.js'
 import { ClaudeSection } from './settings/ClaudeSection.js'
@@ -163,7 +164,7 @@ interface SectionProps {
  * editors for one kind of thing would be two places for them to disagree.
  */
 function InstructionsSection(): React.JSX.Element {
-  return <InstructionEditors projectId={null} />
+  return <InstructionEditors />
 }
 
 function GeneralSection({ config, onChange }: SectionProps): React.JSX.Element {
@@ -729,35 +730,6 @@ function ReadOnlyRow({ label, value }: { label: string; value: string }): React.
       <span className="text-ink-faint truncate font-mono text-[11px]" title={value}>
         {value}
       </span>
-    </div>
-  )
-}
-
-function Segmented<T extends string>({
-  value,
-  options,
-  onChange
-}: {
-  value: T
-  options: readonly { value: T; label: string }[]
-  onChange: (value: T) => void
-}): React.JSX.Element {
-  return (
-    <div className="border-line bg-muted inline-flex rounded-[var(--radius-control)] border p-0.5">
-      {options.map((option) => (
-        <button
-          key={option.value}
-          type="button"
-          onClick={() => {
-            onChange(option.value)
-          }}
-          className={`focus-ring h-6 rounded-[4px] px-3 font-medium transition-colors ${
-            value === option.value ? 'bg-canvas text-ink' : 'text-ink-soft hover:text-ink'
-          }`}
-        >
-          {option.label}
-        </button>
-      ))}
     </div>
   )
 }
