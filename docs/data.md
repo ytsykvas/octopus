@@ -750,6 +750,12 @@ at — a private key, say — into the trust card; leaving it out is how a hook 
 to run without anybody being shown it. Retargeting such a link therefore asks
 again, while nothing else about the repository has changed.
 
+A linked **directory** is the same: one entry, never walked. The listing is
+walked by hand, one level at a time, because `readdir`'s own `recursive` stopped
+meaning that between Node 26.0 and 26.11 — the newer one walks through a linked
+directory, and a hook directory linking to a folder elsewhere then had every
+file in that folder read into the card.
+
 A **set**, capped at ten: two branches whose settings differ would otherwise ask
 on every switch. A worktree that grants nothing digests to the empty string,
 which is how "nothing to approve" is told apart from "approved" without a second

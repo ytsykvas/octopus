@@ -1,6 +1,8 @@
+import { execFile } from 'node:child_process'
 import { mkdir, mkdtemp, rm, symlink, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { promisify } from 'node:util'
 
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 
@@ -134,6 +136,26 @@ describe('capabilityFiles', () => {
     expect(files).toEqual([
       { path: '.claude/hooks/lib', contents: expect.stringContaining('tools'), link: true }
     ])
+  })
+
+  // Walked by hand rather than by `recursive`, so a nested script still has to
+  // be found and named by its full path.
+  it('reads a script in a subdirectory under its whole path', async () => {
+    await mkdir(join(repo, '.claude', 'hooks', 'pre'), { recursive: true })
+    await writeFile(join(repo, '.claude', 'hooks', 'pre', 'lint.sh'), 'npm run lint\n', 'utf8')
+
+    await expect(capabilityFiles(repo)).resolves.toEqual([
+      { path: '.claude/hooks/pre/lint.sh', contents: 'npm run lint\n' }
+    ])
+  })
+
+  // A pipe is neither a script nor a directory, and reading one waits for a
+  // writer that never comes — so it is skipped, not read.
+  it('skips what is neither a file, a directory nor a link', async () => {
+    await mkdir(join(repo, '.claude', 'hooks'), { recursive: true })
+    await promisify(execFile)('mkfifo', [join(repo, '.claude', 'hooks', 'pipe')])
+
+    await expect(capabilityFiles(repo)).resolves.toEqual([])
   })
 
   // Nowhere to lead is still somewhere to show: dropping it is the failure
