@@ -2,6 +2,7 @@ import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { beforeAll, describe, expect, it, vi } from 'vitest'
 
+import type { AutoCompactView } from '@core/autoCompact.js'
 import type { RateLimit, SessionUsage } from '@core/service.js'
 import type { SkillListing } from '@core/skills.js'
 
@@ -12,10 +13,17 @@ import { ComposerAttic } from './ComposerAttic.js'
 beforeAll(stubDialogElement)
 
 const FULL: SessionUsage = {
-  context: { percentage: 48, usedTokens: 48_000, maxTokens: 200_000, model: 'claude-opus-5' }
+  context: {
+    percentage: 48,
+    usedTokens: 48_000,
+    maxTokens: 200_000,
+    model: 'claude-opus-5',
+    modelWindow: null
+  },
+  autoCompact: null
 }
 
-const NOTHING: SessionUsage = { context: null }
+const NOTHING: SessionUsage = { context: null, autoCompact: null }
 
 function limitWith(status: RateLimit['status']): RateLimit {
   return { type: 'rate_limit', status, window: 'five_hour', utilization: null, resetsAt: null }
@@ -42,12 +50,14 @@ function renderAttic(
   onRefreshSkills: ReturnType<typeof vi.fn>
   onOpenSettings: ReturnType<typeof vi.fn>
   onAttach: ReturnType<typeof vi.fn>
+  onAutoCompact: ReturnType<typeof vi.fn>
 } {
   const onSend = vi.fn()
   const onToggleSkill = vi.fn()
   const onRefreshSkills = vi.fn()
   const onOpenSettings = vi.fn()
   const onAttach = vi.fn()
+  const onAutoCompact = vi.fn()
 
   render(
     <ComposerAttic
@@ -59,10 +69,11 @@ function renderAttic(
       onRefreshSkills={onRefreshSkills}
       onOpenSettings={onOpenSettings}
       onAttach={onAttach}
+      onAutoCompact={onAutoCompact}
     />
   )
 
-  return { onSend, onToggleSkill, onRefreshSkills, onOpenSettings, onAttach }
+  return { onSend, onToggleSkill, onRefreshSkills, onOpenSettings, onAttach, onAutoCompact }
 }
 
 describe('what the next message is up against', () => {
@@ -246,7 +257,14 @@ describe('the way out of a full context window', () => {
   // thing it exists to say.
   it('keeps the figure’s own tone on the control', async () => {
     renderAttic({
-      context: { percentage: 92, usedTokens: 184_000, maxTokens: 200_000, model: 'claude-opus-5' }
+      context: {
+        percentage: 92,
+        usedTokens: 184_000,
+        maxTokens: 200_000,
+        model: 'claude-opus-5',
+        modelWindow: null
+      },
+      autoCompact: null
     })
 
     const control = screen.getByRole('button', { name: /Context 92%/ })
@@ -313,5 +331,178 @@ describe('the controls on the right', () => {
     await user.click(screen.getByRole('button', { name: 'Attach files' }))
 
     expect(onAttach).toHaveBeenCalledOnce()
+  })
+})
+
+/*
+ * Where the conversation compacts, chosen in the same menu as the two commands
+ * that act on a full window. A choice among six, so the rows are radios — and
+ * shown even when they cannot be used, with the reason, because a menu whose
+ * rows come and go is harder to learn than one where they are visibly greyed.
+ */
+describe('where the conversation compacts', () => {
+  const view = (overrides: Partial<AutoCompactView> = {}): SessionUsage => ({
+    ...FULL,
+    autoCompact: {
+      chosen: null,
+      effective: 1_000_000,
+      modelWindow: 1_000_000,
+      override: null,
+      pending: false,
+      ...overrides
+    }
+  })
+
+  const open = async (): Promise<void> => {
+    await userEvent.click(screen.getByRole('button', { name: /Context 48%/ }))
+  }
+
+  it('offers the agent’s own and five windows, the current one ticked', async () => {
+    renderAttic(view())
+    await open()
+
+    const radios = screen.getAllByRole('menuitemradio')
+    expect(radios.map((radio) => radio.textContent)).toEqual([
+      expect.stringMatching(/^Auto/),
+      expect.stringMatching(/^300k/),
+      expect.stringMatching(/^400k/),
+      expect.stringMatching(/^500k/),
+      expect.stringMatching(/^600k/),
+      expect.stringMatching(/^800k/)
+    ])
+    expect(screen.getByRole('menuitemradio', { name: /^Auto/ })).toHaveAttribute(
+      'aria-checked',
+      'true'
+    )
+    // What "auto" amounts to right now, which is only known while it is the
+    // choice: the window then in force is the agent's own.
+    expect(screen.getByText('As Claude Code decides — now 1M')).toBeInTheDocument()
+    expect(
+      screen.getByText(
+        'When this conversation is compacted on its own. A change starts the session again; the conversation is kept.'
+      )
+    ).toBeInTheDocument()
+  })
+
+  it('hands the choice up, and back to the agent', async () => {
+    const { onAutoCompact } = renderAttic(view({ chosen: 500_000, effective: 500_000 }))
+    await open()
+    expect(screen.getByRole('menuitemradio', { name: /^500k/ })).toHaveAttribute(
+      'aria-checked',
+      'true'
+    )
+    // Not knowable once something else is chosen, so it is not claimed.
+    expect(screen.getByText('As Claude Code decides')).toBeInTheDocument()
+
+    await userEvent.click(screen.getByRole('menuitemradio', { name: /^300k/ }))
+    expect(onAutoCompact).toHaveBeenLastCalledWith(300_000)
+
+    await open()
+    await userEvent.click(screen.getByRole('menuitemradio', { name: /^Auto/ }))
+    expect(onAutoCompact).toHaveBeenLastCalledWith(null)
+  })
+
+  // The agent cuts a window down to what the model holds, so a choice above it
+  // would look taken and change nothing.
+  it('greys the windows the model cannot hold, and says why', async () => {
+    renderAttic(view({ effective: 200_000, modelWindow: 200_000 }))
+    await open()
+
+    for (const name of [/^300k/, /^800k/]) {
+      expect(screen.getByRole('menuitemradio', { name })).toBeDisabled()
+    }
+    expect(screen.getAllByText('More than this model holds (200k)')).toHaveLength(5)
+    expect(screen.getByRole('menuitemradio', { name: /^Auto/ })).toBeEnabled()
+  })
+
+  it('offers every window while what the model holds is not yet known', async () => {
+    renderAttic(view({ modelWindow: null }))
+    await open()
+
+    expect(screen.getByRole('menuitemradio', { name: /^800k/ })).toBeEnabled()
+    expect(screen.queryByText(/More than this model holds/)).not.toBeInTheDocument()
+  })
+
+  /*
+   * The variable outranks anything a session is told, measured, and nothing
+   * here can change that — so the note says which variable, set where, and
+   * what to do. The rows stay choosable: the variable is read when a session
+   * starts, and a choice is what starts one to notice it has gone.
+   */
+  it('names the variable that decides instead, and leaves the choice open', async () => {
+    const { onAutoCompact } = renderAttic(
+      view({
+        chosen: 300_000,
+        effective: 450_000,
+        override: { value: '450000', from: '~/.claude/settings.json' }
+      })
+    )
+    await open()
+
+    expect(
+      screen.getByText(
+        'CLAUDE_CODE_AUTO_COMPACT_WINDOW=450000 in ~/.claude/settings.json decides instead. Take it out there, then choose here again.'
+      )
+    ).toHaveClass('text-warning')
+    for (const radio of screen.getAllByRole('menuitemradio')) expect(radio).toBeEnabled()
+
+    // The same window again is a real request: it is what looks again.
+    await userEvent.click(screen.getByRole('menuitemradio', { name: /^300k/ }))
+    expect(onAutoCompact).toHaveBeenCalledWith(300_000)
+  })
+
+  it('says so when the variable comes from the environment', async () => {
+    renderAttic(view({ effective: 400_000, override: { value: '400000', from: null } }))
+    await open()
+
+    expect(
+      screen.getByText(
+        'CLAUDE_CODE_AUTO_COMPACT_WINDOW=400000 in the environment decides instead. Take it out there, then choose here again.'
+      )
+    ).toBeInTheDocument()
+  })
+
+  // Chosen mid-turn: the session starts again only once nothing is in flight.
+  it('says a choice waits for the agent to finish', async () => {
+    renderAttic(view({ chosen: 600_000, effective: 1_000_000, pending: true }))
+    await open()
+
+    expect(
+      screen.getByText('Takes effect with the next message, once the agent has finished.')
+    ).not.toHaveClass('text-warning')
+  })
+
+  // The tick and the measurement disagreeing is said rather than left silent.
+  it('says when the window in force is not the one chosen', async () => {
+    renderAttic(view({ chosen: 300_000, effective: 200_000, modelWindow: null }))
+    await open()
+
+    expect(screen.getByText('In effect: 200k, not the chosen 300k.')).toHaveClass('text-warning')
+  })
+
+  // A model that holds less than the choice is not a disagreement: the agent
+  // cut it down to the model, which the greyed rows already explain.
+  it('takes a window cut to the model as agreeing with the choice', async () => {
+    renderAttic(view({ chosen: 300_000, effective: 200_000, modelWindow: 200_000 }))
+    await open()
+
+    expect(screen.queryByText(/not the chosen/)).not.toBeInTheDocument()
+  })
+
+  it('offers no windows without a session to say where it compacts', async () => {
+    renderAttic(FULL)
+    await open()
+
+    expect(screen.queryAllByRole('menuitemradio')).toHaveLength(0)
+    expect(screen.queryByText('Auto-compact')).not.toBeInTheDocument()
+  })
+
+  // Wider than the app's other menus, so the variable name and its path take
+  // two lines rather than four. Asked for by this menu alone.
+  it('opens wider than the other menus', async () => {
+    renderAttic(view())
+    await open()
+
+    expect(screen.getByRole('menu')).toHaveStyle({ width: '360px' })
   })
 })

@@ -20,6 +20,7 @@ import {
   signOut
 } from '../core/accounts.js'
 import {
+  AutoCompactWindowSchema,
   ChatMessageSchema,
   ChatTitleSchema,
   EditedPlanSchema,
@@ -899,6 +900,15 @@ export function registerIpc(
 
   host.handle('chats:effort', (_event, chatId: string, effort: unknown) =>
     attempt(() => service.setChatEffort(chatId, EffortChoiceSchema.parse(effort)))
+  )
+
+  // Null hands the window back to the agent; anything else must be one of the
+  // menu's own five, since a number from a compromised window goes straight
+  // into the agent's settings.
+  host.handle('chats:autoCompact', (_event, chatId: string, window: unknown) =>
+    attempt(() =>
+      service.setChatAutoCompact(chatId, AutoCompactWindowSchema.nullable().parse(window))
+    )
   )
 
   host.handle('chats:planEffort', (_event, chatId: string, effort: unknown) =>

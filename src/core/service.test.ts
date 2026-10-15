@@ -122,7 +122,9 @@ function paths(root: string): Parameters<typeof createService>[0] {
 const started: OctopusService[] = []
 
 async function createService(options: ServiceOptions = {}): Promise<OctopusService> {
-  const made = await makeService(options)
+  // Nobody outranks a window unless a test says so: the default reads the
+  // machine's own `~/.claude/settings.json` and environment.
+  const made = await makeService({ windowOverride: () => Promise.resolve(null), ...options })
   started.push(made)
   return made
 }
@@ -3873,12 +3875,266 @@ describe('the agent chat', () => {
       })
   })
 
+  /*
+   * The agent reads the window once, when a session starts — measured: a
+   * window pushed onto a running session is taken and ignored. So the choice
+   * reaches a conversation by starting its session again, and only when
+   * nothing is in flight that the old process would take with it.
+   */
+  describe('where a conversation compacts', () => {
+    /** Sends one message and lets its turn finish, leaving a session with history. */
+    async function idleAfterOneTurn(): Promise<{
+      service: OctopusService
+      workspaceId: string
+      chatId: string
+    }> {
+      const { service, workspaceId } = await withWorkspace()
+      const chat = await service.openChat(workspaceId)
+      await service.sendToChat(chat.id, 'work')
+      agent().emit(initMessage)
+      agent().emit(resultMessage)
+
+      await vi.waitFor(() => {
+        const [record] = service.listChats(workspaceId)
+        expect(record?.sessionId).toBe('sess-1')
+        expect(record?.status).toBe('idle')
+      })
+      return { service, workspaceId, chatId: chat.id }
+    }
+
+    it('starts the session with the chosen window', async () => {
+      const { service, workspaceId } = await withWorkspace()
+      const chat = await service.openChat(workspaceId)
+
+      await service.setChatAutoCompact(chat.id, 500_000)
+      // Stored, and nothing started for it: a choice is not a reason to spawn.
+      expect(agents).toHaveLength(0)
+      expect(service.listChats(workspaceId)[0]?.autoCompactWindow).toBe(500_000)
+
+      await service.sendToChat(chat.id, 'work')
+      expect(agent().options().settings).toMatchObject({ autoCompactWindow: 500_000 })
+    })
+
+    // Null defers to the agent — its own default, or what `/autocompact`
+    // saved. Sent as anything at all, the flag layer would outrank that.
+    it('says nothing about the window when none is chosen', async () => {
+      const { service, workspaceId } = await withWorkspace()
+      const chat = await service.openChat(workspaceId)
+      await service.sendToChat(chat.id, 'work')
+
+      expect(agent().options().settings).not.toHaveProperty('autoCompactWindow')
+    })
+
+    it('starts an idle conversation again, carrying its history, so the window applies', async () => {
+      const { service, chatId } = await idleAfterOneTurn()
+
+      await service.setChatAutoCompact(chatId, 400_000)
+
+      expect(agents).toHaveLength(2)
+      expect(agents[0]?.closed()).toBe(1)
+      expect(agents[1]?.options().resume).toBe('sess-1')
+      expect(agents[1]?.options().settings).toMatchObject({ autoCompactWindow: 400_000 })
+      await expect(service.sessionUsage(chatId)).resolves.toMatchObject({
+        autoCompact: { chosen: 400_000, pending: false }
+      })
+    })
+
+    it('starts nothing again when the window has not changed', async () => {
+      const { service, chatId } = await idleAfterOneTurn()
+
+      await service.setChatAutoCompact(chatId, null)
+
+      expect(agents).toHaveLength(1)
+      expect(agents[0]?.closed()).toBe(0)
+    })
+
+    /*
+     * Mid-turn the process holds the turn and anything queued behind it, and
+     * closing it would lose both. The choice waits, says so, and is applied
+     * before the next message goes out — the first moment nothing is in flight.
+     */
+    it('waits for the turn to end, then applies the window before the next message', async () => {
+      const { service, workspaceId } = await withWorkspace()
+      const chat = await service.openChat(workspaceId)
+      await service.sendToChat(chat.id, 'work')
+      agent().emit(initMessage)
+      await vi.waitFor(() => {
+        expect(service.listChats(workspaceId)[0]?.status).toBe('running')
+      })
+
+      await service.setChatAutoCompact(chat.id, 600_000)
+
+      expect(agents).toHaveLength(1)
+      expect(agents[0]?.closed()).toBe(0)
+      await expect(service.sessionUsage(chat.id)).resolves.toMatchObject({
+        autoCompact: { chosen: 600_000, pending: true }
+      })
+
+      agents[0]?.emit(resultMessage)
+      await vi.waitFor(() => {
+        expect(service.listChats(workspaceId)[0]?.status).toBe('idle')
+      })
+      await service.sendToChat(chat.id, 'more')
+
+      expect(agents).toHaveLength(2)
+      expect(agents[0]?.closed()).toBe(1)
+      expect(agents[1]?.options().settings).toMatchObject({ autoCompactWindow: 600_000 })
+      // The message went to the new session, not the one being closed.
+      expect(agents[0]?.sent).toEqual(['work'])
+      expect(agents[1]?.sent).toEqual(['more'])
+    })
+
+    it('says who outranks the choice, asked of the files the session reads', async () => {
+      const asked: { cwd: string; sources: readonly string[] }[] = []
+      const { service, workspaceId } = await withWorkspace({
+        windowOverride: (cwd, sources) => {
+          asked.push({ cwd, sources })
+          return Promise.resolve({ value: '450000', from: '~/.claude/settings.json' })
+        }
+      })
+      const chat = await service.openChat(workspaceId)
+      await service.setChatAutoCompact(chat.id, 300_000)
+      await service.sendToChat(chat.id, 'work')
+
+      await expect(service.sessionUsage(chat.id)).resolves.toMatchObject({
+        autoCompact: { override: { value: '450000', from: '~/.claude/settings.json' } }
+      })
+      // The same sources the session was given, so a file it does not read
+      // can never be named as what overrides it.
+      const [workspace] = await service.listWorkspaces('planner')
+      expect(asked).toEqual([{ cwd: workspace?.path, sources: agent().options().settingSources }])
+    })
+
+    /*
+     * The default asks the environment and the user's own file. Pointed at a
+     * directory this test owns, so the machine's real `~/.claude` is never
+     * what decides the answer.
+     */
+    it('asks the environment when nothing else is given to ask', async () => {
+      vi.stubEnv('CLAUDE_CONFIG_DIR', join(dir, 'claude-config'))
+      vi.stubEnv('CLAUDE_CODE_AUTO_COMPACT_WINDOW', '450000')
+      try {
+        const repo = join(dir, 'planner')
+        await initRepo(repo)
+        agents = []
+        const plain = await makeService({ ...paths(dir), query: fakeQuery() })
+        started.push(plain)
+        const project = await plain.addProjectFromPath(repo)
+        const workspace = await plain.createWorkspaceIn(project.id)
+        const chat = await plain.openChat(workspace.id)
+        await plain.sendToChat(chat.id, 'work')
+
+        await expect(plain.sessionUsage(chat.id)).resolves.toMatchObject({
+          autoCompact: { override: { value: '450000', from: null } }
+        })
+      } finally {
+        vi.unstubAllEnvs()
+      }
+    })
+
+    /*
+     * The variable is read once per session, so after it is taken out only a
+     * new session notices. Choosing — the same window included — starts one;
+     * a message does not, or a variable left in place would restart the
+     * session before every one of them.
+     */
+    it('looks again for the variable when a window is chosen while it outranks it', async () => {
+      let override: { value: string; from: string | null } | null = { value: '450000', from: null }
+      const { service, workspaceId } = await withWorkspace({
+        windowOverride: () => Promise.resolve(override)
+      })
+      const chat = await service.openChat(workspaceId)
+      await service.sendToChat(chat.id, 'work')
+      agent().emit(initMessage)
+      agent().emit(resultMessage)
+      await vi.waitFor(() => {
+        expect(service.listChats(workspaceId)[0]?.status).toBe('idle')
+      })
+
+      // Not on a message: the variable is still there, and nothing was chosen.
+      await service.sendToChat(chat.id, 'again')
+      expect(agents).toHaveLength(1)
+      agents[0]?.emit(resultMessage)
+      await vi.waitFor(() => {
+        expect(service.listChats(workspaceId)[0]?.status).toBe('idle')
+      })
+
+      override = null
+      await service.setChatAutoCompact(chat.id, null)
+
+      expect(agents).toHaveLength(2)
+      await expect(service.sessionUsage(chat.id)).resolves.toMatchObject({
+        autoCompact: { override: null }
+      })
+    })
+
+    // A reading the agent could not give is no reading, here as for the share.
+    it('says nothing about the window when the session cannot say how full it is', async () => {
+      contextAnswer = () => Promise.reject(new Error('unknown control request'))
+      const { service, workspaceId } = await withWorkspace()
+      const chat = await service.openChat(workspaceId)
+      await service.sendToChat(chat.id, 'work')
+
+      await expect(service.sessionUsage(chat.id)).resolves.toEqual({
+        context: null,
+        autoCompact: null
+      })
+    })
+
+    // An older CLI does not name the model, and then nothing remembered can be
+    // looked up for it.
+    it('knows nothing of the model when the reading does not name it', async () => {
+      contextAnswer = () => Promise.resolve({ ...CONTEXT_RESPONSE, model: undefined })
+      const { service, workspaceId } = await withWorkspace()
+      const chat = await service.openChat(workspaceId)
+      await service.sendToChat(chat.id, 'work')
+
+      await expect(service.sessionUsage(chat.id)).resolves.toMatchObject({
+        autoCompact: { modelWindow: null }
+      })
+    })
+
+    /*
+     * The model's own limit is only in a turn's result, and a new session has
+     * had none — so what an earlier one learnt is kept, or every restart for a
+     * window would blank the hint the menu needs.
+     */
+    it('remembers what a model holds across the sessions of a conversation', async () => {
+      contextAnswer = () => Promise.resolve({ ...CONTEXT_RESPONSE, model: 'claude-haiku-4-5' })
+      const { service, workspaceId } = await withWorkspace()
+      const chat = await service.openChat(workspaceId)
+      await service.sendToChat(chat.id, 'work')
+      agent().emit(initMessage)
+      agent().emit({
+        ...resultMessage,
+        modelUsage: { 'claude-haiku-4-5': { contextWindow: 200_000 } }
+      } as unknown as SDKMessage)
+      await vi.waitFor(() => {
+        expect(service.listChats(workspaceId)[0]?.status).toBe('idle')
+      })
+      await expect(service.sessionUsage(chat.id)).resolves.toMatchObject({
+        autoCompact: { modelWindow: 200_000 }
+      })
+
+      await service.setChatAutoCompact(chat.id, 300_000)
+
+      expect(agents).toHaveLength(2)
+      await expect(service.sessionUsage(chat.id)).resolves.toMatchObject({
+        context: { modelWindow: null },
+        autoCompact: { modelWindow: 200_000 }
+      })
+    })
+  })
+
   describe('what a session says about usage', () => {
     it('answers nothing about context before a session exists, and starts none', async () => {
       const { service, workspaceId } = await withWorkspace()
       const chat = await service.openChat(workspaceId)
 
-      await expect(service.sessionUsage(chat.id)).resolves.toEqual({ context: null })
+      await expect(service.sessionUsage(chat.id)).resolves.toEqual({
+        context: null,
+        autoCompact: null
+      })
       expect(agents).toHaveLength(0)
     })
 
@@ -3892,7 +4148,15 @@ describe('the agent chat', () => {
           percentage: 2,
           usedTokens: 23_921,
           maxTokens: 1_000_000,
-          model: 'claude-opus-5[1m]'
+          model: 'claude-opus-5[1m]',
+          modelWindow: null
+        },
+        autoCompact: {
+          chosen: null,
+          effective: 1_000_000,
+          modelWindow: null,
+          override: null,
+          pending: false
         }
       })
     })
@@ -3929,7 +4193,8 @@ describe('the agent chat', () => {
       await service.sendToChat(chat.id, 'work')
 
       expect(await service.sessionUsage(chat.id)).toEqual({
-        context: expect.objectContaining({ percentage: 2 })
+        context: expect.objectContaining({ percentage: 2 }),
+        autoCompact: expect.objectContaining({ effective: 1_000_000 })
       })
     })
 

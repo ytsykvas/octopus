@@ -689,6 +689,19 @@ export const uk: Translation = {
     contextTitle: 'Вікно контексту — {{used}} з {{total}}',
     contextCompactNote: 'Агент лишає собі стислий переказ розмови й працює далі.',
     contextClearNote: 'Агент забуває цю розмову, а її запис видаляється.',
+    autoCompactTitle: 'Автокомпакт',
+    autoCompactNote:
+      'Коли розмова стискається сама. Зміна перезапускає сесію; розмова зберігається.',
+    autoCompactAuto: 'Авто',
+    autoCompactAutoNote: 'Як вирішить Claude Code',
+    autoCompactAutoNow: 'Як вирішить Claude Code — зараз {{window}}',
+    autoCompactTooLarge: 'Більше, ніж вміщує ця модель ({{window}})',
+    autoCompactPending: 'Подіє з наступним повідомленням, коли агент закінчить.',
+    autoCompactOverridden:
+      'Замість цього діє {{variable}}={{value}} у {{from}}. Приберіть її там і виберіть тут ще раз.',
+    autoCompactOverriddenEnv:
+      'Замість цього діє {{variable}}={{value}} з оточення. Приберіть її там і виберіть тут ще раз.',
+    autoCompactMismatch: 'Діє {{effective}}, а не вибране {{chosen}}.',
     clearTitle: 'Очистити цю розмову?',
     clearMessage: 'Агент почне спочатку, не пам’ятаючи нічого зі сказаного тут.',
     clearDetail: 'Запис розмови видаляється разом із нею, і повернути його не вийде.',

@@ -2,6 +2,8 @@ import { describe, expect, it } from 'vitest'
 
 import {
   AGENT_KINDS,
+  AUTO_COMPACT_WINDOWS,
+  AutoCompactWindowSchema,
   type AgentCommand,
   AgentCommandSchema,
   type AgentModel,
@@ -58,6 +60,7 @@ describe('a new chat', () => {
       effort: 'medium',
       workingMode: 'default',
       planMode: false,
+      autoCompactWindow: null,
       knownCommands: [],
       skillOverrides: {},
       closedAt: null,
@@ -717,6 +720,7 @@ describe('a conversation continuing another', () => {
     effort: 'high',
     workingMode: 'acceptEdits',
     planMode: true,
+    autoCompactWindow: 500_000,
     knownCommands: [{ name: 'deploy', description: '', argumentHint: '', aliases: [] }],
     skillOverrides: {},
     closedAt: null,
@@ -753,6 +757,8 @@ describe('a conversation continuing another', () => {
     expect(forked.effort).toBe('high')
     expect(forked.workingMode).toBe('acceptEdits')
     expect(forked.knownCommands).toEqual(source.knownCommands)
+    // How long a context is worth keeping is part of how the work is run.
+    expect(forked.autoCompactWindow).toBe(500_000)
   })
 
   /*
@@ -909,5 +915,22 @@ describe('reading /model opusplan as a split', () => {
     ['a property of every object', '/model constructor']
   ])('does not mistake %s for it', (_what, text) => {
     expect(opusPlanSplit(text, NO_COMMANDS, CATALOGUE)).toBeNull()
+  })
+})
+
+/*
+ * Five fixed points, because the agent takes anything from 100k to 1M and a
+ * value arriving from the window goes into its settings: the schema is the one
+ * thing standing between a compromised renderer and an arbitrary number.
+ */
+describe('the compaction windows a conversation may choose', () => {
+  it("offers the menu's five, smallest first", () => {
+    expect(AUTO_COMPACT_WINDOWS).toEqual([300_000, 400_000, 500_000, 600_000, 800_000])
+  })
+
+  it('accepts one of them and nothing in between', () => {
+    expect(AutoCompactWindowSchema.parse(500_000)).toBe(500_000)
+    expect(AutoCompactWindowSchema.safeParse(450_000).success).toBe(false)
+    expect(AutoCompactWindowSchema.safeParse('500000').success).toBe(false)
   })
 })

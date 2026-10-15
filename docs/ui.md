@@ -394,6 +394,29 @@ conversation away. Neither is dispatched: they go out as the text of an ordinary
 message, which is what a slash command is in this app, so the menu hands them to
 the same `onSend` the field uses.
 
+**The same menu chooses where the conversation compacts itself**: _Auto_ and
+300k, 400k, 500k, 600k, 800k, as radio rows in a group of their own between the
+two commands. Left alone, a 1M model compacts near 967k, by which point every
+turn pays for a context it mostly no longer reads. The menu is wider than the
+app's others (`width` on `DropdownMenu`) so the group's notes fit, and the group
+says, most pressing first:
+
+- that **`CLAUDE_CODE_AUTO_COMPACT_WINDOW` decides instead**, naming the value
+  and where it is set — the environment, or the `env` block of a settings file
+  the session reads. Measured, it outranks anything a session is told. The rows
+  stay choosable: the variable is read when a session starts, so after it is
+  taken out a choice — the same window included — is what starts one to notice;
+- that a choice made mid-turn **takes effect with the next message**;
+- **what is in force when it is not what was chosen** — a measurement from
+  `getContextUsage`, not a guess, so a disagreement is said rather than hidden
+  behind the tick.
+
+A window above what the model holds is greyed with that figure, since the
+agent would cut it down anyway. _Auto_ says what it amounts to while it is the
+choice. Choosing starts the session again (see `setChatAutoCompact`); the
+reading is then asked for again, because "Context N%" is measured against the
+window.
+
 **The agent's task list is pinned above the field while it has work left.** A
 long turn is mostly the agent working through a list it wrote for itself, and
 from the log that progress is a scatter of tool rows. The panel is the same list

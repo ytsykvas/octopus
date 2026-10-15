@@ -258,8 +258,18 @@ type — which is the only reason the second shape is known to exist.
 
 A **chat** is a conversation with one agent inside one workspace: `id`,
 `workspaceId`, `agent`, `sessionId`, `model`, `planModel`, `effort`,
-`workingMode`, `planMode`, `knownCommands`, `skillOverrides`, `createdAt`,
-`closedAt`.
+`workingMode`, `planMode`, `autoCompactWindow`, `knownCommands`,
+`skillOverrides`, `createdAt`, `closedAt`.
+
+**`autoCompactWindow` is where the conversation compacts itself** — one of
+`AUTO_COMPACT_WINDOWS` (300k to 800k), or null for the agent's own, which is the
+default for a record written before the field existed. Null is sent as nothing
+at all: the flag layer outranks the user's files, and a `/autocompact` saved
+there is what null defers to. A fork carries it. The agent reads it only when a
+session starts — measured, `applyFlagSettings` takes it and changes nothing — so
+a change starts the conversation's session again with `resume`, at once when it
+is idle and otherwise before the next message, the first moment nothing queued
+can go with the old process.
 
 **An agent event may name the call whose subagent produced it**
 (`parentToolUseId`, on text, reasoning, tool calls and results): the SDK says

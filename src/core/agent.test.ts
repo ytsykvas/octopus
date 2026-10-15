@@ -170,6 +170,7 @@ function fakeAgent(
       allowedTools: [...READ_ONLY_TOOLS],
       additionalDirectories: [],
       skillOverrides: {},
+      autoCompactWindow: null,
       ...overrides
     },
     {
@@ -1196,6 +1197,33 @@ describe('a session', () => {
     })
   })
 
+  it('asks for the chosen compaction window at start-up, in the flag layer', () => {
+    const { agent } = fakeAgent({ autoCompactWindow: 500_000 })
+
+    expect(agent.options().settings).toMatchObject({ autoCompactWindow: 500_000 })
+  })
+
+  // Null defers to the agent, and the flag layer outranks the user's own
+  // files: anything said here, null included, would override `/autocompact`.
+  it('says nothing about the window when none is chosen', () => {
+    const { agent } = fakeAgent()
+
+    expect(agent.options().settings).not.toHaveProperty('autoCompactWindow')
+  })
+
+  /*
+   * Measured: a window pushed onto a running session is accepted and ignored,
+   * so pushing it would only look like it did something. The service starts
+   * the session again instead, and every flag push leaves the key out.
+   */
+  it('leaves the window out of what it pushes onto a running session', async () => {
+    const { agent } = fakeAgent({ autoCompactWindow: 500_000 })
+
+    await agent.session.setEffort('max')
+
+    expect(agent.flagSettings()[0]).not.toHaveProperty('autoCompactWindow')
+  })
+
   it('names the withheld skills at start-up, in the flag layer', () => {
     const { agent } = fakeAgent({ skillOverrides: { 'octopus:review': 'off' } })
 
@@ -1372,7 +1400,8 @@ describe('a session that will not close', () => {
         effort: 'medium',
         allowedTools: [],
         additionalDirectories: [],
-        skillOverrides: {}
+        skillOverrides: {},
+        autoCompactWindow: null
       },
       {
         query: () => conversation,
@@ -1906,6 +1935,47 @@ function queryAnswering(overrides: Record<string, unknown>): Query {
   return overrides as unknown as Query
 }
 
+/*
+ * The model's own limit is only in a turn's result. `maxTokens` shrinks with a
+ * chosen window and `rawMaxTokens` measured the same, so neither says which
+ * choices would be cut down to the model.
+ */
+describe('what a model holds', () => {
+  const result = (modelUsage: unknown): SDKMessage =>
+    ({
+      type: 'result',
+      subtype: 'success',
+      is_error: false,
+      total_cost_usd: 0,
+      duration_ms: 10,
+      usage: { input_tokens: 0, output_tokens: 0 },
+      modelUsage,
+      session_id: 's-1'
+    }) as unknown as SDKMessage
+
+  it('learns it from a finished turn', async () => {
+    const { agent, events } = fakeAgent()
+    agent.emit(result({ 'claude-opus-5[1m]': { contextWindow: 1_000_000, costUSD: 0 } }))
+    await vi.waitFor(() => {
+      expect(events).toContainEqual(expect.objectContaining({ type: 'result' }))
+    })
+
+    await expect(agent.session.contextUsage()).resolves.toMatchObject({ modelWindow: 1_000_000 })
+  })
+
+  // The binary is versioned apart from this package: a result without the
+  // field, or with it in another shape, costs the hint and nothing else.
+  it('knows nothing from a result that does not say, and still ends the turn', async () => {
+    const { agent, events } = fakeAgent()
+    agent.emit(result({ 'claude-opus-5[1m]': { contextWindow: 'lots' } }))
+    await vi.waitFor(() => {
+      expect(events).toContainEqual(expect.objectContaining({ type: 'result', ok: true }))
+    })
+
+    await expect(agent.session.contextUsage()).resolves.toMatchObject({ modelWindow: null })
+  })
+})
+
 describe('reading how full the context window is', () => {
   it('takes the figures worth showing and leaves the rest', async () => {
     const usage = await readContextUsage(
@@ -1916,7 +1986,9 @@ describe('reading how full the context window is', () => {
       percentage: 2,
       usedTokens: 23_921,
       maxTokens: 1_000_000,
-      model: 'claude-opus-5[1m]'
+      model: 'claude-opus-5[1m]',
+      // Nothing to go on before a turn has said what the model holds.
+      modelWindow: null
     })
   })
 

@@ -95,6 +95,17 @@ export interface SessionOptions {
    * behaving exactly as it did before any of this existed.
    */
   readonly skillOverrides: Readonly<Record<string, 'off'>>
+  /**
+   * Where the conversation compacts itself, in tokens; null leaves it to the
+   * agent.
+   *
+   * Read once, when the session starts. Measured against a live session:
+   * `applyFlagSettings` takes the key and changes nothing — `getContextUsage`
+   * still reports the window the session began with, before a turn and after
+   * one. So it is not among the flags `applyFlags` sends, and a change reaches
+   * a conversation by starting its session again (`service.ts`).
+   */
+  readonly autoCompactWindow: number | null
 }
 
 /** What the agent wants to do, as handed to whoever decides. */
@@ -299,6 +310,32 @@ export interface ContextUsage {
    * turn ends. Null on a CLI old enough not to say.
    */
   readonly model: string | null
+  /**
+   * How much the model itself can hold, or null until a turn has said.
+   *
+   * Not `maxTokens`, which is the window compaction is measured against and
+   * shrinks with it — nor `rawMaxTokens`, which measured the same. The model's
+   * own limit is only in a turn's result (`modelUsage[model].contextWindow`):
+   * 1M for Opus 5.5, 200k for Haiku 4.5. A window chosen above it is cut down
+   * to it, so the menu needs it to say which choices would do nothing.
+   */
+  readonly modelWindow: number | null
+}
+
+/**
+ * What a result says each model holds.
+ *
+ * Parsed rather than read off the type: the CLI binary is versioned apart from
+ * this package, and a result from one that predates the field — or a field of
+ * another shape — must cost the menu its hint, not the conversation its turn.
+ */
+const ModelWindowsSchema = z.record(z.string(), z.looseObject({ contextWindow: z.number() }))
+
+function windowsIn(result: { readonly modelUsage?: unknown }): [string, number][] {
+  const parsed = ModelWindowsSchema.safeParse(result.modelUsage)
+  if (!parsed.success) return []
+
+  return Object.entries(parsed.data).map(([model, usage]) => [model, usage.contextWindow])
 }
 
 /**
@@ -329,19 +366,26 @@ type UsageCapable = Partial<
  * chart, a category breakdown, memory files, MCP tools. Four fields are taken
  * and the rest deliberately stops here.
  */
-export async function readContextUsage(conversation: Query): Promise<ContextUsage | null> {
+export async function readContextUsage(
+  conversation: Query,
+  // What the turns so far said each model holds; nothing by default, since a
+  // reading taken before any turn has nothing to go on.
+  windowOf: (model: string) => number | undefined = () => undefined
+): Promise<ContextUsage | null> {
   const ask = (conversation as UsageCapable).getContextUsage
   if (typeof ask !== 'function') return null
 
   try {
     const usage = await ask.call(conversation)
+    const model = typeof usage.model === 'string' && usage.model !== '' ? usage.model : null
     return {
       percentage: usage.percentage,
       usedTokens: usage.totalTokens,
       maxTokens: usage.maxTokens,
       // Defended rather than taken: this arrived later than the rest of the
       // response, so a CLI a few versions back answers without it.
-      model: typeof usage.model === 'string' && usage.model !== '' ? usage.model : null
+      model,
+      modelWindow: (model === null ? undefined : windowOf(model)) ?? null
     }
   } catch {
     return null
@@ -467,6 +511,8 @@ export function startSession(options: SessionOptions, hooks: SessionHooks): Agen
    * about the merge twice.
    */
   let effortChoice = options.effort
+  /** What each model holds, as the turns' results said — see `ContextUsage.modelWindow`. */
+  const modelWindows = new Map<string, number>()
   let withheld: Readonly<Record<string, 'off'>> = options.skillOverrides
 
   async function applyFlags(): Promise<void> {
@@ -496,7 +542,15 @@ export function startSession(options: SessionOptions, hooks: SessionHooks): Agen
       // explicitly, `false` included: a session that quietly kept the last
       // one's workflows would be a state nobody chose, and leaving one unsaid
       // hands the answer to whichever settings file happens to mention it.
-      settings: { ultracode, enableWorkflows: ultracode, skillOverrides: options.skillOverrides },
+      settings: {
+        ultracode,
+        enableWorkflows: ultracode,
+        skillOverrides: options.skillOverrides,
+        // Left out rather than sent as null for "the agent's own": the flag
+        // layer outranks the user's files, so a null here would still be a
+        // claim, and `/autocompact` saved there is what null should defer to.
+        ...(options.autoCompactWindow !== null && { autoCompactWindow: options.autoCompactWindow })
+      },
       settingSources: [...options.settingSources],
       // Omitted when there are none rather than passed empty: a root widens
       // what the session may reach, and an empty list is a claim about that
@@ -607,6 +661,9 @@ export function startSession(options: SessionOptions, hooks: SessionHooks): Agen
       // ready for writing": no model change, no context reading, no usage.
       // Measured by walking into it while probing the usage calls.
       for await (const message of conversation) {
+        if (message.type === 'result') {
+          for (const [model, window] of windowsIn(message)) modelWindows.set(model, window)
+        }
         for (const event of mapMessage(message)) hooks.onEvent(event)
       }
     } catch (error) {
@@ -658,7 +715,7 @@ export function startSession(options: SessionOptions, hooks: SessionHooks): Agen
     },
 
     contextUsage() {
-      return readContextUsage(conversation)
+      return readContextUsage(conversation, (model) => modelWindows.get(model))
     },
 
     usageReport(options) {

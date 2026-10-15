@@ -33,6 +33,15 @@ describe('token counts', () => {
     expect(formatTokens(9960)).toBe('10k')
   })
 
+  // A 1M window as `1000k` made the eye count digits; the menu's choices are
+  // read against it. 999.5k would round up to `1000k`, so it crosses here too.
+  it('names millions as millions', () => {
+    expect(formatTokens(1_000_000)).toBe('1M')
+    expect(formatTokens(1_500_000)).toBe('1.5M')
+    expect(formatTokens(999_499)).toBe('999k')
+    expect(formatTokens(999_500)).toBe('1M')
+  })
+
   it('never shows a fraction of a token or a negative one', () => {
     expect(formatTokens(12.4)).toBe('12')
     expect(formatTokens(-5)).toBe('0')

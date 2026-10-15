@@ -1057,6 +1057,7 @@ describe('reconcile', () => {
         effort: 'medium',
         workingMode: 'default',
         planMode: false,
+        autoCompactWindow: null,
         knownCommands: [],
         skillOverrides: {},
         closedAt: null,

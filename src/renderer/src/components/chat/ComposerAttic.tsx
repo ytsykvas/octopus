@@ -1,11 +1,13 @@
 import { ChevronDown, Eraser, FoldVertical, Paperclip } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 
+import type { AutoCompactView } from '@core/autoCompact.js'
+import { AUTO_COMPACT_VARIABLE, AUTO_COMPACT_WINDOWS, type AutoCompactWindow } from '@core/chats.js'
 import type { RateLimit, SessionUsage } from '@core/service.js'
 import type { SkillListing } from '@core/skills.js'
 
 import { useConfirm } from '../../hooks/useConfirm.js'
-import { DropdownMenu } from '../DropdownMenu.js'
+import { DropdownMenu, type MenuAction, type MenuSection } from '../DropdownMenu.js'
 import { formatTokens, usageTone } from './format.js'
 import { SkillsPanel } from './SkillsPanel.js'
 
@@ -38,7 +40,16 @@ interface ComposerAtticProps {
   readonly onOpenSettings: () => void
   /** Opens the file dialog. The paperclip is the visible way in of three. */
   readonly onAttach: () => void
+  /** Where this conversation compacts itself; null hands it back to the agent. */
+  readonly onAutoCompact: (window: AutoCompactWindow | null) => void
 }
+
+/**
+ * Wide enough that the window group's notes — a variable name and a path among
+ * them — take two lines rather than four. The rest of the app's menus keep
+ * their narrower widths.
+ */
+const MENU_WIDTH = 360
 
 /**
  * What the two rows send, written as it goes on the wire.
@@ -79,7 +90,8 @@ export function ComposerAttic({
   onToggleSkill,
   onRefreshSkills,
   onOpenSettings,
-  onAttach
+  onAttach,
+  onAutoCompact
 }: ComposerAtticProps): React.JSX.Element {
   const { t } = useTranslation()
   // Owned here rather than threaded down from `App`, where the shared one
@@ -130,7 +142,99 @@ export function ComposerAttic({
    * The refusal stayed. That one *is* about this conversation — it says the
    * next turn will not run — and it is the one thing a percentage cannot say.
    */
-  const { context } = usage
+  const { context, autoCompact } = usage
+
+  /**
+   * Where the conversation compacts, as a choice among six.
+   *
+   * Still choosable while a variable outranks them, with the note saying so.
+   * Greyed, they were a dead end: the variable is read only when a session
+   * starts, so after it was taken out nothing could start one to notice — and
+   * a choice here is what does, the same window included.
+   */
+  const windowRows = (view: AutoCompactView): MenuAction[] => {
+    const tooLarge = (window: number): boolean =>
+      view.modelWindow !== null && window > view.modelWindow
+
+    return [
+      {
+        id: 'autocompact:auto',
+        label: t('chat.autoCompactAuto'),
+        // What "auto" means right now is only known while it is the choice:
+        // the window then in force is the agent's own.
+        description:
+          view.chosen === null
+            ? t('chat.autoCompactAutoNow', { window: formatTokens(view.effective) })
+            : t('chat.autoCompactAutoNote'),
+        selected: view.chosen === null,
+        section: windowSection(view),
+        onSelect: () => {
+          onAutoCompact(null)
+        }
+      },
+      ...AUTO_COMPACT_WINDOWS.map((window) => ({
+        id: `autocompact:${String(window)}`,
+        label: formatTokens(window),
+        // A second line only where it adds something: "300k" says where it
+        // compacts already, and repeating it doubled the menu's height.
+        ...(view.modelWindow !== null &&
+          tooLarge(window) && {
+            description: t('chat.autoCompactTooLarge', { window: formatTokens(view.modelWindow) })
+          }),
+        selected: view.chosen === window,
+        disabled: tooLarge(window),
+        onSelect: () => {
+          onAutoCompact(window)
+        }
+      }))
+    ]
+  }
+
+  /**
+   * What the group needs saying, most pressing first.
+   *
+   * A variable outranking the choice beats everything: nothing here can be in
+   * force while it is set. Then a choice still waiting for the turn to end.
+   * Then a window that is not the one chosen for any other reason — the model
+   * holding less, or something this did not foresee — said as a measurement
+   * rather than left as a silent disagreement with the tick.
+   */
+  const windowSection = (view: AutoCompactView): MenuSection => {
+    const title = t('chat.autoCompactTitle')
+
+    if (view.override !== null) {
+      const values = {
+        variable: AUTO_COMPACT_VARIABLE,
+        value: view.override.value,
+        from: view.override.from
+      }
+      return {
+        title,
+        warning: true,
+        note:
+          view.override.from === null
+            ? t('chat.autoCompactOverriddenEnv', values)
+            : t('chat.autoCompactOverridden', values)
+      }
+    }
+
+    if (view.pending) return { title, note: t('chat.autoCompactPending') }
+
+    const expected =
+      view.chosen === null ? null : Math.min(view.chosen, view.modelWindow ?? view.chosen)
+    if (expected !== null && view.chosen !== null && view.effective !== expected) {
+      return {
+        title,
+        warning: true,
+        note: t('chat.autoCompactMismatch', {
+          effective: formatTokens(view.effective),
+          chosen: formatTokens(view.chosen)
+        })
+      }
+    }
+
+    return { title, note: t('chat.autoCompactNote') }
+  }
 
   return (
     <>
@@ -147,6 +251,7 @@ export function ComposerAttic({
           // slash command is in this app.
           <DropdownMenu
             align="left"
+            width={MENU_WIDTH}
             actions={[
               {
                 id: COMPACT,
@@ -157,6 +262,7 @@ export function ComposerAttic({
                   void onSend(COMPACT)
                 }
               },
+              ...(autoCompact === null ? [] : windowRows(autoCompact)),
               {
                 // Last, and in the danger colour: of the two it is the one
                 // that loses something, and the reader should land first on
@@ -166,6 +272,8 @@ export function ComposerAttic({
                 description: t('chat.contextClearNote'),
                 icon: <Eraser aria-hidden size={12} />,
                 destructive: true,
+                // A line of its own, so it does not read as a seventh window.
+                ...(autoCompact !== null && { section: {} }),
                 onSelect: () => {
                   void requestClear()
                 }

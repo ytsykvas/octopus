@@ -54,6 +54,7 @@ function renderComposer(overrides: Partial<ComposerProps> = {}): {
       onEffort={onEffort}
       planEffort={null}
       onPlanEffort={vi.fn()}
+      onAutoCompact={vi.fn()}
       files={[]}
       onRemoveFile={onRemoveFile}
       onAttachFiles={vi.fn()}
@@ -68,7 +69,7 @@ function renderComposer(overrides: Partial<ComposerProps> = {}): {
       models={[]}
       activeModel={null}
       commands={[]}
-      usage={{ context: null }}
+      usage={{ context: null, autoCompact: null }}
       limit={null}
       skills={[]}
       onToggleSkill={vi.fn()}
@@ -272,7 +273,14 @@ describe('sending', () => {
     const user = userEvent.setup()
     const { onSend } = renderComposer({
       usage: {
-        context: { percentage: 48, usedTokens: 48_000, maxTokens: 200_000, model: 'claude-opus-5' }
+        context: {
+          percentage: 48,
+          usedTokens: 48_000,
+          maxTokens: 200_000,
+          model: 'claude-opus-5',
+          modelWindow: null
+        },
+        autoCompact: null
       }
     })
 
@@ -465,7 +473,8 @@ describe('review notes riding with the message', () => {
     const { onSend } = renderComposer({
       notes: [NOTE],
       usage: {
-        context: { percentage: 48, usedTokens: 9, maxTokens: 20, model: null }
+        context: { percentage: 48, usedTokens: 9, maxTokens: 20, model: null, modelWindow: null },
+        autoCompact: null
       }
     })
 
@@ -517,8 +526,10 @@ describe('while the agent is working', () => {
           percentage: 91,
           usedTokens: 182_000,
           maxTokens: 200_000,
-          model: 'claude-opus-5'
-        }
+          model: 'claude-opus-5',
+          modelWindow: null
+        },
+        autoCompact: null
       }
     })
 

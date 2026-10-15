@@ -357,6 +357,11 @@ describe('channel names', () => {
       'chats:effort'
     ],
     [
+      'chats.setAutoCompact',
+      () => method('chats', 'setAutoCompact')('c' as never, 500_000 as never),
+      'chats:autoCompact'
+    ],
+    [
       'chats.setPlanEffort',
       () => method('chats', 'setPlanEffort')('c' as never, 'high' as never),
       'chats:planEffort'
