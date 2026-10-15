@@ -92,7 +92,7 @@ describe('the card /usage draws', () => {
     // would have cost through the API, and this is the question being asked.
     expect(screen.getByText('$1.84')).toBeInTheDocument()
     expect(screen.getByText('2.0k in · 35k out')).toBeInTheDocument()
-    expect(screen.getByText('8412k read · 100k written')).toBeInTheDocument()
+    expect(screen.getByText('8.4M read · 100k written')).toBeInTheDocument()
     expect(screen.getByText('4m 12s')).toBeInTheDocument()
     expect(screen.getByText('+180 / −21 lines')).toBeInTheDocument()
   })

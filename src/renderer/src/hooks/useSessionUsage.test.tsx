@@ -13,7 +13,14 @@ import { useSessionUsage } from './useSessionUsage.js'
 const CHAT = 'chat-1'
 
 const READING: SessionUsage = {
-  context: { percentage: 48, usedTokens: 48_000, maxTokens: 200_000, model: 'claude-opus-5' }
+  context: {
+    percentage: 48,
+    usedTokens: 48_000,
+    maxTokens: 200_000,
+    model: 'claude-opus-5',
+    modelWindow: null
+  },
+  autoCompact: null
 }
 
 /** Delivers an event the way the bridge does, to whoever subscribed. */
@@ -49,7 +56,7 @@ describe('what the running session says about usage', () => {
   })
 
   it('asks again when a session starts', async () => {
-    answering({ context: null })
+    answering({ context: null, autoCompact: null })
     renderHook(() => useSessionUsage(CHAT))
     await waitFor(() => {
       expect(octopus().chats.usage).toHaveBeenCalledTimes(1)
@@ -63,7 +70,7 @@ describe('what the running session says about usage', () => {
   })
 
   it('asks again when a turn ends, since both figures have moved', async () => {
-    answering({ context: null })
+    answering({ context: null, autoCompact: null })
     renderHook(() => useSessionUsage(CHAT))
     await waitFor(() => {
       expect(octopus().chats.usage).toHaveBeenCalledTimes(1)
@@ -125,7 +132,7 @@ describe('what the running session says about usage', () => {
   // measure the figure against, so it waits for the next turn like everything
   // else the strip has nothing to say about.
   it('claims nothing when a compaction arrives before the first reading', async () => {
-    answering({ context: null })
+    answering({ context: null, autoCompact: null })
     const { result } = renderHook(() => useSessionUsage(CHAT))
     await waitFor(() => {
       expect(octopus().chats.usage).toHaveBeenCalledTimes(1)
@@ -162,7 +169,7 @@ describe('what the running session says about usage', () => {
 
   // Every read is a round trip, and one of the two goes on to the network.
   it('ignores the events that say nothing about usage', async () => {
-    answering({ context: null })
+    answering({ context: null, autoCompact: null })
     renderHook(() => useSessionUsage(CHAT))
     await waitFor(() => {
       expect(octopus().chats.usage).toHaveBeenCalledTimes(1)
@@ -174,7 +181,7 @@ describe('what the running session says about usage', () => {
   })
 
   it('ignores a turn that ended in another conversation', async () => {
-    answering({ context: null })
+    answering({ context: null, autoCompact: null })
     renderHook(() => useSessionUsage(CHAT))
     await waitFor(() => {
       expect(octopus().chats.usage).toHaveBeenCalledTimes(1)
@@ -217,7 +224,7 @@ describe('what the running session says about usage', () => {
     vi.mocked(octopus().chats.usage).mockReturnValue(new Promise(() => undefined))
     rerender({ id: 'chat-2' })
 
-    expect(result.current).toEqual({ context: null })
+    expect(result.current).toEqual({ context: null, autoCompact: null })
   })
 
   /*
@@ -249,6 +256,36 @@ describe('what the running session says about usage', () => {
       await abandoned.promise
     })
 
-    expect(result.current).toEqual({ context: null })
+    expect(result.current).toEqual({ context: null, autoCompact: null })
+  })
+})
+
+/*
+ * A window chosen in the menu starts the session again, and the reading is
+ * measured against the window — so it is asked for again each time the caller
+ * says a choice has landed, the same window chosen twice included.
+ */
+describe('a compaction window chosen', () => {
+  it('asks again each time a choice has been applied', async () => {
+    answering(READING)
+    const { rerender } = renderHook(
+      ({ asked }: { asked: number }) => useSessionUsage(CHAT, asked),
+      {
+        initialProps: { asked: 0 }
+      }
+    )
+    await waitFor(() => {
+      expect(octopus().chats.usage).toHaveBeenCalledTimes(1)
+    })
+
+    rerender({ asked: 1 })
+    await waitFor(() => {
+      expect(octopus().chats.usage).toHaveBeenCalledTimes(2)
+    })
+
+    rerender({ asked: 2 })
+    await waitFor(() => {
+      expect(octopus().chats.usage).toHaveBeenCalledTimes(3)
+    })
   })
 })

@@ -24,6 +24,7 @@ export function chat(overrides: Partial<Chat> = {}): Chat {
     effort: 'medium',
     workingMode: 'default',
     planMode: false,
+    autoCompactWindow: null,
     knownCommands: [],
     skillOverrides: {},
     closedAt: null,

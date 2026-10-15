@@ -290,7 +290,8 @@ const CONNECTED: AccountsStatus = {
 const started: OctopusService[] = []
 
 async function createService(options: ServiceOptions = {}): Promise<OctopusService> {
-  const made = await makeService(options)
+  // Not the machine's own `~/.claude` and environment, which the default reads.
+  const made = await makeService({ windowOverride: () => Promise.resolve(null), ...options })
   started.push(made)
   return made
 }
@@ -432,6 +433,7 @@ describe('channel table', () => {
     'chats:mode',
     'chats:planMode',
     'chats:effort',
+    'chats:autoCompact',
     'chats:planEffort',
     'chats:model',
     'chats:planModel',
@@ -2351,6 +2353,29 @@ describe('the agent chat', () => {
     })
   })
 
+  // The menu's five or none: any other number would go into the agent's
+  // settings unchecked, and the agent's own range is wider than what is offered.
+  it('accepts a listed compaction window or none, and nothing else', async () => {
+    const projectId = await addProject()
+    const workspace = await createWorkspace(projectId)
+    const opened = await invoke('chats:open', workspace.id)
+
+    await expect(invoke('chats:autoCompact', chatIdOf(opened), 500_000)).resolves.toEqual({
+      ok: true,
+      value: undefined
+    })
+    await expect(invoke('chats:autoCompact', chatIdOf(opened), null)).resolves.toEqual({
+      ok: true,
+      value: undefined
+    })
+    // Refused at the door, not left to the state write to catch: that one
+    // would answer `fileUnreadable`, after the number had reached the service.
+    await expect(invoke('chats:autoCompact', chatIdOf(opened), 450_000)).resolves.toMatchObject({
+      ok: false,
+      code: 'valueRefused'
+    })
+  })
+
   // Null is the picker's way of handing the choice back; an empty string is a
   // model nobody can run, and it arrives from the same place.
   it('rejects an empty model, accepting a name or none at all', async () => {
@@ -2420,7 +2445,7 @@ describe('the agent chat', () => {
 
     await expect(invoke('chats:usage', chatIdOf(opened))).resolves.toEqual({
       ok: true,
-      value: { context: null }
+      value: { context: null, autoCompact: null }
     })
   })
 

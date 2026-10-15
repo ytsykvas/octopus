@@ -34,6 +34,7 @@ import {
 import {
   type AgentCommand,
   type AgentModel,
+  type AutoCompactWindow,
   type Chat,
   ChatError,
   type ClosedChat,
@@ -54,6 +55,7 @@ import {
   sessionModel,
   type WorkingMode
 } from './chats.js'
+import { type AutoCompactView, findWindowOverride, type WindowOverride } from './autoCompact.js'
 import { cliConfigDir, readCachedUsageAt } from './cliUsageCache.js'
 import { type EditTarget, readChangeContext, readEditTarget, writtenPath } from './changeContext.js'
 import {
@@ -381,6 +383,16 @@ export interface ServiceOptions {
    * directory — a parameter so a test never reads the machine's real one.
    */
   readonly cliConfigDir?: string
+  /**
+   * Who outranks a chat's compaction window for a session about to start.
+   *
+   * Reads the environment and the user's own settings file by default, so a
+   * test passes its own rather than reading the machine's.
+   */
+  readonly windowOverride?: (
+    cwd: string,
+    sources: readonly SettingSourceName[]
+  ) => Promise<WindowOverride | null>
 }
 
 /** An agent event together with where it came from. */
@@ -483,6 +495,8 @@ export function sameWindows(left: UsageWindows, right: UsageWindows | null): boo
  */
 export interface SessionUsage {
   readonly context: ContextUsage | null
+  /** Where the conversation compacts, or null with no session to say. */
+  readonly autoCompact: AutoCompactView | null
 }
 
 /**
@@ -1132,6 +1146,14 @@ export interface OctopusService {
   setChatPlanMode(chatId: string, planning: boolean): Promise<void>
   /** Sets how much thinking the chat asks for while it works. */
   setChatEffort(chatId: string, effort: EffortChoice): Promise<void>
+  /**
+   * Sets where the chat compacts itself; null hands it back to the agent.
+   *
+   * The agent reads the window only when a session starts, so a running
+   * conversation is started again — at once if it is idle, otherwise before
+   * the next message, which is the first moment nothing queued can be lost.
+   */
+  setChatAutoCompact(chatId: string, window: AutoCompactWindow | null): Promise<void>
   /** Sets the effort the chat plans at; null means the one above does both. */
   setChatPlanEffort(chatId: string, effort: EffortChoice | null): Promise<void>
   /** Sets the model the chat writes code with; null returns the choice to the agent. */
@@ -1309,6 +1331,7 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
   const makeGh = options.makeGh ?? ghIn
   const dataRoot = options.dataRoot ?? rootDir()
   const cliDir = options.cliConfigDir ?? cliConfigDir()
+  const windowOverrideFor = options.windowOverride ?? findWindowOverride
   const runQuery = options.query ?? defaultQuery
   const runForkSession = options.forkSession ?? defaultForkSession
   const uuid = options.uuid ?? randomUUID
@@ -1339,6 +1362,20 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
   const download = { fetch: options.fetch ?? globalThis.fetch, timeoutMs: DOWNLOAD_TIMEOUT_MS }
 
   const sessions = new Map<string, AgentSession>()
+  /**
+   * What each running session was started with, as far as compaction goes.
+   *
+   * Kept beside the session because the agent fixes the window at start and
+   * never reports which one it was asked for — and the variable that outranks
+   * it is read at start too, so looking again later could name a value the
+   * session never saw.
+   */
+  const compaction = new Map<
+    string,
+    { readonly startedWith: AutoCompactWindow | null; readonly override: WindowOverride | null }
+  >()
+  /** What each model holds, as any session's turns have said; outlives the sessions. */
+  const modelWindows = new Map<string, number>()
   /**
    * Which session spoke last, as a count rather than a clock.
    *
@@ -2462,6 +2499,32 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
   }
 
   /**
+   * Starts an idle conversation's session again when it was started with
+   * another compaction window than the one now chosen.
+   *
+   * Again rather than told: measured, `applyFlagSettings` accepts the window
+   * and the session keeps the one it began with. The history survives —
+   * `resume` carries it into the new session — and the caller makes sure the
+   * agent is not mid-turn, since a turn in progress and a message queued behind
+   * it would both go with the process.
+   */
+  async function restartForWindow(chatId: string, recheck = false): Promise<void> {
+    const chat = findChat(state, chatId)
+    const started = compaction.get(chatId)
+    if (!chat || !started || !sessions.has(chatId)) return
+    // Chosen again while a variable outranked it: it may have been taken out
+    // since, and only a new session reads it again. Asked for by a choice in
+    // the menu and never by a message, or a variable left in place would
+    // start the session over before every one of them.
+    const recheckOverride = recheck && started.override !== null
+    if (started.startedWith === chat.autoCompactWindow && !recheckOverride) return
+    if (chat.status === 'running' || chat.status === 'waiting_permission') return
+
+    await closeOneChat(chat)
+    await sessionFor(chat, requireWorkspace(chat.workspaceId))
+  }
+
+  /**
    * Ends a chat's session, and leaves its history where it is.
    *
    * The record goes with its workspace at the caller's commit; what needs
@@ -2476,6 +2539,7 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
   async function closeOneChat(chat: Chat): Promise<void> {
     const session = sessions.get(chat.id)
     sessions.delete(chat.id)
+    compaction.delete(chat.id)
 
     // A session that ends mid-tool leaves an edit nobody will ever answer
     // for, and a question nobody will ever answer at all. Both go with it,
@@ -3076,7 +3140,8 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
         effort: DEFAULT_EFFORT,
         allowedTools: [],
         additionalDirectories: [],
-        skillOverrides: {}
+        skillOverrides: {},
+        autoCompactWindow: null
       },
       {
         query: runQuery,
@@ -3156,6 +3221,10 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
       ])
     ])
 
+    // Asked of the files this session will read, as it starts: the variable is
+    // read once by the agent too.
+    const override = await windowOverrideFor(workspace.path, settingSources)
+
     // The record as it is **now**, read after the last await and before the
     // session is registered, with nothing in between. What was asked for is a
     // snapshot from before all of the above, and a mode, an effort or a model
@@ -3182,7 +3251,8 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
         // on every call, against the config as it stands at that moment.
         allowedTools: [...READ_ONLY_TOOLS],
         additionalDirectories: [...skills.roots, attachments],
-        skillOverrides: skills.overrides
+        skillOverrides: skills.overrides,
+        autoCompactWindow: chat.autoCompactWindow
       },
       {
         query: runQuery,
@@ -3199,6 +3269,7 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
     )
 
     sessions.set(chat.id, session)
+    compaction.set(chat.id, { startedWith: chat.autoCompactWindow, override })
 
     // Fire-and-forget, and the two failures go different ways. A list that
     // cannot be *read* is swallowed: it is a convenience for the picker, a
@@ -4777,6 +4848,10 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
        * `/permissions` already lives with, and `docs/ui.md` says so rather than
        * leaving it to be discovered.
        */
+      // Before anything is sent, so the message goes to the session the window
+      // was chosen for. A choice made mid-turn waited for this.
+      await restartForWindow(chatId)
+
       const running = sessions.get(chatId)
       if (running) {
         await running.setPermissionMode(sessionMode(chat))
@@ -4856,6 +4931,12 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
       // running, and pushing it would drop the session to the wrong level
       // mid-plan.
       await pushEffort(chatId, before)
+    },
+
+    async setChatAutoCompact(chatId, window) {
+      requireChat(chatId)
+      await commit((current) => updateChat(current, chatId, { autoCompactWindow: window }))
+      await restartForWindow(chatId, true)
     },
 
     async setChatPlanEffort(chatId, effort) {
@@ -5110,9 +5191,29 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
       // Deliberately not started. Spawning an agent to fill a gauge would also
       // create a record for a workspace nobody has spoken to, which is the very
       // thing `openChat`'s laziness exists to avoid.
-      if (!session) return { context: null }
+      if (!session) return { context: null, autoCompact: null }
 
-      return { context: await session.contextUsage() }
+      const context = await session.contextUsage()
+      if (context === null) return { context: null, autoCompact: null }
+
+      if (context.model !== null && context.modelWindow !== null) {
+        modelWindows.set(context.model, context.modelWindow)
+      }
+      const chat = requireChat(chatId)
+      const started = compaction.get(chatId)
+
+      return {
+        context,
+        autoCompact: {
+          chosen: chat.autoCompactWindow,
+          effective: context.maxTokens,
+          modelWindow:
+            context.modelWindow ??
+            (context.model === null ? null : (modelWindows.get(context.model) ?? null)),
+          override: started?.override ?? null,
+          pending: started !== undefined && started.startedWith !== chat.autoCompactWindow
+        }
+      }
     },
 
     onAgentEvent(handler) {

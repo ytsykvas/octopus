@@ -267,6 +267,28 @@ export const EFFORT_CHOICES = [...EFFORT_LEVELS, 'ultracode'] as const
 export const EffortChoiceSchema = z.enum(EFFORT_CHOICES)
 export type EffortChoice = z.infer<typeof EffortChoiceSchema>
 
+/**
+ * Where a conversation may ask to be compacted, in tokens of context.
+ *
+ * Five fixed points rather than a number field: the agent takes anything from
+ * 100k to 1M, and a free field would invite 1 234 567 — refused at the far end
+ * with nothing said here. The choices sit where a 1M window is worth cutting:
+ * left alone, such a model compacts only near 967k, by which point every turn
+ * pays for a context it mostly no longer reads.
+ */
+export const AUTO_COMPACT_WINDOWS = [300_000, 400_000, 500_000, 600_000, 800_000] as const
+export const AutoCompactWindowSchema = z.literal(AUTO_COMPACT_WINDOWS)
+export type AutoCompactWindow = z.infer<typeof AutoCompactWindowSchema>
+
+/**
+ * The variable the agent reads ahead of any window a conversation chooses.
+ *
+ * Here rather than beside the code that looks for it (`autoCompact.ts`), which
+ * reads files: the window names it in the message saying it is in the way,
+ * and may only take a value from a module that pulls in nothing Node-only.
+ */
+export const AUTO_COMPACT_VARIABLE = 'CLAUDE_CODE_AUTO_COMPACT_WINDOW'
+
 /** A chat's choice as it is stored — see `StoredEffortSchema` for the why. */
 export const StoredEffortChoiceSchema = EffortChoiceSchema.nullable()
   .default(DEFAULT_EFFORT)
@@ -702,6 +724,15 @@ export const ChatSchema = z.object({
   workingMode: WorkingModeSchema.default('default'),
   planMode: z.boolean().default(false),
   /**
+   * Where this conversation compacts itself, or null for wherever the agent
+   * would — its own default, or what `/autocompact` saved for the model.
+   *
+   * Per conversation, as the effort is: how long a context is worth keeping
+   * is a decision about one task. Defaulted rather than migrated: a record
+   * written before the field existed left the choice to the agent.
+   */
+  autoCompactWindow: AutoCompactWindowSchema.nullable().default(null),
+  /**
    * The slash commands this conversation may use, as the agent last reported.
    *
    * On the chat rather than beside `knownModels` in the state, because the two
@@ -846,6 +877,7 @@ export function newChat(workspaceId: string, options: NewChatOptions): Chat {
     // Never planning to begin with. Planning is a decision taken about a
     // particular task, in the composer, once there is a task to plan.
     planMode: false,
+    autoCompactWindow: null,
     // Nothing known until a session has run: the agent is the only thing that
     // can say which commands this worktree has.
     knownCommands: [],
@@ -903,6 +935,9 @@ export function forkChat(source: Chat, options: ForkChatOptions): Chat {
     effort: source.effort,
     workingMode: source.workingMode,
     planMode: false,
+    // Comes along: how long a context is worth keeping is part of how this
+    // work is run, and the fork is the same work.
+    autoCompactWindow: source.autoCompactWindow,
     closedAt: null,
     knownCommands: source.knownCommands,
     // Carried across with the model and the effort, and for the same reason: a

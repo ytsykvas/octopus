@@ -1,5 +1,5 @@
 import { Check } from 'lucide-react'
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { Fragment, useCallback, useEffect, useRef, useState } from 'react'
 
 import { createPortal } from 'react-dom'
 
@@ -27,7 +27,24 @@ export interface MenuAction {
    * and for anything reading the screen.
    */
   readonly selected?: boolean
+  /**
+   * Starts a group at this item: a line above it, and a heading and a note when
+   * given.
+   *
+   * For a menu that holds commands and a choice side by side — the context
+   * menu's `/compact`, its window and `/clear` — where without it the radio
+   * rows would read as three more commands.
+   */
+  readonly section?: MenuSection
   readonly onSelect: () => void
+}
+
+export interface MenuSection {
+  readonly title?: string
+  /** What the group does, or what stands in its way — wrapped, never cut. */
+  readonly note?: string
+  /** Draws the note as a warning: the group's choices are not what is in force. */
+  readonly warning?: boolean
 }
 
 interface DropdownMenuProps {
@@ -39,6 +56,12 @@ interface DropdownMenuProps {
   readonly actions: readonly MenuAction[]
   /** Which edge of the trigger the panel lines up with. */
   readonly align?: 'left' | 'right'
+  /**
+   * The panel's width, for a menu whose own text needs more than the two
+   * defaults give. Asked for by the one menu rather than given to all of them,
+   * which would leave the short ones full of air.
+   */
+  readonly width?: number
 }
 
 const PANEL_WIDTH = 232
@@ -58,6 +81,9 @@ const GAP = 6
 /** One row, and what a second line adds to it — two lines of it at most. */
 const ROW_HEIGHT = 32
 const DESCRIPTION_HEIGHT = 32
+/** A group's line and heading, and what a note under it may take. */
+const SECTION_HEIGHT = 28
+const NOTE_HEIGHT = 48
 
 /**
  * A popup menu.
@@ -71,7 +97,8 @@ const DESCRIPTION_HEIGHT = 32
 export function DropdownMenu({
   trigger,
   actions,
-  align = 'right'
+  align = 'right',
+  width: asked
 }: DropdownMenuProps): React.JSX.Element {
   const [open, setOpen] = useState(false)
   const [position, setPosition] = useState<{ top: number; left: number } | null>(null)
@@ -79,7 +106,7 @@ export function DropdownMenu({
   const panel = useRef<HTMLDivElement>(null)
 
   const described = actions.some((action) => action.description !== undefined)
-  const width = described ? DESCRIBED_WIDTH : PANEL_WIDTH
+  const width = asked ?? (described ? DESCRIBED_WIDTH : PANEL_WIDTH)
 
   const close = useCallback(() => {
     setOpen(false)
@@ -130,7 +157,11 @@ export function DropdownMenu({
     // would run it off the bottom of the window.
     const height = actions.reduce(
       (total, action) =>
-        total + ROW_HEIGHT + (action.description === undefined ? 0 : DESCRIPTION_HEIGHT),
+        total +
+        ROW_HEIGHT +
+        (action.description === undefined ? 0 : DESCRIPTION_HEIGHT) +
+        (action.section === undefined ? 0 : SECTION_HEIGHT) +
+        (action.section?.note === undefined ? 0 : NOTE_HEIGHT),
       8
     )
 
@@ -189,58 +220,83 @@ export function DropdownMenu({
             className="border-line bg-canvas fixed z-50 rounded-[var(--radius-panel)] border p-1 shadow-[var(--shadow-pop)]"
           >
             {actions.map((action) => (
-              <button
-                key={action.id}
-                type="button"
-                // A choice among several is a radio group, not a list of commands.
-                // The role is what carries that to a screen reader, and it is also
-                // the only part of this a jsdom test can see.
-                {...(action.selected === undefined
-                  ? { role: 'menuitem' }
-                  : { role: 'menuitemradio', 'aria-checked': action.selected })}
-                disabled={action.disabled ?? false}
-                onClick={() => {
-                  setOpen(false)
-                  action.onSelect()
-                }}
-                className={`row focus-ring flex w-full items-center gap-2.5 px-2.5 py-1.5 text-left disabled:pointer-events-none disabled:opacity-40 ${
-                  action.destructive === true
-                    ? 'text-danger hover:bg-danger-bg'
-                    : 'text-ink-soft hover:text-ink'
-                }`}
-              >
-                <span className="flex size-4 shrink-0 items-center justify-center">
-                  {/* The tick keeps its space when it is not the current choice,
+              <Fragment key={action.id}>
+                {action.section !== undefined && <SectionHead section={action.section} />}
+                <button
+                  type="button"
+                  // A choice among several is a radio group, not a list of commands.
+                  // The role is what carries that to a screen reader, and it is also
+                  // the only part of this a jsdom test can see.
+                  {...(action.selected === undefined
+                    ? { role: 'menuitem' }
+                    : { role: 'menuitemradio', 'aria-checked': action.selected })}
+                  disabled={action.disabled ?? false}
+                  onClick={() => {
+                    setOpen(false)
+                    action.onSelect()
+                  }}
+                  className={`row focus-ring flex w-full items-center gap-2.5 px-2.5 py-1.5 text-left disabled:pointer-events-none disabled:opacity-40 ${
+                    action.destructive === true
+                      ? 'text-danger hover:bg-danger-bg'
+                      : 'text-ink-soft hover:text-ink'
+                  }`}
+                >
+                  <span className="flex size-4 shrink-0 items-center justify-center">
+                    {/* The tick keeps its space when it is not the current choice,
                     so the labels of a picker line up instead of stepping left
                     and right as the selection moves. */}
-                  {action.selected === undefined ? (
-                    action.icon
-                  ) : (
-                    <Check
-                      aria-hidden
-                      size={12}
-                      className={action.selected ? 'text-accent' : 'opacity-0'}
-                    />
-                  )}
-                </span>
+                    {action.selected === undefined ? (
+                      action.icon
+                    ) : (
+                      <Check
+                        aria-hidden
+                        size={12}
+                        className={action.selected ? 'text-accent' : 'opacity-0'}
+                      />
+                    )}
+                  </span>
 
-                <span className="min-w-0 flex-1">
-                  <span className="block truncate">{action.label}</span>
-                  {/* Wrapped rather than truncated, unlike the label above it.
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate">{action.label}</span>
+                    {/* Wrapped rather than truncated, unlike the label above it.
                     A name cut short is still a name; a sentence cut short at
                     "Most capable for your …" is the half that says nothing.
                     Two lines is the cap — past that the menu is a document. */}
-                  {action.description !== undefined && (
-                    <span className="text-ink-faint line-clamp-2 text-[11px] leading-4">
-                      {action.description}
-                    </span>
-                  )}
-                </span>
-              </button>
+                    {action.description !== undefined && (
+                      <span className="text-ink-faint line-clamp-2 text-[11px] leading-4">
+                        {action.description}
+                      </span>
+                    )}
+                  </span>
+                </button>
+              </Fragment>
             ))}
           </div>,
           document.body
         )}
+    </div>
+  )
+}
+
+/**
+ * Where a group starts: a line, its name, and what it needs saying.
+ *
+ * Presentation only — the rows under it are what a screen reader walks, and a
+ * menu item that cannot be chosen would be one more stop for nothing. The note
+ * still reaches it: a choice blocked by a variable set elsewhere is said by
+ * the rows' own descriptions too.
+ */
+function SectionHead({ section }: { readonly section: MenuSection }): React.JSX.Element {
+  return (
+    <div role="presentation" className="border-line mt-1 border-t px-2.5 pt-2 pb-1">
+      {section.title !== undefined && <p className="section-label">{section.title}</p>}
+      {section.note !== undefined && (
+        <p
+          className={`mt-0.5 text-[11px] leading-4 ${section.warning === true ? 'text-warning' : 'text-ink-faint'}`}
+        >
+          {section.note}
+        </p>
+      )}
     </div>
   )
 }

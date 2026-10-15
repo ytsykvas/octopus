@@ -10,6 +10,10 @@
 export function formatTokens(count: number): string {
   if (count < 1000) return String(Math.max(0, Math.round(count)))
 
+  // A 1M window read as `1000k`, which makes the eye count digits. Millions
+  // keep a decimal only where there is one to keep: `1M`, `1.5M`.
+  if (count >= 999_500) return `${String(Number((count / 1_000_000).toFixed(1)))}M`
+
   const thousands = count / 1000
   const withDecimal = thousands.toFixed(1)
 

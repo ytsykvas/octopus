@@ -3,7 +3,7 @@ import { useCallback, useEffect, useState } from 'react'
 import type { SessionUsage } from '@core/service.js'
 import { onChatEvent } from './chatEvents.js'
 
-const NOTHING: SessionUsage = { context: null }
+const NOTHING: SessionUsage = { context: null, autoCompact: null }
 
 /**
  * What the running agent says about its context window and the account's.
@@ -21,8 +21,15 @@ const NOTHING: SessionUsage = { context: null }
  *
  * That is fine three times a turn and would not be on an interval. If the
  * numbers ever look stale the answer is another event, not a shorter one.
+ *
+ * The fourth moment is a compaction window chosen in the menu. Choosing
+ * starts the session again, and the window the reading is measured against
+ * changes with it — so `asked` is a count the caller moves once the core has
+ * finished, and each move is read again on. A count rather than the choice:
+ * choosing the same window again also starts a session (to look again for a
+ * variable that outranked it), and an unchanged value would read nothing.
  */
-export function useSessionUsage(chatId: string | null): SessionUsage {
+export function useSessionUsage(chatId: string | null, asked = 0): SessionUsage {
   const [usage, setUsage] = useState<SessionUsage>(NOTHING)
   const [shownFor, setShownFor] = useState<string | null>(chatId)
 
@@ -55,7 +62,7 @@ export function useSessionUsage(chatId: string | null): SessionUsage {
     return () => {
       controller.abort()
     }
-  }, [chatId])
+  }, [chatId, asked])
 
   useEffect(() => {
     if (chatId === null) return

@@ -132,7 +132,10 @@ export function ChatSession({
   const rateLimit = useRateLimit()
   const models = useModels()
   const commands = useCommands(chat.chat?.id ?? null)
-  const usage = useSessionUsage(chat.chat?.id ?? null)
+  // Moved once a window chosen in the context menu has been applied, which
+  // starts the session again — see `useSessionUsage`.
+  const [compactChoices, setCompactChoices] = useState(0)
+  const usage = useSessionUsage(chat.chat?.id ?? null, compactChoices)
   const skills = useSkills(chat.chat?.id ?? null, workspace.id, chat.ensure)
 
   /*
@@ -380,6 +383,11 @@ export function ChatSession({
         onEffort={(level) => void chat.setEffort(level)}
         planEffort={planEffort}
         onPlanEffort={(level) => void chat.setPlanEffort(level)}
+        onAutoCompact={(window) => {
+          void chat.setAutoCompact(window).then(() => {
+            setCompactChoices((count) => count + 1)
+          })
+        }}
         model={model}
         onModel={(chosen) => void chat.setModel(chosen)}
         planModel={planModel}

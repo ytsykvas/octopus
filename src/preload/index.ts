@@ -5,6 +5,7 @@ import type { MentionFile } from '@core/fileSearch.js'
 import type {
   AgentCommand,
   AgentModel,
+  AutoCompactWindow,
   Chat,
   ClosedChat,
   EffortChoice,
@@ -247,6 +248,10 @@ const api = {
     /** Sets how much thinking the chat asks for; there is always a level. */
     setEffort: (chatId: string, effort: EffortChoice): Promise<Result<void>> =>
       ipcRenderer.invoke('chats:effort', chatId, effort) as Promise<Result<void>>,
+
+    /** Where the chat compacts itself; null leaves it to the agent. */
+    setAutoCompact: (chatId: string, window: AutoCompactWindow | null): Promise<Result<void>> =>
+      ipcRenderer.invoke('chats:autoCompact', chatId, window) as Promise<Result<void>>,
 
     /** The effort planning runs at; null means the one above does both. */
     setPlanEffort: (chatId: string, effort: EffortChoice | null): Promise<Result<void>> =>

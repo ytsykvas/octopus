@@ -914,6 +914,21 @@ export const en = {
        command that does nothing. */
     contextCompactNote: 'The agent keeps a summary of the conversation and carries on.',
     contextClearNote: 'The agent forgets this conversation, and the log goes with it.',
+    /* The window group in the same menu. The values print through
+       `formatTokens`, so only the words around them are here. */
+    autoCompactTitle: 'Auto-compact',
+    autoCompactNote:
+      'When this conversation is compacted on its own. A change starts the session again; the conversation is kept.',
+    autoCompactAuto: 'Auto',
+    autoCompactAutoNote: 'As Claude Code decides',
+    autoCompactAutoNow: 'As Claude Code decides — now {{window}}',
+    autoCompactTooLarge: 'More than this model holds ({{window}})',
+    autoCompactPending: 'Takes effect with the next message, once the agent has finished.',
+    autoCompactOverridden:
+      '{{variable}}={{value}} in {{from}} decides instead. Take it out there, then choose here again.',
+    autoCompactOverriddenEnv:
+      '{{variable}}={{value}} in the environment decides instead. Take it out there, then choose here again.',
+    autoCompactMismatch: 'In effect: {{effective}}, not the chosen {{chosen}}.',
     clearTitle: 'Clear this conversation?',
     clearMessage: 'The agent starts again with no memory of what was said here.',
     clearDetail: 'The log is deleted with it, and cannot be brought back.',

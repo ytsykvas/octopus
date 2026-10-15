@@ -5,6 +5,7 @@ import { useTranslation } from 'react-i18next'
 import {
   type AgentCommand,
   type AgentModel,
+  type AutoCompactWindow,
   DEFAULT_MODEL,
   type EffortChoice,
   findAgentModel,
@@ -54,6 +55,8 @@ interface ComposerProps {
   /** The effort planning runs at; null means the one above does both. */
   readonly planEffort: EffortChoice | null
   readonly onPlanEffort: (effort: EffortChoice | null) => void
+  /** Where the conversation compacts itself; the choice lives in the context menu. */
+  readonly onAutoCompact: (window: AutoCompactWindow | null) => void
   /**
    * Paths the next message will name.
    *
@@ -185,6 +188,7 @@ export function Composer({
   onEffort,
   planEffort,
   onPlanEffort,
+  onAutoCompact,
   files,
   onRemoveFile,
   onAttachFiles,
@@ -482,6 +486,7 @@ export function Composer({
           onRefreshSkills={onRefreshSkills}
           onOpenSettings={onOpenSettings}
           onAttach={onAttachFiles}
+          onAutoCompact={onAutoCompact}
         />
 
         <ComposerAttachments

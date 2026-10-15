@@ -98,6 +98,7 @@ function storedChat(overrides: Partial<Chat> = {}): Chat {
     effort: 'medium',
     workingMode: 'default',
     planMode: false,
+    autoCompactWindow: null,
     knownCommands: [],
     skillOverrides: {},
     closedAt: null,
@@ -596,6 +597,7 @@ describe('chats', () => {
       effort: 'medium',
       workingMode: 'default',
       planMode: false,
+      autoCompactWindow: null,
       knownCommands: [],
       skillOverrides: {},
       closedAt: null,
@@ -692,6 +694,22 @@ describe('chats', () => {
     const state = removeProject(addChat(withWorkspace, makeChat()), 'planner')
 
     expect(state.chats).toEqual([])
+  })
+
+  // A conversation saved before a window could be chosen left it to the agent,
+  // which is what null says. Without the default the reader would throw, and
+  // the app would not open.
+  it('loads a conversation written before its compaction window could be chosen', async () => {
+    const older: Record<string, unknown> = { ...storedChat() }
+    delete older.autoCompactWindow
+    await writeFile(
+      file,
+      JSON.stringify({ ...withProject, workspaces: [makeWorkspace()], chats: [older] }),
+      'utf8'
+    )
+
+    const loaded = await loadState(file)
+    expect(loaded.chats[0]?.autoCompactWindow).toBeNull()
   })
 
   // A state file written before chats existed must still load; that is why the
@@ -823,6 +841,7 @@ describe('the commands a chat remembers', () => {
     effort: 'medium',
     workingMode: 'default',
     planMode: false,
+    autoCompactWindow: null,
     knownCommands: [],
     skillOverrides: {},
     closedAt: null,

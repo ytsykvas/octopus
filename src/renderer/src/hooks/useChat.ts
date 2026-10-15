@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 
 import {
+  type AutoCompactWindow,
   type Chat,
   type ChatStatus,
   type EffortChoice,
@@ -124,6 +125,8 @@ export interface ChatController {
   readonly setMode: (mode: ChatMode) => Promise<void>
   readonly setEffort: (effort: EffortChoice) => Promise<void>
   readonly setPlanEffort: (effort: EffortChoice | null) => Promise<void>
+  /** Where the conversation compacts itself; null hands it back to the agent. */
+  readonly setAutoCompact: (window: AutoCompactWindow | null) => Promise<void>
   /**
    * The model for writing code. Resolves `true` once the core has taken it and
    * `false` when it was not — the reason is on the error banner already.
@@ -601,6 +604,14 @@ export function useChat(
     [change]
   )
 
+  const setAutoCompact = useCallback(
+    (autoCompactWindow: AutoCompactWindow | null) =>
+      change({ autoCompactWindow }, (chatId) =>
+        window.octopus.chats.setAutoCompact(chatId, autoCompactWindow)
+      ),
+    [change]
+  )
+
   const setPlanEffort = useCallback(
     (planEffort: EffortChoice | null) =>
       change({ planEffort }, (chatId) => window.octopus.chats.setPlanEffort(chatId, planEffort)),
@@ -643,6 +654,7 @@ export function useChat(
     setModel,
     setPlanModel,
     setPlanEffort,
+    setAutoCompact,
     ensure: ensureChat
   }
 }

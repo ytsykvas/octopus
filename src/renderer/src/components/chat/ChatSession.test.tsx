@@ -526,7 +526,14 @@ describe('following the conversation', () => {
     vi.mocked(octopus().chats.usage).mockResolvedValue({
       ok: true,
       value: {
-        context: { percentage: 8, usedTokens: 16_000, maxTokens: 200_000, model: 'claude-opus-5' }
+        context: {
+          percentage: 8,
+          usedTokens: 16_000,
+          maxTokens: 200_000,
+          model: 'claude-opus-5',
+          modelWindow: null
+        },
+        autoCompact: null
       }
     })
     givenChat()
@@ -1858,5 +1865,58 @@ describe('notes from two places riding one message', () => {
 
     expect(comments.remove).toHaveBeenCalledWith(expect.objectContaining({ path: NOTE.path }))
     expect(quotes.remove).not.toHaveBeenCalled()
+  })
+})
+
+/*
+ * The whole way from the menu to the core, because each piece of it has tests
+ * of its own that would pass with the wire between them cut: the attic hands a
+ * choice up, the composer passes it on, the session sends it — and the reading
+ * is asked for again once the core has started the session over.
+ */
+describe('choosing where the conversation compacts', () => {
+  it('sends the window chosen in the context menu, then reads the context again', async () => {
+    const user = userEvent.setup()
+    vi.mocked(octopus().chats.usage).mockResolvedValue({
+      ok: true,
+      value: {
+        context: {
+          percentage: 8,
+          usedTokens: 16_000,
+          maxTokens: 1_000_000,
+          model: 'claude-opus-5',
+          modelWindow: 1_000_000
+        },
+        autoCompact: {
+          chosen: null,
+          effective: 1_000_000,
+          modelWindow: 1_000_000,
+          override: null,
+          pending: false
+        }
+      }
+    })
+    givenChat()
+    await openLoadedChat()
+    await user.click(await screen.findByRole('button', { name: /Context 8%/ }))
+    const asked = vi.mocked(octopus().chats.usage).mock.calls.length
+
+    await user.click(screen.getByRole('menuitemradio', { name: /^500k/ }))
+
+    await waitFor(() => {
+      expect(octopus().chats.setAutoCompact).toHaveBeenCalledWith(CHAT_ID, 500_000)
+    })
+    await waitFor(() => {
+      expect(vi.mocked(octopus().chats.usage).mock.calls.length).toBeGreaterThan(asked)
+    })
+
+    // The same window again starts the session again too — to look for a
+    // variable that may have been taken out — so it is read again as well.
+    const again = vi.mocked(octopus().chats.usage).mock.calls.length
+    await user.click(screen.getByRole('button', { name: /Context 8%/ }))
+    await user.click(screen.getByRole('menuitemradio', { name: /^500k/ }))
+    await waitFor(() => {
+      expect(vi.mocked(octopus().chats.usage).mock.calls.length).toBeGreaterThan(again)
+    })
   })
 })
