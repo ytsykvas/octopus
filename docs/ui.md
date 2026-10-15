@@ -153,6 +153,29 @@ rather than a row per line: a long file is a handful of elements, and a
 selection in the code never picks up the numbers. A deleted file opens onto what
 HEAD still holds, under a banner saying so.
 
+**Code review happens from the viewer.** Selecting lines floats a toolbar over
+them: a button per conversation of the workspace — "Add to Claude 2", the one
+in front last styled as the primary action — and "Copy path". A conversation's
+button opens a small field under the selection; what is written there, or
+nothing, goes to that conversation as a note carrying the reference, the whole
+lines as they read now, and the remark. **The file stays in front**, so a review
+of several files is select, note, next; the conversation's tab counts the notes
+waiting in it. Lines are numbered from the text — the newlines between the start
+of the code and either end of the selection — which reads the same whether the
+`<pre>` holds one text node or a span per token, and a selection that only
+reaches the start of a line, as a triple-click does, does not take it. ⌘C in
+the code copies the same reference, `src/a.ts:12-18`, rather than the text:
+this is a place to point at code from, and "Open in editor" is there for the
+text.
+
+These notes are **per conversation** (`useCodeNotes`, keyed by the tab's key),
+where the diff's and the review's are per workspace and taken by whichever
+composer sends first. They have to be: a note sent to the second conversation
+must not leave with the first one's message. Held by tab key like the drafts, so
+a conversation closed and reopened from the history finds them where they were
+left. The message carries them after the diff's with no heading of their own:
+the path, its lines and the quoted code already say what they are.
+
 **Every conversation stays mounted** while its workspace is open, hidden with a
 class the way the right pane hides its tabs — one that unmounted would lose its
 place in the log and the answer half-streamed into it each time you looked at
@@ -562,6 +585,15 @@ fenced block keeps its own horizontal scroll — `white-space: pre` wraps nowher
 whatever this says, and breaking code at an arbitrary column would misrepresent
 it — while a table already scrolls inside its own box, so wrapping its cells
 instead would be a different design.
+
+**A sent message is drawn from what it is made of** (`userMessage.ts`), and
+never changed: what the agent read is what the log shows, only laid out. A note
+on code — a `path:12-18` line with `>` lines under it, the shape `withNotes`
+writes — becomes a card: the place in mono, the lines unwrapped, the remark
+under them. A reference in running text, like a pasted ⌘C, becomes a mono chip;
+a path has to look like one, so `10:30` stays a time and a URL's port stays in
+the URL. A message with neither is drawn exactly as it always was, character for
+character.
 
 **A turn's footer needs a turn.** One at the head of the log has nothing above
 it to close, and `/clear` used to leave exactly that: the transcript went with
@@ -2672,6 +2704,7 @@ field styling had already drifted by a few pixels of height.
 
 | Component                                              | Worth knowing                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           |
 | ------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `NoteEditor`                                           | a note's field with Cancel and Add, ⌘Enter saving and Escape leaving. The diff writes one under a line; the file viewer floats one under a selection and lets it be empty, because the lines and their place are worth sending on their own                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             |
 | `Modal`                                                | body has **no padding** — a list spans the full width, a form brings its own. A backdrop click does not close it. `lg` is a fixed height so sectioned dialogs do not resize between sections; `md` grows to the window less a margin, because what it carries is read rather than filled in — a plan, a list of repositories — and height is how much of it you see at once                                                                                                                                                                                                                                                                                                                                                                                                                             |
 | `DropdownMenu`                                         | positioned against the **window**, not its trigger — an absolute panel is clipped by any scrolling ancestor, and the tab strip is one. So the coordinates are a snapshot, and a scroll closes it only when it happened in something the trigger sits inside; anything else cannot move it. Widens itself when its items carry a second line, and wraps that line to two rather than truncating: the model descriptions come from the agent, and one written for a width chosen for one-word commands says nothing when cut short. **Its panel is drawn into the body**, because `z-50` only ever means "above its own siblings" — the diff's file headers are `sticky` with a `z-index`, which starts a stacking context, and a menu opened from one was painted behind the header of the file below it |
 | `Combobox`                                             | a select with search; a native one stops being usable around thirty entries                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             |

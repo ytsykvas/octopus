@@ -9,6 +9,7 @@ import type { ChatEntry } from '@core/transcript.js'
 
 import { useChatTabs } from '../../hooks/useChatTabs.js'
 import { useFileTabs } from '../../hooks/useFileTabs.js'
+import { useCodeNotes } from '../../hooks/useCodeNotes.js'
 import type { DiffCommentController } from '../../hooks/useDiffComments.js'
 import type { PullRequestQuoteController } from '../../hooks/usePullRequestQuotes.js'
 import { CHAT_ID, emitAgentEvent, emitChatStatus, givenChat } from '../../test/chat.js'
@@ -59,6 +60,7 @@ function ChatPane({
 }: PaneProps): React.JSX.Element {
   const tabs = useChatTabs(target.id, vi.fn(), onError)
   const files = useFileTabs(target.id)
+  const codeNotes = useCodeNotes(target.id)
 
   return (
     <Chat
@@ -73,6 +75,7 @@ function ChatPane({
       onDraftLeave={onDraftLeave}
       comments={comments}
       quotes={quotes}
+      codeNotes={codeNotes}
       color={color}
       defaultWorkingMode={defaultWorkingMode}
       defaultEffort={defaultEffort}

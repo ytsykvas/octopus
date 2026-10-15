@@ -4,6 +4,7 @@ import {
   Archive,
   CircleSlash,
   Eraser,
+  FileCode2,
   Map,
   Pencil,
   Play,
@@ -40,6 +41,7 @@ import { Markdown } from './Markdown.js'
 import { BLOCK_PART, toThreadMessages } from './threadMessages.js'
 import { ElicitationCard } from './ElicitationCard.js'
 import { QuestionCard } from './QuestionCard.js'
+import { type MessageBlock, messageBlocks } from './userMessage.js'
 import {
   answersByRequest,
   elicitationsByRequest,
@@ -568,6 +570,12 @@ function UserMessage({
 }
 
 function UserBubble({ text }: { text: string }): React.JSX.Element {
+  const blocks = messageBlocks(text)
+  // Nothing recognised: the characters exactly as they were typed.
+  const plain = blocks.every(
+    (block) => block.kind === 'text' && block.parts.every((part) => typeof part === 'string')
+  )
+
   return (
     /*
      * `max-w-full` and `wrap-anywhere` are what keeps a long message inside the
@@ -584,8 +592,56 @@ function UserBubble({ text }: { text: string }): React.JSX.Element {
      * the intrinsic size, so the bubble is allowed to be narrow instead of
      * merely spilling its text once the width is capped.
      */
-    <div className="bubble-sent max-w-full self-end rounded-[var(--radius-panel)] border px-3 py-2 whitespace-pre-wrap wrap-anywhere">
-      {text}
+    <div className="bubble-sent flex max-w-full min-w-0 flex-col gap-2 self-end rounded-[var(--radius-panel)] border px-3 py-2 whitespace-pre-wrap wrap-anywhere">
+      {plain
+        ? text
+        : blocks.map((block, index) =>
+            block.kind === 'text' ? (
+              <p key={index}>
+                {block.parts.map((part, at) =>
+                  typeof part === 'string' ? (
+                    part
+                  ) : (
+                    <code
+                      key={at}
+                      className="bg-canvas border-line rounded-[var(--radius-control)] border px-1 font-mono text-[11px]"
+                    >
+                      {part.path}:{part.range}
+                    </code>
+                  )
+                )}
+              </p>
+            ) : (
+              <NoteCard key={index} note={block} />
+            )
+          )}
+    </div>
+  )
+}
+
+/**
+ * A note on code inside a sent message: where, the lines as they read, and
+ * what was said about them — the shape the composer's chip promised.
+ */
+function NoteCard({
+  note
+}: {
+  readonly note: Extract<MessageBlock, { kind: 'note' }>
+}): React.JSX.Element {
+  return (
+    <div className="border-line bg-canvas text-ink min-w-0 overflow-hidden rounded-[var(--radius-control)] border">
+      <p className="text-ink-soft border-line flex min-w-0 items-center gap-1.5 border-b px-2 py-1 font-mono text-[11px]">
+        <FileCode2 aria-hidden size={12} className="text-ink-faint shrink-0" />
+        <span className="truncate" title={note.path}>
+          {note.path}:{note.range}
+        </span>
+        {note.suffix !== null && <span className="text-ink-faint shrink-0">{note.suffix}</span>}
+      </p>
+      {/* Not wrapped: code read with its lines broken is code misread. */}
+      <pre className="text-ink-soft overflow-x-auto px-2 py-1 font-mono text-[11px] leading-[16px] whitespace-pre">
+        {note.quote}
+      </pre>
+      {note.text !== '' && <p className="border-line border-t px-2 py-1">{note.text}</p>}
     </div>
   )
 }

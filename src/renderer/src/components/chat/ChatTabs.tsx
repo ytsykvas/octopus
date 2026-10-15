@@ -1,12 +1,13 @@
 import { GitBranchPlus, History, MoreHorizontal, Pencil, Plus, X } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 
-import { AGENT_NAMES, MAX_CHAT_TITLE, MAX_CHATS_PER_WORKSPACE } from '@core/chats.js'
+import { MAX_CHAT_TITLE, MAX_CHATS_PER_WORKSPACE } from '@core/chats.js'
 
 import type { ChatTab, ChatTabsController } from '../../hooks/useChatTabs.js'
 import { chatStatusLabel, chatStatusTone } from '../agentStatus.js'
 import { DropdownMenu } from '../DropdownMenu.js'
 import { NameEditor } from '../NameEditor.js'
+import { chatName } from './chatName.js'
 
 interface ChatTabsProps {
   readonly tabs: ChatTabsController
@@ -15,6 +16,8 @@ interface ChatTabsProps {
    * The tab that will come back keeps its place, unmarked until it does.
    */
   readonly filesInFront?: boolean
+  /** How many notes from the viewer wait to go out with a tab's next message. */
+  readonly notesWaiting?: (tabKey: string) => number
 }
 
 /**
@@ -29,7 +32,11 @@ interface ChatTabsProps {
  * this window uses — a reader who has learned the project strip and the right
  * pane should not meet a third convention here.
  */
-export function ChatTabs({ tabs, filesInFront = false }: ChatTabsProps): React.JSX.Element {
+export function ChatTabs({
+  tabs,
+  filesInFront = false,
+  notesWaiting = () => 0
+}: ChatTabsProps): React.JSX.Element {
   const { t } = useTranslation()
 
   return (
@@ -45,6 +52,7 @@ export function ChatTabs({ tabs, filesInFront = false }: ChatTabsProps): React.J
           // is what `/clear` is for.
           closable={tabs.tabs.length > 1}
           controller={tabs}
+          waiting={notesWaiting(tab.key)}
         />
       ))}
 
@@ -134,6 +142,7 @@ interface TabButtonProps {
   readonly active: boolean
   readonly closable: boolean
   readonly controller: ChatTabsController
+  readonly waiting: number
 }
 
 function TabButton({
@@ -141,7 +150,8 @@ function TabButton({
   number,
   active,
   closable,
-  controller
+  controller,
+  waiting
 }: TabButtonProps): React.JSX.Element {
   const { t } = useTranslation()
 
@@ -151,7 +161,7 @@ function TabButton({
   // The name it was given wins over the one it is given. The automatic one is
   // not written into the record, so closing the tab beside it renumbers this
   // one rather than leaving it called after a place it no longer holds.
-  const named = tab.title ?? t('chat.tab', { agent: AGENT_NAMES[tab.agent], number })
+  const named = chatName(t, tab, number)
   // Composed through a key rather than by joining two translated strings: what
   // separates a name from its state is a matter for the language.
   const described = t('chat.tabStatus', {
@@ -256,9 +266,27 @@ function TabButton({
           className={`size-1.5 shrink-0 rounded-full ${chatStatusTone(tab.status, tab.started)}`}
         />
         <span aria-hidden>{named}</span>
+        {/* Notes written in the viewer and aimed at this conversation. The
+            viewer stays in front when one is added, so this is where it shows
+            that the note landed — and where, among three. */}
+        {waiting > 0 && (
+          <span
+            aria-hidden
+            className="bg-muted text-ink-soft rounded-full px-1.5 text-[10px] leading-4 tabular-nums"
+          >
+            {waiting}
+          </span>
+        )}
         {/* The visible label is a name, and the dot beside it says nothing
             aloud at all. The button's whole meaning is in here. */}
-        <span className="sr-only">{described}</span>
+        <span className="sr-only">
+          {waiting > 0
+            ? t('chat.tabWithNotes', {
+                described,
+                waiting: t('chat.notesWaiting', { count: waiting })
+              })
+            : described}
+        </span>
       </button>
 
       {actions.length > 0 && (

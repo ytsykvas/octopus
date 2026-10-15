@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
+import type { CodeNote } from '../../hooks/useCodeNotes.js'
 import type { DiffComment } from '../../hooks/useDiffComments.js'
 import type { PullRequestQuote } from '../../hooks/usePullRequestQuotes.js'
 
@@ -37,6 +38,15 @@ const quote = (overrides: Partial<PullRequestQuote> = {}): PullRequestQuote => (
   ...overrides
 })
 
+const viewed = (overrides: Partial<CodeNote> = {}): CodeNote => ({
+  path: 'src/core/git.ts',
+  line: 7,
+  endLine: 9,
+  code: 'a\nb\nc',
+  text: 'Why three?',
+  ...overrides
+})
+
 const remark = (overrides: Partial<PullRequestQuote> = {}): ChatNote => ({
   kind: 'pullRequest',
   ...quote(overrides)
@@ -48,10 +58,14 @@ describe('what identifies a note', () => {
    * GitHub gave it. Nothing promises those two namespaces never collide, and a
    * collision would drop one of the two from the strip with nothing failing.
    */
-  it('keeps the two kinds in namespaces of their own', () => {
-    const same = noteKey(note({ path: '7', line: 0, endLine: 0 }))
+  it('keeps each kind in a namespace of its own', () => {
+    const keys = [
+      noteKey(note({ path: '7', line: 0, endLine: 0 })),
+      noteKey({ kind: 'code', ...viewed({ path: '7', line: 0, endLine: 0 }) }),
+      noteKey(remark({ key: '7' }))
+    ]
 
-    expect(noteKey(remark({ key: '7' }))).not.toBe(same)
+    expect(new Set(keys).size).toBe(3)
   })
 })
 
@@ -66,12 +80,41 @@ describe('the two queues as one list', () => {
     expect(merged.map((entry) => entry.kind)).toEqual(['diff', 'pullRequest'])
   })
 
+  // Remarks on the code, like the diff's, so they follow them.
+  it('puts the viewer’s notes after the diff’s and before the review', () => {
+    const merged = mergeNotes([comment()], [quote()], [viewed()])
+
+    expect(merged.map((entry) => entry.kind)).toEqual(['diff', 'code', 'pullRequest'])
+  })
+
   it('answers with nothing when neither queue holds anything', () => {
     expect(mergeNotes([], [])).toEqual([])
   })
 })
 
 describe('writing the notes into the message', () => {
+  it('writes a note from the viewer after the diff’s, with no heading of its own', () => {
+    expect(withNotes('Look.', mergeNotes([comment()], [], [viewed()]), INTROS)).toBe(
+      [
+        'Review notes:',
+        'src/core/diff.ts:42\n> const b = 2\nThis should be 3.',
+        'src/core/git.ts:7-9\n> a\n> b\n> c\nWhy three?',
+        'Look.'
+      ].join('\n\n')
+    )
+  })
+
+  // The lines and their place are worth sending without a word about them.
+  it('sends a note with no words as its reference and lines alone', () => {
+    expect(
+      withNotes(
+        '',
+        mergeNotes([], [], [viewed({ line: 7, endLine: 7, code: 'a', text: '' })]),
+        INTROS
+      )
+    ).toBe('src/core/git.ts:7\n> a')
+  })
+
   it('leaves a message with no notes exactly as it was typed', () => {
     expect(withNotes('rerun the tests', [], INTROS)).toBe('rerun the tests')
   })
