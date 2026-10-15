@@ -953,6 +953,25 @@ describe('what the log shows', () => {
     expect(screen.getByText('claude exited with code 1')).toBeInTheDocument()
   })
 
+  // "exited with code 143" is exact and says nothing to the person reading it.
+  it('says in words that the agent was stopped from outside', () => {
+    renderLog({
+      entries: [fromAgent({ type: 'error', message: 'Claude Code process exited with code 143' })]
+    })
+
+    expect(screen.getByText(/Claude Code was stopped from outside/)).toBeInTheDocument()
+    // The SDK's own line stays under it, for anyone who has to look it up.
+    expect(screen.getByText('Claude Code process exited with code 143')).toBeInTheDocument()
+  })
+
+  it('names the code when the agent failed on its own', () => {
+    renderLog({
+      entries: [fromAgent({ type: 'error', message: 'Claude Code process exited with code 1' })]
+    })
+
+    expect(screen.getByText(/Claude Code stopped with an error \(code 1\)/)).toBeInTheDocument()
+  })
+
   // The session id is bookkeeping; a row for it would say nothing to anyone.
   it('draws nothing for events that are not part of the conversation', () => {
     renderLog({

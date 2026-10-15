@@ -6,6 +6,20 @@
  * difference between 47,912 and 48,000.
  */
 
+/**
+ * The exit code in a failure the SDK reported for the agent's process, or
+ * null for any other failure.
+ *
+ * Read from the text because that is all the SDK gives — an `Error` whose
+ * message is "Claude Code process exited with code 143" — and because the
+ * chat logs already written hold only that text, so a code taken any later
+ * would leave every old failure as raw as it was.
+ */
+export function exitCodeOf(message: string): number | null {
+  const found = /process exited with code (\d+)/.exec(message)
+  return found ? Number(found[1]) : null
+}
+
 /** A token count, shortened: `860`, `1.2k`, `48k`. */
 export function formatTokens(count: number): string {
   if (count < 1000) return String(Math.max(0, Math.round(count)))

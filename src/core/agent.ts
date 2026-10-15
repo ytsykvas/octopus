@@ -648,6 +648,10 @@ export function startSession(options: SessionOptions, hooks: SessionHooks): Agen
     }
   })
 
+  // Aborted by `close`. The process it ends goes down with SIGTERM, which the
+  // SDK reports as a failure like any other.
+  const closing = new AbortController()
+
   // Started and never awaited. `close` is what actually ends the session —
   // it kills the process the SDK spawned, and the loop then falls out on its
   // own. Waiting for it there would make closing depend on a stream ending,
@@ -669,7 +673,10 @@ export function startSession(options: SessionOptions, hooks: SessionHooks): Agen
     } catch (error) {
       // The SDK throws for a failed spawn, a lost subscription or an aborted
       // process. Whatever it was, the chat is the only place the user is
-      // looking, so it has to be said there.
+      // looking, so it has to be said there — unless we ended it ourselves:
+      // a session started again for a new compaction window showed "exited
+      // with code 143" above an answer from its successor.
+      if (closing.signal.aborted) return
       hooks.onEvent({ type: 'error', message: describeError(error) })
     }
   })()
@@ -752,6 +759,7 @@ export function startSession(options: SessionOptions, hooks: SessionHooks): Agen
     },
 
     close() {
+      closing.abort()
       input.close()
 
       // Wrapped rather than called directly. The SDK's `close` is synchronous,

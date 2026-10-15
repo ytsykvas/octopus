@@ -415,7 +415,15 @@ A window above what the model holds is greyed with that figure, since the
 agent would cut it down anyway. _Auto_ says what it amounts to while it is the
 choice. Choosing starts the session again (see `setChatAutoCompact`); the
 reading is then asked for again, because "Context N%" is measured against the
-window.
+window. The old process ends with SIGTERM, which the SDK reports as a failure;
+a session closed on purpose says nothing of it, so the restart leaves no error
+in the log.
+
+**A process that died is said in words.** The SDK's failure is "Claude Code
+process exited with code N"; the row says instead that it was stopped from
+outside (a code above 128 is a signal) or stopped with an error and its code,
+that a message carries on, and keeps the SDK's line under it in small print.
+Read from the text by `exitCodeOf`, so logs written before it read the same.
 
 **The agent's task list is pinned above the field while it has work left.** A
 long turn is mostly the agent working through a list it wrote for itself, and

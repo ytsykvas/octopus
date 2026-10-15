@@ -871,6 +871,11 @@ export const en = {
     thinking: 'Thinking',
     memoryReset: 'The agent’s memory of this conversation starts again here',
     compacted: 'The agent summarised everything above to make room',
+    /* An exit code past 128 is a signal: something outside ended the process. */
+    processStopped:
+      'Claude Code was stopped from outside — by the system or another program. Send a message to carry on; the conversation is kept.',
+    processFailed:
+      'Claude Code stopped with an error (code {{code}}). Send a message to try again; the conversation is kept.',
     compactedBy:
       'The agent summarised everything above to make room \u2014 {{before}} became {{after}}',
 
