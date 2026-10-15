@@ -12,7 +12,7 @@ import { FileEditor } from './FileEditor.js'
  * showing the same set and a new kind would otherwise be two more editors to
  * remember. The keys are literals so `t()` still checks them.
  */
-const KINDS: readonly {
+export const INSTRUCTION_KINDS: readonly {
   readonly kind: InstructionKind
   readonly labelKey:
     | 'instructions.pullRequest'
@@ -69,40 +69,33 @@ const KINDS: readonly {
 const ROWS = 10
 
 /**
- * Every instruction, at whichever scope this dialog is about.
+ * Every instruction, as the installation holds it — Settings → Instructions.
  *
- * `null` is the installation's own; a project id is that project's override.
- * One component for both, so the two dialogs cannot drift into disagreeing
- * about what an instruction is called or what it does — the same argument
- * `Field` makes for itself.
+ * A project's own are drawn by `LayeredEditor` in Project settings, beside the
+ * repository's and this installation's, because there the question is which of
+ * several applies. Here there is one layer and the template it starts from, so
+ * a plain editor says all there is; the hint says what can override it.
  *
- * What differs between the scopes is one sentence, appended to each hint: the
- * global one says a project may override it, and a project's says it overrides
- * the global one and that emptying it is a decision. Written as ten hints
- * instead, half of them would go stale the first time a button changed.
+ * `INSTRUCTION_KINDS` is the one table both dialogs draw from, so they cannot
+ * drift into disagreeing about what an instruction is called or what it does.
  */
-export function InstructionEditors({
-  projectId
-}: {
-  readonly projectId: string | null
-}): React.JSX.Element {
+export function InstructionEditors(): React.JSX.Element {
   const { t } = useTranslation()
-
-  const scope = projectId === null ? t('instructions.scopeGlobal') : t('instructions.scopeProject')
+  const scope = t('instructions.scopeGlobal')
 
   return (
     <>
-      {KINDS.map(({ kind, labelKey, hintKey }) => (
+      {INSTRUCTION_KINDS.map(({ kind, labelKey, hintKey }) => (
         <FileEditor
           key={kind}
           label={t(labelKey)}
           hint={`${t(hintKey)} ${scope}`}
           rows={ROWS}
           read={async () => {
-            const result = await window.octopus.projects.readInstruction(projectId, kind)
+            const result = await window.octopus.projects.readInstruction(null, kind)
             return result.ok ? result.value : null
           }}
-          save={(contents) => window.octopus.projects.saveInstruction(projectId, kind, contents)}
+          save={(contents) => window.octopus.projects.saveInstruction(null, kind, contents)}
         />
       ))}
     </>

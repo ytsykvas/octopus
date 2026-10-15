@@ -1045,11 +1045,36 @@ than a switch for scripts here and nothing but a banner in the chat for the rest
 The chat's banner and the Scripts tab's panel stay where the question is asked;
 this is where it is answered for good.
 
-**The Scripts section of that dialog names the source above each editor**, and
-makes it read-only where the repository supplies the script. It used to be three
-plain editors: with a repository script present, editing Build there saved
-happily and changed nothing that runs. A box that takes an edit it will not honour is
-worse than no box.
+**Every script, instruction and live field says where it comes from.** It used
+to be plain editors: with a repository script present, editing Build saved
+happily and changed nothing that runs, and a repository's pull-request
+instruction overrode the text somebody was editing without a word. A box that
+takes an edit it will not honour is worse than no box. Now each one has:
+
+- **a badge** — _In effect: Repository / This project / Settings / Template_, or
+  _Nothing runs_ for a script nobody wrote;
+- **a tab per layer that exists** (`LayeredEditor`, over the shared
+  `Segmented`), opening on the one in effect. _This project_ is always there and
+  is the one edited; the others are shown read-only with the file they live in,
+  because that is where they are changed. The template says what it is — where
+  an editor starts, and for a script nothing runs from it;
+- **a switch, _Use mine instead of the repository's_**, wherever the repository
+  supplies one. It writes `preferLocal` and reads the sources again.
+
+The base branch and env file get the same as a line under their fields
+(`FieldSource`): what the repository sets, which value applies, and — when the
+repository's was refused — why, in words: not trusted yet, no such branch, a
+file git would commit.
+
+**Project settings → Repository opens on the overview** (`SourceTable`): a row
+per setting, a column per layer, a hollow dot where a layer has something and a
+filled one where it is in effect, the switch in the last column, and each row's
+name a link into the section that edits it. One read (`useProjectSources`) feeds
+the table, the badges and the tabs, so they cannot disagree.
+
+Settings → Instructions stays a plain editor per instruction: there is only the
+installation's own and the template it starts from, and its hint says what can
+override it.
 
 **It asks about the workspace the dialog was opened from**, and about the
 checkout only when there is none. A run happens in a worktree, and a branch may

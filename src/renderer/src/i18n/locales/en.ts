@@ -174,8 +174,6 @@ export const en = {
       'A project keeps its settings in ~/.octopus, on this machine. Its repository can carry them in .octopus/, where the app reads them while it works: scripts, instructions, and for a trusted repository the base branch and env file \u2014 each unless you chose your own. Name, icon, colour and the carry list are taken once, when the project is added. Export writes what this installation holds into the checkout, as an ordinary uncommitted change.',
     repoIgnored:
       'git ignores .octopus/, so anything written there stays on this machine. Take it out of .gitignore for the copy to reach anybody else.',
-    scriptFromRepo:
-      'This checkout supplies this script, in {{from}}, and that is what runs. The text below is this project\u2019s own copy, kept but not used.',
     trustTitle: 'Trust',
     trustSwitch: 'Trust this repository',
     trustHint:
@@ -421,6 +419,42 @@ export const en = {
    * is where they are met. The scope sentence is appended to each hint by
    * `InstructionEditors`, so the difference between the two dialogs is said once.
    */
+  /* Where a script, an instruction or a project field comes from. The layers
+     are named for where they live, which is what somebody goes to change. */
+  sources: {
+    layerRepository: 'Repository',
+    layerProject: 'This project',
+    layerGlobal: 'Settings',
+    layerTemplate: 'Template',
+    inEffect: 'In effect: {{layer}}',
+    nothingInEffect: 'Nothing runs',
+    layers: 'Where {{setting}} can come from',
+    useMine: 'Use mine instead of the repository\u2019s',
+    useMineHint:
+      'The repository supplies this, and its copy is what applies. On, this project\u2019s own is used instead, and the repository\u2019s is not read for it.',
+    fromRepository: 'From {{path}} in the checkout. Change it there, or use your own.',
+    fromGlobal: 'From Settings \u2192 Instructions, for every project that writes none of its own.',
+    fromTemplate: 'What octopus ships. It applies when nothing else is written.',
+    scriptTemplate: 'Where an editor starts. Nothing runs from it.',
+    repositoryStates: 'The repository sets {{value}}.',
+    warningRepositoryNotTrusted:
+      'It is not trusted yet, so this project\u2019s own applies. Trust it under Repository.',
+    warningBaseBranchMissing:
+      'This checkout has no such branch, so this project\u2019s own applies.',
+    warningEnvFileOutside: 'That path leaves the worktree, so this project\u2019s own applies.',
+    warningEnvFileNotIgnored:
+      'git would commit that file, and the variables written there are credentials, so this project\u2019s own applies.',
+    warningProjectFileUnreadable:
+      'The repository\u2019s .octopus/project.json could not be read, so this project\u2019s own applies.',
+    tableTitle: 'Where each setting comes from',
+    tableHint:
+      'The repository\u2019s .octopus/ is read while the app works and wins by default; switch an item to use this project\u2019s own. The carry list, name, icon and colour are this project\u2019s own \u2014 the repository\u2019s are taken once, when the project is added.',
+    columnSetting: 'Setting',
+    columnInEffect: 'In effect',
+    columnUseMine: 'Use mine',
+    open: 'Open {{setting}}'
+  },
+
   instructions: {
     scopeGlobal:
       'A project can write its own, which is used instead of this one \u2014 and a repository carrying one in .octopus/instructions/ is used before either.',

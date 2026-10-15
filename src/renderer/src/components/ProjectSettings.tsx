@@ -19,7 +19,7 @@ import { PROJECT_ICONS } from '@core/icons.js'
 import { checkEnvBody } from '@core/envBlock.js'
 import type { InstructionSource } from '@core/instructionSources.js'
 import { initials } from '@core/initials.js'
-import type { ScriptsInWorkspace } from '@core/repoSource.js'
+import { scriptItem, type SourceItemId, instructionItem } from '@core/sourceItems.js'
 import type { ScriptKind } from '@core/scripts.js'
 import type { Project, ProjectPatch } from '@core/store.js'
 
@@ -36,7 +36,11 @@ import { ProjectGlyph } from './ProjectGlyph.js'
 import { AgentPermissions } from './AgentPermissions.js'
 import { SectionRail } from './SectionRail.js'
 import { FileEditor } from './FileEditor.js'
-import { InstructionEditors } from './InstructionEditors.js'
+import { INSTRUCTION_KINDS } from './InstructionEditors.js'
+import { FieldSource } from './FieldSource.js'
+import { LayeredEditor } from './LayeredEditor.js'
+import { SourceTable } from './SourceTable.js'
+import { useProjectSources } from '../hooks/useProjectSources.js'
 import { RepoConfig } from './RepoConfig.js'
 import { RepoTrust } from './RepoTrust.js'
 import { LibrarySection } from './settings/LibrarySection.js'
@@ -101,6 +105,43 @@ const ENV_PROBLEMS = {
  * one of them to be forgotten.
  */
 const SCRIPT_ORDER = ['setup', 'archive', 'run'] as const satisfies readonly ScriptKind[]
+
+/**
+ * What each item is called in the overview — as its own editor calls it.
+ *
+ * A `Record` over every item, so an item added to the core without a name here
+ * is a compile error rather than a row reading `script.lint`.
+ */
+const ITEM_LABELS = {
+  'script.setup': 'project.setupScript',
+  'script.run': 'project.runScript',
+  'script.archive': 'project.archiveScript',
+  'instruction.pullRequest': 'instructions.pullRequest',
+  'instruction.commitMessage': 'instructions.commitMessage',
+  'instruction.fixChecks': 'instructions.fixChecks',
+  'instruction.addressReview': 'instructions.addressReview',
+  'instruction.review': 'instructions.review',
+  'instruction.multiAgentReview': 'instructions.multiAgentReview',
+  'instruction.resolveConflicts': 'instructions.resolveConflicts',
+  'project.baseBranch': 'project.baseBranch',
+  'project.envFile': 'project.envFile'
+} as const satisfies Record<SourceItemId, string>
+
+/** The sections that draw where a setting comes from. */
+const SOURCED_SECTIONS: readonly SectionId[] = [
+  'scripts',
+  'instructions',
+  'git',
+  'env',
+  'repository'
+]
+
+/** Which section edits each item, for the overview table's links. */
+function sectionOf(id: SourceItemId): SectionId {
+  if (id.startsWith('script.')) return 'scripts'
+  if (id.startsWith('instruction.')) return 'instructions'
+  return id === 'project.baseBranch' ? 'git' : 'env'
+}
 
 const SCRIPT_FIELDS = {
   setup: { label: 'project.setupScript', hint: 'project.setupScriptHint' },
@@ -209,16 +250,26 @@ export function ProjectSettings({
    */
   const [envIgnored, setEnvIgnored] = useState(true)
   const [sources, setSources] = useState<readonly InstructionSource[]>([])
-  /**
-   * Where each script would actually come from.
-   *
-   * Resolved against the open workspace's worktree, and against the checkout
-   * only when the dialog was opened without one. The dialog is about the
-   * project, but a script is not: a branch may carry one the checkout has not
-   * got, and answering about the checkout described scripts that were never
-   * going to run.
+  /*
+   * Where every script, instruction and live field comes from, for the badges,
+   * the layer tabs and the overview table. One read for all of them, so they
+   * cannot disagree; the open workspace's worktree when it belongs to this
+   * project, because a branch may carry a script the checkout has not got.
    */
-  const [resolved, setResolved] = useState<ScriptsInWorkspace | null>(null)
+  const { sources: origins, reload: reloadOrigins } = useProjectSources(
+    project.id,
+    workspaceId,
+    SOURCED_SECTIONS.includes(section)
+  )
+
+  /** "Use mine instead", for one item, then the answer read again. */
+  const preferLocal = (id: SourceItemId, on: boolean): void => {
+    const others = project.preferLocal.filter((entry) => entry !== id)
+    void (async () => {
+      await onUpdate({ preferLocal: on ? [...others, id] : others })
+      reloadOrigins()
+    })()
+  }
   /** The named sets this project holds, and which of them is being edited. */
   const [profiles, setProfiles] = useState<readonly string[]>([project.envProfile])
   const [profile, setProfile] = useState(project.envProfile)
@@ -270,23 +321,6 @@ export function ProjectSettings({
       controller.abort()
     }
   }, [section, project.id, project.envFile])
-
-  useEffect(() => {
-    if (section !== 'scripts') return
-    const controller = new AbortController()
-
-    void (async () => {
-      const answer = await window.octopus.projects.scripts(project.id, workspaceId)
-      // A checkout that cannot be read leaves the editors as they were: a
-      // settings file with conflict markers in it is not a reason to tell
-      // somebody their own script does not run.
-      if (!controller.signal.aborted && answer.ok) setResolved(answer.value)
-    })()
-
-    return () => {
-      controller.abort()
-    }
-  }, [section, project.id, workspaceId])
 
   useEffect(() => {
     if (section !== 'instructions') return
@@ -611,35 +645,37 @@ export function ProjectSettings({
                 emptyLabel={t('project.branchNone')}
                 display={shortBranchName}
               />
+              <FieldSource
+                view={origins.get('project.baseBranch')}
+                onPreferLocal={(on) => {
+                  preferLocal('project.baseBranch', on)
+                }}
+              />
             </Field>
           )}
 
           {section === 'scripts' && (
             <>
-              {SCRIPT_ORDER.map((kind) => {
-                const repo = resolved?.scripts[kind]
-
-                return (
-                  <FileEditor
-                    key={kind}
-                    label={t(SCRIPT_FIELDS[kind].label)}
-                    hint={t(SCRIPT_FIELDS[kind].hint)}
-                    placeholder={t('scripts.placeholder')}
-                    supersededBy={
-                      repo === undefined || repo.source === 'project'
-                        ? undefined
-                        : t('project.scriptFromRepo', { from: repo.from })
-                    }
-                    read={async () => {
-                      const result = await window.octopus.projects.readScript(project.id, kind)
-                      return result.ok ? result.value : null
-                    }}
-                    save={(contents) =>
-                      window.octopus.projects.saveScript(project.id, kind, contents)
-                    }
-                  />
-                )
-              })}
+              {SCRIPT_ORDER.map((kind) => (
+                <LayeredEditor
+                  key={kind}
+                  label={t(SCRIPT_FIELDS[kind].label)}
+                  hint={t(SCRIPT_FIELDS[kind].hint)}
+                  placeholder={t('scripts.placeholder')}
+                  view={origins.get(scriptItem(kind))}
+                  read={async () => {
+                    const result = await window.octopus.projects.readScript(project.id, kind)
+                    return result.ok ? result.value : null
+                  }}
+                  save={(contents) =>
+                    window.octopus.projects.saveScript(project.id, kind, contents)
+                  }
+                  onPreferLocal={(on) => {
+                    preferLocal(scriptItem(kind), on)
+                  }}
+                  onSaved={reloadOrigins}
+                />
+              ))}
             </>
           )}
 
@@ -689,6 +725,12 @@ export function ProjectSettings({
                   />
                 )}
               </Field>
+              <FieldSource
+                view={origins.get('project.envFile')}
+                onPreferLocal={(on) => {
+                  preferLocal('project.envFile', on)
+                }}
+              />
 
               {/* Which set. A checkout with a dev section and a production one
                   used to be handled by commenting a block in and out, and a
@@ -836,7 +878,26 @@ export function ProjectSettings({
 
               <AgentPermissions projectId={project.id} />
 
-              <InstructionEditors projectId={project.id} />
+              {INSTRUCTION_KINDS.map(({ kind, labelKey, hintKey }) => (
+                <LayeredEditor
+                  key={kind}
+                  label={t(labelKey)}
+                  hint={`${t(hintKey)} ${t('instructions.scopeProject')}`}
+                  rows={10}
+                  view={origins.get(instructionItem(kind))}
+                  read={async () => {
+                    const result = await window.octopus.projects.readInstruction(project.id, kind)
+                    return result.ok ? result.value : null
+                  }}
+                  save={(contents) =>
+                    window.octopus.projects.saveInstruction(project.id, kind, contents)
+                  }
+                  onPreferLocal={(on) => {
+                    preferLocal(instructionItem(kind), on)
+                  }}
+                  onSaved={reloadOrigins}
+                />
+              ))}
             </>
           )}
 
@@ -844,6 +905,14 @@ export function ProjectSettings({
               is a further step away from a mis-click than a scroll was. */}
           {section === 'repository' && (
             <div className="flex flex-col gap-8">
+              <SourceTable
+                sources={origins}
+                labelOf={(id) => t(ITEM_LABELS[id])}
+                onOpen={(id) => {
+                  setSection(sectionOf(id))
+                }}
+                onPreferLocal={preferLocal}
+              />
               <RepoTrust
                 projectId={project.id}
                 workspaceId={workspaceId}
