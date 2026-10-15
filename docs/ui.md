@@ -2072,20 +2072,24 @@ recycled. Arrows, Home and End move; Right opens a folder and steps into it, Lef
 closes it and steps out; Enter keeps a file open, Space previews it. Collapsing
 a folder that held the focused row leaves focus on the folder, not at the top.
 
-**The icons are VS Code's Material Icon Theme**, resolved by the rules VS Code
-applies to the same manifest: the whole name, then each extension from the
-longest (`test.ts` before `ts`), then the language. Two traps, both handled in
-`components/files/`:
+**The icons are Catppuccin Icons**, the VS Code theme, resolved by the rules VS
+Code applies to the same manifest: the whole name, then each extension from the
+longest (`test.ts` before `ts`), then the language. It replaced Material Icon
+Theme before the tab shipped, at the user's choice. There is no npm package, so
+`vendor/catppuccin-icons/` holds the release as published — Latte's pictures,
+Mocha's, the one table both share, and the licence — and
+`scripts/vendor-icons.ts` refreshes it from a release pinned by version and
+hash. Two traps, both handled in `components/files/`:
 
 - `?no-inline` on the SVG glob is required. The CSP is `default-src 'self'`,
   and Vite turns assets under 4 KB into `data:` URIs, which that policy refuses —
   the icons would show in development and vanish from the built app.
-- A light-ground variant is drawn as a second image and one of the pair hidden
-  by the app's own `.dark` class. Tailwind's `dark:` follows the operating
-  system, not the theme the user picked.
+- Every icon is drawn twice, Latte and Mocha, and one of the pair hidden by the
+  app's own `.dark` class. Tailwind's `dark:` follows the operating system, not
+  the theme the user picked.
 
-The URL table and the 450 KB manifest are chunks of their own, loaded the first
-time the tab draws.
+The URL tables and the manifest are chunks of their own, loaded the first time
+the tab draws.
 
 ## The diff
 
@@ -2691,7 +2695,7 @@ field styling had already drifted by a few pixels of height.
 | `Field`                                                | a labelled form row, in two shapes. Given a **function** it hands over an id and draws a real `<label htmlFor>`; given ordinary children it leaves the label a paragraph, because `htmlFor` names one element and this row is also used for a grid of swatches, a radio list and a select beside three buttons. Those name themselves — wrapping them here in a second group called the same thing was tried, and every such row then answered to its own name twice                                                                                                                                                                                                                                                                                                                                    |
 | `IconButton`, `Notice`                                 | the quiet toolbar button and the message drawn in place of content, shared by the right pane's tabs (`paneControls.tsx`) since the Files tab became the second to need both                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             |
 | `statusMarks`                                          | the letter, word and colour of a changed file — `A`, `M`, `D`, `U`, and the tree's `!` for a conflict — so a file reads the same in Changes and in Files                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
-| `FileIcon`                                             | a file's or folder's Material icon, plain until the theme has loaded and when it names nothing. Decorative throughout: the name beside it says what the row is                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
+| `FileIcon`                                             | a file's or folder's Catppuccin icon, plain until the theme has loaded and when it names nothing. Decorative throughout: the name beside it says what the row is                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
 | `fileSize`                                             | a size in the reader's own numbering, through `Intl` — kilobytes, then megabytes                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
 | `FileEditor`, `NameEditor`, `ResizeHandle`, `Terminal` |                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
 

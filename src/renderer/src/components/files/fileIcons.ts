@@ -9,9 +9,9 @@ import { languageFor } from '../diff/language.js'
 import { type IconManifest, loadIconManifest } from './iconManifest.js'
 
 /**
- * The icon for each theme — as names while the rules decide, as URLs once
- * resolved. `light` is null when the theme draws the same icon on both
- * grounds, which is nearly always.
+ * The icon for each of the app's themes, as URLs. `light` is null when the
+ * light flavour lacks the picture the dark one has — never in a release seen
+ * so far, and then the dark one is drawn on both grounds.
  */
 export interface IconPair {
   readonly dark: string
@@ -49,38 +49,27 @@ function extensionsOf(name: string): string[] {
  * guess from `languageFor`, whose names match VS Code's ids for most
  * languages; where they differ the extension tables have already answered.
  */
-function lookUp(
-  tables: Pick<
-    IconManifest,
-    'fileNames' | 'fileExtensions' | 'languageIds' | 'folderNames' | 'folderNamesExpanded'
-  >,
-  subject: IconSubject
-): string | undefined {
+function lookUp(manifest: IconManifest, subject: IconSubject): string | undefined {
   const name = subject.name.toLowerCase()
 
   if (subject.kind === 'directory') {
-    return (subject.expanded ? tables.folderNamesExpanded : tables.folderNames)[name]
+    return (subject.expanded ? manifest.folderNamesExpanded : manifest.folderNames)[name]
   }
 
-  const named = tables.fileNames[name]
+  const named = manifest.fileNames[name]
   if (named !== undefined) return named
 
   for (const extension of extensionsOf(name)) {
-    const found = tables.fileExtensions[extension]
+    const found = manifest.fileExtensions[extension]
     if (found !== undefined) return found
   }
 
   const language = languageFor(subject.path)
-  return language === null ? undefined : tables.languageIds[language]
+  return language === null ? undefined : manifest.languageIds[language]
 }
 
-/**
- * The icon names for a subject.
- *
- * The manifest's own tables are the dark ones; its `light` block overrides a
- * few for a light ground, where a white glyph would vanish.
- */
-export function iconNamesFor(manifest: IconManifest, subject: IconSubject): IconPair {
+/** The icon's name for a subject, with the theme's plain ones behind the rules. */
+export function iconNameFor(manifest: IconManifest, subject: IconSubject): string {
   const fallback =
     subject.kind === 'file'
       ? manifest.file
@@ -88,10 +77,7 @@ export function iconNamesFor(manifest: IconManifest, subject: IconSubject): Icon
         ? manifest.folderExpanded
         : manifest.folder
 
-  return {
-    dark: lookUp(manifest, subject) ?? fallback,
-    light: lookUp(manifest.light, subject) ?? null
-  }
+  return lookUp(manifest, subject) ?? fallback
 }
 
 /** The file part of a path, which is what the URL table is keyed by. */
@@ -101,28 +87,36 @@ function fileName(path: string): string {
 
 export type IconResolver = (subject: IconSubject) => IconPair | null
 
+/** The URL table keyed by file name, which is how the manifest names a picture. */
+function byFileName(urls: Readonly<Record<string, string>>): ReadonlyMap<string, string> {
+  return new Map(Object.entries(urls).map(([path, url]) => [fileName(path), url]))
+}
+
 /**
- * Turns names into URLs.
+ * Turns a subject into the URLs of its picture in each flavour.
  *
- * Null when the manifest names an icon the package did not ship — a version
- * mismatch, never expected, answered by the plain icon rather than a broken
- * image.
+ * One name for both: the flavours share one table and differ only in the
+ * colours inside the pictures. Null when the manifest names an icon the dark
+ * flavour did not ship — a version mismatch, never expected, answered by the
+ * plain icon rather than a broken image.
  */
 export function makeResolver(
   manifest: IconManifest,
-  urls: Readonly<Record<string, string>>
-): IconResolver {
-  const byFile = new Map(Object.entries(urls).map(([path, url]) => [fileName(path), url]))
-  const urlOf = (icon: string): string | undefined => {
-    const definition = manifest.iconDefinitions[icon]
-    return definition === undefined ? undefined : byFile.get(fileName(definition.iconPath))
+  urls: {
+    readonly light: Readonly<Record<string, string>>
+    readonly dark: Readonly<Record<string, string>>
   }
+): IconResolver {
+  const light = byFileName(urls.light)
+  const dark = byFileName(urls.dark)
 
   return (subject) => {
-    const names = iconNamesFor(manifest, subject)
-    const dark = urlOf(names.dark)
-    if (dark === undefined) return null
-    return { dark, light: names.light === null ? null : (urlOf(names.light) ?? null) }
+    const definition = manifest.iconDefinitions[iconNameFor(manifest, subject)]
+    if (definition === undefined) return null
+    const picture = fileName(definition.iconPath)
+    const darkUrl = dark.get(picture)
+    if (darkUrl === undefined) return null
+    return { dark: darkUrl, light: light.get(picture) ?? null }
   }
 }
 
@@ -154,11 +148,11 @@ export function loadedIconResolver(): IconResolver | null {
  */
 export async function loadIconResolver(): Promise<IconResolver> {
   loading ??= (async () => {
-    const [manifest, { ICON_URLS }] = await Promise.all([
+    const [manifest, { LIGHT_ICON_URLS, DARK_ICON_URLS }] = await Promise.all([
       loadIconManifest(),
       import('./iconUrls.js')
     ])
-    loaded = makeResolver(manifest, ICON_URLS)
+    loaded = makeResolver(manifest, { light: LIGHT_ICON_URLS, dark: DARK_ICON_URLS })
     return loaded
   })()
 

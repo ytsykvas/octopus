@@ -193,5 +193,7 @@ searchable for whoever hits the same thing next.
 [MIT](LICENSE).
 
 The file icons in the Files tab are from
-[Material Icon Theme](https://github.com/material-extensions/vscode-material-icon-theme),
-under its own MIT licence, which ships inside the app.
+[Catppuccin Icons](https://github.com/catppuccin/vscode-icons), under its own
+MIT licence, which ships inside the app. They are kept in `vendor/` as the
+release published them; `npm run vendor:icons` replaces them with the release
+pinned in `scripts/vendor-icons.ts`.

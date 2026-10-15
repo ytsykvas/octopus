@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 
 import {
   type IconSubject,
-  iconNamesFor,
+  iconNameFor,
   loadedIconResolver,
   loadIconResolver,
   makeResolver
@@ -11,34 +11,30 @@ import type { IconManifest } from './iconManifest.js'
 
 const MANIFEST: IconManifest = {
   iconDefinitions: {
-    file: { iconPath: './../icons/file.svg' },
-    folder: { iconPath: './../icons/folder.svg' },
-    'folder-open': { iconPath: './../icons/folder-open.svg' },
-    'folder-src': { iconPath: './../icons/folder-src.svg' },
-    'folder-src-open': { iconPath: './../icons/folder-src-open.svg' },
-    nodejs: { iconPath: './../icons/nodejs.svg' },
-    typescript: { iconPath: './../icons/typescript.svg' },
-    'test-ts': { iconPath: './../icons/test-ts.svg' },
-    python: { iconPath: './../icons/python.svg' },
-    toml: { iconPath: './../icons/toml.svg' },
-    toml_light: { iconPath: './../icons/toml_light.svg' },
-    unshipped: { iconPath: './../icons/unshipped.svg' }
+    _file: { iconPath: './icons/_file.svg' },
+    _folder: { iconPath: './icons/_folder.svg' },
+    _folder_open: { iconPath: './icons/_folder_open.svg' },
+    folder_src: { iconPath: './icons/folder_src.svg' },
+    folder_src_open: { iconPath: './icons/folder_src_open.svg' },
+    'package-json': { iconPath: './icons/package-json.svg' },
+    typescript: { iconPath: './icons/typescript.svg' },
+    'typescript-test': { iconPath: './icons/typescript-test.svg' },
+    python: { iconPath: './icons/python.svg' },
+    toml: { iconPath: './icons/toml.svg' },
+    unshipped: { iconPath: './icons/unshipped.svg' }
   },
-  fileNames: { 'package.json': 'nodejs', 'ghost.txt': 'unshipped', 'nameless.txt': 'undefined' },
-  fileExtensions: { ts: 'typescript', 'test.ts': 'test-ts', toml: 'toml', odd: 'unshipped' },
+  fileNames: {
+    'package.json': 'package-json',
+    'ghost.txt': 'unshipped',
+    'nameless.txt': 'undefined'
+  },
+  fileExtensions: { ts: 'typescript', 'test.ts': 'typescript-test', toml: 'toml' },
   languageIds: { python: 'python' },
-  folderNames: { src: 'folder-src' },
-  folderNamesExpanded: { src: 'folder-src-open' },
-  file: 'file',
-  folder: 'folder',
-  folderExpanded: 'folder-open',
-  light: {
-    fileNames: {},
-    fileExtensions: { toml: 'toml_light', odd: 'unshipped' },
-    languageIds: {},
-    folderNames: {},
-    folderNamesExpanded: {}
-  }
+  folderNames: { src: 'folder_src' },
+  folderNamesExpanded: { src: 'folder_src_open' },
+  file: '_file',
+  folder: '_folder',
+  folderExpanded: '_folder_open'
 }
 
 const file = (path: string): IconSubject => ({
@@ -55,87 +51,88 @@ const folder = (name: string, expanded = false): IconSubject => ({
   expanded
 })
 
-describe('iconNamesFor', () => {
+describe('iconNameFor', () => {
   it('prefers the whole name, ignoring case', () => {
-    expect(iconNamesFor(MANIFEST, file('Package.JSON')).dark).toBe('nodejs')
+    expect(iconNameFor(MANIFEST, file('Package.JSON'))).toBe('package-json')
   })
 
   // The longer extension is what tells a test file from any other.
   it('tries the longest extension first', () => {
-    expect(iconNamesFor(MANIFEST, file('src/a.test.ts')).dark).toBe('test-ts')
-    expect(iconNamesFor(MANIFEST, file('src/a.ts')).dark).toBe('typescript')
+    expect(iconNameFor(MANIFEST, file('src/a.test.ts'))).toBe('typescript-test')
+    expect(iconNameFor(MANIFEST, file('src/a.ts'))).toBe('typescript')
   })
 
   it('falls back to the language the file would be highlighted as', () => {
-    // `pyw` is not in the extension table; `py` would be, but this checks the
-    // language path — `languageFor` maps `.py` to `python`.
-    expect(iconNamesFor({ ...MANIFEST, fileExtensions: {} }, file('tool.py')).dark).toBe('python')
+    // With no extension table, only the language can name it — `languageFor`
+    // maps `.py` to `python`.
+    expect(iconNameFor({ ...MANIFEST, fileExtensions: {} }, file('tool.py'))).toBe('python')
   })
 
   it('falls back to the plain file icon, and treats a leading dot as part of the name', () => {
-    expect(iconNamesFor(MANIFEST, file('.ts')).dark).toBe('file')
-    expect(iconNamesFor(MANIFEST, file('notes.unknown')).dark).toBe('file')
-    expect(iconNamesFor(MANIFEST, file('Makefile')).dark).toBe('file')
+    expect(iconNameFor(MANIFEST, file('.ts'))).toBe('_file')
+    expect(iconNameFor(MANIFEST, file('notes.unknown'))).toBe('_file')
+    expect(iconNameFor(MANIFEST, file('Makefile'))).toBe('_file')
   })
 
   it('picks a folder icon by name, open or closed, with the plain ones behind it', () => {
-    expect(iconNamesFor(MANIFEST, folder('src')).dark).toBe('folder-src')
-    expect(iconNamesFor(MANIFEST, folder('SRC', true)).dark).toBe('folder-src-open')
-    expect(iconNamesFor(MANIFEST, folder('misc')).dark).toBe('folder')
-    expect(iconNamesFor(MANIFEST, folder('misc', true)).dark).toBe('folder-open')
-  })
-
-  it('names a light variant only where the theme has one', () => {
-    expect(iconNamesFor(MANIFEST, file('Cargo.toml'))).toEqual({
-      dark: 'toml',
-      light: 'toml_light'
-    })
-    expect(iconNamesFor(MANIFEST, file('a.ts')).light).toBeNull()
+    expect(iconNameFor(MANIFEST, folder('src'))).toBe('folder_src')
+    expect(iconNameFor(MANIFEST, folder('SRC', true))).toBe('folder_src_open')
+    expect(iconNameFor(MANIFEST, folder('misc'))).toBe('_folder')
+    expect(iconNameFor(MANIFEST, folder('misc', true))).toBe('_folder_open')
   })
 })
 
 describe('makeResolver', () => {
   const urls = {
-    '../node_modules/material-icon-theme/icons/file.svg': '/assets/file.svg',
-    '../node_modules/material-icon-theme/icons/typescript.svg': '/assets/typescript.svg',
-    '../node_modules/material-icon-theme/icons/toml.svg': '/assets/toml.svg',
-    '../node_modules/material-icon-theme/icons/toml_light.svg': '/assets/toml_light.svg'
+    light: {
+      '../vendor/catppuccin-icons/latte/_file.svg': '/assets/latte/_file.svg',
+      '../vendor/catppuccin-icons/latte/typescript.svg': '/assets/latte/typescript.svg'
+    },
+    dark: {
+      '../vendor/catppuccin-icons/mocha/_file.svg': '/assets/mocha/_file.svg',
+      '../vendor/catppuccin-icons/mocha/typescript.svg': '/assets/mocha/typescript.svg',
+      '../vendor/catppuccin-icons/mocha/toml.svg': '/assets/mocha/toml.svg'
+    }
   }
   const resolve = makeResolver(MANIFEST, urls)
 
-  it('turns the names into the URLs the build gave them', () => {
-    expect(resolve(file('a.ts'))).toEqual({ dark: '/assets/typescript.svg', light: null })
-    expect(resolve(file('Cargo.toml'))).toEqual({
-      dark: '/assets/toml.svg',
-      light: '/assets/toml_light.svg'
+  // One name, two pictures: the flavours differ only in their colours.
+  it('gives each flavour its own picture of the same icon', () => {
+    expect(resolve(file('a.ts'))).toEqual({
+      dark: '/assets/mocha/typescript.svg',
+      light: '/assets/latte/typescript.svg'
+    })
+    expect(resolve(file('README'))).toEqual({
+      dark: '/assets/mocha/_file.svg',
+      light: '/assets/latte/_file.svg'
     })
   })
 
-  // A manifest from a newer version naming an icon this package lacks.
+  // A manifest from a newer version naming an icon this copy lacks.
   it('answers null for an icon that was never shipped, so the plain one is drawn', () => {
     expect(resolve(file('ghost.txt'))).toBeNull()
     expect(resolve(file('nameless.txt'))).toBeNull()
     expect(resolve(folder('src'))).toBeNull()
   })
 
-  it('drops a light variant that was never shipped, keeping the dark one', () => {
-    expect(resolve(file('a.odd'))).toBeNull()
-    expect(
-      makeResolver({ ...MANIFEST, fileExtensions: { odd: 'typescript' } }, urls)(file('a.odd'))
-    ).toEqual({ dark: '/assets/typescript.svg', light: null })
+  it('draws the dark picture on both grounds when the light flavour lacks it', () => {
+    expect(resolve(file('Cargo.toml'))).toEqual({ dark: '/assets/mocha/toml.svg', light: null })
   })
 })
 
 describe('loadIconResolver', () => {
-  // The real package: the manifest parses and the build's URL table holds the
-  // icons it names.
-  it('loads the installed theme once and resolves real names', async () => {
+  // The real copy in vendor/: the manifest parses and the build's URL tables
+  // hold the icons it names, in both flavours.
+  it('loads the theme once and resolves real names', async () => {
     expect(loadedIconResolver()).toBeNull()
     const [resolve, again] = await Promise.all([loadIconResolver(), loadIconResolver()])
 
     expect(loadedIconResolver()).toBe(resolve)
     expect(again).toBe(resolve)
-    expect(resolve(file('src/main.ts'))?.dark).toMatch(/typescript\.svg/)
-    expect(resolve(folder('src'))?.dark).toMatch(/folder-src\.svg/)
+    expect(resolve(file('src/main.ts'))).toEqual({
+      dark: expect.stringMatching(/mocha\/typescript\.svg\b/) as string,
+      light: expect.stringMatching(/latte\/typescript\.svg\b/) as string
+    })
+    expect(resolve(folder('src'))?.dark).toMatch(/mocha\/folder_src\.svg\b/)
   })
 })

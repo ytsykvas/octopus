@@ -12,6 +12,7 @@
     "src/core/**/*",
     "src/main/**/*",
     "src/preload/**/*",
+    "scripts/**/*",
     "electron.vite.config.ts",
     "vitest.config.ts",
     "eslint.config.js"

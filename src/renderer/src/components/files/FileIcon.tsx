@@ -35,14 +35,14 @@ function useIconResolver(): IconResolver | null {
 }
 
 /**
- * A file's or folder's icon, as VS Code's material theme draws it.
+ * A file's or folder's icon, as VS Code's Catppuccin theme draws it.
  *
  * Pictures, not interface colour: the icons carry their own palette, which is
  * the point of them, so the tokens-only rule is about everything around them.
  * Decorative throughout — the name beside it says what the row is.
  *
- * A pair is drawn when the theme has a light variant, and the stylesheet hides
- * one by the app's own `.dark` class. Tailwind's `dark:` would follow the
+ * Both flavours are drawn, and the stylesheet hides one by the app's own
+ * `.dark` class. Tailwind's `dark:` would follow the
  * operating system instead, which is not the theme the user picked.
  */
 export function FileIcon({ name, path, kind, expanded }: IconSubject): React.JSX.Element {

@@ -3,15 +3,15 @@ import { describe, expect, it } from 'vitest'
 import { loadIconManifest } from './iconManifest.js'
 
 describe('loadIconManifest', () => {
-  it('reads the installed manifest', async () => {
+  it('reads the manifest kept in vendor/', async () => {
     const manifest = await loadIconManifest()
 
     expect(manifest.fileExtensions.ts).toBe('typescript')
-    expect(manifest.light.fileExtensions.toml).toBe('toml_light')
+    expect(manifest.folderNames.src).toBe('folder_src')
   })
 
-  it('refuses when the package is not there', async () => {
-    await expect(loadIconManifest({})).rejects.toThrow(/not installed/)
+  it('refuses when the copy is not there', async () => {
+    await expect(loadIconManifest({})).rejects.toThrow(/not in vendor/)
   })
 
   // Somebody else's file: a reshaped one is refused rather than half-read.
@@ -19,27 +19,5 @@ describe('loadIconManifest', () => {
     await expect(
       loadIconManifest({ 'x.json': () => Promise.resolve({ default: { file: 1 } }) })
     ).rejects.toThrow()
-  })
-
-  it('fills in a light block that names nothing', async () => {
-    const manifest = await loadIconManifest({
-      'x.json': () =>
-        Promise.resolve({
-          default: {
-            iconDefinitions: {},
-            fileNames: {},
-            fileExtensions: {},
-            languageIds: {},
-            folderNames: {},
-            folderNamesExpanded: {},
-            file: 'file',
-            folder: 'folder',
-            folderExpanded: 'folder-open',
-            light: {}
-          }
-        })
-    })
-
-    expect(manifest.light.fileNames).toEqual({})
   })
 })
