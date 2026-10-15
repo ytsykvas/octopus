@@ -223,6 +223,7 @@ import {
 import { readScript, type ScriptKind, scriptExists, scriptPath, writeScript } from './scripts.js'
 import { instructionItem, type SourceView } from './sourceItems.js'
 import { readSources } from './sources.js'
+import { type ProjectFields, resolveProjectFields } from './projectFields.js'
 import {
   compareRepoItem,
   formatRepoProject,
@@ -231,6 +232,7 @@ import {
   REPO_ITEM_IDS,
   REPO_README_FILE,
   readRepoConfig,
+  readStatedProject,
   type RepoConfigItem,
   type RepoConfigView,
   type RepoItem,
@@ -1578,10 +1580,49 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
    * reached is exactly the failure worth refusing on.
    */
   async function baseRefOf(project: Project): Promise<string> {
+    // The base in effect: the repository's own when it states one git has.
+    const { baseBranch } = await liveProject(project)
     try {
-      return (await resolveBase(makeExec(project.repoPath), project.baseBranch)).ref
+      return (await resolveBase(makeExec(project.repoPath), baseBranch)).ref
     } catch {
-      return project.baseBranch
+      return baseBranch
+    }
+  }
+
+  /**
+   * The base branch and env file in effect, and where each came from.
+   *
+   * The checkout's `.octopus/project.json` decides both unless the project
+   * chose its own (`projectFields.ts` says why, and what is checked first).
+   */
+  async function fieldsOf(project: Project): Promise<ProjectFields> {
+    return resolveProjectFields(
+      await readStatedProject(project.repoPath),
+      {
+        baseBranch: project.baseBranch,
+        envFile: project.envFile,
+        preferBaseBranch: project.preferLocal.includes('project.baseBranch'),
+        preferEnvFile: project.preferLocal.includes('project.envFile')
+      },
+      makeExec(project.repoPath)
+    )
+  }
+
+  /**
+   * The project with the two live fields as they are in effect.
+   *
+   * The stored record is left alone — it holds the user's own values, which
+   * "use mine instead" has to be able to return to — and the places that act
+   * on a base branch or an env file ask this instead. A checkout git cannot
+   * answer for (moved, deleted) keeps the stored values, so the reads this
+   * serves go on working and the workspace is reported missing as before.
+   */
+  async function liveProject(project: Project): Promise<Project> {
+    try {
+      const { baseBranch, envFile } = await fieldsOf(project)
+      return { ...project, baseBranch: baseBranch.value, envFile: envFile.value }
+    } catch {
+      return project
     }
   }
 
@@ -2581,20 +2622,36 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
    * workspace holds at this moment — which is why a run settles the port first
    * and prepares second.
    */
-  async function prepare(project: Project, workspace: Workspace): Promise<CarryReport> {
-    await discardIfOnlyBlock(workspace.path, project.envFile)
+  async function prepare(
+    project: Project,
+    workspace: Workspace
+  ): Promise<{ readonly report: CarryReport; readonly envFile: string }> {
+    const { envFile } = await liveProject(project)
+
+    /*
+     * The block in the file this workspace last wrote to, when that is no
+     * longer the file in effect — a pull that changed `envFile` in the
+     * repository, or "use mine instead". Nothing else would revisit it, and it
+     * is credentials and a port frozen at the moment of the switch, in a file
+     * the stack very likely still reads. A workspace that predates the record
+     * wrote to the project's own file.
+     */
+    const previous = workspace.envFileApplied ?? project.envFile
+    if (previous !== envFile) await removeEnvBlock(workspace.path, previous)
+
+    await discardIfOnlyBlock(workspace.path, envFile)
 
     const report = await carryInto(project.id, project.repoPath, workspace.path, dataRoot)
 
     await applyEnvOverrides(await readEffectiveEnv(project, workspace, dataRoot), {
       path: workspace.path,
-      envFile: project.envFile,
+      envFile,
       rootPath: project.repoPath,
       workspaceName: workspace.name,
       port: workspace.port
     })
 
-    return report
+    return { report, envFile }
   }
 
   /**
@@ -3266,7 +3323,9 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
         await assertBranchExists(makeExec(project.repoPath), patch.baseBranch)
       }
 
-      const wasEnvFile = project.envFile
+      // The file in effect, before and after: with the repository stating one,
+      // editing the project's own changes nothing on disk until it is chosen.
+      const wasEnvFile = (await liveProject(project)).envFile
 
       await commit((current) => updateProject(current, projectId, applied))
 
@@ -3280,8 +3339,8 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
        *
        * After the commit, so a rejected patch leaves the old file alone.
        */
-      const envFile = findProject(state, projectId)?.envFile
-      if (envFile !== undefined && envFile !== wasEnvFile) {
+      const { envFile } = await liveProject(requireProject(projectId))
+      if (envFile !== wasEnvFile) {
         for (const workspace of workspacesOfProject(state, projectId)) {
           await removeEnvBlock(workspace.path, wasEnvFile)
         }
@@ -3582,7 +3641,7 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
 
     async projectSources(projectId, workspaceId) {
       const project = requireProject(projectId)
-      return readSources(cwdFor(project, workspaceId), project, dataRoot)
+      return readSources(cwdFor(project, workspaceId), project, await fieldsOf(project), dataRoot)
     },
 
     async projectTrust(projectId, workspaceId) {
@@ -3661,19 +3720,25 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
 
     async isProjectEnvIgnored(projectId) {
       const project = requireProject(projectId)
-      return isIgnored(makeExec(project.repoPath), project.envFile)
+      return isIgnored(makeExec(project.repoPath), (await liveProject(project)).envFile)
     },
 
     async readWorkspaceEnv(workspaceId) {
       const workspace = requireWorkspace(workspaceId)
       const project = requireProject(workspace.projectId)
 
-      return readWorkspaceEnv(workspace.path, project.envFile)
+      return readWorkspaceEnv(workspace.path, (await liveProject(project)).envFile)
     },
 
     async prepareWorkspace(workspaceId) {
       const workspace = requireWorkspace(workspaceId)
-      return prepare(requireProject(workspace.projectId), workspace)
+      const { report, envFile } = await prepare(requireProject(workspace.projectId), workspace)
+      if (envFile !== workspace.envFileApplied) {
+        await commit((current) =>
+          updateWorkspace(current, workspaceId, { envFileApplied: envFile })
+        )
+      }
+      return report
     },
 
     async isWorkspaceServing(workspaceId) {
@@ -4034,7 +4099,8 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
       const project = requireProject(projectId)
       const exec = makeExec(project.repoPath)
 
-      const workspace = await createWorkspace(project, state, exec, {
+      // Cut from the base in effect, which the repository may state.
+      const created = await createWorkspace(await liveProject(project), state, exec, {
         root: dataRoot,
         fetchExec: makeExec(project.repoPath, FETCH_OPTIONS)
       })
@@ -4043,14 +4109,14 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
         // Inside the rollback, not after it: a worktree missing the files it
         // cannot run without is a workspace that will fail its first build, and
         // undoing it says so at the one moment somebody is watching.
-        await prepare(project, workspace)
+        const { envFile } = await prepare(project, created)
+        const workspace = { ...created, envFileApplied: envFile }
         await commit((current) => addWorkspace(current, workspace))
+        return workspace
       } catch (error) {
-        await rollbackWorkspace(workspace, exec)
+        await rollbackWorkspace(created, exec)
         throw error
       }
-
-      return workspace
     },
 
     async renameWorkspaceById(workspaceId, name) {

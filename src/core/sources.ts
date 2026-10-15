@@ -17,6 +17,8 @@ import {
   type InstructionKind,
   storedInstruction
 } from './instructions.js'
+import type { FieldSource, ProjectFields } from './projectFields.js'
+import { REPO_PROJECT_FILE } from './repoConfig.js'
 import { octopusScript, repoInstruction } from './repoSource.js'
 import { readScript, scriptExists, scriptPath, scriptTemplate, type ScriptKind } from './scripts.js'
 import {
@@ -83,7 +85,13 @@ async function scriptSource(
   layers.push({ layer: 'template', from: null, body: scriptTemplate(kind) })
 
   const preferLocal = project.preferLocal.includes(id)
-  return { id, layers, effective: effectiveOf(layers, preferLocal, false), preferLocal }
+  return {
+    id,
+    layers,
+    effective: effectiveOf(layers, preferLocal, false),
+    preferLocal,
+    warning: null
+  }
 }
 
 async function instructionSource(
@@ -115,7 +123,39 @@ async function instructionSource(
   layers.push({ layer: 'template', from: null, body: instructionTemplate(kind) })
 
   const preferLocal = project.preferLocal.includes(id)
-  return { id, layers, effective: effectiveOf(layers, preferLocal, true), preferLocal }
+  return {
+    id,
+    layers,
+    effective: effectiveOf(layers, preferLocal, true),
+    preferLocal,
+    warning: null
+  }
+}
+
+/**
+ * A project field, from its resolution.
+ *
+ * Both layers are values rather than files: the repository's from
+ * `.octopus/project.json`, the project's from its settings.
+ */
+function fieldSource(
+  id: 'project.baseBranch' | 'project.envFile',
+  field: FieldSource,
+  preferLocal: readonly SourceItemId[]
+): SourceView {
+  const layers: SourceLayerView[] = []
+  if (field.repository !== null) {
+    layers.push({ layer: 'repository', from: REPO_PROJECT_FILE, body: field.repository })
+  }
+  layers.push({ layer: 'project', from: null, body: field.project })
+
+  return {
+    id,
+    layers,
+    effective: field.layer,
+    preferLocal: preferLocal.includes(id),
+    warning: field.warning
+  }
 }
 
 /**
@@ -123,14 +163,23 @@ async function instructionSource(
  *
  * `cwd` is the worktree when one is open and belongs to the project, the
  * checkout otherwise — the same directory the resolvers would be asked about.
+ * The two project fields are resolved against the checkout by the caller, which
+ * has git to ask; they are passed in already worked out.
  */
 export async function readSources(
   cwd: string,
   project: SourcesOf,
+  fields: ProjectFields,
   root?: string
 ): Promise<SourceView[]> {
-  return Promise.all([
+  const files = await Promise.all([
     ...SOURCE_SCRIPT_KINDS.map((kind) => scriptSource(cwd, project, kind, root)),
     ...SOURCE_INSTRUCTION_KINDS.map((kind) => instructionSource(cwd, project, kind, root))
   ])
+
+  return [
+    ...files,
+    fieldSource('project.baseBranch', fields.baseBranch, project.preferLocal),
+    fieldSource('project.envFile', fields.envFile, project.preferLocal)
+  ]
 }

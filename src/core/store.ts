@@ -217,6 +217,18 @@ export const WorkspaceSchema = z.object({
    * Defaulted, because every workspace written before this lacks it entirely.
    */
   notes: NotesBodySchema.default(''),
+  /**
+   * The env file this workspace's block of variables was last written into, or
+   * null before it was recorded.
+   *
+   * The file can now change under a workspace without anybody touching its
+   * settings — a `git pull` that changes `envFile` in `.octopus/project.json`
+   * — and the block in the old file is credentials nobody would ever revisit.
+   * Knowing where it went is what lets the next preparation take it back out.
+   * Null for every workspace written before; the project's own `envFile` is
+   * where those were written.
+   */
+  envFileApplied: z.string().nullable().default(null),
   /** Reserved for future multi-user support; always null for now. */
   ownerId: z.string().nullable()
 })

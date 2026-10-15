@@ -14,8 +14,9 @@ before.** This is insurance, not a new way of configuring anything.
 
 ## The one thing to understand
 
-**The scripts and the instructions are live and the repository wins; the rest
-here is a snapshot.**
+**The scripts, the instructions, the base branch and the env file are live and
+the repository wins; the rest here is a snapshot.** Each of them can be switched
+back to the project's own — _use mine instead_ — one at a time.
 
 Which of the three scripts runs is asked of the **worktree**, in this order:
 `.octopus/scripts/` in it, then the project's own settings under `~/.octopus`.
@@ -24,8 +25,25 @@ the project's own, then the installation's, then the written template — so a
 clone sends the pull-request description this project wants with nothing
 configured.
 
-The carry list and the fields in `project.json` are **not** live: they move only
-by the two actions below, both of which somebody presses.
+Two fields of `project.json` are live too, read from the **checkout** — never a
+worktree, or a feature branch could re-point the base of its own pull request:
+
+- **`baseBranch`** — what workspaces are cut from and compared against, once git
+  confirms the checkout has it. A team that moves to `develop` moves every clone
+  with it.
+- **`envFile`** — where the block of variables is written, **only if git ignores
+  it** in the checkout. That file receives credentials; one git would commit
+  would publish them. A refused value leaves the project's own in effect, and the
+  settings window says why.
+
+The project's stored values are never overwritten: they are what _use mine
+instead_ returns to. When the file in effect changes under a workspace — a pull,
+or that switch — the next preparation takes the block out of the file it was in,
+because the workspace records where it wrote it.
+
+The carry list and the rest of `project.json` — name, icon, colour, which are how
+one person tells their projects apart — are **not** live: they move only by the
+two actions below, both of which somebody presses.
 
 An instruction is not gated the way a script is. It becomes a visible user
 message in the log, where it is read before it does anything, and a dialog in

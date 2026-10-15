@@ -24,6 +24,7 @@ import {
   REPO_ITEM_PATHS,
   REPO_README,
   readRepoConfig,
+  readStatedProject,
   type RepoItem,
   RepoConfigError,
   RepoItemIdSchema,
@@ -50,6 +51,35 @@ async function put(relative: string, contents: string): Promise<void> {
   await mkdir(join(path, '..'), { recursive: true })
   await writeFile(path, contents, 'utf8')
 }
+
+describe('readStatedProject', () => {
+  it('answers null for a repository that states nothing', async () => {
+    await expect(readStatedProject(repo)).resolves.toBeNull()
+  })
+
+  it('reads the fields a repository states', async () => {
+    await put('project.json', '{"baseBranch":"develop"}')
+
+    await expect(readStatedProject(repo)).resolves.toEqual({ baseBranch: 'develop' })
+  })
+
+  // A file that is there and cannot be believed is not the same as nothing,
+  // and it must not stop the app answering — so it is named, not thrown.
+  it('says a file it cannot believe is unreadable', async () => {
+    await put('project.json', 'not json')
+
+    await expect(readStatedProject(repo)).resolves.toBe('unreadable')
+  })
+
+  it('will not read through a linked directory', async () => {
+    const elsewhere = await mkdtemp(join(tmpdir(), 'octopus-elsewhere-'))
+    await writeFile(join(elsewhere, 'project.json'), '{"baseBranch":"x"}', 'utf8')
+    await symlink(elsewhere, join(repo, REPO_DIR))
+
+    await expect(readStatedProject(repo)).resolves.toBe('unreadable')
+    await rm(elsewhere, { recursive: true, force: true })
+  })
+})
 
 describe('REPO_ITEM_PATHS', () => {
   // The promise export makes is that it never writes outside `.octopus/`.

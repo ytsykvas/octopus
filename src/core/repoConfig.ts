@@ -218,6 +218,9 @@ export function repoItemFile(id: RepoItemId): string {
   return join(REPO_DIR, ITEM_PATHS[id])
 }
 
+/** Where a repository states its project fields, relative to its root. */
+export const REPO_PROJECT_FILE = repoItemFile('project')
+
 /** How the copy in a repository stands against the copy in the app. */
 export type RepoItemState = 'onlyInRepository' | 'onlyInApp' | 'same' | 'differs'
 
@@ -377,6 +380,26 @@ export function parseRepoProject(contents: string): RepoProject {
   }
 
   return result.data
+}
+
+/**
+ * The project fields a checkout states, read while the app works.
+ *
+ * Null where it states nothing, which is most repositories. `'unreadable'`
+ * where there is a file and it cannot be believed — not JSON, not a project,
+ * too large, or behind a link — which is not the same thing: the project's own
+ * values stand either way, but the window says why the repository's did not.
+ */
+export async function readStatedProject(
+  repoPath: string
+): Promise<RepoProject | null | 'unreadable'> {
+  try {
+    await assertNotLink(join(repoPath, REPO_DIR), REPO_DIR)
+    const item = await readItem(repoPath, 'project')
+    return item === null ? null : parseRepoProject(item.contents)
+  } catch {
+    return 'unreadable'
+  }
 }
 
 /** Serialises the fields a project exports, with the keys it has not left out. */

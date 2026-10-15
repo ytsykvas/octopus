@@ -812,6 +812,15 @@ against, the repository's file is not even read: a script the project never
 wrote then runs nothing, rather than the repository's quietly coming back, and
 there is nothing of the repository's left to approve.
 
+## The env file a workspace last wrote to
+
+`envFileApplied` on a workspace is the file its block of variables went into,
+or null for a workspace written before it was recorded (those wrote into the
+project's own `envFile`). The file in effect can change without anybody touching
+the workspace — the repository's `.octopus/project.json` can name another — and
+the old block is credentials and a frozen port that nothing would ever revisit.
+Knowing where it went is what lets the next preparation take it back out.
+
 ## Which set of variables a workspace runs with
 
 `envProfile` on a project names the set its workspaces use; `envProfile` on a
