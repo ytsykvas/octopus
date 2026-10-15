@@ -990,6 +990,58 @@ describe('workspaces', () => {
     })
   })
 
+  describe('the Files tab', () => {
+    it('reads the worktree of the workspace asked about, with its marks', async () => {
+      const { service, projectId } = await withProject()
+      const workspace = await service.createWorkspaceIn(projectId)
+      await writeFile(join(workspace.path, 'fresh.ts'), 'x\n', 'utf8')
+
+      const tree = await service.readFileTree(workspace.id)
+
+      expect(tree.entries.map((entry) => entry.path)).toEqual(
+        expect.arrayContaining(['README.md', 'fresh.ts'])
+      )
+      expect(tree.statuses).toEqual({ 'fresh.ts': 'untracked' })
+    })
+
+    it('lists a folder of the workspace from disk', async () => {
+      const { service, projectId } = await withProject()
+      const workspace = await service.createWorkspaceIn(projectId)
+      await mkdir(join(workspace.path, 'node_modules'))
+      await writeFile(join(workspace.path, 'node_modules', 'a.js'), '', 'utf8')
+
+      await expect(service.readWorkspaceDirectory(workspace.id, 'node_modules')).resolves.toEqual({
+        entries: [{ name: 'a.js', kind: 'file' }],
+        truncated: false
+      })
+    })
+
+    it('reads a file of the workspace, and shows what HEAD had of one deleted', async () => {
+      const { service, projectId } = await withProject()
+      const workspace = await service.createWorkspaceIn(projectId)
+      const readme = await readFile(join(workspace.path, 'README.md'), 'utf8')
+
+      await expect(service.readWorkspaceFile(workspace.id, 'README.md')).resolves.toMatchObject({
+        kind: 'text',
+        text: readme
+      })
+
+      await rm(join(workspace.path, 'README.md'))
+      await expect(service.readWorkspaceFile(workspace.id, 'README.md')).resolves.toEqual({
+        kind: 'deleted',
+        text: readme
+      })
+    })
+
+    it('refuses a workspace that does not exist, for each read', async () => {
+      const { service } = await withProject()
+
+      await expect(service.readFileTree('missing')).rejects.toThrow()
+      await expect(service.readWorkspaceDirectory('missing', 'a')).rejects.toThrow()
+      await expect(service.readWorkspaceFile('missing', 'a')).rejects.toThrow()
+    })
+  })
+
   it('refuses to remove a workspace holding uncommitted work', async () => {
     const { service, projectId } = await withProject()
     const workspace = await service.createWorkspaceIn(projectId)

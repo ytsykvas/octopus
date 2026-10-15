@@ -142,6 +142,17 @@ describe('loadConfig', () => {
     }
   })
 
+  it('keeps the Files tab across a save and a load', async () => {
+    const file = join(dir, 'files.json')
+
+    await saveConfig(
+      { ...createDefaultConfig('ytsykvas', NOW, () => UUID), rightPanelTab: 'files' },
+      file
+    )
+
+    expect((await loadConfig(file)).rightPanelTab).toBe('files')
+  })
+
   // Cleaned off the disk rather than translated on every read: the schema
   // applies on the way out too, so the stale word goes the next time anything
   // is saved.
