@@ -2943,6 +2943,7 @@ describe('settings a repository carries', () => {
     await service.exportRepoConfig(id, ['script.setup', 'carry', 'instruction.review', 'project'])
 
     // A second installation, with nothing of its own.
+    await writeFile(join(repo, '.gitignore'), '.env\nconfig/master.key\n', 'utf8')
     const fresh = await createService(paths(join(dir, 'second')))
     const other = await fresh.addProjectFromPath(repo)
 
@@ -2961,13 +2962,33 @@ describe('settings a repository carries', () => {
   it('takes a carry list without where its files come from', async () => {
     const repo = join(dir, 'planner')
     await initRepo(repo)
-    await carry(repo, 'carry', '.env = ~/.ssh/id_rsa\nconfig/master.key\n')
+    await writeFile(join(repo, '.gitignore'), '.env\n', 'utf8')
+    await carry(repo, 'carry', '.env = ~/.ssh/id_rsa\n')
 
     const project = await service.addProjectFromPath(repo)
 
     const list = await service.readProjectCarryList(project.id)
     expect(list).not.toContain('id_rsa')
     expect(list).toContain('.env')
+  })
+
+  /*
+   * A carry list is a list of what is not committed. A repository naming a file
+   * it does not ignore would have this machine's real copy land in the worktree
+   * as something the next `git add -A` publishes, so that line is not taken.
+   */
+  it('takes only the files git ignores', async () => {
+    const repo = join(dir, 'planner')
+    await initRepo(repo)
+    await writeFile(join(repo, '.gitignore'), 'config/master.key\n', 'utf8')
+    await carry(repo, 'carry', '# secrets\n.env\nconfig/master.key\n')
+
+    const project = await service.addProjectFromPath(repo)
+
+    const list = await service.readProjectCarryList(project.id)
+    expect(list).toContain('# secrets')
+    expect(list).toContain('config/master.key')
+    expect(list.split('\n')).not.toContain('.env')
   })
 
   // The base branch and env file stay live, so copying them would leave a

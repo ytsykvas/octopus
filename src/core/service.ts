@@ -3269,11 +3269,32 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
      * a private key into the worktree, where the agent reads it. What is taken
      * is the list of files; where they come from is the checkout, as for a
      * list typed here.
+     *
+     * And only the files git ignores. A carry list is a list of what is not
+     * committed — `.env`, a master key — and a repository naming one it does
+     * not ignore would have this machine's real copy land in the worktree as a
+     * file the next `git add -A` publishes.
      */
     const carried = carryListForExport(await readStatedCarry(project.repoPath))
-    if (carried !== null) await writeCarryList(project.id, carried, dataRoot)
+    if (carried !== null) {
+      const list = await ignoredOnly(carried, makeExec(project.repoPath))
+      await writeCarryList(project.id, list, dataRoot)
+    }
 
     return project
+  }
+
+  /** A carry list with every file line git would commit dropped; comments stay. */
+  async function ignoredOnly(list: string, exec: GitExec): Promise<string> {
+    const kept = await Promise.all(
+      list.split('\n').map(async (line) => {
+        const path = line.trim()
+        if (path === '' || path.startsWith('#')) return line
+        return (await isIgnored(exec, path)) ? line : null
+      })
+    )
+
+    return kept.filter((line): line is string => line !== null).join('\n')
   }
 
   /**

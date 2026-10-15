@@ -169,10 +169,14 @@ it at that moment and never again:
 
 - **name, icon and colour** from `project.json` — how one person tells their
   projects apart, so after this they are theirs to change;
-- **the carry list** from `carry`, **without its sources**. A source is a path on
-  somebody's machine, and from a repository a way to have this one copy a
-  private key into the worktree, where the agent reads it. What is taken is the
-  list of files; they are copied from the checkout, as for a list typed here.
+- **the carry list** from `carry`, **without its sources**, and **only the files
+  git ignores**. A source is a path on somebody's machine, and from a repository
+  a way to have this one copy a private key into the worktree, where the agent
+  reads it. And a carry list is a list of what is not committed: a repository
+  naming a file it does not ignore would have this machine's real `.env` land in
+  the worktree as something the next `git add -A` publishes. What is taken is
+  the list of files; they are copied from the checkout, as for a list typed
+  here.
 
 The base branch and env file are not copied: they stay live, and a copy would
 leave a stale value for _use mine instead_ to return to. A `project.json` that

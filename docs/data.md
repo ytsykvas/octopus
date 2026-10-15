@@ -705,8 +705,9 @@ redirect a write, and nothing that is not there can be read.
 and `~/work/planner/.env` is a fact about one laptop — so `carryListForExport`
 strips every source on the way out and the repository receives the list it always
 did. The same holds coming in: a project added from a checkout that carries a
-list takes it without sources, so a repository cannot name a file on this
-machine to be copied into the worktree.
+list takes it without sources and keeps only the files git ignores, so a
+repository can neither name a file on this machine to be copied in nor have a
+real `.env` land where a commit would publish it.
 
 It **never overwrites** — `COPYFILE_EXCL`, so a file edited inside the worktree
 survives and there is no window between a check and a write. A path the checkout
