@@ -94,7 +94,8 @@ const options = {
   commitInstruction: null,
   diff: diff(),
   branch: 'feature/thing',
-  model: null
+  model: null,
+  settingSources: ['user'] as const
 }
 
 describe('renderDiff', () => {
@@ -324,6 +325,28 @@ describe('draftPullRequest', () => {
     // Describing a change is not a licence to make one.
     expect(captured.allowedTools).not.toContain('Edit')
     expect(captured.allowedTools).not.toContain('Bash')
+  })
+
+  // Left out, the SDK loads every source — an unapproved repository's hooks
+  // included — so what the caller decided has to reach the query as it is.
+  it('loads only the settings it was given', async () => {
+    let captured: Record<string, unknown> = {}
+    const query = ((params: { options?: Record<string, unknown> }) => {
+      captured = params.options ?? {}
+      return {
+        // eslint-disable-next-line @typescript-eslint/require-await
+        async *[Symbol.asyncIterator]() {
+          yield {
+            type: 'assistant',
+            message: { content: [{ type: 'text', text: reply('T', 'B') }] }
+          }
+        }
+      }
+    }) as unknown as QueryFn
+
+    await draftPullRequest(options, query)
+
+    expect(captured.settingSources).toEqual(['user'])
   })
 
   it('uses the configured model when there is one', async () => {

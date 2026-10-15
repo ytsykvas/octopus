@@ -4202,7 +4202,8 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
           // The model a chat would start on. A description is the agent's
           // ordinary work, and there is no reason it should be answered by a
           // different model than the one that did the work being described.
-          model: config.model
+          model: config.model,
+          settingSources: await sourcesFor(workspace)
         },
         runQuery
       )
