@@ -24,6 +24,7 @@ import {
   REPO_ITEM_PATHS,
   REPO_README,
   readRepoConfig,
+  readStatedCarry,
   readStatedProject,
   type RepoItem,
   RepoConfigError,
@@ -77,6 +78,27 @@ describe('readStatedProject', () => {
     await symlink(elsewhere, join(repo, REPO_DIR))
 
     await expect(readStatedProject(repo)).resolves.toBe('unreadable')
+    await rm(elsewhere, { recursive: true, force: true })
+  })
+})
+
+describe('readStatedCarry', () => {
+  it('reads the list a repository carries, or nothing', async () => {
+    await expect(readStatedCarry(repo)).resolves.toBeNull()
+
+    await put('carry', '.env\n')
+
+    await expect(readStatedCarry(repo)).resolves.toBe('.env\n')
+  })
+
+  // Taken while a project is added, so an unreadable one adds it without a list
+  // rather than refusing it.
+  it('answers nothing through a linked directory', async () => {
+    const elsewhere = await mkdtemp(join(tmpdir(), 'octopus-elsewhere-'))
+    await writeFile(join(elsewhere, 'carry'), '.env\n', 'utf8')
+    await symlink(elsewhere, join(repo, REPO_DIR))
+
+    await expect(readStatedCarry(repo)).resolves.toBeNull()
     await rm(elsewhere, { recursive: true, force: true })
   })
 })

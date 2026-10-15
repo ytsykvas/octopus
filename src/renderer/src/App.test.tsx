@@ -1467,36 +1467,29 @@ describe('App', () => {
     expect(within(dialog).getByDisplayValue('ledger')).toBeInTheDocument()
   })
 
-  // The project's own fields are among what an import can bring, so the list
-  // has to be read again — otherwise the tab goes on showing the old name.
-  it('reads the projects again after settings arrive from a repository', async () => {
+  // Pointed at another checkout, what the repository says about the project
+  // may differ, so the list is read again rather than the tab going on showing
+  // the old.
+  it('reads the projects again after the project is pointed at another checkout', async () => {
     givenTwoProjects()
-    vi.mocked(window.octopus.projects.repoConfig).mockResolvedValue({
+    // A checkout can be changed only while nothing is cut from it.
+    vi.mocked(window.octopus.workspaces.list).mockResolvedValue({ ok: true, value: [] })
+    vi.mocked(window.octopus.dialog.pickDirectory).mockResolvedValue({
       ok: true,
-      value: {
-        present: true,
-        ignored: false,
-        items: [
-          {
-            id: 'project',
-            path: '.octopus/project.json',
-            state: 'differs',
-            repository: '{"name":"Ledger"}',
-            app: '{"name":"ledger"}'
-          }
-        ]
-      }
+      value: '/repos/moved'
     })
     const user = await openApp()
     await screen.findByRole('button', { name: 'LE' })
     const dialog = await openProjectSettings(user, 'LE')
-    await user.click(within(dialog).getByRole('button', { name: 'Repository' }))
     vi.mocked(window.octopus.projects.list).mockClear()
 
-    await user.click(await within(dialog).findByRole('button', { name: 'Import' }))
+    await user.click(within(dialog).getByRole('button', { name: 'Change…' }))
 
     await waitFor(() => {
       expect(window.octopus.projects.list).toHaveBeenCalled()
+    })
+    expect(window.octopus.projects.update).toHaveBeenCalledWith('ledger', {
+      repoPath: '/repos/moved'
     })
   })
 

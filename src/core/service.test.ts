@@ -2923,118 +2923,72 @@ describe('settings a repository carries', () => {
     )
   })
 
-  it('takes a script back in, executable, and leaves the rest alone', async () => {
-    const { id, repo } = await withProject()
-    await carry(repo, join('scripts', 'setup.sh'), 'npm ci\n')
-    await carry(repo, 'carry', '.env\nconfig/master.key\n')
-
-    const applied = await service.importRepoConfig(id, ['script.setup'])
-
-    expect(applied).toEqual(['script.setup'])
-    await expect(service.readProjectScript(id, 'setup')).resolves.toBe('npm ci\n')
-    const paths = await service.projectScriptPaths(id)
-    expect(paths.setup).not.toBeNull()
-    await expect(service.readProjectCarryList(id)).resolves.not.toContain('master.key')
-  })
-
-  it('takes in a carry list and an instruction', async () => {
-    const { id, repo } = await withProject()
-    await carry(repo, 'carry', '.env\nconfig/master.key\n')
-    await carry(repo, join('instructions', 'review.md'), '# Read it twice\n')
-
-    await service.importRepoConfig(id, ['carry', 'instruction.review'])
-
-    await expect(service.readProjectCarryList(id)).resolves.toContain('master.key')
-    await expect(service.readProjectInstruction(id, 'review')).resolves.toContain('twice')
-  })
-
-  // The ids arrive from a renderer, which may be out of date with the folder
-  // by a `git pull`. Asking for what is not there is ordinary, not an error —
-  // but the answer must say what was actually taken.
-  it('answers with what it took, not with what was asked for', async () => {
-    const { id, repo } = await withProject()
-    await carry(repo, 'carry', '.env\n')
-
-    const applied = await service.importRepoConfig(id, ['carry', 'script.archive', 'project'])
-
-    expect(applied).toEqual(['carry'])
-  })
-
-  it('replaces what the installation already held rather than merging', async () => {
-    const { id, repo } = await withProject()
-    await service.saveProjectCarryList(id, '.env\nlocal-only.txt\n')
-    await carry(repo, 'carry', '.env\n')
-
-    await service.importRepoConfig(id, ['carry'])
-
-    await expect(service.readProjectCarryList(id)).resolves.toBe('.env\n')
-  })
-
-  it('refuses all three calls for a project that is not there', async () => {
+  it('refuses both calls for a project that is not there', async () => {
     await expect(service.projectRepoConfig('gone')).rejects.toThrow(WorkspaceError)
-    await expect(service.importRepoConfig('gone', ['carry'])).rejects.toThrow(WorkspaceError)
     await expect(service.exportRepoConfig('gone', ['carry'])).rejects.toThrow(WorkspaceError)
   })
 
-  it('applies the fields a repository states about the project', async () => {
-    const { id, repo } = await withProject()
-    await carry(repo, 'project.json', '{"name":"Planner","envFile":".env.local"}')
-
-    await service.importRepoConfig(id, ['project'])
-
-    const project = service.listProjects().find((entry) => entry.id === id)
-    expect(project).toMatchObject({ name: 'Planner', envFile: '.env.local' })
-  })
-
-  // The value did not come from the branch picker, so it is checked here rather
-  // than stored and surfaced much later as a `worktree add` failure that says
-  // nothing about settings.
-  it('refuses a base branch this clone does not have', async () => {
-    const { id, repo } = await withProject()
-    await carry(repo, 'project.json', '{"baseBranch":"develop"}')
-
-    await expect(service.importRepoConfig(id, ['project'])).rejects.toThrow(ProjectValidationError)
-    expect(service.listProjects().find((entry) => entry.id === id)?.baseBranch).toBe('main')
-  })
-
-  it('refuses an env file that would leave the workspace', async () => {
-    const { id, repo } = await withProject()
-    await carry(repo, 'project.json', '{"envFile":"../../.env"}')
-
-    await expect(service.importRepoConfig(id, ['project'])).rejects.toThrow()
-  })
-
-  it('refuses a project.json that is not a project at all', async () => {
-    const { id, repo } = await withProject()
-    await carry(repo, 'project.json', 'baseBranch: develop')
-
-    await expect(service.importRepoConfig(id, ['project'])).rejects.toMatchObject({
-      code: 'repoConfigMalformed'
-    })
-  })
-
-  it('goes out and back in, which is what a wiped installation does', async () => {
+  /*
+   * What a wiped installation does, and the reason the folder exists. Scripts
+   * and instructions are read live, so there is nothing to bring back in; the
+   * look of the project and its carry list are taken once, when it is added.
+   */
+  it('goes out and comes back by adding the project again', async () => {
     const { id, repo } = await withProject()
     await service.saveProjectScript(id, 'setup', 'npm ci\n')
     await service.saveProjectCarryList(id, '.env\nconfig/master.key\n')
     await service.saveProjectInstruction(id, 'review', '# Read it twice\n')
+    await service.updateProjectById(id, { name: 'Planner', icon: 'rocket', color: 'teal' })
 
     await service.exportRepoConfig(id, ['script.setup', 'carry', 'instruction.review', 'project'])
 
     // A second installation, with nothing of its own.
     const fresh = await createService(paths(join(dir, 'second')))
     const other = await fresh.addProjectFromPath(repo)
-    const taken = await fresh.importRepoConfig(other.id, [
-      'script.setup',
-      'carry',
-      'instruction.review',
-      'project'
-    ])
 
-    expect(taken).toHaveLength(4)
-    await expect(fresh.readProjectScript(other.id, 'setup')).resolves.toBe('npm ci\n')
+    expect(other).toMatchObject({ name: 'Planner', icon: 'rocket', color: 'teal' })
     await expect(fresh.readProjectCarryList(other.id)).resolves.toContain('master.key')
-    await expect(fresh.readProjectInstruction(other.id, 'review')).resolves.toContain('twice')
+    const sources = await fresh.projectSources(other.id, null)
+    expect(sources.find((view) => view.id === 'script.setup')?.effective).toBe('repository')
+    expect(sources.find((view) => view.id === 'instruction.review')?.effective).toBe('repository')
+  })
+
+  /*
+   * A source is a path on somebody's machine, and from a repository a way to
+   * have this one copy a private key into the worktree. Taken as a list of
+   * files, read from the checkout as a list typed here would be.
+   */
+  it('takes a carry list without where its files come from', async () => {
+    const repo = join(dir, 'planner')
+    await initRepo(repo)
+    await carry(repo, 'carry', '.env = ~/.ssh/id_rsa\nconfig/master.key\n')
+
+    const project = await service.addProjectFromPath(repo)
+
+    const list = await service.readProjectCarryList(project.id)
+    expect(list).not.toContain('id_rsa')
+    expect(list).toContain('.env')
+  })
+
+  // The base branch and env file stay live, so copying them would leave a
+  // stale value for "use mine instead" to return to.
+  it('does not copy the fields that stay live', async () => {
+    const repo = join(dir, 'planner')
+    await initRepo(repo)
+    await carry(repo, 'project.json', '{"name":"Planner","envFile":".env.local"}')
+
+    const project = await service.addProjectFromPath(repo)
+
+    expect(project).toMatchObject({ name: 'Planner', envFile: '.env' })
+  })
+
+  // A file that cannot be believed adds the project as if there were none.
+  it('adds a project whose project.json cannot be read', async () => {
+    const repo = join(dir, 'planner')
+    await initRepo(repo)
+    await carry(repo, 'project.json', 'baseBranch: develop')
+
+    await expect(service.addProjectFromPath(repo)).resolves.toMatchObject({ name: 'planner' })
   })
 
   it('refuses to read a repository whose folder is a symbolic link', async () => {

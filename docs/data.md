@@ -704,9 +704,9 @@ redirect a write, and nothing that is not there can be read.
 **Sources do not travel.** `.octopus/carry` is committed and cloned by everybody,
 and `~/work/planner/.env` is a fact about one laptop — so `carryListForExport`
 strips every source on the way out and the repository receives the list it always
-did. The cost is worth knowing: importing the `carry` item replaces the local
-list, and the sources in it go too. The Repository panel shows every byte of what
-it would write first, so it is visible rather than silent.
+did. The same holds coming in: a project added from a checkout that carries a
+list takes it without sources, so a repository cannot name a file on this
+machine to be copied into the worktree.
 
 It **never overwrites** — `COPYFILE_EXCL`, so a file edited inside the worktree
 survives and there is no window between a check and a write. A path the checkout

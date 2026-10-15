@@ -347,7 +347,6 @@ describe('channel table', () => {
     'carry:save',
     'permissions:cli',
     'repoConfig:read',
-    'repoConfig:import',
     'repoConfig:export',
     'workspace:prepare',
     'env:profiles',
@@ -580,7 +579,7 @@ describe('validation at the boundary', () => {
   })
 
   it('rejects a repository item it does not know', async () => {
-    const result = await invoke('repoConfig:import', 'nothing', ['script.evil'])
+    const result = await invoke('repoConfig:export', 'nothing', ['script.evil'])
     expect(result).toMatchObject({ ok: false })
   })
 
@@ -589,7 +588,8 @@ describe('validation at the boundary', () => {
     expect(result).toMatchObject({ ok: false })
   })
 
-  it('carries a project settings out to its repository and back in', async () => {
+  // Out, and then read live: nothing has to be brought back in by hand.
+  it('carries a project settings out to its repository, where it is read', async () => {
     const projectId = await addProject('carried')
 
     await invoke('scripts:save', projectId, 'setup', '#!/bin/sh\nnpm ci\n')
@@ -605,13 +605,13 @@ describe('validation at the boundary', () => {
       value: { present: true }
     })
 
-    expect(await invoke('repoConfig:import', projectId, ['script.setup'])).toMatchObject({
-      ok: true,
-      value: ['script.setup']
-    })
-    await expect(invoke('scripts:read', projectId, 'setup')).resolves.toMatchObject({
-      value: expect.stringContaining('npm ci')
-    })
+    // The checkout's copy is the one in effect, over the project's own.
+    const sources = (await invoke('sources:read', projectId, null)) as {
+      value: { id: string; effective: string; layers: { layer: string; body: string }[] }[]
+    }
+    const setup = sources.value.find((view) => view.id === 'script.setup')
+    expect(setup?.effective).toBe('repository')
+    expect(setup?.layers[0]?.body).toContain('npm ci')
   })
 
   it('rejects an env block longer than a block has any business being', async () => {

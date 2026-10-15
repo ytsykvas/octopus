@@ -8,16 +8,12 @@
  * repository the settings describe. A repository may therefore carry a copy,
  * which is what this module reads and writes.
  *
- * **A snapshot, never read at runtime.** Nothing here is consulted while the
- * app works: scripts still run from the data root, `carryInto` still reads the
- * list it always read. The copy moves by two explicit actions, import and
- * export, and the import shows the user every byte before writing it.
- *
- * That is not caution for its own sake. Reading the repository live would mean
- * executing shell that arrived with a `git pull`, and approval in this app is a
- * fact about a **worktree** (`repoTrust.ts`) — a project just re-added after a
- * wipe has approved nothing and has no workspace to approve in, so a live layer
- * would be switched off in exactly the situation it exists for.
+ * **Most of it is read while the app works.** Scripts and instructions come
+ * from here first (`repoSource.ts`), and so do the base branch and env file of
+ * a trusted repository (`projectFields.ts`) — each unless the project chose its
+ * own. Name, icon, colour and the carry list are taken once, when a project is
+ * added. What this module still does on demand is the export, and reading both
+ * sides for the list that writes it.
  *
  * **Writing into a checkout is new.** `SECURITY.md` says `~/.octopus` and the
  * worktree are the whole of what the app may touch, and nothing in `core/` has
@@ -402,6 +398,19 @@ export async function readStatedProject(
   }
 }
 
+/**
+ * The carry list a checkout states, or null where it states none or cannot be
+ * read. Taken once, when a project is added; see `seedFromRepository`.
+ */
+export async function readStatedCarry(repoPath: string): Promise<string | null> {
+  try {
+    await assertNotLink(join(repoPath, REPO_DIR), REPO_DIR)
+    return (await readItem(repoPath, 'carry'))?.contents ?? null
+  } catch {
+    return null
+  }
+}
+
 /** Serialises the fields a project exports, with the keys it has not left out. */
 export function formatRepoProject(project: RepoProject): string {
   return `${JSON.stringify(project, null, 2)}\n`
@@ -432,16 +441,18 @@ installation can be rebuilt from the repository instead of from memory.
 | \`scripts/archive.sh\` | takes back what setup gave out, when a workspace is removed |
 | \`instructions/\` | prose the app sends the agent, one file per action |
 
-**These scripts run.** A checkout that carries them is the one octopus obeys,
-ahead of anything in \`~/.octopus\`, so a clone works with nothing configured —
-and so a change pushed here is shell that will execute on the machine of
-whoever pulls it. It is shown to them first: every version is displayed once
-and runs only after it is allowed, unless they have turned that off for this
-repository in Project Settings.
+**These are read while octopus works.** A checkout that carries a script or
+an instruction is the one octopus obeys, ahead of anything in \`~/.octopus\`,
+so a clone works with nothing configured — and a change pushed here is shell
+that will execute on the machine of whoever pulls it. It is shown to them
+first: every version of a script is displayed once and runs only after it is
+allowed, unless they trust this repository in Project Settings. The base
+branch and env file in \`project.json\` apply once the repository is trusted;
+any of these can be switched back to the person's own, item by item.
 
-The other files here move by two explicit actions in Project Settings — Import,
-which shows every file before writing it, and Export, which writes this
-directory from the settings in the app.
+The name, icon and colour, and the carry list, are taken once, when a project
+is added. Export in Project Settings writes this directory from the settings
+in the app.
 
 **No credentials.** The env overrides a project applies to each workspace are
 never written here. They stay in \`~/.octopus\`, readable by their owner alone,
