@@ -24,6 +24,11 @@ Object.defineProperty(window, 'matchMedia', {
   })
 })
 
+// jsdom lays nothing out, so it has no `scrollIntoView` either, and the file
+// tab strip brings the tab in front into view. A stub here rather than a `?.()`
+// in the component, which would be a branch no real window ever takes.
+Element.prototype.scrollIntoView = (): void => undefined
+
 beforeEach(() => {
   installOctopusStub()
 })

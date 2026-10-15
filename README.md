@@ -191,3 +191,7 @@ searchable for whoever hits the same thing next.
 ## Licence
 
 [MIT](LICENSE).
+
+The file icons in the Files tab are from
+[Material Icon Theme](https://github.com/material-extensions/vscode-material-icon-theme),
+under its own MIT licence, which ships inside the app.

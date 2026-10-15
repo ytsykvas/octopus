@@ -128,6 +128,9 @@ function renderPanel(overrides: Partial<Props> = {}): {
     envFile: '.env',
     onRequestChanged: vi.fn(),
     onRemoveWorkspace: vi.fn(),
+    activeFilePath: null,
+    onOpenFile: vi.fn(),
+    onConversation: vi.fn(),
     onError: vi.fn(),
     ...overrides
   }
@@ -297,16 +300,16 @@ describe('RightPanel', () => {
     expect(props.onTab).toHaveBeenCalledWith('scripts')
   })
 
-  it('offers all five tabs', () => {
+  it('offers all six tabs', () => {
     renderPanel()
 
-    for (const label of ['Changes', 'Terminal', 'Scripts', 'Pull request', 'Notes']) {
+    for (const label of ['Files', 'Changes', 'Terminal', 'Scripts', 'Pull request', 'Notes']) {
       expect(screen.getByRole('button', { name: label })).toBeInTheDocument()
     }
   })
 
   /*
-   * Two tabs are icons, because the row sets the pane's narrowest allowed width
+   * Three tabs are icons, because the row sets the pane's narrowest allowed width
    * and every **word** in it raises that floor for everybody. What they may not
    * lose along with the word is their name — a tab a screen reader announces as
    * nothing would be the real cost of the saving.
@@ -314,7 +317,7 @@ describe('RightPanel', () => {
   it('names the tabs that have no word on them', () => {
     renderPanel()
 
-    for (const name of ['Terminal', 'Notes']) {
+    for (const name of ['Files', 'Terminal', 'Notes']) {
       const tab = screen.getByRole('button', { name })
       expect(tab).toHaveTextContent('')
       expect(tab).toHaveAttribute('title', name)
@@ -322,11 +325,11 @@ describe('RightPanel', () => {
   })
 
   /*
-   * An icon, three words, an icon: the ends are the tools somebody reaches for
+   * Icons, three words, an icon: the ends are the tools somebody reaches for
    * and the middle is the work. Asserted in order, because nothing else here
    * would notice the row being shuffled back.
    */
-  it('opens the row with the terminal and closes it with the notes', () => {
+  it('opens the row with the files and the terminal and closes it with the notes', () => {
     renderPanel()
 
     const row = screen.getByRole('button', { name: 'Terminal' }).parentElement
@@ -334,7 +337,7 @@ describe('RightPanel', () => {
       (one) => one.getAttribute('title') ?? one.textContent
     )
 
-    expect(labels).toEqual(['Terminal', 'Changes', 'Scripts', 'Pull request', 'Notes'])
+    expect(labels).toEqual(['Files', 'Terminal', 'Changes', 'Scripts', 'Pull request', 'Notes'])
   })
 
   /*
@@ -1523,15 +1526,15 @@ describe('RightPanel', () => {
 
     await waitFor(() => {
       /*
-       * Five buttons of 90, and jsdom reports padding and gaps as zero — so the
-       * floor is exactly 450. Asserting the number rather than "more than
+       * Six buttons of 90, and jsdom reports padding and gaps as zero — so the
+       * floor is exactly 540. Asserting the number rather than "more than
        * before" is what would catch the measurement itself going wrong.
        *
        * Every button is given the same width here, which the real row does not
-       * have: the notes tab is an icon precisely so that it costs about a third
+       * have: the icon tabs are icons precisely so that each costs about a third
        * of a word. What this pins is that the row decides the floor at all.
        */
-      expect(screen.getByRole('separator')).toHaveAttribute('aria-valuemin', '450')
+      expect(screen.getByRole('separator')).toHaveAttribute('aria-valuemin', '540')
     })
   })
 

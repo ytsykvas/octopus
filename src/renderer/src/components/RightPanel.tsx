@@ -2,6 +2,7 @@ import {
   ChevronDown,
   ChevronRight,
   ExternalLink,
+  FolderTree,
   type LucideIcon,
   NotebookPen,
   Pencil,
@@ -28,6 +29,7 @@ import type { WorkspaceView } from '@core/workspaces.js'
 
 import { Button } from './Button.js'
 import { DiffPanel } from './diff/DiffPanel.js'
+import { FilesPanel } from './files/FilesPanel.js'
 import { NotesPanel } from './NotesPanel.js'
 import { DropdownMenu } from './DropdownMenu.js'
 import type { DiffView } from './diff/DiffHunk.js'
@@ -45,12 +47,17 @@ import { WorkspaceTerminals } from './WorkspaceTerminals.js'
 const TABS: readonly {
   readonly id: RightPanelTab
   readonly labelKey:
-    'panel.changes' | 'panel.terminal' | 'panel.scripts' | 'panel.pullRequest' | 'panel.notes'
+    | 'panel.files'
+    | 'panel.changes'
+    | 'panel.terminal'
+    | 'panel.scripts'
+    | 'panel.pullRequest'
+    | 'panel.notes'
   /**
    * Drawn instead of the label, where there is one.
    *
-   * Only the notes tab has one, and the reason is the measurement below: the
-   * row sets the pane's narrowest allowed width, so a fifth **word** would
+   * The tools at the two ends have one, and the reason is the measurement
+   * below: the row sets the pane's narrowest allowed width, so another **word** would
    * widen the floor for everybody for ever. An icon costs about a third of it.
    * The label is still what names the button — it moves to `aria-label` and
    * `title` rather than disappearing.
@@ -58,13 +65,15 @@ const TABS: readonly {
   readonly Icon?: LucideIcon
 }[] = [
   /*
-   * An icon, three words, an icon.
+   * Icons, three words, an icon.
    *
-   * The two ends are the tools somebody reaches for — a shell and a scratchpad
-   * — and the three in the middle are about the work itself, which is what the
-   * words are worth spending the width on. Icons between words would read as a
-   * mistake; at the ends they read as what they are.
+   * The ends are the tools somebody reaches for — the files and a shell on one
+   * side, a scratchpad on the other — and the three in the middle are about the
+   * work itself, which is what the words are worth spending the width on. Icons
+   * between words would read as a mistake; at the ends they read as what they
+   * are. Files leads, where an editor keeps its explorer.
    */
+  { id: 'files', labelKey: 'panel.files', Icon: FolderTree },
   { id: 'terminal', labelKey: 'panel.terminal', Icon: SquareTerminal },
   { id: 'diff', labelKey: 'panel.changes' },
   { id: 'scripts', labelKey: 'panel.scripts' },
@@ -208,6 +217,12 @@ interface RightPanelProps {
   readonly onRequestChanged: () => void
   /** Removes a workspace, asking first — the sidebar's own flow, by id. */
   readonly onRemoveWorkspace: (workspaceId: string) => void
+  /** The file tab in front of the centre, which the Files tab marks; null when a chat is. */
+  readonly activeFilePath: string | null
+  /** Opens a file from the Files tab in the centre, as a preview or kept open. */
+  readonly onOpenFile: (path: string, pinned: boolean) => void
+  /** Brings the conversation in front of any open file, before a prompt is sent to it. */
+  readonly onConversation: () => void
   readonly onError: (message: string | null) => void
 }
 
@@ -239,6 +254,9 @@ export function RightPanel({
   envFile,
   onRequestChanged,
   onRemoveWorkspace,
+  activeFilePath,
+  onOpenFile,
+  onConversation,
   onError
 }: RightPanelProps): React.JSX.Element {
   const { t, i18n } = useTranslation()
@@ -677,6 +695,21 @@ export function RightPanel({
             {item.Icon === undefined ? t(item.labelKey) : <item.Icon aria-hidden size={14} />}
           </button>
         ))}
+      </div>
+
+      {/* Hidden rather than unmounted, like the rest: which folders were open
+          and where the tree was scrolled are what a look elsewhere must not
+          cost. `visible` is what stops it reading git meanwhile. */}
+      <div
+        aria-hidden={tab !== 'files'}
+        className={`flex min-h-0 flex-1 flex-col ${tab === 'files' ? '' : 'hidden'}`}
+      >
+        <FilesPanel
+          workspace={active}
+          visible={tab === 'files'}
+          activePath={activeFilePath}
+          onOpen={onOpenFile}
+        />
       </div>
 
       {/* Hidden, never unmounted: a session belongs to the workspace, not to
@@ -1121,6 +1154,7 @@ export function RightPanel({
           onEditInstructions={onEditInstructions}
           onError={onError}
           onRemoveWorkspace={onRemoveWorkspace}
+          onConversation={onConversation}
         />
       </div>
       {/* The note is the one thing a workspace carries that the agent never
