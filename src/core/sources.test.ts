@@ -12,7 +12,15 @@ import {
   type SourceItemId,
   type SourceView
 } from './sourceItems.js'
+import type { FieldSource, ProjectFields } from './projectFields.js'
 import { readSources } from './sources.js'
+
+function own(value: string): FieldSource {
+  return { value, layer: 'project', repository: null, project: value, warning: null }
+}
+
+/** Neither field stated by the repository, as most checkouts are. */
+const FIELDS: ProjectFields = { baseBranch: own('main'), envFile: own('.env') }
 
 let cwd: string
 let root: string
@@ -36,7 +44,7 @@ async function sourceOf(
   id: SourceItemId,
   preferLocal: readonly SourceItemId[] = []
 ): Promise<SourceView | undefined> {
-  return (await readSources(cwd, { id: 'planner', preferLocal }, root)).find(
+  return (await readSources(cwd, { id: 'planner', preferLocal }, FIELDS, root)).find(
     (view) => view.id === id
   )
 }
@@ -58,10 +66,10 @@ describe('the lists the window imports', () => {
 
 describe('readSources', () => {
   it('lists every script and every instruction, once', async () => {
-    const views = await readSources(cwd, { id: 'planner', preferLocal: [] }, root)
+    const views = await readSources(cwd, { id: 'planner', preferLocal: [] }, FIELDS, root)
 
-    expect(views.map((view) => view.id)).toHaveLength(10)
-    expect(new Set(views.map((view) => view.id)).size).toBe(10)
+    expect(views.map((view) => view.id)).toHaveLength(12)
+    expect(new Set(views.map((view) => view.id)).size).toBe(12)
   })
 
   describe('a script', () => {
@@ -71,7 +79,8 @@ describe('readSources', () => {
         id: 'script.setup',
         layers: [{ layer: 'template', from: null, body: scriptTemplate('setup') }],
         effective: null,
-        preferLocal: false
+        preferLocal: false,
+        warning: null
       })
     })
 
@@ -105,6 +114,49 @@ describe('readSources', () => {
 
       await expect(sourceOf('script.run', ['script.run'])).resolves.toMatchObject({
         effective: null
+      })
+    })
+  })
+
+  describe('a project field', () => {
+    it("is the project's own when the repository states nothing", async () => {
+      await expect(sourceOf('project.baseBranch')).resolves.toEqual({
+        id: 'project.baseBranch',
+        layers: [{ layer: 'project', from: null, body: 'main' }],
+        effective: 'project',
+        preferLocal: false,
+        warning: null
+      })
+    })
+
+    it('shows what the repository states beside it, and why it was not taken', async () => {
+      const fields: ProjectFields = {
+        baseBranch: own('main'),
+        envFile: {
+          value: '.env',
+          layer: 'project',
+          repository: 'config/app.yml',
+          project: '.env',
+          warning: 'envFileNotIgnored'
+        }
+      }
+
+      const views = await readSources(
+        cwd,
+        { id: 'planner', preferLocal: ['project.envFile'] },
+        fields,
+        root
+      )
+
+      expect(views.find((view) => view.id === 'project.envFile')).toEqual({
+        id: 'project.envFile',
+        layers: [
+          { layer: 'repository', from: '.octopus/project.json', body: 'config/app.yml' },
+          { layer: 'project', from: null, body: '.env' }
+        ],
+        effective: 'project',
+        preferLocal: true,
+        warning: 'envFileNotIgnored'
       })
     })
   })

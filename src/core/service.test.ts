@@ -810,6 +810,58 @@ describe('workspaces', () => {
     expect(asked).toEqual([['user'], ['user', 'project', 'local']])
   })
 
+  /*
+   * Which branch work is cut from is a fact about the repository, so the
+   * checkout's `.octopus/project.json` decides it live — a team that moved to
+   * `develop` moves every clone with it. Read from the checkout, so a feature
+   * branch cannot re-point its own base.
+   */
+  it('cuts a workspace from the base branch the repository names', async () => {
+    const repo = join(dir, 'planner')
+    await initRepo(repo)
+    await run('git', ['checkout', '-q', '-b', 'develop'], { cwd: repo })
+    await writeFile(join(repo, 'only-on-develop.txt'), 'yes\n', 'utf8')
+    await run('git', ['add', '-A'], { cwd: repo })
+    await run('git', ['commit', '-q', '-m', 'develop'], { cwd: repo })
+    await run('git', ['checkout', '-q', 'main'], { cwd: repo })
+    const project = await service.addProjectFromPath(repo)
+    // The repository's word is taken once it is trusted, as its scripts are.
+    await service.updateProjectById(project.id, { trustRepository: true })
+    expect(project.baseBranch).toBe('main')
+
+    await mkdir(join(repo, '.octopus'), { recursive: true })
+    await writeFile(join(repo, '.octopus', 'project.json'), '{"baseBranch":"develop"}', 'utf8')
+    const workspace = await service.createWorkspaceIn(project.id)
+
+    await expect(readFile(join(workspace.path, 'only-on-develop.txt'), 'utf8')).resolves.toBe(
+      'yes\n'
+    )
+    const sources = await service.projectSources(project.id, workspace.id)
+    expect(sources.find((view) => view.id === 'project.baseBranch')).toMatchObject({
+      effective: 'repository',
+      warning: null
+    })
+    // The stored record keeps the user's own, for "use mine instead".
+    expect(service.listProjects()[0]?.baseBranch).toBe('main')
+  })
+
+  // A checkout git cannot answer for keeps the stored values rather than
+  // failing every read that asks for a field.
+  it('keeps the stored env file when git cannot check the stated one', async () => {
+    const repo = join(dir, 'planner')
+    await initRepo(repo)
+    const project = await service.addProjectFromPath(repo)
+    // The repository's word is taken once it is trusted, as its scripts are.
+    await service.updateProjectById(project.id, { trustRepository: true })
+    await service.saveEnvProfile(project.id, 'default', 'API_KEY=secret\n')
+    const workspace = await service.createWorkspaceIn(project.id)
+    await mkdir(join(repo, '.octopus'), { recursive: true })
+    await writeFile(join(repo, '.octopus', 'project.json'), '{"envFile":".env.local"}', 'utf8')
+    await rm(join(repo, '.git'), { recursive: true, force: true })
+
+    await expect(service.readWorkspaceEnv(workspace.id)).resolves.toContain('API_KEY=secret')
+  })
+
   it('says a workspace that changed nothing changed nothing', async () => {
     const { service, projectId } = await withProject()
     const workspace = await service.createWorkspaceIn(projectId)
@@ -1509,6 +1561,130 @@ describe('env overrides a project adds', () => {
 
     const contents = await readFile(join(workspace.path, '.env'), 'utf8')
     expect(contents.indexOf('production')).toBeLessThan(contents.indexOf('dev.example'))
+  })
+
+  /*
+   * The repository's `.octopus/project.json` decides which file the stack
+   * reads its variables from, live — as long as git ignores it, because the
+   * credentials go there.
+   */
+  it('writes the block into the env file the repository names', async () => {
+    const { id, repo } = await withProject()
+    // The repository's word is taken once it is trusted, as its scripts are.
+    await service.updateProjectById(id, { trustRepository: true })
+    await writeFile(join(repo, '.gitignore'), '.env.local\n', 'utf8')
+    await mkdir(join(repo, '.octopus'), { recursive: true })
+    await writeFile(join(repo, '.octopus', 'project.json'), '{"envFile":".env.local"}', 'utf8')
+    await run('git', ['add', '-A'], { cwd: repo })
+    await run('git', ['commit', '-q', '-m', 'octopus'], { cwd: repo })
+    await service.saveEnvProfile(id, 'default', 'API_KEY=secret\n')
+
+    const workspace = await service.createWorkspaceIn(id)
+
+    await expect(readFile(join(workspace.path, '.env.local'), 'utf8')).resolves.toContain(
+      'API_KEY=secret'
+    )
+    await expect(service.isProjectEnvIgnored(id)).resolves.toBe(true)
+    await expect(service.readWorkspaceEnv(workspace.id)).resolves.toContain('API_KEY=secret')
+  })
+
+  /*
+   * "Use mine instead" moves the block back to the project's own file — and
+   * takes it out of the one it was in, or the credentials stay there, live,
+   * in a file nothing would revisit. The settings change is what does it here,
+   * comparing the file in effect before and after.
+   */
+  it('moves the block out of the old file when the user chooses their own', async () => {
+    const { id, repo } = await withProject()
+    // The repository's word is taken once it is trusted, as its scripts are.
+    await service.updateProjectById(id, { trustRepository: true })
+    await writeFile(join(repo, '.gitignore'), '.env.local\n', 'utf8')
+    await mkdir(join(repo, '.octopus'), { recursive: true })
+    await writeFile(join(repo, '.octopus', 'project.json'), '{"envFile":".env.local"}', 'utf8')
+    await run('git', ['add', '-A'], { cwd: repo })
+    await run('git', ['commit', '-q', '-m', 'octopus'], { cwd: repo })
+    await service.saveEnvProfile(id, 'default', 'API_KEY=secret\n')
+    const workspace = await service.createWorkspaceIn(id)
+
+    await service.updateProjectById(id, { preferLocal: ['project.envFile'] })
+    await service.prepareWorkspace(workspace.id)
+
+    await expect(readFile(join(workspace.path, '.env'), 'utf8')).resolves.toContain(
+      'API_KEY=secret'
+    )
+    // Gone, or at least without the block: a file holding nothing but ours is
+    // removed rather than left empty.
+    const left = await readFile(join(workspace.path, '.env.local'), 'utf8').catch(() => '')
+    expect(left).not.toContain('API_KEY')
+  })
+
+  /*
+   * Nothing in the app changed here — the repository did, as a pull would.
+   * Only the next preparation can notice, and it knows where the block went
+   * because the workspace recorded it.
+   */
+  it('moves the block when the repository changes the env file under a workspace', async () => {
+    const { id, repo } = await withProject()
+    // The repository's word is taken once it is trusted, as its scripts are.
+    await service.updateProjectById(id, { trustRepository: true })
+    await service.saveEnvProfile(id, 'default', 'API_KEY=secret\n')
+    const workspace = await service.createWorkspaceIn(id)
+    await writeFile(join(repo, '.gitignore'), '.env.local\n', 'utf8')
+    await mkdir(join(repo, '.octopus'), { recursive: true })
+    await writeFile(join(repo, '.octopus', 'project.json'), '{"envFile":".env.local"}', 'utf8')
+
+    // The branch picked the ignore rule up too, as a pull would bring it.
+    await writeFile(join(workspace.path, '.gitignore'), '.env.local\n', 'utf8')
+
+    await service.prepareWorkspace(workspace.id)
+
+    await expect(readFile(join(workspace.path, '.env.local'), 'utf8')).resolves.toContain(
+      'API_KEY=secret'
+    )
+    await expect(readFile(join(workspace.path, '.env'), 'utf8')).rejects.toThrow()
+  })
+
+  // Not trusted, the repository's file waits: the project's own is written.
+  it("keeps the project's env file while the repository is not trusted", async () => {
+    const { id, repo } = await withProject()
+    await writeFile(join(repo, '.gitignore'), '.env.local\n', 'utf8')
+    await mkdir(join(repo, '.octopus'), { recursive: true })
+    await writeFile(join(repo, '.octopus', 'project.json'), '{"envFile":".env.local"}', 'utf8')
+    await run('git', ['add', '-A'], { cwd: repo })
+    await run('git', ['commit', '-q', '-m', 'octopus'], { cwd: repo })
+    await service.saveEnvProfile(id, 'default', 'API_KEY=secret\n')
+
+    const workspace = await service.createWorkspaceIn(id)
+
+    await expect(readFile(join(workspace.path, '.env'), 'utf8')).resolves.toContain('API_KEY')
+    const sources = await service.projectSources(id, workspace.id)
+    expect(sources.find((view) => view.id === 'project.envFile')).toMatchObject({
+      effective: 'project',
+      warning: 'repositoryNotTrusted'
+    })
+  })
+
+  /*
+   * The checkout ignores the file; the branch the workspace is on may not.
+   * The credentials land in the worktree, so it is asked there too.
+   */
+  it("writes the project's own env file where the workspace's branch would commit the stated one", async () => {
+    const { id, repo } = await withProject()
+    await writeFile(join(repo, '.gitignore'), '.env.local\n', 'utf8')
+    await mkdir(join(repo, '.octopus'), { recursive: true })
+    await writeFile(join(repo, '.octopus', 'project.json'), '{"envFile":".env.local"}', 'utf8')
+    await run('git', ['add', '-A'], { cwd: repo })
+    await run('git', ['commit', '-q', '-m', 'octopus'], { cwd: repo })
+    await service.updateProjectById(id, { trustRepository: true })
+    await service.saveEnvProfile(id, 'default', 'API_KEY=secret\n')
+    const workspace = await service.createWorkspaceIn(id)
+    await writeFile(join(workspace.path, '.gitignore'), '', 'utf8')
+
+    await service.prepareWorkspace(workspace.id)
+
+    await expect(readFile(join(workspace.path, '.env'), 'utf8')).resolves.toContain('API_KEY')
+    const left = await readFile(join(workspace.path, '.env.local'), 'utf8').catch(() => '')
+    expect(left).not.toContain('API_KEY')
   })
 
   // The whole answer for a project cloned from GitHub: nothing to copy, so the

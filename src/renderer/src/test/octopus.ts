@@ -415,6 +415,7 @@ function workspaceFixture(): Workspace {
     createdAt: '2026-08-08T00:00:00.000Z',
     writers: {},
     notes: '',
+    envFileApplied: null,
     ownerId: null,
     envProfile: null
   }

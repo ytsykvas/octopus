@@ -283,6 +283,7 @@ export async function createWorkspace(
     // Following the project, which is what a workspace nobody has moved does.
     envProfile: null,
     notes: '',
+    envFileApplied: null,
     // Nobody has written anything here yet.
     writers: {},
     ownerId: null

@@ -49,6 +49,14 @@ service of its own — so most of the usual surface does not exist. What does:
   A script is a file, so what is shown and digested is every byte of what runs:
   a `git pull` rewriting it asks again.
 
+- **A repository can name the file credentials are written into.** The
+  checkout's `.octopus/project.json` may set `envFile`, and octopus writes each
+  workspace's variables there. It is taken only from a trusted repository, and
+  only when git ignores that path — in the checkout, and again in the worktree
+  the block is written into — so a repository cannot point it at a file a
+  commit would publish; read from the checkout rather than a worktree, so a
+  branch cannot either. A way around that check is as serious as the items above.
+
 - **Anything reaching a process argument.** External commands go through
   `execFile` with an argument array, and values crossing IPC are parsed with zod
   at the boundary. A path that reaches an argument unvalidated — branch names

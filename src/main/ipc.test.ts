@@ -1354,7 +1354,7 @@ describe('scripts and instructions of a real project', () => {
     }
 
     expect(answer.ok).toBe(true)
-    expect(answer.value).toHaveLength(10)
+    expect(answer.value).toHaveLength(12)
     // The workspace is parsed rather than trusted.
     await expect(invoke('sources:read', projectId, 7)).resolves.toMatchObject({ ok: false })
   })

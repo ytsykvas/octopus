@@ -77,6 +77,7 @@ function makeWorkspace(overrides: Partial<Workspace> = {}): Workspace {
     envProfile: null,
     writers: {},
     notes: '',
+    envFileApplied: null,
     ownerId: null,
     ...overrides
   }
@@ -1111,6 +1112,22 @@ describe('who wrote which file in a workspace', () => {
     const state = await loadState(file)
 
     expect(state.workspaces[0]?.writers).toEqual({})
+  })
+})
+
+describe('the env file a workspace last wrote to', () => {
+  // Every workspace predates the field, and the reader throws on a mismatch.
+  it('loads a workspace written before it was recorded, as not recorded', async () => {
+    const older: Record<string, unknown> = { ...makeWorkspace() }
+    delete older.envFileApplied
+
+    await writeFile(
+      file,
+      JSON.stringify({ version: 1, projects: [project], workspaces: [older], chats: [] }),
+      'utf8'
+    )
+
+    expect((await loadState(file)).workspaces[0]?.envFileApplied).toBeNull()
   })
 })
 

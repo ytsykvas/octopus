@@ -52,7 +52,9 @@ export const SOURCE_ITEM_IDS = [
   'instruction.addressReview',
   'instruction.review',
   'instruction.multiAgentReview',
-  'instruction.resolveConflicts'
+  'instruction.resolveConflicts',
+  'project.baseBranch',
+  'project.envFile'
 ] as const
 
 export const SourceItemIdSchema = z.enum(SOURCE_ITEM_IDS)
@@ -65,6 +67,20 @@ export function scriptItem(kind: ScriptKind): SourceItemId {
 export function instructionItem(kind: InstructionKind): SourceItemId {
   return `instruction.${kind}`
 }
+
+/**
+ * Why what the repository states is not what is in effect.
+ *
+ * Only the two project fields can be refused this way: a script or an
+ * instruction from the repository is taken as it is, while a base branch and an
+ * env file are checked against git first.
+ */
+export type SourceWarning =
+  | 'repositoryNotTrusted'
+  | 'baseBranchMissing'
+  | 'envFileOutside'
+  | 'envFileNotIgnored'
+  | 'projectFileUnreadable'
 
 /** One layer of one item, as the window draws it. */
 export interface SourceLayerView {
@@ -83,4 +99,6 @@ export interface SourceView {
   readonly effective: SourceLayer | null
   /** Whether the user chose their own over the repository's. */
   readonly preferLocal: boolean
+  /** Why the repository's is not in effect although it states one, or null. */
+  readonly warning: SourceWarning | null
 }
