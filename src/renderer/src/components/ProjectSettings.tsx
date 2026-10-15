@@ -905,14 +905,8 @@ export function ProjectSettings({
               is a further step away from a mis-click than a scroll was. */}
           {section === 'repository' && (
             <div className="flex flex-col gap-8">
-              <SourceTable
-                sources={origins}
-                labelOf={(id) => t(ITEM_LABELS[id])}
-                onOpen={(id) => {
-                  setSection(sectionOf(id))
-                }}
-                onPreferLocal={preferLocal}
-              />
+              {/* First: the warnings under Git, Env and Scripts send people here
+                  to switch it on, and below the table it was out of sight. */}
               <RepoTrust
                 projectId={project.id}
                 workspaceId={workspaceId}
@@ -923,6 +917,14 @@ export function ProjectSettings({
                 onTrustChange={(trusted) =>
                   void onUpdate({ trustRepository: trusted, trustRepoScripts: false })
                 }
+              />
+              <SourceTable
+                sources={origins}
+                labelOf={(id) => t(ITEM_LABELS[id])}
+                onOpen={(id) => {
+                  setSection(sectionOf(id))
+                }}
+                onPreferLocal={preferLocal}
               />
               <RepoConfig projectId={project.id} />
             </div>
