@@ -13,6 +13,7 @@
 import { z } from 'zod'
 
 import { InputQueue, mapMessage, type QueryFn, READ_ONLY_TOOLS, userMessage } from './agent.js'
+import type { SettingSourceName } from './config.js'
 import type { WorkspaceDiff } from './diff.js'
 import { GitHubError } from './github.js'
 import { describeError } from './persist.js'
@@ -205,6 +206,15 @@ export interface DraftOptions {
   readonly diff: WorkspaceDiff
   readonly branch: string
   readonly model: string | null
+  /**
+   * The settings a chat in this workspace would load.
+   *
+   * Required rather than defaulted: the SDK loads **every** source when the
+   * option is left out, so a draft written without it read an unapproved
+   * repository's hooks, permission rules and MCP servers — past the gate a chat
+   * in the same worktree is held at.
+   */
+  readonly settingSources: readonly SettingSourceName[]
 }
 
 /**
@@ -242,6 +252,7 @@ export async function draftPullRequest(
         // sentence would be the worst kind of surprise.
         allowedTools: [...READ_ONLY_TOOLS],
         permissionMode: 'default',
+        settingSources: [...options.settingSources],
         ...(options.model === null ? {} : { model: options.model })
       }
     })

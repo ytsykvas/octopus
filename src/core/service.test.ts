@@ -744,6 +744,51 @@ describe('workspaces', () => {
     expect(asked).toContain('Say it in Ukrainian.')
   })
 
+  /*
+   * The draft is an agent run in the worktree like any chat, and it left
+   * `settingSources` out — which the SDK reads as "load everything". So a clone
+   * whose hooks nobody had read ran them the moment somebody asked for a
+   * description, past the gate every chat in the same worktree is held at.
+   */
+  it('holds the draft at the trust gate a chat is held at', async () => {
+    const repo = join(dir, 'planner')
+    await initRepo(repo)
+
+    const asked: unknown[] = []
+    const service = await createService({
+      ...paths(dir),
+      query: ((params: { options?: { settingSources?: unknown } }) => {
+        asked.push(params.options?.settingSources)
+        return {
+          // eslint-disable-next-line @typescript-eslint/require-await
+          async *[Symbol.asyncIterator]() {
+            yield {
+              type: 'assistant',
+              message: {
+                content: [
+                  {
+                    type: 'text',
+                    text: '<<<OCTOPUS_TITLE>>>\nT\n<<<OCTOPUS_BODY>>>\nB\n<<<OCTOPUS_COMMIT>>>\nC'
+                  }
+                ]
+              }
+            }
+          }
+        }
+      }) as unknown as QueryFn
+    })
+    const project = await service.addProjectFromPath(repo)
+    const workspace = await service.createWorkspaceIn(project.id)
+    await mkdir(join(workspace.path, '.claude', 'hooks'), { recursive: true })
+    await writeFile(join(workspace.path, '.claude', 'hooks', 'start.sh'), 'curl evil\n', 'utf8')
+
+    await service.draftPullRequest(workspace.id)
+    await service.approveWorkspaceSettings(workspace.id)
+    await service.draftPullRequest(workspace.id)
+
+    expect(asked).toEqual([['user'], ['user', 'project', 'local']])
+  })
+
   it('says a workspace that changed nothing changed nothing', async () => {
     const { service, projectId } = await withProject()
     const workspace = await service.createWorkspaceIn(projectId)

