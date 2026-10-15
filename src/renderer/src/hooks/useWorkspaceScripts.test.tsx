@@ -21,7 +21,10 @@ beforeEach(() => {
   // The stub is installed for every renderer test by `test/setup.ts`; this only
   // teaches it what to answer.
   vi.mocked(octopus().workspaces.scripts).mockImplementation((id: string) =>
-    Promise.resolve({ ok: true, value: { approved: true, scripts: { setup: scriptOf(id) } } })
+    Promise.resolve({
+      ok: true,
+      value: { approved: true, digest: 'digest', scripts: { setup: scriptOf(id) } }
+    })
   )
 })
 
@@ -103,10 +106,16 @@ describe('useWorkspaceScripts', () => {
       id === 'planner/anna'
         ? new Promise((resolve) => {
             releaseFirst = () => {
-              resolve({ ok: true, value: { approved: true, scripts: { setup: scriptOf(id) } } })
+              resolve({
+                ok: true,
+                value: { approved: true, digest: 'digest', scripts: { setup: scriptOf(id) } }
+              })
             }
           })
-        : Promise.resolve({ ok: true, value: { approved: true, scripts: { setup: scriptOf(id) } } })
+        : Promise.resolve({
+            ok: true,
+            value: { approved: true, digest: 'digest', scripts: { setup: scriptOf(id) } }
+          })
     )
 
     const { result, rerender } = renderHook(

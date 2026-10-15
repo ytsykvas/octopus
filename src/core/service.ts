@@ -137,7 +137,7 @@ import type { PullRequestDetail } from './pullRequestShapes.js'
 import { gitIn, isIgnored } from './git.js'
 import { FETCH_OPTIONS, resolveBase } from './remotes.js'
 import { type InstructionSource, instructionSources } from './instructionSources.js'
-import { type CapabilityFile, capabilityFiles, trustDigest, withApproval } from './repoTrust.js'
+import { assertShown, capabilityFiles, type RepositoryTrust, trustDigest } from './repoTrust.js'
 import {
   effectiveInstruction,
   type InstructionKind,
@@ -260,6 +260,7 @@ import {
   saveState,
   type State,
   updateChat,
+  recordApproval,
   updateProject,
   updateWorkspace,
   type Workspace,
@@ -604,8 +605,15 @@ export interface OctopusService {
    * one they learn to click through.
    */
   workspaceScripts(workspaceId: string): Promise<ScriptsInWorkspace>
-  /** Records that these scripts were read, so they may run. */
-  approveWorkspaceScripts(workspaceId: string): Promise<void>
+  /**
+   * Records that these scripts were read, so they may run.
+   *
+   * `digest` is the one the reader was shown. Approving recomputes it, and a
+   * repository that changed in between is refused rather than approved unseen.
+   * The workspace when there is one, the checkout otherwise — the same
+   * directory `projectScripts` answered about.
+   */
+  approveScripts(projectId: string, workspaceId: string | null, digest: string): Promise<void>
   /**
    * The same answer for a project, resolved against its checkout.
    *
@@ -721,12 +729,19 @@ export interface OctopusService {
    * octopus loads them as the CLI does, so opening a clone would hand it those
    * unless somebody has read them.
    */
-  workspaceTrust(workspaceId: string): Promise<{
-    readonly approved: boolean
-    readonly files: readonly CapabilityFile[]
-  }>
-  /** Records that these files were read, so the next session may load them. */
-  approveWorkspaceSettings(workspaceId: string): Promise<void>
+  workspaceTrust(workspaceId: string): Promise<RepositoryTrust>
+  /**
+   * The same for a project, in a workspace of it or its checkout.
+   *
+   * What Project settings shows, so the one place that holds the switch also
+   * says what the switch would cover.
+   */
+  projectTrust(projectId: string, workspaceId: string | null): Promise<RepositoryTrust>
+  /**
+   * Records that these files were read, so the next session may load them.
+   * Refused when they changed after `digest` was shown, as for scripts.
+   */
+  approveSettings(projectId: string, workspaceId: string | null, digest: string): Promise<void>
   /**
    * A workspace's env file as it stands, or null where it has none.
    *
@@ -2584,7 +2599,46 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
    * a prompt every time a script is edited.
    */
   function allowedToRun(project: Project, digest: string): boolean {
-    return digest === '' || project.trustRepoScripts || project.approvedScripts.includes(digest)
+    return (
+      digest === '' ||
+      project.trustRepository ||
+      // The older switch, which said "scripts" and nothing more. Kept so a
+      // project trusted before there was one switch does not start asking.
+      project.trustRepoScripts ||
+      project.approvedScripts.includes(digest)
+    )
+  }
+
+  /**
+   * The directory a project-level question is asked of.
+   *
+   * The workspace when one is given **and belongs to this project**. The
+   * settings dialog passes whichever workspace is selected, and that can be
+   * another project's — answering from it described somebody else's
+   * repository. The checkout otherwise, which every worktree is cut from.
+   */
+  function cwdFor(project: Project, workspaceId: string | null): string {
+    const workspace = workspaceId === null ? null : requireWorkspace(workspaceId)
+    return workspace?.projectId === project.id ? workspace.path : project.repoPath
+  }
+
+  /**
+   * What a worktree grants and whether that is agreed to — one function for
+   * the gate, the panel and the approval.
+   *
+   * Three copies of this used to compute the digest each for itself, and an
+   * approval that recorded one digest while the gate checked another would
+   * have asked forever.
+   */
+  async function settingsTrustIn(cwd: string, project: Project): Promise<RepositoryTrust> {
+    const files = await capabilityFiles(cwd)
+    const digest = trustDigest(files)
+
+    // Nothing to grant is nothing to approve, which is most repositories.
+    const approved =
+      digest === '' || project.trustRepository || project.approvedSettings.includes(digest)
+
+    return { approved, digest, files }
   }
 
   /**
@@ -2650,9 +2704,7 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
    */
   async function sourcesIn(cwd: string, project: Project): Promise<SettingSourceName[]> {
     const configured = toSdkSettingSources(config.settingSources)
-
-    const digest = trustDigest(await capabilityFiles(cwd))
-    if (digest === '' || project.approvedSettings.includes(digest)) return configured
+    if ((await settingsTrustIn(cwd, project)).approved) return configured
 
     return configured.filter((source) => source === 'user')
   }
@@ -3509,14 +3561,16 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
       )
     },
 
+    // `async` for the refusals as much as the answer: an unknown id rejects
+    // the promise rather than throwing past it.
     async workspaceTrust(workspaceId) {
       const workspace = requireWorkspace(workspaceId)
-      const project = requireProject(workspace.projectId)
-      const files = await capabilityFiles(workspace.path)
-      const digest = trustDigest(files)
+      return settingsTrustIn(workspace.path, requireProject(workspace.projectId))
+    },
 
-      // Nothing to grant is nothing to approve, which is most repositories.
-      return { approved: digest === '' || project.approvedSettings.includes(digest), files }
+    async projectTrust(projectId, workspaceId) {
+      const project = requireProject(projectId)
+      return settingsTrustIn(cwdFor(project, workspaceId), project)
     },
 
     async workspaceScripts(workspaceId) {
@@ -3527,7 +3581,7 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
 
       // Nothing supplied by the repository is nothing to approve, which is
       // every project configured the way they all used to be.
-      return { approved: allowedToRun(project, digest), scripts }
+      return { approved: allowedToRun(project, digest), digest, scripts }
     },
 
     async projectScripts(projectId, workspaceId) {
@@ -3547,40 +3601,30 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
        * The checkout otherwise, which is the best answer available before a
        * workspace is open.
        */
-      const workspace = workspaceId === null ? null : requireWorkspace(workspaceId)
-      const scripts = await resolveScripts(
-        workspace?.path ?? project.repoPath,
-        project.id,
-        dataRoot
-      )
+      const scripts = await resolveScripts(cwdFor(project, workspaceId), project.id, dataRoot)
+      const digest = scriptsDigest(scripts)
 
-      return { approved: allowedToRun(project, scriptsDigest(scripts)), scripts }
+      return { approved: allowedToRun(project, digest), digest, scripts }
     },
 
-    async approveWorkspaceScripts(workspaceId) {
-      const workspace = requireWorkspace(workspaceId)
-      const project = requireProject(workspace.projectId)
-      const digest = scriptsDigest(await resolveScripts(workspace.path, project.id, dataRoot))
-      if (digest === '') return
-
-      await commit((current) =>
-        updateProject(current, project.id, {
-          approvedScripts: withApproval(project.approvedScripts, digest)
-        })
+    async approveScripts(projectId, workspaceId, shown) {
+      const project = requireProject(projectId)
+      const digest = scriptsDigest(
+        await resolveScripts(cwdFor(project, workspaceId), project.id, dataRoot)
       )
+      if (digest === '') return
+      assertShown(digest, shown)
+
+      await commit((current) => recordApproval(current, project.id, 'approvedScripts', digest))
     },
 
-    async approveWorkspaceSettings(workspaceId) {
-      const workspace = requireWorkspace(workspaceId)
-      const project = requireProject(workspace.projectId)
-      const digest = trustDigest(await capabilityFiles(workspace.path))
+    async approveSettings(projectId, workspaceId, shown) {
+      const project = requireProject(projectId)
+      const { digest } = await settingsTrustIn(cwdFor(project, workspaceId), project)
       if (digest === '') return
+      assertShown(digest, shown)
 
-      await commit((current) =>
-        updateProject(current, project.id, {
-          approvedSettings: withApproval(project.approvedSettings, digest)
-        })
-      )
+      await commit((current) => recordApproval(current, project.id, 'approvedSettings', digest))
     },
 
     async isProjectEnvIgnored(projectId) {

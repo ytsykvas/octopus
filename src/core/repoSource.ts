@@ -121,6 +121,8 @@ export async function resolveScript(
 /** What runs in one workspace, and whether the repository's part is approved. */
 export interface ScriptsInWorkspace {
   readonly approved: boolean
+  /** What approving would record, handed back so the approval covers what was shown. */
+  readonly digest: string
   readonly scripts: Readonly<Partial<Record<ScriptKind, ResolvedScript>>>
 }
 

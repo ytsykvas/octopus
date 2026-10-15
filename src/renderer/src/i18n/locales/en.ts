@@ -176,14 +176,23 @@ export const en = {
       'git ignores .octopus/, so anything written there stays on this machine. Take it out of .gitignore for the copy to reach anybody else.',
     scriptFromRepo:
       'This checkout supplies this script, in {{from}}, and that is what runs. The text below is this project\u2019s own copy, kept but not used.',
-    repoRuns: 'What this repository runs',
+    trustTitle: 'Trust',
+    trustSwitch: 'Trust this repository',
+    trustHint:
+      'On, and its scripts run and its Claude settings, hooks and MCP servers load without being shown first \u2014 reasonable for a repository you write, not for a clone. Off, and each version is shown once before it is used, so a git pull that changes one asks again.',
+    trustLegacy:
+      'Its scripts are trusted from before there was one switch; its Claude settings, hooks and MCP servers are not. Turn this on to trust all of it.',
+    trustScripts: 'Scripts it supplies',
     repoRunsNone:
       'This repository supplies no scripts, so the ones in this project\u2019s settings are what run.',
     repoRunsAllowed: 'These have been read and are allowed to run.',
-    repoRunsWaiting:
-      'These have not been read yet, so Run is disabled until they are allowed \u2014 on the Scripts tab, or with the switch below.',
-    repoTrustHint:
-      'Trust this repository\u2019s scripts. Off, and each version is shown once before it runs, so a git pull that rewrites one asks again. On, and whatever the repository holds runs without asking \u2014 which is reasonable for a repository you write, and is not for a clone.',
+    repoRunsWaiting: 'These have not been read yet, so Run is disabled until they are allowed.',
+    trustSettings: 'Claude settings, hooks and MCP servers',
+    trustSettingsNone: 'This repository ships none, so there is nothing to allow.',
+    trustSettingsAllowed: 'These have been read, and every session loads them.',
+    trustSettingsWaiting:
+      'These have not been read yet, so sessions load none of the repository\u2019s own settings \u2014 its CLAUDE.md included \u2014 until they are allowed.',
+    trustReview: 'Review and allow',
     repoIn: 'From the repository',
     repoOut: 'Into the repository',
     repoImport: 'Import',
@@ -1493,6 +1502,8 @@ export const en = {
     branchMissing:
       'That repository has no branch called \u201c{{branch}}\u201d. Choose a base branch it does have before pointing the project at it.',
     draftFailed: 'The description could not be drafted: {{reason}}',
+    trustChanged:
+      'What the repository supplies changed after it was shown, so it was not allowed. Here is what is there now \u2014 read it again before allowing it.',
     /* Not a failure to reach the agent — it answered, and the answer had no
        title and body in it. Says what to do, because trying again is usually
        all it takes and nothing here is broken. */

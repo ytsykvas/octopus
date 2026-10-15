@@ -1,8 +1,9 @@
 import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
-import type { CapabilityFile } from '@core/repoTrust.js'
+import type { RepositoryTrust } from '@core/repoTrust.js'
 
+import { useErrorMessage } from '../hooks/useErrorMessage.js'
 import { Button } from './Button.js'
 import { Modal } from './Modal.js'
 
@@ -18,29 +19,38 @@ import { Modal } from './Modal.js'
  * that grants capability is a summary somebody has to trust instead.
  */
 export function RepoTrustReview({
+  projectId,
   workspaceId,
   onApproved,
   onClose
 }: {
-  readonly workspaceId: string
+  readonly projectId: string
+  /** The worktree to read, or null for the checkout — as Project settings asks. */
+  readonly workspaceId: string | null
   readonly onApproved: () => void
   readonly onClose: () => void
 }): React.JSX.Element {
   const { t } = useTranslation()
-  const [files, setFiles] = useState<readonly CapabilityFile[]>([])
+  const describe = useErrorMessage()
+  const [trust, setTrust] = useState<RepositoryTrust | null>(null)
+  const [error, setError] = useState<string | null>(null)
+  // Bumped to read again after a refusal, so what is shown is what is there.
+  const [reading, setReading] = useState(0)
 
   useEffect(() => {
     const controller = new AbortController()
 
     void (async () => {
-      const answer = await window.octopus.workspaces.trust(workspaceId)
-      if (!controller.signal.aborted && answer.ok) setFiles(answer.value.files)
+      const answer = await window.octopus.projects.trust(projectId, workspaceId)
+      if (!controller.signal.aborted && answer.ok) setTrust(answer.value)
     })()
 
     return () => {
       controller.abort()
     }
-  }, [workspaceId])
+  }, [projectId, workspaceId, reading])
+
+  const files = trust?.files ?? []
 
   return (
     <Modal
@@ -48,20 +58,43 @@ export function RepoTrustReview({
       onClose={onClose}
       size="md"
       footer={
-        <Button
-          onClick={() => {
-            void (async () => {
-              const done = await window.octopus.workspaces.approveSettings(workspaceId)
-              if (done.ok) onApproved()
-            })()
-          }}
-        >
-          {t('trust.approve')}
-        </Button>
+        // Nothing read yet is nothing to allow, so the button has no digest to
+        // send until there is one on screen.
+        trust === null ? (
+          <Button disabled>{t('trust.approve')}</Button>
+        ) : (
+          <Button
+            onClick={() => {
+              void (async () => {
+                // The digest of what is on screen, so a repository that changed
+                // since it was read is refused rather than allowed unseen.
+                const done = await window.octopus.projects.approveSettings(
+                  projectId,
+                  workspaceId,
+                  trust.digest
+                )
+                if (done.ok) {
+                  onApproved()
+                  return
+                }
+                setError(describe(done))
+                setReading((count) => count + 1)
+              })()
+            }}
+          >
+            {t('trust.approve')}
+          </Button>
+        )
       }
     >
       <div className="space-y-4 px-4 py-3">
         <p className="text-ink-soft max-w-2xl leading-relaxed">{t('trust.explain')}</p>
+
+        {error !== null && (
+          <p role="alert" className="text-danger leading-relaxed">
+            {error}
+          </p>
+        )}
 
         {files.map((file) => (
           <div key={file.path} className="space-y-1.5">

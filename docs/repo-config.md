@@ -64,18 +64,21 @@ machine. That is the line the arrangement rests on: the repository decides _what
 runs_, the machine decides _what it runs against_. A pull can change the build
 script; it cannot point a workspace at production.
 
-### Turning the gate off, per project
+### Turning the gates off, per project
 
 A repository you write yourself asks the same question after every commit that
-touches a script, and the answer is always yes. **Trust this repository's
-scripts** in Project settings → Repository says so once: on, the digest is not
-consulted at all. Off is the default, and off is what a clone should stay.
+touches a script or a hook, and the answer is always yes. **Trust this
+repository** in Project settings → Repository says so once, for its scripts and
+for the Claude settings, hooks and MCP servers it ships alike: on, neither digest
+is consulted. Off is the default, and off is what a clone should stay.
 
-It is a project's own field (`trustRepoScripts`) rather than a global setting or
-a per-script one, because the unit somebody actually trusts is a repository. The
-same section lists what the checkout supplies and where each script comes from,
-so what has been agreed to is readable afterwards rather than only at the moment
-of agreeing.
+It is a project's own field (`trustRepository`) rather than a global setting or
+a per-file one, because the unit somebody actually trusts is a repository. It
+replaced a switch for scripts alone (`trustRepoScripts`), which is still honoured
+for scripts so nothing starts asking, but is not read as covering the rest. The
+same section lists what the checkout supplies under each gate, whether it has
+been allowed, and opens the full text to allow it — so what has been agreed to is
+readable afterwards rather than only at the moment of agreeing.
 
 ## The directory
 

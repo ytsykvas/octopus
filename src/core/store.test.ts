@@ -28,6 +28,7 @@ import {
   PROJECT_COLORS,
   type Project,
   ProjectSchema,
+  recordApproval,
   rememberModels,
   removeProject,
   removeWorkspace,
@@ -56,6 +57,7 @@ const project: Project = {
   approvedScripts: [],
   envProfile: 'default',
   trustRepoScripts: false,
+  trustRepository: false,
   disabledSkillDefaults: [],
   color: 'blue'
 }
@@ -385,6 +387,7 @@ describe('projects', () => {
     approvedScripts: ['another-digest'],
     envProfile: 'prod',
     trustRepoScripts: true,
+    trustRepository: true,
     disabledSkillDefaults: ['review'],
     repoPath: '/repos/moved'
   }
@@ -956,6 +959,54 @@ describe('the env file a project writes its variables into', () => {
     })
 
     expect(stored.envFile).toBe('.env')
+  })
+})
+
+describe('trusting a repository', () => {
+  /*
+   * Every project in every state file predates the one switch, and the reader
+   * throws on a mismatch — so a missing default would stop the app opening.
+   * And it must not be read from the older scripts-only switch: that was a
+   * decision about scripts, and carrying it over would extend it to hooks and
+   * MCP servers nobody agreed to.
+   */
+  it('loads a project written before the switch, trusting nothing new', async () => {
+    const older: Record<string, unknown> = { ...project, trustRepoScripts: true }
+    delete older.trustRepository
+
+    await writeFile(
+      file,
+      JSON.stringify({ version: 1, projects: [older], workspaces: [], chats: [] }),
+      'utf8'
+    )
+
+    const state = await loadState(file)
+
+    expect(state.projects[0]).toMatchObject({ trustRepository: false, trustRepoScripts: true })
+  })
+})
+
+describe('recording an approval', () => {
+  const ledger: Project = { ...project, id: 'ledger', name: 'ledger', repoPath: '/repos/ledger' }
+
+  it('adds the digest to the named list of that project alone', () => {
+    const state = { ...EMPTY_STATE, projects: [project, ledger] }
+
+    const next = recordApproval(state, 'planner', 'approvedSettings', 'abc')
+
+    expect(next.projects[0]?.approvedSettings).toEqual(['abc'])
+    expect(next.projects[0]?.approvedScripts).toEqual([])
+    expect(next.projects[1]).toEqual(ledger)
+  })
+
+  // Built from the state it is given, so an approval recorded a moment ago is
+  // kept rather than overwritten by a list read before it.
+  it('keeps what the state already holds', () => {
+    const state = { ...EMPTY_STATE, projects: [{ ...project, approvedScripts: ['first'] }] }
+
+    const next = recordApproval(state, 'planner', 'approvedScripts', 'second')
+
+    expect(next.projects[0]?.approvedScripts).toEqual(['first', 'second'])
   })
 })
 

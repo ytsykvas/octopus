@@ -55,7 +55,7 @@ import type { InstructionSource } from '@core/instructionSources.js'
 import type { UsageWindows } from '@core/usage.js'
 import type { RepoConfigView, RepoItemId } from '@core/repoConfig.js'
 import type { CarryReport } from '@core/carry.js'
-import type { CapabilityFile } from '@core/repoTrust.js'
+import type { RepositoryTrust } from '@core/repoTrust.js'
 import type { Project, ProjectPatch } from '@core/store.js'
 import type { ThemeName } from '@core/types.js'
 
@@ -561,10 +561,6 @@ const api = {
     scripts: (workspaceId: string): Promise<Result<ScriptsInWorkspace>> =>
       ipcRenderer.invoke('scripts:resolved', workspaceId) as Promise<Result<ScriptsInWorkspace>>,
 
-    /** Records that the repository's scripts were read, so they may run. */
-    approveScripts: (workspaceId: string): Promise<Result<void>> =>
-      ipcRenderer.invoke('scripts:approve', workspaceId) as Promise<Result<void>>,
-
     /**
      * Writes the note this workspace carries for its user.
      *
@@ -602,16 +598,8 @@ const api = {
       ipcRenderer.invoke('workspace:prepare', workspaceId) as Promise<Result<CarryReport>>,
 
     /** What this repository can grant itself, and whether it was approved. */
-    trust: (
-      workspaceId: string
-    ): Promise<Result<{ approved: boolean; files: readonly CapabilityFile[] }>> =>
-      ipcRenderer.invoke('trust:read', workspaceId) as Promise<
-        Result<{ approved: boolean; files: readonly CapabilityFile[] }>
-      >,
-
-    /** Records that those files were read. */
-    approveSettings: (workspaceId: string): Promise<Result<void>> =>
-      ipcRenderer.invoke('trust:approve', workspaceId) as Promise<Result<void>>,
+    trust: (workspaceId: string): Promise<Result<RepositoryTrust>> =>
+      ipcRenderer.invoke('trust:read', workspaceId) as Promise<Result<RepositoryTrust>>,
 
     /** The workspace's env file as it stands, or null where it has none. */
     env: (workspaceId: string): Promise<Result<string | null>> =>
@@ -897,6 +885,35 @@ const api = {
       ipcRenderer.invoke('scripts:project', projectId, workspaceId) as Promise<
         Result<ScriptsInWorkspace>
       >,
+
+    /**
+     * Records that the repository's scripts were read, so they may run.
+     *
+     * `digest` is the one that came with what was shown; a repository that
+     * changed since is refused rather than approved unseen.
+     */
+    approveScripts: (
+      projectId: string,
+      workspaceId: string | null,
+      digest: string
+    ): Promise<Result<void>> =>
+      ipcRenderer.invoke('scripts:approve', projectId, workspaceId, digest) as Promise<
+        Result<void>
+      >,
+
+    /** What this repository can grant itself, and whether it was approved. */
+    trust: (projectId: string, workspaceId: string | null): Promise<Result<RepositoryTrust>> =>
+      ipcRenderer.invoke('trust:project', projectId, workspaceId) as Promise<
+        Result<RepositoryTrust>
+      >,
+
+    /** Records that those files were read, on the same terms as the scripts. */
+    approveSettings: (
+      projectId: string,
+      workspaceId: string | null,
+      digest: string
+    ): Promise<Result<void>> =>
+      ipcRenderer.invoke('trust:approve', projectId, workspaceId, digest) as Promise<Result<void>>,
 
     /** What this project offers the agent, and what this machine adds. */
     instructionSources: (

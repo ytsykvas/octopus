@@ -1036,11 +1036,14 @@ allowed. This is where it belongs because it is the answer
 to "why is Run doing nothing", and that question is asked in front of `Run`.
 
 After it is allowed the panel goes quiet, and the place to look is **Project
-settings → Repository**: the same section as Import and Export, listing each
-script the checkout supplies, the file it came from, and whether it may run,
-with the per-project trust switch under it. One question — how much of this
-checkout the app believes — in one place, rather than a banner that appears once
-and is gone.
+settings → Repository**, under **Trust**: one switch, _Trust this repository_,
+then the two things it covers — the scripts the checkout supplies, and the Claude
+settings, hooks and MCP servers it ships — each listed with where it came from,
+whether it is allowed, and a _Review and allow_ that shows every byte first. One
+question — how much of this checkout the app believes — in one place, rather
+than a switch for scripts here and nothing but a banner in the chat for the rest.
+The chat's banner and the Scripts tab's panel stay where the question is asked;
+this is where it is answered for good.
 
 **The Scripts section of that dialog names the source above each editor**, and
 makes it read-only where the repository supplies the script. It used to be three

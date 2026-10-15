@@ -853,7 +853,7 @@ export function RightPanel({
           </p>
         )}
 
-        {activeScripts !== undefined && !activeScripts.approved && activeWorkspaceId !== null && (
+        {activeScripts !== undefined && !activeScripts.approved && activeWorkspace !== null && (
           <div className="border-line bg-muted/40 shrink-0 space-y-2 border-b px-3 py-2.5">
             <p className="text-ink-soft leading-relaxed">{t('scripts.repoNotice')}</p>
 
@@ -891,9 +891,16 @@ export function RightPanel({
               onClick={() => {
                 void (async () => {
                   onError(null)
-                  const done = await window.octopus.workspaces.approveScripts(activeWorkspaceId)
-                  if (done.ok) onScriptsChanged()
-                  else onError(describeFailure(done))
+                  // The digest of what is on screen: a pull that rewrote a
+                  // script after it was shown is refused, not approved unseen —
+                  // and refreshing then shows what is there now.
+                  const done = await window.octopus.projects.approveScripts(
+                    activeWorkspace.projectId,
+                    activeWorkspace.id,
+                    activeScripts.digest
+                  )
+                  onScriptsChanged()
+                  if (!done.ok) onError(describeFailure(done))
                 })()
               }}
             >

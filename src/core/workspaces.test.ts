@@ -58,6 +58,7 @@ beforeEach(async () => {
     approvedScripts: [],
     envProfile: 'default',
     trustRepoScripts: false,
+    trustRepository: false,
     disabledSkillDefaults: [],
     color: 'blue'
   }

@@ -769,13 +769,25 @@ beside the text, so allowing a body as the cleanup script is not allowing it as
 the one that runs on every build. A script the user wrote in Project settings is
 never in it — approving your own text is a dialog people learn to click through.
 
-`trustRepoScripts` turns the digest off for one project. Off — the default — a
-version is shown once and runs only after it is allowed, so a `git pull` that
-rewrites a script asks again. On, whatever the checkout holds runs unasked,
-which is a reasonable thing to say about a repository you write and not about a
-clone. It is a project's own setting rather than a global one, and it lives in
-Project settings beside Import and Export: what a repository may run and what it
-may carry are the same question about the same checkout.
+`trustRepository` turns **both** digests off for one project. Off — the default
+— a version is shown once and is used only after it is allowed, so a `git pull`
+that changes a script or a hook asks again. On, whatever the checkout holds runs
+and loads unasked, which is a reasonable thing to say about a repository you
+write and not about a clone. One switch because the unit somebody trusts is a
+repository: with a switch for scripts alone, a project whose scripts were trusted
+went on asking about its settings on every new workspace. The two lists stay
+separate underneath, so reading a hook still approves no build script.
+
+`trustRepoScripts` is the older, scripts-only switch, and it is still honoured
+for scripts — nothing that ran unasked starts asking. It is deliberately **not**
+read as `trustRepository`: that would extend a decision about scripts to hooks
+and MCP servers nobody agreed to. Turning the one switch either way clears it.
+
+An approval records the digest the reader was **shown**, not one computed at the
+click: the renderer sends the digest back, and a repository whose files changed
+in between — a pull, an agent writing a hook — is refused with `trustChanged`
+rather than allowed unseen. And it is written from the state as it stands inside
+the commit, so two approvals landing together both survive.
 
 Both lists are read from the **worktree a session runs in**, not the checkout —
 the SDK is pointed at the worktree, and a branch may carry different settings
