@@ -309,15 +309,23 @@ describe('RightPanel', () => {
   })
 
   /*
-   * Three tabs are icons, because the row sets the pane's narrowest allowed width
+   * Two tabs are icons, because the row sets the pane's narrowest allowed width
    * and every **word** in it raises that floor for everybody. What they may not
    * lose along with the word is their name — a tab a screen reader announces as
    * nothing would be the real cost of the saving.
    */
+  it('writes Files out as a word', () => {
+    renderPanel()
+
+    const tab = screen.getByRole('button', { name: 'Files' })
+    expect(tab).toHaveTextContent('Files')
+    expect(tab).not.toHaveAttribute('title')
+  })
+
   it('names the tabs that have no word on them', () => {
     renderPanel()
 
-    for (const name of ['Files', 'Terminal', 'Notes']) {
+    for (const name of ['Terminal', 'Notes']) {
       const tab = screen.getByRole('button', { name })
       expect(tab).toHaveTextContent('')
       expect(tab).toHaveAttribute('title', name)
@@ -325,11 +333,11 @@ describe('RightPanel', () => {
   })
 
   /*
-   * Icons, three words, an icon: the ends are the tools somebody reaches for
-   * and the middle is the work. Asserted in order, because nothing else here
-   * would notice the row being shuffled back.
+   * An icon, four words, an icon: the ends are the tools somebody reaches for
+   * and the middle is the work, Files first beside the shell. Asserted in
+   * order, because nothing else here would notice the row being shuffled back.
    */
-  it('opens the row with the files and the terminal and closes it with the notes', () => {
+  it('opens the row with the terminal and the files and closes it with the notes', () => {
     renderPanel()
 
     const row = screen.getByRole('button', { name: 'Terminal' }).parentElement
@@ -337,7 +345,7 @@ describe('RightPanel', () => {
       (one) => one.getAttribute('title') ?? one.textContent
     )
 
-    expect(labels).toEqual(['Files', 'Terminal', 'Changes', 'Scripts', 'Pull request', 'Notes'])
+    expect(labels).toEqual(['Terminal', 'Files', 'Changes', 'Scripts', 'Pull request', 'Notes'])
   })
 
   /*

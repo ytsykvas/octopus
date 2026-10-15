@@ -2,7 +2,6 @@ import {
   ChevronDown,
   ChevronRight,
   ExternalLink,
-  FolderTree,
   type LucideIcon,
   NotebookPen,
   Pencil,
@@ -65,16 +64,17 @@ const TABS: readonly {
   readonly Icon?: LucideIcon
 }[] = [
   /*
-   * Icons, three words, an icon.
+   * An icon, four words, an icon.
    *
-   * The ends are the tools somebody reaches for — the files and a shell on one
-   * side, a scratchpad on the other — and the three in the middle are about the
-   * work itself, which is what the words are worth spending the width on. Icons
+   * The ends are the tools somebody reaches for — a shell on one side, a
+   * scratchpad on the other — and the four in the middle are about the work
+   * itself, which is what the words are worth spending the width on. Icons
    * between words would read as a mistake; at the ends they read as what they
-   * are. Files leads, where an editor keeps its explorer.
+   * are. Files is a word, beside the shell: a tree icon was too easy to miss
+   * for the tab most of the browsing starts in.
    */
-  { id: 'files', labelKey: 'panel.files', Icon: FolderTree },
   { id: 'terminal', labelKey: 'panel.terminal', Icon: SquareTerminal },
+  { id: 'files', labelKey: 'panel.files' },
   { id: 'diff', labelKey: 'panel.changes' },
   { id: 'scripts', labelKey: 'panel.scripts' },
   { id: 'pullRequest', labelKey: 'panel.pullRequest' },

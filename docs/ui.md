@@ -1247,16 +1247,16 @@ tab. Read once when the section opens rather than watched, because nothing
 announces a session starting and a row that quietly went stale would be worse
 than one the reader knows is a snapshot.
 
-**Three tabs are icons, and they sit at the two ends.** The tab row decides the
+**Two tabs are icons, and they sit at the two ends.** The tab row decides the
 pane's narrowest allowed width — the measurement further down is exactly that —
-so every **word** in the row raises the floor for everybody for ever. Files,
-Terminal and Notes carry an icon each instead, which costs about a third of a
-word.
+so every **word** in the row raises the floor for everybody for ever. Terminal
+and Notes carry an icon each instead, which costs about a third of a word.
 
-Which three is not arbitrary. The ends are the tools somebody reaches for — the
-files and a shell on one side, a scratchpad on the other — and the three in the
-middle are about the work itself, which is what the words are worth spending
-the width on. Files leads, where an editor keeps its explorer. An icon between
+Which two is not arbitrary. The ends are the tools somebody reaches for — a
+shell on one side, a scratchpad on the other — and the four in the middle are
+about the work itself, which is what the words are worth spending the width on.
+Files is one of the words, beside the shell: it was an icon first, and a tree
+glyph was too easy to miss for the tab most browsing starts in. An icon between
 words would read as a mistake; at the ends they read as what they are.
 
 What they may not lose along with the word is their name: the label moves to the
@@ -1401,7 +1401,7 @@ for the same turn endings and settles for the same 300ms, and re-reads only the
 project the workspace belongs to: a turn ending is a poor reason to run
 `git status` over every workspace of every project.
 
-**The right pane carries six tabs.** Files and Terminal, then Changes, Scripts
+**The right pane carries six tabs.** Terminal, then Files, Changes, Scripts
 and Pull request, then Notes. Build and server were two tabs and are now two halves of one: they
 are the same question — what this workspace runs — and splitting it cost a fifth
 of a row whose width has to be **measured** because it barely fits. Stacked, a
@@ -1952,11 +1952,11 @@ inside it, or once folded there is nothing left to click, and the way back has t
 be hunted for somewhere else.
 
 Both side panes are resizable and their widths persist. The right pane's floor is
-**measured, not chosen**: it is whatever its six tabs need. The three that
+**measured, not chosen**: it is whatever its six tabs need. The four that
 carry a label change width with the language — a number picked against English
 left the Ukrainian ones overflowing, and since the pane does not shrink,
 anything sticking out of it pushed the window wider and put a horizontal
-scrollbar under the application. The three that carry an icon do not change at
+scrollbar under the application. The two that carry an icon do not change at
 all, which is the whole reason they carry one.
 
 **The tabs cannot wrap and cannot shrink**, and that is what makes the
