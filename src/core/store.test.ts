@@ -58,6 +58,7 @@ const project: Project = {
   envProfile: 'default',
   trustRepoScripts: false,
   trustRepository: false,
+  preferLocal: [],
   disabledSkillDefaults: [],
   color: 'blue'
 }
@@ -388,6 +389,7 @@ describe('projects', () => {
     envProfile: 'prod',
     trustRepoScripts: true,
     trustRepository: true,
+    preferLocal: ['script.setup'],
     disabledSkillDefaults: ['review'],
     repoPath: '/repos/moved'
   }
@@ -983,6 +985,27 @@ describe('trusting a repository', () => {
     const state = await loadState(file)
 
     expect(state.projects[0]).toMatchObject({ trustRepository: false, trustRepoScripts: true })
+  })
+})
+
+describe('choosing your own over the repository', () => {
+  // Every project predates the list, and the reader throws on a mismatch.
+  it('loads a project written before the choice existed, taking nothing as chosen', async () => {
+    const older: Record<string, unknown> = { ...project }
+    delete older.preferLocal
+
+    await writeFile(
+      file,
+      JSON.stringify({ version: 1, projects: [older], workspaces: [], chats: [] }),
+      'utf8'
+    )
+
+    expect((await loadState(file)).projects[0]?.preferLocal).toEqual([])
+  })
+
+  // Only the items that can come from a repository can be chosen against it.
+  it('refuses an item that is not one', () => {
+    expect(ProjectPatchSchema.safeParse({ preferLocal: ['script.lint'] }).success).toBe(false)
   })
 })
 

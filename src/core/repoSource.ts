@@ -35,6 +35,7 @@ import { REPO_DIR, assertUnlinkedPath } from './repoConfig.js'
 import { trustDigest } from './repoTrust.js'
 import { SCRIPT_KINDS } from './scriptEnv.js'
 import { SCRIPT_FILES, type ScriptKind, readScript, scriptExists, scriptPath } from './scripts.js'
+import { scriptItem, type SourceItemId } from './sourceItems.js'
 import type { ProjectId } from './types.js'
 
 /** Where a resolved script was found, in the order they are consulted. */
@@ -67,7 +68,7 @@ export function octopusScriptPath(kind: ScriptKind): string {
  * back a file from outside the checkout under a path inside it — and this one
  * is about to be executed.
  */
-async function octopusScript(cwd: string, kind: ScriptKind): Promise<ResolvedScript | null> {
+export async function octopusScript(cwd: string, kind: ScriptKind): Promise<ResolvedScript | null> {
   const relative = octopusScriptPath(kind)
   await assertUnlinkedPath(cwd, relative)
 
@@ -94,14 +95,19 @@ async function octopusScript(cwd: string, kind: ScriptKind): Promise<ResolvedScr
  * question is asked with no workspace open. Those can differ: a branch may add
  * a script the checkout has not got, and the answer has to be about the
  * directory the script would actually run in.
+ *
+ * `preferLocal` is "use mine instead": the repository is not asked at all, so
+ * a project that chose its own script runs it — or, having written none, runs
+ * nothing — whatever `.octopus/` holds.
  */
 export async function resolveScript(
   kind: ScriptKind,
   cwd: string,
   projectId: ProjectId,
-  root?: string
+  root?: string,
+  preferLocal = false
 ): Promise<ResolvedScript | null> {
-  const own = await octopusScript(cwd, kind)
+  const own = preferLocal ? null : await octopusScript(cwd, kind)
   if (own !== null) return own
 
   if (await scriptExists(kind, projectId, root)) {
@@ -129,12 +135,19 @@ export interface ScriptsInWorkspace {
 export async function resolveScripts(
   cwd: string,
   projectId: ProjectId,
-  root?: string
+  root?: string,
+  preferLocal: readonly SourceItemId[] = []
 ): Promise<Readonly<Partial<Record<ScriptKind, ResolvedScript>>>> {
   const resolved: Partial<Record<ScriptKind, ResolvedScript>> = {}
 
   for (const kind of SCRIPT_KINDS) {
-    const script = await resolveScript(kind, cwd, projectId, root)
+    const script = await resolveScript(
+      kind,
+      cwd,
+      projectId,
+      root,
+      preferLocal.includes(scriptItem(kind))
+    )
     if (script !== null) resolved[kind] = script
   }
 

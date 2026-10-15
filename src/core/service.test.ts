@@ -2998,6 +2998,22 @@ describe('scripts a repository supplies', () => {
     expect(service.listProjects()[0]?.approvedScripts).toEqual([])
   })
 
+  // Chosen against, the repository's script is not resolved — so there is
+  // nothing of the repository's to approve, and Run is not held back by it.
+  it("runs the project's own script once the user chose it, with nothing to approve", async () => {
+    const { projectId, workspaceId } = await withWorkspace()
+    await inWorktree(workspaceId, '.octopus/scripts/setup.sh', '#!/bin/sh\nrepo\n')
+    await service.saveProjectScript(projectId, 'setup', '#!/bin/sh\nmine\n')
+
+    await service.updateProjectById(projectId, { preferLocal: ['script.setup'] })
+
+    await expect(service.workspaceScripts(workspaceId)).resolves.toMatchObject({
+      approved: true,
+      digest: '',
+      scripts: { setup: { source: 'project' } }
+    })
+  })
+
   it("runs a trusted repository's scripts unread", async () => {
     const { projectId, workspaceId } = await withWorkspace()
     await inWorktree(workspaceId, '.octopus/scripts/setup.sh', '#!/bin/sh\nmake\n')
@@ -3217,6 +3233,53 @@ describe('project instructions', () => {
 
   it('refuses to resolve one for a workspace that is not there', async () => {
     await expect(service.readEffectiveInstruction('missing', 'pullRequest')).rejects.toThrow()
+  })
+
+  /*
+   * A project that wrote none inherits the installation's, and its editor
+   * used to open on the template instead — one text on screen, another sent,
+   * and the template saved over the inherited one the moment it was touched.
+   */
+  it("opens a project's editor on the installation's when the project wrote none", async () => {
+    const id = await withProject()
+    await service.saveProjectInstruction(null, 'pullRequest', 'Global rules.\n')
+
+    await expect(service.readProjectInstruction(id, 'pullRequest')).resolves.toBe('Global rules.\n')
+  })
+
+  /*
+   * "Use mine instead". The repository's instruction wins by default; chosen
+   * against, it is not read at all and the project's chain answers.
+   */
+  it("sends the project's own once the user chose it over the repository's", async () => {
+    const repo = join(dir, 'planner')
+    await initRepo(repo)
+    await mkdir(join(repo, '.octopus', 'instructions'), { recursive: true })
+    await writeFile(join(repo, '.octopus', 'instructions', 'pull-request.md'), 'Repo.\n', 'utf8')
+    await run('git', ['add', '-A'], { cwd: repo })
+    await run('git', ['commit', '-q', '-m', 'instructions'], { cwd: repo })
+    const projectId = (await service.addProjectFromPath(repo)).id
+    const workspace = await service.createWorkspaceIn(projectId)
+    await service.saveProjectInstruction(projectId, 'pullRequest', 'Mine.\n')
+
+    await expect(service.readEffectiveInstruction(workspace.id, 'pullRequest')).resolves.toBe(
+      'Repo.\n'
+    )
+
+    await service.updateProjectById(projectId, { preferLocal: ['instruction.pullRequest'] })
+
+    await expect(service.readEffectiveInstruction(workspace.id, 'pullRequest')).resolves.toBe(
+      'Mine.\n'
+    )
+    const sources = await service.projectSources(projectId, workspace.id)
+    expect(sources.find((view) => view.id === 'instruction.pullRequest')).toMatchObject({
+      effective: 'project',
+      preferLocal: true
+    })
+  })
+
+  it('refuses to list the sources of a project that does not exist', async () => {
+    await expect(service.projectSources('missing', null)).rejects.toThrow()
   })
 })
 

@@ -26,6 +26,7 @@ const project = (id: string, name: string): Project => ({
   envProfile: 'default',
   trustRepoScripts: false,
   trustRepository: false,
+  preferLocal: [],
   disabledSkillDefaults: [],
   color: 'blue'
 })

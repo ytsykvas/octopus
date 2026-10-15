@@ -224,6 +224,11 @@ export async function storedInstruction(
   }
 }
 
+/** The text octopus ships for an instruction nobody has written. */
+export function instructionTemplate(kind: InstructionKind): string {
+  return TEMPLATES[kind]
+}
+
 /** An instruction's contents, or the template when it has never been written. */
 export async function readInstruction(
   kind: InstructionKind,

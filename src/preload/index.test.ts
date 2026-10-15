@@ -181,6 +181,11 @@ describe('channel names', () => {
     ['workspaces.env', () => method('workspaces', 'env')('w' as never), 'workspace:env'],
     ['workspaces.trust', () => method('workspaces', 'trust')('w' as never), 'trust:read'],
     [
+      'projects.sources',
+      () => method('projects', 'sources')('p' as never, null as never),
+      'sources:read'
+    ],
+    [
       'projects.trust',
       () => method('projects', 'trust')('p' as never, null as never),
       'trust:project'

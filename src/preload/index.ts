@@ -56,6 +56,7 @@ import type { UsageWindows } from '@core/usage.js'
 import type { RepoConfigView, RepoItemId } from '@core/repoConfig.js'
 import type { CarryReport } from '@core/carry.js'
 import type { RepositoryTrust } from '@core/repoTrust.js'
+import type { SourceView } from '@core/sourceItems.js'
 import type { Project, ProjectPatch } from '@core/store.js'
 import type { ThemeName } from '@core/types.js'
 
@@ -900,6 +901,10 @@ const api = {
       ipcRenderer.invoke('scripts:approve', projectId, workspaceId, digest) as Promise<
         Result<void>
       >,
+
+    /** Every layer of every script and instruction, and which one is in effect. */
+    sources: (projectId: string, workspaceId: string | null): Promise<Result<SourceView[]>> =>
+      ipcRenderer.invoke('sources:read', projectId, workspaceId) as Promise<Result<SourceView[]>>,
 
     /** What this repository can grant itself, and whether it was approved. */
     trust: (projectId: string, workspaceId: string | null): Promise<Result<RepositoryTrust>> =>

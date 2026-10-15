@@ -360,6 +360,7 @@ describe('channel table', () => {
     'env:ignored',
     'instructions:sources',
     'trust:read',
+    'sources:read',
     'trust:project',
     'trust:approve',
     'scripts:resolved',
@@ -1341,6 +1342,21 @@ describe('scripts and instructions of a real project', () => {
       ok: true,
       value: { approved: true }
     })
+  })
+
+  // Every layer of every script and instruction, for the settings window.
+  it('lists where each script and instruction comes from', async () => {
+    const projectId = await addProject()
+
+    const answer = (await invoke('sources:read', projectId, null)) as {
+      ok: boolean
+      value: { id: string }[]
+    }
+
+    expect(answer.ok).toBe(true)
+    expect(answer.value).toHaveLength(10)
+    // The workspace is parsed rather than trusted.
+    await expect(invoke('sources:read', projectId, 7)).resolves.toMatchObject({ ok: false })
   })
 
   // Asked of the project rather than a workspace, because Project settings is

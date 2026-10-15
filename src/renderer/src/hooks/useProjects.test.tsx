@@ -22,6 +22,7 @@ const planner: Project = {
   envProfile: 'default',
   trustRepoScripts: false,
   trustRepository: false,
+  preferLocal: [],
   disabledSkillDefaults: [],
   color: 'blue'
 }
@@ -38,6 +39,7 @@ const website: Project = {
   envProfile: 'default',
   trustRepoScripts: false,
   trustRepository: false,
+  preferLocal: [],
   disabledSkillDefaults: [],
   color: 'green'
 }

@@ -150,6 +150,8 @@ export async function createProject(
     // A repository is read before it is believed, until somebody says otherwise.
     trustRepoScripts: false,
     trustRepository: false,
+    // The repository's word wins until somebody says otherwise, item by item.
+    preferLocal: [],
     // Every skill on, which is how Claude Code treats one it discovers. A
     // project starts by withholding nothing.
     disabledSkillDefaults: []

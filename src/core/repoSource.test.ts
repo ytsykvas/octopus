@@ -34,6 +34,36 @@ async function put(relative: string, contents: string): Promise<void> {
 }
 
 describe('resolveScript', () => {
+  // "Use mine instead": the repository's script is not even read, so a project
+  // that wrote its own runs it, whatever the branch carries.
+  it("runs the project's own when the user chose it over the repository's", async () => {
+    await put('.octopus/scripts/setup.sh', '#!/bin/sh\nrepo\n')
+    await writeScript('setup', 'planner', '#!/bin/sh\nmine\n', root)
+
+    await expect(resolveScript('setup', cwd, 'planner', root, true)).resolves.toMatchObject({
+      source: 'project',
+      contents: '#!/bin/sh\nmine\n'
+    })
+  })
+
+  // Chosen against and nothing written: nothing runs, rather than the
+  // repository's quietly coming back.
+  it('runs nothing when the user chose their own and wrote none', async () => {
+    await put('.octopus/scripts/setup.sh', '#!/bin/sh\nrepo\n')
+
+    await expect(resolveScript('setup', cwd, 'planner', root, true)).resolves.toBeNull()
+  })
+
+  it('takes the choice per script', async () => {
+    await put('.octopus/scripts/setup.sh', '#!/bin/sh\nrepo setup\n')
+    await put('.octopus/scripts/run.sh', '#!/bin/sh\nrepo run\n')
+
+    const scripts = await resolveScripts(cwd, 'planner', root, ['script.setup'])
+
+    expect(scripts.setup).toBeUndefined()
+    expect(scripts.run?.source).toBe('repoOctopus')
+  })
+
   it('answers with nothing when neither the repository nor the project has one', async () => {
     await expect(resolveScript('setup', cwd, 'planner', root)).resolves.toBeNull()
   })

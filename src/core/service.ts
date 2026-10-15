@@ -221,6 +221,8 @@ import {
   scriptsDigest
 } from './repoSource.js'
 import { readScript, type ScriptKind, scriptExists, scriptPath, writeScript } from './scripts.js'
+import { instructionItem, type SourceView } from './sourceItems.js'
+import { readSources } from './sources.js'
 import {
   compareRepoItem,
   formatRepoProject,
@@ -729,6 +731,12 @@ export interface OctopusService {
    * octopus loads them as the CLI does, so opening a clone would hand it those
    * unless somebody has read them.
    */
+  /**
+   * Where every script and instruction comes from: each layer that exists,
+   * which one is in effect, and whether the user chose their own over the
+   * repository's. Asked of a workspace of the project, or its checkout.
+   */
+  projectSources(projectId: string, workspaceId: string | null): Promise<SourceView[]>
   workspaceTrust(workspaceId: string): Promise<RepositoryTrust>
   /**
    * The same for a project, in a workspace of it or its checkout.
@@ -2664,7 +2672,7 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
   ): Promise<ResolvedScript | null> {
     let scripts: Readonly<Partial<Record<ScriptKind, ResolvedScript>>>
     try {
-      scripts = await resolveScripts(workspace.path, project.id, dataRoot)
+      scripts = await resolveScripts(workspace.path, project.id, dataRoot, project.preferLocal)
     } catch {
       return null
     }
@@ -2725,7 +2733,11 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
    * the one place the app writes a description itself.
    */
   async function instructionFor(workspace: Workspace, kind: InstructionKind): Promise<string> {
-    const supplied = await repoInstruction(kind, workspace.path)
+    const project = requireProject(workspace.projectId)
+    // "Use mine instead": the repository is not read at all.
+    const supplied = project.preferLocal.includes(instructionItem(kind))
+      ? null
+      : await repoInstruction(kind, workspace.path)
 
     return supplied?.body ?? effectiveInstruction(kind, workspace.projectId, dataRoot)
   }
@@ -3568,6 +3580,11 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
       return settingsTrustIn(workspace.path, requireProject(workspace.projectId))
     },
 
+    async projectSources(projectId, workspaceId) {
+      const project = requireProject(projectId)
+      return readSources(cwdFor(project, workspaceId), project, dataRoot)
+    },
+
     async projectTrust(projectId, workspaceId) {
       const project = requireProject(projectId)
       return settingsTrustIn(cwdFor(project, workspaceId), project)
@@ -3576,7 +3593,12 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
     async workspaceScripts(workspaceId) {
       const workspace = requireWorkspace(workspaceId)
       const project = requireProject(workspace.projectId)
-      const scripts = await resolveScripts(workspace.path, project.id, dataRoot)
+      const scripts = await resolveScripts(
+        workspace.path,
+        project.id,
+        dataRoot,
+        project.preferLocal
+      )
       const digest = scriptsDigest(scripts)
 
       // Nothing supplied by the repository is nothing to approve, which is
@@ -3601,7 +3623,12 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
        * The checkout otherwise, which is the best answer available before a
        * workspace is open.
        */
-      const scripts = await resolveScripts(cwdFor(project, workspaceId), project.id, dataRoot)
+      const scripts = await resolveScripts(
+        cwdFor(project, workspaceId),
+        project.id,
+        dataRoot,
+        project.preferLocal
+      )
       const digest = scriptsDigest(scripts)
 
       return { approved: allowedToRun(project, digest), digest, scripts }
@@ -3610,7 +3637,12 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
     async approveScripts(projectId, workspaceId, shown) {
       const project = requireProject(projectId)
       const digest = scriptsDigest(
-        await resolveScripts(cwdFor(project, workspaceId), project.id, dataRoot)
+        await resolveScripts(
+          cwdFor(project, workspaceId),
+          project.id,
+          dataRoot,
+          project.preferLocal
+        )
       )
       if (digest === '') return
       assertShown(digest, shown)
@@ -3674,8 +3706,15 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
     async readProjectInstruction(projectId, kind) {
       // Only a project has to exist. The global one belongs to the install and
       // is written the first time anybody saves it.
-      if (projectId !== null) requireProject(projectId)
-      return readInstruction(kind, projectId, dataRoot)
+      if (projectId === null) return readInstruction(kind, null, dataRoot)
+      requireProject(projectId)
+      /*
+       * A project that wrote none inherits the installation's, so that is what
+       * its editor starts from. It used to start from the template — showing
+       * one text while another was sent, and saving the template over the
+       * inherited one the moment anybody touched it.
+       */
+      return effectiveInstruction(kind, projectId, dataRoot)
     },
 
     async saveProjectInstruction(projectId, kind, contents) {
