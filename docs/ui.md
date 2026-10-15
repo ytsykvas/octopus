@@ -1049,7 +1049,9 @@ this is where it is answered for good.
 to be plain editors: with a repository script present, editing Build saved
 happily and changed nothing that runs, and a repository's pull-request
 instruction overrode the text somebody was editing without a word. A box that
-takes an edit it will not honour is worse than no box. Now each one has:
+takes an edit it will not honour is worse than no box. Now each one has, under
+its name — which comes first, because under the tabs it read as the end of the
+editor above and the switch looked like that one's:
 
 - **a badge** — _In effect: Repository / This project / Settings / Template_, or
   _Nothing runs_ for a script nobody wrote;
@@ -1066,10 +1068,11 @@ The base branch and env file get the same as a line under their fields
 repository's was refused — why, in words: not trusted yet, no such branch, a
 file git would commit.
 
-**Project settings → Repository opens on the overview** (`SourceTable`): a row
-per setting, a column per layer, a hollow dot where a layer has something and a
-filled one where it is in effect, the switch in the last column, and each row's
-name a link into the section that edits it. One read (`useProjectSources`) feeds
+**Project settings → Repository opens on the trust switch** — the warnings under
+Git, Env and Scripts send people there to turn it on — **and then the overview**
+(`SourceTable`): a row per setting, a column per layer, a hollow dot where a
+layer has something and a filled one where it is in effect, the switch in the
+last column, and each row's name a link into the section that edits it. One read (`useProjectSources`) feeds
 the table, the badges and the tabs, so they cannot disagree.
 
 Settings → Instructions stays a plain editor per instruction: there is only the

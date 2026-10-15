@@ -6,6 +6,8 @@ import { Field } from './Field.js'
 
 interface FileEditorProps {
   readonly label: string
+  /** The label names the box without being drawn — the caller heads it already. */
+  readonly hideLabel?: boolean
   readonly hint: string
   readonly placeholder?: string
   readonly rows?: number
@@ -39,6 +41,7 @@ interface FileEditorProps {
  */
 export function FileEditor({
   label,
+  hideLabel = false,
   hint,
   placeholder,
   rows = 16,
@@ -91,7 +94,7 @@ export function FileEditor({
   const problems = notes?.(body) ?? []
 
   return (
-    <Field label={label} hint={hint}>
+    <Field label={label} hint={hint} hideLabel={hideLabel}>
       {(id) => (
         <>
           <textarea

@@ -49,6 +49,19 @@ describe('a labelled form row', () => {
     expect(screen.getAllByRole('group', { name: 'Colour' })).toHaveLength(1)
   })
 
+  // A caller that heads the row itself — the layered editor — would otherwise
+  // show the same words twice, and the box must still answer to them.
+  it('names the control without drawing the label when asked to', () => {
+    render(
+      <Field label="Build script" hideLabel>
+        {(id) => <textarea id={id} defaultValue="npm install" />}
+      </Field>
+    )
+
+    expect(screen.getByLabelText('Build script')).toHaveValue('npm install')
+    expect(screen.getByText('Build script')).toHaveClass('sr-only')
+  })
+
   // Two rows on one screen must not share an id, or the second label points at
   // the first row's control.
   it('gives each row its own id', () => {

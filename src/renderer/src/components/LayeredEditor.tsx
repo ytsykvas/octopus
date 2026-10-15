@@ -67,6 +67,9 @@ export function LayeredEditor({
 
   return (
     <div className="flex flex-col gap-2">
+      {/* The name first. Under the tabs it read as the end of the editor above,
+          and the switch between them looked like that one's. */}
+      <h3 className="font-medium">{label}</h3>
       <div className="flex flex-wrap items-center justify-between gap-2">
         <Segmented<SourceLayer>
           label={t('sources.layers', { setting: label })}
@@ -97,6 +100,7 @@ export function LayeredEditor({
       {showing.layer === 'project' ? (
         <FileEditor
           label={label}
+          hideLabel
           hint={hint}
           {...(placeholder === undefined ? {} : { placeholder })}
           {...(rows === undefined ? {} : { rows })}
@@ -109,7 +113,6 @@ export function LayeredEditor({
         />
       ) : (
         <div className="flex flex-col gap-1.5">
-          <p className="font-medium">{label}</p>
           <p className="text-ink-faint leading-relaxed">
             {showing.layer === 'repository'
               ? t('sources.fromRepository', { path: showing.from })

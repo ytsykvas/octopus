@@ -1160,8 +1160,21 @@ describe('ProjectSettings', () => {
     expect(window.octopus.projects.repoConfig).toHaveBeenCalledWith('planner')
   })
 
-  // The switch lives beside Import and Export because it is the same question:
+  // The switch lives beside Export because it is the same question:
   // how much of this checkout the app believes.
+  // The warnings under Git, Env and Scripts send people here to switch it on;
+  // below a table of twelve rows it was out of sight when they arrived.
+  it('puts the trust switch above the table of sources', async () => {
+    const user = userEvent.setup()
+    await renderDialog()
+
+    await openSection(user, 'Repository')
+
+    const toggle = await screen.findByRole('switch', { name: 'Trust this repository' })
+    const table = screen.getByRole('table')
+    expect(toggle.compareDocumentPosition(table) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+  })
+
   it('trusts a repository from the same section that moves settings', async () => {
     const user = userEvent.setup()
     const props = await renderDialog()
@@ -1329,6 +1342,41 @@ describe('ProjectSettings', () => {
     const group = screen.getByRole('group', { name: /Build script/ })
     await user.click(within(group).getByRole('button', { name: 'This project' }))
     expect(await screen.findByLabelText('Build script')).toHaveValue('npm install')
+  })
+
+  /*
+   * The name used to sit under the layer tabs and the switch, so on a page of
+   * three editors each one's controls read as the end of the editor above —
+   * "use mine" for Cleanup looked like it belonged to Build.
+   */
+  it('heads each editor with its name, above its layers and its switch', async () => {
+    offerScripts()
+    givenSources([
+      {
+        id: 'script.setup',
+        layers: [{ layer: 'repository', from: '.octopus/scripts/setup.sh', body: 'bin/setup' }],
+        effective: 'repository',
+        preferLocal: false,
+        warning: null
+      }
+    ])
+    const user = userEvent.setup()
+    await renderDialog()
+
+    await openSection(user, 'Scripts')
+
+    const heading = await screen.findByRole('heading', { name: 'Build script' })
+    const group = screen.getByRole('group', { name: /Build script/ })
+    const toggle = await screen.findByRole('switch', { name: /Use mine instead/ })
+    expect(heading.compareDocumentPosition(group) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    expect(heading.compareDocumentPosition(toggle) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+
+    // Once on screen: the box below still answers to the name, without
+    // drawing it a second time as though it were a second setting.
+    await user.click(within(group).getByRole('button', { name: 'This project' }))
+    const box = await screen.findByLabelText('Build script')
+    expect(screen.getByText('Build script', { selector: 'label' })).toHaveClass('sr-only')
+    expect(box).toHaveValue('npm install')
   })
 
   it('reads again after a save, because a save can change which copy applies', async () => {
