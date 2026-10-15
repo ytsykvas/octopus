@@ -42,7 +42,7 @@ describe('parseStatus', () => {
       ''
     ].join('\0')
 
-    expect(parseStatus(output)).toEqual({
+    expect(parseStatus(output).statuses).toEqual({
       'edited.ts': 'modified',
       'staged.ts': 'modified',
       'both.ts': 'modified',
@@ -61,7 +61,7 @@ describe('parseStatus', () => {
     const codes = ['DD', 'AU', 'UD', 'UA', 'DU', 'AA', 'UU']
     const output = codes.map((code) => `${code} ${code}.ts`).join('\0')
 
-    expect(Object.values(parseStatus(output))).toEqual(codes.map(() => 'conflicted'))
+    expect(Object.values(parseStatus(output).statuses)).toEqual(codes.map(() => 'conflicted'))
   })
 
   // Under -z the new path comes first and the old one is its own record. Read
@@ -70,17 +70,35 @@ describe('parseStatus', () => {
   it('marks the new side of a rename or copy and skips the old one', () => {
     const output = 'R  renamed.ts\0old.ts\0C  copy.ts\0source.ts\0 M after.ts\0'
 
-    expect(parseStatus(output)).toEqual({
+    expect(parseStatus(output).statuses).toEqual({
       'renamed.ts': 'renamed',
       'copy.ts': 'copied',
       'after.ts': 'modified'
     })
   })
 
+  // ` R` is a rename git found in the worktree column, after `git add -N`.
+  // Read as ordinary records, its old path became a phantom file.
+  it('skips the old side of a rename found in the worktree column', () => {
+    expect(parseStatus(' R new.txt\0old.txt\0 C dup.txt\0src.txt\0').statuses).toEqual({
+      'new.txt': 'renamed',
+      'dup.txt': 'copied'
+    })
+  })
+
+  it('names the old side of a rename as moved away, and not that of a copy', () => {
+    expect(parseStatus('R  new.ts\0old.ts\0 C dup.ts\0src.ts\0').movedAway).toEqual(['old.ts'])
+  })
+
+  // Output cut off after a rename's first record: nothing to name.
+  it('survives a rename with its second record missing', () => {
+    expect(parseStatus('R  new.ts').movedAway).toEqual([])
+  })
+
   it('keeps names git would otherwise quote, untouched', () => {
     const output = ' M with space.ts\0?? odd\nname.ts\0 M папка/файл.ts\0'
 
-    expect(Object.keys(parseStatus(output))).toEqual([
+    expect(Object.keys(parseStatus(output).statuses)).toEqual([
       'with space.ts',
       'odd\nname.ts',
       'папка/файл.ts'
@@ -88,7 +106,7 @@ describe('parseStatus', () => {
   })
 
   it('reads nothing from a clean tree', () => {
-    expect(parseStatus('')).toEqual({})
+    expect(parseStatus('').statuses).toEqual({})
   })
 })
 
@@ -103,6 +121,14 @@ describe('parseIgnored', () => {
 })
 
 describe('collectTreeEntries', () => {
+  it('leaves out a path renamed away though the index still lists it', () => {
+    const { entries } = collectTreeEntries(['old.ts', 'new.ts'], [], { 'new.ts': 'renamed' }, [
+      'old.ts'
+    ])
+
+    expect(entries.map((entry) => entry.path)).toEqual(['new.ts'])
+  })
+
   it('adds a deletion that only the status knows about', () => {
     const { entries } = collectTreeEntries(['kept.ts'], [], { 'removed.ts': 'deleted' })
 
@@ -339,6 +365,22 @@ describe('readFileTree', () => {
       // The old side of the rename is not on disk and not in the tree.
       expect(tree.entries.map((entry) => entry.path)).not.toContain('a.txt')
       expect(tree.truncated).toBe(false)
+    })
+
+    it('reads a move announced with `git add -N` as a rename, with no phantom path', async () => {
+      await run('mv', [join(dir, 'a.txt'), join(dir, 'moved.txt')])
+      await git('add', '-N', 'moved.txt')
+
+      const tree = await readFileTree(gitIn(dir))
+
+      expect(tree.statuses).toEqual({ 'moved.txt': 'renamed' })
+      expect(tree.entries.map((entry) => entry.path).sort()).toEqual([
+        '.gitignore',
+        'disk-gone.txt',
+        'edited.txt',
+        'moved.txt',
+        'staged-gone.txt'
+      ])
     })
   })
 })

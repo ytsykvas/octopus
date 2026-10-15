@@ -14,12 +14,8 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 
 import { type GitExec, gitIn } from './git.js'
 import { type Workspace, WorkspaceSchema } from './store.js'
-import {
-  MAX_DIRECTORY_ENTRIES,
-  MAX_VIEW_BYTES,
-  readWorkspaceDirectory,
-  readWorkspaceFile
-} from './workspaceFiles.js'
+import { MAX_DIRECTORY_ENTRIES } from './fileTree.js'
+import { MAX_VIEW_BYTES, readWorkspaceDirectory, readWorkspaceFile } from './workspaceFiles.js'
 import { WorkspaceError } from './workspaces.js'
 
 const run = promisify(execFile)
@@ -218,6 +214,17 @@ describe('readWorkspaceFile', () => {
       await expect(readWorkspaceFile(workspace, 'z?', exec)).resolves.toEqual({
         kind: 'deleted',
         text: 'questioned\n'
+      })
+    })
+
+    it('reads a deleted name that holds a tab', async () => {
+      await writeFile(join(dir, 'a\tb.txt'), 'tabbed\n', 'utf8')
+      await commit()
+      await unlink(join(dir, 'a\tb.txt'))
+
+      await expect(readWorkspaceFile(workspace, 'a\tb.txt', exec)).resolves.toEqual({
+        kind: 'deleted',
+        text: 'tabbed\n'
       })
     })
 

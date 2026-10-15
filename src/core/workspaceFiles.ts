@@ -17,20 +17,13 @@ import {
   type DirectoryEntry,
   type DirectoryListing,
   HIDDEN_NAMES,
+  MAX_DIRECTORY_ENTRIES,
   type TreeEntryKind
 } from './fileTree.js'
 import type { GitExec } from './git.js'
 import { insideWorktree } from './paths.js'
 import type { Workspace } from './store.js'
 import { fileInWorkspace, WorkspaceError } from './workspaces.js'
-
-/**
- * Past this a folder stops listing.
- *
- * `node_modules/.pnpm` runs to thousands of entries, and nobody scrolls a
- * folder that long looking for something — they would search.
- */
-export const MAX_DIRECTORY_ENTRIES = 5_000
 
 /**
  * The largest file the viewer is sent.
@@ -149,7 +142,10 @@ async function committed(exec: GitExec, path: string): Promise<FileContent | nul
 
   // `<mode> <type> <object> <size>\t<path>`, the size padded with spaces.
   const [record = ''] = listing.split('\0')
-  const [head = '', listed] = record.split('\t')
+  // At the first tab only: the path after it may hold tabs of its own.
+  const tab = record.indexOf('\t')
+  const head = record.slice(0, Math.max(0, tab))
+  const listed = tab === -1 ? null : record.slice(tab + 1)
   const [, type, object = '', size] = head.split(/\s+/)
   if (listed !== path || type !== 'blob') return null
 

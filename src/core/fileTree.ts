@@ -89,6 +89,15 @@ export type TreeIndex = ReadonlyMap<string, readonly TreeNode[]>
 export const MAX_TREE_ENTRIES = 50_000
 
 /**
+ * Past this a folder read from disk stops listing.
+ *
+ * `node_modules/.pnpm` runs to thousands of entries, and nobody scrolls a
+ * folder that long looking for something — they would search. Here rather than
+ * beside the reader so the window can say the number in its notice.
+ */
+export const MAX_DIRECTORY_ENTRIES = 5_000
+
+/**
  * Names the tree never shows, at any depth.
  *
  * VS Code's own `files.exclude` defaults. `.git` is the one that matters: it
@@ -114,8 +123,10 @@ function statusOf(code: string): TreeStatus {
 
   const [index = ' ', tree = ' '] = code
   if (index === 'D' || tree === 'D') return 'deleted'
-  if (index === 'R') return 'renamed'
-  if (index === 'C') return 'copied'
+  // A rename in the worktree column too: `git add -N` on a moved file makes
+  // git pair the two paths without anything staged, and reports ` R`.
+  if (index === 'R' || tree === 'R') return 'renamed'
+  if (index === 'C' || tree === 'C') return 'copied'
   if (index === 'A') return 'added'
   if (index === 'T' || tree === 'T') return 'typeChanged'
   return 'modified'
@@ -125,13 +136,19 @@ function statusOf(code: string): TreeStatus {
  * Reads `git status --porcelain=v1 -z`.
  *
  * Each record is `XY path`, NUL-terminated, with no quoting under `-z`. A
- * rename or a copy carries a second record holding the path it came from —
+ * rename or a copy — in either column — carries a second record holding the
+ * path it came from —
  * after the new one, which is the opposite of the arrow git prints without
  * `-z` — and that second record is skipped: the old path is not on disk, so
  * there is no row to mark.
  */
-export function parseStatus(output: string): Record<string, TreeStatus> {
+export function parseStatus(output: string): {
+  statuses: Record<string, TreeStatus>
+  /** The old sides of renames — paths the index may still list, gone from disk. */
+  movedAway: string[]
+} {
   const statuses: Record<string, TreeStatus> = {}
+  const movedAway: string[] = []
   // One iterator, advanced by hand past the second record of a rename.
   const records = output.split('\0').values()
 
@@ -141,10 +158,13 @@ export function parseStatus(output: string): Record<string, TreeStatus> {
     const code = record.slice(0, 2)
     statuses[record.slice(3)] = statusOf(code)
 
-    if (code.startsWith('R') || code.startsWith('C')) records.next()
+    if (!/[RC]/.test(code)) continue
+    const from = records.next()
+    // A copy's source is still there; a rename's is not.
+    if (code.includes('R') && from.done !== true) movedAway.push(from.value)
   }
 
-  return statuses
+  return { statuses, movedAway }
 }
 
 /**
@@ -181,9 +201,12 @@ function hidden(path: string): boolean {
 export function collectTreeEntries(
   listed: readonly string[],
   ignored: readonly TreeEntry[],
-  statuses: Readonly<Record<string, TreeStatus>>
+  statuses: Readonly<Record<string, TreeStatus>>,
+  movedAway: readonly string[] = []
 ): { entries: TreeEntry[]; truncated: boolean } {
-  const seen = new Set<string>()
+  // The old side of a rename found in the worktree (` R`, after `git add -N`)
+  // is still in the index and so in `ls-files --cached`, though not on disk.
+  const seen = new Set<string>(movedAway)
   const entries: TreeEntry[] = []
 
   const add = (entry: TreeEntry): void => {
@@ -349,8 +372,13 @@ export async function readFileTree(exec: GitExec): Promise<FileTreeSnapshot> {
     exec(['ls-files', '-z', '--others', '--ignored', '--exclude-standard', '--directory'])
   ])
 
-  const statuses = parseStatus(status)
-  const { entries, truncated } = collectTreeEntries(listed, parseIgnored(ignored), statuses)
+  const { statuses, movedAway } = parseStatus(status)
+  const { entries, truncated } = collectTreeEntries(
+    listed,
+    parseIgnored(ignored),
+    statuses,
+    movedAway
+  )
 
   return { entries, statuses, truncated }
 }
