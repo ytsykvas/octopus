@@ -23,7 +23,7 @@
 
 import { createHash } from 'node:crypto'
 import { readdir, readFile, realpath } from 'node:fs/promises'
-import { join, relative } from 'node:path'
+import { join } from 'node:path'
 
 import { resolvesInside } from './paths.js'
 
@@ -101,6 +101,41 @@ async function follow(root: string, path: string): Promise<CapabilityFile> {
 }
 
 /**
+ * Every file under the hooks directory, walked one level at a time.
+ *
+ * Not `readdir(…, { recursive: true })`, though that is what this was. Node
+ * changed what it does with a linked directory between 26.0 and 26.11: the
+ * older one listed the link and stopped, the newer one walks through it — so a
+ * hook directory linking to somewhere outside the worktree had that somewhere
+ * read file by file into the trust card, which is the thing `follow` exists to
+ * prevent. A walk written here descends only into what `lstat` calls a
+ * directory, whichever Node it runs on.
+ */
+async function hookPaths(
+  cwd: string,
+  directory: string
+): Promise<{ path: string; link: boolean }[]> {
+  let entries
+  try {
+    entries = await readdir(join(cwd, directory), { withFileTypes: true })
+  } catch {
+    // No hooks directory, which is most repositories.
+    return []
+  }
+
+  const found = await Promise.all(
+    entries.map(async (entry) => {
+      const path = join(directory, entry.name)
+      if (entry.isDirectory()) return hookPaths(cwd, path)
+      if (entry.isSymbolicLink()) return [{ path, link: true }]
+      return entry.isFile() ? [{ path, link: false }] : []
+    })
+  )
+
+  return found.flat()
+}
+
+/**
  * Everything in this worktree that grants the agent a capability.
  *
  * Read from the directory a session runs in — a worktree, not the checkout —
@@ -113,25 +148,13 @@ async function follow(root: string, path: string): Promise<CapabilityFile> {
 export async function capabilityFiles(cwd: string): Promise<CapabilityFile[]> {
   const named = await Promise.all(FILES.map((path) => read(cwd, path)))
 
-  let scripts: Promise<CapabilityFile | null>[] = []
-  try {
-    const entries = await readdir(join(cwd, HOOKS), { withFileTypes: true, recursive: true })
+  const scripts = await Promise.all(
+    (await hookPaths(cwd, HOOKS)).map(({ path, link }) =>
+      link ? follow(cwd, path) : read(cwd, path)
+    )
+  )
 
-    scripts = entries
-      .filter((entry) => entry.isFile() || entry.isSymbolicLink())
-      .map((entry) => {
-        // Under `recursive`, `name` is a basename and the subdirectory it was
-        // found in is on `parentPath` — so a nested script joined the old way
-        // would be named as though it sat at the top.
-        const path = relative(cwd, join(entry.parentPath, entry.name))
-
-        return entry.isSymbolicLink() ? follow(cwd, path) : read(cwd, path)
-      })
-  } catch {
-    // No hooks directory, which is most repositories.
-  }
-
-  return [...named, ...(await Promise.all(scripts))]
+  return [...named, ...scripts]
     .filter((file): file is CapabilityFile => file !== null)
     .sort((a, b) => a.path.localeCompare(b.path))
 }
