@@ -1602,7 +1602,8 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
         baseBranch: project.baseBranch,
         envFile: project.envFile,
         preferBaseBranch: project.preferLocal.includes('project.baseBranch'),
-        preferEnvFile: project.preferLocal.includes('project.envFile')
+        preferEnvFile: project.preferLocal.includes('project.envFile'),
+        trusted: project.trustRepository
       },
       makeExec(project.repoPath)
     )
@@ -2622,11 +2623,27 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
    * workspace holds at this moment — which is why a run settles the port first
    * and prepares second.
    */
+  /**
+   * The env file to write this workspace's block into.
+   *
+   * The repository's is checked against the checkout's ignore rules when it is
+   * resolved — and the block lands in the **worktree**, on a branch whose
+   * `.gitignore` may say otherwise. Asked again there, so a branch that stops
+   * ignoring the file gets the project's own instead of credentials a
+   * `git add -A` would commit.
+   */
+  async function envFileFor(project: Project, workspace: Workspace): Promise<string> {
+    const { envFile } = await liveProject(project)
+    if (envFile === project.envFile) return envFile
+
+    return (await isIgnored(makeExec(workspace.path), envFile)) ? envFile : project.envFile
+  }
+
   async function prepare(
     project: Project,
     workspace: Workspace
   ): Promise<{ readonly report: CarryReport; readonly envFile: string }> {
-    const { envFile } = await liveProject(project)
+    const envFile = await envFileFor(project, workspace)
 
     /*
      * The block in the file this workspace last wrote to, when that is no

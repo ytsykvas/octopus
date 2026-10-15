@@ -26,14 +26,20 @@ clone sends the pull-request description this project wants with nothing
 configured.
 
 Two fields of `project.json` are live too, read from the **checkout** — never a
-worktree, or a feature branch could re-point the base of its own pull request:
+worktree, or a feature branch could re-point the base of its own pull request —
+and **only for a trusted repository** (_Trust this repository_). Both decide
+things the user did not write, where work is cut from and where credentials go,
+so a repository's word waits until it is believed, as its scripts and hooks do;
+until then the project's own stand and the settings window shows the
+repository's as waiting:
 
 - **`baseBranch`** — what workspaces are cut from and compared against, once git
   confirms the checkout has it. A team that moves to `develop` moves every clone
   with it.
 - **`envFile`** — where the block of variables is written, **only if git ignores
-  it** in the checkout. That file receives credentials; one git would commit
-  would publish them. A refused value leaves the project's own in effect, and the
+  it** — in the checkout when it is resolved, and again in the worktree before
+  the block is written, since the branch there may have its own `.gitignore`.
+  That file receives credentials; one git would commit would publish them. A refused value leaves the project's own in effect, and the
   settings window says why.
 
 The project's stored values are never overwritten: they are what _use mine

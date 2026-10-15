@@ -56,6 +56,15 @@ export interface FieldsOf {
   /** Whether the user chose their own over the repository's, per field. */
   readonly preferBaseBranch: boolean
   readonly preferEnvFile: boolean
+  /**
+   * Whether the repository is trusted (`trustRepository`).
+   *
+   * Both fields decide things the user did not write — which branch work is
+   * cut from, and where credentials are written — so a repository's word is
+   * taken only once it is believed, as its scripts and hooks are. Until then
+   * the project's own stand and the window shows the repository's as waiting.
+   */
+  readonly trusted: boolean
 }
 
 function own(
@@ -75,6 +84,8 @@ async function baseBranchOf(
   if (stated === undefined || project.preferBaseBranch) {
     return own(project.baseBranch, stated ?? null, unreadable ? 'projectFileUnreadable' : null)
   }
+
+  if (!project.trusted) return own(project.baseBranch, stated, 'repositoryNotTrusted')
 
   if (!(await anyBranchExists(exec, stated))) {
     return own(project.baseBranch, stated, 'baseBranchMissing')
@@ -98,6 +109,8 @@ async function envFileOf(
   if (stated === undefined || project.preferEnvFile) {
     return own(project.envFile, stated ?? null, unreadable ? 'projectFileUnreadable' : null)
   }
+
+  if (!project.trusted) return own(project.envFile, stated, 'repositoryNotTrusted')
 
   if (!insideWorktree(stated)) return own(project.envFile, stated, 'envFileOutside')
   if (!(await isIgnored(exec, stated))) return own(project.envFile, stated, 'envFileNotIgnored')

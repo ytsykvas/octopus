@@ -31,7 +31,8 @@ const OWN: FieldsOf = {
   baseBranch: 'main',
   envFile: '.env',
   preferBaseBranch: false,
-  preferEnvFile: false
+  preferEnvFile: false,
+  trusted: true
 }
 
 function resolve(
@@ -88,6 +89,20 @@ describe('resolveProjectFields', () => {
   it('refuses an env file outside the worktree', async () => {
     await expect(resolve({ envFile: '../elsewhere/.env' })).resolves.toMatchObject({
       envFile: { value: '.env', layer: 'project', warning: 'envFileOutside' }
+    })
+  })
+
+  /*
+   * Both fields decide what the user did not write — where work is cut from,
+   * where credentials go — so a repository's word waits until it is trusted,
+   * as its scripts and hooks do.
+   */
+  it('takes nothing from a repository that is not trusted, and says so', async () => {
+    await expect(
+      resolve({ baseBranch: 'develop', envFile: '.env.local' }, { ...OWN, trusted: false })
+    ).resolves.toMatchObject({
+      baseBranch: { value: 'main', repository: 'develop', warning: 'repositoryNotTrusted' },
+      envFile: { value: '.env', repository: '.env.local', warning: 'repositoryNotTrusted' }
     })
   })
 

@@ -825,6 +825,8 @@ describe('workspaces', () => {
     await run('git', ['commit', '-q', '-m', 'develop'], { cwd: repo })
     await run('git', ['checkout', '-q', 'main'], { cwd: repo })
     const project = await service.addProjectFromPath(repo)
+    // The repository's word is taken once it is trusted, as its scripts are.
+    await service.updateProjectById(project.id, { trustRepository: true })
     expect(project.baseBranch).toBe('main')
 
     await mkdir(join(repo, '.octopus'), { recursive: true })
@@ -849,6 +851,8 @@ describe('workspaces', () => {
     const repo = join(dir, 'planner')
     await initRepo(repo)
     const project = await service.addProjectFromPath(repo)
+    // The repository's word is taken once it is trusted, as its scripts are.
+    await service.updateProjectById(project.id, { trustRepository: true })
     await service.saveEnvProfile(project.id, 'default', 'API_KEY=secret\n')
     const workspace = await service.createWorkspaceIn(project.id)
     await mkdir(join(repo, '.octopus'), { recursive: true })
@@ -1566,6 +1570,8 @@ describe('env overrides a project adds', () => {
    */
   it('writes the block into the env file the repository names', async () => {
     const { id, repo } = await withProject()
+    // The repository's word is taken once it is trusted, as its scripts are.
+    await service.updateProjectById(id, { trustRepository: true })
     await writeFile(join(repo, '.gitignore'), '.env.local\n', 'utf8')
     await mkdir(join(repo, '.octopus'), { recursive: true })
     await writeFile(join(repo, '.octopus', 'project.json'), '{"envFile":".env.local"}', 'utf8')
@@ -1590,6 +1596,8 @@ describe('env overrides a project adds', () => {
    */
   it('moves the block out of the old file when the user chooses their own', async () => {
     const { id, repo } = await withProject()
+    // The repository's word is taken once it is trusted, as its scripts are.
+    await service.updateProjectById(id, { trustRepository: true })
     await writeFile(join(repo, '.gitignore'), '.env.local\n', 'utf8')
     await mkdir(join(repo, '.octopus'), { recursive: true })
     await writeFile(join(repo, '.octopus', 'project.json'), '{"envFile":".env.local"}', 'utf8')
@@ -1617,11 +1625,16 @@ describe('env overrides a project adds', () => {
    */
   it('moves the block when the repository changes the env file under a workspace', async () => {
     const { id, repo } = await withProject()
+    // The repository's word is taken once it is trusted, as its scripts are.
+    await service.updateProjectById(id, { trustRepository: true })
     await service.saveEnvProfile(id, 'default', 'API_KEY=secret\n')
     const workspace = await service.createWorkspaceIn(id)
     await writeFile(join(repo, '.gitignore'), '.env.local\n', 'utf8')
     await mkdir(join(repo, '.octopus'), { recursive: true })
     await writeFile(join(repo, '.octopus', 'project.json'), '{"envFile":".env.local"}', 'utf8')
+
+    // The branch picked the ignore rule up too, as a pull would bring it.
+    await writeFile(join(workspace.path, '.gitignore'), '.env.local\n', 'utf8')
 
     await service.prepareWorkspace(workspace.id)
 
@@ -1629,6 +1642,49 @@ describe('env overrides a project adds', () => {
       'API_KEY=secret'
     )
     await expect(readFile(join(workspace.path, '.env'), 'utf8')).rejects.toThrow()
+  })
+
+  // Not trusted, the repository's file waits: the project's own is written.
+  it("keeps the project's env file while the repository is not trusted", async () => {
+    const { id, repo } = await withProject()
+    await writeFile(join(repo, '.gitignore'), '.env.local\n', 'utf8')
+    await mkdir(join(repo, '.octopus'), { recursive: true })
+    await writeFile(join(repo, '.octopus', 'project.json'), '{"envFile":".env.local"}', 'utf8')
+    await run('git', ['add', '-A'], { cwd: repo })
+    await run('git', ['commit', '-q', '-m', 'octopus'], { cwd: repo })
+    await service.saveEnvProfile(id, 'default', 'API_KEY=secret\n')
+
+    const workspace = await service.createWorkspaceIn(id)
+
+    await expect(readFile(join(workspace.path, '.env'), 'utf8')).resolves.toContain('API_KEY')
+    const sources = await service.projectSources(id, workspace.id)
+    expect(sources.find((view) => view.id === 'project.envFile')).toMatchObject({
+      effective: 'project',
+      warning: 'repositoryNotTrusted'
+    })
+  })
+
+  /*
+   * The checkout ignores the file; the branch the workspace is on may not.
+   * The credentials land in the worktree, so it is asked there too.
+   */
+  it("writes the project's own env file where the workspace's branch would commit the stated one", async () => {
+    const { id, repo } = await withProject()
+    await writeFile(join(repo, '.gitignore'), '.env.local\n', 'utf8')
+    await mkdir(join(repo, '.octopus'), { recursive: true })
+    await writeFile(join(repo, '.octopus', 'project.json'), '{"envFile":".env.local"}', 'utf8')
+    await run('git', ['add', '-A'], { cwd: repo })
+    await run('git', ['commit', '-q', '-m', 'octopus'], { cwd: repo })
+    await service.updateProjectById(id, { trustRepository: true })
+    await service.saveEnvProfile(id, 'default', 'API_KEY=secret\n')
+    const workspace = await service.createWorkspaceIn(id)
+    await writeFile(join(workspace.path, '.gitignore'), '', 'utf8')
+
+    await service.prepareWorkspace(workspace.id)
+
+    await expect(readFile(join(workspace.path, '.env'), 'utf8')).resolves.toContain('API_KEY')
+    const left = await readFile(join(workspace.path, '.env.local'), 'utf8').catch(() => '')
+    expect(left).not.toContain('API_KEY')
   })
 
   // The whole answer for a project cloned from GitHub: nothing to copy, so the

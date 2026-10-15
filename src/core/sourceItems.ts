@@ -76,7 +76,11 @@ export function instructionItem(kind: InstructionKind): SourceItemId {
  * env file are checked against git first.
  */
 export type SourceWarning =
-  'baseBranchMissing' | 'envFileOutside' | 'envFileNotIgnored' | 'projectFileUnreadable'
+  | 'repositoryNotTrusted'
+  | 'baseBranchMissing'
+  | 'envFileOutside'
+  | 'envFileNotIgnored'
+  | 'projectFileUnreadable'
 
 /** One layer of one item, as the window draws it. */
 export interface SourceLayerView {

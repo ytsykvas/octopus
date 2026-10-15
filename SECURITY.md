@@ -51,10 +51,11 @@ service of its own — so most of the usual surface does not exist. What does:
 
 - **A repository can name the file credentials are written into.** The
   checkout's `.octopus/project.json` may set `envFile`, and octopus writes each
-  workspace's variables there. It is taken only when git ignores that path in
-  the checkout, so a repository cannot point the block at a file a commit would
-  publish; read from the checkout rather than a worktree, so a branch cannot
-  either. A way around that check is as serious as the items above.
+  workspace's variables there. It is taken only from a trusted repository, and
+  only when git ignores that path — in the checkout, and again in the worktree
+  the block is written into — so a repository cannot point it at a file a
+  commit would publish; read from the checkout rather than a worktree, so a
+  branch cannot either. A way around that check is as serious as the items above.
 
 - **Anything reaching a process argument.** External commands go through
   `execFile` with an argument array, and values crossing IPC are parsed with zod
