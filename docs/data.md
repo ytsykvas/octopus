@@ -797,6 +797,21 @@ They did once: the panel narrowed by the setting alone while the session narrowe
 by the setting and the gate, and an unapproved repository was reported as read
 while the agent read none of it.
 
+## Choosing your own over the repository's
+
+`preferLocal` on a project lists the scripts and instructions it takes from its
+own settings even where the checkout's `.octopus/` supplies one — _use mine
+instead_, per item. The repository wins by default, because `.octopus/` is how a
+team agrees on a script or an instruction; this is the way out of that for one
+item, not for the whole repository.
+
+A list of what was opted out rather than a flag per item, so an item added later
+starts on the default without a migration, and an empty list — every record
+written before it existed — means the repository wins everywhere. Chosen
+against, the repository's file is not even read: a script the project never
+wrote then runs nothing, rather than the repository's quietly coming back, and
+there is nothing of the repository's left to approve.
+
 ## Which set of variables a workspace runs with
 
 `envProfile` on a project names the set its workspaces use; `envProfile` on a

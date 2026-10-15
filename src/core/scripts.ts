@@ -96,6 +96,11 @@ export const SCRIPT_FILES: Record<ScriptKind, string> = {
   archive: 'archive.sh'
 }
 
+/** The text an editor starts from — nothing runs from it. */
+export function scriptTemplate(kind: ScriptKind): string {
+  return TEMPLATES[kind]
+}
+
 export function scriptPath(kind: ScriptKind, projectId: ProjectId, root?: string): string {
   return projectScript(projectId, SCRIPT_FILES[kind], root)
 }

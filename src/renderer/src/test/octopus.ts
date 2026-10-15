@@ -274,6 +274,7 @@ export function installOctopusStub(): Api {
       cliPermissions: vi.fn(() => ok([])),
       scripts: vi.fn(() => ok({ approved: true, digest: '', scripts: {} })),
       approveScripts: vi.fn(() => ok(undefined)),
+      sources: vi.fn(() => ok([])),
       trust: vi.fn(() => ok({ approved: true, digest: '', files: [] })),
       approveSettings: vi.fn(() => ok(undefined)),
       envProfiles: vi.fn(() => ok({ profiles: ['default'], projectDefault: 'default' })),

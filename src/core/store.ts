@@ -13,6 +13,7 @@ import { z } from 'zod'
 import { CodedError } from './codedError.js'
 import { NotesBodySchema } from './notes.js'
 import { withApproval } from './repoTrust.js'
+import { SourceItemIdSchema } from './sourceItems.js'
 import { UsageWindowsSchema } from './usage.js'
 
 import {
@@ -142,6 +143,16 @@ export const ProjectSchema = z.object({
    * until somebody turns this one on.
    */
   trustRepository: z.boolean().default(false),
+  /**
+   * Items this project takes from its own settings even where the repository
+   * supplies one — "use mine instead".
+   *
+   * The repository wins by default, because `.octopus/` is how a team agrees on
+   * a script or an instruction. This is the per-item way out of that, kept as a
+   * list of what was opted out rather than a flag per item, so an item added
+   * later starts on the default without a migration.
+   */
+  preferLocal: z.array(SourceItemIdSchema).default([]),
   /**
    * Skills that are off in every new conversation of this project.
    *
@@ -497,6 +508,7 @@ export const ProjectPatchSchema = z
         envProfile: true,
         trustRepoScripts: true,
         trustRepository: true,
+        preferLocal: true,
         disabledSkillDefaults: true,
         repoPath: true
       }).shape
@@ -632,6 +644,7 @@ export function updateProject(state: State, projectId: string, patch: ProjectPat
             ...(patch.trustRepository !== undefined && {
               trustRepository: patch.trustRepository
             }),
+            ...(patch.preferLocal !== undefined && { preferLocal: patch.preferLocal }),
             ...(patch.disabledSkillDefaults !== undefined && {
               disabledSkillDefaults: patch.disabledSkillDefaults
             }),

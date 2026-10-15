@@ -337,6 +337,12 @@ export function registerIpc(
   // workspace open, and the checkout answers then. The digest is the one shown,
   // parsed rather than trusted — an approval covers what was read, not what is
   // on disk at the moment of clicking.
+  // Every layer of every script and instruction, for the settings window. The
+  // workspace or null, as for trust: the checkout answers when none is open.
+  host.handle('sources:read', (_event, projectId: string, workspaceId: unknown) =>
+    attempt(() => service.projectSources(projectId, z.string().nullable().parse(workspaceId)))
+  )
+
   host.handle('trust:project', (_event, projectId: string, workspaceId: unknown) =>
     attempt(() => service.projectTrust(projectId, z.string().nullable().parse(workspaceId)))
   )
