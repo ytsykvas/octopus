@@ -38,6 +38,7 @@ import { SectionRail } from './SectionRail.js'
 import { FileEditor } from './FileEditor.js'
 import { InstructionEditors } from './InstructionEditors.js'
 import { RepoConfig } from './RepoConfig.js'
+import { RepoTrust } from './RepoTrust.js'
 import { LibrarySection } from './settings/LibrarySection.js'
 import { SkillsSection } from './settings/SkillsSection.js'
 
@@ -844,13 +845,20 @@ export function ProjectSettings({
           {/* Reaching removal now takes choosing the section it lives in, which
               is a further step away from a mis-click than a scroll was. */}
           {section === 'repository' && (
-            <RepoConfig
-              projectId={project.id}
-              workspaceId={workspaceId}
-              trusted={project.trustRepoScripts}
-              onTrustChange={(trusted) => void onUpdate({ trustRepoScripts: trusted })}
-              onImported={onImported}
-            />
+            <div className="flex flex-col gap-8">
+              <RepoTrust
+                projectId={project.id}
+                workspaceId={workspaceId}
+                trusted={project.trustRepository}
+                trustedScripts={project.trustRepoScripts}
+                // Either way the older scripts-only switch goes: on, the new
+                // one covers scripts too; off, nothing is trusted unread.
+                onTrustChange={(trusted) =>
+                  void onUpdate({ trustRepository: trusted, trustRepoScripts: false })
+                }
+              />
+              <RepoConfig projectId={project.id} onImported={onImported} />
+            </div>
           )}
 
           {section === 'danger' && (

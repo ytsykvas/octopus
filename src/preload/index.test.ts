@@ -181,8 +181,13 @@ describe('channel names', () => {
     ['workspaces.env', () => method('workspaces', 'env')('w' as never), 'workspace:env'],
     ['workspaces.trust', () => method('workspaces', 'trust')('w' as never), 'trust:read'],
     [
-      'workspaces.approveSettings',
-      () => method('workspaces', 'approveSettings')('w' as never),
+      'projects.trust',
+      () => method('projects', 'trust')('p' as never, null as never),
+      'trust:project'
+    ],
+    [
+      'projects.approveSettings',
+      () => method('projects', 'approveSettings')('p' as never, null as never, 'd' as never),
       'trust:approve'
     ],
     ['workspaces.scripts', () => method('workspaces', 'scripts')('w' as never), 'scripts:resolved'],
@@ -202,8 +207,8 @@ describe('channel names', () => {
       'workspaces:notes'
     ],
     [
-      'workspaces.approveScripts',
-      () => method('workspaces', 'approveScripts')('w' as never),
+      'projects.approveScripts',
+      () => method('projects', 'approveScripts')('p' as never, null as never, 'd' as never),
       'scripts:approve'
     ],
     ['projects.envProfiles', () => method('projects', 'envProfiles')('p' as never), 'env:profiles'],

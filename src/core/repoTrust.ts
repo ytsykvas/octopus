@@ -25,6 +25,8 @@ import { createHash } from 'node:crypto'
 import { readdir, readFile, realpath } from 'node:fs/promises'
 import { join } from 'node:path'
 
+import { CodedError } from './codedError.js'
+
 import { resolvesInside } from './paths.js'
 
 /** One file a repository can grant itself something with. */
@@ -175,6 +177,38 @@ export function trustDigest(files: readonly CapabilityFile[]): string {
   for (const file of files) hash.update(`${file.path}\0${file.contents}\0`)
 
   return hash.digest('hex')
+}
+
+/** What a worktree can make the agent do, and whether that has been agreed to. */
+export interface RepositoryTrust {
+  readonly approved: boolean
+  /**
+   * What would be recorded by approving, handed back on approval.
+   *
+   * The renderer shows `files` and then asks; the files can change between the
+   * two — a `git pull`, an agent writing a hook — and an approval computed at
+   * click time would then cover something nobody was shown.
+   */
+  readonly digest: string
+  readonly files: readonly CapabilityFile[]
+}
+
+export type TrustErrorCode = 'trustChanged'
+
+/** Refuses an approval of something other than what was shown. */
+export class TrustError extends CodedError<TrustErrorCode> {
+  override readonly name = 'TrustError'
+}
+
+/** The approval as asked for, or a refusal when what is there has moved on. */
+export function assertShown(digest: string, shown: string): void {
+  if (digest !== shown) {
+    throw new TrustError(
+      'trustChanged',
+      {},
+      'What the repository supplies changed after it was shown; read it again before allowing it.'
+    )
+  }
 }
 
 /**

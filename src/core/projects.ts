@@ -149,6 +149,7 @@ export async function createProject(
     envProfile: DEFAULT_PROFILE,
     // A repository is read before it is believed, until somebody says otherwise.
     trustRepoScripts: false,
+    trustRepository: false,
     // Every skill on, which is how Claude Code treats one it discovers. A
     // project starts by withholding nothing.
     disabledSkillDefaults: []

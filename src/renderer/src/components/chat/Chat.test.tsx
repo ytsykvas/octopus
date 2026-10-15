@@ -149,7 +149,11 @@ describe('a repository that has not been read', () => {
   it('says the agent is working without the repository', async () => {
     vi.mocked(octopus().workspaces.trust).mockResolvedValue({
       ok: true,
-      value: { approved: false, files: [{ path: '.claude/settings.json', contents: '{}' }] }
+      value: {
+        approved: false,
+        digest: 'digest',
+        files: [{ path: '.claude/settings.json', contents: '{}' }]
+      }
     })
     givenChats([chat()])
     render(<Pane />)
@@ -160,7 +164,7 @@ describe('a repository that has not been read', () => {
   it('says nothing about a repository that grants nothing', async () => {
     vi.mocked(octopus().workspaces.trust).mockResolvedValue({
       ok: true,
-      value: { approved: true, files: [] }
+      value: { approved: true, digest: 'digest', files: [] }
     })
     givenChats([chat()])
     render(<Pane />)
@@ -178,6 +182,15 @@ describe('a repository that has not been read', () => {
       ok: true,
       value: {
         approved: false,
+        digest: 'digest',
+        files: [{ path: '.claude/settings.json', contents: '"Bash(rm -rf /:*)"' }]
+      }
+    })
+    vi.mocked(octopus().projects.trust).mockResolvedValue({
+      ok: true,
+      value: {
+        approved: false,
+        digest: 'digest',
         files: [{ path: '.claude/settings.json', contents: '"Bash(rm -rf /:*)"' }]
       }
     })
@@ -192,14 +205,30 @@ describe('a repository that has not been read', () => {
     await waitFor(() => {
       expect(screen.queryByText(/pre-approve tools/)).toBeNull()
     })
-    expect(octopus().workspaces.approveSettings).toHaveBeenCalledWith(WORKSPACE.id)
+    expect(octopus().projects.approveSettings).toHaveBeenCalledWith(
+      WORKSPACE.projectId,
+      WORKSPACE.id,
+      'digest'
+    )
   })
 
   // Closing without allowing leaves the notice standing, since nothing changed.
   it('keeps the notice when the review is closed unanswered', async () => {
     vi.mocked(octopus().workspaces.trust).mockResolvedValue({
       ok: true,
-      value: { approved: false, files: [{ path: '.claude/settings.json', contents: '{}' }] }
+      value: {
+        approved: false,
+        digest: 'digest',
+        files: [{ path: '.claude/settings.json', contents: '{}' }]
+      }
+    })
+    vi.mocked(octopus().projects.trust).mockResolvedValue({
+      ok: true,
+      value: {
+        approved: false,
+        digest: 'digest',
+        files: [{ path: '.claude/settings.json', contents: '{}' }]
+      }
     })
     givenChats([chat()])
     render(<Pane />)
@@ -208,16 +237,28 @@ describe('a repository that has not been read', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Close' }))
 
     expect(screen.getByText(/pre-approve tools/)).toBeInTheDocument()
-    expect(octopus().workspaces.approveSettings).not.toHaveBeenCalled()
+    expect(octopus().projects.approveSettings).not.toHaveBeenCalled()
   })
 
   // The approval failing must not put the notice away — nothing was recorded.
   it('keeps the notice when the approval could not be written', async () => {
     vi.mocked(octopus().workspaces.trust).mockResolvedValue({
       ok: true,
-      value: { approved: false, files: [{ path: '.claude/settings.json', contents: '{}' }] }
+      value: {
+        approved: false,
+        digest: 'digest',
+        files: [{ path: '.claude/settings.json', contents: '{}' }]
+      }
     })
-    vi.mocked(octopus().workspaces.approveSettings).mockResolvedValue({
+    vi.mocked(octopus().projects.trust).mockResolvedValue({
+      ok: true,
+      value: {
+        approved: false,
+        digest: 'digest',
+        files: [{ path: '.claude/settings.json', contents: '{}' }]
+      }
+    })
+    vi.mocked(octopus().projects.approveSettings).mockResolvedValue({
       ok: false,
       error: 'EACCES'
     })
@@ -228,7 +269,7 @@ describe('a repository that has not been read', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Allow these' }))
 
     await waitFor(() => {
-      expect(octopus().workspaces.approveSettings).toHaveBeenCalled()
+      expect(octopus().projects.approveSettings).toHaveBeenCalled()
     })
     // The strip's own words: the modal is still open and explains the same
     // mechanism in its own.
@@ -242,7 +283,7 @@ describe('a repository that has not been read', () => {
       () =>
         new Promise((resolve) => {
           gate.land = () => {
-            resolve({ ok: true, value: { approved: false, files: [] } })
+            resolve({ ok: true, value: { approved: false, digest: 'digest', files: [] } })
           }
         })
     )
@@ -266,7 +307,7 @@ describe('a repository that has not been read', () => {
   it('does not carry the warning to the next workspace', async () => {
     vi.mocked(octopus().workspaces.trust).mockResolvedValue({
       ok: true,
-      value: { approved: false, files: [] }
+      value: { approved: false, digest: 'digest', files: [] }
     })
     givenChats([chat()])
     const { rerender } = render(<Pane />)
@@ -274,7 +315,7 @@ describe('a repository that has not been read', () => {
 
     vi.mocked(octopus().workspaces.trust).mockResolvedValue({
       ok: true,
-      value: { approved: true, files: [] }
+      value: { approved: true, digest: 'digest', files: [] }
     })
     rerender(<Pane workspace={workspaceView('bob')} />)
 

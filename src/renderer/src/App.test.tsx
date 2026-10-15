@@ -43,6 +43,7 @@ function project(overrides: Partial<Project> = {}): Project {
     approvedScripts: [],
     envProfile: 'default',
     trustRepoScripts: false,
+    trustRepository: false,
     disabledSkillDefaults: [],
     color: 'blue',
     ...overrides
@@ -174,7 +175,7 @@ function givenScriptsOf(paths: Record<string, Partial<Record<ScriptKind, string>
       }
     }
 
-    return Promise.resolve({ ok: true, value: { approved: true, scripts } })
+    return Promise.resolve({ ok: true, value: { approved: true, digest: '', scripts } })
   })
 }
 
@@ -1562,6 +1563,7 @@ describe('App', () => {
         ok: true,
         value: {
           approved: true,
+          digest: 'digest',
           scripts: written
             ? {
                 setup: {

@@ -333,8 +333,22 @@ export function registerIpc(
     attempt(() => service.workspaceTrust(workspaceId))
   )
 
-  host.handle('trust:approve', (_event, workspaceId: string) =>
-    attempt(() => service.approveWorkspaceSettings(workspaceId))
+  // The project as well, and a workspace or null: Project settings asks with no
+  // workspace open, and the checkout answers then. The digest is the one shown,
+  // parsed rather than trusted — an approval covers what was read, not what is
+  // on disk at the moment of clicking.
+  host.handle('trust:project', (_event, projectId: string, workspaceId: unknown) =>
+    attempt(() => service.projectTrust(projectId, z.string().nullable().parse(workspaceId)))
+  )
+
+  host.handle('trust:approve', (_event, projectId: string, workspaceId: unknown, digest: unknown) =>
+    attempt(() =>
+      service.approveSettings(
+        projectId,
+        z.string().nullable().parse(workspaceId),
+        z.string().parse(digest)
+      )
+    )
   )
 
   // Keyed by workspace for the same reason: which script runs is a fact about
@@ -345,8 +359,16 @@ export function registerIpc(
     attempt(() => service.workspaceScripts(workspaceId))
   )
 
-  host.handle('scripts:approve', (_event, workspaceId: string) =>
-    attempt(() => service.approveWorkspaceScripts(workspaceId))
+  host.handle(
+    'scripts:approve',
+    (_event, projectId: string, workspaceId: unknown, digest: unknown) =>
+      attempt(() =>
+        service.approveScripts(
+          projectId,
+          z.string().nullable().parse(workspaceId),
+          z.string().parse(digest)
+        )
+      )
   )
 
   // The workspace as well, because a run happens in a worktree and a branch may

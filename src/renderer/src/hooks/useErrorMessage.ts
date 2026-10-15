@@ -22,6 +22,8 @@ export function useErrorMessage(): (failure: Failure) => string {
           return t('errors.draftFailed', { reason: failure.params?.reason ?? '' })
         case 'draftUnreadable':
           return t('errors.draftUnreadable')
+        case 'trustChanged':
+          return t('errors.trustChanged')
         case 'envProfileExists':
           return t('errors.envProfileExists', { name: failure.params?.name ?? '' })
         case 'envProfileMissing':

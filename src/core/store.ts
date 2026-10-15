@@ -12,6 +12,7 @@ import { z } from 'zod'
 
 import { CodedError } from './codedError.js'
 import { NotesBodySchema } from './notes.js'
+import { withApproval } from './repoTrust.js'
 import { UsageWindowsSchema } from './usage.js'
 
 import {
@@ -126,6 +127,21 @@ export const ProjectSchema = z.object({
    * from "whatever this repository says is fine".
    */
   trustRepoScripts: z.boolean().default(false),
+  /**
+   * Whether this repository is believed without being read first — its
+   * scripts *and* the Claude settings, hooks and MCP servers it ships.
+   *
+   * One switch rather than one per gate, because the unit somebody trusts is a
+   * repository: a project whose scripts were trusted still asked about its
+   * settings on every new workspace, and those settings were usually the user's
+   * own, carried in from the checkout.
+   *
+   * Not filled from `trustRepoScripts`, deliberately. That one was a decision
+   * about scripts, and carrying it across would extend it to hooks and MCP
+   * servers nobody agreed to — so the older field keeps covering scripts alone
+   * until somebody turns this one on.
+   */
+  trustRepository: z.boolean().default(false),
   /**
    * Skills that are off in every new conversation of this project.
    *
@@ -480,6 +496,7 @@ export const ProjectPatchSchema = z
         approvedScripts: true,
         envProfile: true,
         trustRepoScripts: true,
+        trustRepository: true,
         disabledSkillDefaults: true,
         repoPath: true
       }).shape
@@ -495,6 +512,32 @@ export type ProjectPatch = z.infer<typeof ProjectPatchSchema>
  * Only the keys present in the patch are touched, so changing the base branch
  * cannot quietly rewrite the name with a stale copy held by the UI.
  */
+/**
+ * Records an approval against the project as it stands in `state`.
+ *
+ * From the state handed to the commit rather than from a project read before
+ * an await: two approvals landing together used to build their lists from the
+ * same stale record, and the second write dropped the first.
+ *
+ * A project that has gone in the meantime is left gone — the map simply finds
+ * nothing to change.
+ */
+export function recordApproval(
+  state: State,
+  projectId: string,
+  list: 'approvedScripts' | 'approvedSettings',
+  digest: string
+): State {
+  return {
+    ...state,
+    projects: state.projects.map((project) =>
+      project.id === projectId
+        ? { ...project, [list]: withApproval(project[list], digest) }
+        : project
+    )
+  }
+}
+
 export function updateProject(state: State, projectId: string, patch: ProjectPatch): State {
   if (!state.projects.some((project) => project.id === projectId)) {
     throw new StateConflictError(`Project ${projectId} not found`)
@@ -585,6 +628,9 @@ export function updateProject(state: State, projectId: string, patch: ProjectPat
             ...(patch.envProfile !== undefined && { envProfile: patch.envProfile }),
             ...(patch.trustRepoScripts !== undefined && {
               trustRepoScripts: patch.trustRepoScripts
+            }),
+            ...(patch.trustRepository !== undefined && {
+              trustRepository: patch.trustRepository
             }),
             ...(patch.disabledSkillDefaults !== undefined && {
               disabledSkillDefaults: patch.disabledSkillDefaults

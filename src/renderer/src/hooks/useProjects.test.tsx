@@ -21,6 +21,7 @@ const planner: Project = {
   approvedScripts: [],
   envProfile: 'default',
   trustRepoScripts: false,
+  trustRepository: false,
   disabledSkillDefaults: [],
   color: 'blue'
 }
@@ -36,6 +37,7 @@ const website: Project = {
   approvedScripts: [],
   envProfile: 'default',
   trustRepoScripts: false,
+  trustRepository: false,
   disabledSkillDefaults: [],
   color: 'green'
 }

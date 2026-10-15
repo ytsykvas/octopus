@@ -39,7 +39,9 @@ service of its own — so most of the usual surface does not exist. What does:
   in the app — so a `git pull` can change it.
   `src/core/repoSource.ts` digests what the repository supplies and shows every
   version once before it runs; a project can be marked trusted, which turns that
-  off deliberately and per project. A way to get a repository's script executed
+  off — and the settings gate above with it — deliberately and per project. An
+  approval covers the digest of what was **shown**: one computed at the click
+  would allow a script rewritten after the reader looked. A way to get a repository's script executed
   without either — an approval that survives the script changing, a path that
   resolves outside the checkout, a source that skips the digest — is as serious
   as the item above, and for the same reason.

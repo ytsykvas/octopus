@@ -166,6 +166,7 @@ export function Chat({
 
       {reviewing && (
         <RepoTrustReview
+          projectId={workspace.projectId}
           workspaceId={workspace.id}
           onApproved={() => {
             setReviewing(false)

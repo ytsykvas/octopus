@@ -25,6 +25,7 @@ function project(overrides: Partial<Project> = {}): Project {
     approvedScripts: [],
     envProfile: 'default',
     trustRepoScripts: false,
+    trustRepository: false,
     disabledSkillDefaults: [],
     color: 'blue',
     ...overrides
@@ -1159,9 +1160,11 @@ describe('ProjectSettings', () => {
     const props = await renderDialog()
 
     await openSection(user, 'Repository')
-    await user.click(await screen.findByRole('checkbox'))
+    await user.click(await screen.findByRole('switch', { name: 'Trust this repository' }))
 
-    expect(props.onUpdate).toHaveBeenCalledWith({ trustRepoScripts: true })
+    // The older scripts-only switch goes either way: on, the one switch covers
+    // scripts too; off, nothing is believed unread.
+    expect(props.onUpdate).toHaveBeenCalledWith({ trustRepository: true, trustRepoScripts: false })
   })
 
   it('shows the pull request instructions under Instructions', async () => {
@@ -1288,6 +1291,7 @@ describe('ProjectSettings', () => {
       ok: true,
       value: {
         approved: true,
+        digest: 'digest',
         scripts: {
           setup: {
             kind: 'setup',
@@ -1316,6 +1320,7 @@ describe('ProjectSettings', () => {
       ok: true,
       value: {
         approved: true,
+        digest: 'digest',
         scripts: {
           setup: {
             kind: 'setup',

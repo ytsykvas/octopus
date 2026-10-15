@@ -36,6 +36,7 @@ function scriptsFor(answer: ScriptsInWorkspace): ReadonlyMap<string, ScriptsInWo
 
 const SCRIPTS = scriptsFor({
   approved: true,
+  digest: 'digest',
   scripts: { setup: ownScript('setup'), run: ownScript('run') }
 })
 
@@ -632,7 +633,7 @@ describe('RightPanel', () => {
       renderPanel({
         workspaces: [anna],
         activeWorkspaceId: anna.id,
-        scripts: scriptsFor({ approved: false, scripts: { run: fromRepo } })
+        scripts: scriptsFor({ approved: false, digest: 'digest', scripts: { run: fromRepo } })
       })
       await userEvent.click(scriptsTab())
 
@@ -671,7 +672,7 @@ describe('RightPanel', () => {
       renderPanel({
         workspaces: [anna],
         activeWorkspaceId: anna.id,
-        scripts: scriptsFor({ approved: false, scripts: { setup: long } })
+        scripts: scriptsFor({ approved: false, digest: 'digest', scripts: { setup: long } })
       })
       await userEvent.click(scriptsTab())
 
@@ -710,7 +711,7 @@ describe('RightPanel', () => {
       renderPanel({
         workspaces: [anna],
         activeWorkspaceId: anna.id,
-        scripts: scriptsFor({ approved: true, scripts: { run: fromRepo } })
+        scripts: scriptsFor({ approved: true, digest: 'digest', scripts: { run: fromRepo } })
       })
       await userEvent.click(scriptsTab())
 
@@ -731,21 +732,25 @@ describe('RightPanel', () => {
       renderPanel({
         workspaces: [anna],
         activeWorkspaceId: anna.id,
-        scripts: scriptsFor({ approved: false, scripts: { run: fromRepo } }),
+        scripts: scriptsFor({ approved: false, digest: 'digest', scripts: { run: fromRepo } }),
         onScriptsChanged
       })
       await userEvent.click(scriptsTab())
 
       await userEvent.click(screen.getByRole('button', { name: 'Allow these' }))
 
-      expect(octopus().workspaces.approveScripts).toHaveBeenCalledWith(anna.id)
+      expect(octopus().projects.approveScripts).toHaveBeenCalledWith(
+        anna.projectId,
+        anna.id,
+        'digest'
+      )
       await waitFor(() => {
         expect(onScriptsChanged).toHaveBeenCalled()
       })
     })
 
     it('says why an approval could not be recorded', async () => {
-      vi.mocked(octopus().workspaces.approveScripts).mockResolvedValue({
+      vi.mocked(octopus().projects.approveScripts).mockResolvedValue({
         ok: false,
         error: 'nope'
       })
@@ -753,7 +758,7 @@ describe('RightPanel', () => {
       renderPanel({
         workspaces: [anna],
         activeWorkspaceId: anna.id,
-        scripts: scriptsFor({ approved: false, scripts: { run: fromRepo } }),
+        scripts: scriptsFor({ approved: false, digest: 'digest', scripts: { run: fromRepo } }),
         onError
       })
       await userEvent.click(scriptsTab())
@@ -937,7 +942,7 @@ describe('RightPanel', () => {
     renderPanel({
       workspaces: [anna],
       activeWorkspaceId: anna.id,
-      scripts: scriptsFor({ approved: true, scripts: { run: ownScript('run') } })
+      scripts: scriptsFor({ approved: true, digest: 'digest', scripts: { run: ownScript('run') } })
     })
 
     await userEvent.click(scriptsTab())
@@ -955,7 +960,11 @@ describe('RightPanel', () => {
     renderPanel({
       workspaces: [anna],
       activeWorkspaceId: anna.id,
-      scripts: scriptsFor({ approved: true, scripts: { setup: ownScript('setup') } })
+      scripts: scriptsFor({
+        approved: true,
+        digest: 'digest',
+        scripts: { setup: ownScript('setup') }
+      })
     })
 
     await userEvent.click(scriptsTab())

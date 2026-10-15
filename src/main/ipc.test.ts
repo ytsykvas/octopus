@@ -360,6 +360,7 @@ describe('channel table', () => {
     'env:ignored',
     'instructions:sources',
     'trust:read',
+    'trust:project',
     'trust:approve',
     'scripts:resolved',
     'scripts:project',
@@ -1227,15 +1228,30 @@ describe('scripts and instructions of a real project', () => {
     await mkdir(join(workspace.path, '.claude'), { recursive: true })
     await writeFile(join(workspace.path, '.claude', 'settings.json'), '{"a":1}', 'utf8')
 
-    await expect(invoke('trust:read', workspace.id)).resolves.toMatchObject({
+    const read = (await invoke('trust:read', workspace.id)) as {
+      value: { approved: boolean; digest: string }
+    }
+    expect(read.value.approved).toBe(false)
+    await expect(invoke('trust:project', projectId, workspace.id)).resolves.toMatchObject({
       ok: true,
-      value: { approved: false }
+      value: { approved: false, digest: read.value.digest }
     })
 
-    await expect(invoke('trust:approve', workspace.id)).resolves.toMatchObject({ ok: true })
+    // Approved under the digest that was shown, and refused under any other.
+    await expect(invoke('trust:approve', projectId, workspace.id, 'stale')).resolves.toMatchObject({
+      ok: false,
+      code: 'trustChanged'
+    })
+    await expect(
+      invoke('trust:approve', projectId, workspace.id, read.value.digest)
+    ).resolves.toMatchObject({ ok: true })
     await expect(invoke('trust:read', workspace.id)).resolves.toMatchObject({
       ok: true,
       value: { approved: true }
+    })
+    // The digest is parsed rather than trusted.
+    await expect(invoke('trust:approve', projectId, workspace.id, 7)).resolves.toMatchObject({
+      ok: false
     })
   })
 
@@ -1317,7 +1333,10 @@ describe('scripts and instructions of a real project', () => {
       value: { approved: false, scripts: { setup: { source: 'repoOctopus' } } }
     })
 
-    await expect(invoke('scripts:approve', workspace.id)).resolves.toMatchObject({ ok: true })
+    const shown = (await invoke('scripts:resolved', workspace.id)) as { value: { digest: string } }
+    await expect(
+      invoke('scripts:approve', projectId, workspace.id, shown.value.digest)
+    ).resolves.toMatchObject({ ok: true })
     await expect(invoke('scripts:resolved', workspace.id)).resolves.toMatchObject({
       ok: true,
       value: { approved: true }

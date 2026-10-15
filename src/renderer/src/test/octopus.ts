@@ -153,12 +153,10 @@ export function installOctopusStub(): Api {
       instruction: vi.fn(() => ok('Describe what changed and why.')),
       prepare: vi.fn(() => ok({ written: [], missing: [] })),
       env: vi.fn(() => ok('')),
-      trust: vi.fn(() => ok({ approved: true, files: [] })),
-      scripts: vi.fn(() => ok({ approved: true, scripts: {} })),
-      approveScripts: vi.fn(() => ok(undefined)),
+      trust: vi.fn(() => ok({ approved: true, digest: '', files: [] })),
+      scripts: vi.fn(() => ok({ approved: true, digest: '', scripts: {} })),
       setEnvProfile: vi.fn(() => ok(undefined)),
       setNotes: vi.fn(() => ok(undefined)),
-      approveSettings: vi.fn(() => ok(undefined)),
       // The port answers by default: a test about a script that ignores
       // `$OCTOPUS_PORT` says so, and the rest are not about ports at all.
       serving: vi.fn(() => ok(true)),
@@ -274,7 +272,10 @@ export function installOctopusStub(): Api {
       // Nothing declared, which is the ordinary answer for a checkout with no
       // `.claude` permissions in it.
       cliPermissions: vi.fn(() => ok([])),
-      scripts: vi.fn(() => ok({ approved: true, scripts: {} })),
+      scripts: vi.fn(() => ok({ approved: true, digest: '', scripts: {} })),
+      approveScripts: vi.fn(() => ok(undefined)),
+      trust: vi.fn(() => ok({ approved: true, digest: '', files: [] })),
+      approveSettings: vi.fn(() => ok(undefined)),
       envProfiles: vi.fn(() => ok({ profiles: ['default'], projectDefault: 'default' })),
       readEnv: vi.fn(() => ok('')),
       createEnv: vi.fn(() => ok(undefined)),
