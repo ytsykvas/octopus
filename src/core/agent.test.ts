@@ -1137,6 +1137,22 @@ describe('a session', () => {
     expect(events).toEqual([{ type: 'error', message: 'claude exited with code 1' }])
   })
 
+  /*
+   * A session closed on purpose ends its process with SIGTERM, and the SDK
+   * reports that as a failure: "exited with code 143". Choosing a compaction
+   * window closes one to start it again, and the chat showed the restart as an
+   * error, under a session that went on to answer perfectly well.
+   */
+  it('says nothing when the stream fails because it was closed', async () => {
+    const { agent, events } = fakeAgent()
+
+    await agent.session.close()
+    agent.finish(new Error('Claude Code process exited with code 143'))
+    await settle()
+
+    expect(events).toEqual([])
+  })
+
   it('changes the model of a running session', async () => {
     const { agent } = fakeAgent()
 

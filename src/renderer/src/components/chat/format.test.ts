@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 
 import {
+  exitCodeOf,
   formatAge,
   formatCountdown,
   formatDuration,
@@ -237,5 +238,16 @@ describe('the moment a window resets', () => {
 
     expect(formatResetAt(soon)).toBe(formatResetAt(soon, new Date()))
     expect(formatResetAt(soon)).not.toBeNull()
+  })
+})
+
+describe('exitCodeOf', () => {
+  it('reads the code the SDK puts in a process failure', () => {
+    expect(exitCodeOf('Claude Code process exited with code 143')).toBe(143)
+  })
+
+  it('finds none in any other failure', () => {
+    expect(exitCodeOf('ProcessTransport is not ready for writing')).toBeNull()
+    expect(exitCodeOf('claude exited with code 1')).toBeNull()
   })
 })

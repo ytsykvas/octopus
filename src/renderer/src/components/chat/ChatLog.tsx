@@ -34,7 +34,7 @@ import { Button } from '../Button.js'
 import { named } from '../diff/invisible.js'
 import { shown } from '../diff/shown.js'
 import type { Streaming } from '../../hooks/useChat.js'
-import { formatTokens } from './format.js'
+import { exitCodeOf, formatTokens } from './format.js'
 import type { Change, ChangeLine } from './changeSummary.js'
 import { Markdown } from './Markdown.js'
 import { BLOCK_PART, toThreadMessages } from './threadMessages.js'
@@ -1349,10 +1349,25 @@ function RefusalRow({
   )
 }
 
+/*
+ * A process that died is said in words, with the SDK's own line kept under
+ * them: "exited with code 143" is exact and means nothing to the person reading
+ * it, and the words alone would leave nothing to search for.
+ */
 function ErrorRow({ message }: { message: string }): React.JSX.Element {
+  const { t } = useTranslation()
+  const code = exitCodeOf(message)
+
   return (
-    <p className="bg-danger-bg text-danger border-danger/25 rounded-[var(--radius-control)] border px-3 py-2">
-      {shown(message)}
-    </p>
+    <div className="bg-danger-bg text-danger border-danger/25 rounded-[var(--radius-control)] border px-3 py-2">
+      {code === null ? (
+        <p>{shown(message)}</p>
+      ) : (
+        <>
+          <p>{code > 128 ? t('chat.processStopped') : t('chat.processFailed', { code })}</p>
+          <p className="text-ink-faint mt-1 font-mono text-[11px]">{shown(message)}</p>
+        </>
+      )}
+    </div>
   )
 }
