@@ -180,8 +180,25 @@ through a branch and a pull request, and merges once CI is green:
 git checkout -b fix/short-description
 # work, then `npm run check`
 git push -u origin fix/short-description
-gh pr create --fill
+gh pr create --title "fix: …" --body-file body.md
 ```
+
+**The pull request itself**, in English like everything else here:
+
+- **Title** — Conventional Commits, imperative, under 72 characters. A squash
+  merge makes it the commit on `main`, so it is written as one.
+- **`## Summary`** — under five sentences: the behaviour change, the modules and
+  components touched, the tests added. It covers the whole branch
+  (`git diff origin/main...HEAD`), not only this session's part. Strings are
+  mentioned only when `en.ts` and `uk.ts` gained or changed keys — never a
+  "no strings changed" line.
+- **`## Reason and result`** — plain language for someone who does not read
+  code, with three labelled parts: **Problem**, **Before** and **After**, the
+  last two as the person using the app sees it. The five-sentence limit is not
+  this section's.
+- Nothing that lives only in the maintainer's setup — `docs/tasks/`,
+  `CLAUDE.md`, `.claude/`: the repository is public and the reader cannot follow
+  it.
 
 Opening the pull request is standing permission, not a question each time —
 closing a finding ends with it. What still needs asking is anything destructive
