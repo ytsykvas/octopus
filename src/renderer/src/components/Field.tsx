@@ -30,10 +30,17 @@ import { useId } from 'react'
 export function Field({
   label,
   hint,
+  hideLabel = false,
   children
 }: {
   label: string
   hint?: string
+  /**
+   * Still the control's name, but not drawn: for a row whose caller already
+   * shows the same words as a heading above it, where a second copy would read
+   * as a second setting.
+   */
+  hideLabel?: boolean
   children: React.ReactNode | ((id: string) => React.ReactNode)
 }): React.JSX.Element {
   const id = useId()
@@ -42,7 +49,7 @@ export function Field({
     <div>
       {typeof children === 'function' ? (
         <>
-          <label htmlFor={id} className="mb-1.5 block font-medium">
+          <label htmlFor={id} className={hideLabel ? 'sr-only' : 'mb-1.5 block font-medium'}>
             {label}
           </label>
           {children(id)}
