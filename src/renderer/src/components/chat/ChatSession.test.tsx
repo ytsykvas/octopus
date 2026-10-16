@@ -556,6 +556,41 @@ describe('following the conversation', () => {
   })
 })
 
+describe('the day on screen', () => {
+  /** Pins where the log and each day's separator sit, as layout would. */
+  function place(log: HTMLElement, tops: Record<string, number>): void {
+    log.getBoundingClientRect = () => ({ top: 0 }) as DOMRect
+    for (const separator of log.querySelectorAll<HTMLElement>('[data-day]')) {
+      const top = tops[separator.dataset.day ?? '']
+      separator.getBoundingClientRect = () => ({ top }) as DOMRect
+    }
+  }
+
+  // Telegram's floating date: once a day's own separator has gone off the
+  // top, a copy of it floats there, and it changes as the next day arrives.
+  it('floats the day being read once its separator has scrolled away', async () => {
+    givenChat([
+      { role: 'user', at: '2025-03-02T09:00:00.000Z', text: 'first' },
+      { role: 'user', at: '2025-03-04T09:00:00.000Z', text: 'later' }
+    ])
+    await openLoadedChat()
+    await screen.findByText('later')
+
+    const log = screen.getByRole('log')
+    // Nothing has scrolled past, so the separators speak for themselves.
+    expect(screen.getAllByText('2 March 2025')).toHaveLength(1)
+
+    place(log, { '2025-03-02': -200, '2025-03-04': 300 })
+    fireEvent.scroll(log)
+    expect(screen.getAllByText('2 March 2025')).toHaveLength(2)
+
+    place(log, { '2025-03-02': -600, '2025-03-04': -10 })
+    fireEvent.scroll(log)
+    expect(screen.getAllByText('2 March 2025')).toHaveLength(1)
+    expect(screen.getAllByText('4 March 2025')).toHaveLength(2)
+  })
+})
+
 describe('stopping a turn', () => {
   it('asks the agent to stop', async () => {
     const user = userEvent.setup()

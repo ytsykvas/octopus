@@ -3,10 +3,14 @@ import { describe, expect, it } from 'vitest'
 import {
   exitCodeOf,
   formatAge,
+  formatClock,
   formatCountdown,
+  formatDayLabel,
   formatDuration,
+  formatFullTime,
   formatResetAt,
   formatTokens,
+  localDayKey,
   usageFill,
   usageLevel,
   usageTone
@@ -249,5 +253,60 @@ describe('exitCodeOf', () => {
   it('finds none in any other failure', () => {
     expect(exitCodeOf('ProcessTransport is not ready for writing')).toBeNull()
     expect(exitCodeOf('claude exited with code 1')).toBeNull()
+  })
+})
+
+// The suite runs in Europe/Kyiv (`vitest.shared.ts`), three hours ahead of UTC
+// in summer and two in winter, so these instants are chosen to sit on the other
+// side of a local midnight from where UTC puts them.
+describe('when a message was sent', () => {
+  it('says the hour in the reader’s zone, on a 24-hour clock', () => {
+    expect(formatClock('2026-10-16T11:32:00Z')).toBe('14:32')
+    expect(formatClock('2026-10-16T21:05:00Z')).toBe('00:05')
+  })
+
+  it('takes the day where the reader is, not where UTC is', () => {
+    // 22:30 UTC on the 15th is half past one on the 16th in Kyiv.
+    expect(localDayKey('2026-10-15T22:30:00Z')).toBe('2026-10-16')
+    expect(localDayKey('2026-01-05T08:00:00Z')).toBe('2026-01-05')
+  })
+})
+
+describe('what a day separator says', () => {
+  const labels = { today: 'Today', yesterday: 'Yesterday', locale: 'en-GB' }
+  const from = new Date(2026, 9, 16, 9, 0)
+
+  it('names today and yesterday', () => {
+    expect(formatDayLabel('2026-10-16', labels, from)).toBe('Today')
+    expect(formatDayLabel('2026-10-15', labels, from)).toBe('Yesterday')
+  })
+
+  it('finds yesterday by the calendar across a month and a clock change', () => {
+    // Kyiv moves to summer time on 29 March 2026, a 23-hour day: 24 hours
+    // before half past midnight on the 30th is 23:30 on the 28th.
+    expect(formatDayLabel('2026-03-29', labels, new Date(2026, 2, 30, 0, 30))).toBe('Yesterday')
+    expect(formatDayLabel('2026-09-30', labels, new Date(2026, 9, 1, 12, 0))).toBe('Yesterday')
+  })
+
+  it('writes an earlier day out, without the year while it is this one', () => {
+    expect(formatDayLabel('2026-10-14', labels, from)).toBe('14 October')
+    expect(formatDayLabel('2026-10-14', { ...labels, locale: 'uk' }, from)).toBe('14 жовтня')
+  })
+
+  it('adds the year once it is not this one', () => {
+    expect(formatDayLabel('2025-12-31', labels, from)).toBe('31 December 2025')
+  })
+
+  it('reads the clock when not told the time', () => {
+    expect(formatDayLabel(localDayKey(new Date().toISOString()), labels)).toBe('Today')
+  })
+})
+
+describe('the whole moment, for a tooltip', () => {
+  it('carries the date and the hour in the language asked for', () => {
+    const full = formatFullTime('2026-10-16T11:32:00Z', 'en-GB')
+
+    expect(full).toContain('16 October 2026')
+    expect(full).toContain('14:32')
   })
 })
