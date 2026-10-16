@@ -240,8 +240,8 @@ const api = {
       ipcRenderer.invoke('chats:history', chatId) as Promise<Result<ChatEntry[]>>,
 
     /** Sends a message. The answer arrives through `onEvent`, not here. */
-    send: (chatId: string, text: string): Promise<Result<void>> =>
-      ipcRenderer.invoke('chats:send', chatId, text) as Promise<Result<void>>,
+    send: (chatId: string, text: string): Promise<Result<string | null>> =>
+      ipcRenderer.invoke('chats:send', chatId, text) as Promise<Result<string | null>>,
 
     /** Stops the current turn; the session stays open for the next message. */
     interrupt: (chatId: string): Promise<Result<void>> =>

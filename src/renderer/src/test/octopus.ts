@@ -80,7 +80,7 @@ export function installOctopusStub(): Api {
         })
       ),
       rewind: vi.fn(() => ok({ files: null, text: null })),
-      send: vi.fn(() => ok(undefined)),
+      send: vi.fn(() => ok<string | null>(null)),
       interrupt: vi.fn(() => ok(undefined)),
       setWorkingMode: vi.fn(() => ok(undefined)),
       setPlanMode: vi.fn(() => ok(undefined)),
