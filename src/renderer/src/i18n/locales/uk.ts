@@ -675,6 +675,9 @@ export const uk: Translation = {
       in_progress: 'виконується',
       completed: 'виконано'
     },
+    today: 'Сьогодні',
+    yesterday: 'Вчора',
+    dateLocale: 'uk',
     rewind: 'Повернути файли до стану перед цим повідомленням',
     rewindTitle: 'Повернути файли?',
     rewindMessage_one:
