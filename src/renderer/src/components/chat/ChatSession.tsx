@@ -9,6 +9,7 @@ import { Placeholder } from '../Placeholder.js'
 import { useAttachments } from '../../hooks/useAttachments.js'
 import { useChat } from '../../hooks/useChat.js'
 import type { ChatTab } from '../../hooks/useChatTabs.js'
+import type { CodeNoteController } from '../../hooks/useCodeNotes.js'
 import type { DiffCommentController } from '../../hooks/useDiffComments.js'
 import type { PullRequestQuoteController } from '../../hooks/usePullRequestQuotes.js'
 import { type ChatNote, mergeNotes } from './attachments.js'
@@ -57,6 +58,11 @@ interface ChatSessionProps {
   /** Remarks carried in from the review on this branch's pull request. */
   readonly quotes: PullRequestQuoteController
   /**
+   * Notes written in the file viewer. Unlike the two above these are aimed:
+   * this conversation shows and sends only the ones addressed to its tab.
+   */
+  readonly codeNotes: CodeNoteController
+  /**
    * What the settings say a new conversation starts with.
    *
    * Passed in rather than read here because the footer has to name what
@@ -90,6 +96,7 @@ export function ChatSession({
   onDraftLeave,
   comments,
   quotes,
+  codeNotes,
   defaultWorkingMode,
   defaultEffort,
   defaultModel,
@@ -410,14 +417,16 @@ export function ChatSession({
            this is already the layer that adapts a controller to a prop, and the
            composer has no business knowing there are two places a note can come
            from. */
-        notes={mergeNotes(comments.pending, quotes.pending)}
+        notes={mergeNotes(comments.pending, quotes.pending, codeNotes.pendingFor(tab.key))}
         onRemoveNote={(note: ChatNote) => {
           if (note.kind === 'diff') comments.remove(note)
+          else if (note.kind === 'code') codeNotes.remove(tab.key, note)
           else quotes.remove(note)
         }}
         onNotesSent={() => {
           comments.clear()
           quotes.clear()
+          codeNotes.clear(tab.key)
           attachments.clear()
         }}
         files={attachments.files}

@@ -1,9 +1,10 @@
-import { render, screen, waitFor, within } from '@testing-library/react'
+import { act, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { beforeAll, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { useChatTabs } from '../../hooks/useChatTabs.js'
 import { useFileTabs } from '../../hooks/useFileTabs.js'
+import { useCodeNotes } from '../../hooks/useCodeNotes.js'
 import { chat, emitAgentEvent, givenChats } from '../../test/chat.js'
 import { commentController, quoteController } from '../../test/comments.js'
 import { stubDialogElement } from '../../test/dialog.js'
@@ -12,6 +13,10 @@ import type { WorkspaceView } from '@core/workspaces.js'
 
 import { workspaceView } from '../../test/workspaces.js'
 import { Chat } from './Chat.js'
+
+// The viewer stays plain here: colours landing mid-test would replace the text
+// a selection was made in.
+vi.mock('../diff/highlight.js', () => ({ highlight: () => Promise.resolve(null) }))
 
 // The plan's approval is a dialog, and jsdom implements none of `<dialog>`.
 beforeAll(stubDialogElement)
@@ -22,6 +27,7 @@ const WORKSPACE = workspaceView('anna')
 function Pane({ workspace = WORKSPACE }: { workspace?: WorkspaceView }): React.JSX.Element {
   const tabs = useChatTabs(workspace.id, vi.fn(), vi.fn())
   const files = useFileTabs(workspace.id)
+  const codeNotes = useCodeNotes(workspace.id)
 
   return (
     <>
@@ -34,6 +40,7 @@ function Pane({ workspace = WORKSPACE }: { workspace?: WorkspaceView }): React.J
         onDraftLeave={vi.fn()}
         comments={commentController()}
         quotes={quoteController()}
+        codeNotes={codeNotes}
         color="blue"
         defaultWorkingMode="default"
         defaultEffort="medium"
@@ -365,5 +372,95 @@ describe('a repository that has not been read', () => {
       expect(octopus().workspaces.trust).toHaveBeenCalled()
     })
     expect(screen.queryByText(/pre-approve tools/)).toBeNull()
+  })
+})
+
+/*
+ * A note written in the viewer is aimed: it goes to the conversation whose
+ * button was pressed, waits there while the file stays in front, and rides out
+ * with that conversation's next message — and no other's.
+ */
+describe('a note sent from the file viewer', () => {
+  beforeEach(() => {
+    Range.prototype.getBoundingClientRect = () => new DOMRect(20, 100, 80, 16)
+    vi.mocked(octopus().files.read).mockResolvedValue({
+      ok: true,
+      value: { kind: 'text', text: 'one\ntwo\nthree\n', bytes: 14 }
+    })
+  })
+
+  afterEach(() => {
+    window.getSelection()?.removeAllRanges()
+  })
+
+  async function noteToSecond(user: ReturnType<typeof userEvent.setup>): Promise<void> {
+    await openTwo()
+    await user.click(screen.getByRole('button', { name: 'tree: a.ts' }))
+    const node = await waitFor(() => {
+      const text = document.querySelector('pre.diff-code')?.firstChild
+      if (!text?.textContent) throw new Error('not read yet')
+      return text
+    })
+    const range = document.createRange()
+    range.setStart(node, 4)
+    range.setEnd(node, 7)
+    act(() => {
+      window.getSelection()?.removeAllRanges()
+      window.getSelection()?.addRange(range)
+      document.dispatchEvent(new Event('selectionchange'))
+    })
+    await user.click(screen.getByRole('button', { name: 'Add to Claude 2' }))
+    await user.type(screen.getByRole('textbox'), 'why two?')
+    await user.click(screen.getByRole('button', { name: 'Add' }))
+  }
+
+  it('waits in that conversation, counted on its tab, while the file stays in front', async () => {
+    const user = userEvent.setup()
+    await noteToSecond(user)
+
+    expect(screen.getByRole('button', { name: 'Reload' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /^Claude 2: .*, 1 note waiting$/ })).toBeVisible()
+    expect(screen.getByRole('button', { name: /^Claude 1: [^,]*$/ })).toBeVisible()
+  })
+
+  it('goes out with that conversation’s message only, and is gone after', async () => {
+    const user = userEvent.setup()
+    await noteToSecond(user)
+
+    // The file put away: here the strip is not wrapped to do it, as `App`'s is.
+    await user.click(screen.getByRole('button', { name: 'Close a.ts' }))
+    await user.click(screen.getByRole('button', { name: /^Claude 1: / }))
+    // Held by the second conversation alone, which is mounted and hidden.
+    expect(screen.getAllByText('a.ts:2')).toHaveLength(1)
+    expect(screen.getByText('a.ts:2').closest('[aria-hidden="true"]')).not.toBeNull()
+
+    await user.click(screen.getByRole('button', { name: /^Claude 2: / }))
+    expect(screen.getByText('a.ts:2').closest('[aria-hidden="true"]')).toBeNull()
+    // The one composer on screen: the other conversation's is mounted, hidden.
+    await user.type(screen.getByRole('textbox'), 'look{Enter}')
+
+    await waitFor(() => {
+      expect(octopus().chats.send).toHaveBeenCalledWith(
+        'chat-2',
+        'src/a.ts:2\n> two\nwhy two?\n\nlook'
+      )
+    })
+    expect(screen.getByRole('button', { name: /^Claude 2: [^,]*$/ })).toBeVisible()
+  })
+
+  it('can be taken back from the composer', async () => {
+    const user = userEvent.setup()
+    await noteToSecond(user)
+    await user.click(screen.getByRole('button', { name: 'Close a.ts' }))
+    await user.click(screen.getByRole('button', { name: /^Claude 2: / }))
+
+    const chip = screen.getByText('a.ts:2').closest('span')
+    await user.click(
+      within(chip?.parentElement ?? document.body).getByRole('button', {
+        name: 'Remove this note'
+      })
+    )
+
+    expect(screen.queryByText('a.ts:2')).not.toBeInTheDocument()
   })
 })

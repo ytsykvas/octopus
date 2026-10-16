@@ -33,6 +33,7 @@ import { useConfirm } from './hooks/useConfirm.js'
 import { useErrorMessage } from './hooks/useErrorMessage.js'
 import { DEFAULT_ENV_FILE } from '@core/envBlock.js'
 
+import { useCodeNotes } from './hooks/useCodeNotes.js'
 import { useDiffComments } from './hooks/useDiffComments.js'
 import { useFileRevert } from './hooks/useFileRevert.js'
 import { useBranchRequests } from './hooks/useBranchRequests.js'
@@ -133,6 +134,10 @@ export function App(): React.JSX.Element {
      beside the diff's rather than one union, so the diff pane keeps narrowing a
      shape whose every member it can hold. */
   const reviewQuotes = usePullRequestQuotes(selectedWorkspaceId)
+  /* Notes written in the file viewer, each aimed at one conversation. Kept by
+     tab key like the drafts, so a conversation closed and reopened from the
+     history finds its notes where they were left. */
+  const codeNotes = useCodeNotes(selectedWorkspaceId)
 
   /*
    * The selected workspace's conversations.
@@ -902,6 +907,7 @@ export function App(): React.JSX.Element {
               color={selectedProject.color}
               comments={diffComments}
               quotes={reviewQuotes}
+              codeNotes={codeNotes}
               defaultWorkingMode={defaultWorkingMode}
               defaultEffort={defaultEffort}
               defaultModel={defaultModel}

@@ -1,13 +1,18 @@
-import { act, render, screen, waitFor } from '@testing-library/react'
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import type { FileContent } from '@core/workspaceFiles.js'
 
 import { octopus } from '../../test/octopus.js'
 import { highlight } from '../diff/highlight.js'
 import { MAX_LINE_LENGTH } from '../diff/useHighlighting.js'
-import { FileViewer, MAX_HIGHLIGHT_CHARS, MAX_HIGHLIGHT_LINES } from './FileViewer.js'
+import {
+  FileViewer,
+  MAX_HIGHLIGHT_CHARS,
+  MAX_HIGHLIGHT_LINES,
+  type NoteTarget
+} from './FileViewer.js'
 
 vi.mock('../diff/highlight.js', () => ({ highlight: vi.fn() }))
 
@@ -22,10 +27,27 @@ beforeEach(() => {
   vi.mocked(highlight).mockReset().mockResolvedValue(null)
 })
 
-function renderViewer(path = 'src/a.ts'): { onError: ReturnType<typeof vi.fn> } {
+const TARGETS: readonly NoteTarget[] = [
+  { key: 'first', name: 'Claude 1', active: false },
+  { key: 'chat-2', name: 'Claude 2', active: true }
+]
+
+function renderViewer(path = 'src/a.ts'): {
+  onError: ReturnType<typeof vi.fn>
+  onNote: ReturnType<typeof vi.fn>
+} {
   const onError = vi.fn()
-  render(<FileViewer workspaceId={WORKSPACE} path={path} onError={onError} />)
-  return { onError }
+  const onNote = vi.fn()
+  render(
+    <FileViewer
+      workspaceId={WORKSPACE}
+      path={path}
+      onError={onError}
+      targets={TARGETS}
+      onNote={onNote}
+    />
+  )
+  return { onError, onNote }
 }
 
 /** The code column, which is the `<pre>` that is not the line numbers. */
@@ -170,5 +192,181 @@ describe('FileViewer', () => {
     vi.mocked(octopus().files.open).mockResolvedValue({ ok: false, error: 'no application' })
     await userEvent.click(screen.getByRole('button', { name: 'Open in editor' }))
     expect(onError).toHaveBeenCalledWith(expect.stringContaining('no application'))
+  })
+})
+
+describe('reviewing selected lines', () => {
+  // jsdom lays nothing out, so a range has no box; the toolbar reads one.
+  beforeEach(() => {
+    Range.prototype.getBoundingClientRect = () => new DOMRect(20, 100, 80, 36)
+  })
+
+  afterEach(() => {
+    window.getSelection()?.removeAllRanges()
+    vi.useRealTimers()
+  })
+
+  /** Opens a three-line file and selects from inside line two into line three. */
+  async function selected(): Promise<{ onNote: ReturnType<typeof vi.fn> }> {
+    answering({ kind: 'text', text: 'one\ntwo\nthree\n', bytes: 14 })
+    const view = renderViewer()
+    await waitFor(() => {
+      expect(code()).toHaveTextContent('one two three')
+    })
+    selectText(5, 10)
+    return view
+  }
+
+  function selectText(start: number, end: number): void {
+    const node = code()?.firstChild
+    if (!node) throw new Error('no code')
+    const range = document.createRange()
+    range.setStart(node, start)
+    range.setEnd(node, end)
+    act(() => {
+      window.getSelection()?.removeAllRanges()
+      window.getSelection()?.addRange(range)
+      // jsdom does not fire it; a browser does for every way a selection is made.
+      document.dispatchEvent(new Event('selectionchange'))
+    })
+  }
+
+  const toolbar = (): HTMLElement => screen.getByRole('toolbar', { name: 'Lines 2-3' })
+
+  it('offers a note to each conversation, the last one in front first among them', async () => {
+    await selected()
+
+    const buttons = within(toolbar()).getAllByRole('button')
+    expect(buttons.map((button) => button.textContent)).toEqual([
+      'Add to Claude 1',
+      'Add to Claude 2',
+      'Copy path'
+    ])
+    expect(buttons[1]).toHaveClass('bg-accent')
+    expect(buttons[0]).not.toHaveClass('bg-accent')
+    // Above the selection, which starts 100px down.
+    expect(toolbar()).toHaveStyle({ top: '66px', left: '20px' })
+  })
+
+  it('floats below a selection at the very top of the window', async () => {
+    Range.prototype.getBoundingClientRect = () => new DOMRect(20, 10, 80, 36)
+    await selected()
+
+    expect(toolbar()).toHaveStyle({ top: '52px' })
+  })
+
+  // A press on the toolbar must not clear the selection it acts on.
+  it('keeps the selection when the toolbar is pressed', async () => {
+    await selected()
+
+    expect(fireEvent.mouseDown(toolbar())).toBe(false)
+  })
+
+  it('goes when the selection does', async () => {
+    await selected()
+
+    act(() => {
+      window.getSelection()?.removeAllRanges()
+      document.dispatchEvent(new Event('selectionchange'))
+    })
+
+    expect(screen.queryByRole('toolbar')).not.toBeInTheDocument()
+  })
+
+  it('sends a note on the whole lines to the conversation chosen', async () => {
+    const user = userEvent.setup()
+    const { onNote } = await selected()
+
+    await user.click(within(toolbar()).getByRole('button', { name: 'Add to Claude 1' }))
+    expect(screen.getByText('src/a.ts:2-3')).toBeInTheDocument()
+    await user.type(
+      screen.getByRole('textbox', {
+        name: 'What should the agent know about these lines? (optional)'
+      }),
+      'rename these'
+    )
+    await user.click(screen.getByRole('button', { name: 'Add' }))
+
+    expect(onNote).toHaveBeenCalledWith('first', {
+      path: 'src/a.ts',
+      line: 2,
+      endLine: 3,
+      // Read from the file, whole lines, not the half of line two selected.
+      code: 'two\nthree',
+      text: 'rename these'
+    })
+    expect(screen.queryByRole('textbox')).not.toBeInTheDocument()
+    expect(window.getSelection()?.rangeCount).toBe(0)
+  })
+
+  // The lines and their place are worth sending without a word.
+  it('sends a note with no words', async () => {
+    const user = userEvent.setup()
+    const { onNote } = await selected()
+
+    await user.click(within(toolbar()).getByRole('button', { name: 'Add to Claude 2' }))
+    await user.click(screen.getByRole('button', { name: 'Add' }))
+
+    expect(onNote).toHaveBeenCalledWith('chat-2', expect.objectContaining({ text: '' }))
+  })
+
+  it('drops the note on Escape', async () => {
+    const user = userEvent.setup()
+    const { onNote } = await selected()
+
+    await user.click(within(toolbar()).getByRole('button', { name: 'Add to Claude 2' }))
+    await user.keyboard('{Escape}')
+
+    expect(screen.queryByRole('textbox')).not.toBeInTheDocument()
+    expect(onNote).not.toHaveBeenCalled()
+  })
+
+  it('copies the reference to the lines rather than their text with ⌘C', async () => {
+    await selected()
+    const setData = vi.fn()
+
+    const allowed = fireEvent.copy(code() ?? document.body, { clipboardData: { setData } })
+
+    expect(setData).toHaveBeenCalledWith('text/plain', 'src/a.ts:2-3')
+    expect(allowed).toBe(false)
+  })
+
+  it('leaves ⌘C alone when nothing in the code is selected', async () => {
+    await selected()
+    window.getSelection()?.removeAllRanges()
+    const setData = vi.fn()
+
+    const allowed = fireEvent.copy(code() ?? document.body, { clipboardData: { setData } })
+
+    expect(setData).not.toHaveBeenCalled()
+    expect(allowed).toBe(true)
+  })
+
+  it('copies the reference from the toolbar, says so, and offers it again', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true })
+    const writeText = vi.fn(() => Promise.resolve())
+    Object.defineProperty(navigator, 'clipboard', { value: { writeText }, configurable: true })
+    await selected()
+
+    fireEvent.click(within(toolbar()).getByRole('button', { name: 'Copy path' }))
+
+    expect(await within(toolbar()).findByRole('button', { name: 'Path copied' })).toBeVisible()
+    expect(writeText).toHaveBeenCalledWith('src/a.ts:2-3')
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(2000)
+    })
+    expect(within(toolbar()).getByRole('button', { name: 'Copy path' })).toBeVisible()
+  })
+
+  it('says when the clipboard refused', async () => {
+    Object.defineProperty(navigator, 'clipboard', {
+      value: { writeText: vi.fn(() => Promise.reject(new Error('not focused'))) },
+      configurable: true
+    })
+    await selected()
+
+    fireEvent.click(within(toolbar()).getByRole('button', { name: 'Copy path' }))
+
+    expect(await within(toolbar()).findByRole('button', { name: 'Could not copy' })).toBeVisible()
   })
 })
