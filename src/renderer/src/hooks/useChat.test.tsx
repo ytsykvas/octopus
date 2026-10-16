@@ -785,6 +785,44 @@ describe('a different conversation in the same pane', () => {
     expect(result.current.entries).toEqual([])
     expect(result.current.chat?.id).toBe('chat-2')
   })
+
+  /*
+   * A rewind re-reads the log, and the read can still be on its way when the
+   * tab changes. Landing after the switch, it drew the conversation left
+   * behind into the one now in front.
+   */
+  it('keeps a log re-read after a rewind out of the conversation switched to', async () => {
+    const first = chat()
+    const second = chat({ id: 'chat-2' })
+    const kept: ChatEntry = { role: 'user', at: '2026-08-11T09:00:00.000Z', text: 'the first one' }
+    const other: ChatEntry = { role: 'user', at: '2026-08-11T09:00:00.000Z', text: 'the second' }
+    vi.mocked(octopus().chats.history).mockResolvedValue({ ok: true, value: [kept] })
+    const { result, rerender } = renderHook(
+      ({ record }: { record: Chat }) =>
+        useChat(record, 'planner/anna', 'idle', describeFailure, noted),
+      { initialProps: { record: first } }
+    )
+    await waitFor(() => {
+      expect(result.current.entries).toEqual([kept])
+    })
+
+    const reread = held<Result<ChatEntry[]>>()
+    vi.mocked(octopus().chats.history).mockReturnValueOnce(reread.promise)
+    emitAgentEvent({ type: 'conversation_rewound', messageId: 'm-1' })
+
+    vi.mocked(octopus().chats.history).mockResolvedValue({ ok: true, value: [other] })
+    rerender({ record: second })
+    await waitFor(() => {
+      expect(result.current.entries).toEqual([other])
+    })
+
+    await act(async () => {
+      reread.resolve({ ok: true, value: [] })
+      await reread.promise
+    })
+
+    expect(result.current.entries).toEqual([other])
+  })
 })
 
 describe('a turn already in flight when the pane opens', () => {
