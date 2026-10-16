@@ -86,7 +86,7 @@ export function installOctopusStub(): Api {
           skippedLinks: 0
         })
       ),
-      send: vi.fn(() => ok(undefined)),
+      send: vi.fn(() => ok<string | null>(null)),
       interrupt: vi.fn(() => ok(undefined)),
       setWorkingMode: vi.fn(() => ok(undefined)),
       setPlanMode: vi.fn(() => ok(undefined)),
