@@ -33,7 +33,11 @@ interface UseWorkspaces {
    * the row would otherwise only catch up when the next turn ended.
    */
   readonly setChats: (workspaceId: string, chats: readonly WorkspaceChat[]) => void
-  readonly create: (projectId: string) => Promise<void>
+  /**
+   * Makes a workspace in a project, answering with its id — or null where
+   * nothing was made, a second press included, so the caller can open it.
+   */
+  readonly create: (projectId: string) => Promise<string | null>
   /**
    * Whether a workspace is being made right now.
    *
@@ -262,7 +266,7 @@ export function useWorkspaces(
        * has already claimed and fails on a path that exists. A refusal the user
        * did nothing to earn.
        */
-      if (creatingRef.current) return
+      if (creatingRef.current) return null
       creatingRef.current = true
       setCreating(true)
 
@@ -271,13 +275,20 @@ export function useWorkspaces(
         const result = await window.octopus.workspaces.create(projectId)
         if (!result.ok) {
           onError(describeFailure(result))
-          return
+          return null
         }
 
+        /*
+         * Read before answering, so the workspace the caller opens is already
+         * in the list it draws from.
+         *
+         * No rename here any more. It went straight into one while the name was
+         * a placeholder — but what somebody knows at this moment is the task,
+         * and that goes into the conversation the caller now opens. The name
+         * can be changed whenever it is worth it.
+         */
         await refresh()
-        // Straight into rename: the generated name is a placeholder, and this is
-        // the moment the user knows what the task is.
-        setEditingId(result.value.id)
+        return result.value.id
       } finally {
         creatingRef.current = false
         setCreating(false)

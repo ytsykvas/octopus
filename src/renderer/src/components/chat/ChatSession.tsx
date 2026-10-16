@@ -5,6 +5,7 @@ import { type Chat, type Effort, opusPlanSplit, type WorkingMode } from '@core/c
 import { latestTodos } from '@core/todos.js'
 import type { WorkspaceView } from '@core/workspaces.js'
 
+import { EnvProfileSwitch } from '../EnvProfileSwitch.js'
 import { Placeholder } from '../Placeholder.js'
 import { useAttachments } from '../../hooks/useAttachments.js'
 import { useChat } from '../../hooks/useChat.js'
@@ -14,6 +15,7 @@ import type { PullRequestQuoteController } from '../../hooks/usePullRequestQuote
 import { type ChatNote, mergeNotes } from './attachments.js'
 import { useErrorMessage } from '../../hooks/useErrorMessage.js'
 import { useCommands } from '../../hooks/useCommands.js'
+import { useEnvProfiles } from '../../hooks/useEnvProfiles.js'
 import { useConfirm } from '../../hooks/useConfirm.js'
 import { useModels } from '../../hooks/useModels.js'
 import { useRateLimit } from '../../hooks/useRateLimit.js'
@@ -71,6 +73,12 @@ interface ChatSessionProps {
   readonly defaultPlanModel: string | null
   /** Opens the settings on skills, for a conversation that has none to switch. */
   readonly onOpenSkillSettings: () => void
+  /** The workspace was just made, so this conversation's field takes the caret. */
+  readonly focusComposer: boolean
+  /** The set of variables the project uses, until the list is read. */
+  readonly projectEnvProfile: string
+  /** The workspace's record changed, and the list should be read again. */
+  readonly onWorkspacesChanged: () => void
 }
 
 /**
@@ -94,7 +102,10 @@ export function ChatSession({
   defaultEffort,
   defaultModel,
   defaultPlanModel,
-  onOpenSkillSettings
+  onOpenSkillSettings,
+  focusComposer,
+  projectEnvProfile,
+  onWorkspacesChanged
 }: ChatSessionProps): React.JSX.Element {
   const { t } = useTranslation()
 
@@ -111,6 +122,23 @@ export function ChatSession({
   // that looking at another tab does not throw the edits away.
   const [planEdit, setPlanEdit] = useState<{ requestId: string; text: string } | null>(null)
   const describeFailure = useErrorMessage()
+  /*
+   * Read here as well as in the Run row: the first message is where a task
+   * starts, and whether the work behind it runs against production or staging
+   * data is a question for that moment, not for after the build. One hook, so
+   * the two places cannot disagree about what is stored.
+   *
+   * A failure goes to the conversation's own banner, which is the news about
+   * this workspace on screen; clearing is left to the banner's own owners.
+   */
+  const env = useEnvProfiles(
+    workspace.projectId,
+    projectEnvProfile,
+    (message) => {
+      if (message !== null) setNotice(message)
+    },
+    onWorkspacesChanged
+  )
   const chat = useChat(tab.record, workspace.id, tab.status, describeFailure, onOpened)
 
   // Held against the entries, like the log's own walks: this reads the whole
@@ -293,7 +321,26 @@ export function ChatSession({
         !chat.busy &&
         chat.streaming.text === '' &&
         chat.streaming.thinking === '' ? (
-          <Placeholder title={t('chat.emptyTitle')}>{t('chat.emptyBody')}</Placeholder>
+          <Placeholder
+            title={t('chat.emptyTitle')}
+            actions={
+              /* Nothing to choose with a single set, so nothing is drawn. */
+              env.profiles.length > 1 ? (
+                <>
+                  <span className="text-ink-faint text-[11px]">{t('chat.envLabel')}</span>
+                  <EnvProfileSwitch
+                    profiles={env.profiles}
+                    value={workspace.envProfile ?? env.projectDefault}
+                    onChange={(name) => {
+                      void env.setWorkspaceProfile(workspace.id, name)
+                    }}
+                  />
+                </>
+              ) : undefined
+            }
+          >
+            {t('chat.emptyBody')}
+          </Placeholder>
         ) : (
           <ChatLog
             entries={chat.entries}
@@ -375,6 +422,7 @@ export function ChatSession({
       <Composer
         initialDraft={draft}
         onDraftLeave={onDraftLeave}
+        focusOnMount={focusComposer}
         busy={chat.busy}
         workingMode={workingMode}
         planMode={record?.planMode ?? false}

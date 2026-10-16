@@ -100,6 +100,17 @@ export function App(): React.JSX.Element {
   const [checkingGitHub, setCheckingGitHub] = useState(false)
   const [selectedWorkspaceId, setSelectedWorkspaceId] = useState<string | null>(null)
   const [editingProjectId, setEditingProjectId] = useState<string | null>(null)
+  /*
+   * The workspace just made here, whose composer takes the focus.
+   *
+   * Only until the selection leaves it: coming back to a workspace later is
+   * not the moment its task is being written, and a field that grabbed the
+   * caret on every visit would take it from wherever somebody was typing.
+   */
+  const [freshWorkspaceId, setFreshWorkspaceId] = useState<string | null>(null)
+  if (freshWorkspaceId !== null && freshWorkspaceId !== selectedWorkspaceId) {
+    setFreshWorkspaceId(null)
+  }
 
   /*
    * The error banner follows the selection out, and no further.
@@ -124,6 +135,27 @@ export function App(): React.JSX.Element {
 
   const projects = useProjects(confirm, setError)
   const workspaces = useWorkspaces(projects.all, confirm, setError)
+
+  /*
+   * Makes a workspace and opens it on its empty conversation.
+   *
+   * It used to land in the list, unselected, with its name open for editing —
+   * but what somebody knows at this moment is the task, not a name for it. So
+   * the conversation opens with its field taking the caret, and the set of
+   * variables it will run against can be chosen right there, before the
+   * first message.
+   */
+  const createWorkspace = useCallback(
+    async (projectId: string) => {
+      const made = await workspaces.create(projectId)
+      if (made === null) return
+
+      setSelectedProjectId(projectId)
+      setSelectedWorkspaceId(made)
+      setFreshWorkspaceId(made)
+    },
+    [workspaces]
+  )
   // Held here because the diff writes the notes and the composer sends them,
   // and the two panes are siblings that know nothing of each other.
   const diffComments = useDiffComments(selectedWorkspaceId)
@@ -419,7 +451,7 @@ export function App(): React.JSX.Element {
 
       if (event.metaKey && event.shiftKey && event.key.toLowerCase() === 'n') {
         event.preventDefault()
-        if (selectedProjectId !== null) void workspaces.create(selectedProjectId)
+        if (selectedProjectId !== null) void createWorkspace(selectedProjectId)
         return
       }
 
@@ -469,7 +501,15 @@ export function App(): React.JSX.Element {
     return () => {
       window.removeEventListener('keydown', onKey)
     }
-  }, [selectedProjectId, workspaces, projects, updateConfig, showPullRequests, chatTabs])
+  }, [
+    selectedProjectId,
+    workspaces,
+    projects,
+    updateConfig,
+    showPullRequests,
+    chatTabs,
+    createWorkspace
+  ])
 
   const selectedProject = projects.all.find((project) => project.id === selectedProjectId) ?? null
   const projectWorkspaces = selectedProject
@@ -751,7 +791,7 @@ export function App(): React.JSX.Element {
                   // which only renders with a project — the guard is for the
                   // type, and no interaction reaches its other branch.
                   /* v8 ignore next */
-                  if (selectedProject) void workspaces.create(selectedProject.id)
+                  if (selectedProject) void createWorkspace(selectedProject.id)
                 }}
                 creating={workspaces.creating}
                 onRenameWorkspace={(id, name) => void workspaces.rename(id, name)}
@@ -805,7 +845,7 @@ export function App(): React.JSX.Element {
             <WorkspacePane
               hasWorkspaces={projectWorkspaces.length > 0}
               creating={workspaces.creating}
-              onCreate={() => void workspaces.create(selectedProject.id)}
+              onCreate={() => void createWorkspace(selectedProject.id)}
             />
           ) : (
             <Chat
@@ -829,6 +869,11 @@ export function App(): React.JSX.Element {
               defaultPlanModel={defaultPlanModel}
               onOpenSkillSettings={() => {
                 setSettingsSection('skills')
+              }}
+              focusComposer={selectedWorkspace.id === freshWorkspaceId}
+              projectEnvProfile={selectedProject.envProfile}
+              onWorkspacesChanged={() => {
+                void workspaces.refresh()
               }}
             />
           )}

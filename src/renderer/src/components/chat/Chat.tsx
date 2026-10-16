@@ -52,6 +52,12 @@ interface ChatProps {
   readonly defaultPlanModel: string | null
   /** Opens the settings on skills — the way out of an empty skills panel. */
   readonly onOpenSkillSettings: () => void
+  /** The workspace was just made here, so its composer takes the caret. */
+  readonly focusComposer: boolean
+  /** The set of variables the workspace's project uses, until the list is read. */
+  readonly projectEnvProfile: string
+  /** The workspace's record changed — the set it runs with — and the list should be read again. */
+  readonly onWorkspacesChanged: () => void
 }
 
 /**
@@ -83,7 +89,10 @@ export function Chat({
   defaultEffort,
   defaultModel,
   defaultPlanModel,
-  onOpenSkillSettings
+  onOpenSkillSettings,
+  focusComposer,
+  projectEnvProfile,
+  onWorkspacesChanged
 }: ChatProps): React.JSX.Element {
   const { t } = useTranslation()
   const [reviewing, setReviewing] = useState(false)
@@ -201,6 +210,9 @@ export function Chat({
           defaultModel={defaultModel}
           defaultPlanModel={defaultPlanModel}
           onOpenSkillSettings={onOpenSkillSettings}
+          focusComposer={focusComposer && tab.key === tabs.activeKey}
+          projectEnvProfile={projectEnvProfile}
+          onWorkspacesChanged={onWorkspacesChanged}
         />
       ))}
     </div>

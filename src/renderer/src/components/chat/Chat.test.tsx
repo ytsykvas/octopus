@@ -35,6 +35,9 @@ function Pane({ workspace = WORKSPACE }: { workspace?: WorkspaceView }): React.J
       defaultModel={null}
       defaultPlanModel={null}
       onOpenSkillSettings={vi.fn()}
+      focusComposer={false}
+      projectEnvProfile="default"
+      onWorkspacesChanged={vi.fn()}
     />
   )
 }

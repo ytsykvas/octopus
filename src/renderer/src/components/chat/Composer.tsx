@@ -43,6 +43,12 @@ interface ComposerProps {
   /** Where the text goes when the composer is left, so it is there on return. */
   readonly onDraftLeave: (text: string) => void
   readonly busy: boolean
+  /**
+   * Takes the caret on mount — for a workspace just made, whose task is the
+   * next thing typed. An effect rather than `autoFocus`, which the linter
+   * refuses for every field because it is wrong for most.
+   */
+  readonly focusOnMount?: boolean
   /** What the agent may do without asking, once it is doing anything. */
   readonly workingMode: WorkingMode
   /** Whether the next message is asked for a plan first. */
@@ -215,7 +221,8 @@ export function Composer({
   onRemoveNote,
   onNotesSent,
   initialDraft,
-  onDraftLeave
+  onDraftLeave,
+  focusOnMount = false
 }: ComposerProps): React.JSX.Element {
   const { t } = useTranslation()
   const [draft, setDraft] = useState(initialDraft)
@@ -257,6 +264,10 @@ export function Composer({
   /** Where the caret goes once the next value has been written, or null. */
   const caretAfterWrite = useRef<number | null>(null)
   const [caret, setCaret] = useState(initialDraft.length)
+
+  useEffect(() => {
+    if (focusOnMount) textarea.current?.focus()
+  }, [focusOnMount])
 
   useEffect(() => {
     if (caretAfterWrite.current === null) return

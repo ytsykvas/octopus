@@ -341,7 +341,7 @@ They run in the same worktree with no locking between them, deliberately (§16).
 
 | Combination | Action                              |
 | ----------- | ----------------------------------- |
-| `⌘⇧N`       | new workspace                       |
+| `⌘⇧N`       | new workspace, opened on its chat   |
 | `⌘1`–`⌘9`   | switch project                      |
 | `⌃1`–`⌃9`   | jump to a workspace                 |
 | `⌥1`–`⌥3`   | switch conversation                 |
