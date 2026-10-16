@@ -1003,19 +1003,37 @@ find it, and by then the empty state that might have carried the button is gone.
 It is a **sibling** of the fold control rather than a child of it, so reaching
 for the env cannot put the build away. It is a menu rather than a button because
 the answers are genuinely different in kind: the variables are typed, the files
-are copied, showing this workspace's env is not an edit at all, and the set of
-variables this workspace runs with is a choice among several. A single button
+are copied, showing this workspace's env is not an edit at all, and following
+the project's set is a choice rather than an edit. A single button
 could only ever reach one of them, and for a project cloned from GitHub that was
 reliably the wrong one — nothing gitignored was ever on GitHub to copy.
 
-**Which set it runs with is on that menu too**, listing the project's named sets
-with the workspace's own marked. The project's choice is the default and
-`Follow the project` is a real entry rather than the absence of a choice, so a
-workspace can be put back on the project's set after being pinned. Choosing one
-while the server is up says so: the header turns the label to warning and the
-pane says the server is still holding the old values, because a header that
-changed silently would be the failure the whole feature exists to prevent,
-pointing the other way.
+**Which set it runs with is a switch in the Run row**, one button per set with
+the one in force pressed, and nothing at all while a project has fewer than two.
+It began inside the `Env` menu and was moved out because it is the question
+asked most — one workspace on production data, the next on staging, a build
+pulling a different dump for each — and a choice that decides which database
+somebody writes to is not one to keep two clicks deep. Every set is drawn
+alike: the app cannot know which name means production. The switch is disabled
+while a build runs, since the build already has its set in its environment.
+
+Pressing the set already in force does nothing rather than pinning to it, which
+would quietly stop the workspace following the project. A press reads the
+workspace list again, because that list is what the switch draws from: without
+it the switch stayed on the old set while the new one was already stored — and
+so did the menu it replaced. `Follow the project`
+stays on the `Env` menu as a real entry rather than the absence of a choice, so
+a workspace can be put back on the project's set after being pinned.
+
+Moving a workspace while it serves says so, in warning colour, on a strip of
+its own under the row — in the row's text it was cut to its first two words,
+since the row then holds the switch and four controls. **Two different
+sentences**, because a restart starts the server again
+without building: where the build ran on the other set, the row says so and
+asks for Stop then Run — a restart would pick up the new `.env` and keep a
+database restored from the other environment's dump. Only where nothing was
+built on the old set does it recommend the restart. Neither is said while
+nothing serves, since the next Run builds again anyway.
 
 **None of that could ever appear**, and it is worth recording why rather than
 leaving the fix looking cosmetic. A second set could only be made through one
@@ -1024,8 +1042,7 @@ replaces at renderer start-up with a function that throws, in dev and in the
 build alike. The throw was the first statement of an async function called as
 `void`, so it produced no dialog, no call and no banner: only a console line.
 Every project therefore held exactly the one set the migration created, and
-`Duplicate`, `Delete`, this menu and the resolved-name suffix on its trigger
-were all unreachable. Every test mocked `window.prompt`, and jsdom supplies a
+`Duplicate`, `Delete` and the choice on this menu were all unreachable. Every test mocked `window.prompt`, and jsdom supplies a
 stub that lets a spy install, so the suite was green and fully covered over a
 path that cannot run outside jsdom.
 

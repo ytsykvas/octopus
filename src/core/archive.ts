@@ -15,7 +15,7 @@ import { execFile } from 'node:child_process'
 import { promisify } from 'node:util'
 
 import type { ResolvedScript } from './repoSource.js'
-import { scriptEnv } from './scriptEnv.js'
+import { scriptEnv, type ScriptValues } from './scriptEnv.js'
 
 const run = promisify(execFile)
 
@@ -39,11 +39,10 @@ const defaultRun: RunScript = async (file, options) => {
 }
 
 /** What the script needs to know about the workspace it is taking apart. */
-export interface ArchiveValues {
-  readonly rootPath: string
-  readonly workspaceName: string
+export interface ArchiveValues extends ScriptValues {
   readonly path: string
-  readonly port: number
+  /** The variables of the set in effect at removal — the only one there is by then. */
+  readonly variables: Readonly<Record<string, string>>
 }
 
 /**
@@ -69,7 +68,9 @@ export async function runArchiveScript(
     // and `kubectl` resolve the way they do in a terminal.
     await runner(script.path, {
       cwd: values.path,
-      env: scriptEnv('archive', values),
+      // Ours last, so a set that names `OCTOPUS_ROOT_PATH` cannot point the
+      // cleanup at somebody else's checkout.
+      env: { ...values.variables, ...scriptEnv('archive', values) },
       timeout: TIMEOUT_MS
     })
     return null

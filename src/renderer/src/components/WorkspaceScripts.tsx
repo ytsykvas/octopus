@@ -54,6 +54,8 @@ interface WorkspaceScriptsProps {
   readonly onOutcome: (workspaceId: string, ok: boolean) => void
   /** Where a run's server actually ended up, which the header links to. */
   readonly onPort?: (workspace: WorkspaceView, port: number) => void
+  /** The set of variables a run here was prepared with, as it starts. */
+  readonly onProfile?: (workspaceId: string, profile: string) => void
   /** A runner that was still going has unmounted. */
   readonly onGone?: (workspaceId: string) => void
   /** Whether a half has something running, whenever that changes. */
@@ -86,6 +88,7 @@ export function WorkspaceScripts({
   stopTokenFor,
   onOutcome,
   onPort,
+  onProfile,
   onRunning,
   onGone
 }: WorkspaceScriptsProps): React.JSX.Element {
@@ -150,6 +153,9 @@ export function WorkspaceScripts({
             onOpenSettings={onOpenSettings}
             onPort={(settled) => {
               onPort?.(workspace, settled)
+            }}
+            onProfile={(profile) => {
+              onProfile?.(workspace.id, profile)
             }}
             onGone={() => {
               onGone?.(workspace.id)

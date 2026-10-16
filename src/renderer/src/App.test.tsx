@@ -1547,6 +1547,50 @@ describe('App', () => {
     expect(window.octopus.workspaces.scripts).toHaveBeenCalledWith('ledger/carol')
   })
 
+  /*
+   * The switch draws from the workspace list, and the set is stored on the
+   * workspace. Nothing read the list again after a press, so the switch stayed
+   * on the old set while the new one was already stored — the one thing a
+   * control naming the environment must never get wrong.
+   */
+  it('moves the environment switch to the set a press stored', async () => {
+    givenTwoProjects()
+    vi.mocked(window.octopus.projects.envProfiles).mockResolvedValue({
+      ok: true,
+      value: { profiles: ['default', 'prod'], projectDefault: 'default' }
+    })
+    let stored: string | null = null
+    vi.mocked(window.octopus.workspaces.setEnvProfile).mockImplementation((_id, name) => {
+      stored = name
+      return Promise.resolve({ ok: true, value: undefined })
+    })
+    vi.mocked(window.octopus.workspaces.list).mockImplementation((projectId: string) =>
+      Promise.resolve({
+        ok: true,
+        value:
+          projectId === 'planner'
+            ? [workspaceView('anna', { envProfile: stored }), workspaceView('bob')]
+            : []
+      })
+    )
+    const user = await openApp()
+    await user.click(await screen.findByRole('button', { name: 'PL' }))
+    await user.click(screen.getByRole('button', { name: 'Scripts' }))
+    await user.click(await screen.findByText('anna'))
+
+    const sets = await screen.findByRole('group', {
+      name: 'Set of variables this workspace runs with'
+    })
+    await user.click(within(sets).getByRole('button', { name: 'prod' }))
+
+    await waitFor(() => {
+      expect(within(sets).getByRole('button', { name: 'prod' })).toHaveAttribute(
+        'aria-pressed',
+        'true'
+      )
+    })
+  })
+
   // A script is written for the first time in the project settings, so the
   // paths are read again the moment that dialog closes.
   it('reads the scripts again after the project settings close', async () => {

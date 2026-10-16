@@ -312,8 +312,47 @@ describe('ScriptRunner', () => {
         env: {
           OCTOPUS_ROOT_PATH: '/Users/test/planner',
           OCTOPUS_WORKSPACE_NAME: 'anna',
-          OCTOPUS_WORKSPACE_SLUG: 'anna'
+          OCTOPUS_WORKSPACE_SLUG: 'anna',
+          OCTOPUS_ENV_PROFILE: 'default'
         }
+      })
+    )
+  })
+
+  /*
+   * A build that pulls a dump wants `$DUMP_URL` in its own environment, and the
+   * name of the set for whatever the variables cannot say. Both come from the
+   * call that wrote the env file, so the two cannot be on different sets.
+   */
+  it('gives the script the set of variables the run was prepared with', async () => {
+    vi.mocked(octopus().workspaces.prepare).mockResolvedValue({
+      ok: true,
+      value: {
+        written: [],
+        missing: [],
+        profile: 'prod',
+        variables: { DUMP_URL: 's3://prod', OCTOPUS_ROOT_PATH: '/elsewhere' }
+      }
+    })
+
+    mountAndStart({
+      workspace: anna,
+      kind: 'setup',
+      script: SETUP_SCRIPT,
+      port: 3111,
+      rootPath: '/Users/test/planner',
+      onOpenSettings: vi.fn()
+    })
+
+    await sessionsOpened(1)
+    expect(octopus().terminal.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        env: expect.objectContaining({
+          DUMP_URL: 's3://prod',
+          OCTOPUS_ENV_PROFILE: 'prod',
+          // Ours win: a set naming the checkout cannot point the build elsewhere.
+          OCTOPUS_ROOT_PATH: '/Users/test/planner'
+        }) as unknown
       })
     )
   })
@@ -477,7 +516,10 @@ describe('ScriptRunner', () => {
     })
     vi.mocked(octopus().workspaces.prepare).mockImplementation(() => {
       order.push('prepare')
-      return Promise.resolve({ ok: true, value: { written: [], missing: [] } })
+      return Promise.resolve({
+        ok: true,
+        value: { written: [], missing: [], profile: 'default', variables: {} }
+      })
     })
 
     const { rerender } = mountAndStart({
@@ -647,7 +689,10 @@ describe('ScriptRunner', () => {
       () =>
         new Promise((resolve) => {
           release = () => {
-            resolve({ ok: true, value: { written: [], missing: [] } })
+            resolve({
+              ok: true,
+              value: { written: [], missing: [], profile: 'default', variables: {} }
+            })
           }
         })
     )
@@ -764,7 +809,10 @@ describe('ScriptRunner', () => {
     })
     vi.mocked(octopus().workspaces.prepare).mockImplementation(() => {
       order.push('prepare')
-      return Promise.resolve({ ok: true, value: { written: [], missing: [] } })
+      return Promise.resolve({
+        ok: true,
+        value: { written: [], missing: [], profile: 'default', variables: {} }
+      })
     })
 
     mountAndStart({
@@ -806,7 +854,12 @@ describe('ScriptRunner', () => {
   it('names a file it could not carry and runs anyway', async () => {
     vi.mocked(octopus().workspaces.prepare).mockResolvedValue({
       ok: true,
-      value: { written: ['.env'], missing: ['config/master.key'] }
+      value: {
+        written: ['.env'],
+        missing: ['config/master.key'],
+        profile: 'default',
+        variables: {}
+      }
     })
 
     mountAndStart({
@@ -829,7 +882,7 @@ describe('ScriptRunner', () => {
   it('says nothing when the whole list was carried', async () => {
     vi.mocked(octopus().workspaces.prepare).mockResolvedValue({
       ok: true,
-      value: { written: ['.env'], missing: [] }
+      value: { written: ['.env'], missing: [], profile: 'default', variables: {} }
     })
 
     mountAndStart({

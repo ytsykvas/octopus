@@ -843,6 +843,9 @@ export function App(): React.JSX.Element {
             scripts={workspaceScripts.scripts}
             scriptFailures={workspaceScripts.failures}
             onScriptsChanged={workspaceScripts.refresh}
+            onWorkspacesChanged={() => {
+              void workspaces.refresh()
+            }}
             /*
              * Per workspace, from its own project's record.
              *

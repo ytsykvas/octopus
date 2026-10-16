@@ -1156,7 +1156,7 @@ describe('scripts and instructions of a real project', () => {
     // has to stay harmless.
     await expect(invoke('workspace:prepare', workspace.id)).resolves.toEqual({
       ok: true,
-      value: { written: [], missing: [] }
+      value: { written: [], missing: [], profile: 'default', variables: {} }
     })
   })
 

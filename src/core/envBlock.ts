@@ -9,7 +9,7 @@
  * rule in the other direction").
  */
 
-import { scriptEnv } from './scriptEnv.js'
+import { scriptEnv, type ScriptValues } from './scriptEnv.js'
 
 /**
  * The file the block goes into where a project has not said otherwise.
@@ -31,13 +31,10 @@ export const OPEN = '# >>> octopus: project overrides'
 export const CLOSE = '# <<< octopus'
 
 /** What a workspace the block is being written for is worth knowing about. */
-export interface WorkspaceValues {
+export interface WorkspaceValues extends ScriptValues {
   readonly path: string
   /** Which file to write, relative to the worktree. */
   readonly envFile: string
-  readonly rootPath: string
-  readonly workspaceName: string
-  readonly port: number
 }
 
 /**
@@ -80,7 +77,7 @@ export function withoutMarkers(body: string): string {
     .join('\n')
 }
 
-export function substituteEnv(body: string, values: WorkspaceValues): string {
+export function substituteEnv(body: string, values: ScriptValues): string {
   const table = scriptEnv('run', values)
   const swap = (whole: string, name: string): string => table[name] ?? whole
 
@@ -165,6 +162,91 @@ export function checkEnvBody(body: string): EnvProblem[] {
 }
 
 /**
+ * A block as the name-to-value table a script's environment is built from.
+ *
+ * The scripts are given the variables themselves, not only the file they were
+ * written into: a build that pulls a dump wants `$DUMP_URL`, and asking every
+ * script to source `.env` first — with whatever quoting its shell disagrees
+ * with dotenv about — is a step each one would get wrong differently.
+ *
+ * **Only what reads the same here as in dotenv.** The server starts with these
+ * already in its environment, and dotenv, Vite and Ruby's `Dotenv.load` all
+ * leave a variable that is already there alone — so a value read differently
+ * here would beat the right one in the file. What is certain is kept: `export`
+ * allowed, a value in matching quotes taken between them, an unquoted value cut
+ * at its first `#` (both the Node and the Ruby dotenv do that), the last of a
+ * repeated name winning. What is not is **left out**, and still reaches the file
+ * untouched, where the app reads it correctly:
+ *
+ * - a quote that does not close on its line — a multi-line value, a PEM key —
+ *   and every line up to the one that closes it, which would otherwise be read
+ *   as assignments of their own (a base64 line ending `==` passes `KEY`);
+ * - a backtick-quoted value, and text after a closing quote;
+ * - a `\` in double quotes, where dotenv turns `\n` into a newline;
+ * - a `$` outside single quotes once our own names are filled in, where
+ *   dotenv-expand and the Ruby dotenv expand another variable.
+ *
+ * A `Map` on the way, because `__proto__` passes `KEY` and assigning it to a
+ * plain object sets the prototype instead of a variable.
+ */
+export function parseEnvBody(body: string): Record<string, string> {
+  const parsed = new Map<string, string>()
+  // The quote a multi-line value opened and has not closed yet.
+  let open: string | null = null
+
+  for (const raw of body.split('\n')) {
+    if (open !== null) {
+      if (raw.includes(open)) open = null
+      continue
+    }
+
+    const text = raw.trim().replace(EXPORT, '')
+    // Our markers start with `#`, so they go with the comments.
+    if (text === '' || text.startsWith('#')) continue
+
+    const equals = text.indexOf('=')
+    if (equals === -1) continue
+
+    const value = text.slice(equals + 1).trim()
+    const quote = value.charAt(0)
+    // Before the name is judged: a line that opens a value spanning several
+    // has to be followed to its end whatever its name is.
+    if (QUOTES.includes(quote) && !value.includes(quote, 1)) {
+      open = quote
+      continue
+    }
+
+    const name = text.slice(0, equals).trim()
+    const read = readValue(value)
+    if (KEY.test(name) && read !== null) parsed.set(name, read)
+  }
+
+  return Object.fromEntries(parsed)
+}
+
+/** The quotes dotenv lets a value span lines in. */
+const QUOTES = ['"', "'", '`']
+
+/** One single-line value as dotenv reads it, or null where that is not certain. */
+function readValue(value: string): string | null {
+  const quote = value.charAt(0)
+
+  if (QUOTES.includes(quote)) {
+    const closing = value.indexOf(quote, 1)
+    const inner = value.slice(1, closing)
+    const after = value.slice(closing + 1).trim()
+
+    if (quote === '`' || (after !== '' && !after.startsWith('#'))) return null
+    if (quote === '"' && (inner.includes('\\') || inner.includes('$'))) return null
+    return inner
+  }
+
+  const comment = value.indexOf('#')
+  const plain = (comment === -1 ? value : value.slice(0, comment)).trim()
+  return plain.includes('$') ? null : plain
+}
+
+/**
  * The `$OCTOPUS_…` names in a value that are not ours to replace.
  *
  * A typo here is invisible: nothing fails, the literal text reaches the file,
@@ -172,7 +254,7 @@ export function checkEnvBody(body: string): EnvProblem[] {
  */
 function unknownReferences(value: string): string[] {
   // The values do not matter, only which names exist.
-  const known = scriptEnv('run', { rootPath: '', workspaceName: '', port: 0 })
+  const known = scriptEnv('run', { rootPath: '', workspaceName: '', port: 0, profile: '' })
 
   const found: string[] = []
   const collect = (whole: string, name: string): string => {

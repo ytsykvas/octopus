@@ -257,7 +257,8 @@ out.
 
 Variables reach a script under `OCTOPUS_*` names: `$OCTOPUS_PORT` (plus
 `$OCTOPUS_PORT_1`…`_9`) for the server only, and `OCTOPUS_ROOT_PATH`,
-`OCTOPUS_WORKSPACE_NAME` and `OCTOPUS_WORKSPACE_SLUG` for all three. Dev values
+`OCTOPUS_WORKSPACE_NAME`, `OCTOPUS_WORKSPACE_SLUG` and `OCTOPUS_ENV_PROFILE` for
+all three, along with the variables of the set in effect. Dev values
 appended to `.env` inside `setup.sh` belong in the env block instead — which
 stays out of the repository.
 

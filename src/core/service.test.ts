@@ -32,7 +32,7 @@ import { MAX_CLOSED_CHATS_PER_WORKSPACE } from './chats.js'
 import type { RemoteRepository } from './github.js'
 import { type GitOptions, gitIn } from './git.js'
 import { WORKSPACE_NAMES } from './names.js'
-import { skillsDirOf } from './paths.js'
+import { projectEnvProfile, skillsDirOf } from './paths.js'
 import { ProjectValidationError } from './projects.js'
 import {
   type ChatEvent,
@@ -1763,7 +1763,7 @@ describe('env overrides a project adds', () => {
     await expect(readFile(join(workspace.path, '.env'), 'utf8')).resolves.toContain('OVERRIDE=1')
 
     await writeFile(join(repo, '.env'), 'DATABASE_URL=postgres://real\n', 'utf8')
-    await expect(service.prepareWorkspace(workspace.id)).resolves.toEqual({
+    await expect(service.prepareWorkspace(workspace.id)).resolves.toMatchObject({
       written: ['.env'],
       missing: []
     })
@@ -2210,6 +2210,47 @@ describe('the cleanup script', () => {
     await expect(service.listWorkspaces(project.id)).resolves.toHaveLength(0)
   })
 
+  // It takes back what the build made, and the build was told the set.
+  it('is given the set the workspace is on, and its variables', async () => {
+    const repo = join(dir, 'planner')
+    await initRepo(repo)
+    const project = await service.addProjectFromPath(repo)
+    const workspace = await service.createWorkspaceIn(project.id)
+    await service.createEnvProfile(project.id, 'prod', null)
+    await service.saveEnvProfile(project.id, 'prod', 'DB_HOST=prod.example\n')
+    await service.setWorkspaceEnvProfile(workspace.id, 'prod')
+
+    const marker = join(dir, 'archived.txt')
+    await service.saveProjectScript(
+      project.id,
+      'archive',
+      `#!/bin/sh\nprintf '%s %s' "$OCTOPUS_ENV_PROFILE" "$DB_HOST" > '${marker}'\n`
+    )
+
+    await service.removeWorkspaceById(workspace.id, { deleteBranch: false })
+
+    await expect(readFile(marker, 'utf8')).resolves.toBe('prod prod.example')
+  })
+
+  it('is given the set when the whole project goes, too', async () => {
+    const repo = join(dir, 'planner')
+    await initRepo(repo)
+    const project = await service.addProjectFromPath(repo)
+    await service.createWorkspaceIn(project.id)
+    await service.saveEnvProfile(project.id, 'default', 'DB_HOST=dev.example\n')
+
+    const marker = join(dir, 'archived-project.txt')
+    await service.saveProjectScript(
+      project.id,
+      'archive',
+      `#!/bin/sh\nprintf '%s %s' "$OCTOPUS_ENV_PROFILE" "$DB_HOST" > '${marker}'\n`
+    )
+
+    await service.removeProjectById(project.id)
+
+    await expect(readFile(marker, 'utf8')).resolves.toBe('default dev.example')
+  })
+
   /*
    * A workspace that cannot be deleted because a cleanup script is broken is a
    * worse problem than the one being cleaned up.
@@ -2423,6 +2464,56 @@ describe('sets of variables', () => {
     const written = await readFile(join(workspace?.path ?? '', '.env'), 'utf8')
     expect(written).toContain('xibodb42')
     expect(written).not.toContain('MYSQL_DATABASE=xibodb\n')
+  })
+
+  it("answers with the set's variables, for the scripts about to start", async () => {
+    // A build that pulls a dump wants `$DUMP_URL` in its own environment, and
+    // the name for a `case` on what the variables cannot say.
+    const { projectId, workspaceId } = await withWorkspace()
+    await service.saveEnvProfile(projectId, 'default', 'DUMP_URL=s3://staging\n')
+    await service.createEnvProfile(projectId, 'prod', null)
+    await service.saveEnvProfile(
+      projectId,
+      'prod',
+      'DUMP_URL=s3://prod\nAPP_URL="http://localhost:$OCTOPUS_PORT"\n'
+    )
+    await service.setWorkspaceEnvProfile(workspaceId, 'prod')
+
+    const prepared = await service.prepareWorkspace(workspaceId)
+
+    const workspace = (await service.listWorkspaces(projectId)).find((w) => w.id === workspaceId)
+    expect(prepared).toMatchObject({
+      profile: 'prod',
+      variables: {
+        DUMP_URL: 's3://prod',
+        APP_URL: `http://localhost:${String(workspace?.port)}`
+      }
+    })
+  })
+
+  it("answers with the project's set for a workspace that follows it", async () => {
+    const { projectId, workspaceId } = await withWorkspace()
+    await service.saveEnvProfile(projectId, 'default', 'DUMP_URL=s3://staging\n')
+
+    await expect(service.prepareWorkspace(workspaceId)).resolves.toMatchObject({
+      profile: 'default',
+      variables: { DUMP_URL: 's3://staging' }
+    })
+  })
+
+  it('answers with no variables, not the default ones, for a set whose file has gone', async () => {
+    // A workspace on `prod` quietly handed `dev` is the failure the sets exist
+    // to prevent; a build that finds nothing fails on it, loudly.
+    const { projectId, workspaceId } = await withWorkspace()
+    await service.saveEnvProfile(projectId, 'default', 'DUMP_URL=s3://staging\n')
+    await service.createEnvProfile(projectId, 'prod', null)
+    await service.setWorkspaceEnvProfile(workspaceId, 'prod')
+    await rm(projectEnvProfile(projectId, 'prod', join(dir, 'data')))
+
+    const prepared = await service.prepareWorkspace(workspaceId)
+    expect(prepared.profile).toBe('prod')
+    // Exactly empty: `{}` inside a `toMatchObject` matches the default set too.
+    expect(prepared.variables).toEqual({})
   })
 
   it('goes back to following the project', async () => {
@@ -2792,7 +2883,9 @@ describe('files carried into a workspace', () => {
 
     await expect(service.prepareWorkspace(workspace.id)).resolves.toEqual({
       written: [],
-      missing: ['not-there']
+      missing: ['not-there'],
+      profile: 'default',
+      variables: {}
     })
   })
 
@@ -2807,7 +2900,9 @@ describe('files carried into a workspace', () => {
 
     await expect(service.prepareWorkspace(workspace.id)).resolves.toEqual({
       written: ['later.txt'],
-      missing: []
+      missing: [],
+      profile: 'default',
+      variables: {}
     })
     await expect(readFile(join(workspace.path, 'later.txt'), 'utf8')).resolves.toBe('hello\n')
   })
@@ -2822,7 +2917,9 @@ describe('files carried into a workspace', () => {
 
     await expect(service.prepareWorkspace(workspace.id)).resolves.toEqual({
       written: [],
-      missing: []
+      missing: [],
+      profile: 'default',
+      variables: {}
     })
     await expect(readFile(join(workspace.path, '.env'), 'utf8')).resolves.toBe('FROM=hand\n')
   })

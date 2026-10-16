@@ -35,6 +35,13 @@ interface ScriptRunnerProps {
    */
   readonly onPort?: (port: number) => void
   /**
+   * The set of variables a run was prepared with, as it starts.
+   *
+   * Said by the half rather than worked out above it, because this is the one
+   * place that knows what the env file and the script were actually given.
+   */
+  readonly onProfile?: (profile: string) => void
+  /**
    * This half has gone while its process was still running.
    *
    * A build is only ever left behind by a runner reporting it finished, so an
@@ -79,6 +86,7 @@ export function ScriptRunner({
   rootPath,
   onOpenSettings,
   onPort,
+  onProfile,
   onGone,
   onRunning,
   startToken = 0,
@@ -110,6 +118,7 @@ export function ScriptRunner({
       port={port}
       rootPath={rootPath}
       onPort={onPort}
+      onProfile={onProfile}
       onGone={onGone}
       onRunning={onRunning}
       startToken={startToken}
@@ -126,6 +135,7 @@ interface RunnerProps {
   readonly port: number
   readonly rootPath: string
   readonly onPort: ((port: number) => void) | undefined
+  readonly onProfile: ((profile: string) => void) | undefined
   readonly onGone: (() => void) | undefined
   readonly onRunning: ((running: boolean) => void) | undefined
   readonly startToken: number
@@ -148,6 +158,7 @@ function Runner({
   port: recordedPort,
   rootPath,
   onPort,
+  onProfile,
   onGone,
   onRunning,
   startToken,
@@ -185,6 +196,18 @@ function Runner({
    * environment.
    */
   const [port, setPort] = useState(recordedPort)
+  /*
+   * The set of variables this run was prepared with, for the script's own
+   * environment.
+   *
+   * Answered by the same call that wrote them into the env file, so the file
+   * and the process cannot be on two different sets. Empty until then, which
+   * is never seen: the terminal is only drawn once a run has begun.
+   */
+  const [envSet, setEnvSet] = useState<{
+    readonly profile: string
+    readonly variables: Readonly<Record<string, string>>
+  }>({ profile: '', variables: {} })
 
   /*
    * Whether this half is still going, as an unmount can read it.
@@ -317,6 +340,8 @@ function Runner({
 
       setError(null)
       setMissing(carried.value.missing)
+      setEnvSet({ profile: carried.value.profile, variables: carried.value.variables })
+      onProfile?.(carried.value.profile)
       begin()
     })()
   }
@@ -435,7 +460,17 @@ function Runner({
             cwd={workspace.path}
             owner={{ workspaceId: workspace.id, purpose: kind }}
             command={[script.path]}
-            env={scriptEnv(kind, { rootPath, workspaceName: workspace.name, port })}
+            // Ours last, so a set that names `OCTOPUS_PORT` cannot move the
+            // server off the port this workspace owns.
+            env={{
+              ...envSet.variables,
+              ...scriptEnv(kind, {
+                rootPath,
+                workspaceName: workspace.name,
+                port,
+                profile: envSet.profile
+              })
+            }}
             onExit={(exitCode) => {
               setRunning(false)
               onOutcome?.(exitCode === 0)

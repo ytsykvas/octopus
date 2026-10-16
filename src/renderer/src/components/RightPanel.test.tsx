@@ -103,6 +103,7 @@ function renderPanel(overrides: Partial<Props> = {}): {
     scripts: new Map(),
     scriptFailures: new Map(),
     onScriptsChanged: vi.fn(),
+    onWorkspacesChanged: vi.fn(),
     // Per workspace, so a runner from another project keeps its own checkout.
     projectFor: () => ({
       rootPath: '/Users/test/planner',
@@ -482,15 +483,24 @@ describe('RightPanel', () => {
    * and offers the same way in.
    */
   describe('the set of variables a workspace runs with', () => {
+    const SWITCH = 'Set of variables this workspace runs with'
+
+    /** The row of set names in the Run row, once the list has landed. */
+    async function envSwitch(): Promise<HTMLElement> {
+      return screen.findByRole('group', { name: SWITCH })
+    }
+
     beforeEach(() => {
+      // `default` because that is what `projectFor` says the project is on,
+      // which is what a real project record and its list always agree about.
       vi.mocked(octopus().projects.envProfiles).mockResolvedValue({
         ok: true,
-        value: { profiles: ['dev', 'prod'], projectDefault: 'dev' }
+        value: { profiles: ['default', 'prod'], projectDefault: 'default' }
       })
     })
 
     it('says nothing while a project has only one set', async () => {
-      // A project that has never named a second one sees exactly the menu it
+      // A project that has never named a second one sees exactly the pane it
       // always had.
       vi.mocked(octopus().projects.envProfiles).mockResolvedValue({
         ok: true,
@@ -499,32 +509,39 @@ describe('RightPanel', () => {
       renderPanel({ workspaces: [anna], activeWorkspaceId: anna.id, scripts: SCRIPTS })
       await userEvent.click(scriptsTab())
 
+      await waitFor(() => {
+        expect(octopus().projects.envProfiles).toHaveBeenCalled()
+      })
+      expect(screen.queryByRole('group', { name: SWITCH })).not.toBeInTheDocument()
       expect(within(buildSection()).getByRole('button', { name: 'Env' })).toBeInTheDocument()
     })
 
     it('says nothing when the list could not be read', async () => {
-      // A name the app is not sure of is worse than no name: the suffix is a
-      // claim about what the next run will use.
+      // A set the app is not sure exists is worse than no switch: pressing it
+      // would pin a workspace to a name that may not be there.
       vi.mocked(octopus().projects.envProfiles).mockResolvedValue({ ok: false, error: 'gone' })
       renderPanel({ workspaces: [anna], activeWorkspaceId: anna.id, scripts: SCRIPTS })
       await userEvent.click(scriptsTab())
 
-      expect(within(buildSection()).getByRole('button', { name: 'Env' })).toBeInTheDocument()
+      await waitFor(() => {
+        expect(octopus().projects.envProfiles).toHaveBeenCalled()
+      })
+      expect(screen.queryByRole('group', { name: SWITCH })).not.toBeInTheDocument()
     })
 
-    it('names the set in force, whether it is followed or chosen', async () => {
+    it('shows the set in force for a workspace that follows the project', async () => {
       renderPanel({ workspaces: [anna], activeWorkspaceId: anna.id, scripts: SCRIPTS })
       await userEvent.click(scriptsTab())
 
-      // The project's, because this workspace follows it — and the same word
-      // would be there if it had been chosen. "What am I about to run with" has
-      // one answer either way.
-      // Read off the element rather than matched as an accessible name: the
-      // separator is a middle dot, and name matching normalises around it.
-      const env = within(buildSection()).getByRole('button', { name: /^Env/ })
-      await waitFor(() => {
-        expect(env).toHaveTextContent('Env · dev')
-      })
+      const sets = await envSwitch()
+      expect(within(sets).getByRole('button', { name: 'default' })).toHaveAttribute(
+        'aria-pressed',
+        'true'
+      )
+      expect(within(sets).getByRole('button', { name: 'prod' })).toHaveAttribute(
+        'aria-pressed',
+        'false'
+      )
     })
 
     it('shows the workspace on its own set', async () => {
@@ -532,49 +549,72 @@ describe('RightPanel', () => {
       renderPanel({ workspaces: [pinned], activeWorkspaceId: pinned.id, scripts: SCRIPTS })
       await userEvent.click(scriptsTab())
 
-      const env = within(buildSection()).getByRole('button', { name: /^Env/ })
-      await waitFor(() => {
-        expect(env).toHaveTextContent('Env · prod')
-      })
+      expect(within(await envSwitch()).getByRole('button', { name: 'prod' })).toHaveAttribute(
+        'aria-pressed',
+        'true'
+      )
     })
 
-    it('puts a workspace on one, and back to following', async () => {
-      const onScriptsChanged = vi.fn()
+    it('puts a workspace on a set with one press, and back to following from the menu', async () => {
+      const onWorkspacesChanged = vi.fn()
       renderPanel({
         workspaces: [anna],
         activeWorkspaceId: anna.id,
         scripts: SCRIPTS,
-        onScriptsChanged
+        onWorkspacesChanged
       })
       await userEvent.click(scriptsTab())
 
-      // The list arrives from the service, and the menu has no profiles in it
-      // until it has: the suffix is the cheapest proof that it landed.
-      const env = within(buildSection()).getByRole('button', { name: /^Env/ })
-      await waitFor(() => {
-        expect(env).toHaveTextContent('Env · dev')
-      })
+      const sets = await envSwitch()
+      // The one already in force is not a change, and pinning to it would
+      // silently stop the workspace following the project.
+      await userEvent.click(within(sets).getByRole('button', { name: 'default' }))
+      expect(octopus().workspaces.setEnvProfile).not.toHaveBeenCalled()
 
-      await userEvent.click(env)
-      await userEvent.click(screen.getByRole('menuitemradio', { name: 'prod' }))
+      await userEvent.click(within(sets).getByRole('button', { name: 'prod' }))
       expect(octopus().workspaces.setEnvProfile).toHaveBeenCalledWith(anna.id, 'prod')
 
-      await userEvent.click(env)
+      await userEvent.click(within(buildSection()).getByRole('button', { name: 'Env' }))
       await userEvent.click(screen.getByRole('menuitemradio', { name: /Follow the project/ }))
       expect(octopus().workspaces.setEnvProfile).toHaveBeenLastCalledWith(anna.id, null)
 
+      // The list is what the switch draws from; read again, it moves.
       await waitFor(() => {
-        expect(onScriptsChanged).toHaveBeenCalled()
+        expect(onWorkspacesChanged).toHaveBeenCalledTimes(2)
       })
     })
 
-    it('says the server is still on the previous set after a move', async () => {
+    it('keeps the set names out of the Env menu', async () => {
+      // One place to choose, so the two cannot be read as different answers.
+      renderPanel({ workspaces: [anna], activeWorkspaceId: anna.id, scripts: SCRIPTS })
+      await userEvent.click(scriptsTab())
+      await envSwitch()
+
+      await userEvent.click(within(buildSection()).getByRole('button', { name: 'Env' }))
+
+      expect(screen.queryByRole('menuitemradio', { name: 'prod' })).not.toBeInTheDocument()
+      expect(screen.getByRole('menuitemradio', { name: /Follow the project/ })).toBeInTheDocument()
+    })
+
+    it('holds the choice while a build runs', async () => {
+      // The build was handed its set as it started; moving now would leave the
+      // pane naming one environment while the build pulled the other's dump.
+      renderPanel({ workspaces: [anna], activeWorkspaceId: anna.id, scripts: SCRIPTS })
+      await userEvent.click(scriptsTab())
+      const sets = await envSwitch()
+
+      await userEvent.click(screen.getByRole('button', { name: 'Run' }))
+      await sessionsOpened(1)
+
+      expect(within(sets).getByRole('button', { name: 'prod' })).toBeDisabled()
+    })
+
+    it('says the build is on the previous set after a move, and a restart does not fix it', async () => {
       /*
-       * A server reads its `.env` once, at boot. Moving the workspace rewrites
-       * the block on the next run, so until then the header named one
-       * environment while the process held another — the same
-       * silent-wrong-environment failure this feature exists to prevent, only
-       * pointing the other way.
+       * A restart starts the server again without building. It picks up the
+       * new `.env`, while the database the build restored from the other
+       * environment's dump stays — so the warning recommending a restart was
+       * advice that left the workspace on the wrong data, saying all was well.
        */
       const { rerender, props } = renderPanel({
         workspaces: [anna],
@@ -583,14 +623,71 @@ describe('RightPanel', () => {
       })
       await userEvent.click(scriptsTab())
       await userEvent.click(screen.getByRole('button', { name: 'Run' }))
-      // Build first, then the server — the second session is the one that reads
-      // the env and therefore the one this is about.
       await sessionsOpened(1)
       processExits(1)
       await sessionsOpened(2)
 
       const moved = { ...anna, envProfile: 'prod' }
       rerender({ ...props, workspaces: [moved], activeWorkspaceId: moved.id })
+
+      expect(await screen.findByText(/Built with “default”/)).toBeInTheDocument()
+
+      await userEvent.click(screen.getByRole('button', { name: 'Restart' }))
+      await sessionsOpened(3)
+
+      expect(screen.getByText(/stop, then run again to build with “prod”/)).toBeInTheDocument()
+      expect(screen.queryByText(/Restart it to pick up the change/)).not.toBeInTheDocument()
+    })
+
+    it('says the server is still on the previous set where nothing was built', async () => {
+      /*
+       * A server reads its `.env` once, at boot. Moving the workspace rewrites
+       * the block on the next run, so until then the header named one
+       * environment while the process held another. With no build script a
+       * restart is the whole fix, and that is what it says.
+       */
+      const serverOnly = scriptsFor({
+        approved: true,
+        digest: 'digest',
+        scripts: { run: ownScript('run') }
+      })
+      const { rerender, props } = renderPanel({
+        workspaces: [anna],
+        activeWorkspaceId: anna.id,
+        scripts: serverOnly
+      })
+      await userEvent.click(scriptsTab())
+      await userEvent.click(screen.getByRole('button', { name: 'Run' }))
+      await sessionsOpened(1)
+
+      const moved = { ...anna, envProfile: 'prod' }
+      rerender({ ...props, workspaces: [moved], activeWorkspaceId: moved.id })
+
+      expect(await screen.findByText(/Restart it to pick up the change/)).toBeInTheDocument()
+    })
+
+    it('takes the set a server holds from what its env was written with', async () => {
+      /*
+       * The port settles before the env is written, and the list can still be
+       * on the set before a press. Read from the list, the record agreed with
+       * the switch while the server held something else, and nothing was said.
+       */
+      vi.mocked(octopus().workspaces.prepare).mockResolvedValue({
+        ok: true,
+        value: { written: [], missing: [], profile: 'prod', variables: {} }
+      })
+      renderPanel({
+        workspaces: [anna],
+        activeWorkspaceId: anna.id,
+        scripts: scriptsFor({
+          approved: true,
+          digest: 'digest',
+          scripts: { run: ownScript('run') }
+        })
+      })
+      await userEvent.click(scriptsTab())
+      await userEvent.click(screen.getByRole('button', { name: 'Run' }))
+      await sessionsOpened(1)
 
       expect(await screen.findByText(/Restart it to pick up the change/)).toBeInTheDocument()
     })
@@ -605,16 +702,11 @@ describe('RightPanel', () => {
         onError
       })
       await userEvent.click(scriptsTab())
-      const env = within(buildSection()).getByRole('button', { name: /^Env/ })
-      await waitFor(() => {
-        expect(env).toHaveTextContent('Env · dev')
-      })
 
-      await userEvent.click(env)
-      await userEvent.click(screen.getByRole('menuitemradio', { name: 'prod' }))
+      await userEvent.click(within(await envSwitch()).getByRole('button', { name: 'prod' }))
 
       await waitFor(() => {
-        expect(onError).toHaveBeenCalled()
+        expect(onError).toHaveBeenCalledWith(expect.any(String))
       })
     })
   })

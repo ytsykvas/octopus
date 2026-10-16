@@ -152,7 +152,7 @@ export function installOctopusStub(): Api {
       replyToReviewThread: vi.fn(() => ok(undefined)),
       setReviewThreadResolved: vi.fn(() => ok(undefined)),
       instruction: vi.fn(() => ok('Describe what changed and why.')),
-      prepare: vi.fn(() => ok({ written: [], missing: [] })),
+      prepare: vi.fn(() => ok({ written: [], missing: [], profile: 'default', variables: {} })),
       env: vi.fn(() => ok('')),
       trust: vi.fn(() => ok({ approved: true, digest: '', files: [] })),
       scripts: vi.fn(() => ok({ approved: true, digest: '', scripts: {} })),

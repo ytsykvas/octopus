@@ -23,6 +23,7 @@ import type { PullRequestQuoteController } from '../hooks/usePullRequestQuotes.j
 import type { Failure } from '../../../preload/index.js'
 import { useErrorMessage } from '../hooks/useErrorMessage.js'
 import { useRunSequence } from '../hooks/useRunSequence.js'
+import { useEnvProfiles } from '../hooks/useEnvProfiles.js'
 import { useServingPort } from '../hooks/useServingPort.js'
 import type { WorkspaceView } from '@core/workspaces.js'
 
@@ -30,6 +31,7 @@ import { Button } from './Button.js'
 import { DiffPanel } from './diff/DiffPanel.js'
 import { NotesPanel } from './NotesPanel.js'
 import { DropdownMenu } from './DropdownMenu.js'
+import { EnvProfileSwitch } from './EnvProfileSwitch.js'
 import type { DiffView } from './diff/DiffHunk.js'
 import { ResizeHandle } from './ResizeHandle.js'
 import { PullRequestPanel } from './pr/PullRequestPanel.js'
@@ -169,6 +171,12 @@ interface RightPanelProps {
   readonly scriptFailures: ReadonlyMap<string, Failure>
   /** Re-reads the map, after an approval has changed the answer. */
   readonly onScriptsChanged: () => void
+  /**
+   * A workspace's own record changed here — the set of variables it runs with
+   * — so the list it comes from has to be read again. Without it the switch
+   * stayed pressed on the old set while the new one was already stored.
+   */
+  readonly onWorkspacesChanged: () => void
   /** Which set of variables the open project uses, before the list is read. */
   readonly defaultEnvProfile: string
   readonly onEditScripts: () => void
@@ -219,6 +227,7 @@ export function RightPanel({
   scripts,
   scriptFailures,
   onScriptsChanged,
+  onWorkspacesChanged,
   projectFor,
   defaultEnvProfile,
   onEditScripts,
@@ -340,38 +349,12 @@ export function RightPanel({
    * guard could only ever be reached through a button that is disabled, and an
    * unreachable line is a claim about behaviour nobody can check.
    */
-  /**
-   * The sets of variables this project holds, so a workspace can be put on one.
-   *
-   * Read when the tab is looked at rather than kept in `App`: it changes in the
-   * settings dialog, which closes back onto this pane.
-   */
-  const [envProfiles, setEnvProfiles] = useState<readonly string[]>([])
-  const [projectEnvProfile, setProjectEnvProfile] = useState(defaultEnvProfile)
-
-  useEffect(() => {
-    if (projectId === null) return
-    const controller = new AbortController()
-
-    void (async () => {
-      const answer = await window.octopus.projects.envProfiles(projectId)
-      if (controller.signal.aborted || !answer.ok) return
-
-      setEnvProfiles(answer.value.profiles)
-      setProjectEnvProfile(answer.value.projectDefault)
-    })()
-
-    return () => {
-      controller.abort()
-    }
-  }, [projectId, defaultEnvProfile])
-
-  const setWorkspaceProfile = async (workspaceId: string, name: string | null): Promise<void> => {
-    onError(null)
-    const done = await window.octopus.workspaces.setEnvProfile(workspaceId, name)
-    if (done.ok) onScriptsChanged()
-    else onError(describeFailure(done))
-  }
+  /** The sets of variables this project holds, so a workspace can be put on one. */
+  const {
+    profiles: envProfiles,
+    projectDefault: projectEnvProfile,
+    setWorkspaceProfile
+  } = useEnvProfiles(projectId, defaultEnvProfile, onError, onWorkspacesChanged)
 
   /**
    * The set of variables each running server was started with.
@@ -383,6 +366,16 @@ export function RightPanel({
    * the other way.
    */
   const [servingProfiles, setServingProfiles] = useState<Readonly<Record<string, string>>>({})
+
+  /**
+   * The set of variables each workspace was last built with.
+   *
+   * Apart from the server's because a restart starts the server again without
+   * building: after a switch it picks up the new `.env` while whatever the build
+   * made — a database restored from the other environment's dump — stays where
+   * it was. The server's record alone then said all was well.
+   */
+  const [builtProfiles, setBuiltProfiles] = useState<Readonly<Record<string, string>>>({})
 
   /** What this workspace would run, and whether it is allowed to yet. */
   const activeScripts = activeWorkspaceId === null ? undefined : scripts.get(activeWorkspaceId)
@@ -454,11 +447,30 @@ export function RightPanel({
   const profileOf = (workspace: WorkspaceView): string =>
     workspace.envProfile ?? projectFor(workspace.id).envProfile
 
-  const staleProfile =
-    activeWorkspace !== null &&
-    activeRun.stage === 'serving' &&
-    servingProfiles[activeWorkspace.id] !== undefined &&
-    servingProfiles[activeWorkspace.id] !== profileOf(activeWorkspace)
+  /*
+   * Only while serving. Otherwise the next press of Run builds again, and
+   * warning about a build that is about to be redone would be noise.
+   */
+  const servingWorkspace =
+    activeWorkspace !== null && activeRun.stage === 'serving' ? activeWorkspace : null
+  const differs = (record: Readonly<Record<string, string>>): string | null => {
+    if (servingWorkspace === null) return null
+    const held = record[servingWorkspace.id]
+    return held !== undefined && held !== profileOf(servingWorkspace) ? held : null
+  }
+  const staleBuild = differs(builtProfiles)
+  /*
+   * The build's first, because a restart cannot fix it and the server's
+   * sentence would recommend exactly a restart.
+   */
+  const envWarning =
+    servingWorkspace === null
+      ? null
+      : staleBuild !== null
+        ? t('scripts.envRebuild', { built: staleBuild, current: profileOf(servingWorkspace) })
+        : differs(servingProfiles) !== null
+          ? t('scripts.envRestart')
+          : null
 
   const servingAt =
     activeWorkspace !== null && activeRun.stage === 'serving'
@@ -748,11 +760,6 @@ export function RightPanel({
           <span className="text-ink-faint min-w-0 flex-1 truncate text-[11px]">
             {activeRun.stage === 'failed' ? (
               <span className="text-danger">{t('scripts.buildFailed')}</span>
-            ) : staleProfile ? (
-              /* Said rather than enforced, like the silent port beside it: the
-                 server is somebody's work in progress and taking it down to be
-                 consistent would be the ruder of the two. */
-              <span className="text-warning">{t('scripts.envRestart')}</span>
             ) : servingAt !== null && silentPort ? (
               /* Said rather than enforced. The script is the user's, and being
                  wrong about it must not take the link or the controls away. */
@@ -784,6 +791,20 @@ export function RightPanel({
           >
             <Pencil aria-hidden size={12} />
           </Button>
+
+          {/* After the button above rather than before it: the switch appears
+              only once the sets are read and is held while a build runs, and
+              the button that never changes must not be moved by it. */}
+          {activeWorkspace !== null && (
+            <EnvProfileSwitch
+              profiles={envProfiles}
+              value={profileOf(activeWorkspace)}
+              disabled={building}
+              onChange={(name) => {
+                void setWorkspaceProfile(activeWorkspace.id, name)
+              }}
+            />
+          )}
 
           {/* Every control for the tab, and none in the halves — and only ever
               the ones that can mean something. Run goes once the server is up:
@@ -836,6 +857,18 @@ export function RightPanel({
             </>
           )}
         </div>
+
+        {/* Under the row rather than in its text, and wrapped: while a server
+            is up that row holds the switch and four controls, and the sentence
+            that says which environment the data came from was cut to its first
+            two words. Said rather than enforced: the server is somebody's work
+            in progress, and taking it down to be consistent would be the ruder
+            of the two. */}
+        {envWarning !== null && (
+          <p className="border-line bg-warning-bg text-warning shrink-0 border-b px-3 py-1.5 text-[11px]">
+            {envWarning}
+          </p>
+        )}
 
         {/* Pinned above both halves rather than inside one, and never in a
             modal: this is the answer to "why is Run doing nothing", and it has
@@ -964,9 +997,11 @@ export function RightPanel({
             <DropdownMenu
               actions={[
                 /*
-                 * The choice first, the three commands after it. Shown only
-                 * where there is a choice: a project with one set sees exactly
-                 * the menu it always had.
+                 * The sets themselves are a switch in the Run row, where they
+                 * are seen; what stays here is the one answer that is not a
+                 * set — follow the project, wherever it moves. Shown only where
+                 * there is a choice: a project with one set sees exactly the
+                 * menu it always had.
                  */
                 ...(envProfiles.length > 1 && activeWorkspace !== null
                   ? [
@@ -977,15 +1012,7 @@ export function RightPanel({
                         onSelect: () => {
                           void setWorkspaceProfile(activeWorkspace.id, null)
                         }
-                      },
-                      ...envProfiles.map((name) => ({
-                        id: `profile-${name}`,
-                        label: name,
-                        selected: activeWorkspace.envProfile === name,
-                        onSelect: () => {
-                          void setWorkspaceProfile(activeWorkspace.id, name)
-                        }
-                      }))
+                      }
                     ]
                   : []),
                 {
@@ -1013,16 +1040,6 @@ export function RightPanel({
               trigger={({ onClick, open }) => (
                 <Button size="sm" onClick={onClick} aria-expanded={open}>
                   {t('scripts.env')}
-                  {/* The resolved name, whether it is followed or chosen: "what
-                      am I about to run with" has the same answer either way, and
-                      the difference lives in the menu. Faint and the same size —
-                      the app has no idea which of these means production, and
-                      colouring a word because it matches one would be a guess. */}
-                  {envProfiles.length > 1 && activeWorkspace !== null && (
-                    <span className="text-ink-faint">
-                      {` · ${activeWorkspace.envProfile ?? projectEnvProfile}`}
-                    </span>
-                  )}
                 </Button>
               )}
             />
@@ -1059,6 +1076,9 @@ export function RightPanel({
               onOutcome={(id, ok) => {
                 sequence.finished('setup', id, ok)
               }}
+              onProfile={(id, profile) => {
+                setBuiltProfiles((current) => ({ ...current, [id]: profile }))
+              }}
               // A build only ever leaves `building` by reporting itself
               // finished, so a runner that goes while one is in flight would
               // strand the workspace with Run disabled and nothing to press.
@@ -1093,15 +1113,12 @@ export function RightPanel({
             onRunning={adoptServer}
             onPort={(workspace, settled) => {
               setSettledPorts((current) => ({ ...current, [workspace.id]: settled }))
-
-              // The port settles as the server starts, which is also the moment
-              // it reads its `.env` — so this is when the set it is holding
-              // stops being a guess. The workspace comes with the call rather
-              // than being looked up, which leaves nothing to be undefined.
-              setServingProfiles((current) => ({
-                ...current,
-                [workspace.id]: profileOf(workspace)
-              }))
+            }}
+            // From the call that wrote the `.env` the server is about to read,
+            // not from the list: the list can still be on the set before a
+            // press, and the port settles before the env is written.
+            onProfile={(id, profile) => {
+              setServingProfiles((current) => ({ ...current, [id]: profile }))
             }}
           />
         </section>

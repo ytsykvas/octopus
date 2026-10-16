@@ -9,7 +9,9 @@ const values = {
   // name a database with, and the raw label is what it must not be.
   workspaceName: 'Fix login bug',
   path: '/tmp/anna',
-  port: 3100
+  port: 3100,
+  profile: 'prod',
+  variables: { DUMP_URL: 's3://prod/latest.sql' }
 }
 
 /** A script of the project's own, which is what the old arrangement always was. */
@@ -55,9 +57,28 @@ describe('runArchiveScript', () => {
     // No port among them, though one was passed: `scriptEnv` gives the ports to
     // the server script alone, and cleanup is not serving.
     expect(call?.options.env).toEqual({
+      DUMP_URL: 's3://prod/latest.sql',
       OCTOPUS_ROOT_PATH: '/Users/test/planner',
       OCTOPUS_WORKSPACE_NAME: 'Fix login bug',
-      OCTOPUS_WORKSPACE_SLUG: 'fix_login_bug'
+      OCTOPUS_WORKSPACE_SLUG: 'fix_login_bug',
+      OCTOPUS_ENV_PROFILE: 'prod'
+    })
+  })
+
+  it('lets none of the set\u2019s variables replace one of ours', async () => {
+    // The cleanup drops what the build made; a set that named the checkout
+    // would point it at somebody else's.
+    const { runner, seen } = recorder()
+
+    await runArchiveScript(
+      ownScript,
+      { ...values, variables: { OCTOPUS_ROOT_PATH: '/elsewhere', OCTOPUS_ENV_PROFILE: 'dev' } },
+      runner
+    )
+
+    expect(seen[0]?.options.env).toMatchObject({
+      OCTOPUS_ROOT_PATH: '/Users/test/planner',
+      OCTOPUS_ENV_PROFILE: 'prod'
     })
   })
 

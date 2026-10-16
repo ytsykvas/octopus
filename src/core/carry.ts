@@ -204,6 +204,22 @@ export interface CarryReport {
 }
 
 /**
+ * What getting a workspace ready to run answers with: the carry, and the set
+ * of variables its scripts are to be started with.
+ *
+ * The variables come back rather than being left in the env file alone because
+ * the scripts are started in the window — `terminal:create` takes the spec
+ * from there — and a build that pulls a dump wants `$DUMP_URL` in its own
+ * environment, not a file to source.
+ */
+export interface PreparedWorkspace extends CarryReport {
+  /** The set in effect, by name. */
+  readonly profile: string
+  /** Its variables, `$OCTOPUS_*` already filled in. */
+  readonly variables: Readonly<Record<string, string>>
+}
+
+/**
  * Whether a failure means the worktree already has the file.
  *
  * `COPYFILE_EXCL` is how this refuses to overwrite, so `EEXIST` is the success

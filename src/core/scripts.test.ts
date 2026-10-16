@@ -115,7 +115,12 @@ describe('scriptsDirectory', () => {
 })
 
 describe('scriptEnv', () => {
-  const values = { rootPath: '/Users/test/planner', workspaceName: 'anna', port: 3323 }
+  const values = {
+    rootPath: '/Users/test/planner',
+    workspaceName: 'anna',
+    port: 3323,
+    profile: 'default'
+  }
 
   /*
    * A script runs inside a worktree, which is a copy of the repository and not

@@ -4,6 +4,7 @@ import { ScriptKindSchema } from './scripts.js'
 import {
   BLOCK,
   PORT_VARIABLE,
+  PROFILE_VARIABLE,
   SCRIPT_KINDS,
   SLUG_MAX_LENGTH,
   blockPorts,
@@ -71,7 +72,12 @@ describe('blockPorts', () => {
 })
 
 describe('scriptEnv', () => {
-  const values = { rootPath: '/repo', workspaceName: 'Fix login bug', port: 3110 }
+  const values = {
+    rootPath: '/repo',
+    workspaceName: 'Fix login bug',
+    port: 3110,
+    profile: 'prod'
+  }
 
   it('gives every kind the checkout, the name and the slug', () => {
     for (const kind of ['setup', 'run', 'archive'] as const) {
@@ -80,6 +86,14 @@ describe('scriptEnv', () => {
         OCTOPUS_WORKSPACE_NAME: 'Fix login bug',
         OCTOPUS_WORKSPACE_SLUG: 'fix_login_bug'
       })
+    }
+  })
+
+  it('tells every kind which set of variables is in effect', () => {
+    // The build that pulls a dump is the one that needs it most, and the
+    // cleanup that drops what the build made the next.
+    for (const kind of SCRIPT_KINDS) {
+      expect(scriptEnv(kind, values)[PROFILE_VARIABLE]).toBe('prod')
     }
   })
 
