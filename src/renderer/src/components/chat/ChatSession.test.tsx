@@ -595,6 +595,30 @@ describe('the day on screen', () => {
     expect(screen.getAllByText('2 March 2025')).toHaveLength(1)
     expect(screen.getAllByText('4 March 2025')).toHaveLength(2)
   })
+
+  /*
+   * The log can move under a scroller that has not: a turn landing, or a
+   * rewind cutting the days below away. No scroll event comes, so the change
+   * in the log is what asks again.
+   */
+  it('reads the day again when the log changes under a still scroller', async () => {
+    givenChat([
+      { role: 'user', at: '2025-03-02T09:00:00.000Z', text: 'first' },
+      { role: 'user', at: '2025-03-04T09:00:00.000Z', text: 'later' }
+    ])
+    await openLoadedChat()
+    await screen.findByText('later')
+    const log = screen.getByRole('log')
+    place(log, { '2025-03-02': -200, '2025-03-04': 300 })
+    fireEvent.scroll(log)
+    expect(screen.getAllByText('2 March 2025')).toHaveLength(2)
+
+    place(log, { '2025-03-02': -600, '2025-03-04': -10 })
+    emitAgentEvent({ type: 'text', text: 'still here' })
+
+    await screen.findByText('still here')
+    expect(screen.getAllByText('4 March 2025')).toHaveLength(2)
+  })
 })
 
 describe('stopping a turn', () => {
@@ -1425,6 +1449,78 @@ describe('the permission mode', () => {
       })
       expect(field()).toHaveFocus()
       expect(octopus().chats.rewind).toHaveBeenCalledWith(CHAT_ID, MESSAGE, 'conversation')
+    })
+
+    /*
+     * The whole loop, end to end: rewind, send the message again as it came
+     * back, and the new line can be rewound in its turn — without reopening
+     * the conversation, which is what the id handed back with a send is for.
+     */
+    it('offers to rewind the message sent again after a rewind', async () => {
+      const user = userEvent.setup()
+      const AGAIN = '33333333-3333-4333-8333-333333333333'
+      givenPreview()
+      vi.mocked(octopus().chats.rewind).mockResolvedValue({
+        ok: true,
+        value: { files: null, text: 'rename it' }
+      })
+      givenChat(SAID)
+      await openLoadedChat()
+
+      await user.click(await mark())
+      vi.mocked(octopus().chats.history).mockResolvedValue({ ok: true, value: [] })
+      await user.click(await screen.findByRole('button', { name: /Conversation only/ }))
+      emitAgentEvent({ type: 'conversation_rewound', messageId: MESSAGE })
+      await waitFor(() => {
+        expect(field()).toHaveValue('rename it')
+      })
+      await waitFor(() => {
+        expect(
+          screen.queryByRole('button', { name: 'Rewind to before this message' })
+        ).not.toBeInTheDocument()
+      })
+
+      vi.mocked(octopus().chats.send).mockResolvedValue({ ok: true, value: AGAIN })
+      await user.keyboard('{Enter}')
+      emitAgentEvent({
+        type: 'result',
+        ok: true,
+        costUsd: null,
+        durationMs: 1000,
+        inputTokens: 10,
+        outputTokens: 10,
+        terminalReason: 'completed'
+      })
+      emitChatStatus(CHAT_ID, 'idle')
+
+      await user.click(await mark())
+      await waitFor(() => {
+        expect(octopus().chats.rewindPreview).toHaveBeenLastCalledWith(CHAT_ID, AGAIN)
+      })
+    })
+
+    // The cut closed the session the gauge was reading, so it reads again
+    // rather than go on showing the longer history's context.
+    it('reads the context again once the conversation is rewound', async () => {
+      const user = userEvent.setup()
+      givenPreview()
+      vi.mocked(octopus().chats.rewind).mockResolvedValue({
+        ok: true,
+        value: { files: null, text: 'rename it' }
+      })
+      givenChat(SAID)
+      await openLoadedChat()
+      await user.click(await mark())
+      await waitFor(() => {
+        expect(octopus().chats.usage).toHaveBeenCalled()
+      })
+      const asked = vi.mocked(octopus().chats.usage).mock.calls.length
+
+      await user.click(await screen.findByRole('button', { name: /Conversation only/ }))
+
+      await waitFor(() => {
+        expect(vi.mocked(octopus().chats.usage).mock.calls.length).toBeGreaterThan(asked)
+      })
     })
 
     // Only the files went back: the conversation, and what is being typed,

@@ -723,9 +723,8 @@ describe('the id a message is sent under', () => {
       await result.current.send('/usage')
     })
 
-    expect(result.current.entries).toEqual([
-      expect.not.objectContaining({ uuid: expect.anything() as unknown })
-    ])
+    expect(result.current.entries).toHaveLength(1)
+    expect(result.current.entries[0]).not.toHaveProperty('uuid')
   })
 
   // The log was replaced while the send was on its way — another conversation,
@@ -756,6 +755,40 @@ describe('the id a message is sent under', () => {
     })
 
     expect(result.current.entries.some((entry) => 'uuid' in entry)).toBe(false)
+  })
+
+  /*
+   * The line is found by identity, not by what it says. A log read again in
+   * the meantime holds a line reading exactly the same, and stamping that one
+   * would hand the id to a message the core may have recorded under another.
+   */
+  it('does not stamp a line that only reads the same', async () => {
+    givenChat()
+    const sending = held<Result<string | null>>()
+    vi.mocked(octopus().chats.send).mockReturnValue(sending.promise)
+    const { result } = renderHook(() => useChat(...open()))
+    await waitFor(() => {
+      expect(octopus().chats.history).toHaveBeenCalled()
+    })
+
+    let sent: Promise<boolean> | undefined
+    act(() => {
+      sent = result.current.send('first')
+    })
+    const lookalike: ChatEntry = { role: 'user', at: '2026-08-11T09:00:00.000Z', text: 'first' }
+    vi.mocked(octopus().chats.history).mockResolvedValue({ ok: true, value: [lookalike] })
+    emitAgentEvent({ type: 'conversation_rewound', messageId: 'm-1' })
+    await waitFor(() => {
+      expect(result.current.entries).toEqual([lookalike])
+    })
+
+    await act(async () => {
+      sending.resolve({ ok: true, value: MESSAGE })
+      await sent
+    })
+
+    expect(result.current.entries).toEqual([lookalike])
+    expect(result.current.entries[0]).not.toHaveProperty('uuid')
   })
 })
 

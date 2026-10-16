@@ -47,6 +47,7 @@ import {
   type WorkspaceStatusEvent
 } from './service.js'
 import { POOL_START } from './ports.js'
+import type { ChatEntry } from './transcript.js'
 import type { UsageLimit, UsageWindows } from './usage.js'
 import { BLOCK } from './scriptEnv.js'
 import { listWorktrees } from './worktree.js'
@@ -9230,6 +9231,32 @@ describe('the agent chat', () => {
         expect(
           history.map((entry) => (entry.role === 'user' ? entry.text : entry.event.type))
         ).toEqual(['rename the helper', 'session_started', 'result', 'files_rewound'])
+      })
+
+      /*
+       * Windows read the log again the moment they hear the conversation was
+       * cut. The row about the files is written just before, and a read that
+       * overtook its write drew a log without it — read here at that same
+       * moment, as a window would.
+       */
+      it('has the row about the files on disk by the time windows read again', async () => {
+        const { service, chatId, second, events } = await spokenTwice()
+        const reads: Promise<ChatEntry[]>[] = []
+        const push = events.push.bind(events)
+        events.push = (...added: ChatEvent[]): number => {
+          for (const one of added) {
+            if (one.event.type === 'conversation_rewound') reads.push(service.chatHistory(chatId))
+          }
+          return push(...added)
+        }
+
+        await service.rewindChat(chatId, second, 'both')
+
+        expect(reads).toHaveLength(1)
+        const [history] = await Promise.all(reads)
+        expect(
+          history?.some((entry) => entry.role === 'agent' && entry.event.type === 'files_rewound')
+        ).toBe(true)
       })
     })
 
