@@ -69,6 +69,12 @@ async function openTwo(): Promise<void> {
   await waitFor(() => {
     expect(screen.getByText('Claude 2')).toBeInTheDocument()
   })
+  // And both logs read. The strip is drawn from the list, before either pane
+  // has its history; an event delivered in between was drawn and then replaced
+  // by the history landing after it — on a loaded CI runner, now and then.
+  await waitFor(() => {
+    expect(screen.getAllByText('Start the conversation')).toHaveLength(2)
+  })
 }
 
 describe('the pane', () => {
