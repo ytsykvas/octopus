@@ -320,6 +320,13 @@ describe('channel names', () => {
       () => method('files', 'search')('w' as never, 'comp' as never),
       'files:search'
     ],
+    ['files.tree', () => method('files', 'tree')('w' as never), 'files:tree'],
+    [
+      'files.directory',
+      () => method('files', 'directory')('w' as never, 'node_modules' as never),
+      'files:directory'
+    ],
+    ['files.read', () => method('files', 'read')('w' as never, 'a.ts' as never), 'files:read'],
     ['chats.list', () => method('chats', 'list')('w' as never), 'chats:list'],
     ['chats.open', () => method('chats', 'open')('w' as never), 'chats:open'],
     ['chats.create', () => method('chats', 'create')('w' as never), 'chats:create'],

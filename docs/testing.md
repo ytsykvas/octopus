@@ -224,7 +224,10 @@ somewhere harmless turns that whole class of mistake into a missing file.
 ## Renderer tests
 
 `src/renderer/src/test/setup.ts` runs before each: it installs a stub on
-`window.octopus`, initialises real translations and cleans up afterwards.
+`window.octopus`, initialises real translations and cleans up afterwards. It
+also stands in for what jsdom does not implement and a component calls
+unconditionally — `matchMedia`, `scrollIntoView` — so the component needs no
+`?.()` branch a real window never takes.
 
 The stub in [`test/octopus.ts`](../src/renderer/src/test/octopus.ts) is **typed
 as the real `OctopusApi`**, so a channel added to preload without a counterpart

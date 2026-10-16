@@ -21,6 +21,7 @@
     "lint:fix": "eslint . --fix",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
+    "vendor:icons": "node --experimental-strip-types scripts/vendor-icons.ts",
     "test": "vitest run && vitest run --config vitest.renderer.config.ts",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage && vitest run --config vitest.renderer.config.ts --coverage",

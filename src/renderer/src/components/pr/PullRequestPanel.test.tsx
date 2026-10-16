@@ -115,12 +115,14 @@ function renderPanel(
   onError: ReturnType<typeof vi.fn>
   onRequestChanged: ReturnType<typeof vi.fn>
   onRemoveWorkspace: ReturnType<typeof vi.fn>
+  onConversation: ReturnType<typeof vi.fn>
   quotes: ReturnType<typeof quoteController>
 } {
   const onEditInstructions = vi.fn()
   const onError = vi.fn()
   const onRequestChanged = vi.fn()
   const onRemoveWorkspace = vi.fn()
+  const onConversation = vi.fn()
   const quotes = overrides.quotes ?? quoteController()
 
   render(
@@ -134,10 +136,18 @@ function renderPanel(
       onEditInstructions={onEditInstructions}
       onError={onError}
       onRemoveWorkspace={onRemoveWorkspace}
+      onConversation={onConversation}
     />
   )
 
-  return { onEditInstructions, onError, onRequestChanged, onRemoveWorkspace, quotes }
+  return {
+    onEditInstructions,
+    onError,
+    onRequestChanged,
+    onRemoveWorkspace,
+    onConversation,
+    quotes
+  }
 }
 
 describe('the pull request tab', () => {
@@ -194,6 +204,7 @@ describe('the pull request tab', () => {
         onRemoveWorkspace={vi.fn()}
         onEditInstructions={vi.fn()}
         onError={vi.fn()}
+        onConversation={vi.fn()}
       />
     )
 
@@ -1164,10 +1175,12 @@ describe('what the tab can do about a request', () => {
     const user = userEvent.setup()
     answer(view({ request: request() }))
     answerDetail(detail())
-    renderPanel()
+    const { onConversation } = renderPanel()
 
     await user.click(await screen.findByRole('button', { name: 'Review it' }))
 
+    // The conversation comes in front of any open file before it is written to.
+    expect(onConversation).toHaveBeenCalledTimes(1)
     expect(octopus().workspaces.instruction).toHaveBeenCalledWith(anna.id, 'review')
     const sent = vi.mocked(octopus().chats.send).mock.calls[0]?.[1] ?? ''
     expect(sent).toContain('Describe what changed and why.')

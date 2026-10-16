@@ -121,6 +121,38 @@ message. Twenty are kept per workspace; closing one more discards the oldest.
 Sending to a closed conversation is refused, for a window that has not heard it
 was closed would otherwise start a session no tab and no status shows.
 
+**Files open beside the conversations**, in the same strip after a 1px rule:
+underlined like them, because they are the same kind of thing — what the centre
+is showing — with the file's icon where a conversation has its dot. One click in
+the tree opens a **loose** tab, set in italics, which the next one-click file
+replaces, so browsing a tree does not leave a tab behind per file looked at; a
+double-click on the row or on the tab, or Enter in the tree, keeps it. Note that
+a double-click **pins** a file tab where it **renames** a conversation — two
+kinds of tab, two meanings of the gesture each kind already had in an editor and
+here. The strip scrolls sideways once the files outrun the room, and the one in
+front is scrolled into view.
+
+A file in front hides every conversation behind it — still mounted, still
+streaming — and only the conversation on screen may raise a dialog, so none can
+while a file is showing. Every way of asking for a conversation (its tab, `⌘T`,
+`⌘⇧T`, `⌥1–3`, a fork, the history) puts the files behind it again, and so does
+everything the right pane sends to a composer — a review note from Changes, a
+remark or a prepared prompt from the pull request — since a note added behind a
+file lands where nobody can see it: wrappers in `App` rather than a call at each
+place. `⌘W` closes the file in front and is
+left alone otherwise. The files live in memory, per workspace, like which
+conversation was in front.
+
+**The viewer is mounted only while its tab is in front**, unlike a
+conversation: there is nothing in it to lose by going, and coming forward is
+exactly when a file may have changed, so it reads the file again then — and after
+each turn, and when the window regains focus. Read-only, highlighted by the
+diff's own `highlight()` up to 256 KB, 20 000 lines and lines of 2 000
+characters, plain past that with a line saying why. Two `<pre>`s side by side
+rather than a row per line: a long file is a handful of elements, and a
+selection in the code never picks up the numbers. A deleted file opens onto what
+HEAD still holds, under a banner saying so.
+
 **Every conversation stays mounted** while its workspace is open, hidden with a
 class the way the right pane hides its tabs — one that unmounted would lose its
 place in the log and the answer half-streamed into it each time you looked at
@@ -1215,15 +1247,17 @@ tab. Read once when the section opens rather than watched, because nothing
 announces a session starting and a row that quietly went stale would be worse
 than one the reader knows is a snapshot.
 
-**Two tabs are icons, and they are the two ends.** The tab row decides the
+**Two tabs are icons, and they sit at the two ends.** The tab row decides the
 pane's narrowest allowed width — the measurement further down is exactly that —
 so every **word** in the row raises the floor for everybody for ever. Terminal
 and Notes carry an icon each instead, which costs about a third of a word.
 
 Which two is not arbitrary. The ends are the tools somebody reaches for — a
-shell and a scratchpad — and the three in the middle are about the work itself,
-which is what the words are worth spending the width on. An icon between words
-would read as a mistake; at the ends they read as what they are.
+shell on one side, a scratchpad on the other — and the four in the middle are
+about the work itself, which is what the words are worth spending the width on.
+Files is one of the words, beside the shell: it was an icon first, and a tree
+glyph was too easy to miss for the tab most browsing starts in. An icon between
+words would read as a mistake; at the ends they read as what they are.
 
 What they may not lose along with the word is their name: the label moves to the
 button's `aria-label` and its tooltip rather than disappearing, because a tab a
@@ -1367,8 +1401,8 @@ for the same turn endings and settles for the same 300ms, and re-reads only the
 project the workspace belongs to: a turn ending is a poor reason to run
 `git status` over every workspace of every project.
 
-**The right pane carries five tabs.** Terminal, then Changes, Scripts and Pull
-request, then Notes. Build and server were two tabs and are now two halves of one: they
+**The right pane carries six tabs.** Terminal, then Files, Changes, Scripts
+and Pull request, then Notes. Build and server were two tabs and are now two halves of one: they
 are the same question — what this workspace runs — and splitting it cost a fifth
 of a row whose width has to be **measured** because it barely fits. Stacked, a
 server can be seen running while a build is read, which two tabs could not show
@@ -1918,7 +1952,7 @@ inside it, or once folded there is nothing left to click, and the way back has t
 be hunted for somewhere else.
 
 Both side panes are resizable and their widths persist. The right pane's floor is
-**measured, not chosen**: it is whatever its five tabs need. The three that
+**measured, not chosen**: it is whatever its six tabs need. The four that
 carry a label change width with the language — a number picked against English
 left the Ukrainian ones overflowing, and since the pane does not shrink,
 anything sticking out of it pushed the window wider and put a horizontal
@@ -1988,6 +2022,74 @@ Korean among others — Enter confirms a candidate, and it used to send the
 message with it: every committed word went out. `isComposing` on the native
 event is the check, in the three places that have this key: the composer, the
 plan dialog's field, and the rename field, which writes to disk.
+
+## The Files tab
+
+The worktree as an editor's explorer draws it, with git's marks. Kept mounted
+while hidden like every tab of the pane, so the open folders and the scroll
+position survive a look elsewhere; the open folders are remembered per
+workspace too.
+
+**The marks are measured against HEAD**, not against the base branch the
+Changes tab uses. The tree answers "what have I not committed", which is what an
+editor's explorer means by a coloured name; Changes answers "what will this
+branch deliver". After a commit the tree goes clean while Changes still lists
+the files — both right, and not a bug. The colours and letters are the diff's
+own (`statusMarks.ts`, shared): green for new, blue for edited, red for deleted
+and conflicted, the conflict marked `!` because a diff against a merge base
+never sees one. A folder with work below it carries a dot in the colour of the
+strongest change inside, so a collapsed folder still says there is something in
+it. Each mark is said aloud after the name; the colour alone says nothing.
+
+**Deleted files stay in the tree, struck through.** An editor's explorer drops
+them, but a deletion is work as much as an edit is, and the mark is the point of
+the tab. Git lists them unevenly — a file removed from disk is still in the
+index, one removed with `git rm` only in the status — so `fileTree.ts` adds every
+path the status names.
+
+**Ignored entries are shown greyed**, and an ignored folder opens: git reports
+`node_modules/` as one entry, and its contents are read from disk only when it
+is expanded, through the same containment check as opening a file. A folder
+lists at most 5 000 entries and says so under the last. A refresh reads again
+only the ignored folders still open — one opened once and closed must not cost
+a long read on every turn after — and a listing is laid into the tree only while
+git still calls its folder ignored, so `git add -f` or an edited `.gitignore`
+hands the folder back to git's own children and marks.
+
+**Read when it could have changed, never watched**: when the tab is shown, when
+a turn of any of the workspace's chats ends (settled 300ms, like the diff), when
+the window regains focus — which is what catches an edit made in another editor
+— and on Refresh. Nothing is read while the tab is hidden. `git status` runs
+with `--no-optional-locks`, so it never takes the index lock the agent's own git
+needs in the same worktree.
+
+**Rows are virtualised.** Every row is 22px, so the rows in view are a slice of
+an array and the space above and below them is one spacer each; a folder of
+thousands opens without a pause. For the same reason the tree is a `tree` with
+`aria-activedescendant` rather than a roving tabindex — the focused row may not
+exist in the DOM, and focus kept on the tree cannot be lost when a row is
+recycled. Arrows, Home and End move; Right opens a folder and steps into it, Left
+closes it and steps out; Enter keeps a file open, Space previews it. Collapsing
+a folder that held the focused row leaves focus on the folder, not at the top.
+
+**The icons are Catppuccin Icons**, the VS Code theme, resolved by the rules VS
+Code applies to the same manifest: the whole name, then each extension from the
+longest (`test.ts` before `ts`), then the language. It replaced Material Icon
+Theme before the tab shipped, at the user's choice. There is no npm package, so
+`vendor/catppuccin-icons/` holds the release as published — Latte's pictures,
+Mocha's, the one table both share, and the licence — and
+`scripts/vendor-icons.ts` refreshes it from a release pinned by version and
+hash. Two traps, both handled in `components/files/`:
+
+- `?no-inline` on the SVG glob is required. The CSP is `default-src 'self'`,
+  and Vite turns assets under 4 KB into `data:` URIs, which that policy refuses —
+  the icons would show in development and vanish from the built app.
+- Every icon is drawn twice, Latte and Mocha, and one of the pair hidden by the
+  app's own `.dark` class. Tailwind's `dark:` follows the operating system, not
+  the theme the user picked.
+
+The URL tables and the manifest are chunks of their own, loaded the first time
+the tab draws.
 
 ## The diff
 
@@ -2591,6 +2693,10 @@ field styling had already drifted by a few pixels of height.
 | `Settings`                                             | `initialSection` opens it where the caller needs it. Read once, on mount — correct only because `App` renders the dialog conditionally, so a close unmounts it                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
 | `ProjectGlyph`                                         | a project's icon, `aria-hidden`: wherever it appears the element around it is already named                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             |
 | `Field`                                                | a labelled form row, in two shapes. Given a **function** it hands over an id and draws a real `<label htmlFor>`; given ordinary children it leaves the label a paragraph, because `htmlFor` names one element and this row is also used for a grid of swatches, a radio list and a select beside three buttons. Those name themselves — wrapping them here in a second group called the same thing was tried, and every such row then answered to its own name twice                                                                                                                                                                                                                                                                                                                                    |
+| `IconButton`, `Notice`                                 | the quiet toolbar button and the message drawn in place of content, shared by the right pane's tabs (`paneControls.tsx`) since the Files tab became the second to need both                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             |
+| `statusMarks`                                          | the letter, word and colour of a changed file — `A`, `M`, `D`, `U`, and the tree's `!` for a conflict — so a file reads the same in Changes and in Files                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
+| `FileIcon`                                             | a file's or folder's Catppuccin icon, plain until the theme has loaded and when it names nothing. Decorative throughout: the name beside it says what the row is                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
+| `fileSize`                                             | a size in the reader's own numbering, through `Intl` — kilobytes, then megabytes                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
 | `FileEditor`, `NameEditor`, `ResizeHandle`, `Terminal` |                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
 
 `Button` has four variants: `accent`, `quiet`, `danger` (subdued destructive),

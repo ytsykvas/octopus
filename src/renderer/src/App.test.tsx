@@ -1949,6 +1949,228 @@ describe('App', () => {
     expect(window.octopus.config.update).toHaveBeenLastCalledWith({ rightPanelTab: 'diff' })
   })
 
+  it('opens the files with ⌘⇧E', async () => {
+    givenTwoProjects()
+    await openApp()
+
+    fireEvent.keyDown(window, { key: 'E', metaKey: true, shiftKey: true })
+
+    expect(window.octopus.config.update).toHaveBeenLastCalledWith({ rightPanelTab: 'files' })
+  })
+
+  describe('a file opened from the tree', () => {
+    async function openReadme(): Promise<ReturnType<typeof userEvent.setup>> {
+      givenTwoProjects()
+      vi.mocked(window.octopus.files.tree).mockResolvedValue({
+        ok: true,
+        value: {
+          entries: [{ path: 'README.md', kind: 'file', ignored: false }],
+          statuses: {},
+          truncated: false
+        }
+      })
+      vi.mocked(window.octopus.files.read).mockResolvedValue({
+        ok: true,
+        value: { kind: 'text', text: '# Planner', bytes: 9 }
+      })
+      const user = await openApp()
+      await user.click(await screen.findByRole('button', { name: 'PL' }))
+      await user.click(await screen.findByText('anna'))
+      await user.click(screen.getByRole('button', { name: 'Files' }))
+      await user.click(await screen.findByRole('treeitem', { name: /^README\.md/ }))
+      return user
+    }
+
+    it('comes to the front of the centre, beside the conversations', async () => {
+      await openReadme()
+
+      expect(await screen.findByText('# Planner')).toBeInTheDocument()
+      const files = screen.getByRole('navigation', { name: 'Open files' })
+      expect(within(files).getByRole('button', { name: 'README.md' })).toHaveAttribute(
+        'aria-current',
+        'page'
+      )
+      // No conversation is the one showing while a file is.
+      const conversations = screen.getByRole('navigation', { name: 'Conversations' })
+      expect(within(conversations).queryByRole('button', { current: 'page' })).toBeNull()
+      expect(screen.getByRole('treeitem', { name: /^README\.md/ })).toHaveAttribute(
+        'aria-selected',
+        'true'
+      )
+    })
+
+    // A conversation asked for must not stay behind the file.
+    it('steps back behind a conversation brought forward, and stays open', async () => {
+      const user = await openReadme()
+      await screen.findByText('# Planner')
+
+      const conversations = screen.getByRole('navigation', { name: 'Conversations' })
+      await user.click(within(conversations).getByRole('button', { name: /Claude 1/ }))
+
+      expect(screen.queryByText('# Planner')).not.toBeInTheDocument()
+      expect(screen.getByRole('button', { name: 'README.md' })).not.toHaveAttribute('aria-current')
+    })
+
+    it('closes with ⌘W, which leaves a conversation alone', async () => {
+      await openReadme()
+      await screen.findByText('# Planner')
+
+      fireEvent.keyDown(window, { key: 'w', metaKey: true })
+      expect(screen.queryByText('# Planner')).not.toBeInTheDocument()
+      expect(screen.queryByRole('navigation', { name: 'Open files' })).not.toBeInTheDocument()
+
+      // Nothing to close now; the key is not taken from the system.
+      expect(fireEvent.keyDown(window, { key: 'w', metaKey: true })).toBe(true)
+      expect(screen.getByRole('navigation', { name: 'Conversations' })).toBeInTheDocument()
+    })
+
+    // Every way of asking for a conversation puts the file behind it.
+    it('steps back behind a conversation asked for from the keyboard', async () => {
+      await openReadme()
+      await screen.findByText('# Planner')
+
+      fireEvent.keyDown(window, { key: 't', metaKey: true })
+      await waitFor(() => {
+        expect(screen.queryByText('# Planner')).not.toBeInTheDocument()
+      })
+
+      await userEvent.click(screen.getByRole('button', { name: 'README.md' }))
+      expect(await screen.findByText('# Planner')).toBeInTheDocument()
+      fireEvent.keyDown(window, { key: 'T', metaKey: true, shiftKey: true })
+      await waitFor(() => {
+        expect(screen.queryByText('# Planner')).not.toBeInTheDocument()
+      })
+    })
+
+    it('steps back behind a conversation reopened from the history', async () => {
+      vi.mocked(window.octopus.chats.closed).mockResolvedValue({
+        ok: true,
+        value: [
+          {
+            chat: chat({ id: 'chat-9', workspaceId: 'planner/anna' }),
+            closedAt: '2026-08-20T10:00:00.000Z',
+            preview: 'fix the login bug'
+          }
+        ]
+      })
+      vi.mocked(window.octopus.chats.reopen).mockResolvedValue({
+        ok: true,
+        value: chat({ id: 'chat-9', workspaceId: 'planner/anna' })
+      })
+      const user = await openReadme()
+      await screen.findByText('# Planner')
+
+      await user.click(screen.getByRole('button', { name: 'Closed conversations' }))
+      await user.click(await screen.findByText('fix the login bug'))
+
+      await waitFor(() => {
+        expect(screen.queryByText('# Planner')).not.toBeInTheDocument()
+      })
+    })
+
+    it('steps back behind a conversation continued in a new tab', async () => {
+      vi.mocked(window.octopus.chats.list).mockResolvedValue({
+        ok: true,
+        value: [chat({ workspaceId: 'planner/anna', sessionId: 'session-1' })]
+      })
+      const user = await openReadme()
+      await screen.findByText('# Planner')
+
+      await user.click(screen.getByRole('button', { name: 'Claude 1' }))
+      await user.click(
+        await screen.findByRole('menuitem', { name: /Continue in a new conversation/ })
+      )
+
+      await waitFor(() => {
+        expect(screen.queryByText('# Planner')).not.toBeInTheDocument()
+      })
+    })
+
+    // A note added behind an open file would land in a composer nobody can see.
+    it('steps back behind a review note added from the changes', async () => {
+      vi.mocked(window.octopus.workspaces.diff).mockResolvedValue({
+        ok: true,
+        value: workspaceDiff([fileDiff('src/a.ts')])
+      })
+      const user = await openReadme()
+      await screen.findByText('# Planner')
+
+      await user.click(screen.getByRole('button', { name: 'Changes' }))
+      await user.click(await screen.findByRole('button', { name: 'Comment on line 2' }))
+      await user.type(await screen.findByRole('textbox'), 'rename this')
+      await user.click(screen.getByRole('button', { name: 'Add' }))
+
+      await waitFor(() => {
+        expect(screen.queryByText('# Planner')).not.toBeInTheDocument()
+      })
+    })
+
+    it('steps back behind a remark quoted from the pull request', async () => {
+      vi.mocked(window.octopus.workspaces.pullRequest).mockResolvedValue({
+        ok: true,
+        value: {
+          request: {
+            number: 7,
+            state: 'open',
+            title: 'Rename the thing',
+            url: 'https://github.com/o/p/pull/7'
+          },
+          pushed: true,
+          dirty: false,
+          unpushedCommits: 0,
+          ahead: 0,
+          base: 'main'
+        }
+      })
+      vi.mocked(window.octopus.workspaces.pullRequestDetail).mockResolvedValue({
+        ok: true,
+        value: {
+          state: 'open',
+          title: 'Rename the thing',
+          url: 'https://github.com/o/p/pull/7',
+          draft: false,
+          checks: [],
+          comments: [
+            {
+              kind: 'inline',
+              id: 'PRRC_1',
+              threadId: 'PRRT_1',
+              author: 'olena',
+              body: 'Why the second case?',
+              createdAt: '2026-08-20T11:00:00Z',
+              url: 'https://github.com/o/p/pull/7#discussion_r1',
+              path: 'src/core/git.ts',
+              line: 42,
+              quote: '@@ -1 +1 @@\n-const a = 1',
+              resolved: false
+            }
+          ],
+          decision: null,
+          mergeable: 'mergeable',
+          mergeState: 'clean',
+          capped: false
+        }
+      })
+      const user = await openReadme()
+      await screen.findByText('# Planner')
+
+      await user.click(screen.getByRole('button', { name: 'Pull request' }))
+      await user.click(await screen.findByRole('button', { name: 'Add to chat' }))
+
+      await waitFor(() => {
+        expect(screen.queryByText('# Planner')).not.toBeInTheDocument()
+      })
+    })
+
+    it('is kept open by a double-click in the tree', async () => {
+      const user = await openReadme()
+
+      await user.dblClick(screen.getByRole('treeitem', { name: /^README\.md/ }))
+
+      expect(await screen.findByRole('button', { name: 'README.md' })).not.toHaveClass('italic')
+    })
+  })
+
   // Listed in §10.8 since before there was a tab for it to name, which is the
   // shape of shortcut that teaches people to distrust the whole table.
   /*

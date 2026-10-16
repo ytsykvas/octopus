@@ -8,7 +8,7 @@ import {
   PanelRightOpen,
   Plus
 } from 'lucide-react'
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import { DEFAULT_EFFORT } from '@core/chats.js'
@@ -37,7 +37,8 @@ import { useDiffComments } from './hooks/useDiffComments.js'
 import { useFileRevert } from './hooks/useFileRevert.js'
 import { useBranchRequests } from './hooks/useBranchRequests.js'
 import { usePullRequestQuotes } from './hooks/usePullRequestQuotes.js'
-import { type ChatTab, useChatTabs } from './hooks/useChatTabs.js'
+import { type ChatTab, type ChatTabsController, useChatTabs } from './hooks/useChatTabs.js'
+import { useFileTabs } from './hooks/useFileTabs.js'
 import { useProjects } from './hooks/useProjects.js'
 import { useWorkspaceScripts } from './hooks/useWorkspaceScripts.js'
 import { useWorkspaces } from './hooks/useWorkspaces.js'
@@ -166,7 +167,61 @@ export function App(): React.JSX.Element {
     [setWorkspaceChats]
   )
 
-  const chatTabs = useChatTabs(selectedWorkspaceId, publishChats, setError)
+  const conversations = useChatTabs(selectedWorkspaceId, publishChats, setError)
+  const fileTabs = useFileTabs(selectedWorkspaceId)
+
+  /*
+   * The conversations, with every way of bringing one forward also putting the
+   * open files behind it.
+   *
+   * Wrapped once here rather than at each caller: a tab click, ⌘T, ⌘⇧T, ⌥1–3,
+   * forking and reopening from history all mean "show me this conversation",
+   * and a file left in front of the one asked for would make every one of them
+   * look like it did nothing.
+   */
+  const chatTabs = useMemo<ChatTabsController>(() => {
+    const forward =
+      <A extends unknown[], R>(action: (...args: A) => R) =>
+      (...args: A): R => {
+        fileTabs.showChat()
+        return action(...args)
+      }
+
+    return {
+      ...conversations,
+      select: forward(conversations.select),
+      create: forward(conversations.create),
+      fork: forward(conversations.fork),
+      reopen: forward(conversations.reopen),
+      reopenLast: forward(conversations.reopenLast)
+    }
+  }, [conversations, fileTabs])
+
+  /*
+   * The right pane's ways into the composer, the same rule again: a review note
+   * or a remark quoted from GitHub lands in a composer, and one behind an open
+   * file is a note added to nothing visible.
+   */
+  const paneComments = useMemo(
+    () => ({
+      ...diffComments,
+      add: (comment: Parameters<typeof diffComments.add>[0]) => {
+        fileTabs.showChat()
+        diffComments.add(comment)
+      }
+    }),
+    [diffComments, fileTabs]
+  )
+  const paneQuotes = useMemo(
+    () => ({
+      ...reviewQuotes,
+      add: (quote: Parameters<typeof reviewQuotes.add>[0]) => {
+        fileTabs.showChat()
+        reviewQuotes.add(quote)
+      }
+    }),
+    [reviewQuotes, fileTabs]
+  )
 
   /*
    * The conversation a prompt from the right pane would go to.
@@ -434,6 +489,28 @@ export function App(): React.JSX.Element {
         return
       }
 
+      // The editor's key for its explorer, and the same shape as ⌘⇧D above.
+      if (event.metaKey && event.shiftKey && event.key.toLowerCase() === 'e') {
+        event.preventDefault()
+        setRightPanelOpen(true)
+        void updateConfig({ rightPanelTab: 'files' })
+        return
+      }
+
+      // Closes the file in front, as in an editor — and only a file. With a
+      // conversation in front the key is left alone: closing a conversation is
+      // a menu item on purpose, and there is no window to close behind it.
+      if (
+        event.metaKey &&
+        !event.shiftKey &&
+        event.key.toLowerCase() === 'w' &&
+        fileTabs.active !== null
+      ) {
+        event.preventDefault()
+        fileTabs.close(fileTabs.active)
+        return
+      }
+
       // The twin of the one above, and the shortcut §10.8 has listed since
       // before there was a tab to give it. A listed shortcut that does nothing
       // is read once, tried once, and takes the rest of the table with it.
@@ -469,7 +546,7 @@ export function App(): React.JSX.Element {
     return () => {
       window.removeEventListener('keydown', onKey)
     }
-  }, [selectedProjectId, workspaces, projects, updateConfig, showPullRequests, chatTabs])
+  }, [selectedProjectId, workspaces, projects, updateConfig, showPullRequests, chatTabs, fileTabs])
 
   const selectedProject = projects.all.find((project) => project.id === selectedProjectId) ?? null
   const projectWorkspaces = selectedProject
@@ -816,6 +893,8 @@ export function App(): React.JSX.Element {
               key={selectedWorkspace.id}
               workspace={selectedWorkspace}
               tabs={chatTabs}
+              files={fileTabs}
+              onError={setError}
               draftOf={(tabKey) => drafts.get(`${selectedWorkspace.id}#${tabKey}`) ?? ''}
               onDraftLeave={(tabKey, text) => {
                 keepDraft(selectedWorkspace.id, tabKey, text)
@@ -896,12 +975,18 @@ export function App(): React.JSX.Element {
             onDiffView={(diffView) => void updateConfig({ diffView })}
             tab={config?.rightPanelTab ?? 'diff'}
             onTab={(rightPanelTab) => void updateConfig({ rightPanelTab })}
-            comments={diffComments}
+            comments={paneComments}
             revert={fileRevert}
-            quotes={reviewQuotes}
+            quotes={paneQuotes}
             envFile={selectedProject?.envFile ?? DEFAULT_ENV_FILE}
             onRequestChanged={branchRequests.refresh}
             onRemoveWorkspace={(id) => void workspaces.remove(id)}
+            activeFilePath={fileTabs.active}
+            onConversation={fileTabs.showChat}
+            onOpenFile={(path, pinned) => {
+              if (pinned) fileTabs.open(path)
+              else fileTabs.preview(path)
+            }}
             onError={setError}
             // The room the pane must leave alone. Folded away, the list takes
             // none of it — and the pane may have that room too.

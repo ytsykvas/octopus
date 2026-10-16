@@ -110,6 +110,8 @@ import {
 } from './config.js'
 import { type AgentEvent, forTranscript, isEphemeral } from './events.js'
 import { listFiles, type MentionFile, rankFiles } from './fileSearch.js'
+import { type DirectoryListing, type FileTreeSnapshot, readFileTree } from './fileTree.js'
+import { type FileContent, readWorkspaceDirectory, readWorkspaceFile } from './workspaceFiles.js'
 import {
   cloneRepository,
   listRepositories,
@@ -1061,6 +1063,26 @@ export interface OctopusService {
    * asked on every keystroke and the worktree does not change that fast.
    */
   searchFiles(workspaceId: string, query: string): Promise<MentionFile[]>
+
+  /**
+   * The worktree's files and what git says about each, for the Files tab.
+   *
+   * Read fresh on every call, unlike `searchFiles`: the tab asks only when it
+   * is shown, a turn ends or the window comes back, and each of those is a
+   * moment the answer may have changed.
+   */
+  readFileTree(workspaceId: string): Promise<FileTreeSnapshot>
+
+  /** A folder of the worktree read from disk — an ignored one being opened. */
+  readWorkspaceDirectory(workspaceId: string, path: string): Promise<DirectoryListing>
+
+  /**
+   * A file of the worktree for the viewer, or why it cannot be shown.
+   *
+   * Containment is checked here, symlinks followed, as for opening a file: the
+   * path arrives from a window that draws agent output.
+   */
+  readWorkspaceFile(workspaceId: string, path: string): Promise<FileContent>
 
   /**
    * The workspace's chat, created on first use.
@@ -4527,6 +4549,20 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
       const files = await listFiles(makeExec(workspace.path))
       fileLists.set(workspaceId, { at: asked, files })
       return await offered(files)
+    },
+
+    async readFileTree(workspaceId) {
+      const workspace = requireWorkspace(workspaceId)
+      return readFileTree(makeExec(workspace.path))
+    },
+
+    async readWorkspaceDirectory(workspaceId, path) {
+      return readWorkspaceDirectory(requireWorkspace(workspaceId), path)
+    },
+
+    async readWorkspaceFile(workspaceId, path) {
+      const workspace = requireWorkspace(workspaceId)
+      return readWorkspaceFile(workspace, path, makeExec(workspace.path))
     },
 
     async resolveWorkspaceFile(workspaceId, path) {

@@ -1,8 +1,9 @@
-import { render, screen, waitFor } from '@testing-library/react'
+import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { beforeAll, describe, expect, it, vi } from 'vitest'
 
 import { useChatTabs } from '../../hooks/useChatTabs.js'
+import { useFileTabs } from '../../hooks/useFileTabs.js'
 import { chat, emitAgentEvent, givenChats } from '../../test/chat.js'
 import { commentController, quoteController } from '../../test/comments.js'
 import { stubDialogElement } from '../../test/dialog.js'
@@ -20,22 +21,36 @@ const WORKSPACE = workspaceView('anna')
 /** The pane as `App` assembles it, tab strip and all. */
 function Pane({ workspace = WORKSPACE }: { workspace?: WorkspaceView }): React.JSX.Element {
   const tabs = useChatTabs(workspace.id, vi.fn(), vi.fn())
+  const files = useFileTabs(workspace.id)
 
   return (
-    <Chat
-      workspace={workspace}
-      tabs={tabs}
-      draftOf={() => ''}
-      onDraftLeave={vi.fn()}
-      comments={commentController()}
-      quotes={quoteController()}
-      color="blue"
-      defaultWorkingMode="default"
-      defaultEffort="medium"
-      defaultModel={null}
-      defaultPlanModel={null}
-      onOpenSkillSettings={vi.fn()}
-    />
+    <>
+      <Chat
+        workspace={workspace}
+        tabs={tabs}
+        files={files}
+        onError={vi.fn()}
+        draftOf={() => ''}
+        onDraftLeave={vi.fn()}
+        comments={commentController()}
+        quotes={quoteController()}
+        color="blue"
+        defaultWorkingMode="default"
+        defaultEffort="medium"
+        defaultModel={null}
+        defaultPlanModel={null}
+        onOpenSkillSettings={vi.fn()}
+      />
+      {/* What the right pane's tree does, reduced to a button. */}
+      <button
+        type="button"
+        onClick={() => {
+          files.preview('src/a.ts')
+        }}
+      >
+        tree: a.ts
+      </button>
+    </>
   )
 }
 
@@ -75,6 +90,24 @@ describe('the pane', () => {
  * scroll position and the answer half-streamed into it each time you looked at
  * another — which, with several agents at work, is most of the time.
  */
+describe('a file in front of the conversations', () => {
+  // Only the pane on screen may raise a dialog (§10.8), and with a file in
+  // front no conversation is on screen.
+  it('hides every conversation and marks none of their tabs', async () => {
+    const user = userEvent.setup()
+    await openTwo()
+
+    await user.click(screen.getByRole('button', { name: 'tree: a.ts' }))
+
+    expect(await screen.findByRole('button', { name: 'Reload' })).toBeInTheDocument()
+    for (const log of screen.getAllByRole('log', { hidden: true })) {
+      expect(log.closest('[aria-hidden]')).toHaveAttribute('aria-hidden', 'true')
+    }
+    const strip = screen.getByRole('navigation', { name: 'Conversations' })
+    expect(within(strip).queryByRole('button', { current: 'page' })).toBeNull()
+  })
+})
+
 describe('the conversations that are not showing', () => {
   it('keeps them mounted and hides them', async () => {
     await openTwo()
