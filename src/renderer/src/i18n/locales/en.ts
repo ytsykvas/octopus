@@ -875,6 +875,12 @@ export const en = {
       in_progress: 'in progress',
       completed: 'done'
     },
+    // Above the first message of each day, and floating at the top of the log
+    // while it is scrolled. The locale is the date's, not the interface's:
+    // British English writes the day first, as the rest of the app does.
+    today: 'Today',
+    yesterday: 'Yesterday',
+    dateLocale: 'en-GB',
     /* Putting the files back to how they were when a message was sent. */
     rewind: 'Put the files back to before this message',
     rewindTitle: 'Put the files back?',
