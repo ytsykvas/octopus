@@ -2632,7 +2632,12 @@ describe('the agent chat', () => {
 
     const opened = await invoke('chats:open', workspace.id)
 
-    await invoke('chats:send', chatIdOf(opened), 'hello')
+    // Answered with the id the message was sent under, which is what lets the
+    // line already drawn be rewound before the history is read again.
+    await expect(invoke('chats:send', chatIdOf(opened), 'hello')).resolves.toEqual({
+      ok: true,
+      value: expect.stringMatching(/^[0-9a-f-]{36}$/) as unknown
+    })
 
     await vi.waitFor(() => {
       expect(bench.chatEvents.map((entry) => entry.event)).toContainEqual({

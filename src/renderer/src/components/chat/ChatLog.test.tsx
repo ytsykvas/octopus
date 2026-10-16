@@ -1612,6 +1612,58 @@ describe('deciding on an ordinary tool', () => {
  * whether the agent may act, but what it should do. It gets its own card, and
  * the call that carried it draws nothing — the card is already the question.
  */
+/*
+ * A rewind cuts the log back, and the next turn is drawn at positions the cut
+ * turn held. Rows are keyed by position, so whatever a row was holding must not
+ * pass to the different thing now standing where it stood.
+ */
+describe('a log cut back and written again', () => {
+  const asked = (requestId: string, question: string): ChatEntry =>
+    fromAgent({
+      type: 'permission_request',
+      requestId,
+      toolName: 'AskUserQuestion',
+      input: {
+        questions: [
+          {
+            question,
+            header: 'Pick',
+            multiSelect: false,
+            options: [{ label: 'date-fns' }, { label: 'Luxon' }]
+          }
+        ]
+      }
+    })
+
+  it('draws a new question in the old one’s place with nothing chosen', async () => {
+    const user = userEvent.setup()
+    const said: ChatEntry = { role: 'user', at: AT, text: 'pick a library' }
+    const props = {
+      streaming: { text: '', thinking: '' },
+      busy: false,
+      pendingElicitationId: null,
+      onAnswer: vi.fn(),
+      onAnswerElicitation: vi.fn(),
+      onAnswerQuestions: vi.fn(),
+      onExecutePlan: vi.fn(),
+      onRewind: vi.fn()
+    }
+    const { rerender } = render(
+      <ChatLog {...props} entries={[said, asked('r-1', 'Which one?')]} pendingRequestId="r-1" />
+    )
+    await user.click(screen.getByRole('radio', { name: /Luxon/ }))
+    expect(screen.getByRole('radio', { name: /Luxon/ })).toBeChecked()
+
+    rerender(<ChatLog {...props} entries={[said]} pendingRequestId={null} />)
+    rerender(
+      <ChatLog {...props} entries={[said, asked('r-2', 'Which one now?')]} pendingRequestId="r-2" />
+    )
+
+    expect(screen.getByText('Which one now?')).toBeInTheDocument()
+    expect(screen.getByRole('radio', { name: /Luxon/ })).not.toBeChecked()
+  })
+})
+
 describe('a question the agent asked', () => {
   const ASKED = {
     questions: [

@@ -33,8 +33,9 @@ export const DAY_PART = 'day'
  *
  * A turn is what the user said and everything the agent did in answer, up to
  * the next thing the user said. The message's id is the position of its first
- * block, which is stable for as long as it exists — the log is append-only, and
- * nothing is ever reordered or removed (`ChatLog` keys its rows the same way).
+ * block, which is stable for as long as it exists — the log is only ever added
+ * to or cut back from the end by a rewind, never reordered, so a position names
+ * one message until the message is gone (`ChatLog` keys its rows the same way).
  *
  * A message that begins a calendar day the one before it did not opens with a
  * `DAY_PART`, the first message of all included. The day is the first block's,

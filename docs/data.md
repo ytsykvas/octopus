@@ -278,7 +278,8 @@ can go with the old process.
 from before it reads the same as one after.
 
 **A transcript's user entries carry a `uuid`**: the id the message was sent to
-the agent under, which is what putting the files back to it is asked with. It is
+the agent under, which is what rewinding to it is asked with — the files' checkpoint
+and the point the conversation is cut at both go by it. It is
 optional — a message sent before ids were kept has none, and simply offers no
 rewind. The `files_rewound` event records a rewind with how much it undid and how many
 files a link kept it from restoring (`skippedLinks`, defaulting to 0). A

@@ -194,6 +194,15 @@ function tab(letters: string): HTMLElement {
   return screen.getByRole('button', { name: letters })
 }
 
+/**
+ * The same, waited for. `openApp` waits for the strip's add button, which is
+ * drawn before the projects arrive — so a tab read at once was there on a fast
+ * machine and missing on a loaded CI runner, failing whichever test came first.
+ */
+function findTab(letters: string): Promise<HTMLElement> {
+  return screen.findByRole('button', { name: letters })
+}
+
 /** The right pane: a `<section>`, which carries no role to reach it by. */
 function rightPane(): HTMLElement {
   const section = screen.getByRole('button', { name: 'Changes' }).closest('section')
@@ -428,7 +437,7 @@ describe('App', () => {
     await user.click(await screen.findByRole('button', { name: 'PL' }))
     await user.click(await screen.findByRole('button', { name: 'Hide workspaces' }))
 
-    await user.click(tab('LE'))
+    await user.click(await findTab('LE'))
 
     expect(await screen.findByText('carol')).toBeInTheDocument()
   })
@@ -505,7 +514,7 @@ describe('App', () => {
     })
     givenTwoProjects()
     const user = await openApp()
-    await user.click(tab('PL'))
+    await user.click(await findTab('PL'))
     await user.click(screen.getByRole('button', { name: /anna/ }))
 
     const [chip] = await screen.findAllByRole('button', { name: 'Skills for this conversation' })
@@ -548,7 +557,7 @@ describe('App', () => {
 
     const openAnna = async (): Promise<ReturnType<typeof userEvent.setup>> => {
       const user = await openApp()
-      await user.click(tab('PL'))
+      await user.click(await findTab('PL'))
       await user.click(screen.getByRole('button', { name: /anna/ }))
       await screen.findByText('Listed.')
       return user
@@ -706,7 +715,7 @@ describe('App', () => {
     await user.keyboard('{Control>}1{/Control}')
     expect(await screen.findByText('/tmp/planner/anna')).toBeInTheDocument()
 
-    await user.click(tab('LE'))
+    await user.click(await findTab('LE'))
 
     expect(
       await screen.findByText('Select a workspace to open a terminal in its directory.')
@@ -1636,7 +1645,7 @@ describe('App', () => {
     await user.click(await screen.findByText('anna'))
     expect(await screen.findByText('/tmp/planner/setup.sh')).toBeInTheDocument()
 
-    await user.click(tab('LE'))
+    await user.click(await findTab('LE'))
     await user.click(await screen.findByText('carol'))
 
     expect(await screen.findByText(/No build script yet/)).toBeInTheDocument()
@@ -1829,7 +1838,7 @@ describe('App', () => {
     )
     const user = await openApp()
     await user.click(await screen.findByRole('button', { name: 'PL' }))
-    await user.click(tab('LE'))
+    await user.click(await findTab('LE'))
     await user.click(screen.getByRole('button', { name: 'Scripts' }))
     await user.click(await screen.findByText('carol'))
 
@@ -1847,7 +1856,7 @@ describe('App', () => {
   it('opens another conversation with ⌘T', async () => {
     givenTwoProjects()
     const user = await openApp()
-    await user.click(tab('PL'))
+    await user.click(await findTab('PL'))
     await user.click(screen.getByRole('button', { name: /anna/ }))
     await screen.findByRole('navigation', { name: 'Conversations' })
 
@@ -1877,7 +1886,7 @@ describe('App', () => {
     })
     givenTwoProjects()
     const user = await openApp()
-    await user.click(tab('PL'))
+    await user.click(await findTab('PL'))
     await user.click(screen.getByRole('button', { name: /anna/ }))
     await screen.findByRole('navigation', { name: 'Conversations' })
 
@@ -1905,7 +1914,7 @@ describe('App', () => {
     })
     givenTwoProjects()
     const user = await openApp()
-    await user.click(tab('PL'))
+    await user.click(await findTab('PL'))
     await user.click(screen.getByRole('button', { name: /anna/ }))
     await screen.findByRole('button', { name: /^Claude 2: / })
 
@@ -1933,7 +1942,7 @@ describe('App', () => {
     })
     givenTwoProjects()
     const user = await openApp()
-    await user.click(tab('PL'))
+    await user.click(await findTab('PL'))
     await user.click(screen.getByRole('button', { name: /anna/ }))
     await screen.findByRole('button', { name: /^Claude 3: / })
 
@@ -1969,7 +1978,7 @@ describe('App', () => {
     })
     givenTwoProjects()
     const user = await openApp()
-    await user.click(tab('PL'))
+    await user.click(await findTab('PL'))
     await user.click(screen.getByRole('button', { name: /anna/ }))
     const strip = await screen.findByRole('navigation', { name: 'Conversations' })
 
@@ -1995,7 +2004,7 @@ describe('App', () => {
     })
     givenTwoProjects()
     const user = await openApp()
-    await user.click(tab('PL'))
+    await user.click(await findTab('PL'))
     await user.click(screen.getByRole('button', { name: /anna/ }))
     const strip = await screen.findByRole('navigation', { name: 'Conversations' })
 
@@ -2014,7 +2023,7 @@ describe('App', () => {
   it('leaves other ⌥ combinations alone', async () => {
     givenTwoProjects()
     const user = await openApp()
-    await user.click(tab('PL'))
+    await user.click(await findTab('PL'))
     await user.click(screen.getByRole('button', { name: /anna/ }))
     await screen.findByRole('navigation', { name: 'Conversations' })
 
@@ -2026,7 +2035,7 @@ describe('App', () => {
   it('does nothing for a conversation that is not there', async () => {
     givenTwoProjects()
     const user = await openApp()
-    await user.click(tab('PL'))
+    await user.click(await findTab('PL'))
     await user.click(screen.getByRole('button', { name: /anna/ }))
     const strip = await screen.findByRole('navigation', { name: 'Conversations' })
 
