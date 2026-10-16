@@ -5100,7 +5100,7 @@ describe('the agent chat', () => {
       offered = () => Promise.reject(new Error('no such control request'))
       const chat = await service.openChat(workspaceId)
 
-      await expect(service.sendToChat(chat.id, 'work')).resolves.toBeUndefined()
+      await expect(service.sendToChat(chat.id, 'work')).resolves.toEqual(expect.any(String))
       expect(service.knownModels()).toEqual([])
     })
   })
@@ -5234,7 +5234,7 @@ describe('the agent chat', () => {
 
       const chat = await service.openChat(workspaceId)
 
-      await expect(service.sendToChat(chat.id, 'work')).resolves.toBeUndefined()
+      await expect(service.sendToChat(chat.id, 'work')).resolves.toEqual(expect.any(String))
       expect(service.chatCommands(chat.id)).toEqual([])
     })
   })
@@ -8709,11 +8709,14 @@ describe('the agent chat', () => {
       const { service, workspaceId } = await withWorkspace()
       const chat = await service.openChat(workspaceId)
 
-      await service.sendToChat(chat.id, 'first')
+      const answered = await service.sendToChat(chat.id, 'first')
 
       const [recorded] = await service.chatHistory(chat.id)
       expect(recorded).toMatchObject({ role: 'user', uuid: expect.any(String) })
       expect(agent().sentIds).toEqual([recorded?.role === 'user' ? recorded.uuid : null])
+      // And says it back: the window has drawn the message already, and without
+      // the id its line could not be rewound until the history was read again.
+      expect(answered).toBe(recorded?.role === 'user' ? recorded.uuid : 'not a user entry')
     })
 
     it('asks the agent to checkpoint files at all', async () => {
@@ -8920,11 +8923,12 @@ describe('the agent chat', () => {
       const { service, workspaceId } = await withWorkspace()
       const chat = await service.openChat(workspaceId)
 
-      await service.sendToChat(chat.id, '/usage')
+      const answered = await service.sendToChat(chat.id, '/usage')
 
       const [entry] = await service.chatHistory(chat.id)
       expect(entry).toMatchObject({ role: 'user', text: '/usage' })
       expect(entry).not.toHaveProperty('uuid')
+      expect(answered).toBeNull()
     })
 
     // The id comes from the window, and the agent will rewind to any it has

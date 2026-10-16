@@ -412,7 +412,8 @@ export function useChat(
 
       // Drawn before the round trip: the message is the user's own, and
       // waiting for the disk to confirm it makes typing feel unresponsive.
-      setEntries((current) => [...current, { role: 'user', at: new Date().toISOString(), text }])
+      const drawn: ChatEntry = { role: 'user', at: new Date().toISOString(), text }
+      setEntries((current) => [...current, drawn])
       setStreaming(NOTHING_STREAMING)
       setBusy(true)
       setError(null)
@@ -442,6 +443,17 @@ export function useChat(
         if (history.ok) setEntries(history.value)
 
         return false
+      }
+
+      /* The id the core recorded it under, put on the line already drawn: it
+         is what the mark that rewinds to this message asks with, and the line
+         had none until now. Matched by identity, so a log replaced in the
+         meantime — another conversation, a cleared one — is left alone. */
+      const uuid = sent.value
+      if (uuid !== null) {
+        setEntries((current) =>
+          current.map((entry) => (entry === drawn ? { ...drawn, uuid } : entry))
+        )
       }
 
       return true

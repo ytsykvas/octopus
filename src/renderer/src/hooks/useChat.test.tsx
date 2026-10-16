@@ -675,6 +675,90 @@ describe('a conversation rewound', () => {
   })
 })
 
+describe('the id a message is sent under', () => {
+  const MESSAGE = '22222222-2222-4222-8222-222222222222'
+
+  /*
+   * Reported from a running app: the mark that puts the files back appeared
+   * only on messages from before the pane was opened. The one just sent — the
+   * one most often worth undoing — was drawn without its id, and got it only
+   * when the history was read again on the next visit.
+   */
+  it('takes the id the core gave it, so the message can be rewound at once', async () => {
+    const earlier: ChatEntry = {
+      role: 'user',
+      at: '2026-08-11T09:00:00.000Z',
+      text: 'look around',
+      uuid: 'earlier'
+    }
+    givenChat([earlier])
+    vi.mocked(octopus().chats.send).mockResolvedValue({ ok: true, value: MESSAGE })
+    const { result } = renderHook(() => useChat(...open()))
+    await waitFor(() => {
+      expect(result.current.entries).toEqual([earlier])
+    })
+
+    await act(async () => {
+      await result.current.send('rename the helper')
+    })
+
+    // The new line gets its id; the one before it is left exactly as it was.
+    expect(result.current.entries).toEqual([
+      earlier,
+      expect.objectContaining({ role: 'user', text: 'rename the helper', uuid: MESSAGE })
+    ])
+  })
+
+  // `/usage` is answered by octopus and never reaches the agent: there is
+  // nothing to rewind to.
+  it('stays without one when the core gave none', async () => {
+    givenChat()
+    vi.mocked(octopus().chats.send).mockResolvedValue({ ok: true, value: null })
+    const { result } = renderHook(() => useChat(...open()))
+    await waitFor(() => {
+      expect(octopus().chats.history).toHaveBeenCalled()
+    })
+
+    await act(async () => {
+      await result.current.send('/usage')
+    })
+
+    expect(result.current.entries).toEqual([
+      expect.not.objectContaining({ uuid: expect.anything() as unknown })
+    ])
+  })
+
+  // The log was replaced while the send was on its way — another conversation,
+  // or a fresh read — and the line it would have stamped is no longer there.
+  it('leaves a log that no longer holds the message alone', async () => {
+    givenChat()
+    const sending = held<Result<string | null>>()
+    vi.mocked(octopus().chats.send).mockReturnValue(sending.promise)
+    const { result } = renderHook(() => useChat(...open()))
+    await waitFor(() => {
+      expect(octopus().chats.history).toHaveBeenCalled()
+    })
+
+    let sent: Promise<boolean> | undefined
+    act(() => {
+      sent = result.current.send('first')
+    })
+    await waitFor(() => {
+      expect(result.current.entries).toHaveLength(1)
+    })
+    act(() => {
+      emitAgentEvent({ type: 'conversation_reset', cleared: true })
+    })
+
+    await act(async () => {
+      sending.resolve({ ok: true, value: MESSAGE })
+      await sent
+    })
+
+    expect(result.current.entries.some((entry) => 'uuid' in entry)).toBe(false)
+  })
+})
+
 describe('a different conversation in the same pane', () => {
   // Switching tabs is not a continuation: the log, the answer being streamed
   // and the question being waited on all belong to the one being left.

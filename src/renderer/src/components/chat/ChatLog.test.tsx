@@ -192,6 +192,38 @@ describe('a plan the user rewrote', () => {
   })
 })
 
+// Kyiv time (`vitest.shared.ts`): 09:00 UTC on 11 August is noon there.
+describe('when things were said', () => {
+  it('writes the hour under a message, with the whole moment on hover', () => {
+    renderLog({ entries: [{ role: 'user', at: AT, text: 'rename the helper' }] })
+
+    const time = screen.getByText('12:00')
+    expect(time.tagName).toBe('TIME')
+    expect(time).toHaveAttribute('dateTime', AT)
+    expect(time).toHaveAttribute('title', expect.stringContaining('11 August 2026'))
+  })
+
+  it('marks where each day begins, and only there', () => {
+    renderLog({
+      entries: [
+        { role: 'user', at: '2025-03-02T09:00:00.000Z', text: 'first' },
+        { role: 'agent', at: '2025-03-02T09:01:00.000Z', event: { type: 'text', text: 'on it' } },
+        { role: 'user', at: '2025-03-02T10:00:00.000Z', text: 'same day' },
+        { role: 'user', at: '2025-03-04T09:00:00.000Z', text: 'two days on' }
+      ]
+    })
+
+    const days = document.querySelectorAll('[data-day]')
+    expect([...days].map((day) => day.getAttribute('data-day'))).toEqual([
+      '2025-03-02',
+      '2025-03-04'
+    ])
+    // Another year than the reader's, so the year is written out.
+    expect(screen.getByText('2 March 2025')).toBeInTheDocument()
+    expect(screen.getByText('4 March 2025')).toBeInTheDocument()
+  })
+})
+
 describe('rewinding from a message', () => {
   const MESSAGE = '11111111-1111-4111-8111-111111111111'
 

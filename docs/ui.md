@@ -195,6 +195,20 @@ agent actually did to the working tree. Reasoning is folded away, a successful
 tool result is not shown at all — the output of a `Read` is the file, and pasting
 it in would bury the conversation in the codebase.
 
+**A sent message carries its hour, and each day opens with a chip.** The hour
+sits under the bubble in faint 24-hour figures (`14:32`), always visible, with
+the full date and time in its tooltip — the same 24-hour, day-first reasoning
+`formatResetAt` gives. The first message of each calendar day, in the reader's
+time zone, opens with a pill saying "Today", "Yesterday" or the date, the year
+only once it is not this one's. The label is worked out when the pill is drawn
+and only the day's key is held with the message, so a chip that said "Today"
+says "Yesterday" tomorrow. An agent turn that runs past midnight is dated where
+it began: a mark in the middle of one turn would split an answer from its
+question. Once a day's own pill has scrolled off the top, a copy floats there,
+as a messenger's does — read off the separators' positions on each scroll
+(`useDayAtTop`), since a sticky separator could never leave the message that
+holds it.
+
 **A failed one is shown, and shortened from the middle.** It is the row the user
 has to act on, so it is not summarised away — but it cannot be unbounded either,
 and where it is cut decides what survives. A validation error names the rule at

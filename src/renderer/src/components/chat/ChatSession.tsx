@@ -15,12 +15,14 @@ import type { PullRequestQuoteController } from '../../hooks/usePullRequestQuote
 import { type ChatNote, mergeNotes } from './attachments.js'
 import { useErrorMessage } from '../../hooks/useErrorMessage.js'
 import { useCommands } from '../../hooks/useCommands.js'
+import { useDayAtTop } from '../../hooks/useDayAtTop.js'
 import { useModels } from '../../hooks/useModels.js'
 import { useRateLimit } from '../../hooks/useRateLimit.js'
 import { useRewindChoice } from '../../hooks/useRewindChoice.js'
 import { useSessionUsage } from '../../hooks/useSessionUsage.js'
 import { useSkills } from '../../hooks/useSkills.js'
 import { ChatLog } from './ChatLog.js'
+import { DayChip } from './DayChip.js'
 import { Composer } from './Composer.js'
 import { HeadsUp } from './HeadsUp.js'
 import { PlanDialog } from './PlanDialog.js'
@@ -203,6 +205,7 @@ export function ChatSession({
 
   const scroller = useRef<HTMLDivElement | null>(null)
   const pinnedToBottom = useRef(true)
+  const dayAtTop = useDayAtTop(scroller)
 
   // Answered here rather than in the log because this is where the pending
   // request and the composer's mode meet — the plan's approval decides what the
@@ -283,6 +286,13 @@ export function ChatSession({
     element.scrollTop = element.scrollHeight
   }, [visible, chat.entries, chat.streaming])
 
+  // Read again whenever the log can have moved under a still scroller: a turn
+  // landing, or the tab coming back. Hidden, there is nothing to measure.
+  const { update: updateDayAtTop } = dayAtTop
+  useEffect(() => {
+    if (visible) updateDayAtTop()
+  }, [visible, chat.entries, updateDayAtTop])
+
   return (
     <div
       aria-hidden={!visible}
@@ -300,9 +310,20 @@ export function ChatSession({
           // A few pixels of slack: smooth scrolling and sub-pixel heights mean
           // "at the bottom" is rarely exactly zero.
           pinnedToBottom.current = distance < 40
+          dayAtTop.update()
         }}
         className="min-h-0 flex-1 overflow-auto"
       >
+        {/* The day on screen, floating once its own separator has scrolled
+            away. Sticky only works on a child of the scroller itself, and
+            zero-height so it lays nothing out — it draws over the log rather
+            than pushing it down. `items-start`, or the row's default stretch
+            squeezes the pill to the zero height of its row. */}
+        {dayAtTop.day !== null && (
+          <div className="pointer-events-none sticky top-2 z-10 flex h-0 items-start justify-center overflow-visible">
+            <DayChip day={dayAtTop.day} floating />
+          </div>
+        )}
         {(chat.error ?? notice) !== null && (
           <div className="mx-auto w-full max-w-6xl px-6 pt-5">
             <p className="bg-danger-bg text-danger border-danger/25 rounded-[var(--radius-control)] border px-3 py-2">

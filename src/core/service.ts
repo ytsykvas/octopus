@@ -1185,8 +1185,15 @@ export interface OctopusService {
   listChats(workspaceId: string): readonly Chat[]
   /** Everything said in a chat, as it will be redrawn after a restart. */
   chatHistory(chatId: string): Promise<ChatEntry[]>
-  /** Sends a message, starting or resuming the agent session as needed. */
-  sendToChat(chatId: string, text: string): Promise<void>
+  /**
+   * Sends a message, starting or resuming the agent session as needed.
+   *
+   * Answers with the id the message was recorded under, which is what it is
+   * rewound to — or null for one that never reaches the agent. The window
+   * draws the message before this returns, and without the id its line could
+   * not be rewound until the history was read again.
+   */
+  sendToChat(chatId: string, text: string): Promise<string | null>
   /** Stops the current turn; the session stays open. */
   interruptChat(chatId: string): Promise<void>
   /** Sets how freely the chat works once it is working. */
@@ -5183,12 +5190,13 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
             windowsFrom(report, now(), usageWindows, await asOfFor(report, session))
           )
         }
-        return
+        return null
       }
 
       session.send(text, messageId)
 
       await setChatStatus(chatId, 'running')
+      return messageId
     },
 
     async interruptChat(chatId) {
