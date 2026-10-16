@@ -9276,16 +9276,29 @@ describe('the agent chat', () => {
         await expect(saidIn(service, chatId)).resolves.toHaveLength(2)
       })
 
-      // A session starting from the old history would come up after the close
-      // and hold it; the start is let finish, and closed with the rest.
-      it('lets a session already starting finish, and closes it', async () => {
+      // A session started from the old history must not outlive the cut: the
+      // rewind closes it, so the next one starts at the cut. Ordered by hand —
+      // the rewind reads its cut only once the preview's session is up — since
+      // left to timing this passed locally and failed on a slower machine.
+      it('closes a session started from the old history', async () => {
         const { service, chatId, first, second } = await spokenTwice()
         await service.closeChats()
         const before = agents.length
+        // Held in an object: assigned inside the closure, which narrowing cannot see.
+        const preview: { running: Promise<unknown> | null } = { running: null }
+        sessionChain = async () => {
+          // The rewind's own read: start the preview, and wait for its session.
+          if (preview.running === null) {
+            preview.running = service.previewRewind(chatId, first)
+            await vi.waitFor(() => {
+              expect(agents.length).toBe(before + 1)
+            })
+          }
+          return chainOf(first, second)
+        }
 
-        const previewing = service.previewRewind(chatId, first)
         await service.rewindChat(chatId, second, 'conversation')
-        await previewing
+        await preview.running
 
         expect(agents.length).toBe(before + 1)
         expect(agents.at(-1)?.closed()).toBe(1)
