@@ -343,25 +343,33 @@ the log, named "Plan, as you edited it", under the one the agent wrote: the log
 has to say what the agent was actually told to do. Rewriting is the whole-plan
 alternative to the feedback field, which sends the plan back to be reworked.
 
-**A message offers to put the files back to before it.** Hovering a message the
-user sent reveals a small undo mark beside it. It is not a conversation rewind —
-what was said stays — it restores the **files** to how they were when that
-message was sent, which is the safety net for letting an agent run unattended.
-Two steps, and the first changes nothing: the agent is asked what it _would_
-do, so the question has the numbers in it ("puts 3 files back … +12 −4"), and
-only the second call does it. The dialog says what the numbers cannot: anything
-changed in those files since — by the agent or by the user — is overwritten.
-Nothing to undo is an answer rather than a question, and says so in the banner.
-The log gains a quiet row afterwards, because the tree changed without the agent
-doing anything, and it says how many files a link kept it from restoring, since
-the rewind never follows one and a bare count would read as though everything
-tracked had come back. It is refused while **any** conversation of the workspace
-is working, not only this one: the worktree is shared, and the checkpoint
-restores whatever it tracked, which can be a file another is editing. The mark is absent while the agent is working (the core would
-refuse it, and a button that can only fail is a promise the interface does not
-keep) and on messages sent before their ids were kept. It needs checkpointing,
-which every session is started with from now on — a checkpoint cannot be taken
-for work already done, so conversations that ran before this have none.
+**A message offers to rewind to before it** — the conversation, the files, or
+both, the three Claude Code's own `/rewind` offers. Hovering a message the user
+sent reveals a small undo mark beside it. Two steps, and the first changes
+nothing: the core is asked what each half _would_ do, so the dialog's rows carry
+the numbers ("puts 3 files back … +12 −4") and picking one is the confirmation.
+A choice that cannot be had stays in its place, disabled, with the reason — the
+conversation was compacted since, or forked from another, so the agent no longer
+holds that point; another conversation of the workspace is working, so the
+files cannot be touched; the agent refused, in its own words; or the files are
+already as they were. A row that vanished would read as a feature that is not
+there, and the reason is the one thing the user can act on. While the files are
+on offer the dialog says once what the numbers cannot: anything changed in them
+since — by the agent or by the user — is overwritten.
+
+Rewinding the conversation drops the message and everything after it from the
+log and from what the agent remembers, and puts the message back in the field,
+replacing whatever was there, with the caret at its end — to be edited and sent
+again, as Claude Code does. Putting the files back adds a quiet row to the log,
+because the tree changed without the agent doing anything, and it says how many
+files a link kept it from restoring, since the rewind never follows one. The
+files are refused while **any** conversation of the workspace is working, not
+only this one: the worktree is shared. The mark is absent while the agent is
+working (the core would refuse it, and a button that can only fail is a promise
+the interface does not keep) and on messages sent before their ids were kept.
+The files need checkpointing, which every session is started with — a
+checkpoint cannot be taken for work already done, so conversations that ran
+before it have none.
 
 **Escape stops a running turn**, as it does in Claude Code, and the button's
 tooltip says so. Only once neither suggestion list has taken the key — those

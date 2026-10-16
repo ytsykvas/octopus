@@ -678,21 +678,32 @@ export const uk: Translation = {
     today: 'Сьогодні',
     yesterday: 'Вчора',
     dateLocale: 'uk',
-    rewind: 'Повернути файли до стану перед цим повідомленням',
-    rewindTitle: 'Повернути файли?',
-    rewindMessage_one:
-      'Це поверне {{count}} файл до стану перед цим повідомленням (+{{insertions}} −{{deletions}}).',
-    rewindMessage_few:
-      'Це поверне {{count}} файли до стану перед цим повідомленням (+{{insertions}} −{{deletions}}).',
-    rewindMessage_many:
-      'Це поверне {{count}} файлів до стану перед цим повідомленням (+{{insertions}} −{{deletions}}).',
-    rewindMessage_other:
-      'Це поверне {{count}} файлів до стану перед цим повідомленням (+{{insertions}} −{{deletions}}).',
-    rewindDetail:
-      'Усе, що змінилося в них відтоді — агентом чи вами — буде перезаписано, і повернути це не вийде.',
-    rewindConfirm: 'Повернути файли',
-    rewindCancel: 'Скасувати',
+    rewind: 'Повернутися до моменту перед цим повідомленням',
+    rewindTitle: 'Повернутися до моменту перед цим повідомленням',
+    rewindBoth: 'Розмову і файли',
+    rewindConversation: 'Лише розмову',
+    rewindFiles: 'Лише файли',
+    rewindDropsMessages:
+      'Прибирає це повідомлення і все після нього. Текст повертається в поле вводу, щоб виправити й надіслати знову.',
+    rewindPutsFilesBack_one:
+      'Повертає {{count}} файл до стану перед цим повідомленням (+{{insertions}} −{{deletions}}).',
+    rewindPutsFilesBack_few:
+      'Повертає {{count}} файли до стану перед цим повідомленням (+{{insertions}} −{{deletions}}).',
+    rewindPutsFilesBack_many:
+      'Повертає {{count}} файлів до стану перед цим повідомленням (+{{insertions}} −{{deletions}}).',
+    rewindPutsFilesBack_other:
+      'Повертає {{count}} файлів до стану перед цим повідомленням (+{{insertions}} −{{deletions}}).',
+    rewindKeepsFiles: 'Файли лишаються як є.',
+    rewindKeepsConversation: 'Розмова лишається як є.',
+    rewindNoConversation:
+      'Агент уже не тримає цього моменту: розмову відтоді стиснуто або відгалужено від іншої.',
+    rewindFilesBusy: 'В цьому воркспейсі працює інша розмова.',
     rewindNothing: 'Файли вже такі, якими були перед цим повідомленням.',
+    rewindFilesRefused: 'Повернути файли не вийде: {{reason}}',
+    rewindFilesRefusedPlain: 'Повернути файли до цього повідомлення не вийде.',
+    rewindDetail:
+      'Усе, що змінилося у файлах відтоді — агентом чи вами — буде перезаписано, і повернути це не вийде.',
+    rewindCancel: 'Скасувати',
     filesRewound:
       'Файли повернуто до попереднього повідомлення: змінено {{files}}, +{{insertions}} −{{deletions}}',
     filesRewoundSkipped_one: '({{count}} залишено — на його шляху було посилання)',
@@ -1320,9 +1331,10 @@ export const uk: Translation = {
     lastChat: 'Останню розмову закрити не можна. Щоб почати її спочатку, скористайтеся /clear.',
     nothingToFork: 'Ця розмова ще не почалася, тож продовжувати нема чого.',
     forkFailed: 'Агент не зміг скопіювати цю розмову.',
-    rewindBusy: 'Агент працює. Зупиніть його, перш ніж повертати файли.',
-    rewindUnavailable: 'Повернути файли до цього повідомлення не вийде.',
-    rewindUnavailableReason: 'Повернути файли до цього повідомлення не вийде: {{reason}}',
+    rewindBusy: 'Агент працює. Зупиніть його, перш ніж повертатися назад.',
+    rewindUnavailable: 'Повернути цю розмову до того повідомлення не вийде.',
+    rewindUnavailableReason: 'Повернути цю розмову до того повідомлення не вийде: {{reason}}',
+    rewindInProgress: 'Розмова саме повертається назад. Зачекайте, доки це завершиться.',
     chatClosed: 'Цю розмову закрито. Спершу відкрийте її з історії.',
     repoConfigSymlink:
       '{{path}} — символічне посилання. octopus не читає й не пише через нього, бо воно може вести куди завгодно поза репозиторієм.',

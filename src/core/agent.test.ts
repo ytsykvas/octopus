@@ -163,6 +163,7 @@ function fakeAgent(
     {
       cwd: '/ws/kyiv',
       resume: null,
+      resumeAt: null,
       settingSources: [],
       permissionMode: 'default',
       model: null,
@@ -1001,6 +1002,27 @@ describe('a session', () => {
     expect(agent.options()).toMatchObject({ resume: 'sess-9', model: 'claude-opus-5' })
   })
 
+  // A rewound conversation picks the session up where it was cut, not at its
+  // end — that is the whole of what the agent forgets.
+  it('picks a stored session up at the cut, when there is one', () => {
+    const { agent } = fakeAgent({ resume: 'sess-9', resumeAt: 'entry-4' })
+
+    expect(agent.options()).toMatchObject({ resume: 'sess-9', resumeSessionAt: 'entry-4' })
+  })
+
+  it('continues from the end when there is no cut', () => {
+    const { agent } = fakeAgent({ resume: 'sess-9' })
+
+    expect(agent.options()).not.toHaveProperty('resumeSessionAt')
+  })
+
+  // The CLI refuses the flag without a session to resume.
+  it('drops a cut that has no session to apply to', () => {
+    const { agent } = fakeAgent({ resume: null, resumeAt: 'entry-4' })
+
+    expect(agent.options()).not.toHaveProperty('resumeSessionAt')
+  })
+
   // The id is the only handle there is on a point in the conversation: it is
   // what the files are rewound to, and nothing in the stream says it back.
   it('stamps the id it was given on the message', async () => {
@@ -1410,6 +1432,7 @@ describe('a session that will not close', () => {
       {
         cwd: '/ws/kyiv',
         resume: null,
+        resumeAt: null,
         settingSources: [],
         permissionMode: 'default',
         model: null,

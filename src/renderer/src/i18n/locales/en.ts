@@ -881,22 +881,35 @@ export const en = {
     today: 'Today',
     yesterday: 'Yesterday',
     dateLocale: 'en-GB',
-    /* Putting the files back to how they were when a message was sent. */
-    rewind: 'Put the files back to before this message',
-    rewindTitle: 'Put the files back?',
-    rewindMessage_one:
-      'This puts {{count}} file back to how it was before this message (+{{insertions}} −{{deletions}}).',
-    rewindMessage_few:
-      'This puts {{count}} files back to how they were before this message (+{{insertions}} −{{deletions}}).',
-    rewindMessage_many:
-      'This puts {{count}} files back to how they were before this message (+{{insertions}} −{{deletions}}).',
-    rewindMessage_other:
-      'This puts {{count}} files back to how they were before this message (+{{insertions}} −{{deletions}}).',
+    /* Rewinding to before a message: the conversation, the files, or both. */
+    rewind: 'Rewind to before this message',
+    rewindTitle: 'Rewind to before this message',
+    rewindBoth: 'Conversation and files',
+    rewindConversation: 'Conversation only',
+    rewindFiles: 'Files only',
+    // What each choice does, under its name.
+    rewindDropsMessages:
+      'Removes this message and everything after it. The message goes back into the field, to edit and send again.',
+    rewindPutsFilesBack_one:
+      'Puts {{count}} file back to how it was before this message (+{{insertions}} −{{deletions}}).',
+    rewindPutsFilesBack_few:
+      'Puts {{count}} files back to how they were before this message (+{{insertions}} −{{deletions}}).',
+    rewindPutsFilesBack_many:
+      'Puts {{count}} files back to how they were before this message (+{{insertions}} −{{deletions}}).',
+    rewindPutsFilesBack_other:
+      'Puts {{count}} files back to how they were before this message (+{{insertions}} −{{deletions}}).',
+    rewindKeepsFiles: 'The files stay as they are.',
+    rewindKeepsConversation: 'The conversation stays as it is.',
+    // Why a choice is not on offer, in its place.
+    rewindNoConversation:
+      'The agent no longer holds this point: the conversation was compacted since, or forked from another.',
+    rewindFilesBusy: 'Another conversation in this workspace is working.',
+    rewindNothing: 'The files are already as they were before this message.',
+    rewindFilesRefused: 'The files cannot be put back: {{reason}}',
+    rewindFilesRefusedPlain: 'The files cannot be put back to this message.',
     rewindDetail:
-      'Anything changed in them since — by the agent or by you — is overwritten, and cannot be brought back.',
-    rewindConfirm: 'Put files back',
+      'Anything changed in the files since — by the agent or by you — is overwritten, and cannot be brought back.',
     rewindCancel: 'Cancel',
-    rewindNothing: 'The files are already as they were before that message.',
     filesRewound:
       'Files put back to an earlier message: {{files}} changed, +{{insertions}} −{{deletions}}',
     filesRewoundSkipped_one: '({{count}} left alone — a link sat at its path)',
@@ -1714,9 +1727,10 @@ export const en = {
     lastChat: 'The last conversation cannot be closed. Use /clear to start it again.',
     nothingToFork: 'This conversation has not started yet, so there is nothing to continue.',
     forkFailed: 'The agent could not copy this conversation.',
-    rewindBusy: 'The agent is working. Stop it before putting the files back.',
-    rewindUnavailable: 'The files cannot be put back to that message.',
-    rewindUnavailableReason: 'The files cannot be put back to that message: {{reason}}',
+    rewindBusy: 'The agent is working. Stop it before rewinding.',
+    rewindUnavailable: 'This conversation cannot be rewound to that message.',
+    rewindUnavailableReason: 'This conversation cannot be rewound to that message: {{reason}}',
+    rewindInProgress: 'This conversation is being rewound. Wait for it to finish.',
     chatClosed: 'That conversation was closed. Reopen it from the history first.',
     repoConfigSymlink:
       '{{path}} is a symbolic link. octopus will not read or write through one, because it can point anywhere outside the repository.',

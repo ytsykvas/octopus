@@ -32,7 +32,7 @@ import { MAX_CLOSED_CHATS_PER_WORKSPACE } from './chats.js'
 import type { RemoteRepository } from './github.js'
 import { type GitOptions, gitIn } from './git.js'
 import { WORKSPACE_NAMES } from './names.js'
-import { skillsDirOf } from './paths.js'
+import { chatTranscript, skillsDirOf } from './paths.js'
 import { ProjectValidationError } from './projects.js'
 import {
   type ChatEvent,
@@ -148,7 +148,11 @@ afterEach(async () => {
   await Promise.allSettled(started.map((one) => one.closeChats()))
   started.length = 0
 
-  await rm(dir, { recursive: true, force: true })
+  // Retried because that wait is bounded: `closeChats` gives up after
+  // `SHUTDOWN_GRACE_MS`, as a quit should, and on a loaded CI runner a write
+  // can still land after it — the same `ENOTEMPTY`, in the MCP question tests
+  // twice in a row. The write is real and finishing; the removal just waits.
+  await rm(dir, { recursive: true, force: true, maxRetries: 10, retryDelay: 50 })
 })
 
 describe('default paths', () => {
@@ -8613,6 +8617,30 @@ describe('the agent chat', () => {
   })
 
   describe('putting the files back to a message', () => {
+    /**
+     * What the agent CLI holds of the session, as a rewind reads it back.
+     *
+     * Every user message this conversation recorded, each after an answer of
+     * its own, so a cut always has an entry to fall on — which is how a real
+     * chain reads. Replaced by a test that wants another history.
+     */
+    let sessionChain: (sessionId: string) => Promise<unknown>
+    /** Every fork asked for, with what it was asked to keep. */
+    let forks: { sessionId: string; upToMessageId: string | undefined }[]
+
+    beforeEach(() => {
+      sessionChain = () => Promise.resolve([])
+      forks = []
+    })
+
+    /** The chain for these messages, the way the CLI writes one. */
+    function chainOf(...messageIds: string[]): { type: string; uuid: string }[] {
+      return messageIds.flatMap((id, index) => [
+        { type: 'user', uuid: id },
+        { type: 'assistant', uuid: `answer-${String(index + 1)}` }
+      ])
+    }
+
     /** A conversation that has spoken once and finished, so it has a session. */
     async function spoken(): Promise<{
       service: OctopusService
@@ -8621,7 +8649,13 @@ describe('the agent chat', () => {
       messageId: string
       events: ChatEvent[]
     }> {
-      const { service, workspaceId, events } = await withWorkspace()
+      const { service, workspaceId, events } = await withWorkspace({
+        sessionMessages: (sessionId) => sessionChain(sessionId),
+        forkSession: (sessionId, options) => {
+          forks.push({ sessionId, upToMessageId: options.upToMessageId })
+          return Promise.resolve({ sessionId: 'sess-forked' })
+        }
+      })
       const chat = await service.openChat(workspaceId)
       await service.sendToChat(chat.id, 'rename the helper')
       agent().emit(initMessage)
@@ -8635,7 +8669,41 @@ describe('the agent chat', () => {
 
       const [entry] = await service.chatHistory(chat.id)
       const messageId = entry?.role === 'user' ? (entry.uuid ?? '') : ''
+      sessionChain = () => Promise.resolve(chainOf(messageId))
       return { service, workspaceId, chatId: chat.id, messageId, events }
+    }
+
+    /**
+     * A conversation of two finished turns, the second the one to rewind to —
+     * so the cut falls on the first turn's answer and something is kept.
+     */
+    async function spokenTwice(): Promise<{
+      service: OctopusService
+      workspaceId: string
+      chatId: string
+      first: string
+      second: string
+      events: ChatEvent[]
+    }> {
+      const { service, workspaceId, chatId, messageId: first, events } = await spoken()
+      await service.sendToChat(chatId, 'now rename the test too')
+      agent().emit(resultMessage)
+      await vi.waitFor(() => {
+        expect(service.listChats(workspaceId)[0]?.status).toBe('idle')
+      })
+
+      const history = await service.chatHistory(chatId)
+      const last = history.findLast((entry) => entry.role === 'user')
+      const second = last?.role === 'user' ? (last.uuid ?? '') : ''
+      sessionChain = () => Promise.resolve(chainOf(first, second))
+      return { service, workspaceId, chatId, first, second, events }
+    }
+
+    /** The texts of what the user said, as the history now holds them. */
+    async function saidIn(service: OctopusService, chatId: string): Promise<string[]> {
+      return (await service.chatHistory(chatId)).flatMap((entry) =>
+        entry.role === 'user' ? [entry.text] : []
+      )
     }
 
     // The id the agent will know the message by is the only handle on that
@@ -8668,10 +8736,8 @@ describe('the agent chat', () => {
       const { service, chatId, messageId } = await spoken()
 
       await expect(service.previewRewind(chatId, messageId)).resolves.toMatchObject({
-        canRewind: true,
-        filesChanged: ['a.ts', 'b.ts'],
-        insertions: 12,
-        deletions: 4
+        conversation: true,
+        files: { canRewind: true, filesChanged: ['a.ts', 'b.ts'], insertions: 12, deletions: 4 }
       })
 
       expect(agent().rewinds()).toEqual([{ messageId, dryRun: true }])
@@ -8680,7 +8746,10 @@ describe('the agent chat', () => {
     it('puts the files back and records that it did', async () => {
       const { service, chatId, messageId } = await spoken()
 
-      await service.rewindChat(chatId, messageId)
+      await expect(service.rewindChat(chatId, messageId, 'files')).resolves.toMatchObject({
+        files: { filesChanged: ['a.ts', 'b.ts'] },
+        text: null
+      })
 
       expect(agent().rewinds()).toEqual([{ messageId, dryRun: false }])
       // In the log as well, because it changed the tree without the agent
@@ -8707,7 +8776,7 @@ describe('the agent chat', () => {
       await service.previewRewind(chatId, messageId)
       expect(rewound).toEqual([])
 
-      await service.rewindChat(chatId, messageId)
+      await service.rewindChat(chatId, messageId, 'files')
       expect(rewound).toHaveLength(1)
     })
 
@@ -8720,8 +8789,14 @@ describe('the agent chat', () => {
       const [entry] = await service.chatHistory(chat.id)
       const messageId = entry?.role === 'user' ? (entry.uuid ?? '') : ''
 
-      await expect(service.rewindChat(chat.id, messageId)).rejects.toMatchObject({
-        name: 'ChatError',
+      // Either half: the conversation is being added to, and its files edited.
+      for (const scope of ['files', 'conversation'] as const) {
+        await expect(service.rewindChat(chat.id, messageId, scope)).rejects.toMatchObject({
+          name: 'ChatError',
+          code: 'rewindBusy'
+        })
+      }
+      await expect(service.previewRewind(chat.id, messageId)).rejects.toMatchObject({
         code: 'rewindBusy'
       })
       expect(agent().rewinds()).toEqual([])
@@ -8739,11 +8814,28 @@ describe('the agent chat', () => {
         )
       })
 
-      await expect(service.rewindChat(chatId, messageId)).rejects.toMatchObject({
-        code: 'rewindBusy'
+      for (const scope of ['files', 'both'] as const) {
+        await expect(service.rewindChat(chatId, messageId, scope)).rejects.toMatchObject({
+          code: 'rewindBusy'
+        })
+      }
+      // The preview says the files cannot be asked about rather than refusing:
+      // the conversation still can be.
+      await expect(service.previewRewind(chatId, messageId)).resolves.toEqual({
+        conversation: true,
+        files: null
       })
-      await expect(service.previewRewind(chatId, messageId)).rejects.toMatchObject({
-        code: 'rewindBusy'
+    })
+
+    // Its own history is not shared: only the files are.
+    it('rewinds the conversation while another of the workspace is working', async () => {
+      const { service, workspaceId, chatId, messageId } = await spoken()
+      const other = await service.createChat(workspaceId)
+      await service.sendToChat(other.id, 'keep editing')
+
+      await expect(service.rewindChat(chatId, messageId, 'conversation')).resolves.toMatchObject({
+        files: null,
+        text: 'rename the helper'
       })
     })
 
@@ -8819,7 +8911,7 @@ describe('the agent chat', () => {
           skippedLinks: 2
         })
 
-      await service.rewindChat(chatId, messageId)
+      await service.rewindChat(chatId, messageId, 'files')
 
       await vi.waitFor(async () => {
         const history = await service.chatHistory(chatId)
@@ -8849,8 +8941,11 @@ describe('the agent chat', () => {
       const { service, chatId } = await spoken()
 
       await expect(
-        service.rewindChat(chatId, '00000000-0000-4000-8000-000000000000')
+        service.rewindChat(chatId, '00000000-0000-4000-8000-000000000000', 'both')
       ).rejects.toMatchObject({ name: 'ChatError', code: 'rewindUnavailable' })
+      await expect(
+        service.previewRewind(chatId, '00000000-0000-4000-8000-000000000000')
+      ).rejects.toMatchObject({ code: 'rewindUnavailable' })
       expect(agent().rewinds()).toEqual([])
     })
 
@@ -8865,7 +8960,7 @@ describe('the agent chat', () => {
       const [entry] = await service.chatHistory(chat.id)
       const messageId = entry?.role === 'user' ? (entry.uuid ?? '') : ''
 
-      await expect(service.rewindChat(chat.id, messageId)).rejects.toMatchObject({
+      await expect(service.rewindChat(chat.id, messageId, 'both')).rejects.toMatchObject({
         code: 'rewindUnavailable'
       })
     })
@@ -8875,9 +8970,15 @@ describe('the agent chat', () => {
       rewindAnswer = () =>
         Promise.resolve({ canRewind: false, error: 'No checkpoint for that message' })
 
-      await expect(service.rewindChat(chatId, messageId)).rejects.toMatchObject({
+      await expect(service.rewindChat(chatId, messageId, 'files')).rejects.toMatchObject({
         code: 'rewindUnavailable',
         params: { reason: 'No checkpoint for that message' }
+      })
+      // The preview answers with the verdict rather than refusing, so the
+      // dialog can say why the files are not on offer.
+      await expect(service.previewRewind(chatId, messageId)).resolves.toMatchObject({
+        conversation: true,
+        files: { canRewind: false, error: 'No checkpoint for that message' }
       })
       const history = await service.chatHistory(chatId)
       expect(
@@ -8889,7 +8990,7 @@ describe('the agent chat', () => {
       const { service, chatId, messageId } = await spoken()
       rewindAnswer = () => Promise.resolve({ canRewind: false })
 
-      await expect(service.rewindChat(chatId, messageId)).rejects.toMatchObject({
+      await expect(service.rewindChat(chatId, messageId, 'files')).rejects.toMatchObject({
         code: 'rewindUnavailable',
         params: { reason: '' }
       })
@@ -8906,6 +9007,310 @@ describe('the agent chat', () => {
 
       expect(agents.length).toBe(before + 1)
       expect(agents.at(-1)?.rewinds()).toEqual([{ messageId, dryRun: true }])
+    })
+
+    describe('the conversation', () => {
+      it('cuts the log back and hands the message back, leaving the files alone', async () => {
+        const { service, chatId, second, events } = await spokenTwice()
+
+        await expect(service.rewindChat(chatId, second, 'conversation')).resolves.toEqual({
+          files: null,
+          text: 'now rename the test too'
+        })
+
+        await expect(saidIn(service, chatId)).resolves.toEqual(['rename the helper'])
+        expect(agent().rewinds()).toEqual([])
+        // Every window holding the log is told to read it again.
+        expect(events.map((event) => event.event)).toContainEqual({
+          type: 'conversation_rewound',
+          messageId: second
+        })
+      })
+
+      /*
+       * The agent forgets from where the next session starts: measured against
+       * the real CLI, a session started at the cut and closed unused leaves a
+       * plain resume remembering everything. So the cut is kept until a turn
+       * runs on it, and the session that was holding the old history goes.
+       */
+      it('starts the next session at the cut, and forgets it once a turn has run', async () => {
+        const { service, workspaceId, chatId, second } = await spokenTwice()
+
+        await service.rewindChat(chatId, second, 'conversation')
+        expect(agents[0]?.closed()).toBe(1)
+        expect(service.listChats(workspaceId)[0]).toMatchObject({
+          sessionId: 'sess-1',
+          resumeAt: 'answer-1'
+        })
+
+        await service.sendToChat(chatId, 'rename the test, carefully')
+        expect(agents[1]?.options()).toMatchObject({
+          resume: 'sess-1',
+          resumeSessionAt: 'answer-1'
+        })
+
+        agents[1]?.emit(resultMessage)
+        await vi.waitFor(() => {
+          expect(service.listChats(workspaceId)[0]?.resumeAt).toBeNull()
+        })
+      })
+
+      // Applied by the next session whenever it comes, which may be after a
+      // restart: the record carries it.
+      it('keeps the cut across a restart until it is used', async () => {
+        const { service, workspaceId, chatId, second } = await spokenTwice()
+        await service.rewindChat(chatId, second, 'conversation')
+
+        const reopened = await createService({ ...paths(dir), query: fakeQuery() })
+
+        expect(reopened.listChats(workspaceId)[0]?.resumeAt).toBe('answer-1')
+      })
+
+      // A session started at one cut, outlived by a second rewind, must not
+      // clear the second cut when it finally finishes something.
+      it('is not forgotten by a session that started at another cut', async () => {
+        const { service, workspaceId, chatId, first, second, events } = await spokenTwice()
+        await service.sendToChat(chatId, 'and the docs')
+        agent().emit(resultMessage)
+        await vi.waitFor(() => {
+          expect(service.listChats(workspaceId)[0]?.status).toBe('idle')
+        })
+        const third = (await service.chatHistory(chatId))
+          .flatMap((entry) => (entry.role === 'user' ? [entry.uuid ?? ''] : []))
+          .at(-1)
+        sessionChain = () => Promise.resolve(chainOf(first, second, third ?? ''))
+
+        await service.rewindChat(chatId, third ?? '', 'conversation')
+        // Started at that cut, by asking what a rewind would do.
+        await service.previewRewind(chatId, second)
+        const atThatCut = agents.at(-1)
+        expect(atThatCut?.options()).toMatchObject({ resumeSessionAt: 'answer-2' })
+
+        await service.rewindChat(chatId, second, 'conversation')
+        // A closed session can still hand over what it had buffered.
+        const results = events.filter((event) => event.event.type === 'result').length
+        atThatCut?.emit(resultMessage)
+        await vi.waitFor(() => {
+          expect(events.filter((event) => event.event.type === 'result')).toHaveLength(results + 1)
+        })
+        // Commits run in order, so once this one has, the result's has too.
+        await service.renameChat(chatId, 'settled')
+
+        expect(service.listChats(workspaceId)[0]?.resumeAt).toBe('answer-1')
+      })
+
+      it('forgets a cut that belonged to a session since replaced', async () => {
+        const { service, workspaceId, chatId, second } = await spokenTwice()
+        await service.rewindChat(chatId, second, 'conversation')
+
+        await service.sendToChat(chatId, 'start over')
+        agents.at(-1)?.emit({ ...initMessage, session_id: 'sess-2' })
+
+        await vi.waitFor(() => {
+          expect(service.listChats(workspaceId)[0]).toMatchObject({
+            sessionId: 'sess-2',
+            resumeAt: null
+          })
+        })
+      })
+
+      // Nothing precedes it, so there is nothing to keep: a new session.
+      it('starts over when the message opened the conversation', async () => {
+        const { service, workspaceId, chatId, first } = await spokenTwice()
+
+        await expect(service.rewindChat(chatId, first, 'conversation')).resolves.toMatchObject({
+          text: 'rename the helper'
+        })
+
+        await expect(service.chatHistory(chatId)).resolves.toEqual([])
+        expect(service.listChats(workspaceId)[0]).toMatchObject({
+          sessionId: null,
+          resumeAt: null
+        })
+        await service.sendToChat(chatId, 'from scratch')
+        expect(agents.at(-1)?.options()).not.toHaveProperty('resume')
+      })
+
+      // The fork copies the agent's session as it is on disk, which still
+      // runs to the end until a turn lands on the cut.
+      it('cuts a fork where it is waiting to be cut', async () => {
+        const { service, chatId, second } = await spokenTwice()
+        await service.forkChat(chatId)
+        await service.rewindChat(chatId, second, 'conversation')
+
+        await service.forkChat(chatId)
+
+        expect(forks).toEqual([
+          { sessionId: 'sess-1', upToMessageId: undefined },
+          { sessionId: 'sess-1', upToMessageId: 'answer-1' }
+        ])
+      })
+
+      // Compacted away, or renamed by a fork: offered as unavailable, and
+      // refused without touching anything.
+      it('is not offered for a message the session no longer holds', async () => {
+        const { service, workspaceId, chatId, second } = await spokenTwice()
+        sessionChain = () => Promise.resolve(chainOf('someone-else'))
+        const before = await service.chatHistory(chatId)
+
+        await expect(service.previewRewind(chatId, second)).resolves.toMatchObject({
+          conversation: false
+        })
+        await expect(service.rewindChat(chatId, second, 'both')).rejects.toMatchObject({
+          code: 'rewindUnavailable'
+        })
+
+        await expect(service.chatHistory(chatId)).resolves.toEqual(before)
+        expect(agent().rewinds()).toEqual([{ messageId: second, dryRun: true }])
+        expect(service.listChats(workspaceId)[0]?.resumeAt).toBeNull()
+      })
+
+      it('is not offered when the session’s history cannot be read', async () => {
+        const { service, chatId, second } = await spokenTwice()
+        sessionChain = () => Promise.reject(new Error('no such session'))
+
+        await expect(service.previewRewind(chatId, second)).resolves.toMatchObject({
+          conversation: false
+        })
+      })
+
+      // The files go first, and a refusal there leaves the conversation as it
+      // was — nothing about the rewind happened.
+      it('stays whole when the files cannot be put back', async () => {
+        const { service, workspaceId, chatId, second } = await spokenTwice()
+        rewindAnswer = () => Promise.resolve({ canRewind: false, error: 'No checkpoint' })
+
+        await expect(service.rewindChat(chatId, second, 'both')).rejects.toMatchObject({
+          code: 'rewindUnavailable'
+        })
+
+        await expect(saidIn(service, chatId)).resolves.toHaveLength(2)
+        expect(service.listChats(workspaceId)[0]?.resumeAt).toBeNull()
+      })
+
+      // Nothing was sent on top of the cut yet, so putting the record back
+      // makes the failure exact.
+      it('puts the record back when the log cannot be cut', async () => {
+        const { service, workspaceId, chatId, second } = await spokenTwice()
+        await mkdir(`${chatTranscript(chatId, join(dir, 'data'))}.tmp`, { recursive: true })
+        await writeFile(
+          join(`${chatTranscript(chatId, join(dir, 'data'))}.tmp`, 'blocker'),
+          '',
+          'utf8'
+        )
+
+        await expect(service.rewindChat(chatId, second, 'conversation')).rejects.toThrow()
+
+        expect(service.listChats(workspaceId)[0]).toMatchObject({
+          sessionId: 'sess-1',
+          resumeAt: null
+        })
+        await expect(saidIn(service, chatId)).resolves.toHaveLength(2)
+      })
+    })
+
+    describe('both halves', () => {
+      it('puts the files back first, and keeps the row that says so', async () => {
+        const { service, chatId, second } = await spokenTwice()
+        const asked: string[] = []
+        const answer = rewindAnswer
+        rewindAnswer = () => {
+          asked.push(agents[0]?.closed() === 0 ? 'files while alive' : 'files after close')
+          return answer()
+        }
+
+        await expect(service.rewindChat(chatId, second, 'both')).resolves.toMatchObject({
+          files: { filesChanged: ['a.ts', 'b.ts'] },
+          text: 'now rename the test too'
+        })
+
+        expect(asked).toEqual(['files while alive'])
+        // Written after the cut, or the cut would have taken it.
+        const history = await service.chatHistory(chatId)
+        expect(
+          history.map((entry) => (entry.role === 'user' ? entry.text : entry.event.type))
+        ).toEqual(['rename the helper', 'session_started', 'result', 'files_rewound'])
+      })
+    })
+
+    describe('a rewind under way', () => {
+      /** Holds the session's history back, so the rewind waits mid-way. */
+      function holdChain(messages: string[]): { release: () => void } {
+        // Made up front rather than when asked for: the rewind reads the chain
+        // only after its own checks, which may well be after the test lets go.
+        let release: () => void = () => undefined
+        const chain = new Promise<unknown>((resolve) => {
+          release = () => {
+            resolve(chainOf(...messages))
+          }
+        })
+        sessionChain = () => chain
+        return { release }
+      }
+
+      // A message would land in the history being cut, or start a session on it.
+      it('refuses a message, and a second rewind, until it ends', async () => {
+        const { service, chatId, first, second } = await spokenTwice()
+        const held = holdChain([first, second])
+
+        const rewinding = service.rewindChat(chatId, second, 'conversation')
+        await vi.waitFor(async () => {
+          await expect(service.sendToChat(chatId, 'too soon')).rejects.toMatchObject({
+            code: 'rewindInProgress'
+          })
+        })
+        await expect(service.rewindChat(chatId, first, 'conversation')).rejects.toMatchObject({
+          code: 'rewindInProgress'
+        })
+
+        held.release()
+        await rewinding
+        await service.sendToChat(chatId, 'now')
+        await expect(saidIn(service, chatId)).resolves.toEqual(['rename the helper', 'now'])
+      })
+
+      // The worktree is shared, so the files are refused if another
+      // conversation began working while this one was finding its cut.
+      it('asks again whether the workspace is quiet before the files', async () => {
+        const { service, workspaceId, chatId, first, second } = await spokenTwice()
+        const other = await service.createChat(workspaceId)
+        const held = holdChain([first, second])
+
+        const rewinding = service.rewindChat(chatId, second, 'both')
+        await service.sendToChat(other.id, 'keep editing')
+        held.release()
+
+        await expect(rewinding).rejects.toMatchObject({ code: 'rewindBusy' })
+        await expect(saidIn(service, chatId)).resolves.toHaveLength(2)
+      })
+
+      // A session started from the old history must not outlive the cut: the
+      // rewind closes it, so the next one starts at the cut. Ordered by hand —
+      // the rewind reads its cut only once the preview's session is up — since
+      // left to timing this passed locally and failed on a slower machine.
+      it('closes a session started from the old history', async () => {
+        const { service, chatId, first, second } = await spokenTwice()
+        await service.closeChats()
+        const before = agents.length
+        // Held in an object: assigned inside the closure, which narrowing cannot see.
+        const preview: { running: Promise<unknown> | null } = { running: null }
+        sessionChain = async () => {
+          // The rewind's own read: start the preview, and wait for its session.
+          if (preview.running === null) {
+            preview.running = service.previewRewind(chatId, first)
+            await vi.waitFor(() => {
+              expect(agents.length).toBe(before + 1)
+            })
+          }
+          return chainOf(first, second)
+        }
+
+        await service.rewindChat(chatId, second, 'conversation')
+        await preview.running
+
+        expect(agents.length).toBe(before + 1)
+        expect(agents.at(-1)?.closed()).toBe(1)
+      })
     })
   })
 
@@ -8957,7 +9362,7 @@ describe('the agent chat', () => {
         code: 'chatClosed'
       })
       await expect(
-        service.rewindChat(first.id, '00000000-0000-4000-8000-000000000000')
+        service.rewindChat(first.id, '00000000-0000-4000-8000-000000000000', 'both')
       ).rejects.toMatchObject({ code: 'chatClosed' })
       expect(agents).toHaveLength(0)
     })

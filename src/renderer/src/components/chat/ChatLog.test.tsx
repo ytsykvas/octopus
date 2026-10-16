@@ -224,7 +224,7 @@ describe('when things were said', () => {
   })
 })
 
-describe('putting the files back from a message', () => {
+describe('rewinding from a message', () => {
   const MESSAGE = '11111111-1111-4111-8111-111111111111'
 
   // The log only offers it; the pane asks the question and does the work.
@@ -234,9 +234,7 @@ describe('putting the files back from a message', () => {
       entries: [{ role: 'user', at: AT, text: 'rename the helper', uuid: MESSAGE }]
     })
 
-    await user.click(
-      screen.getByRole('button', { name: 'Put the files back to before this message' })
-    )
+    await user.click(screen.getByRole('button', { name: 'Rewind to before this message' }))
 
     expect(onRewind).toHaveBeenCalledExactlyOnceWith(MESSAGE)
   })
@@ -246,7 +244,7 @@ describe('putting the files back from a message', () => {
     renderLog({ entries: [{ role: 'user', at: AT, text: 'an old message' }] })
 
     expect(
-      screen.queryByRole('button', { name: 'Put the files back to before this message' })
+      screen.queryByRole('button', { name: 'Rewind to before this message' })
     ).not.toBeInTheDocument()
   })
 
@@ -259,7 +257,7 @@ describe('putting the files back from a message', () => {
     })
 
     expect(
-      screen.queryByRole('button', { name: 'Put the files back to before this message' })
+      screen.queryByRole('button', { name: 'Rewind to before this message' })
     ).not.toBeInTheDocument()
   })
 

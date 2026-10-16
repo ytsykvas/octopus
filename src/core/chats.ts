@@ -86,6 +86,7 @@ export type ChatErrorCode =
   | 'forkFailed'
   | 'rewindBusy'
   | 'rewindUnavailable'
+  | 'rewindInProgress'
   | 'chatClosed'
 
 /**
@@ -670,6 +671,20 @@ export const ChatSchema = z.object({
   title: z.string().nullable().default(null),
   /** Agent session id; null until the agent has answered once. */
   sessionId: z.string().nullable(),
+  /**
+   * Where the next session picks the conversation up, after it was rewound.
+   *
+   * The id of the last message the agent should still remember, handed to the
+   * SDK as `resumeSessionAt`. Stored rather than applied at once because the
+   * cut only lands once a turn runs on top of it: measured, a session started
+   * with it and closed without a message leaves a plain `resume` remembering
+   * everything that was cut. So it stays until that turn has finished, and an
+   * application closed in between applies it on the next message.
+   *
+   * Null for the ordinary case, and defaulted: a record from before rewinding
+   * existed was never rewound.
+   */
+  resumeAt: z.string().nullable().default(null),
   /** Model override; null leaves the choice to the agent. */
   model: z.string().nullable(),
   /**
@@ -863,6 +878,7 @@ export function newChat(workspaceId: string, options: NewChatOptions): Chat {
     status: 'idle',
     title: null,
     sessionId: null,
+    resumeAt: null,
     // Copied from the settings rather than left null and read through them
     // later: the pair is a starting point, and a conversation that changed it
     // must not move again when the settings do.
@@ -927,6 +943,9 @@ export function forkChat(source: Chat, options: ForkChatOptions): Chat {
     // cannot be read. It takes the automatic name until it is given one.
     title: null,
     sessionId: options.sessionId,
+    // The fork was cut where the source was waiting to be, so it has nothing
+    // left to apply.
+    resumeAt: null,
     model: source.model,
     planModel: source.planModel,
     // The split comes along, unlike `planMode`. It is a statement about how

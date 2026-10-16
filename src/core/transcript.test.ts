@@ -13,7 +13,8 @@ import {
   MAX_PREVIEW,
   previewOf,
   readTranscript,
-  removeTranscript
+  removeTranscript,
+  truncateTranscript
 } from './transcript.js'
 
 let root: string
@@ -292,6 +293,59 @@ describe('the preview of a conversation', () => {
 
   it('is empty for a conversation that never had a message', async () => {
     await expect(previewOf('chat-nothing', root)).resolves.toBe('')
+  })
+})
+
+describe('cutting back to a message, which is what a rewind needs', () => {
+  const first: ChatEntry = { role: 'user', at: AT, text: 'look around', uuid: 'm-1' }
+  const answer: ChatEntry = { role: 'agent', at: AT, event: { type: 'text', text: 'done' } }
+  const second: ChatEntry = { role: 'user', at: AT, text: 'now rename it', uuid: 'm-2' }
+  const later: ChatEntry = { role: 'agent', at: AT, event: { type: 'text', text: 'renamed' } }
+
+  async function spoken(): Promise<void> {
+    for (const entry of [first, answer, second, later]) await appendEntry('chat-1', entry, root)
+  }
+
+  it('drops the message and everything after it, and hands its words back', async () => {
+    await spoken()
+
+    await expect(truncateTranscript('chat-1', 'm-2', root)).resolves.toBe('now rename it')
+    await expect(readTranscript('chat-1', root)).resolves.toEqual([first, answer])
+    // Still a file the next entry can be appended to as a line of its own.
+    await appendEntry('chat-1', later, root)
+    await expect(readTranscript('chat-1', root)).resolves.toEqual([first, answer, later])
+  })
+
+  it('leaves nothing when the message opened the conversation', async () => {
+    await spoken()
+
+    await expect(truncateTranscript('chat-1', 'm-1', root)).resolves.toBe('look around')
+    await expect(readFile(chatTranscript('chat-1', root), 'utf8')).resolves.toBe('')
+  })
+
+  // The caller checked first; a cut at a guess would lose lines for nothing.
+  it('touches nothing for a message the history does not hold', async () => {
+    await spoken()
+    const before = await readFile(chatTranscript('chat-1', root), 'utf8')
+
+    await expect(truncateTranscript('chat-1', 'm-9', root)).resolves.toBeNull()
+    await expect(readFile(chatTranscript('chat-1', root), 'utf8')).resolves.toBe(before)
+  })
+
+  it('says nothing about a chat that never wrote anything', async () => {
+    await expect(truncateTranscript('chat-nothing', 'm-1', root)).resolves.toBeNull()
+  })
+
+  // It takes a suffix away; what stays is not its to reformat or to judge.
+  it('keeps the lines before the cut byte for byte, a damaged one included', async () => {
+    const path = chatTranscript('chat-1', root)
+    await mkdir(join(root, 'chats'), { recursive: true })
+    const head = `${JSON.stringify(first)}\n{"role":"user","at":\n`
+    await writeFile(path, `${head}${JSON.stringify(second)}\n`, 'utf8')
+
+    await truncateTranscript('chat-1', 'm-2', root)
+
+    await expect(readFile(path, 'utf8')).resolves.toBe(head)
   })
 })
 

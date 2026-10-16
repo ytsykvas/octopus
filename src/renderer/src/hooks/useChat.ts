@@ -309,6 +309,20 @@ export function useChat(
         return
       }
 
+      /* The conversation was cut back to before a message. The transcript on
+         disk is already the shorter one, and it is the record — so it is read
+         again rather than the cut repeated here, which would be a second copy
+         of where it falls. Every window holding this log hears it; only the
+         one that asked puts the message back in its field. */
+      if (event.type === 'conversation_rewound') {
+        setStreaming(NOTHING_STREAMING)
+        void window.octopus.chats.history(openChatId).then((history) => {
+          if (history.ok) setEntries(history.value)
+          else setError(describeFailure(history))
+        })
+        return
+      }
+
       // What is left of `isEphemeral` after the two deltas above is the rate
       // limit, which describes the account rather than the conversation and
       // is drawn in the attic by `useRateLimit`. Falling through cost twice:
@@ -362,7 +376,7 @@ export function useChat(
         setPendingElicitation(null)
       }
     }, openChatId)
-  }, [openChatId])
+  }, [openChatId, describeFailure])
 
   /**
    * The conversation's record, created if this is the first thing done to it.

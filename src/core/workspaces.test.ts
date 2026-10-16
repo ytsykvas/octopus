@@ -1051,6 +1051,7 @@ describe('reconcile', () => {
         status: 'idle',
         title: null,
         sessionId: null,
+        resumeAt: null,
         model: null,
         planModel: null,
         planEffort: null,

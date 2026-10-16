@@ -636,6 +636,45 @@ describe('the record the pane creates for itself', () => {
   })
 })
 
+describe('a conversation rewound', () => {
+  const kept: ChatEntry = { role: 'user', at: '2026-08-11T09:00:00.000Z', text: 'look around' }
+  const dropped: ChatEntry = { role: 'user', at: '2026-08-11T09:05:00.000Z', text: 'rename it' }
+
+  // The transcript on disk is already the shorter one, and it is the record:
+  // every window holding the log reads it again rather than cutting its own.
+  it('reads the log again', async () => {
+    givenChat([kept, dropped])
+    const { result } = renderHook(() => useChat(...open()))
+    await waitFor(() => {
+      expect(result.current.entries).toEqual([kept, dropped])
+    })
+
+    vi.mocked(octopus().chats.history).mockResolvedValue({ ok: true, value: [kept] })
+    emitAgentEvent({ type: 'conversation_rewound', messageId: 'm-2' })
+
+    await waitFor(() => {
+      expect(result.current.entries).toEqual([kept])
+    })
+  })
+
+  it('says so when the log cannot be read again', async () => {
+    givenChat([kept, dropped])
+    const { result } = renderHook(() => useChat(...open()))
+    await waitFor(() => {
+      expect(result.current.entries).toHaveLength(2)
+    })
+
+    vi.mocked(octopus().chats.history).mockResolvedValue({ ok: false, error: 'unreadable' })
+    emitAgentEvent({ type: 'conversation_rewound', messageId: 'm-2' })
+
+    await waitFor(() => {
+      expect(result.current.error).toBe('unreadable')
+    })
+    // Nothing is guessed at in its place: the log stays as it was drawn.
+    expect(result.current.entries).toHaveLength(2)
+  })
+})
+
 describe('the id a message is sent under', () => {
   const MESSAGE = '22222222-2222-4222-8222-222222222222'
 
