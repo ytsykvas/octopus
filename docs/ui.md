@@ -525,8 +525,10 @@ what a command did, so it appears once the agent — or one of its subagents —
 has run `Bash`. It waits for the turn to end rather than pushing the field up
 mid-answer, and only one is shown at a time. **Learn more** opens a paragraph in
 place; **Knew this already** stores the id in the config's `dismissedTips`, for
-every conversation; **Dismiss** hides it in this conversation until the app is
-next opened. Claude Code's number keys are left out: the field below takes
+every conversation; **Dismiss** hides it in this conversation for as long as
+its workspace stays open — the conversations are rebuilt when another workspace
+is chosen, and it comes back with them, which is what tells the two buttons
+apart. Claude Code's number keys are left out: the field below takes
 text, and a digit there is a digit. A new heads-up is one entry in
 `components/chat/tips.ts` — an id and the condition on the log — and its
 `title` and `detail` under `tips.<id>` in the locales.

@@ -569,6 +569,37 @@ describe('App', () => {
       })
     })
 
+    it('goes once the settings have taken the answer', async () => {
+      vi.mocked(window.octopus.config.update).mockImplementation((patch) =>
+        Promise.resolve({ ok: true, value: config(patch) })
+      )
+      ranACommand()
+      const user = await openAnna()
+
+      await user.click(await screen.findByRole('button', { name: 'Knew this already' }))
+
+      await waitFor(() => {
+        expect(screen.queryByRole('region', { name: 'Heads up' })).not.toBeInTheDocument()
+      })
+    })
+
+    // Dismiss lives in the conversation, and `App` keys the pane by workspace:
+    // leaving and coming back builds it fresh, and the caveat with it.
+    it('comes back after a dismiss once the workspace is left and returned to', async () => {
+      ranACommand()
+      const user = await openAnna()
+      await user.click(await screen.findByRole('button', { name: 'Dismiss' }))
+      expect(screen.queryByRole('region', { name: 'Heads up' })).not.toBeInTheDocument()
+
+      await user.click(screen.getByRole('button', { name: /bob/ }))
+      await user.click(screen.getByRole('button', { name: /anna/ }))
+
+      expect(await screen.findByRole('region', { name: 'Heads up' })).toBeInTheDocument()
+      expect(window.octopus.config.update).not.toHaveBeenCalledWith(
+        expect.objectContaining({ dismissedTips: expect.anything() as unknown })
+      )
+    })
+
     it('is not shown again once the settings hold it', async () => {
       vi.mocked(window.octopus.config.get).mockResolvedValue({
         ok: true,

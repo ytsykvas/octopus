@@ -138,8 +138,9 @@ export function ChatSession({
   // every streamed token.
   const todos = useMemo(() => latestTodos(chat.entries) ?? [], [chat.entries])
 
-  // Closed here without "I knew this": gone from this conversation, and back in
-  // the next one, which is the difference between the two buttons.
+  // Closed here without "I knew this": gone from this conversation while its
+  // workspace is open, and back once `App` rebuilds the pane for another one —
+  // which is the difference between the two buttons.
   const [closedTips, setClosedTips] = useState<ReadonlySet<string>>(new Set())
   /* Only between turns: one arriving mid-turn would push the field up while
      the agent is still writing, and the moment it is worth reading is when
