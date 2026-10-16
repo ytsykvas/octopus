@@ -63,6 +63,7 @@ function config(overrides: Partial<Config> = {}): Config {
     planModel: null,
     alwaysAllowedTools: [],
     disabledSkillDefaults: [],
+    dismissedTips: [],
     theme: 'system',
     language: 'en',
     rightPanelWidth: 360,
@@ -514,6 +515,70 @@ describe('App', () => {
 
     expect(await screen.findByRole('dialog', { name: 'Settings' })).toBeInTheDocument()
     expect(screen.getByText('Skills everywhere')).toBeInTheDocument()
+  })
+
+  /*
+   * The heads-up is answered in the conversation and kept in the config, three
+   * components apart — each half is tested where it lives, and this is the wire
+   * between them.
+   */
+  describe('a heads-up answered once', () => {
+    const ranACommand = (): void => {
+      vi.mocked(window.octopus.chats.list).mockResolvedValue({
+        ok: true,
+        value: [chat({ workspaceId: 'planner/anna' })]
+      })
+      vi.mocked(window.octopus.chats.history).mockResolvedValue({
+        ok: true,
+        value: [
+          {
+            role: 'agent',
+            at: '2026-08-13T09:00:00.000Z',
+            event: { type: 'tool_use', toolUseId: 'c-1', name: 'Bash', input: { command: 'ls' } }
+          },
+          {
+            role: 'agent',
+            at: '2026-08-13T09:00:01.000Z',
+            event: { type: 'text', text: 'Listed.' }
+          }
+        ]
+      })
+      givenTwoProjects()
+    }
+
+    const openAnna = async (): Promise<ReturnType<typeof userEvent.setup>> => {
+      const user = await openApp()
+      await user.click(tab('PL'))
+      await user.click(screen.getByRole('button', { name: /anna/ }))
+      await screen.findByText('Listed.')
+      return user
+    }
+
+    it('is kept in the settings beside the ones answered before', async () => {
+      vi.mocked(window.octopus.config.get).mockResolvedValue({
+        ok: true,
+        value: config({ dismissedTips: ['someOlderTip'] })
+      })
+      ranACommand()
+      const user = await openAnna()
+
+      await user.click(await screen.findByRole('button', { name: 'Knew this already' }))
+
+      expect(window.octopus.config.update).toHaveBeenCalledWith({
+        dismissedTips: ['someOlderTip', 'rewindSkipsCommands']
+      })
+    })
+
+    it('is not shown again once the settings hold it', async () => {
+      vi.mocked(window.octopus.config.get).mockResolvedValue({
+        ok: true,
+        value: config({ dismissedTips: ['rewindSkipsCommands'] })
+      })
+      ranACommand()
+      await openAnna()
+
+      expect(screen.queryByRole('region', { name: 'Heads up' })).not.toBeInTheDocument()
+    })
   })
 
   it('closes the settings dialog again', async () => {

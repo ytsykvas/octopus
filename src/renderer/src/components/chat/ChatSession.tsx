@@ -22,8 +22,10 @@ import { useSessionUsage } from '../../hooks/useSessionUsage.js'
 import { useSkills } from '../../hooks/useSkills.js'
 import { ChatLog } from './ChatLog.js'
 import { Composer } from './Composer.js'
+import { HeadsUp } from './HeadsUp.js'
 import { PlanDialog } from './PlanDialog.js'
 import { TodoPanel } from './TodoPanel.js'
+import { currentTip } from './tips.js'
 import { planTitle, readPlan } from './toolSummary.js'
 
 interface ChatSessionProps {
@@ -77,6 +79,10 @@ interface ChatSessionProps {
   readonly defaultPlanModel: string | null
   /** Opens the settings on skills, for a conversation that has none to switch. */
   readonly onOpenSkillSettings: () => void
+  /** Heads-ups the user said they already knew, from the settings. */
+  readonly dismissedTips: readonly string[]
+  /** "I knew this" on a heads-up — kept in the settings, for every conversation. */
+  readonly onDismissTip: (id: string) => void
 }
 
 /**
@@ -101,7 +107,9 @@ export function ChatSession({
   defaultEffort,
   defaultModel,
   defaultPlanModel,
-  onOpenSkillSettings
+  onOpenSkillSettings,
+  dismissedTips,
+  onDismissTip
 }: ChatSessionProps): React.JSX.Element {
   const { t } = useTranslation()
 
@@ -127,6 +135,17 @@ export function ChatSession({
   // transcript, and it is asked on every render of a pane that re-renders on
   // every streamed token.
   const todos = useMemo(() => latestTodos(chat.entries) ?? [], [chat.entries])
+
+  // Closed here without "I knew this": gone from this conversation, and back in
+  // the next one, which is the difference between the two buttons.
+  const [closedTips, setClosedTips] = useState<ReadonlySet<string>>(new Set())
+  /* Only between turns: one arriving mid-turn would push the field up while
+     the agent is still writing, and the moment it is worth reading is when
+     the next message is about to be typed. */
+  const tip = useMemo(
+    () => (chat.busy ? null : currentTip(chat.entries, new Set([...dismissedTips, ...closedTips]))),
+    [chat.busy, chat.entries, dismissedTips, closedTips]
+  )
 
   // A refusal is no suggestions rather than a message: the list is a
   // convenience, and an error banner over a half-typed `@` would be the louder
@@ -379,6 +398,18 @@ export function ChatSession({
           pinned across every later turn and every restart, describing work
           nobody is doing. The log still holds it. */}
       <TodoPanel todos={chat.busy ? todos : []} />
+
+      {tip !== null && (
+        <HeadsUp
+          tip={tip}
+          onKnown={() => {
+            onDismissTip(tip)
+          }}
+          onClose={() => {
+            setClosedTips((current) => new Set([...current, tip]))
+          }}
+        />
+      )}
 
       <Composer
         initialDraft={draft}

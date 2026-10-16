@@ -212,6 +212,15 @@ export const ConfigSchema = z.object({
    */
   disabledSkillDefaults: z.array(z.string()).default([]),
 
+  /**
+   * Heads-ups above the message field the user said they already knew, by id.
+   *
+   * Stored because "I knew this" is a statement about the person, not about one
+   * conversation — a tip answered that way should not come back in the next
+   * one. Closing a tip without that answer is kept in the window and not here.
+   */
+  dismissedTips: z.array(z.string()).default([]),
+
   theme: ThemePreferenceSchema,
 
   /**
@@ -316,6 +325,7 @@ export function createDefaultConfig(
     planModel: null,
     alwaysAllowedTools: [],
     disabledSkillDefaults: [],
+    dismissedTips: [],
     theme: 'system',
     language: 'en',
     cloneDirectory: '',

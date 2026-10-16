@@ -503,6 +503,20 @@ instead of showing a bare tool name. Only `TodoWrite` is read; the newer
 skipped — it is its own task's, and the newest one written would otherwise
 replace the conversation's.
 
+**A heads-up can sit in the same place between turns.** "✦ Heads up · …" is a
+caveat shown at the moment it starts to be true of this conversation, the way
+Claude Code shows its own. The first one says that rewinding files undoes only
+what the agent changed with its editing tools: the SDK's checkpoints do not see
+what a command did, so it appears once the agent — or one of its subagents —
+has run `Bash`. It waits for the turn to end rather than pushing the field up
+mid-answer, and only one is shown at a time. **Learn more** opens a paragraph in
+place; **Knew this already** stores the id in the config's `dismissedTips`, for
+every conversation; **Dismiss** hides it in this conversation until the app is
+next opened. Claude Code's number keys are left out: the field below takes
+text, and a digit there is a digit. A new heads-up is one entry in
+`components/chat/tips.ts` — an id and the condition on the log — and its
+`title` and `detail` under `tips.<id>` in the locales.
+
 **Typing `@` offers the workspace's files.** The fourth way to attach one — the
 paperclip, a drop and a paste being the others — and it lands in the same place:
 choosing a file adds its **path** as an attachment chip and takes the token out

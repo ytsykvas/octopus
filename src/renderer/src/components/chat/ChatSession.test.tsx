@@ -33,6 +33,8 @@ interface PaneProps {
   readonly defaultEffort?: Effort
   readonly defaultModel?: string | null
   readonly defaultPlanModel?: string | null
+  readonly dismissedTips?: readonly string[]
+  readonly onDismissTip?: (id: string) => void
   /** Where a failure the strip owns is reported, as `App` reports it. */
   readonly onError?: (message: string | null) => void
 }
@@ -56,6 +58,8 @@ function ChatPane({
   defaultEffort = 'medium',
   defaultModel = null,
   defaultPlanModel = null,
+  dismissedTips = [],
+  onDismissTip = vi.fn(),
   onError = vi.fn()
 }: PaneProps): React.JSX.Element {
   const tabs = useChatTabs(target.id, vi.fn(), onError)
@@ -82,6 +86,8 @@ function ChatPane({
       defaultModel={defaultModel}
       defaultPlanModel={defaultPlanModel}
       onOpenSkillSettings={vi.fn()}
+      dismissedTips={dismissedTips}
+      onDismissTip={onDismissTip}
     />
   )
 }
@@ -1806,6 +1812,87 @@ describe('a draft and the workspace it was typed in', () => {
  * somebody has come back to check on it. The list beside the pane says the
  * workspace is working, so the window used to disagree with itself.
  */
+/** The agent ran a command, and then said so: the moment the heads-up waits for. */
+const RAN_A_COMMAND: ChatEntry[] = [
+  {
+    role: 'agent',
+    at: '2026-08-13T09:00:00.000Z',
+    event: { type: 'tool_use', toolUseId: 'call-1', name: 'Bash', input: { command: 'npm test' } }
+  },
+  { role: 'agent', at: '2026-08-13T09:00:01.000Z', event: { type: 'text', text: 'Tests pass.' } }
+]
+
+const headsUp = (): HTMLElement | null => screen.queryByRole('region', { name: 'Heads up' })
+
+describe('a heads-up above the field', () => {
+  it('warns that a rewind leaves commands alone once the agent has run one', async () => {
+    givenChat(RAN_A_COMMAND)
+    await openLoadedChat()
+
+    const region = await screen.findByRole('region', { name: 'Heads up' })
+    expect(region).toHaveTextContent('Changes made by commands in the terminal stay.')
+  })
+
+  it('says nothing in a conversation where no command has run', async () => {
+    givenChat([
+      {
+        role: 'agent',
+        at: '2026-08-13T09:00:00.000Z',
+        event: { type: 'tool_use', toolUseId: 'call-1', name: 'Read', input: { file_path: '/a' } }
+      },
+      { role: 'agent', at: '2026-08-13T09:00:01.000Z', event: { type: 'text', text: 'Read it.' } }
+    ])
+    await openLoadedChat()
+    expect(await screen.findByText('Read it.')).toBeInTheDocument()
+
+    expect(headsUp()).not.toBeInTheDocument()
+  })
+
+  it('waits for the turn to end rather than pushing the field up mid-answer', async () => {
+    givenChat(RAN_A_COMMAND, { status: 'running' })
+    render(<ChatPane workspace={workspaceView('anna')} />)
+    expect(await screen.findByText('Tests pass.')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Stop' })).toBeInTheDocument()
+
+    expect(headsUp()).not.toBeInTheDocument()
+
+    emitChatStatus(CHAT_ID, 'idle')
+
+    expect(await screen.findByRole('region', { name: 'Heads up' })).toBeInTheDocument()
+  })
+
+  it('stays away once the settings say it was already known', async () => {
+    givenChat(RAN_A_COMMAND)
+    render(<ChatPane workspace={workspaceView('anna')} dismissedTips={['rewindSkipsCommands']} />)
+    expect(await screen.findByText('Tests pass.')).toBeInTheDocument()
+
+    expect(headsUp()).not.toBeInTheDocument()
+  })
+
+  it('hands "knew this already" up to be kept in the settings', async () => {
+    const user = userEvent.setup()
+    const onDismissTip = vi.fn()
+    givenChat(RAN_A_COMMAND)
+    render(<ChatPane workspace={workspaceView('anna')} onDismissTip={onDismissTip} />)
+
+    await user.click(await screen.findByRole('button', { name: 'Knew this already' }))
+
+    expect(onDismissTip).toHaveBeenCalledWith('rewindSkipsCommands')
+  })
+
+  it('closes for this conversation alone without writing anything down', async () => {
+    const user = userEvent.setup()
+    const onDismissTip = vi.fn()
+    givenChat(RAN_A_COMMAND)
+    render(<ChatPane workspace={workspaceView('anna')} onDismissTip={onDismissTip} />)
+
+    await user.click(await screen.findByRole('button', { name: 'Dismiss' }))
+
+    expect(headsUp()).not.toBeInTheDocument()
+    expect(onDismissTip).not.toHaveBeenCalled()
+  })
+})
+
 describe('a turn that was left running', () => {
   it('offers to stop a turn found already in flight', async () => {
     givenChat([], { status: 'running' })

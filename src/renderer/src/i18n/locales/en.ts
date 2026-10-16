@@ -1618,6 +1618,21 @@ export const en = {
     linkRefused: 'A link leading out of this worktree. It is shown, not read: {{target}}',
     linkBroken: 'A link pointing at nothing.'
   },
+  /* Heads-ups above the message field: a caveat shown once it starts to
+     matter. Each tip has a one-line title and a paragraph behind "Learn more". */
+  tips: {
+    headsUp: 'Heads up',
+    learnMore: 'Learn more',
+    showLess: 'Show less',
+    knewIt: 'Knew this already',
+    dismiss: 'Dismiss',
+    rewindSkipsCommands: {
+      title:
+        'Rewinding files undoes only what the agent changed with its editing tools. Changes made by commands in the terminal stay.',
+      detail:
+        'Files are saved for a rewind when the agent edits them with Edit or Write. A command — a formatter, a code generator, git checkout, rm — changes files past those saves, so a rewind will not touch what it did. Before a command you may want to undo, commit or stash your work; the Changes tab shows what the files have gained and lost.'
+    }
+  },
   errors: {
     /* Commands and subagents. Each says what the reader can do about it, which
        for a name is "choose another" and for a document is "it is not one". */

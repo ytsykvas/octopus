@@ -47,6 +47,8 @@ function Pane({ workspace = WORKSPACE }: { workspace?: WorkspaceView }): React.J
         defaultModel={null}
         defaultPlanModel={null}
         onOpenSkillSettings={vi.fn()}
+        dismissedTips={[]}
+        onDismissTip={vi.fn()}
       />
       {/* What the right pane's tree does, reduced to a button. */}
       <button
