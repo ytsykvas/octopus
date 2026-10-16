@@ -23,6 +23,7 @@ function config(overrides: Partial<Config> = {}): Config {
     planModel: null,
     alwaysAllowedTools: [],
     disabledSkillDefaults: [],
+    dismissedTips: [],
     theme: 'system',
     language: 'en',
     rightPanelWidth: 360,

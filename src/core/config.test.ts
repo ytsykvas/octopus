@@ -113,6 +113,7 @@ describe('loadConfig', () => {
     expect(config.rightPanelWidth).toBe(360)
     expect(config.rightPanelTab).toBe('diff')
     expect(config.sidebarWidth).toBe(240)
+    expect(config.dismissedTips).toEqual([])
     expect(config.branchPrefix).toBe('ytsykvas')
     // Absent, so the default answers for it.
     expect(config.effort).toBe('medium')

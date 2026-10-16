@@ -331,6 +331,7 @@ function defaultConfig(): Config {
     planModel: null,
     alwaysAllowedTools: [],
     disabledSkillDefaults: [],
+    dismissedTips: [],
     theme: 'system' as const,
     language: 'en' as const,
     rightPanelTab: 'diff' as const,

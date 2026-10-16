@@ -57,6 +57,12 @@ const TAB_STRIP_WIDTH = 56
 const DEFAULT_SIDEBAR_WIDTH = 240
 
 /**
+ * No heads-up answered yet, before the config has been read. One array rather
+ * than a fresh `[]` per render, which would recompute every conversation's tip.
+ */
+const NO_TIPS: readonly string[] = []
+
+/**
  * Whether a keystroke landed somewhere that takes text.
  *
  * The terminal counts, and that is the part worth stating: xterm.js takes its
@@ -662,6 +668,7 @@ export function App(): React.JSX.Element {
   const defaultEffort = config?.effort ?? DEFAULT_EFFORT
   const defaultModel = config?.model ?? null
   const defaultPlanModel = config?.planModel ?? null
+  const dismissedTips = config?.dismissedTips ?? NO_TIPS
 
   return (
     <div className="bg-canvas text-ink flex h-full flex-col">
@@ -914,6 +921,12 @@ export function App(): React.JSX.Element {
               defaultPlanModel={defaultPlanModel}
               onOpenSkillSettings={() => {
                 setSettingsSection('skills')
+              }}
+              dismissedTips={dismissedTips}
+              onDismissTip={(id) => {
+                // No duplicate to guard against: a tip already in the list is
+                // never on screen to be answered twice.
+                void updateConfig({ dismissedTips: [...dismissedTips, id] })
               }}
             />
           )}
