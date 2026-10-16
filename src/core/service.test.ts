@@ -148,7 +148,11 @@ afterEach(async () => {
   await Promise.allSettled(started.map((one) => one.closeChats()))
   started.length = 0
 
-  await rm(dir, { recursive: true, force: true })
+  // Retried because that wait is bounded: `closeChats` gives up after
+  // `SHUTDOWN_GRACE_MS`, as a quit should, and on a loaded CI runner a write
+  // can still land after it — the same `ENOTEMPTY`, in the MCP question tests
+  // twice in a row. The write is real and finishing; the removal just waits.
+  await rm(dir, { recursive: true, force: true, maxRetries: 10, retryDelay: 50 })
 })
 
 describe('default paths', () => {
