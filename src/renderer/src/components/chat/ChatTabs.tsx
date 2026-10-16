@@ -10,6 +10,11 @@ import { NameEditor } from '../NameEditor.js'
 
 interface ChatTabsProps {
   readonly tabs: ChatTabsController
+  /**
+   * A file is in front of the centre, so no conversation is the one showing.
+   * The tab that will come back keeps its place, unmarked until it does.
+   */
+  readonly filesInFront?: boolean
 }
 
 /**
@@ -24,7 +29,7 @@ interface ChatTabsProps {
  * this window uses — a reader who has learned the project strip and the right
  * pane should not meet a third convention here.
  */
-export function ChatTabs({ tabs }: ChatTabsProps): React.JSX.Element {
+export function ChatTabs({ tabs, filesInFront = false }: ChatTabsProps): React.JSX.Element {
   const { t } = useTranslation()
 
   return (
@@ -34,7 +39,7 @@ export function ChatTabs({ tabs }: ChatTabsProps): React.JSX.Element {
           key={tab.key}
           tab={tab}
           number={index + 1}
-          active={tab.key === tabs.activeKey}
+          active={tab.key === tabs.activeKey && !filesInFront}
           // The last conversation cannot be closed — a workspace with none has
           // no way back to one but the first message, and emptying the only one
           // is what `/clear` is for.
@@ -70,7 +75,7 @@ export function ChatTabs({ tabs }: ChatTabsProps): React.JSX.Element {
  * Read when opened rather than kept live: the list costs a read of each
  * transcript, which is not worth paying for while nobody is looking at it.
  */
-function HistoryMenu({ tabs }: ChatTabsProps): React.JSX.Element {
+function HistoryMenu({ tabs }: { readonly tabs: ChatTabsController }): React.JSX.Element {
   const { t, i18n } = useTranslation()
 
   const when = (closedAt: string): string =>

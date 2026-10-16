@@ -16,6 +16,12 @@ files:
   - package.json
   - '!**/*.map'
 
+# The file icons are copied into `out/` by the build, and their MIT licence
+# asks for its notice to travel with them. Nothing else of `vendor/` is packed.
+extraResources:
+  - from: vendor/catppuccin-icons/LICENSE
+    to: licenses/catppuccin-icons.LICENSE
+
 # Two dependencies are executables rather than JavaScript and cannot be run
 # from inside an asar archive: the terminal's native binding, and the Claude
 # Code binary the Agent SDK resolves out of node_modules at runtime.

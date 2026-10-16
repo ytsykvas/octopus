@@ -11,60 +11,16 @@ import {
 import { memo, useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
-import type { FileDiff, FileStatus } from '@core/diff.js'
+import type { FileDiff } from '@core/diff.js'
 import type { PublishState } from '@core/publish.js'
 
 import { DropdownMenu } from '../DropdownMenu.js'
+import { FILE_STATUS_MARKS } from '../statusMarks.js'
 import { type DiffView, DiffHunk } from './DiffHunk.js'
 import type { CommentSurface } from './CommentedRow.js'
 import { fileHasInvisible } from './invisible.js'
 import { shown } from './shown.js'
 import type { Highlighting } from './useHighlighting.js'
-
-/**
- * The letter in a file's header, and the word it stands for.
- *
- * Both keys are written out rather than built from the status: `t` is typed
- * against the locale, and a key assembled at runtime is a string it cannot
- * check — which is the whole point of typing the locales against each other.
- */
-interface StatusMark {
-  readonly letter:
-    | 'diff.statusAdded'
-    | 'diff.statusModified'
-    | 'diff.statusDeleted'
-    | 'diff.statusRenamed'
-    | 'diff.statusCopied'
-    | 'diff.statusTypeChanged'
-    | 'diff.statusUntracked'
-  readonly label:
-    | 'diff.statusAddedLabel'
-    | 'diff.statusModifiedLabel'
-    | 'diff.statusDeletedLabel'
-    | 'diff.statusRenamedLabel'
-    | 'diff.statusCopiedLabel'
-    | 'diff.statusTypeChangedLabel'
-    | 'diff.statusUntrackedLabel'
-  readonly tone: string
-}
-
-const STATUS_KEYS: Record<FileStatus, StatusMark> = {
-  added: { letter: 'diff.statusAdded', label: 'diff.statusAddedLabel', tone: 'text-success' },
-  modified: { letter: 'diff.statusModified', label: 'diff.statusModifiedLabel', tone: 'text-info' },
-  deleted: { letter: 'diff.statusDeleted', label: 'diff.statusDeletedLabel', tone: 'text-danger' },
-  renamed: { letter: 'diff.statusRenamed', label: 'diff.statusRenamedLabel', tone: 'text-info' },
-  copied: { letter: 'diff.statusCopied', label: 'diff.statusCopiedLabel', tone: 'text-info' },
-  typeChanged: {
-    letter: 'diff.statusTypeChanged',
-    label: 'diff.statusTypeChangedLabel',
-    tone: 'text-warning'
-  },
-  untracked: {
-    letter: 'diff.statusUntracked',
-    label: 'diff.statusUntrackedLabel',
-    tone: 'text-success'
-  }
-}
 
 /**
  * The badge, written the same way as the marks above and for the same reason.
@@ -259,7 +215,7 @@ export const DiffFile = memo(function DiffFile({
   const { t } = useTranslation()
   const [copied, setCopied] = useState<Copied>('idle')
 
-  const status = STATUS_KEYS[file.status]
+  const status = FILE_STATUS_MARKS[file.status]
   const Chevron = collapsed ? ChevronRight : ChevronDown
 
   // Back to offering the action on its own, and cleared on the way out: a row

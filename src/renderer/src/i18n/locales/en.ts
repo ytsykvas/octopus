@@ -403,6 +403,9 @@ export const en = {
   },
 
   panel: {
+    /* An icon in the tab row, like Terminal and Notes, so a sixth tab does not
+       widen the narrowest the pane may be. */
+    files: 'Files',
     changes: 'Changes',
     terminal: 'Terminal',
     /* Named on the tab rather than in `scripts.*` with the two headings inside
@@ -417,6 +420,44 @@ export const en = {
     expand: 'Show panel',
     terminalPlaceholder: 'Select a workspace to open a terminal in its directory.',
     resize: 'Resize panel'
+  },
+
+  /* The right pane's Files tab and the file tabs it opens in the centre. */
+  files: {
+    tree: 'Files of this workspace',
+    refresh: 'Refresh',
+    collapseAll: 'Collapse all folders',
+    noWorkspace: 'Select a workspace to see its files.',
+    loading: 'Reading files…',
+    empty: 'This workspace has no files yet.',
+    truncated: 'Only the first {{limit}} files are listed.',
+    loadingFolder: 'Reading…',
+    folderFailed: 'This folder could not be read.',
+    folderTruncated: 'Only the first {{limit}} entries are listed.',
+    /* Said aloud after a greyed row's name; the grey says it to the eye. */
+    ignored: 'ignored by git',
+    /* Said aloud after a folder's name when its dot is drawn. */
+    changesInside: 'has changes',
+    /* The letter for a conflict, beside the diff's own A, M, D, U. */
+    statusConflicted: '!',
+    statusConflictedLabel: 'Conflicted',
+    tabs: 'Open files',
+    preview: '{{name}} — preview. Opening another file replaces it; double-click to keep it open.',
+    close: 'Close {{name}}'
+  },
+
+  /* A file opened from the Files tab, read-only. */
+  viewer: {
+    loading: 'Opening…',
+    binary: 'This is a binary file ({{size}}) and is not shown here.',
+    tooLarge: 'This file is {{size}}, more than the {{limit}} shown here.',
+    missing: 'This file is no longer there.',
+    deleted: 'This file has been deleted. This is its last committed version.',
+    deletedUnreadable:
+      'This file has been deleted, and its last committed version cannot be shown here.',
+    plain: 'Shown without colours: the file is too large to highlight.',
+    openExternally: 'Open in editor',
+    reload: 'Reload'
   },
 
   /*

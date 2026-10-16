@@ -2,6 +2,8 @@ import { contextBridge, ipcRenderer, webUtils } from 'electron'
 
 import type { AccountKind, AccountsStatus, GitHubAccount } from '@core/accounts.js'
 import type { MentionFile } from '@core/fileSearch.js'
+import type { DirectoryListing, FileTreeSnapshot } from '@core/fileTree.js'
+import type { FileContent } from '@core/workspaceFiles.js'
 import type {
   AgentCommand,
   AgentModel,
@@ -632,7 +634,19 @@ const api = {
 
     /** The workspace's files matching what is typed after an `@`, best first. */
     search: (workspaceId: string, query: string): Promise<Result<MentionFile[]>> =>
-      ipcRenderer.invoke('files:search', workspaceId, query) as Promise<Result<MentionFile[]>>
+      ipcRenderer.invoke('files:search', workspaceId, query) as Promise<Result<MentionFile[]>>,
+
+    /** Every file of the worktree and what git says about each, for the Files tab. */
+    tree: (workspaceId: string): Promise<Result<FileTreeSnapshot>> =>
+      ipcRenderer.invoke('files:tree', workspaceId) as Promise<Result<FileTreeSnapshot>>,
+
+    /** A folder git ignores whole, read from disk when it is opened. */
+    directory: (workspaceId: string, path: string): Promise<Result<DirectoryListing>> =>
+      ipcRenderer.invoke('files:directory', workspaceId, path) as Promise<Result<DirectoryListing>>,
+
+    /** A file for the viewer, or why it cannot be shown. */
+    read: (workspaceId: string, path: string): Promise<Result<FileContent>> =>
+      ipcRenderer.invoke('files:read', workspaceId, path) as Promise<Result<FileContent>>
   },
 
   attachments: {

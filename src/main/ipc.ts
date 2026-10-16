@@ -823,6 +823,20 @@ export function registerIpc(
     attempt(() => service.searchFiles(workspaceId, MentionQuerySchema.parse(query)))
   )
 
+  // The Files tab. The two that take a path validate it here and leave proving
+  // it inside the workspace to the service, the split `files:open` uses.
+  host.handle('files:tree', (_event, workspaceId: string) =>
+    attempt(() => service.readFileTree(workspaceId))
+  )
+
+  host.handle('files:directory', (_event, workspaceId: string, path: unknown) =>
+    attempt(() => service.readWorkspaceDirectory(workspaceId, FilePathSchema.parse(path)))
+  )
+
+  host.handle('files:read', (_event, workspaceId: string, path: unknown) =>
+    attempt(() => service.readWorkspaceFile(workspaceId, FilePathSchema.parse(path)))
+  )
+
   // The agent chat. Everything the renderer sends here reaches a model or a
   // stored record, so each argument is validated rather than trusted.
   service.onAgentEvent(host.broadcastChatEvent)

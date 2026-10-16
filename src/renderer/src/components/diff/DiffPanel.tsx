@@ -30,6 +30,7 @@ import type { DiffView } from './DiffHunk.js'
 import { MIN_SPLIT_COLUMNS, splitThreshold } from './measure.js'
 import { lineAddress, selectionAnchor } from './selectionAnchor.js'
 import { NO_TOKENS, useHighlighting } from './useHighlighting.js'
+import { IconButton, Notice } from '../paneControls.js'
 
 /**
  * A file this big starts collapsed.
@@ -712,47 +713,6 @@ function quote(lines: ReadonlyMap<string, string>, anchor: CommentAnchor): strin
   }
 
   return covered.join('\n')
-}
-
-function Notice({
-  children,
-  tone = 'soft'
-}: {
-  readonly children: React.ReactNode
-  readonly tone?: 'soft' | 'danger'
-}): React.JSX.Element {
-  return (
-    <div className="flex-1 overflow-auto p-4">
-      <p className={`leading-relaxed ${tone === 'danger' ? 'text-danger' : 'text-ink-faint'}`}>
-        {children}
-      </p>
-    </div>
-  )
-}
-
-function IconButton({
-  label,
-  onClick,
-  disabled = false,
-  children
-}: {
-  readonly label: string
-  readonly onClick: () => void
-  readonly disabled?: boolean
-  readonly children: React.ReactNode
-}): React.JSX.Element {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      disabled={disabled}
-      title={label}
-      aria-label={label}
-      className="focus-ring text-ink-faint hover:text-ink hover:bg-muted rounded-[var(--radius-control)] p-1 disabled:pointer-events-none disabled:opacity-40"
-    >
-      {children}
-    </button>
-  )
 }
 
 /**

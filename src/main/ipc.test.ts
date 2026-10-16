@@ -417,6 +417,9 @@ describe('channel table', () => {
     'workspaces:resolveReviewThread',
     'files:open',
     'files:search',
+    'files:tree',
+    'files:directory',
+    'files:read',
     'chats:list',
     'chats:open',
     'chats:create',
@@ -1993,6 +1996,46 @@ describe('workspaces of a real project', () => {
     expect(await invoke('files:search', workspace.id, 42)).toMatchObject({ ok: false })
     expect(await invoke('files:search', workspace.id, 'x'.repeat(257))).toMatchObject({
       ok: false
+    })
+  })
+
+  it('reads the file tree, a folder and a file of a workspace', async () => {
+    const projectId = await addProject()
+    const workspace = await createWorkspace(projectId)
+    await mkdir(join(workspace.path, 'node_modules'))
+    await writeFile(join(workspace.path, 'node_modules', 'a.js'), '', 'utf8')
+
+    await expect(invoke('files:tree', workspace.id)).resolves.toMatchObject({
+      ok: true,
+      value: { statuses: {}, truncated: false }
+    })
+    await expect(invoke('files:directory', workspace.id, 'node_modules')).resolves.toEqual({
+      ok: true,
+      value: { entries: [{ name: 'a.js', kind: 'file' }], truncated: false }
+    })
+    await expect(invoke('files:read', workspace.id, 'README.md')).resolves.toMatchObject({
+      ok: true,
+      value: { kind: 'text' }
+    })
+  })
+
+  // Refused at the boundary before the service sees it; the service then
+  // refuses what climbs out, which is a different check.
+  it('refuses a folder or file path that is empty, not a string, or outside', async () => {
+    const projectId = await addProject()
+    const workspace = await createWorkspace(projectId)
+
+    for (const channel of ['files:directory', 'files:read']) {
+      expect(await invoke(channel, workspace.id, '')).toMatchObject({ ok: false })
+      expect(await invoke(channel, workspace.id, 42)).toMatchObject({ ok: false })
+    }
+    expect(await invoke('files:directory', workspace.id, '../..')).toMatchObject({
+      ok: false,
+      code: 'worktreeMissing'
+    })
+    expect(await invoke('files:read', workspace.id, '../../../etc/passwd')).toMatchObject({
+      ok: true,
+      value: { kind: 'missing' }
     })
   })
 

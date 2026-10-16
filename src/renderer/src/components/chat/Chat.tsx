@@ -6,12 +6,15 @@ import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import type { ChatTabsController } from '../../hooks/useChatTabs.js'
+import type { FileTabsController } from '../../hooks/useFileTabs.js'
 import { Button } from '../Button.js'
 import { RepoTrustReview } from '../RepoTrustReview.js'
 import type { DiffCommentController } from '../../hooks/useDiffComments.js'
 import type { PullRequestQuoteController } from '../../hooks/usePullRequestQuotes.js'
 import { ChatSession } from './ChatSession.js'
 import { ChatTabs } from './ChatTabs.js'
+import { FileTabs } from '../files/FileTabs.js'
+import { FileViewer } from '../files/FileViewer.js'
 
 interface ChatProps {
   /**
@@ -24,6 +27,15 @@ interface ChatProps {
   readonly workspace: WorkspaceView
   /** The workspace's conversations, which `App` owns so ⌥1–⌥3 can reach them. */
   readonly tabs: ChatTabsController
+  /**
+   * The files opened from the right pane's tree, beside the conversations.
+   *
+   * When one is in front, every conversation is hidden behind it — still
+   * mounted, so a turn keeps streaming into the pane nobody is looking at.
+   */
+  readonly files: FileTabsController
+  /** Says a failure in the window's banner — a file the system would not open. */
+  readonly onError: (message: string | null) => void
   /**
    * What was in a tab's composer when it was last left.
    *
@@ -74,6 +86,8 @@ interface ChatProps {
 export function Chat({
   workspace,
   tabs,
+  files,
+  onError,
   draftOf,
   onDraftLeave,
   comments,
@@ -133,7 +147,7 @@ export function Chat({
       // stylesheet own how the colour is used rather than each component.
       style={{ '--project-color': `var(--project-${color})` } as React.CSSProperties}
     >
-      <header className="border-line flex h-9 shrink-0 items-center border-b px-6">
+      <header className="border-line flex h-9 min-w-0 shrink-0 items-center border-b px-6">
         {/* Held to the pane's left edge rather than to the capped column below
             it. Lined up with the log, the strip drifted to the middle of a wide
             window, and tabs are found by where they start, not by what they
@@ -143,7 +157,8 @@ export function Chat({
             has moved to the title bar beside the project's directory: it says
             where the work lands, which is a fact about the window rather than
             about any one conversation. */}
-        <ChatTabs tabs={tabs} />
+        <ChatTabs tabs={tabs} filesInFront={files.active !== null} />
+        <FileTabs files={files} />
       </header>
 
       {/* Pinned under the header rather than inside the scroller, where
@@ -186,7 +201,9 @@ export function Chat({
           key={tab.key}
           workspace={workspace}
           tab={tab}
-          visible={tab.key === tabs.activeKey}
+          // Behind a file as well as behind another conversation: only the
+          // pane on screen may raise a dialog (§10.8).
+          visible={tab.key === tabs.activeKey && files.active === null}
           onOpened={(chat: ChatRecord) => {
             tabs.bind(tab.key, chat)
           }}
@@ -203,6 +220,18 @@ export function Chat({
           onOpenSkillSettings={onOpenSkillSettings}
         />
       ))}
+
+      {/* Mounted only while in front, unlike the conversations: a file is read
+          again each time it comes forward, which is when it may have changed,
+          and there is nothing in it to lose by going. */}
+      {files.active !== null && (
+        <FileViewer
+          key={files.active}
+          workspaceId={workspace.id}
+          path={files.active}
+          onError={onError}
+        />
+      )}
     </div>
   )
 }

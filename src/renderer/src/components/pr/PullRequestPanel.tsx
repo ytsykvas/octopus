@@ -56,6 +56,11 @@ interface PullRequestPanelProps {
    * one, and a check nothing can reach is a claim nothing tests.
    */
   readonly onRemoveWorkspace: (workspaceId: string) => void
+  /**
+   * A prompt is on its way to the conversation, so it comes to the front of the
+   * centre — a turn started behind an open file could raise no dialog at all.
+   */
+  readonly onConversation: () => void
 }
 
 /**
@@ -75,7 +80,8 @@ export function PullRequestPanel({
   onRequestChanged,
   onEditInstructions,
   onError,
-  onRemoveWorkspace
+  onRemoveWorkspace,
+  onConversation
 }: PullRequestPanelProps): React.JSX.Element {
   const { t } = useTranslation()
   const describeFailure = useErrorMessage()
@@ -142,6 +148,7 @@ export function PullRequestPanel({
    */
   const prompt = (kind: InstructionKind, open: PullRequest, conversation: string): void => {
     setSending(kind)
+    onConversation()
     void (async () => {
       const instruction = await window.octopus.workspaces.instruction(workspace.id, kind)
       if (!instruction.ok) {
