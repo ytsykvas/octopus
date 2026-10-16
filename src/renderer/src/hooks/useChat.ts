@@ -297,8 +297,11 @@ export function useChat(
    */
   useEffect(() => {
     if (openChatId === null) return
+    // A read started here can land after the pane has moved to another
+    // conversation; this is what tells it the log it brings is no longer wanted.
+    let listening = true
 
-    return onChatEvent(({ event }) => {
+    const release = onChatEvent(({ event }) => {
       if (event.type === 'text_delta') {
         setStreaming((current) => ({ ...current, text: current.text + event.text }))
         return
@@ -317,6 +320,7 @@ export function useChat(
       if (event.type === 'conversation_rewound') {
         setStreaming(NOTHING_STREAMING)
         void window.octopus.chats.history(openChatId).then((history) => {
+          if (!listening) return
           if (history.ok) setEntries(history.value)
           else setError(describeFailure(history))
         })
@@ -376,6 +380,11 @@ export function useChat(
         setPendingElicitation(null)
       }
     }, openChatId)
+
+    return () => {
+      listening = false
+      release()
+    }
   }, [openChatId, describeFailure])
 
   /**

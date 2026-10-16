@@ -360,11 +360,13 @@ since — by the agent or by the user — is overwritten.
 Rewinding the conversation drops the message and everything after it from the
 log and from what the agent remembers, and puts the message back in the field,
 replacing whatever was there, with the caret at its end — to be edited and sent
-again, as Claude Code does. The log scrolls to its new end, and the context
-gauge reads again: the session it was reading from is closed by the cut, and
-the next one starts from the shorter history. Putting the files back adds a
-quiet row to the log, because the tree changed without the agent doing
-anything, and it says how many
+again, as Claude Code does. Every window holding the log reads it again from
+disk; one whose tab has moved to another conversation by the time that read
+comes back drops it rather than draw the old log into the new one. The log
+scrolls to its new end, and the context gauge reads again: the session it was
+reading from is closed by the cut, and the next one starts from the shorter
+history. Putting the files back adds a quiet row to the log, because the tree
+changed without the agent doing anything, and it says how many
 files a link kept it from restoring, since the rewind never follows one. The
 files are refused while **any** conversation of the workspace is working, not
 only this one: the worktree is shared. The mark is absent while the agent is
