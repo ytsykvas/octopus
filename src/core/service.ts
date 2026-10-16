@@ -13,6 +13,7 @@ import { z } from 'zod'
 
 import {
   forkSession as defaultForkSession,
+  getSessionMessages as defaultSessionMessages,
   query as defaultQuery
 } from '@anthropic-ai/claude-agent-sdk'
 
@@ -208,8 +209,18 @@ import {
   copyTranscript,
   previewOf,
   readTranscript,
-  removeTranscript
+  removeTranscript,
+  truncateTranscript
 } from './transcript.js'
+import {
+  type CutPoint,
+  cutBefore,
+  type RewindOutcome,
+  type RewindPreview,
+  type RewindScope,
+  rewindsConversation,
+  rewindsFiles
+} from './rewind.js'
 import {
   assertBranchExists,
   createProject,
@@ -325,8 +336,20 @@ const MODEL_EVENTS: ReadonlySet<string> = new Set([
  */
 export type ForkSessionFn = (
   sessionId: string,
-  options: { readonly dir: string }
+  options: { readonly dir: string; readonly upToMessageId?: string }
 ) => Promise<{ readonly sessionId: string }>
+
+/**
+ * The SDK's `getSessionMessages`, narrowed the same way: a session's history
+ * as the agent CLI holds it, which is where a rewind finds its cut.
+ *
+ * Answers `unknown` because what comes back is the CLI's file read through,
+ * and `cutBefore` validates the little of it that is used.
+ */
+export type SessionMessagesFn = (
+  sessionId: string,
+  options: { readonly dir: string }
+) => Promise<unknown>
 
 export interface ServiceOptions {
   readonly stateFilePath?: string
@@ -376,6 +399,8 @@ export interface ServiceOptions {
    * machine running it.
    */
   readonly forkSession?: ForkSessionFn
+  /** The SDK's session reader, injected for the reason `forkSession` is. */
+  readonly sessionMessages?: SessionMessagesFn
   readonly uuid?: () => string
   /** Current time as an ISO string; a parameter so records are predictable in tests. */
   readonly now?: () => string
@@ -1127,21 +1152,23 @@ export interface OctopusService {
    */
   closeChat(chatId: string): Promise<void>
   /**
-   * What putting the files back to a message would do, without doing it.
+   * What rewinding to a message could do, without doing any of it.
    *
-   * Asked before the real thing so the user can be told how much it undoes
-   * before agreeing to it.
+   * Asked before the real thing so the user chooses between the conversation,
+   * the files or both knowing which of them can be had and how much each
+   * undoes.
    */
-  previewRewind(chatId: string, messageId: string): Promise<FileRewind>
+  previewRewind(chatId: string, messageId: string): Promise<RewindPreview>
   /**
-   * Puts the files back to how they were when a message was sent.
+   * Rewinds to just before a message: the conversation, the files, or both.
    *
-   * Refused while a turn is running — the agent would be changing the files the
-   * same moment they were being restored — and for a message that is not one of
-   * this conversation's own. The result is also written to the log as an event,
-   * since it changed the tree without the agent doing anything.
+   * Refused while the conversation is working, and — when the files are part
+   * of it — while any conversation of the workspace is, since they share the
+   * worktree. A files rewind is written to the log as an event, since it
+   * changed the tree without the agent doing anything; a conversation rewind
+   * cuts the log back and hands the message's text back for the composer.
    */
-  rewindChat(chatId: string, messageId: string): Promise<FileRewind>
+  rewindChat(chatId: string, messageId: string, scope: RewindScope): Promise<RewindOutcome>
   /**
    * The workspace's closed conversations, most recently closed first, each with
    * the opening message it is recognised by.
@@ -1356,6 +1383,7 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
   const windowOverrideFor = options.windowOverride ?? findWindowOverride
   const runQuery = options.query ?? defaultQuery
   const runForkSession = options.forkSession ?? defaultForkSession
+  const runSessionMessages = options.sessionMessages ?? defaultSessionMessages
   const uuid = options.uuid ?? randomUUID
   const now = options.now ?? ((): string => new Date().toISOString())
 
@@ -1979,6 +2007,25 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
   }
 
   /**
+   * Cuts a conversation's history back to before a message, and answers with
+   * that message's text.
+   *
+   * In the same queue as the appends, for the reason `discard` gives. Awaited,
+   * unlike `record`: a failure here has to undo the rewind around it rather
+   * than surface as a stray error. The queue's tail is left settled either
+   * way, since everything after it chains on without failure arms.
+   */
+  function cutHistory(chat: Chat, messageId: string): Promise<string | null> {
+    const run = transcriptWrites.then(() => truncateTranscript(chat.id, messageId, dataRoot))
+    transcriptWrites = run.then(
+      () => undefined,
+      () => undefined
+    )
+
+    return run
+  }
+
+  /**
    * Adds a conversation to a workspace, refusing past the cap.
    *
    * The count is taken inside the commit rather than before it, for the same
@@ -2194,7 +2241,9 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
         commit((current) => {
           const existing = findChat(current, chat.id)
           if (!existing || existing.sessionId === event.sessionId) return current
-          return updateChat(current, chat.id, { sessionId: event.sessionId })
+          // A cut belongs to the session it was taken in, and means nothing in
+          // another.
+          return updateChat(current, chat.id, { sessionId: event.sessionId, resumeAt: null })
         })
       )
     }
@@ -2582,79 +2631,265 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
   }
 
   /**
-   * Asks the agent to put the files back to a message, or to say what that
-   * would do.
+   * Forgets a rewind's cut once a turn has run on top of it.
    *
-   * Three things are checked before the agent is asked at all. The conversation
-   * is not mid-turn, because a rewind under a running agent is a race for the
-   * same files. The message is one **this** conversation recorded: the id comes
-   * from the window, and the agent will happily rewind to any it has heard of.
-   * And there is a session to ask — started from the stored id if the
-   * application has been restarted since, which is what makes a rewind
-   * possible long after the turn it undoes.
+   * Only the same cut: a rewind taken again since has put a different one
+   * there, which the next session still has to apply.
    */
-  async function rewind(chatId: string, messageId: string, dryRun: boolean): Promise<FileRewind> {
-    const chat = requireOpenChat(chatId)
+  function settleCut(chat: Chat, cut: string): void {
+    background(
+      chat,
+      commit((current) => {
+        const existing = findChat(current, chat.id)
+        if (existing?.resumeAt !== cut) return current
+        return updateChat(current, chat.id, { resumeAt: null })
+      })
+    )
+  }
 
-    // The worktree is shared by every conversation of the workspace, up to
-    // three, and a rewind restores whatever *this* one's checkpoint tracked —
-    // which can be a file another is editing at that moment. So it is the
-    // workspace that has to be quiet, not only this tab.
-    const refuseWhileWorking = (): void => {
-      const working = chatsOfWorkspace(state, chat.workspaceId).some(
-        (other) => other.status === 'running' || other.status === 'waiting_permission'
-      )
+  /**
+   * Conversations in the middle of a rewind, refused a message until it ends.
+   *
+   * A send writes its line to the transcript outside the write queue, and
+   * starts a session; either landing in the middle of a rewind would leave a
+   * message the cut then drops, or a session started on the history being cut.
+   */
+  const rewinding = new Set<string>()
 
-      if (working) {
-        throw new ChatError(
-          'rewindBusy',
-          { chatId },
-          `Workspace ${chat.workspaceId} is working; its files cannot be rewound now.`
-        )
-      }
+  /** Refuses while this conversation is working; handed the record as just read. */
+  function refuseWhileChatWorks(chat: Chat): void {
+    if (chat.status === 'running' || chat.status === 'waiting_permission') {
+      throw new ChatError('rewindBusy', { chatId: chat.id }, `Chat ${chat.id} is working.`)
     }
+  }
 
-    refuseWhileWorking()
+  /**
+   * Refuses while any conversation of the workspace is working.
+   *
+   * The worktree is shared by every conversation of the workspace, up to
+   * three, and putting the files back restores whatever *this* one's
+   * checkpoint tracked — which can be a file another is editing at that
+   * moment. So for the files it is the workspace that has to be quiet.
+   */
+  function refuseWhileWorkspaceWorks(chat: Chat): void {
+    if (workspaceWorks(chat)) {
+      throw new ChatError(
+        'rewindBusy',
+        { chatId: chat.id },
+        `Workspace ${chat.workspaceId} is working; its files cannot be rewound now.`
+      )
+    }
+  }
 
-    const known = (await readTranscript(chatId, dataRoot)).some(
+  function workspaceWorks(chat: Chat): boolean {
+    return chatsOfWorkspace(state, chat.workspaceId).some(
+      (other) => other.status === 'running' || other.status === 'waiting_permission'
+    )
+  }
+
+  /**
+   * Refuses a message this conversation did not record, or one it has no
+   * session to rewind against.
+   *
+   * The id comes from the window, and the agent will happily rewind to any it
+   * has heard of. A session is what both halves need: the files are put back
+   * by it, and the conversation is cut in its history.
+   */
+  async function requireRewindable(chat: Chat, messageId: string): Promise<void> {
+    const known = (await readTranscript(chat.id, dataRoot)).some(
       (entry) => entry.role === 'user' && entry.uuid === messageId
     )
     if (!known || chat.sessionId === null) {
       throw new ChatError(
         'rewindUnavailable',
-        { chatId, reason: '' },
-        `Chat ${chatId} cannot be rewound to ${messageId}.`
+        { chatId: chat.id, reason: '' },
+        `Chat ${chat.id} cannot be rewound to ${messageId}.`
       )
     }
+  }
+
+  /**
+   * Where the agent's memory is cut to rewind to a message.
+   *
+   * Read from the session's own history rather than worked out from ours: the
+   * cut has to name an entry of the CLI's chain, and our transcript records
+   * neither every entry nor every id. A history that cannot be read is a
+   * message that cannot be found — the conversation is then not offered,
+   * rather than cut somewhere approximately right.
+   */
+  async function cutFor(
+    sessionId: string,
+    workspace: Workspace,
+    messageId: string
+  ): Promise<CutPoint> {
+    try {
+      return cutBefore(await runSessionMessages(sessionId, { dir: workspace.path }), messageId)
+    } catch {
+      return { kind: 'missing' }
+    }
+  }
+
+  /**
+   * What rewinding to a message could do.
+   *
+   * Each half answers for itself. The conversation is offered when the
+   * session's history still holds the message; the files are the agent's own
+   * dry run — `canRewind` false included, with its reason — or null while
+   * another conversation of the workspace is working and they cannot be asked
+   * about at all. The session is started for it if the application has been
+   * restarted since, which is what makes a rewind possible long after the
+   * turn it undoes.
+   */
+  async function previewRewind(chatId: string, messageId: string): Promise<RewindPreview> {
+    const chat = requireOpenChat(chatId)
+    refuseWhileChatWorks(chat)
+    await requireRewindable(chat, messageId)
 
     const workspace = requireWorkspace(chat.workspaceId)
+    // Checked by `requireRewindable` just above; the guard is for the type.
+    /* v8 ignore next */
+    const sessionId = chat.sessionId ?? ''
+    const conversation = (await cutFor(sessionId, workspace, messageId)).kind !== 'missing'
+
+    // Asked once, unlike the real thing: a dry run changes nothing, so a turn
+    // that begins while the session starts costs only a stale count, and the
+    // rewind itself asks again.
+    if (workspaceWorks(chat)) return { conversation, files: null }
     const session = await sessionFor(chat, workspace)
 
+    return { conversation, files: await session.rewindFiles(messageId, true) }
+  }
+
+  /**
+   * Rewinds to just before a message.
+   *
+   * Everything that can refuse is asked before anything changes: the
+   * conversation is quiet (the workspace too, when the files are part of it),
+   * the message is this conversation's own, and — for the conversation — the
+   * session's history still holds it.
+   *
+   * Then the files first, while the session that checkpointed them is alive.
+   * Then the conversation: the cut is stored on the record, the session is
+   * closed so the next one starts from it, and our own history is cut back.
+   * The record is put back if that last step fails, which makes it exact —
+   * nothing has been sent on top of the cut yet. The files cannot be put back
+   * the same way, so a failure after them is reported with the files restored.
+   */
+  async function rewind(
+    chatId: string,
+    messageId: string,
+    scope: RewindScope
+  ): Promise<RewindOutcome> {
+    const chat = requireOpenChat(chatId)
+
+    if (rewinding.has(chatId)) {
+      throw new ChatError('rewindInProgress', { chatId }, `Chat ${chatId} is already rewinding.`)
+    }
+
+    refuseWhileChatWorks(chat)
+    if (rewindsFiles(scope)) refuseWhileWorkspaceWorks(chat)
+
+    rewinding.add(chatId)
+    try {
+      await requireRewindable(chat, messageId)
+      const workspace = requireWorkspace(chat.workspaceId)
+      // Checked by `requireRewindable` just above; the guard is for the type.
+      /* v8 ignore next */
+      const sessionId = chat.sessionId ?? ''
+
+      const cut = rewindsConversation(scope) ? await cutFor(sessionId, workspace, messageId) : null
+      if (cut?.kind === 'missing') {
+        throw new ChatError(
+          'rewindUnavailable',
+          { chatId, reason: '' },
+          `Chat ${chatId} no longer holds ${messageId} in its session.`
+        )
+      }
+
+      const files = rewindsFiles(scope) ? await rewindFilesTo(chat, workspace, messageId) : null
+      const text = cut === null ? null : await rewindConversationTo(chat, messageId, cut)
+
+      // After the cut, or the cut would take this line with it.
+      if (files !== null) {
+        handleEvent(chat, {
+          type: 'files_rewound',
+          messageId,
+          files: files.filesChanged.length,
+          insertions: files.insertions,
+          deletions: files.deletions,
+          skippedLinks: files.skippedLinks
+        })
+      }
+
+      if (cut !== null) {
+        // Once the log is what it will be: every window holding it reads it
+        // again on this, and a read racing the line above would miss it.
+        await transcriptWrites
+        handleEvent(chat, { type: 'conversation_rewound', messageId })
+      }
+
+      return { files, text }
+    } finally {
+      rewinding.delete(chatId)
+    }
+  }
+
+  /** The files' half of a rewind. */
+  async function rewindFilesTo(
+    chat: Chat,
+    workspace: Workspace,
+    messageId: string
+  ): Promise<FileRewind> {
+    const session = await sessionFor(chat, workspace)
     // Asked again: starting the session took time, and a message sent in that
     // window began a turn this would otherwise have run underneath.
-    refuseWhileWorking()
+    refuseWhileWorkspaceWorks(chat)
 
-    const result = await session.rewindFiles(messageId, dryRun)
+    const result = await session.rewindFiles(messageId, false)
     if (!result.canRewind) {
       throw new ChatError(
         'rewindUnavailable',
-        { chatId, reason: result.error ?? '' },
-        result.error ?? `Chat ${chatId} cannot be rewound to ${messageId}.`
+        { chatId: chat.id, reason: result.error ?? '' },
+        result.error ?? `Chat ${chat.id} cannot be rewound to ${messageId}.`
       )
     }
 
-    if (!dryRun) {
-      handleEvent(chat, {
-        type: 'files_rewound',
-        messageId,
-        files: result.filesChanged.length,
-        insertions: result.insertions,
-        deletions: result.deletions,
-        skippedLinks: result.skippedLinks
-      })
-    }
-
     return result
+  }
+
+  /**
+   * The conversation's half of a rewind: answers with the message's text.
+   *
+   * A message nothing precedes leaves nothing to keep, so the conversation
+   * starts over with a new session rather than resuming an empty cut.
+   */
+  async function rewindConversationTo(
+    chat: Chat,
+    messageId: string,
+    cut: Exclude<CutPoint, { kind: 'missing' }>
+  ): Promise<string | null> {
+    // A start already under way would register a session from the history
+    // being cut; it is let finish, and then closed with the rest.
+    // Settled rather than awaited: a start that fails has registered nothing,
+    // and its failure is the message's to report, not the rewind's.
+    await Promise.allSettled([starts.get(chat.id)])
+
+    const before = requireChat(chat.id)
+    const restore = { sessionId: before.sessionId, resumeAt: before.resumeAt }
+    const next =
+      cut.kind === 'fresh'
+        ? { sessionId: null, resumeAt: null }
+        : { sessionId: before.sessionId, resumeAt: cut.uuid }
+
+    await commit((current) => updateChat(current, chat.id, next))
+    await closeOneChat(before)
+
+    try {
+      return await cutHistory(chat, messageId)
+    } catch (error) {
+      await commit((current) => updateChat(current, chat.id, restore))
+      throw error
+    }
   }
 
   /**
@@ -3156,6 +3391,7 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
       {
         cwd: workspace.path,
         resume: null,
+        resumeAt: null,
         settingSources: [],
         permissionMode: 'default',
         model: null,
@@ -3256,10 +3492,17 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
     // message joining a start somebody else began.
     const chat = requireChat(asked.id)
 
+    // A rewind's cut, applied by this session and settled by it: once a turn
+    // has run on top of it, a plain resume follows the new branch, and before
+    // that it would not (`Chat.resumeAt`). Held by value, so a result from
+    // this session cannot clear a cut a later rewind put there.
+    const cut = chat.resumeAt
+
     const session = startSession(
       {
         cwd: workspace.path,
         resume: chat.sessionId,
+        resumeAt: cut,
         settingSources,
         permissionMode: sessionMode(chat),
         model: sessionModel(chat),
@@ -3279,6 +3522,8 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
       {
         query: runQuery,
         onEvent: (event) => {
+          if (cut !== null && event.type === 'result') settleCut(chat, cut)
+
           // Re-read rather than closed over: `chat` is a snapshot, and the
           // session id written after the first turn would not be in it.
           handleEvent(findChat(state, chat.id) ?? chat, event)
@@ -4670,7 +4915,12 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
       try {
         // `dir` rather than letting it search: without one the SDK looks
         // through every project directory for a session id.
-        forked = await runForkSession(source.sessionId, { dir: workspace.path })
+        // A rewind still waiting to be applied is applied here too, or the
+        // fork would remember everything the source was told to forget.
+        forked = await runForkSession(source.sessionId, {
+          dir: workspace.path,
+          ...(source.resumeAt !== null && { upToMessageId: source.resumeAt })
+        })
       } catch (error) {
         throw new ChatError('forkFailed', { chatId }, describeError(error))
       }
@@ -4736,11 +4986,11 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
     },
 
     previewRewind(chatId, messageId) {
-      return rewind(chatId, messageId, true)
+      return previewRewind(chatId, messageId)
     },
 
-    rewindChat(chatId, messageId) {
-      return rewind(chatId, messageId, false)
+    rewindChat(chatId, messageId, scope) {
+      return rewind(chatId, messageId, scope)
     },
 
     listClosedChats(workspaceId) {
@@ -4788,6 +5038,14 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
       // worktree with nothing to stop it.
       const chat = requireOpenChat(chatId)
       const workspace = requireWorkspace(chat.workspaceId)
+
+      if (rewinding.has(chatId)) {
+        throw new ChatError(
+          'rewindInProgress',
+          { chatId },
+          `Chat ${chatId} is rewinding; the message would land in the middle of it.`
+        )
+      }
 
       // Written before the agent is asked anything: if starting the session
       // fails, the message the user typed is still in their history rather

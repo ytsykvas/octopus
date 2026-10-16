@@ -15,9 +15,9 @@ import type { PullRequestQuoteController } from '../../hooks/usePullRequestQuote
 import { type ChatNote, mergeNotes } from './attachments.js'
 import { useErrorMessage } from '../../hooks/useErrorMessage.js'
 import { useCommands } from '../../hooks/useCommands.js'
-import { useConfirm } from '../../hooks/useConfirm.js'
 import { useModels } from '../../hooks/useModels.js'
 import { useRateLimit } from '../../hooks/useRateLimit.js'
+import { useRewindChoice } from '../../hooks/useRewindChoice.js'
 import { useSessionUsage } from '../../hooks/useSessionUsage.js'
 import { useSkills } from '../../hooks/useSkills.js'
 import { ChatLog } from './ChatLog.js'
@@ -113,7 +113,10 @@ export function ChatSession({
   // one place it says things.
   const [notice, setNotice] = useState<string | null>(null)
   const attachments = useAttachments(setNotice)
-  const { confirm, dialog: confirmDialog } = useConfirm()
+  const { choose: chooseRewind, dialog: rewindDialog } = useRewindChoice()
+  /* A rewound message on its way back into the composer. The id is what makes
+     the same text handed back twice a second instruction rather than nothing. */
+  const [seed, setSeed] = useState<{ text: string; id: number } | undefined>(undefined)
   // A plan the user is rewriting, by the request it belongs to. Kept here so
   // that looking at another tab does not throw the edits away.
   const [planEdit, setPlanEdit] = useState<{ requestId: string; text: string } | null>(null)
@@ -193,12 +196,13 @@ export function ChatSession({
   const record = chat.chat
 
   /*
-   * Puts the files back to how they were when a message was sent.
+   * Rewinds to before a message: the conversation, the files, or both.
    *
-   * Asked in two steps, and the first changes nothing: the agent is asked what
-   * it *would* do, so the question the user answers has the numbers in it. The
-   * second repeats the call for real. A rewind overwrites files — including any
-   * the user edited since — so it is never taken on a click alone.
+   * Asked in two steps, and the first changes nothing: what each half *would*
+   * do is fetched first, so the choice the user makes has the numbers and the
+   * reasons in it. A rewind can overwrite files — including any the user
+   * edited since — and drop part of the conversation, so it is never taken on
+   * a click alone.
    */
   const recordId = record?.id ?? null
   const rewind = async (messageId: string): Promise<void> => {
@@ -214,28 +218,25 @@ export function ChatSession({
       return
     }
 
-    const files = preview.value.filesChanged.length
-    if (files === 0) {
-      setNotice(t('chat.rewindNothing'))
+    const scope = await chooseRewind(preview.value)
+    if (scope === null) return
+
+    const done = await window.octopus.chats.rewind(recordId, messageId, scope)
+    if (!done.ok) {
+      setNotice(describeFailure(done))
       return
     }
 
-    const answer = await confirm({
-      title: t('chat.rewindTitle'),
-      message: t('chat.rewindMessage', {
-        count: files,
-        insertions: preview.value.insertions,
-        deletions: preview.value.deletions
-      }),
-      detail: t('chat.rewindDetail'),
-      confirmLabel: t('chat.rewindConfirm'),
-      cancelLabel: t('chat.rewindCancel'),
-      destructive: true
-    })
-    if (!answer.confirmed) return
+    const text = done.value.text
+    if (text === null) return
 
-    const done = await window.octopus.chats.rewind(recordId, messageId)
-    if (!done.ok) setNotice(describeFailure(done))
+    // The message, back in the field to be edited and sent again; the log is
+    // re-read by `useChat` when the core says the conversation was rewound.
+    // The end of the log is where the reader now is, and the session the
+    // context gauge read from has been closed.
+    setSeed((current) => ({ text, id: (current?.id ?? 0) + 1 }))
+    pinnedToBottom.current = true
+    setCompactChoices((count) => count + 1)
   }
   const workingMode = record?.workingMode ?? defaultWorkingMode
   const effort = record?.effort ?? defaultEffort
@@ -381,6 +382,7 @@ export function ChatSession({
 
       <Composer
         initialDraft={draft}
+        seed={seed}
         onDraftLeave={onDraftLeave}
         busy={chat.busy}
         workingMode={workingMode}
@@ -444,7 +446,7 @@ export function ChatSession({
         }}
       />
 
-      {confirmDialog}
+      {rewindDialog}
     </div>
   )
 }

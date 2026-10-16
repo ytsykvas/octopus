@@ -409,6 +409,20 @@ export const AgentEventSchema = z.discriminatedUnion('type', [
   }),
 
   /**
+   * The conversation was cut back to before a message.
+   *
+   * Never written down: the transcript it describes has already been cut, so a
+   * line saying so would be the first thing in a history that no longer has
+   * what it refers to. It exists to tell every window holding the log to read
+   * it again.
+   */
+  z.object({
+    type: z.literal('conversation_rewound'),
+    /** The user message the conversation was rewound to — now gone with it. */
+    messageId: z.string()
+  }),
+
+  /**
    * What `/usage` was asked and answered.
    *
    * Kept in the transcript, unlike the rate limit two variants up, and the
@@ -485,7 +499,8 @@ export function isEphemeral(event: AgentEvent): boolean {
     event.type === 'text_delta' ||
     event.type === 'thinking_delta' ||
     event.type === 'rate_limit' ||
-    event.type === 'commands_changed'
+    event.type === 'commands_changed' ||
+    event.type === 'conversation_rewound'
   )
 }
 

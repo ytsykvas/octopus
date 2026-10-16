@@ -68,24 +68,18 @@ export function installOctopusStub(): Api {
       history: vi.fn(() => ok([])),
       rewindPreview: vi.fn(() =>
         ok({
-          canRewind: true,
-          error: null,
-          filesChanged: [],
-          insertions: 0,
-          deletions: 0,
-          skippedLinks: 0
+          conversation: true,
+          files: {
+            canRewind: true,
+            error: null,
+            filesChanged: [],
+            insertions: 0,
+            deletions: 0,
+            skippedLinks: 0
+          }
         })
       ),
-      rewind: vi.fn(() =>
-        ok({
-          canRewind: true,
-          error: null,
-          filesChanged: [],
-          insertions: 0,
-          deletions: 0,
-          skippedLinks: 0
-        })
-      ),
+      rewind: vi.fn(() => ok({ files: null, text: null })),
       send: vi.fn(() => ok(undefined)),
       interrupt: vi.fn(() => ok(undefined)),
       setWorkingMode: vi.fn(() => ok(undefined)),
@@ -310,6 +304,7 @@ function chatFixture(): Chat {
     status: 'idle',
     title: null,
     sessionId: null,
+    resumeAt: null,
     model: null,
     planModel: null,
     planEffort: null,

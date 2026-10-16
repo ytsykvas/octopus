@@ -30,6 +30,7 @@ import {
   WorkingModeSchema
 } from '../core/chats.js'
 import { CarryListSchema } from '../core/carry.js'
+import { RewindScopeSchema } from '../core/rewind.js'
 import { EnvBodySchema } from '../core/env.js'
 import { ProfileNameSchema } from '../core/envProfileNames.js'
 import type { RemoteRepository } from '../core/github.js'
@@ -888,8 +889,10 @@ export function registerIpc(
     attempt(() => service.previewRewind(chatId, MessageIdSchema.parse(messageId)))
   )
 
-  host.handle('chats:rewind', (_event, chatId: string, messageId: unknown) =>
-    attempt(() => service.rewindChat(chatId, MessageIdSchema.parse(messageId)))
+  host.handle('chats:rewind', (_event, chatId: string, messageId: unknown, scope: unknown) =>
+    attempt(() =>
+      service.rewindChat(chatId, MessageIdSchema.parse(messageId), RewindScopeSchema.parse(scope))
+    )
   )
 
   host.handle('chats:history', (_event, chatId: string) =>

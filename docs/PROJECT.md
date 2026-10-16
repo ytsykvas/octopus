@@ -600,6 +600,8 @@ The `sessionId` from `SDKSystemMessage` is persisted — that is what enables re
 
 Forking a conversation goes through the SDK's own `forkSession(sessionId, { dir })`, never by copying the id: a plain `resume` continues a session **in place and keeps its id**, so two records holding one would be two agent processes appending to a single session file, each reading the other's turns as part of its own. The SDK's fork returns a new id, and copies what the model remembers; our own transcript is copied beside it, because that is what the screen draws.
 
+Rewinding a conversation to before a message goes through the same session rather than a fork: the SDK's `resumeSessionAt` cuts what the model remembers in place, and the file checkpoints of that session stay usable, which a fork would lose — its file history is not copied. The cut is kept on the record until a turn has run on it, because a session started at the cut and closed unused leaves a plain `resume` remembering everything. The files are rewound by the same session's `rewindFiles`, so the conversation, the files or both can be put back, as Claude Code's own `/rewind` offers.
+
 ### 12.4 The pull request
 
 The tab is the whole of a branch's life after the work is done, and everything

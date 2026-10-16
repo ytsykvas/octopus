@@ -280,7 +280,16 @@ from before it reads the same as one after.
 the agent under, which is what putting the files back to it is asked with. It is
 optional — a message sent before ids were kept has none, and simply offers no
 rewind. The `files_rewound` event records a rewind with how much it undid and how many
-files a link kept it from restoring (`skippedLinks`, defaulting to 0).
+files a link kept it from restoring (`skippedLinks`, defaulting to 0). A
+transcript is appended to, and the one rewrite is a conversation rewind, which
+cuts it back to just before a user message; `conversation_rewound` is never
+stored, since the history it would describe is already gone.
+
+**`resumeAt` is the cut a rewound conversation is waiting to apply**: the last
+entry of the agent's session it should still remember, handed over as
+`resumeSessionAt` when the next session starts, and cleared once a turn has run
+there. It defaults to null — a record from before rewinding existed was never
+rewound.
 
 **`closedAt` is null while a conversation is a tab** and the time it was closed
 otherwise. It defaults to null, so a record written before it existed loads as

@@ -1300,86 +1300,145 @@ describe('the permission mode', () => {
     })
   })
 
-  describe('putting the files back from a message', () => {
+  describe('rewinding to a message', () => {
     const MESSAGE = '11111111-1111-4111-8111-111111111111'
 
     const SAID: ChatEntry[] = [
       { role: 'user', at: '2026-08-13T09:00:00.000Z', text: 'rename it', uuid: MESSAGE }
     ]
 
-    // Two steps, and the first changes nothing: the question the user answers
-    // has the numbers in it, because the agent was asked what it would do.
-    it('asks what it would do, says so, and does it once agreed', async () => {
-      const user = userEvent.setup()
+    /** What the core says a rewind would do: both halves on offer. */
+    function givenPreview(): void {
       vi.mocked(octopus().chats.rewindPreview).mockResolvedValue({
         ok: true,
         value: {
-          canRewind: true,
-          error: null,
-          filesChanged: ['a.ts', 'b.ts'],
-          insertions: 12,
-          deletions: 4,
-          skippedLinks: 0
+          conversation: true,
+          files: {
+            canRewind: true,
+            error: null,
+            filesChanged: ['a.ts', 'b.ts'],
+            insertions: 12,
+            deletions: 4,
+            skippedLinks: 0
+          }
         }
       })
+    }
+
+    const mark = (): Promise<HTMLElement> =>
+      screen.findByRole('button', { name: 'Rewind to before this message' })
+
+    // Two steps, and the first changes nothing: the choice the user makes has
+    // the numbers in it, because the core was asked what each half would do.
+    it('asks what to put back, with what each would do, and does what was chosen', async () => {
+      const user = userEvent.setup()
+      givenPreview()
       givenChat(SAID)
       await openLoadedChat()
 
-      await user.click(await screen.findByRole('button', { name: /Put the files back to before/ }))
+      await user.click(await mark())
 
-      expect(
-        await screen.findByText(
-          'This puts 2 files back to how they were before this message (+12 −4).'
-        )
-      ).toBeInTheDocument()
+      const both = await screen.findByRole('button', { name: /Conversation and files/ })
+      expect(both).toHaveTextContent(
+        'Puts 2 files back to how they were before this message (+12 −4).'
+      )
       expect(octopus().chats.rewind).not.toHaveBeenCalled()
 
-      await user.click(screen.getByRole('button', { name: 'Put files back' }))
+      await user.click(both)
 
       await waitFor(() => {
-        expect(octopus().chats.rewind).toHaveBeenCalledWith(CHAT_ID, MESSAGE)
+        expect(octopus().chats.rewind).toHaveBeenCalledWith(CHAT_ID, MESSAGE, 'both')
       })
     })
 
-    it('does nothing when the question is answered no', async () => {
+    it('does nothing when the dialog is dismissed', async () => {
       const user = userEvent.setup()
-      vi.mocked(octopus().chats.rewindPreview).mockResolvedValue({
-        ok: true,
-        value: {
-          canRewind: true,
-          error: null,
-          filesChanged: ['a.ts'],
-          insertions: 1,
-          deletions: 0,
-          skippedLinks: 0
-        }
-      })
+      givenPreview()
       givenChat(SAID)
       await openLoadedChat()
 
-      await user.click(await screen.findByRole('button', { name: /Put the files back to before/ }))
+      await user.click(await mark())
       await user.click(await screen.findByRole('button', { name: 'Cancel' }))
 
       expect(octopus().chats.rewind).not.toHaveBeenCalled()
     })
 
-    // Nothing to undo is an answer, not a question.
-    it('says so rather than asking when nothing would change', async () => {
+    // Claude Code's own rewind does this: the message comes back to be
+    // edited and sent again, in the field, with the caret at its end.
+    it('hands the message back to the field after the conversation is rewound', async () => {
       const user = userEvent.setup()
+      givenPreview()
+      vi.mocked(octopus().chats.rewind).mockResolvedValue({
+        ok: true,
+        value: { files: null, text: 'rename it' }
+      })
+      givenChat(SAID)
+      await openLoadedChat()
+      await user.type(field(), 'half a thought')
+
+      await user.click(await mark())
+      await user.click(await screen.findByRole('button', { name: /Conversation only/ }))
+
+      await waitFor(() => {
+        expect(field()).toHaveValue('rename it')
+      })
+      expect(field()).toHaveFocus()
+      expect(octopus().chats.rewind).toHaveBeenCalledWith(CHAT_ID, MESSAGE, 'conversation')
+    })
+
+    // Only the files went back: the conversation, and what is being typed,
+    // stay as they were.
+    it('leaves the field alone when only the files were put back', async () => {
+      const user = userEvent.setup()
+      givenPreview()
+      vi.mocked(octopus().chats.rewind).mockResolvedValue({
+        ok: true,
+        value: {
+          files: {
+            canRewind: true,
+            error: null,
+            filesChanged: ['a.ts'],
+            insertions: 1,
+            deletions: 0,
+            skippedLinks: 0
+          },
+          text: null
+        }
+      })
+      givenChat(SAID)
+      await openLoadedChat()
+      await user.type(field(), 'still typing')
+
+      await user.click(await mark())
+      await user.click(await screen.findByRole('button', { name: /Files only/ }))
+
+      await waitFor(() => {
+        expect(octopus().chats.rewind).toHaveBeenCalledWith(CHAT_ID, MESSAGE, 'files')
+      })
+      expect(field()).toHaveValue('still typing')
+    })
+
+    it('says why when it cannot be asked about at all', async () => {
+      const user = userEvent.setup()
+      vi.mocked(octopus().chats.rewindPreview).mockResolvedValue({
+        ok: false,
+        error: 'busy',
+        code: 'rewindBusy'
+      })
       givenChat(SAID)
       await openLoadedChat()
 
-      await user.click(await screen.findByRole('button', { name: /Put the files back to before/ }))
+      await user.click(await mark())
 
       expect(
-        await screen.findByText('The files are already as they were before that message.')
+        await screen.findByText('The agent is working. Stop it before rewinding.')
       ).toBeInTheDocument()
-      expect(octopus().chats.rewind).not.toHaveBeenCalled()
     })
 
-    it('says why when the agent cannot', async () => {
+    it('says so when the real rewind is refused after choosing', async () => {
       const user = userEvent.setup()
-      vi.mocked(octopus().chats.rewindPreview).mockResolvedValue({
+      givenPreview()
+      vi.mocked(octopus().chats.rewind).mockResolvedValue({
         ok: false,
         error: 'No checkpoint for that message',
         code: 'rewindUnavailable',
@@ -1388,41 +1447,13 @@ describe('the permission mode', () => {
       givenChat(SAID)
       await openLoadedChat()
 
-      await user.click(await screen.findByRole('button', { name: /Put the files back to before/ }))
+      await user.click(await mark())
+      await user.click(await screen.findByRole('button', { name: /Files only/ }))
 
       expect(
         await screen.findByText(
-          'The files cannot be put back to that message: No checkpoint for that message'
+          'This conversation cannot be rewound to that message: No checkpoint for that message'
         )
-      ).toBeInTheDocument()
-    })
-
-    it('says so when the real rewind is refused after agreeing', async () => {
-      const user = userEvent.setup()
-      vi.mocked(octopus().chats.rewindPreview).mockResolvedValue({
-        ok: true,
-        value: {
-          canRewind: true,
-          error: null,
-          filesChanged: ['a.ts'],
-          insertions: 1,
-          deletions: 0,
-          skippedLinks: 0
-        }
-      })
-      vi.mocked(octopus().chats.rewind).mockResolvedValue({
-        ok: false,
-        error: 'busy',
-        code: 'rewindBusy'
-      })
-      givenChat(SAID)
-      await openLoadedChat()
-
-      await user.click(await screen.findByRole('button', { name: /Put the files back to before/ }))
-      await user.click(await screen.findByRole('button', { name: 'Put files back' }))
-
-      expect(
-        await screen.findByText('The agent is working. Stop it before putting the files back.')
       ).toBeInTheDocument()
     })
   })
