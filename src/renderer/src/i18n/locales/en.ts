@@ -450,7 +450,14 @@ export const en = {
       'This file has been deleted, and its last committed version cannot be shown here.',
     plain: 'Shown without colours: the file is too large to highlight.',
     openExternally: 'Open in editor',
-    reload: 'Reload'
+    reload: 'Reload',
+    /* The toolbar over selected lines. */
+    selection: 'Lines {{range}}',
+    addTo: 'Add to {{name}}',
+    copyReference: 'Copy path',
+    copied: 'Path copied',
+    copyFailed: 'Could not copy',
+    notePlaceholder: 'What should the agent know about these lines? (optional)'
   },
 
   /*
@@ -1010,6 +1017,14 @@ export const en = {
     attachIntro: 'Files I am pointing you at:',
     /* Shown over the composer while something is being dragged onto it. */
     attachDrop: 'Drop to attach',
+    /* A tab's spoken name when notes wait in it: its name and state, then the count. */
+    tabWithNotes: '{{described}}, {{waiting}}',
+    /* The counter on a conversation's tab: notes from the viewer that will go
+       out with its next message. */
+    notesWaiting_one: '{{count}} note waiting',
+    notesWaiting_few: '{{count}} notes waiting',
+    notesWaiting_many: '{{count}} notes waiting',
+    notesWaiting_other: '{{count}} notes waiting',
 
     model: 'Model',
     /* The default row's name, for a catalogue that has not arrived yet and so

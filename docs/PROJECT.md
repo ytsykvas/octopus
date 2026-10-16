@@ -335,29 +335,32 @@ A workspace holds up to **three conversations at once**, switched by a strip of 
 
 They run in the same worktree with no locking between them, deliberately (§16). Every tab stays mounted while its workspace is open, so a conversation keeps its place in the log and the answer being streamed into it while another is on screen — but only the one showing may raise a dialog, since a modal about work the reader cannot see is the worst kind of interruption.
 
-Files opened from the right pane's tree take tabs of their own in the same strip, after the conversations, read-only with syntax colours. One click opens a loose tab, set in italics, that the next one-click file replaces — an editor's preview — and a double-click keeps it. A file in front hides every conversation behind it, still running; asking for a conversation in any way puts the files behind it again. Read-only on purpose: the agent writes these files, and a second writer in the same window would race it with nothing to say which won. "Open in editor" is the way to change one.
+Files opened from the right pane's tree take tabs of their own in the same strip, after the conversations, read-only with syntax colours. One click opens a loose tab, set in italics, that the next one-click file replaces — an editor's preview — and a double-click keeps it. A file in front hides every conversation behind it, still running; asking for a conversation in any way puts the files behind it again. Read-only on purpose: the agent writes these files, and a second writer in the same window would race it with nothing to say which won. "Open in editor" is the way to change one. Selected lines can be sent as a note to any one of the workspace's conversations, chosen by name, while the file stays in front — a review is several files and a note on each, gathered in the conversation that will act on them.
 
 **Right pane — terminal, files, changes, scripts, the pull request and notes** in tabs, pinned to the pane's right edge. Shows what the agent did and gives manual access to the workspace. Draggable, and both its width and which tab is showing persist. Whether it is folded away does not — that is a mood about the current window. Its active tab carries the open project's colour, falling back to the accent while no project is open.
 
 #### Shortcuts
 
-| Combination | Action                              |
-| ----------- | ----------------------------------- |
-| `⌘⇧N`       | new workspace                       |
-| `⌘1`–`⌘9`   | switch project                      |
-| `⌃1`–`⌃9`   | jump to a workspace                 |
-| `⌥1`–`⌥3`   | switch conversation                 |
-| `⌘T`        | new conversation                    |
-| `⌘⇧T`       | reopen the last closed conversation |
-| `⌘⇧E`       | files                               |
-| `⌘⇧D`       | changes                             |
-| `⌘⇧P`       | pull request                        |
-| `⌘W`        | close the file in front             |
-| `⇧⇥`        | next mode                           |
+| Combination | Action                               |
+| ----------- | ------------------------------------ |
+| `⌘⇧N`       | new workspace                        |
+| `⌘1`–`⌘9`   | switch project                       |
+| `⌃1`–`⌃9`   | jump to a workspace                  |
+| `⌥1`–`⌥3`   | switch conversation                  |
+| `⌘T`        | new conversation                     |
+| `⌘⇧T`       | reopen the last closed conversation  |
+| `⌘⇧E`       | files                                |
+| `⌘⇧D`       | changes                              |
+| `⌘⇧P`       | pull request                         |
+| `⌘W`        | close the file in front              |
+| `⌘C`        | in a file: copy the lines' reference |
+| `⇧⇥`        | next mode                            |
 
 `⇧⇥` works in the composer's field only, and goes round ask first → `Auto mode` → plan, the order Claude Code's own shift+tab uses; anywhere else in the window it still moves the focus back.
 
 `⌘W` closes a file tab and nothing else: with a conversation in front the key is left alone, because closing a conversation is a menu item on purpose.
+
+`⌘C` in a file copies a reference to the selected lines, `src/a.ts:12-18`, not their text: the viewer is where code is pointed at, and the reference is what an agent and a reviewer can follow.
 
 `⌘⇧P` opens the pull request tab, which is what it was waiting for. Listing a shortcut that does nothing is worse than listing none: it is read once, tried once, and the rest of the table quietly distrusted along with it — which is what `⌘⇧D` did here for a fortnight, and what `⌘⇧P` did until there was a tab to name.
 

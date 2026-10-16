@@ -372,7 +372,13 @@ export const uk: Translation = {
     deletedUnreadable: 'Цей файл видалено, і його останню закомічену версію тут показати не можна.',
     plain: 'Показано без кольорів: файл завеликий для підсвітки.',
     openExternally: 'Відкрити в редакторі',
-    reload: 'Перечитати'
+    reload: 'Перечитати',
+    selection: 'Рядки {{range}}',
+    addTo: 'Додати в {{name}}',
+    copyReference: 'Копіювати шлях',
+    copied: 'Шлях скопійовано',
+    copyFailed: 'Не вдалося скопіювати',
+    notePlaceholder: 'Що агенту варто знати про ці рядки? (необов’язково)'
   },
 
   sources: {
@@ -760,6 +766,11 @@ export const uk: Translation = {
     attachRemove: 'Прибрати цей файл',
     attachIntro: 'Файли, на які я показую:',
     attachDrop: 'Відпустіть, щоб прикріпити',
+    tabWithNotes: '{{described}}, {{waiting}}',
+    notesWaiting_one: '{{count}} нотатка чекає',
+    notesWaiting_few: '{{count}} нотатки чекають',
+    notesWaiting_many: '{{count}} нотаток чекають',
+    notesWaiting_other: '{{count}} нотатки чекають',
 
     model: 'Модель',
     modelDefault: 'Модель за замовчуванням',

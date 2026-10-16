@@ -12,7 +12,6 @@ import { useTranslation } from 'react-i18next'
 
 import type { FileDiff } from '@core/diff.js'
 import { shortBranchName } from '@core/branches.js'
-import { AGENT_NAMES } from '@core/chats.js'
 import type { PublishState } from '@core/publish.js'
 import type { WorkspaceView } from '@core/workspaces.js'
 
@@ -31,6 +30,7 @@ import { MIN_SPLIT_COLUMNS, splitThreshold } from './measure.js'
 import { lineAddress, selectionAnchor } from './selectionAnchor.js'
 import { NO_TOKENS, useHighlighting } from './useHighlighting.js'
 import { IconButton, Notice } from '../paneControls.js'
+import { chatName } from '../chat/chatName.js'
 
 /**
  * A file this big starts collapsed.
@@ -142,7 +142,7 @@ export function DiffPanel({
     // are recognisably the same conversation.
     const named = chats.map((chat, index) => ({
       id: chat.id,
-      name: chat.title ?? t('chat.tab', { agent: AGENT_NAMES[chat.agent], number: index + 1 })
+      name: chatName(t, chat, index + 1)
     }))
 
     /*

@@ -9,10 +9,12 @@ import type { ChatTabsController } from '../../hooks/useChatTabs.js'
 import type { FileTabsController } from '../../hooks/useFileTabs.js'
 import { Button } from '../Button.js'
 import { RepoTrustReview } from '../RepoTrustReview.js'
+import type { CodeNoteController } from '../../hooks/useCodeNotes.js'
 import type { DiffCommentController } from '../../hooks/useDiffComments.js'
 import type { PullRequestQuoteController } from '../../hooks/usePullRequestQuotes.js'
 import { ChatSession } from './ChatSession.js'
 import { ChatTabs } from './ChatTabs.js'
+import { chatName } from './chatName.js'
 import { FileTabs } from '../files/FileTabs.js'
 import { FileViewer } from '../files/FileViewer.js'
 
@@ -47,6 +49,8 @@ interface ChatProps {
   /** Review notes from the diff pane, riding out with the next message. */
   readonly comments: DiffCommentController
   readonly quotes: PullRequestQuoteController
+  /** Notes from the file viewer, each held by the conversation it was sent to. */
+  readonly codeNotes: CodeNoteController
   /**
    * The project's colour, for the messages you sent and the active tab's rule.
    *
@@ -92,6 +96,7 @@ export function Chat({
   onDraftLeave,
   comments,
   quotes,
+  codeNotes,
   color,
   defaultWorkingMode,
   defaultEffort,
@@ -157,7 +162,11 @@ export function Chat({
             has moved to the title bar beside the project's directory: it says
             where the work lands, which is a fact about the window rather than
             about any one conversation. */}
-        <ChatTabs tabs={tabs} filesInFront={files.active !== null} />
+        <ChatTabs
+          tabs={tabs}
+          filesInFront={files.active !== null}
+          notesWaiting={(tabKey) => codeNotes.pendingFor(tabKey).length}
+        />
         <FileTabs files={files} />
       </header>
 
@@ -213,6 +222,7 @@ export function Chat({
           }}
           comments={comments}
           quotes={quotes}
+          codeNotes={codeNotes}
           defaultWorkingMode={defaultWorkingMode}
           defaultEffort={defaultEffort}
           defaultModel={defaultModel}
@@ -230,6 +240,14 @@ export function Chat({
           workspaceId={workspace.id}
           path={files.active}
           onError={onError}
+          // Every conversation in the strip, named as the strip names it. The
+          // one in front last leads, which is where "the chat I was in" is.
+          targets={tabs.tabs.map((tab, index) => ({
+            key: tab.key,
+            name: chatName(t, tab, index + 1),
+            active: tab.key === tabs.activeKey
+          }))}
+          onNote={codeNotes.add}
         />
       )}
     </div>

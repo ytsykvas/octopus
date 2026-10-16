@@ -270,6 +270,54 @@ describe('putting the files back from a message', () => {
   })
 })
 
+/*
+ * The message is what the agent was sent and is never rewritten; this is only
+ * how it is drawn. A note on code becomes a card and a reference a chip, and
+ * anything else reads exactly as it was typed.
+ */
+describe('a message carrying notes on code', () => {
+  const user = (text: string): ChatEntry => ({ role: 'user', at: AT, text })
+
+  it('draws each note as a card: where, the lines, and what was said', () => {
+    renderLog({
+      entries: [
+        user(
+          'Look at these.\n\nsrc/core/a.ts:12-13\n> const a = 1\n> const b = 2\nWhy two?\n\nsrc/b.ts:4 (as it was)\n> gone\n\nLook.'
+        )
+      ]
+    })
+
+    expect(screen.getByText('Look at these.')).toBeInTheDocument()
+    const first = screen.getByText('src/core/a.ts:12-13')
+    expect(first).toHaveAttribute('title', 'src/core/a.ts')
+    const card = first.closest('div')
+    expect(card?.querySelector('pre')?.textContent).toBe('const a = 1\nconst b = 2')
+    expect(card).toHaveTextContent('Why two?')
+    // A note with nothing said is its place and its lines, and no empty line.
+    const second = screen.getByText('src/b.ts:4').closest('div')
+    expect(second).toHaveTextContent('(as it was)')
+    expect(second?.querySelectorAll('p')).toHaveLength(1)
+    expect(screen.getByText('Look.')).toBeInTheDocument()
+  })
+
+  it('draws a reference in running text as a chip', () => {
+    renderLog({ entries: [user('the bug is at src/a.ts:12-18, I think')] })
+
+    expect(screen.getByText('src/a.ts:12-18').tagName).toBe('CODE')
+    expect(screen.getByText(/the bug is at/).textContent).toBe(
+      'the bug is at src/a.ts:12-18, I think'
+    )
+  })
+
+  it('leaves a message with nothing of the sort exactly as typed', () => {
+    const typed = '\n  indented\n\nat 10:30'
+    renderLog({ entries: [user(typed)] })
+
+    expect(document.querySelector('.bubble-sent')?.textContent).toBe(typed)
+    expect(document.querySelector('.bubble-sent p')).toBeNull()
+  })
+})
+
 describe('what the log shows', () => {
   it('shows what the user said and what came back', () => {
     renderLog({

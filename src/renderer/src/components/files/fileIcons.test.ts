@@ -122,7 +122,9 @@ describe('makeResolver', () => {
 
 describe('loadIconResolver', () => {
   // The real copy in vendor/: the manifest parses and the build's URL tables
-  // hold the icons it names, in both flavours.
+  // hold the icons it names, in both flavours. Two tables of 656 pictures,
+  // transformed on first import: under coverage, beside the rest of the suite,
+  // that outruns the default five seconds.
   it('loads the theme once and resolves real names', async () => {
     expect(loadedIconResolver()).toBeNull()
     const [resolve, again] = await Promise.all([loadIconResolver(), loadIconResolver()])
@@ -134,5 +136,5 @@ describe('loadIconResolver', () => {
       light: expect.stringMatching(/latte\/typescript\.svg\b/) as string
     })
     expect(resolve(folder('src'))?.dark).toMatch(/mocha\/folder_src\.svg\b/)
-  })
+  }, 30_000)
 })
