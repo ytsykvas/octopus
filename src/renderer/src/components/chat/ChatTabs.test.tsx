@@ -26,6 +26,7 @@ function controller(overrides: Partial<ChatTabsController> = {}): ChatTabsContro
     tabs: [tab()],
     activeKey: 'chat-1',
     select: vi.fn(),
+    selectIn: vi.fn(),
     canCreate: true,
     create: vi.fn(() => Promise.resolve()),
     fork: vi.fn(() => Promise.resolve()),

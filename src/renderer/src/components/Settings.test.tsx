@@ -28,6 +28,7 @@ function config(overrides: Partial<Config> = {}): Config {
     language: 'en',
     rightPanelWidth: 360,
     rightPanelOpen: true,
+    notificationSound: true,
     rightPanelTab: 'diff',
     diffView: 'unified',
     sidebarWidth: 240,
@@ -187,6 +188,15 @@ describe('Settings', () => {
     await user.click(screen.getByRole('button', { name: 'English' }))
 
     expect(props.onChange).toHaveBeenCalledExactlyOnceWith({ language: 'en' })
+  })
+
+  it('turns the notice sound off', async () => {
+    const user = userEvent.setup()
+    const props = await renderSettings()
+
+    await user.click(screen.getByRole('switch', { name: 'Sound' }))
+
+    expect(props.onChange).toHaveBeenCalledExactlyOnceWith({ notificationSound: false })
   })
 
   it('shows one section at a time', async () => {

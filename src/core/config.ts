@@ -258,6 +258,15 @@ export const ConfigSchema = z.object({
   rightPanelOpen: z.boolean().default(true),
 
   /**
+   * Whether a notice is announced with a sound as well as drawn.
+   *
+   * On by default: the notice is for work happening out of sight, and a sound
+   * is what reaches somebody looking elsewhere. Quiet and short, and one switch
+   * away for anybody who would rather not.
+   */
+  notificationSound: z.boolean().default(true),
+
+  /**
    * How a diff is laid out: one column, or the two sides beside each other.
    *
    * Stored rather than kept per session because it is a preference about how
@@ -339,6 +348,7 @@ export function createDefaultConfig(
     cloneDirectory: '',
     rightPanelWidth: 360,
     rightPanelOpen: true,
+    notificationSound: true,
     diffView: 'unified',
     rightPanelTab: 'diff',
     sidebarWidth: 240,

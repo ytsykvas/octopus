@@ -44,6 +44,7 @@ import { useProjects } from './hooks/useProjects.js'
 import { useWorkspaceScripts } from './hooks/useWorkspaceScripts.js'
 import { useWorkspaces } from './hooks/useWorkspaces.js'
 import { useAttention } from './hooks/useAttention.js'
+import { AttentionToasts } from './components/AttentionToasts.js'
 
 /**
  * The project strip's width, `w-15` in `ProjectTabs`.
@@ -154,7 +155,12 @@ export function App(): React.JSX.Element {
 
   const projects = useProjects(confirm, setError)
   const workspaces = useWorkspaces(projects.all, confirm, setError)
-  const attention = useAttention(projects.all, workspaces.flat, selectedWorkspaceId)
+  const attention = useAttention(
+    projects.all,
+    workspaces.flat,
+    selectedWorkspaceId,
+    config?.notificationSound === true
+  )
 
   /*
    * Makes a workspace and opens it on its empty conversation.
@@ -1099,6 +1105,20 @@ export function App(): React.JSX.Element {
           leftWidth={TAB_STRIP_WIDTH + (sidebarOpen ? sidebarWidth : 0)}
         />
       </div>
+
+      <AttentionToasts
+        toasts={attention.toasts}
+        projects={projects.all}
+        workspaces={workspaces.flat}
+        onShow={(notice) => {
+          // The tab first: it is remembered per workspace, and the workspace
+          // opens on whichever tab it remembers.
+          conversations.selectIn(notice.workspaceId, notice.chatId)
+          setSelectedProjectId(notice.projectId)
+          setSelectedWorkspaceId(notice.workspaceId)
+        }}
+        onDismiss={attention.dismiss}
+      />
 
       {settingsSection !== null && config && (
         <Settings

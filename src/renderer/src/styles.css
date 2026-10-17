@@ -484,3 +484,23 @@
     outline-offset: 2px;
   }
 }
+
+/* A toast arriving (AttentionToasts.tsx): a short fade and lift, so the eye
+   finds it without the corner flashing. None at all for anybody who has asked
+   the system for less motion. */
+@keyframes notice-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+}
+
+.notice-in {
+  animation: notice-in 150ms ease-out;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .notice-in {
+    animation: none;
+  }
+}

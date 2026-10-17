@@ -14,7 +14,7 @@ import type { WorkspaceView } from '@core/workspaces.js'
 import type { Result } from '../../preload/index.js'
 import { fileDiff, workspaceDiff } from './test/diff.js'
 import { stubDialogElement } from './test/dialog.js'
-import { chat } from './test/chat.js'
+import { chat, emitAgentEvent, givenChats } from './test/chat.js'
 import { disconnectedAccounts } from './test/octopus.js'
 import type { ResolvedScript } from '@core/repoSource.js'
 import { workspaceView } from './test/workspaces.js'
@@ -68,6 +68,7 @@ function config(overrides: Partial<Config> = {}): Config {
     language: 'en',
     rightPanelWidth: 360,
     rightPanelOpen: true,
+    notificationSound: true,
     rightPanelTab: 'diff',
     diffView: 'unified',
     sidebarWidth: 240,
@@ -2868,5 +2869,42 @@ describe('a branch list that came back full', () => {
     await user.click(await screen.findByText('anna'))
 
     expect(await screen.findByRole('button', { name: 'Create PR' })).toBeInTheDocument()
+  })
+})
+
+describe('news from agents out of sight', () => {
+  const DONE = {
+    type: 'result',
+    ok: true,
+    costUsd: null,
+    durationMs: 1,
+    inputTokens: null,
+    outputTokens: null,
+    terminalReason: null
+  } as const
+
+  // The toast is the news; Show is the way to it — the project, the workspace
+  // and the very conversation, rather than whichever tab the workspace last had.
+  it('raises a toast that opens the conversation it is about, and goes once it has', async () => {
+    givenTwoProjects()
+    givenChats([
+      chat({ id: 'c-1', title: 'One', sessionId: 's-1' }),
+      chat({ id: 'c-2', title: 'Two', sessionId: 's-2' })
+    ])
+    const user = await openApp()
+    await user.click(await findTab('LE'))
+    await user.click(await screen.findByText('carol'))
+
+    emitAgentEvent(DONE, 'c-2', 'planner/anna')
+
+    const toast = await screen.findByRole('region', { name: 'Finished' })
+    expect(toast).toHaveTextContent('planner · anna')
+    expect(screen.getByRole('img', { name: /finished here/ })).toBeInTheDocument()
+
+    await user.click(within(toast).getByRole('button', { name: 'Show' }))
+
+    expect(await screen.findByRole('button', { name: /^Two/, current: 'page' })).toBeInTheDocument()
+    expect(screen.queryByRole('region', { name: 'Finished' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('img', { name: /finished here/ })).not.toBeInTheDocument()
   })
 })

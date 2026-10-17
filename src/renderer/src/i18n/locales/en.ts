@@ -1292,6 +1292,9 @@ export const en = {
 
     language: 'Language',
     languageHint: 'English is the default. Restart is not required.',
+    notificationSound: 'Sound',
+    notificationSoundHint:
+      'A quiet chime when an agent finishes, fails or needs your answer somewhere you are not looking.',
 
     branchPrefix: 'Branch prefix',
     branchPrefixHint:
@@ -1650,6 +1653,17 @@ export const en = {
   },
   /* Heads-ups above the message field: a caveat shown once it starts to
      matter. Each tip has a one-line title and a paragraph behind "Learn more". */
+  // News from an agent in a workspace out of sight, in the bottom-right corner.
+  notices: {
+    done: 'Finished',
+    error: 'Ended with an error',
+    question: 'Has a question for you',
+    plan: 'Plan is ready for review',
+    permission: 'Wants to use {{tool}}',
+    show: 'Show',
+    dismiss: 'Dismiss'
+  },
+
   tips: {
     headsUp: 'Heads up',
     learnMore: 'Learn more',

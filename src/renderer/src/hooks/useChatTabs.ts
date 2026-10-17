@@ -47,6 +47,8 @@ export interface ChatTabsController {
   readonly tabs: readonly ChatTab[]
   readonly activeKey: string
   readonly select: (key: string) => void
+  /** Chooses the tab a workspace opens on, before it is the one on screen. */
+  readonly selectIn: (workspaceId: string, key: string) => void
   /** Whether another conversation may be opened here; false at the cap. */
   readonly canCreate: boolean
   readonly create: () => Promise<void>
@@ -336,6 +338,10 @@ export function useChatTabs(
     setActiveByWorkspace((current) => new Map(current).set(id, key))
   }, [])
 
+  const selectIn = useCallback((workspaceId: string, key: string) => {
+    setActiveByWorkspace((current) => new Map(current).set(workspaceId, key))
+  }, [])
+
   const remembered = workspaceId === null ? undefined : activeByWorkspace.get(workspaceId)
   // The remembered tab may have been closed since, here or in another window,
   // so a key nothing answers to falls back to the first tab rather than to none
@@ -509,6 +515,7 @@ export function useChatTabs(
     tabs,
     activeKey,
     select,
+    selectIn,
     rename,
     editingKey,
     setEditingKey,
