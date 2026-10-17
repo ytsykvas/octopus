@@ -1888,11 +1888,12 @@ passes `skipBehaviors: true` and a typed `/usage`, the one place that section is
 drawn, does not. The 260ms above predates this and is no longer what a read
 costs.
 
-**Which CLI answers is the SDK's, not the terminal's.** The app sets no
-`pathToClaudeCodeExecutable`, so the binary that runs is the platform package
-beside the SDK — `claude-agent-sdk-darwin-arm64`, of the SDK's own version —
-and a `claude` installed on the machine is a different build that may behave
-differently. Between 0.3.224 and 2.1.299 the usage client changed in ways that
+**Which CLI answers is the SDK's, not the terminal's.** The binary that runs
+is the platform package beside the SDK — `claude-agent-sdk-darwin-arm64`, of
+the SDK's own version — and a `claude` installed on the machine is a different
+build that may behave differently. `pathToClaudeCodeExecutable` is set only in
+the packaged app, and only to the unpacked copy of that same package
+(`agentBinary.ts`). Between 0.3.224 and 2.1.299 the usage client changed in ways that
 matter here: 2.1.299 keeps a successful answer for about a minute and says so
 ("answered from a snapshot … endpoint not asked"), honours a 429's
 `Retry-After` and does not ask again for 3–5 minutes, and logs which of those

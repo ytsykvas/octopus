@@ -32,6 +32,7 @@ import {
   READ_ONLY_TOOLS,
   startSession
 } from './agent.js'
+import { unpackedAgentBinary, withAgentBinary } from './agentBinary.js'
 import {
   type AgentCommand,
   type AgentModel,
@@ -1394,7 +1395,9 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
   const dataRoot = options.dataRoot ?? rootDir()
   const cliDir = options.cliConfigDir ?? cliConfigDir()
   const windowOverrideFor = options.windowOverride ?? findWindowOverride
-  const runQuery = options.query ?? defaultQuery
+  // Corrected for the packaged app, where the SDK's own guess points into
+  // `app.asar` and cannot be started (`agentBinary.ts`).
+  const runQuery = options.query ?? withAgentBinary(defaultQuery, unpackedAgentBinary())
   const runForkSession = options.forkSession ?? defaultForkSession
   const runSessionMessages = options.sessionMessages ?? defaultSessionMessages
   const uuid = options.uuid ?? randomUUID
