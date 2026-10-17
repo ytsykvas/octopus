@@ -52,6 +52,25 @@ with a name of its own, so the tab is still called by its letters. The tiles
 grew from 36px to 40px to give it room, and the strip from 56px to 60px with
 them.
 
+**The same news is a toast in the bottom-right corner**, up to three, newest
+first, each saying what happened — finished, ended with an error, has a
+question, a plan to review, or the tool it wants — and where. **Show** opens the
+project, the workspace and the very conversation the news is about (`selectIn`),
+not whichever tab that workspace last had; × takes the toast down and leaves the
+tile's dot until the workspace is opened. No timer removes one: news that
+vanishes while somebody is reading something else was never delivered. It is a
+`fixed` block drawn into the body, as the menus are, not a `<dialog>` — an open
+dialog switches off the window's own keys.
+
+A quiet chime goes with it (`sound.ts`): rising for finished, one note for a
+wait, falling for an error, at a twentieth of full volume and no more than once
+in 1.5s, so several agents finishing together ring once. Synthesised with Web
+Audio rather than played from a file, since Vite inlines a small file as a
+`data:` URL the window's CSP refuses for media. The workspace on screen gets no
+toast and no dot, but it **does** get the chime while the window is not in
+front: somebody in another application is not looking at it either. Settings →
+General turns the sound off (`notificationSound`).
+
 **The foot of the left column is one footer**, as wide as the strip and the list
 together: the account's limits, and under them a row holding Settings and the
 fold, both icons. The two are the controls that belong to the window rather than

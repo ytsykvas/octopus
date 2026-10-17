@@ -1,5 +1,5 @@
-import { type RenderHookResult, renderHook } from '@testing-library/react'
-import { describe, expect, it } from 'vitest'
+import { act, type RenderHookResult, renderHook } from '@testing-library/react'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import type { AgentEvent } from '@core/events.js'
 import type { Project } from '@core/store.js'
@@ -7,7 +7,15 @@ import type { WorkspaceView } from '@core/workspaces.js'
 
 import { emitAgentEvent } from '../test/chat.js'
 import { workspaceView } from '../test/workspaces.js'
-import { type Attention, useAttention } from './useAttention.js'
+import { chime } from '../sound.js'
+import { type Attention, TOAST_LIMIT, useAttention } from './useAttention.js'
+
+vi.mock('../sound.js', () => ({ chime: vi.fn() }))
+
+afterEach(() => {
+  vi.mocked(chime).mockClear()
+  vi.restoreAllMocks()
+})
 
 const PLANNER = { id: 'planner' } as Project
 const ANNA = workspaceView('anna')
@@ -26,15 +34,24 @@ const DONE: AgentEvent = {
 interface Props {
   readonly openId: string | null
   readonly list: readonly WorkspaceView[]
+  readonly sound?: boolean
 }
 
 function render(
   open: string | null,
-  workspaces: readonly WorkspaceView[] = [ANNA, BEN]
+  workspaces: readonly WorkspaceView[] = [ANNA, BEN],
+  sound = false
 ): RenderHookResult<Attention, Props> {
-  return renderHook(({ openId, list }: Props) => useAttention([PLANNER], list, openId), {
-    initialProps: { openId: open, list: workspaces }
-  })
+  return renderHook(
+    ({ openId, list, sound: audible }: Props) =>
+      useAttention([PLANNER], list, openId, audible ?? sound),
+    { initialProps: { openId: open, list: workspaces } }
+  )
+}
+
+/** The window in front of the user, or behind another application. */
+function focused(inFront: boolean): void {
+  vi.spyOn(document, 'hasFocus').mockReturnValue(inFront)
 }
 
 describe('useAttention', () => {
@@ -127,5 +144,94 @@ describe('useAttention', () => {
 
     expect(result.current.marks.size).toBe(0)
     expect(result.current.notices).toEqual([])
+  })
+
+  describe('the sound', () => {
+    it('chimes for news from a workspace out of sight', () => {
+      focused(true)
+      render(BEN.id, [ANNA, BEN], true)
+
+      emitAgentEvent(DONE, 'c-1', ANNA.id)
+
+      expect(chime).toHaveBeenCalledWith('done')
+    })
+
+    it('stays quiet when the switch is off', () => {
+      focused(false)
+      render(BEN.id, [ANNA, BEN], false)
+
+      emitAgentEvent(DONE, 'c-1', ANNA.id)
+
+      expect(chime).not.toHaveBeenCalled()
+    })
+
+    // The workspace on screen is not news while somebody is looking at it —
+    // but somebody in another application is not looking at it either.
+    it('chimes for the workspace on screen only while the window is behind another', () => {
+      const { result } = render(ANNA.id, [ANNA, BEN], true)
+
+      focused(true)
+      emitAgentEvent(DONE, 'c-1', ANNA.id)
+      expect(chime).not.toHaveBeenCalled()
+
+      focused(false)
+      emitAgentEvent(DONE, 'c-1', ANNA.id)
+      expect(chime).toHaveBeenCalledWith('done')
+      // A sound only: no toast and no mark for the workspace already open.
+      expect(result.current.notices).toEqual([])
+    })
+
+    it('follows the switch after subscribing', () => {
+      focused(true)
+      const { rerender } = render(BEN.id, [ANNA, BEN], false)
+
+      rerender({ openId: BEN.id, list: [ANNA, BEN], sound: true })
+      emitAgentEvent(DONE, 'c-1', ANNA.id)
+
+      expect(chime).toHaveBeenCalledOnce()
+    })
+  })
+
+  describe('the toasts', () => {
+    it('draws the newest first, no more than the limit', () => {
+      const many = Array.from({ length: TOAST_LIMIT + 1 }, (_, index) =>
+        workspaceView(`w${String(index)}`)
+      )
+      const { result } = render(BEN.id, [...many, BEN])
+
+      for (const [index, workspace] of many.entries()) {
+        emitAgentEvent(DONE, `c-${String(index)}`, workspace.id)
+      }
+
+      expect(result.current.toasts.map((toast) => toast.chatId)).toEqual(['c-3', 'c-2', 'c-1'])
+    })
+
+    // A toast closed by hand is gone; the news itself is not — the tab keeps
+    // its mark until the workspace is opened.
+    it('takes a dismissed toast down and leaves the mark', () => {
+      const { result } = render(BEN.id)
+      emitAgentEvent(DONE, 'c-1', ANNA.id)
+
+      act(() => {
+        const [toast] = result.current.toasts
+        if (toast) result.current.dismiss(toast)
+      })
+
+      expect(result.current.toasts).toEqual([])
+      expect(result.current.marks.get('planner')).toBe('done')
+    })
+
+    it('shows the next news from a conversation whose toast was dismissed', () => {
+      const { result } = render(BEN.id)
+      emitAgentEvent(DONE, 'c-1', ANNA.id)
+      act(() => {
+        const [toast] = result.current.toasts
+        if (toast) result.current.dismiss(toast)
+      })
+
+      emitAgentEvent({ type: 'error', message: 'failed' }, 'c-1', ANNA.id)
+
+      expect(result.current.toasts).toMatchObject([{ chatId: 'c-1', kind: 'error' }])
+    })
   })
 })

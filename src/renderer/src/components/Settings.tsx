@@ -33,6 +33,7 @@ import { Modal } from './Modal.js'
 import { useConfirm } from '../hooks/useConfirm.js'
 import { SectionRail } from './SectionRail.js'
 import { Segmented } from './Segmented.js'
+import { Switch } from './Switch.js'
 import { AccountCard } from './settings/AccountCard.js'
 import { AuthTerminal } from './settings/AuthTerminal.js'
 import { ClaudeSection } from './settings/ClaudeSection.js'
@@ -193,6 +194,14 @@ function GeneralSection({ config, onChange }: SectionProps): React.JSX.Element {
             { value: 'uk', label: 'Українська' }
           ]}
           onChange={(language) => void onChange({ language })}
+        />
+      </Field>
+
+      <Field label={t('settings.notificationSound')} hint={t('settings.notificationSoundHint')}>
+        <Switch
+          checked={config.notificationSound}
+          onChange={(notificationSound) => void onChange({ notificationSound })}
+          label={t('settings.notificationSound')}
         />
       </Field>
     </div>

@@ -335,6 +335,7 @@ function defaultConfig(): Config {
     theme: 'system' as const,
     language: 'en' as const,
     rightPanelOpen: true,
+    notificationSound: true,
     rightPanelTab: 'diff' as const,
     rightPanelWidth: 360,
     diffView: 'unified' as const,

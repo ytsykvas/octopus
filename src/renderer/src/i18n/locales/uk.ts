@@ -981,6 +981,9 @@ export const uk: Translation = {
 
     language: 'Мова',
     languageHint: 'Англійська — типова. Перезапуск не потрібен.',
+    notificationSound: 'Звук',
+    notificationSoundHint:
+      'Тихий сигнал, коли агент закінчив, завершився з помилкою або чекає на вашу відповідь там, куди ви зараз не дивитесь.',
 
     branchPrefix: 'Префікс гілок',
     branchPrefixHint:
@@ -1263,6 +1266,16 @@ export const uk: Translation = {
     linkRefused: 'Посилання за межі цієї робочої копії. Його показано, а не прочитано: {{target}}',
     linkBroken: 'Посилання, що вказує в нікуди.'
   },
+  notices: {
+    done: 'Закінчив',
+    error: 'Завершився з помилкою',
+    question: 'Має до вас питання',
+    plan: 'План чекає на перегляд',
+    permission: 'Хоче скористатися {{tool}}',
+    show: 'Показати',
+    dismiss: 'Закрити'
+  },
+
   tips: {
     headsUp: 'Зверніть увагу',
     learnMore: 'Детальніше',

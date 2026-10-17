@@ -726,7 +726,7 @@ The layer boundaries are §11.1. What each core module does is
 
 ## 15. Out of scope for stage 1
 
-Monaco diff, notifications, workspace archiving, Linux builds, and signing and notarisation.
+Monaco diff, OS notifications, workspace archiving, Linux builds, and signing and notarisation.
 
 The whole of the pull request came in ahead of this list, and it is worth saying why rather than quietly deleting the line: §3 calls a branch and a pull request the unit of integration, and a workspace whose branch had no way out of the app was only half of that. Opening one arrived first; the checks, the review threads and merging followed, because a request the app can open and then cannot read is a loop that still ends in a browser.
 
