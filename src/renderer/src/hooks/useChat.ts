@@ -368,9 +368,10 @@ export function useChat(
           input: event.input
         })
       }
-      // Answered somewhere else — the other window on this workspace. The
-      // card here has to stop offering buttons for a question that is settled.
-      if (event.type === 'question_answered') {
+      // Answered somewhere else — the other window on this workspace — or
+      // withdrawn by the bridge. The card here has to stop offering buttons for
+      // a question that is settled.
+      if (event.type === 'question_answered' || event.type === 'permission_withdrawn') {
         setPending((current) => (current?.requestId === event.requestId ? null : current))
       }
 

@@ -2423,6 +2423,14 @@ heading stays ours, though the SDK offers a `title` and says to prefer it — th
 sentence says what the tool name and the path above it already say, in English,
 in a window that is not.
 
+**"Always allow" is left off where the bridge forbids a standing answer.** The
+CLI sets `suppressAlwaysAllowRule` when the rule that button would write is
+wider than the question — and on those asks it names no narrow rule, so the
+answer would have granted the whole tool. The card then offers Allow and
+Decline only. **A question the bridge withdraws loses its buttons** the moment
+it is withdrawn, rather than at the end of the turn, and reads like any other
+settled card.
+
 The permission card is the strongest case rather than the diff pane. It is the
 one place somebody authorises a command to run against their working tree, and
 answering "Always allow" there writes the tool _name_ — so a misread line

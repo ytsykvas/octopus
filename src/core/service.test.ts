@@ -3704,7 +3704,8 @@ describe('the agent chat', () => {
       toolName: string,
       input?: unknown,
       decisionReason?: string,
-      suggestions?: readonly PermissionUpdate[]
+      suggestions?: readonly PermissionUpdate[],
+      extra?: { signal?: AbortSignal; suppressAlwaysAllowRule?: boolean }
     ) => Promise<unknown>
     /** Calls the SDK's `onElicitation`, which is what an MCP server blocks on. */
     readonly elicit: (request: Record<string, unknown>) => Promise<{ action: string }>
@@ -3847,7 +3848,7 @@ describe('the agent chat', () => {
           done = true
           push()
         },
-        ask: (toolName, input = {}, decisionReason, suggestions) => {
+        ask: (toolName, input = {}, decisionReason, suggestions, extra = {}) => {
           const canUseTool = options.canUseTool
           if (typeof canUseTool !== 'function') throw new Error('no canUseTool')
           // All three arguments, as the SDK passes them. The third is where the
@@ -3861,12 +3862,16 @@ describe('the agent chat', () => {
                 signal: AbortSignal
                 decisionReason?: string
                 suggestions?: readonly PermissionUpdate[]
+                suppressAlwaysAllowRule?: boolean
               }
             ) => Promise<unknown>
           )(toolName, input, {
-            signal: new AbortController().signal,
+            signal: extra.signal ?? new AbortController().signal,
             ...(decisionReason !== undefined && { decisionReason }),
-            ...(suggestions !== undefined && { suggestions })
+            ...(suggestions !== undefined && { suggestions }),
+            ...(extra.suppressAlwaysAllowRule !== undefined && {
+              suppressAlwaysAllowRule: extra.suppressAlwaysAllowRule
+            })
           })
         },
         elicit: (request) => {
@@ -6333,6 +6338,84 @@ describe('the agent chat', () => {
       expect(service.getConfig().alwaysAllowedTools).toEqual([
         { toolName: 'Bash', ruleContent: null }
       ])
+    })
+
+    /*
+     * The bridge's word that a standing answer is wider than this question. On
+     * exactly those asks it names no narrow rule, so "always" fell back to the
+     * whole tool — every `Bash` command from then on, for one `ls`. The card
+     * draws no "Always" then; this is the half that holds for a window that
+     * sent it anyway.
+     */
+    it('approves the call and stores nothing where a standing answer is forbidden', async () => {
+      const { service, workspaceId, events } = await withWorkspace()
+      const chat = await service.openChat(workspaceId)
+      await service.sendToChat(chat.id, 'run it')
+
+      const decision = agent().ask('Bash', { command: 'ls' }, undefined, undefined, {
+        suppressAlwaysAllowRule: true
+      })
+      const requestId = await waitForRequest(events)
+
+      const request = events.find((entry) => entry.event.type === 'permission_request')
+      expect(request?.event).toMatchObject({ suppressAlways: true })
+
+      await service.answerPermission(requestId, 'always')
+
+      await expect(decision).resolves.toMatchObject({ behavior: 'allow' })
+      await expect(decision).resolves.not.toHaveProperty('updatedPermissions')
+      expect(service.getConfig().alwaysAllowedTools).toEqual([])
+    })
+
+    /*
+     * The bridge took the question back. The card kept live buttons until the
+     * turn ended and pressing them reached nothing; now the request is let go
+     * the moment it is withdrawn, and the window is told so.
+     */
+    it('lets go of a question the bridge withdraws', async () => {
+      const { service, workspaceId, events } = await withWorkspace()
+      const chat = await service.openChat(workspaceId)
+      await service.sendToChat(chat.id, 'run it')
+
+      const withdraw = new AbortController()
+      const decision = agent().ask('Bash', { command: 'ls' }, undefined, undefined, {
+        signal: withdraw.signal
+      })
+      const requestId = await waitForRequest(events)
+      await vi.waitFor(() => {
+        expect(service.listChats(workspaceId)[0]?.status).toBe('waiting_permission')
+      })
+
+      withdraw.abort()
+
+      await expect(decision).resolves.toMatchObject({ behavior: 'deny' })
+      expect(events.map((entry) => entry.event)).toContainEqual({
+        type: 'permission_withdrawn',
+        requestId
+      })
+      expect(service.pendingPermission(chat.id)).toBeNull()
+      // The turn goes on without the answer, as it does after a refusal.
+      await vi.waitFor(() => {
+        expect(service.listChats(workspaceId)[0]?.status).toBe('running')
+      })
+    })
+
+    it('takes nothing back from a question already answered', async () => {
+      const { service, workspaceId, events } = await withWorkspace()
+      const chat = await service.openChat(workspaceId)
+      await service.sendToChat(chat.id, 'run it')
+
+      const withdraw = new AbortController()
+      const decision = agent().ask('Bash', { command: 'ls' }, undefined, undefined, {
+        signal: withdraw.signal
+      })
+      const requestId = await waitForRequest(events)
+      await service.answerPermission(requestId, 'allow')
+      await expect(decision).resolves.toMatchObject({ behavior: 'allow' })
+
+      withdraw.abort()
+
+      expect(events.some((entry) => entry.event.type === 'permission_withdrawn')).toBe(false)
     })
 
     /* Without this the very next call asks again: the SDK knows nothing about a
