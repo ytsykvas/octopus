@@ -2615,7 +2615,12 @@ right column the Terminal, Changes, Files, Scripts, Pull request and Notes tabs
 whenever no workspace is chosen, plus a clean Changes tab, an empty file tree and
 a project without a build or server script. Those tabs used to show one grey line
 each, through four different wrappers. Each now says it in two parts: a short
-title in a lighter voice, and the plain sentence saying what to do. The line is
+title in a lighter voice, and the plain sentence saying what to do. In the
+locales that is a pair of keys, `…Title` and `…Body`, so a new empty state adds
+both — English first — and hands them to `Placeholder`, with `compact` in the
+right column, rather than drawing a `<p>` of its own. `Notice` and the Scripts
+tab's `Hint` stay for what is not emptiness: an error, a file the viewer cannot
+show, a script waiting to be run. The line is
 drawn at the pane: a picker's "Nothing found", a popover or a settings list
 keeps its plain line, because a drawing has no room there and would read as a
 broken image. The sidebar keeps its line too — with no projects, the centre is
