@@ -6,11 +6,16 @@ import { HeadsUp } from './HeadsUp.js'
 
 const DETAIL = /commit or stash your work/
 
-function renderHeadsUp(): { onKnown: () => void; onClose: () => void } {
+function renderHeadsUp(): {
+  onKnown: () => void
+  onClose: () => void
+  onAdd: (text: string) => void
+} {
   const onKnown = vi.fn()
   const onClose = vi.fn()
-  render(<HeadsUp tip="rewindSkipsCommands" onKnown={onKnown} onClose={onClose} />)
-  return { onKnown, onClose }
+  const onAdd = vi.fn()
+  render(<HeadsUp tip="rewindSkipsCommands" onKnown={onKnown} onClose={onClose} onAdd={onAdd} />)
+  return { onKnown, onClose, onAdd }
 }
 
 describe('a heads-up', () => {
@@ -49,6 +54,7 @@ describe('a heads-up', () => {
 
     for (const [name, icon] of [
       ['Learn more', 'lucide-chevron-down'],
+      ['Add to chat', 'lucide-message-square-plus'],
       ['Knew this already', 'lucide-check'],
       ['Dismiss', 'lucide-x']
     ] as const) {
@@ -67,6 +73,32 @@ describe('a heads-up', () => {
 
     const svg = screen.getByRole('button', { name: 'Show less' }).querySelector('svg')
     expect(svg).toHaveClass('lucide-chevron-up')
+  })
+
+  // What is on screen is what goes into the field: the one line while the
+  // explanation is folded, and both once it is open.
+  it('adds the line it shows to the chat', async () => {
+    const user = userEvent.setup()
+    const { onAdd } = renderHeadsUp()
+
+    await user.click(screen.getByRole('button', { name: 'Add to chat' }))
+
+    expect(onAdd).toHaveBeenCalledExactlyOnceWith(
+      'Rewinding files undoes only what the agent changed with its editing tools. Changes made by commands in the terminal stay.'
+    )
+  })
+
+  it('adds the explanation as well once it is open', async () => {
+    const user = userEvent.setup()
+    const { onAdd } = renderHeadsUp()
+    await user.click(screen.getByRole('button', { name: 'Learn more' }))
+
+    await user.click(screen.getByRole('button', { name: 'Add to chat' }))
+
+    expect(onAdd).toHaveBeenCalledOnce()
+    expect(vi.mocked(onAdd).mock.calls[0]?.[0]).toMatch(
+      /^Rewinding files undoes only[^]*stay\.\n\nFiles are saved for a rewind[^]*lost\.$/
+    )
   })
 
   it('tells the two ways out apart', async () => {

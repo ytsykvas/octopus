@@ -1479,6 +1479,30 @@ describe('a message handed back', () => {
     expect(screen.getByRole('textbox')).toHaveValue('rename it')
   })
 
+  // "Add to chat" is added to a message, not one — so a half-written message is
+  // kept and the text goes after it, on a line of its own.
+  it('goes after the draft on a line of its own when it is to be appended', () => {
+    const { rerender } = renderComposer({ initialDraft: 'half a thought  ' })
+
+    rerender({ seed: { text: 'the heads-up', id: 1, append: true } })
+
+    const field = screen.getByRole('textbox')
+    expect(field).toHaveValue('half a thought\n\nthe heads-up')
+    expect(field).toHaveFocus()
+    expect((field as HTMLTextAreaElement).selectionStart).toBe(
+      'half a thought\n\nthe heads-up'.length
+    )
+  })
+
+  // With nothing written there is nothing to separate it from.
+  it('stands alone when appended to an empty field', () => {
+    const { rerender } = renderComposer({ initialDraft: '   ' })
+
+    rerender({ seed: { text: 'the heads-up', id: 1, append: true } })
+
+    expect(screen.getByRole('textbox')).toHaveValue('the heads-up')
+  })
+
   // Remounted per workspace: a seed already applied must not come back.
   it('takes one present when it mounts as already applied', () => {
     renderComposer({ initialDraft: 'my own words', seed: { text: 'rename it', id: 3 } })

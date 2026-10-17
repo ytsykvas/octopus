@@ -1,4 +1,4 @@
-import { Check, ChevronDown, ChevronUp, X } from 'lucide-react'
+import { Check, ChevronDown, ChevronUp, MessageSquarePlus, X } from 'lucide-react'
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
@@ -11,6 +11,8 @@ interface HeadsUpProps {
   readonly onKnown: () => void
   /** Hide it here for now, without saying anything about the person. */
   readonly onClose: () => void
+  /** Put what it says into the message field, to be sent along with a question. */
+  readonly onAdd: (text: string) => void
 }
 
 /**
@@ -22,11 +24,16 @@ interface HeadsUpProps {
  * The explanation opens in place rather than in a browser, because what it
  * says is about this app and fits in a paragraph.
  *
+ * **Add to chat** takes what is on screen into the message field: the one line,
+ * and the explanation too when it is open. A caveat about the agent's own limits
+ * is often what the next message is about, and typing it out again is the part
+ * nobody should have to do.
+ *
  * Each button carries an icon, as the buttons elsewhere in the window do. The
  * chevron is the one that says something: it turns over with the paragraph it
  * opens, so the state shows without reading `aria-expanded`.
  */
-export function HeadsUp({ tip, onKnown, onClose }: HeadsUpProps): React.JSX.Element {
+export function HeadsUp({ tip, onKnown, onClose, onAdd }: HeadsUpProps): React.JSX.Element {
   const { t } = useTranslation()
   const [open, setOpen] = useState(false)
 
@@ -59,6 +66,19 @@ export function HeadsUp({ tip, onKnown, onClose }: HeadsUpProps): React.JSX.Elem
           >
             {open ? <ChevronUp aria-hidden size={13} /> : <ChevronDown aria-hidden size={13} />}
             {open ? t('tips.showLess') : t('tips.learnMore')}
+          </Button>
+          <Button
+            size="sm"
+            onClick={() => {
+              onAdd(
+                open
+                  ? `${t(`tips.${tip}.title`)}\n\n${t(`tips.${tip}.detail`)}`
+                  : t(`tips.${tip}.title`)
+              )
+            }}
+          >
+            <MessageSquarePlus aria-hidden size={13} />
+            {t('tips.addToChat')}
           </Button>
           <Button size="sm" onClick={onKnown}>
             <Check aria-hidden size={13} />

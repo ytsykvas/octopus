@@ -137,7 +137,9 @@ export function ChatSession({
   const { choose: chooseRewind, dialog: rewindDialog } = useRewindChoice()
   /* A rewound message on its way back into the composer. The id is what makes
      the same text handed back twice a second instruction rather than nothing. */
-  const [seed, setSeed] = useState<{ text: string; id: number } | undefined>(undefined)
+  const [seed, setSeed] = useState<{ text: string; id: number; append?: boolean } | undefined>(
+    undefined
+  )
   // A plan the user is rewriting, by the request it belongs to. Kept here so
   // that looking at another tab does not throw the edits away.
   const [planEdit, setPlanEdit] = useState<{ requestId: string; text: string } | null>(null)
@@ -475,6 +477,13 @@ export function ChatSession({
             onDismissTip(tip)
           }}
           onClose={() => {
+            setClosedTips((current) => new Set([...current, tip]))
+          }}
+          // Added to what is being written rather than replacing it, and the
+          // heads-up goes for this conversation: its words are in the field
+          // now, and a second press would put them in twice.
+          onAdd={(text) => {
+            setSeed((current) => ({ text, id: (current?.id ?? 0) + 1, append: true }))
             setClosedTips((current) => new Set([...current, tip]))
           }}
         />

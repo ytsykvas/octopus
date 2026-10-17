@@ -41,14 +41,17 @@ interface ComposerProps {
    */
   readonly initialDraft: string
   /**
-   * Text to put in the field now, replacing what is there — a rewound
-   * message, handed back to be edited and sent again.
+   * Text to put in the field now — by default replacing what is there, a
+   * rewound message handed back to be edited and sent again; with `append`,
+   * after what is there, on a line of its own, for text that is added to a
+   * message rather than being one (a heads-up's words, "add to chat").
    *
    * Applied once per `id`, so the same text can be handed back twice and a
    * render that passes the same seed again changes nothing. One present when
    * the composer mounts is taken as already applied.
    */
-  readonly seed?: { readonly text: string; readonly id: number } | undefined
+  readonly seed?:
+    { readonly text: string; readonly id: number; readonly append?: boolean } | undefined
   /** Where the text goes when the composer is left, so it is there on return. */
   readonly onDraftLeave: (text: string) => void
   readonly busy: boolean
@@ -295,10 +298,16 @@ export function Composer({
     if (seed === undefined || seed.id === seeded.current) return
 
     seeded.current = seed.id
-    latest.current = seed.text
-    caretAfterWrite.current = seed.text.length
-    setDraft(seed.text)
-    setCaret(seed.text.length)
+    // Appended after a blank line, so a half-written message is added to and
+    // not overwritten; with nothing written there is nothing to separate from.
+    const text =
+      seed.append === true && latest.current.trim() !== ''
+        ? `${latest.current.trimEnd()}\n\n${seed.text}`
+        : seed.text
+    latest.current = text
+    caretAfterWrite.current = text.length
+    setDraft(text)
+    setCaret(text.length)
     textarea.current?.focus()
   }, [seed])
   /** Which suggestion Enter would take. */

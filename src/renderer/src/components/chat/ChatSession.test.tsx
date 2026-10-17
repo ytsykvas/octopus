@@ -2117,6 +2117,30 @@ describe('a heads-up above the field', () => {
     expect(onDismissTip).toHaveBeenCalledWith('rewindSkipsCommands')
   })
 
+  // The tip's words go into the field after whatever is being written, and the
+  // heads-up closes for this conversation: they are in the field now, and a
+  // second press would put them in twice. Nothing is written to the settings.
+  it('adds its words to the message being written and closes', async () => {
+    const user = userEvent.setup()
+    const onDismissTip = vi.fn()
+    givenChat(RAN_A_COMMAND)
+    render(
+      <ChatPane
+        workspace={workspaceView('anna')}
+        onDismissTip={onDismissTip}
+        draft="why did it do that?"
+      />
+    )
+
+    await user.click(await screen.findByRole('button', { name: 'Add to chat' }))
+
+    expect(field()).toHaveValue(
+      'why did it do that?\n\nRewinding files undoes only what the agent changed with its editing tools. Changes made by commands in the terminal stay.'
+    )
+    expect(headsUp()).not.toBeInTheDocument()
+    expect(onDismissTip).not.toHaveBeenCalled()
+  })
+
   it('closes for this conversation alone without writing anything down', async () => {
     const user = userEvent.setup()
     const onDismissTip = vi.fn()
