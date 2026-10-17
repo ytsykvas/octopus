@@ -108,6 +108,16 @@ export const AgentEventSchema = z.discriminatedUnion('type', [
      * live event carries the whole thing.
      */
     truncated: z.boolean().optional(),
+    /**
+     * The task a `TaskCreate` call made, by the id later calls refer to it with.
+     *
+     * Only the tool's structured output carries it — `content` says
+     * "Task #1 created successfully", which is prose, not a contract — and
+     * without it no later `TaskUpdate` could be matched to the line it changes.
+     * Optional: every other result, and every transcript written before, has
+     * none.
+     */
+    taskId: z.string().optional(),
     uuid: z.string().optional(),
     parentToolUseId: ParentSchema
   }),
