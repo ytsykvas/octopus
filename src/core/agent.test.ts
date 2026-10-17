@@ -793,6 +793,54 @@ describe('mapping SDK messages', () => {
     ])
   })
 
+  describe('the id of a task a result made', () => {
+    // As measured on CLI 2.1.299: the id is only in the structured output, and
+    // the text beside it is prose.
+    function results(blocks: string[], output: unknown): SDKMessage {
+      return {
+        type: 'user',
+        message: {
+          role: 'user',
+          content: blocks.map((id) => ({
+            type: 'tool_result',
+            tool_use_id: id,
+            content: 'Task #1 created successfully: Alpha'
+          }))
+        },
+        parent_tool_use_id: null,
+        session_id: 's-1',
+        tool_use_result: output
+      } as unknown as SDKMessage
+    }
+
+    it('is read off the structured output', () => {
+      expect(mapMessage(results(['call-1'], { task: { id: '1', subject: 'Alpha' } }))).toEqual([
+        {
+          type: 'tool_result',
+          toolUseId: 'call-1',
+          ok: true,
+          content: 'Task #1 created successfully: Alpha',
+          taskId: '1'
+        }
+      ])
+    })
+
+    // One output per message: with two results it belongs to neither for sure.
+    it('is left off when the message carries more than one result', () => {
+      const events = mapMessage(results(['call-1', 'call-2'], { task: { id: '1' } }))
+
+      expect(events).toHaveLength(2)
+      expect(events.some((event) => 'taskId' in event)).toBe(false)
+    })
+
+    it('is left off an output that names no task', () => {
+      expect(mapMessage(results(['call-1'], { success: true, taskId: '1' }))[0]).not.toHaveProperty(
+        'taskId'
+      )
+      expect(mapMessage(results(['call-1'], undefined))[0]).not.toHaveProperty('taskId')
+    })
+  })
+
   it('turns streamed text and thinking into deltas', () => {
     const text = {
       type: 'stream_event',

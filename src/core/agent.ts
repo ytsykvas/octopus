@@ -1045,14 +1045,18 @@ function fromUser(message: SDKUserMessage): AgentEvent[] {
   const parent =
     message.parent_tool_use_id === null ? {} : { parentToolUseId: message.parent_tool_use_id }
 
-  for (const block of content) {
-    if (block.type !== 'tool_result') continue
+  const results = content.filter((block) => block.type === 'tool_result')
+  // The structured output is one per message, so it can only be told apart
+  // from its neighbours' when the message carries a single result.
+  const taskId = results.length === 1 ? createdTaskId(message.tool_use_result) : null
 
+  for (const block of results) {
     events.push({
       type: 'tool_result',
       toolUseId: block.tool_use_id,
       ok: block.is_error !== true,
       content: describeToolResult(block.content),
+      ...(taskId !== null && { taskId }),
       // Optional on this message where it is required on an assistant one, so
       // a result that arrives without one simply cannot be retracted.
       ...(message.uuid === undefined ? {} : { uuid: message.uuid }),
@@ -1061,6 +1065,20 @@ function fromUser(message: SDKUserMessage): AgentEvent[] {
   }
 
   return events
+}
+
+/** `TaskCreate`'s structured output — `TaskGet`'s has the same shape. */
+const CreatedTaskSchema = z.object({ task: z.object({ id: z.string() }) })
+
+/**
+ * The id of the task a result made, or null when it made none.
+ *
+ * Another result that happens to name a task the same way (`TaskGet`) gets one
+ * too, and that is harmless: the list only reads it off a `TaskCreate`.
+ */
+function createdTaskId(output: unknown): string | null {
+  const parsed = CreatedTaskSchema.safeParse(output)
+  return parsed.success ? parsed.data.task.id : null
 }
 
 /**

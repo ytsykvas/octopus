@@ -512,15 +512,18 @@ long turn is mostly the agent working through a list it wrote for itself, and
 from the log that progress is a scatter of tool rows. The panel is the same list
 as one line — "Tasks · 3 of 7 · Running the tests" — that opens to the whole of
 it, each item with a mark and, for a reader who cannot see the mark, its state
-in words. It reads the newest readable `TodoWrite` call, since the tool always
-sends the whole list, and is shown **only while the agent is working**: a list
+in words. It is replayed from the agent's calls: a current CLI keeps the list
+with `TaskCreate` and `TaskUpdate`, one line per call, and offers `TodoWrite`
+only when `CLAUDE_CODE_ENABLE_TASKS=0` is set — a 2.1.299 session had no
+`TodoWrite` at all, so while only that was read the panel never appeared.
+`TodoWrite` still replaces the whole list when it is used. A created task joins
+once its result names its id, the one thing later updates refer to it by. The
+panel is shown **only while the agent is working**: a list
 left with items pending (interrupted, errored, abandoned) would otherwise stay
 pinned across every later turn and every restart, describing work nobody is
 doing, and the log still holds it. The log's own `TodoWrite` row says how far it had got ("1 of 3")
-instead of showing a bare tool name. Only `TodoWrite` is read; the newer
-`TaskCreate`/`TaskUpdate` tools are not. A list written by a subagent is
-skipped — it is its own task's, and the newest one written would otherwise
-replace the conversation's.
+instead of showing a bare tool name. A list written by a subagent is skipped —
+it is its own task's, and its calls would otherwise rewrite the conversation's.
 
 **A heads-up can sit in the same place between turns.** "✦ Heads up · …" is a
 caveat shown at the moment it starts to be true of this conversation, the way
