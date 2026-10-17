@@ -83,8 +83,12 @@ from inside an asar archive:
 
 - `node_modules/node-pty` — the terminal's native binding;
 - `node_modules/@anthropic-ai/claude-agent-sdk-darwin-arm64/claude` — the agent
-  itself, which the SDK resolves out of `node_modules` at runtime. It is
-  ~277 MB on its own and accounts for most of the bundle's size.
+  itself. It is ~277 MB on its own and accounts for most of the bundle's size.
+  The SDK resolves it with `require.resolve`, which in the bundle answers with
+  a path **inside** `app.asar`: Electron's patched `fs` makes it look present,
+  but `spawn` is not patched and fails with `spawn ENOTDIR`. Unpacking alone is
+  therefore not enough — `agentBinary.ts` hands the SDK the
+  `app.asar.unpacked` path explicitly.
 
 If either stops being unpacked, the app still starts and still looks fine. The
 terminal fails to open, or chat fails on the first message. Neither shows up in
