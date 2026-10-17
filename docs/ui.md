@@ -2574,24 +2574,60 @@ consequences generalise:
 - **delete the redundant signal** — once the tab visibly joined the panel, the
   marker beside it was a second answer to a question already answered.
 
-The right pane's tabs are built the same way and for the same reason. They sit
-on the line that closes their row, and the chosen one breaks through it —
-`items-end` puts them on the line, `-mb-px` and a transparent border let the
-tab's own fill paint over it — so the tab reads as the view below reaching up.
-They are pinned to the row's right end, so the part of the line left of them is
-what a wider pane gains.
-The fill is the open project's colour and there is no outline: a drawn edge made
-the tab look like a box resting on the row rather than part of it.
+The right pane's tabs are the project strip's, turned a quarter, and for the same
+reason. The ones not chosen are tiles — `.tab-idle`, `rounded-[10px]`, the
+project's colour at the same 14% — floating with room beneath them. The chosen
+one, `.tab-selected`, is taller: it runs down to the line that closes the row and
+over it (`-mb-px` and a transparent border let its fill paint across), squared
+off there, so it reads as the view below reaching up. Both start six pixels from
+the top of the row, which is what keeps the row even, and the chosen one carries
+six pixels of padding underneath so its label stays level with the others'. The
+tabs are pinned to the row's right end, so the part of the line left of them is
+what a wider pane gains. There is no outline: a drawn edge made the tab look like
+a box resting on the row rather than part of it.
+
+**The colour carries on below the tabs.** Everything under the row is wrapped in
+one element with `.project-tinted`, the wash the workspace list has, so the view
+is the same colour the chosen tab ends in. One wrapper rather than the class on
+the pane: the gradient starts at the top of the element that carries it, and it
+has to start exactly where the tab stops — the tab is the colour the gradient
+begins with, 18%, which is why `.tab-selected` is 18% and no longer the 16% it
+was. The row itself stays neutral. On a tinted row the tiles would lie on a
+ground already holding 18% of their own colour and all but vanish, and the
+chosen tab, which takes that ground's colour, would look paler than they do —
+the strip works the same way, a neutral column of tiles beside a tinted list.
+With no project open the class is left off and the pane keeps its plain surface.
+
+The labels are mixed towards the ink, not copied from the strip. The strip mixes
+its letters with `--ink-faint`, which measured 3.3:1 in the light theme at the
+worst of the fifteen colours — acceptable for two initials, not for a word at
+13px, and worse than the plain `--ink-soft` these tabs had. Mixed with `--ink`
+(55% colour for a tile, 75% for the chosen tab) the worst is 5.6:1 and 4.8:1 in
+the light theme, 6.4:1 and 5.7:1 in the dark one. The chosen tab's label cannot
+be the project's colour outright: on an 18% fill that is 3.3:1 in the light theme
+and 4.5:1 in the dark one, and on the 16% it used to have it was already 3.4:1.
 
 Its earlier shape is the lesson worth keeping. A muted fill measured 1.09:1
 against the pane behind it — two greys a fraction apart, invisible — so where
 selection cannot be shown by relationship, show it by **hue, not brightness**.
 
-`.tab-selected` reads `var(--project-color, var(--accent))`, and the pane sets
-the variable only when a project is open, so with none every fallback resolves to
-the accent. A fallback is what makes the variable optional; setting it to an
-empty value instead would leave `color-mix` invalid and the tab with no fill at
-all.
+Both classes read `var(--project-color, …)`, and the pane sets the variable only
+when a project is open, so with none every fallback resolves to the accent for
+the chosen tab and to the neutral inks for the rest. A fallback is what makes the
+variable optional; setting it to an empty value instead would leave `color-mix`
+invalid and the tab with no fill at all.
+
+**The terminal has no ground of its own**, so the wash reaches it too — a dark slab
+under the first tab would have been the one view that did not join. Two things
+paint it and both are cleared in `Terminal`'s host with `!important` utilities:
+xterm puts the theme's background inline on its scrollable element, and its own
+stylesheet gives the viewport beneath a `#000`. Important because one is inline
+and the other unlayered, and either beats a layered utility on its own. The
+theme's `background` stays opaque, never painted, because reverse video takes its
+letters from it: set transparent, the status line of `less`, a selected menu row
+and `fzf` drew text that could not be read. The sticky file headers in the
+changes view are opaque as well, necessarily — they ride over scrolling code — and
+read as neutral bars on the wash.
 
 ### Selection can also be a surface
 
@@ -2792,7 +2828,7 @@ rather than as pixel art.
 
 `.panel` · `.row` / `.row-selected` · `.input` · `.choice` / `.choice-danger` ·
 `.section-label` · `.focus-ring` · `.titlebar-drag` · `.project-tinted` ·
-`.bubble-sent` · `.tab-selected`
+`.bubble-sent` · `.tab-selected` / `.tab-idle`
 
 **`.choice` goes on every checkbox and radio**, and being absent from this list
 is why three of the six were left painted by the platform for months. Without

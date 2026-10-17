@@ -20,6 +20,10 @@ function readTheme(): ITheme {
     styles.getPropertyValue(token).trim() || fallback
 
   return {
+    // Opaque on purpose, though it is never painted: the host below clears the
+    // ground so the pane's wash shows through, and what this colour still does
+    // is give reverse video its text — a cell drawn inverse takes the
+    // background as its letters, and a transparent one made them vanish.
     background: read('--canvas', '#ffffff'),
     foreground: read('--ink', '#16181d'),
     cursor: read('--accent', '#2563eb'),
@@ -220,5 +224,15 @@ export function Terminal({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  return <div ref={host} className="h-full w-full overflow-hidden" />
+  return (
+    <div
+      ref={host}
+      // No ground of its own: the pane around it carries the project's wash.
+      // xterm paints the theme's background inline on its scrollable element
+      // and its stylesheet gives the viewport beneath `#000` besides, so both
+      // are cleared. Important because the first is inline and the second
+      // unlayered, and either would beat a layered utility on its own.
+      className="h-full w-full overflow-hidden [&_.xterm-scrollable-element]:bg-transparent! [&_.xterm-viewport]:bg-transparent!"
+    />
+  )
 }
