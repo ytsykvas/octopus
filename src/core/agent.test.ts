@@ -1462,12 +1462,14 @@ describe('permissions', () => {
    * The third is the one this used to leave out on both sides, which is how a
    * field the bridge sends went unread for as long as it did.
    */
-  function permissionCall(
-    agent: FakeQuery
-  ): (
+  function permissionCall(agent: FakeQuery): (
     name: string,
     input: Record<string, unknown>,
-    options?: { decisionReason?: string; suggestions?: readonly PermissionUpdate[] }
+    options?: {
+      decisionReason?: string
+      suggestions?: readonly PermissionUpdate[]
+      suppressAlwaysAllowRule?: boolean
+    }
   ) => Promise<unknown> {
     const canUseTool = agent.options().canUseTool
     if (typeof canUseTool !== 'function') throw new Error('canUseTool was not passed to the SDK')
@@ -1479,6 +1481,7 @@ describe('permissions', () => {
         signal: AbortSignal
         decisionReason?: string
         suggestions?: readonly PermissionUpdate[]
+        suppressAlwaysAllowRule?: boolean
       }
     ) => Promise<unknown>
 
@@ -1517,7 +1520,8 @@ describe('permissions', () => {
       {
         toolName: 'Edit',
         input: { file_path: '/w/.claude/skills/demo/SKILL.md' },
-        reason: 'Claude requested permissions to write to it.'
+        reason: 'Claude requested permissions to write to it.',
+        signal: expect.any(AbortSignal)
       }
     ])
   })
@@ -1538,7 +1542,9 @@ describe('permissions', () => {
 
     await permissionCall(agent)('Edit', { file_path: '/a.rb' })
 
-    expect(asked).toEqual([{ toolName: 'Edit', input: { file_path: '/a.rb' } }])
+    expect(asked).toEqual([
+      { toolName: 'Edit', input: { file_path: '/a.rb' }, signal: expect.any(AbortSignal) }
+    ])
   })
 
   /* The narrow rule the bridge named, handed straight back: without it the very
@@ -1608,8 +1614,60 @@ describe('permissions', () => {
     await permissionCall(agent)('Edit', { file_path: '/w/docs/a.md' }, { suggestions: [rule] })
 
     expect(asked).toEqual([
-      { toolName: 'Edit', input: { file_path: '/w/docs/a.md' }, suggestions: [rule] }
+      {
+        toolName: 'Edit',
+        input: { file_path: '/w/docs/a.md' },
+        suggestions: [rule],
+        signal: expect.any(AbortSignal)
+      }
     ])
+  })
+
+  /* The bridge's word that "always" would grant more than this question: on
+     exactly those asks the suggestion names no narrow rule, so the fallback
+     would store the whole tool. Passed on only when set. */
+  it('passes on that a standing answer must not be offered', async () => {
+    const asked: { suppressAlways?: boolean }[] = []
+    const { agent } = fakeAgent(
+      {},
+      {
+        askPermission: (ask) => {
+          asked.push(ask)
+          return Promise.resolve({ allow: true })
+        }
+      }
+    )
+
+    await permissionCall(agent)('Bash', { command: 'ls' }, { suppressAlwaysAllowRule: true })
+    await permissionCall(agent)('Bash', { command: 'ls' }, { suppressAlwaysAllowRule: false })
+
+    expect(asked[0]?.suppressAlways).toBe(true)
+    expect(asked[1]).not.toHaveProperty('suppressAlways')
+  })
+
+  /* The signal is what tells the service the question was taken back, so it
+     is the SDK's own one that has to arrive, not a copy. */
+  it('hands over the signal the bridge withdraws a question with', async () => {
+    const asked: { signal: AbortSignal }[] = []
+    const { agent } = fakeAgent(
+      {},
+      {
+        askPermission: (ask) => {
+          asked.push(ask)
+          return Promise.resolve({ allow: true })
+        }
+      }
+    )
+    const canUseTool = agent.options().canUseTool as (
+      name: string,
+      input: Record<string, unknown>,
+      options: { signal: AbortSignal }
+    ) => Promise<unknown>
+    const withdraw = new AbortController()
+
+    await canUseTool('Bash', {}, { signal: withdraw.signal })
+
+    expect(asked[0]?.signal).toBe(withdraw.signal)
   })
 
   it('allows a tool the user approved, keeping the arguments', async () => {
@@ -1730,7 +1788,11 @@ describe('permissions', () => {
 
     await permissionCall(agent)('Write', { file_path: '/b.rb' })
 
-    expect(asked).toHaveBeenCalledWith({ toolName: 'Write', input: { file_path: '/b.rb' } })
+    expect(asked).toHaveBeenCalledWith({
+      toolName: 'Write',
+      input: { file_path: '/b.rb' },
+      signal: expect.any(AbortSignal)
+    })
   })
 })
 

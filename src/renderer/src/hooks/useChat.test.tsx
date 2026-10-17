@@ -230,6 +230,32 @@ describe('answering a question', () => {
     expect(result.current.pending).toBeNull()
   })
 
+  // The bridge took the question back: the turn goes on without it, so the
+  // card must stop offering buttons that would reach nothing.
+  it('drops a card the bridge withdrew', async () => {
+    givenChat()
+    const { result } = renderHook(() => useChat(...open()))
+    await waitFor(() => {
+      expect(result.current.chat).not.toBeNull()
+    })
+
+    emitAgentEvent({
+      type: 'permission_request',
+      requestId: 'r-p',
+      toolName: 'Bash',
+      input: { command: 'ls' }
+    })
+    await waitFor(() => {
+      expect(result.current.pending?.requestId).toBe('r-p')
+    })
+
+    emitAgentEvent({ type: 'permission_withdrawn', requestId: 'r-p' })
+
+    await waitFor(() => {
+      expect(result.current.pending).toBeNull()
+    })
+  })
+
   // An answer to some other question leaves this one alone — two questions can
   // be open at once, and the second must not take the first's card down.
   it('leaves a card that is waiting on a different question', async () => {

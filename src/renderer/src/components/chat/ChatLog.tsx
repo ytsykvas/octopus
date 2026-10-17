@@ -464,6 +464,7 @@ function AgentRow({
           toolName={event.toolName}
           input={event.input}
           reason={event.reason ?? null}
+          suppressAlways={event.suppressAlways === true}
           // A request read back from the transcript is history: the session it
           // belonged to answered it long ago, and offering buttons would let
           // the user answer a question nobody is waiting on.
@@ -1095,6 +1096,7 @@ function PermissionCard({
   toolName,
   input,
   reason,
+  suppressAlways,
   answerable,
   onAnswer
 }: {
@@ -1102,6 +1104,11 @@ function PermissionCard({
   input: unknown
   /** The bridge's explanation, where it sent one. Null is the ordinary case. */
   reason: string | null
+  /**
+   * The bridge forbade a standing answer: the rule "Always" would write is
+   * wider than this question, so the button is not offered at all.
+   */
+  suppressAlways: boolean
   answerable: boolean
   onAnswer: (answer: PermissionAnswer) => void
 }): React.JSX.Element {
@@ -1154,14 +1161,16 @@ function PermissionCard({
             {t('chat.allow')}
           </Button>
 
-          <Button
-            size="sm"
-            onClick={() => {
-              onAnswer('always')
-            }}
-          >
-            {t('chat.always')}
-          </Button>
+          {!suppressAlways && (
+            <Button
+              size="sm"
+              onClick={() => {
+                onAnswer('always')
+              }}
+            >
+              {t('chat.always')}
+            </Button>
+          )}
 
           <Button
             variant="danger"

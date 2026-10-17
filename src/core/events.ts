@@ -142,7 +142,24 @@ export const AgentEventSchema = z.discriminatedUnion('type', [
      * allowed directories — and nothing for a request the mode explains on its
      * own. Optional also keeps every transcript written before this readable.
      */
-    reason: z.string().optional()
+    reason: z.string().optional(),
+    /**
+     * The bridge said a standing answer must not be offered here, so the card
+     * draws no "Always". Optional: absent on most requests and on every one
+     * written before.
+     */
+    suppressAlways: z.boolean().optional()
+  }),
+
+  /**
+   * The bridge withdrew a permission request before anyone answered it.
+   *
+   * The turn goes on without the answer, so the card has to stop offering
+   * buttons that no longer reach anything. Drawn as nothing itself.
+   */
+  z.object({
+    type: z.literal('permission_withdrawn'),
+    requestId: z.string()
   }),
 
   /**

@@ -577,6 +577,8 @@ interface PendingPermission {
   readonly input: unknown
   /** The narrow rule the bridge named, for an answer of "always". */
   readonly suggestions?: readonly PermissionUpdate[]
+  /** The bridge forbade a standing answer here; "always" then grants this call only. */
+  readonly suppressAlways?: boolean
   /** Which conversation is blocked — approving a plan reads its mode back. */
   readonly chatId: string
   readonly workspaceId: string
@@ -2410,7 +2412,7 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
    */
   async function askPermission(
     chat: Chat,
-    { toolName, input, reason, suggestions }: PermissionAsk
+    { toolName, input, reason, suggestions, suppressAlways, signal }: PermissionAsk
   ): Promise<PermissionOutcome> {
     // Read on every call, against the config as it stands at that moment: a
     // name handed to `allowedTools` at session start could not be taken back
@@ -2423,7 +2425,8 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
       requestId,
       toolName,
       input,
-      ...(reason !== undefined && { reason })
+      ...(reason !== undefined && { reason }),
+      ...(suppressAlways === true && { suppressAlways })
     })
 
     return new Promise<PermissionOutcome>((resolve) => {
@@ -2434,9 +2437,30 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
         // Kept with the question so the answer can store the narrow rule the
         // bridge named, rather than this application guessing at one.
         ...(suggestions !== undefined && { suggestions }),
+        ...(suppressAlways === true && { suppressAlways }),
         chatId: chat.id,
         workspaceId: chat.workspaceId
       })
+
+      /*
+       * The bridge can take a question back — the call it held is gone — and
+       * nothing else would tell the window: the card kept live buttons until
+       * the turn ended, and pressing them reached nothing. Released as a
+       * refusal for the reason `abandonPermissions` gives, and the chat goes
+       * back to `running` for the one the deny path gives: the turn carries on.
+       */
+      signal.addEventListener(
+        'abort',
+        () => {
+          // Already answered: the answer removed it, and there is nothing to take back.
+          if (!pending.delete(requestId)) return
+
+          resolve({ allow: false, message: ABANDONED })
+          handleEvent(chat, { type: 'permission_withdrawn', requestId })
+          background(chat, setChatStatus(chat.id, 'running'))
+        },
+        { once: true }
+      )
     })
   }
 
@@ -5395,8 +5419,16 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
        * `standingFrom` reads the bridge's own suggestion; with none — an older
        * CLI, or a question about nothing in particular — it falls back to the
        * whole tool, which is what every answer meant before this.
+       *
+       * Nothing at all where the bridge forbade a standing answer: the window
+       * draws no "Always" then, and a window that drew one anyway — an older
+       * card — gets this call approved and nothing stored, since the rule it
+       * would write is wider than the question.
        */
-      const granted = answer === 'always' && !leaving ? standingFrom(request) : null
+      const granted =
+        answer === 'always' && !leaving && request.suppressAlways !== true
+          ? standingFrom(request)
+          : null
 
       if (granted) {
         await applyConfig({

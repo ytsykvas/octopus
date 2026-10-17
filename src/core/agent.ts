@@ -152,6 +152,16 @@ export interface PermissionAsk {
    * what it stores instead.
    */
   readonly suggestions?: readonly PermissionUpdate[]
+  /**
+   * The bridge saying a standing answer must not be offered for this question.
+   *
+   * Set when the rule "always" would write grants more than the question's own
+   * action — and on exactly those questions the suggestion carries no narrow
+   * rule, so the fallback would store the whole tool.
+   */
+  readonly suppressAlways?: boolean
+  /** Aborted when the bridge withdraws the question before anyone answered. */
+  readonly signal: AbortSignal
 }
 
 /**
@@ -617,15 +627,21 @@ export function startSession(options: SessionOptions, hooks: SessionHooks): Agen
         })
       },
 
-      canUseTool: async (toolName, toolInput, { decisionReason, suggestions }) => {
+      canUseTool: async (
+        toolName,
+        toolInput,
+        { decisionReason, suggestions, suppressAlwaysAllowRule, signal }
+      ) => {
         const outcome = await hooks.askPermission({
           toolName,
           input: toolInput,
+          signal,
           // Spread rather than assigned: `exactOptionalPropertyTypes` tells an
           // absent field apart from one set to `undefined`, and the SDK sends
           // no reason for most requests.
           ...(decisionReason !== undefined && { reason: decisionReason }),
-          ...(suggestions !== undefined && { suggestions })
+          ...(suggestions !== undefined && { suggestions }),
+          ...(suppressAlwaysAllowRule === true && { suppressAlways: true })
         })
         if (!outcome.allow) return { behavior: 'deny', message: outcome.message }
 

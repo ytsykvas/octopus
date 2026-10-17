@@ -864,6 +864,25 @@ finds for a chat to whatever window opens the conversation — at which point a
 question the user had stopped instead of answering came back with live buttons
 on it.
 
+**The bridge can withdraw one too.** `canUseTool`'s third argument carries a
+`signal`, aborted when the CLI no longer wants the answer. `askPermission`
+listens on it: a question still in `pending` is released as `ABANDONED`, a
+`permission_withdrawn` event tells every window to take its buttons down, and
+the chat goes back to `running` for the reason the deny path gives — the turn
+carries on. Unheard, the card kept live buttons until the turn ended and
+pressing them reached nothing. An abort after the answer finds nothing to take
+back.
+
+### "Always" is not offered where the bridge forbids it
+
+The same argument carries `suppressAlwaysAllowRule`, set when the rule "always"
+would write grants more than the question's own action. On exactly those asks
+the suggestion names no narrow rule, so `standingFrom` would fall back to the
+whole tool — every `Bash` command, for one `ls`. The flag rides on the
+`permission_request` event, where the card reads it and draws no "Always", and
+on the pending request, where `answerPermission` reads it and stores nothing:
+an "always" that arrives anyway, from a card drawn before, approves the one call.
+
 The other half of the same rule: the entry is removed where the answer is
 **given**, after the writes that can fail. Removing it first meant a config
 write that failed left the agent blocked on a question nothing could ask again —

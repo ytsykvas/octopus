@@ -1387,6 +1387,23 @@ describe('a permission request', () => {
     ])
   })
 
+  /* The bridge said the rule "Always" would write is wider than this question,
+     so the card does not offer it — the other two answers still stand. */
+  it('offers no "Always" where the bridge forbade a standing answer', () => {
+    const suppressed = fromAgent({
+      type: 'permission_request',
+      requestId: 'r-1',
+      toolName: 'Bash',
+      input: { command: 'ls' },
+      suppressAlways: true
+    })
+    renderLog({ entries: [suppressed], pendingRequestId: 'r-1' })
+
+    expect(screen.queryByRole('button', { name: 'Always allow' })).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Allow' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Decline' })).toBeInTheDocument()
+  })
+
   // A request read back from the transcript was answered long ago; offering
   // buttons would let the user answer a question nobody is waiting on.
   it('offers no buttons for a request nobody is blocked on', () => {
