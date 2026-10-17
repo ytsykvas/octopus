@@ -2550,6 +2550,17 @@ instead, chosen in its settings dialog. The ids live in
 `ProjectGlyph`, typed as a full `Record` so an id with nothing to draw fails the
 type check rather than leaving a hole in the strip.
 
+**The letters are the project's colour a quarter of the way towards the ink**,
+whether the tab is chosen or not. They were the colour alone on the chosen tab
+and the colour mixed with `--ink-faint` on the rest, and measured over the
+fifteen colours in both themes the worst case on the idle tile was 3.3:1 in the
+light theme (lime) — under the 4.5:1 text needs, and these are letters. With the
+ink in the mix every colour is at least 5.2:1 on an idle tile and 4.8:1 on the
+chosen one in the light theme, 6.1:1 and 5.7:1 in the dark one. A quarter, not
+more: the tab is how a project is recognised, and the further the mix goes towards
+the ink, the more the fifteen look alike. One constant, `LETTERS`, serves both
+states.
+
 Two rules that are easy to get wrong:
 
 - **There is no `project-` utility class.** No `--project-*` token is in
@@ -2601,14 +2612,14 @@ chosen tab, which takes that ground's colour, would look paler than they do —
 the strip works the same way, a neutral column of tiles beside a tinted list.
 With no project open the class is left off and the pane keeps its plain surface.
 
-The labels are mixed towards the ink, not copied from the strip. The strip mixes
-its letters with `--ink-faint`, which measured 3.3:1 in the light theme at the
-worst of the fifteen colours — acceptable for two initials, not for a word at
-13px, and worse than the plain `--ink-soft` these tabs had. Mixed with `--ink`
-(55% colour for a tile, 75% for the chosen tab) the worst is 5.6:1 and 4.8:1 in
-the light theme, 6.4:1 and 5.7:1 in the dark one. The chosen tab's label cannot
-be the project's colour outright: on an 18% fill that is 3.3:1 in the light theme
-and 4.5:1 in the dark one, and on the 16% it used to have it was already 3.4:1.
+The labels are mixed towards the ink, as the strip's letters are now. The strip
+used `--ink-faint` for them, which measured 3.3:1 in the light theme at the worst
+of the fifteen colours — and a word at 13px is worse off than two bold initials.
+Here a tile's label is 55% colour with the ink and the chosen tab's 75%, the
+strip's own mix; the worst is 5.6:1 and 4.8:1 in the light theme, 6.4:1 and 5.7:1
+in the dark one. The chosen tab's label cannot be the project's colour outright:
+on an 18% fill that is 3.3:1 in the light theme and 4.5:1 in the dark one, and on
+the 16% it used to have it was already 3.4:1.
 
 Its earlier shape is the lesson worth keeping. A muted fill measured 1.09:1
 against the pane behind it — two greys a fraction apart, invisible — so where

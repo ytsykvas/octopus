@@ -7,6 +7,20 @@ import type { Project } from '@core/store.js'
 import { DropdownMenu } from './DropdownMenu.js'
 import { ProjectGlyph } from './ProjectGlyph.js'
 
+/**
+ * What the initials or the icon are drawn in: the project's colour, a quarter
+ * of the way towards the ink.
+ *
+ * The colour alone, or mixed with `--ink-faint` as these were, left the worst of
+ * the fifteen at 3.3:1 in the light theme on the tile (lime) — under the 4.5:1
+ * text needs, and these are letters. A quarter of ink brings every colour to at
+ * least 5.2:1 on an idle tile and 4.8:1 on the chosen one, in both themes, and
+ * leaves the hue plain: the tab is how a project is recognised, so it is not
+ * pushed further towards grey than that. The same mix the right pane's chosen
+ * tab uses.
+ */
+const LETTERS = 'color-mix(in srgb, var(--project-color) 75%, var(--ink))'
+
 interface ProjectTabsProps {
   readonly projects: readonly Project[]
   readonly activeProjectId: string | null
@@ -142,11 +156,11 @@ function ProjectTab({
                     // Matches the top of the sidebar's gradient exactly: the
                     // two surfaces meet with nothing between them.
                     backgroundColor: 'color-mix(in srgb, var(--project-color) 18%, var(--surface))',
-                    color: 'var(--project-color)'
+                    color: LETTERS
                   }
                 : {
                     backgroundColor: 'color-mix(in srgb, var(--project-color) 14%, transparent)',
-                    color: 'color-mix(in srgb, var(--project-color) 70%, var(--ink-faint))'
+                    color: LETTERS
                   }
             }
           >
