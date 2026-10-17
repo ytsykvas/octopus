@@ -156,9 +156,10 @@ function renderPanel(overrides: Partial<Props> = {}): {
  * them says nothing without a stylesheet, and jsdom has none.
  */
 function shownTab(): HTMLElement {
-  // A direct child: the build half now marks its own folded body the same way,
-  // and a search through the whole pane would find that instead.
-  const body = pane().querySelector<HTMLElement>(':scope > [aria-hidden="false"]')
+  // A child of the wrapper round the views: the build half marks its own folded
+  // body the same way, and a search through the whole pane would find that
+  // instead.
+  const body = pane().querySelector<HTMLElement>(':scope > div > [aria-hidden="false"]')
   if (!body) throw new Error('No tab body is showing')
 
   return body
@@ -243,11 +244,76 @@ describe('RightPanel', () => {
     renderPanel()
 
     expect(screen.getByRole('button', { name: 'Changes' })).toHaveClass('tab-selected')
+    expect(screen.getByRole('button', { name: 'Changes' })).not.toHaveClass('tab-idle')
+    expect(screen.getByRole('button', { name: 'Files' })).toHaveClass('tab-idle')
 
     await userEvent.click(screen.getByRole('button', { name: 'Terminal' }))
 
     expect(screen.getByRole('button', { name: 'Changes' })).not.toHaveClass('tab-selected')
+    expect(screen.getByRole('button', { name: 'Changes' })).toHaveClass('tab-idle')
     expect(screen.getByRole('button', { name: 'Terminal' })).toHaveClass('tab-selected')
+    expect(screen.getByRole('button', { name: 'Terminal' })).not.toHaveClass('tab-idle')
+  })
+
+  /*
+   * The project strip's tab turned a quarter: the ones not chosen are tiles
+   * with room beneath them, and the chosen one runs on down to the line that
+   * closes the row, squared off, so it reads as the pane reaching up. jsdom
+   * does no layout, so the classes are the rule — and the tops have to agree
+   * (6px from the row's top: a 32px tile with 5px under it, a 38px tab over
+   * the line) or the row looks uneven.
+   */
+  it('lets the chosen tab reach the line while the others float above it', () => {
+    renderPanel()
+
+    expect(screen.getByRole('button', { name: 'Changes' })).toHaveClass(
+      'h-[38px]',
+      '-mb-px',
+      'rounded-t-[10px]',
+      // Keeps its label level with the tiles', which it is taller than.
+      'pb-1.5'
+    )
+    expect(screen.getByRole('button', { name: 'Files' })).toHaveClass(
+      'h-8',
+      'mb-[5px]',
+      'rounded-[10px]'
+    )
+    expect(screen.getByRole('button', { name: 'Files' })).not.toHaveClass('-mb-px')
+  })
+
+  it('draws the two icon tabs as squares', () => {
+    renderPanel()
+
+    for (const name of ['Terminal', 'Notes']) {
+      expect(screen.getByRole('button', { name })).toHaveClass('w-8', 'px-0')
+    }
+    expect(screen.getByRole('button', { name: 'Files' })).toHaveClass('px-3')
+  })
+
+  /*
+   * The top of what is under the tabs carries the project's wash, fading out
+   * within a short distance — carried by one element wrapped round the views,
+   * so the gradient starts where the chosen tab ends. Not the full-height
+   * `project-tinted` of the workspace list: this pane is read for code. Without
+   * a project there is no colour to wash with, and the pane keeps its plain
+   * surface.
+   */
+  it('washes the top of the views in the colour of the project that is open', () => {
+    renderPanel({ color: 'teal' })
+
+    const tinted = pane().querySelector('.project-tinted-top')
+    expect(pane().querySelector('.project-tinted')).not.toBeInTheDocument()
+    expect(tinted).toBeInTheDocument()
+    // The view on screen is inside it; the row of tabs, whose line it starts
+    // under, is not.
+    expect(tinted).toContainElement(shownTab())
+    expect(tinted).not.toContainElement(screen.getByRole('button', { name: 'Changes' }))
+  })
+
+  it('leaves the views unwashed until a project is chosen', () => {
+    renderPanel()
+
+    expect(pane().querySelector('.project-tinted-top')).not.toBeInTheDocument()
   })
 
   /*

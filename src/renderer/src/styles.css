@@ -246,6 +246,25 @@
     );
   }
 
+  /* The same wash, but only across the top. The workspace list is a column of
+     little else, so it carries the colour down its whole height; the right pane
+     holds code, a terminal and file trees, where a tinted ground behind a long
+     read tires the eye. So the colour starts where the chosen tab ends — 18%,
+     the tab's own fill, or the join shows — and is gone by the time the content
+     has begun, leaving the plain surface the rest of the way.
+
+     The end stop is `--surface` rather than `transparent`: interpolating towards
+     transparent passes through a greyed midpoint in some engines, and the
+     surface is what the pane is anyway. */
+  .project-tinted-top {
+    background-image: linear-gradient(
+      to bottom,
+      color-mix(in srgb, var(--project-color) 18%, var(--surface)),
+      var(--surface) 160px
+    );
+    background-repeat: no-repeat;
+  }
+
   /* A message you sent, carrying the project's colour the same way the sidebar
      and the active tab do — an 18% wash, so identity reads alike everywhere.
      A saturated fill was available and deliberately not used: the palette is
@@ -264,10 +283,18 @@
 
      `--project-color` is set inline by the pane, and the fallbacks are the
      accent it used to be painted with: with no project open the tab row looks
-     exactly as it did rather than losing its fill to an invalid colour-mix. */
+     exactly as it did rather than losing its fill to an invalid colour-mix.
+
+     18%, not the 16% it was: this is the colour `.project-tinted` starts with,
+     and a tab is meant to be the pane reaching up, so the two must be the same
+     colour or the join shows. Its label is mixed a quarter of the way towards
+     the ink rather than drawn in the project's colour outright. Measured over
+     the fifteen colours in both themes, the colour alone gave 3.3:1 in the
+     light theme and 4.5:1 in the dark one at 13px; this gives 4.8:1 and 5.7:1,
+     and is still plainly the project's hue. */
   .tab-selected {
-    background-color: color-mix(in srgb, var(--project-color, var(--accent)) 16%, var(--surface));
-    color: var(--project-color, var(--accent));
+    background-color: color-mix(in srgb, var(--project-color, var(--accent)) 18%, var(--surface));
+    color: color-mix(in srgb, var(--project-color, var(--accent)) 75%, var(--ink));
     /* No outline: the fill alone is the shape, and a drawn edge around it made
        the tab read as a box sitting on the row rather than as part of it.
        The border is kept transparent rather than removed so the geometry does
@@ -275,6 +302,29 @@
        under it, which is what covers the row's line along the bottom edge and
        joins the tab to the view below. */
     border-color: transparent;
+  }
+
+  /* A tab in the right pane that is not the chosen one: a tile like the ones in
+     the project strip, tinted with the project's colour at the same 14%.
+
+     The label is not the strip's formula. There the letters are mixed with
+     `--ink-faint`, which measured 3.3:1 in the light theme at the worst colour
+     — fine for two initials, not for a word at 13px, and worse than the plain
+     `--ink-soft` these tabs had before. Mixed with `--ink` the worst of the
+     fifteen colours is 5.6:1 in the light theme and 6.4:1 in the dark.
+
+     The row these sit on stays neutral on purpose. On a tinted row the tiles
+     would lie on a ground that already holds 18% of the same colour and all but
+     vanish, and the chosen tab, which takes that ground's colour, would look
+     paler than they do. */
+  .tab-idle {
+    background-color: color-mix(in srgb, var(--project-color, var(--ink-faint)) 14%, transparent);
+    color: color-mix(in srgb, var(--project-color, var(--ink-soft)) 55%, var(--ink));
+    border-color: transparent;
+  }
+
+  .tab-idle:hover {
+    background-color: color-mix(in srgb, var(--project-color, var(--ink-faint)) 22%, transparent);
   }
 
   .panel {

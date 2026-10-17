@@ -546,6 +546,28 @@ describe('Terminal', () => {
     })
   })
 
+  /*
+   * No ground of its own. The pane the terminal sits in carries the open
+   * project's wash, and a terminal painting `--canvas` over it was a dark slab
+   * in the one tab that is meant to join the tabs above like the others do.
+   *
+   * The theme's background stays opaque — the test above — and is cleared in
+   * CSS instead, because a transparent one is what reverse video takes its
+   * letters from: `less`'s status line, a selected menu row and `fzf` all drew
+   * invisible text. xterm paints that colour inline on its scrollable element
+   * and gives the viewport beneath a `#000` of its own, so both are overridden,
+   * with `!important` since one is inline and the other unlayered.
+   */
+  it('lets the pane behind it show through', async () => {
+    const { container } = render(<Terminal cwd="/tmp/planner/anna" />)
+    await sessionStarted()
+
+    expect(container.firstElementChild).toHaveClass(
+      '[&_.xterm-scrollable-element]:bg-transparent!',
+      '[&_.xterm-viewport]:bg-transparent!'
+    )
+  })
+
   // Reading once at mount was the bug: a terminal opened before the stored
   // preference came back over IPC read the light defaults and stayed white in
   // a dark window, and switching theme afterwards left it behind.

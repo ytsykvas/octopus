@@ -665,11 +665,13 @@ export function RightPanel({
         }}
       />
 
-      {/* Browser tabs rather than a row of buttons: the tabs sit on the line
-          that closes the row, and the chosen one breaks through it, so it reads
-          as the view below reaching up — the same relationship the project
-          strip has with the sidebar. `items-end` and `-mb-px` are what put them
-          on the line rather than above it.
+      {/* Tiles like the project strip's, on a neutral row: the ones not chosen
+          float, tinted with the project's colour, and the chosen one runs down
+          to the line that closes the row and breaks through it, so it reads as
+          the view below reaching up — the same relationship the project strip
+          has with the sidebar, whose wash the view below now carries too
+          (`project-tinted-top`, further down). `items-end` and the margins are what
+          place them against the line rather than above it.
 
           Pinned to the right edge with `justify-end`: the pane is dragged by
           its left edge, so the tabs stay put and widening it only adds empty
@@ -677,7 +679,7 @@ export function RightPanel({
           measured from this row's children, and neither may add or move one. */}
       <div
         ref={tabs}
-        className="border-line flex h-11 shrink-0 items-end justify-end gap-0.5 border-b px-2"
+        className="border-line flex h-11 shrink-0 items-end justify-end gap-1 border-b px-2"
       >
         {TABS.map((item) => (
           <button
@@ -705,12 +707,19 @@ export function RightPanel({
               'aria-label': t(item.labelKey),
               title: t(item.labelKey)
             })}
-            className={`focus-ring -mb-px flex h-8 shrink-0 items-center justify-center rounded-t-[8px] border font-medium whitespace-nowrap transition-colors ${
-              item.Icon === undefined ? 'px-3' : 'px-2.5'
+            className={`focus-ring flex shrink-0 items-center justify-center border font-medium whitespace-nowrap transition-colors ${
+              item.Icon === undefined ? 'px-3' : 'w-8 px-0'
             } ${
+              // Both start 6px from the top of the row. The idle one is a tile
+              // with room beneath it; the chosen one runs on down to the line
+              // and over it (`-mb-px`), squared off there, so it reads as the
+              // pane below reaching up — the project strip's tab, turned a
+              // quarter. The six pixels of padding under the chosen one keep
+              // its label level with the others: it is taller, and centred in
+              // that height the word would sit three pixels low.
               tab === item.id
-                ? 'tab-selected'
-                : 'text-ink-soft hover:bg-muted hover:text-ink border-transparent'
+                ? 'tab-selected -mb-px h-[38px] rounded-t-[10px] pb-1.5'
+                : 'tab-idle mb-[5px] h-8 rounded-[10px]'
             }`}
           >
             {item.Icon === undefined ? t(item.labelKey) : <item.Icon aria-hidden size={14} />}
@@ -718,36 +727,46 @@ export function RightPanel({
         ))}
       </div>
 
-      {/* Hidden rather than unmounted, like the rest: which folders were open
+      {/* The project's wash across the top of what is under the tabs, fading
+          out within the first 160px — the way the workspace list is washed, but
+          not all the way down: this pane is read for code and terminal output.
+          One wrapper rather than the class on the section: the gradient starts
+          at the top of the element that carries it, and it has to start exactly
+          where the chosen tab ends — the tab is the colour the gradient begins
+          with, and a row's height of drift is enough for the join to show.
+          Without a project the class is left off and the pane keeps its plain
+          surface. */}
+      <div className={`flex min-h-0 flex-1 flex-col ${color ? 'project-tinted-top' : ''}`}>
+        {/* Hidden rather than unmounted, like the rest: which folders were open
           and where the tree was scrolled are what a look elsewhere must not
           cost. `visible` is what stops it reading git meanwhile. */}
-      <div
-        aria-hidden={tab !== 'files'}
-        className={`flex min-h-0 flex-1 flex-col ${tab === 'files' ? '' : 'hidden'}`}
-      >
-        <FilesPanel
-          workspace={active}
-          visible={showing === 'files'}
-          activePath={activeFilePath}
-          onOpen={onOpenFile}
-        />
-      </div>
+        <div
+          aria-hidden={tab !== 'files'}
+          className={`flex min-h-0 flex-1 flex-col ${tab === 'files' ? '' : 'hidden'}`}
+        >
+          <FilesPanel
+            workspace={active}
+            visible={showing === 'files'}
+            activePath={activeFilePath}
+            onOpen={onOpenFile}
+          />
+        </div>
 
-      {/* Hidden, never unmounted: a session belongs to the workspace, not to
+        {/* Hidden, never unmounted: a session belongs to the workspace, not to
           whether its tab happens to be on screen. Switching to Changes used to
           kill every terminal in the project. */}
-      <div
-        aria-hidden={tab !== 'terminal'}
-        className={`flex min-h-0 flex-1 flex-col ${tab === 'terminal' ? '' : 'hidden'}`}
-      >
-        <WorkspaceTerminals
-          workspaces={workspaces}
-          activeId={activeWorkspaceId}
-          visible={showing === 'terminal'}
-        />
-      </div>
+        <div
+          aria-hidden={tab !== 'terminal'}
+          className={`flex min-h-0 flex-1 flex-col ${tab === 'terminal' ? '' : 'hidden'}`}
+        >
+          <WorkspaceTerminals
+            workspaces={workspaces}
+            activeId={activeWorkspaceId}
+            visible={showing === 'terminal'}
+          />
+        </div>
 
-      {/* Every pane below stays mounted and is hidden by a class. `aria-hidden`
+        {/* Every pane below stays mounted and is hidden by a class. `aria-hidden`
           says the same thing to a screen reader, which the class alone only
           manages once the stylesheet has loaded — four panes speaking at once
           is what a reader would otherwise hear, and what a test would find.
@@ -756,23 +775,23 @@ export function RightPanel({
           unmounted diff loses which files were collapsed and where the pane was
           scrolled to, both of which a review builds up over several turns.
           `visible` is what stops it reading git while another tab is showing. */}
-      <div
-        aria-hidden={tab !== 'diff'}
-        className={`flex min-h-0 flex-1 flex-col ${tab === 'diff' ? '' : 'hidden'}`}
-      >
-        <DiffPanel
-          workspace={active}
-          visible={showing === 'diff'}
-          view={diffView}
-          onView={onDiffView}
-          width={applied}
-          comments={comments}
-          revert={revert}
-          onError={onError}
-        />
-      </div>
+        <div
+          aria-hidden={tab !== 'diff'}
+          className={`flex min-h-0 flex-1 flex-col ${tab === 'diff' ? '' : 'hidden'}`}
+        >
+          <DiffPanel
+            workspace={active}
+            visible={showing === 'diff'}
+            view={diffView}
+            onView={onDiffView}
+            width={applied}
+            comments={comments}
+            revert={revert}
+            onError={onError}
+          />
+        </div>
 
-      {/* Hidden, never unmounted — the third place in this file that has to be,
+        {/* Hidden, never unmounted — the third place in this file that has to be,
           and for the sharpest reason. Unmounting the terminal is exactly how
           the Stop button ends a run, so leaving the tab pressed Stop without
           saying so: a dev server died on the way to reading the diff, and a
@@ -780,7 +799,7 @@ export function RightPanel({
           `node_modules` behind it. `WorkspaceScripts` keeps the same promise
           against the other click that used to end a run — opening another
           workspace. */}
-      {/* One tab, both scripts, one above the other. They were two tabs, which
+        {/* One tab, both scripts, one above the other. They were two tabs, which
           made a pair of halves of one question — what this workspace runs —
           into two places to look, and cost a fifth of a tab row whose width has
           to be measured because it barely fits. Stacked, a server can be seen
@@ -789,31 +808,31 @@ export function RightPanel({
           Each half gets `min-h-0` and half the height. A terminal measures
           itself against the box it is in, and a box that has not been told it
           may be shorter than its content grows instead of scrolling. */}
-      <div
-        aria-hidden={tab !== 'scripts'}
-        className={`flex min-h-0 flex-1 flex-col ${tab === 'scripts' ? '' : 'hidden'}`}
-      >
-        {/* The whole point of the tab in one row: the first thing anybody does
+        <div
+          aria-hidden={tab !== 'scripts'}
+          className={`flex min-h-0 flex-1 flex-col ${tab === 'scripts' ? '' : 'hidden'}`}
+        >
+          {/* The whole point of the tab in one row: the first thing anybody does
             with a new workspace is these two steps in this order, and the
             second only makes sense after the first. The halves carry nothing —
             four buttons across two of them, two saying the same word, is what
             this replaced. */}
-        <div className="border-line flex shrink-0 items-center gap-2 border-b px-3 py-1.5">
-          <span className="text-ink-faint min-w-0 flex-1 truncate text-[11px]">
-            {activeRun.stage === 'failed' ? (
-              <span className="text-danger">{t('scripts.buildFailed')}</span>
-            ) : servingAt !== null && silentPort ? (
-              /* Said rather than enforced. The script is the user's, and being
+          <div className="border-line flex shrink-0 items-center gap-2 border-b px-3 py-1.5">
+            <span className="text-ink-faint min-w-0 flex-1 truncate text-[11px]">
+              {activeRun.stage === 'failed' ? (
+                <span className="text-danger">{t('scripts.buildFailed')}</span>
+              ) : servingAt !== null && silentPort ? (
+                /* Said rather than enforced. The script is the user's, and being
                  wrong about it must not take the link or the controls away. */
-              <span className="text-warning">
-                {t('scripts.portSilent', { port: servingAt.port })}
-              </span>
-            ) : (
-              t(STAGE_HINTS[activeRun.stage])
-            )}
-          </span>
+                <span className="text-warning">
+                  {t('scripts.portSilent', { port: servingAt.port })}
+                </span>
+              ) : (
+                t(STAGE_HINTS[activeRun.stage])
+              )}
+            </span>
 
-          {/* The way to the scripts themselves, and the only control here that
+            {/* The way to the scripts themselves, and the only control here that
               does not change with the run.
 
               It sits before the rest deliberately. Everything after it swaps as
@@ -824,45 +843,45 @@ export function RightPanel({
               it starts being wanted: `ScriptRunner` offers **Write the script**
               while there is no script, so a tab whose whole subject is
               `setup.sh` led nowhere the moment `setup.sh` was written. */}
-          <Button
-            size="sm"
-            disabled={projectId === null}
-            onClick={onEditScripts}
-            title={t('scripts.editScripts')}
-            aria-label={t('scripts.editScripts')}
-          >
-            <Pencil aria-hidden size={12} />
-          </Button>
+            <Button
+              size="sm"
+              disabled={projectId === null}
+              onClick={onEditScripts}
+              title={t('scripts.editScripts')}
+              aria-label={t('scripts.editScripts')}
+            >
+              <Pencil aria-hidden size={12} />
+            </Button>
 
-          {/* After the button above rather than before it: the switch appears
+            {/* After the button above rather than before it: the switch appears
               only once the sets are read and is held while a build runs, and
               the button that never changes must not be moved by it. */}
-          {activeWorkspace !== null && (
-            <EnvProfileSwitch
-              profiles={envProfiles}
-              value={profileOf(activeWorkspace)}
-              disabled={building}
-              onChange={(name) => {
-                void setWorkspaceProfile(activeWorkspace.id, name)
-              }}
-            />
-          )}
+            {activeWorkspace !== null && (
+              <EnvProfileSwitch
+                profiles={envProfiles}
+                value={profileOf(activeWorkspace)}
+                disabled={building}
+                onChange={(name) => {
+                  void setWorkspaceProfile(activeWorkspace.id, name)
+                }}
+              />
+            )}
 
-          {/* Every control for the tab, and none in the halves — and only ever
+            {/* Every control for the tab, and none in the halves — and only ever
               the ones that can mean something. Run goes once the server is up:
               what it offers has already happened, and a rebuild from there is
               Stop and then Run, which is also the order that frees the port
               before anything tries to bind it again. */}
-          {servingAt === null && (
-            <Button size="sm" variant="accent" disabled={runAll === undefined} onClick={runAll}>
-              <Play aria-hidden size={12} />
-              {t(building ? 'scripts.running' : 'scripts.runAll')}
-            </Button>
-          )}
+            {servingAt === null && (
+              <Button size="sm" variant="accent" disabled={runAll === undefined} onClick={runAll}>
+                <Play aria-hidden size={12} />
+                {t(building ? 'scripts.running' : 'scripts.runAll')}
+              </Button>
+            )}
 
-          {servingAt !== null && (
-            <>
-              {/* An anchor rather than a button: `setWindowOpenHandler` already
+            {servingAt !== null && (
+              <>
+                {/* An anchor rather than a button: `setWindowOpenHandler` already
                   hands a `_blank` target to the system browser, so this needs no
                   channel of its own — and it is a link, which is what a reader
                   expects to be able to copy or open in a new tab.
@@ -870,69 +889,69 @@ export function RightPanel({
                   Styled as a control because it stands in a row of them, and
                   only while something is serving: a port with nothing behind it
                   opens on a connection refused. */}
-              <a
-                href={`http://localhost:${String(servingAt.port)}`}
-                target="_blank"
-                rel="noreferrer"
-                title={t('scripts.openInBrowser', { port: servingAt.port })}
-                aria-label={t('scripts.openInBrowser', { port: servingAt.port })}
-                className="focus-ring border-line bg-canvas text-ink hover:bg-muted inline-flex h-6 items-center justify-center gap-1.5 rounded-[var(--radius-control)] border px-2 text-[11px] font-medium transition-colors"
-              >
-                <ExternalLink aria-hidden size={12} />
-              </a>
+                <a
+                  href={`http://localhost:${String(servingAt.port)}`}
+                  target="_blank"
+                  rel="noreferrer"
+                  title={t('scripts.openInBrowser', { port: servingAt.port })}
+                  aria-label={t('scripts.openInBrowser', { port: servingAt.port })}
+                  className="focus-ring border-line bg-canvas text-ink hover:bg-muted inline-flex h-6 items-center justify-center gap-1.5 rounded-[var(--radius-control)] border px-2 text-[11px] font-medium transition-colors"
+                >
+                  <ExternalLink aria-hidden size={12} />
+                </a>
 
-              {/* The common half of a restart: the code changed under a running
+                {/* The common half of a restart: the code changed under a running
                   server and needs picking up, while the checkout did not. */}
-              <Button
-                size="sm"
-                onClick={restartServer}
-                title={t('scripts.serverRestart')}
-                aria-label={t('scripts.serverRestart')}
-              >
-                <RotateCw aria-hidden size={12} />
-              </Button>
+                <Button
+                  size="sm"
+                  onClick={restartServer}
+                  title={t('scripts.serverRestart')}
+                  aria-label={t('scripts.serverRestart')}
+                >
+                  <RotateCw aria-hidden size={12} />
+                </Button>
 
-              <Button size="sm" variant="danger" onClick={stopRun}>
-                <Square aria-hidden size={12} />
-                {t('scripts.stop')}
-              </Button>
-            </>
-          )}
-        </div>
+                <Button size="sm" variant="danger" onClick={stopRun}>
+                  <Square aria-hidden size={12} />
+                  {t('scripts.stop')}
+                </Button>
+              </>
+            )}
+          </div>
 
-        {/* Under the row rather than in its text, and wrapped: while a server
+          {/* Under the row rather than in its text, and wrapped: while a server
             is up that row holds the switch and four controls, and the sentence
             that says which environment the data came from was cut to its first
             two words. Said rather than enforced: the server is somebody's work
             in progress, and taking it down to be consistent would be the ruder
             of the two. */}
-        {envWarning !== null && (
-          <p className="border-line bg-warning-bg text-warning shrink-0 border-b px-3 py-1.5 text-[11px]">
-            {envWarning}
-          </p>
-        )}
+          {envWarning !== null && (
+            <p className="border-line bg-warning-bg text-warning shrink-0 border-b px-3 py-1.5 text-[11px]">
+              {envWarning}
+            </p>
+          )}
 
-        {/* Pinned above both halves rather than inside one, and never in a
+          {/* Pinned above both halves rather than inside one, and never in a
             modal: this is the answer to "why is Run doing nothing", and it has
             to be readable at the moment somebody presses it. Every byte of what
             the repository supplies is shown — an approval over a summary is an
             approval of the summary. Where what it supplies is a command line,
             that is the whole of what can be shown, and the notice below says
             so: the file the line invokes is not read here and not digested. */}
-        {/* Why Run is doing nothing, in the place Run is. A repository whose
+          {/* Why Run is doing nothing, in the place Run is. A repository whose
             settings will not parse resolves to no scripts at all, and without
             this the pane disabled the button and said nothing. */}
-        {scriptFailure !== undefined && (
-          <p className="border-line bg-muted/40 text-danger shrink-0 border-b px-3 py-2.5">
-            {t('scripts.repoUnreadable', { reason: describeFailure(scriptFailure) })}
-          </p>
-        )}
+          {scriptFailure !== undefined && (
+            <p className="border-line bg-muted/40 text-danger shrink-0 border-b px-3 py-2.5">
+              {t('scripts.repoUnreadable', { reason: describeFailure(scriptFailure) })}
+            </p>
+          )}
 
-        {activeScripts !== undefined && !activeScripts.approved && activeWorkspace !== null && (
-          <div className="border-line bg-muted/40 shrink-0 space-y-2 border-b px-3 py-2.5">
-            <p className="text-ink-soft leading-relaxed">{t('scripts.repoNotice')}</p>
+          {activeScripts !== undefined && !activeScripts.approved && activeWorkspace !== null && (
+            <div className="border-line bg-muted/40 shrink-0 space-y-2 border-b px-3 py-2.5">
+              <p className="text-ink-soft leading-relaxed">{t('scripts.repoNotice')}</p>
 
-            {/* Bounded, with a scroll of its own.
+              {/* Bounded, with a scroll of its own.
                 
                 The block around it is `shrink-0`, so without a ceiling here a
                 long script simply grew: a 110-line `setup.sh` measured 1909px
@@ -941,54 +960,54 @@ export function RightPanel({
                 scroll. The tab became the notice and nothing else. The notice
                 and the button stay outside this box on purpose — they are the
                 two things that must never scroll out of reach. */}
-            <div className="max-h-[38vh] space-y-2 overflow-y-auto">
-              {suppliedScripts.map((script) => (
-                <div key={script.kind}>
-                  <p className="text-ink-faint font-mono text-[11px]">{script.from}</p>
-                  <pre
-                    /* Wrapped rather than scrolled sideways. `overflow-x-auto`
+              <div className="max-h-[38vh] space-y-2 overflow-y-auto">
+                {suppliedScripts.map((script) => (
+                  <div key={script.kind}>
+                    <p className="text-ink-faint font-mono text-[11px]">{script.from}</p>
+                    <pre
+                      /* Wrapped rather than scrolled sideways. `overflow-x-auto`
                        alone did clip correctly — but macOS hides the scrollbar
                        until it moves, so 80-column shell in a 354px box read as
                        text simply cut off. Asking somebody to scroll every line
                        right and back is not a way to read code they are being
                        asked to approve. `overflow-x-auto` stays for the one
                        thing wrapping cannot break: an unbroken token. */
-                    className="border-line bg-canvas mt-1 overflow-x-auto rounded-[var(--radius-control)] border px-2 py-1.5 font-mono text-[11px] break-words whitespace-pre-wrap"
-                  >
-                    {script.contents}
-                  </pre>
-                </div>
-              ))}
+                      className="border-line bg-canvas mt-1 overflow-x-auto rounded-[var(--radius-control)] border px-2 py-1.5 font-mono text-[11px] break-words whitespace-pre-wrap"
+                    >
+                      {script.contents}
+                    </pre>
+                  </div>
+                ))}
+              </div>
+
+              <Button
+                size="sm"
+                onClick={() => {
+                  void (async () => {
+                    onError(null)
+                    // The digest of what is on screen: a pull that rewrote a
+                    // script after it was shown is refused, not approved unseen —
+                    // and refreshing then shows what is there now.
+                    const done = await window.octopus.projects.approveScripts(
+                      activeWorkspace.projectId,
+                      activeWorkspace.id,
+                      activeScripts.digest
+                    )
+                    onScriptsChanged()
+                    if (!done.ok) onError(describeFailure(done))
+                  })()
+                }}
+              >
+                {t('scripts.repoApprove')}
+              </Button>
             </div>
+          )}
 
-            <Button
-              size="sm"
-              onClick={() => {
-                void (async () => {
-                  onError(null)
-                  // The digest of what is on screen: a pull that rewrote a
-                  // script after it was shown is refused, not approved unseen —
-                  // and refreshing then shows what is there now.
-                  const done = await window.octopus.projects.approveScripts(
-                    activeWorkspace.projectId,
-                    activeWorkspace.id,
-                    activeScripts.digest
-                  )
-                  onScriptsChanged()
-                  if (!done.ok) onError(describeFailure(done))
-                })()
-              }}
-            >
-              {t('scripts.repoApprove')}
-            </Button>
-          </div>
-        )}
-
-        {/* A named region each, rather than two anonymous halves. Both are on
+          {/* A named region each, rather than two anonymous halves. Both are on
             screen at once now, so "the Run button" is ambiguous to anything
             reading the pane aloud — and to anything testing it. The heading is
             `aria-hidden` because the region already carries the same word. */}
-        {/* The build half folds away and the server half does not, which is
+          {/* The build half folds away and the server half does not, which is
             not an oversight: a build is run once when a workspace is made and
             then read, while a server runs for as long as the work does. Folding
             the one that is finished is what gives the one that is still going
@@ -998,35 +1017,35 @@ export function RightPanel({
             how Stop ends a run — the comment above says why at length — so a
             fold that removed it would kill a `setup.sh` half way through
             without saying so. */}
-        <section
-          aria-label={t('scripts.build')}
-          className={buildOpen ? 'flex min-h-0 flex-1 flex-col' : 'shrink-0'}
-        >
-          {/* The row carries the border, not the toggle: the env button is a
+          <section
+            aria-label={t('scripts.build')}
+            className={buildOpen ? 'flex min-h-0 flex-1 flex-col' : 'shrink-0'}
+          >
+            {/* The row carries the border, not the toggle: the env button is a
               sibling rather than a child, so reaching for it cannot fold the
               build away by accident. */}
-          <div className="border-line flex shrink-0 items-center gap-2 border-b pr-2">
-            <button
-              type="button"
-              onClick={() => {
-                setBuildOpen(!buildOpen)
-              }}
-              aria-expanded={buildOpen}
-              // Named for what it does rather than for the word on it:
-              // `Build` is also the heading it carries, and two controls with
-              // one name are ambiguous to anything reading the pane aloud.
-              aria-label={t(buildOpen ? 'scripts.foldBuild' : 'scripts.unfoldBuild')}
-              className="focus-ring section-label hover:bg-muted flex min-w-0 flex-1 items-center gap-1.5 px-3 py-1.5 text-left"
-            >
-              {buildOpen ? (
-                <ChevronDown aria-hidden size={12} className="text-ink-faint shrink-0" />
-              ) : (
-                <ChevronRight aria-hidden size={12} className="text-ink-faint shrink-0" />
-              )}
-              {t('scripts.build')}
-            </button>
+            <div className="border-line flex shrink-0 items-center gap-2 border-b pr-2">
+              <button
+                type="button"
+                onClick={() => {
+                  setBuildOpen(!buildOpen)
+                }}
+                aria-expanded={buildOpen}
+                // Named for what it does rather than for the word on it:
+                // `Build` is also the heading it carries, and two controls with
+                // one name are ambiguous to anything reading the pane aloud.
+                aria-label={t(buildOpen ? 'scripts.foldBuild' : 'scripts.unfoldBuild')}
+                className="focus-ring section-label hover:bg-muted flex min-w-0 flex-1 items-center gap-1.5 px-3 py-1.5 text-left"
+              >
+                {buildOpen ? (
+                  <ChevronDown aria-hidden size={12} className="text-ink-faint shrink-0" />
+                ) : (
+                  <ChevronRight aria-hidden size={12} className="text-ink-faint shrink-0" />
+                )}
+                {t('scripts.build')}
+              </button>
 
-            {/* Always here, not only while the build script is missing. The env
+              {/* Always here, not only while the build script is missing. The env
                 is the thing a build most often turns out to be lacking, and by
                 then the empty state that held this button is long gone.
 
@@ -1036,58 +1055,58 @@ export function RightPanel({
                 all. One button could only ever reach one of them, which for a
                 project cloned from GitHub was reliably the wrong one — nothing
                 gitignored was ever on GitHub to copy. */}
-            <DropdownMenu
-              actions={[
-                /*
-                 * The sets themselves are a switch in the Run row, where they
-                 * are seen; what stays here is the one answer that is not a
-                 * set — follow the project, wherever it moves. Shown only where
-                 * there is a choice: a project with one set sees exactly the
-                 * menu it always had.
-                 */
-                ...(envProfiles.length > 1 && activeWorkspace !== null
-                  ? [
-                      {
-                        id: 'follow',
-                        label: t('scripts.envFollow', { name: projectEnvProfile }),
-                        selected: activeWorkspace.envProfile === null,
-                        onSelect: () => {
-                          void setWorkspaceProfile(activeWorkspace.id, null)
+              <DropdownMenu
+                actions={[
+                  /*
+                   * The sets themselves are a switch in the Run row, where they
+                   * are seen; what stays here is the one answer that is not a
+                   * set — follow the project, wherever it moves. Shown only where
+                   * there is a choice: a project with one set sees exactly the
+                   * menu it always had.
+                   */
+                  ...(envProfiles.length > 1 && activeWorkspace !== null
+                    ? [
+                        {
+                          id: 'follow',
+                          label: t('scripts.envFollow', { name: projectEnvProfile }),
+                          selected: activeWorkspace.envProfile === null,
+                          onSelect: () => {
+                            void setWorkspaceProfile(activeWorkspace.id, null)
+                          }
                         }
-                      }
-                    ]
-                  : []),
-                {
-                  id: 'variables',
-                  label: t('scripts.editEnv'),
-                  onSelect: onEditEnv
-                },
-                {
-                  id: 'files',
-                  label: t('scripts.editFiles'),
-                  onSelect: onEditFiles
-                },
-                {
-                  id: 'show',
-                  label: t('scripts.showEnv'),
-                  // Nothing to show without a workspace, and setting the flag
-                  // anyway armed a dialog that sprang open by itself on the
-                  // next one picked.
-                  disabled: activeWorkspaceId === null,
-                  onSelect: () => {
-                    setShowingEnv(true)
+                      ]
+                    : []),
+                  {
+                    id: 'variables',
+                    label: t('scripts.editEnv'),
+                    onSelect: onEditEnv
+                  },
+                  {
+                    id: 'files',
+                    label: t('scripts.editFiles'),
+                    onSelect: onEditFiles
+                  },
+                  {
+                    id: 'show',
+                    label: t('scripts.showEnv'),
+                    // Nothing to show without a workspace, and setting the flag
+                    // anyway armed a dialog that sprang open by itself on the
+                    // next one picked.
+                    disabled: activeWorkspaceId === null,
+                    onSelect: () => {
+                      setShowingEnv(true)
+                    }
                   }
-                }
-              ]}
-              trigger={({ onClick, open }) => (
-                <Button size="sm" onClick={onClick} aria-expanded={open}>
-                  {t('scripts.env')}
-                </Button>
-              )}
-            />
-          </div>
+                ]}
+                trigger={({ onClick, open }) => (
+                  <Button size="sm" onClick={onClick} aria-expanded={open}>
+                    {t('scripts.env')}
+                  </Button>
+                )}
+              />
+            </div>
 
-          {/* `aria-hidden` beside the class, exactly as the tabs above do it:
+            {/* `aria-hidden` beside the class, exactly as the tabs above do it:
               the class says nothing to a screen reader, and nothing at all
               without a stylesheet — which is also the only handle a test has.
 
@@ -1101,101 +1120,104 @@ export function RightPanel({
               enough on its own: the pty was created at the wrong width and the
               program running in it has already wrapped its output to it, which
               is exactly the mangled log somebody opens this pane to read. */}
-          <div
-            aria-hidden={!buildOpen}
-            className={buildOpen ? 'flex min-h-0 flex-1 flex-col' : 'h-0 shrink-0 overflow-hidden'}
+            <div
+              aria-hidden={!buildOpen}
+              className={
+                buildOpen ? 'flex min-h-0 flex-1 flex-col' : 'h-0 shrink-0 overflow-hidden'
+              }
+            >
+              <WorkspaceScripts
+                workspaces={scriptable}
+                activeId={activeWorkspaceId}
+                kind="setup"
+                scriptFor={(id) => scripts.get(id)?.scripts.setup ?? null}
+                visible={showing === 'scripts'}
+                projectFor={projectFor}
+                onOpenSettings={onEditScripts}
+                tokenFor={(id) => sequence.runOf(id).build}
+                stopTokenFor={(id) => sequence.runOf(id).stop}
+                onOutcome={(id, ok) => {
+                  sequence.finished('setup', id, ok)
+                }}
+                onProfile={(id, profile) => {
+                  setBuiltProfiles((current) => ({ ...current, [id]: profile }))
+                }}
+                // A build only ever leaves `building` by reporting itself
+                // finished, so a runner that goes while one is in flight would
+                // strand the workspace with Run disabled and nothing to press.
+                onGone={(id) => {
+                  sequence.abandon(id)
+                }}
+                onRunning={adoptBuild}
+              />
+            </div>
+          </section>
+
+          <section
+            aria-label={t('scripts.server')}
+            className="border-line flex min-h-0 flex-1 flex-col border-t"
           >
+            <p aria-hidden className="section-label border-line shrink-0 border-b px-3 py-1.5">
+              {t('scripts.server')}
+            </p>
             <WorkspaceScripts
               workspaces={scriptable}
               activeId={activeWorkspaceId}
-              kind="setup"
-              scriptFor={(id) => scripts.get(id)?.scripts.setup ?? null}
+              kind="run"
+              scriptFor={(id) => scripts.get(id)?.scripts.run ?? null}
               visible={showing === 'scripts'}
               projectFor={projectFor}
               onOpenSettings={onEditScripts}
-              tokenFor={(id) => sequence.runOf(id).build}
+              tokenFor={(id) => sequence.runOf(id).server}
               stopTokenFor={(id) => sequence.runOf(id).stop}
               onOutcome={(id, ok) => {
-                sequence.finished('setup', id, ok)
+                sequence.finished('run', id, ok)
               }}
+              onRunning={adoptServer}
+              onPort={(workspace, settled) => {
+                setSettledPorts((current) => ({ ...current, [workspace.id]: settled }))
+              }}
+              // From the call that wrote the `.env` the server is about to read,
+              // not from the list: the list can still be on the set before a
+              // press, and the port settles before the env is written.
               onProfile={(id, profile) => {
-                setBuiltProfiles((current) => ({ ...current, [id]: profile }))
+                setServingProfiles((current) => ({ ...current, [id]: profile }))
               }}
-              // A build only ever leaves `building` by reporting itself
-              // finished, so a runner that goes while one is in flight would
-              // strand the workspace with Run disabled and nothing to press.
-              onGone={(id) => {
-                sequence.abandon(id)
-              }}
-              onRunning={adoptBuild}
             />
-          </div>
-        </section>
+          </section>
+        </div>
 
-        <section
-          aria-label={t('scripts.server')}
-          className="border-line flex min-h-0 flex-1 flex-col border-t"
+        <div
+          aria-hidden={tab !== 'pullRequest'}
+          className={`flex min-h-0 flex-1 flex-col ${tab === 'pullRequest' ? '' : 'hidden'}`}
         >
-          <p aria-hidden className="section-label border-line shrink-0 border-b px-3 py-1.5">
-            {t('scripts.server')}
-          </p>
-          <WorkspaceScripts
-            workspaces={scriptable}
-            activeId={activeWorkspaceId}
-            kind="run"
-            scriptFor={(id) => scripts.get(id)?.scripts.run ?? null}
-            visible={showing === 'scripts'}
-            projectFor={projectFor}
-            onOpenSettings={onEditScripts}
-            tokenFor={(id) => sequence.runOf(id).server}
-            stopTokenFor={(id) => sequence.runOf(id).stop}
-            onOutcome={(id, ok) => {
-              sequence.finished('run', id, ok)
-            }}
-            onRunning={adoptServer}
-            onPort={(workspace, settled) => {
-              setSettledPorts((current) => ({ ...current, [workspace.id]: settled }))
-            }}
-            // From the call that wrote the `.env` the server is about to read,
-            // not from the list: the list can still be on the set before a
-            // press, and the port settles before the env is written.
-            onProfile={(id, profile) => {
-              setServingProfiles((current) => ({ ...current, [id]: profile }))
-            }}
+          <PullRequestPanel
+            workspace={active}
+            visible={showing === 'pullRequest'}
+            chatId={chatId}
+            quotes={quotes}
+            envFile={envFile}
+            onRequestChanged={onRequestChanged}
+            onEditInstructions={onEditInstructions}
+            onError={onError}
+            onRemoveWorkspace={onRemoveWorkspace}
+            onConversation={onConversation}
           />
-        </section>
-      </div>
-
-      <div
-        aria-hidden={tab !== 'pullRequest'}
-        className={`flex min-h-0 flex-1 flex-col ${tab === 'pullRequest' ? '' : 'hidden'}`}
-      >
-        <PullRequestPanel
-          workspace={active}
-          visible={showing === 'pullRequest'}
-          chatId={chatId}
-          quotes={quotes}
-          envFile={envFile}
-          onRequestChanged={onRequestChanged}
-          onEditInstructions={onEditInstructions}
-          onError={onError}
-          onRemoveWorkspace={onRemoveWorkspace}
-          onConversation={onConversation}
-        />
-      </div>
-      {/* The note is the one thing a workspace carries that the agent never
+        </div>
+        {/* The note is the one thing a workspace carries that the agent never
           reads. Remounted per workspace by the key, which is what makes its
           debounced save safe: an editor that loads against one target and saves
           a moment later writes the old text into the newly chosen one. */}
-      <div
-        aria-hidden={tab !== 'notes'}
-        className={`flex min-h-0 flex-1 flex-col ${tab === 'notes' ? '' : 'hidden'}`}
-      >
-        <NotesPanel
-          key={activeWorkspaceId ?? 'none'}
-          workspaceId={activeWorkspaceId}
-          notes={workspaces.find((one) => one.id === activeWorkspaceId)?.notes ?? ''}
-        />
+        <div
+          aria-hidden={tab !== 'notes'}
+          className={`flex min-h-0 flex-1 flex-col ${tab === 'notes' ? '' : 'hidden'}`}
+        >
+          <NotesPanel
+            key={activeWorkspaceId ?? 'none'}
+            workspaceId={activeWorkspaceId}
+            notes={workspaces.find((one) => one.id === activeWorkspaceId)?.notes ?? ''}
+          />
+        </div>
       </div>
     </section>
   )
