@@ -2927,6 +2927,22 @@ A button that stops responding also has to say why. The `+` swaps its plus for a
 turning mark while it waits — a still, dimmed icon reads as the app having hung
 rather than as it working.
 
+**A new workspace opens on its empty conversation.** All three places go
+through `App.createWorkspace`, which selects what `useWorkspaces.create` answers
+with and gives that conversation's composer the caret. It used to land in the
+list unselected, with its name open for editing — but what somebody knows at
+that moment is the task, not a name for it; the name stays a double-click away.
+The caret is taken once: `App` forgets the workspace was new as soon as the
+selection leaves it, so coming back later does not pull the caret out of
+wherever it was.
+
+The empty conversation also offers the **set of variables** the workspace runs
+against, beside a `Runs against` label, whenever the project has more than one —
+the same `EnvProfileSwitch` and `useEnvProfiles` as the Run row, so the two read
+one stored answer and a press on either moves both. Whether the work behind the
+first message runs on production or staging data is a question for before it
+is asked, not for after a build has pulled the other dump.
+
 ## Two lint rules that will stop you
 
 - **No `setState` in an effect.** State derived from a prop is adjusted during

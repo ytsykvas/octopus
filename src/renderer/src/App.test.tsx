@@ -1283,6 +1283,98 @@ describe('App', () => {
   })
 
   /*
+   * It used to land in the list, unselected, with its name open for editing.
+   * What somebody knows at this moment is the task, so the new workspace opens
+   * on its empty conversation with the caret already in the field.
+   */
+  it('opens a new workspace on its conversation, with the caret in the composer', async () => {
+    givenTwoProjects()
+    const made = workspaceView('dora', {
+      id: 'ledger/dora',
+      projectId: 'ledger',
+      path: '/tmp/ledger/dora'
+    })
+    let created = false
+    vi.mocked(window.octopus.workspaces.create).mockImplementation(() => {
+      created = true
+      return Promise.resolve({ ok: true, value: made })
+    })
+    vi.mocked(window.octopus.workspaces.list).mockImplementation((projectId: string) =>
+      Promise.resolve({
+        ok: true,
+        value: projectId === 'ledger' && created ? [made] : []
+      })
+    )
+    const user = await openApp()
+    await user.click(await screen.findByRole('button', { name: 'LE' }))
+
+    const centre = within(screen.getByRole('main'))
+    await user.click(await centre.findByRole('button', { name: 'New workspace' }))
+
+    expect(await screen.findByText('Start the conversation')).toBeInTheDocument()
+    await waitFor(() => {
+      expect(screen.getByPlaceholderText(/Ask the agent/)).toHaveFocus()
+    })
+    // No rename field: the name can wait, the task cannot.
+    expect(screen.queryByRole('textbox', { name: /name/i })).not.toBeInTheDocument()
+  })
+
+  it('stays on the open workspace when a new one could not be made', async () => {
+    givenTwoProjects()
+    vi.mocked(window.octopus.workspaces.create).mockResolvedValue({ ok: false, error: 'no' })
+    const user = await openApp()
+    await user.click(await screen.findByRole('button', { name: 'LE' }))
+    await user.click(await screen.findByText('carol'))
+    expect(await screen.findByText('Start the conversation')).toBeInTheDocument()
+
+    await user.keyboard('{Meta>}{Shift>}N{/Shift}{/Meta}')
+
+    await waitFor(() => {
+      expect(window.octopus.workspaces.create).toHaveBeenCalledWith('ledger')
+    })
+    // Nothing made is nothing to open: carol's conversation is still there.
+    expect(screen.getByText('Start the conversation')).toBeInTheDocument()
+  })
+
+  it('takes the caret only on the visit that made the workspace', async () => {
+    // Coming back later is not the moment its task is being written, and a
+    // field grabbing the caret on every visit takes it from wherever it was.
+    givenTwoProjects()
+    const made = workspaceView('dora', {
+      id: 'ledger/dora',
+      projectId: 'ledger',
+      path: '/tmp/ledger/dora'
+    })
+    const carol = workspaceView('carol', {
+      id: 'ledger/carol',
+      projectId: 'ledger',
+      path: '/tmp/ledger/carol'
+    })
+    let created = false
+    vi.mocked(window.octopus.workspaces.create).mockImplementation(() => {
+      created = true
+      return Promise.resolve({ ok: true, value: made })
+    })
+    vi.mocked(window.octopus.workspaces.list).mockImplementation((projectId: string) =>
+      Promise.resolve({
+        ok: true,
+        value: projectId === 'ledger' ? (created ? [carol, made] : [carol]) : []
+      })
+    )
+    const user = await openApp()
+    await user.click(await screen.findByRole('button', { name: 'LE' }))
+    await user.keyboard('{Meta>}{Shift>}N{/Shift}{/Meta}')
+    await waitFor(() => {
+      expect(screen.getByPlaceholderText(/Ask the agent/)).toHaveFocus()
+    })
+
+    await user.click(screen.getByText('carol'))
+    await user.click(screen.getByText('dora'))
+
+    expect(await screen.findByPlaceholderText(/Ask the agent/)).not.toHaveFocus()
+  })
+
+  /*
    * A project with no workspaces used to say "select a workspace" over an empty
    * list, and offered nothing to click: the button that makes one lives in the
    * sidebar's project header, which is not where someone who has just added a
@@ -1743,17 +1835,31 @@ describe('App', () => {
     await user.click(screen.getByRole('button', { name: 'Scripts' }))
     await user.click(await screen.findByText('anna'))
 
-    const sets = await screen.findByRole('group', {
+    // Two of them on screen — the empty conversation and the Run row — and a
+    // press on either has to move both, since they are one stored answer.
+    const switches = await screen.findAllByRole('group', {
       name: 'Set of variables this workspace runs with'
     })
-    await user.click(within(sets).getByRole('button', { name: 'prod' }))
-
-    await waitFor(() => {
-      expect(within(sets).getByRole('button', { name: 'prod' })).toHaveAttribute(
-        'aria-pressed',
-        'true'
-      )
+    expect(switches).toHaveLength(2)
+    const inChat = within(screen.getByRole('main')).getByRole('group', {
+      name: 'Set of variables this workspace runs with'
     })
+    const inRunRow = switches.find((one) => one !== inChat)
+    if (inRunRow === undefined) throw new Error('no switch in the Run row')
+
+    const pressedEverywhere = async (name: string): Promise<void> => {
+      await waitFor(() => {
+        for (const sets of switches) {
+          expect(within(sets).getByRole('button', { name })).toHaveAttribute('aria-pressed', 'true')
+        }
+      })
+    }
+
+    await user.click(within(inChat).getByRole('button', { name: 'prod' }))
+    await pressedEverywhere('prod')
+
+    await user.click(within(inRunRow).getByRole('button', { name: 'default' }))
+    await pressedEverywhere('default')
   })
 
   // A script is written for the first time in the project settings, so the

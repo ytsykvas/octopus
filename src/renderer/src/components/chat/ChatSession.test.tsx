@@ -37,6 +37,8 @@ interface PaneProps {
   readonly onDismissTip?: (id: string) => void
   /** Where a failure the strip owns is reported, as `App` reports it. */
   readonly onError?: (message: string | null) => void
+  readonly focusComposer?: boolean
+  readonly onWorkspacesChanged?: () => void
 }
 
 /**
@@ -60,7 +62,9 @@ function ChatPane({
   defaultPlanModel = null,
   dismissedTips = [],
   onDismissTip = vi.fn(),
-  onError = vi.fn()
+  onError = vi.fn(),
+  focusComposer = false,
+  onWorkspacesChanged = vi.fn()
 }: PaneProps): React.JSX.Element {
   const tabs = useChatTabs(target.id, vi.fn(), onError)
   const files = useFileTabs(target.id)
@@ -86,6 +90,9 @@ function ChatPane({
       defaultModel={defaultModel}
       defaultPlanModel={defaultPlanModel}
       onOpenSkillSettings={vi.fn()}
+      focusComposer={focusComposer}
+      projectEnvProfile="default"
+      onWorkspacesChanged={onWorkspacesChanged}
       dismissedTips={dismissedTips}
       onDismissTip={onDismissTip}
     />
@@ -201,6 +208,105 @@ describe('a workspace nobody has written in', () => {
     await openChat()
 
     expect(screen.getByRole('button', { name: /^Permissions:/ })).toBeEnabled()
+  })
+})
+
+describe('the environment a new task runs against', () => {
+  const SWITCH = 'Set of variables this workspace runs with'
+
+  /*
+   * The first message is where a task starts, and whether the work behind it
+   * runs against production or staging data is a question for that moment —
+   * not for after a build has already pulled the wrong dump.
+   */
+  it('offers the sets on the empty conversation', async () => {
+    vi.mocked(octopus().projects.envProfiles).mockResolvedValue({
+      ok: true,
+      value: { profiles: ['default', 'prod'], projectDefault: 'default' }
+    })
+    await openChat()
+
+    const sets = await screen.findByRole('group', { name: SWITCH })
+    expect(screen.getByText('Runs against')).toBeInTheDocument()
+    expect(within(sets).getByRole('button', { name: 'default' })).toHaveAttribute(
+      'aria-pressed',
+      'true'
+    )
+  })
+
+  it('puts the workspace on a set and has the list read again', async () => {
+    vi.mocked(octopus().projects.envProfiles).mockResolvedValue({
+      ok: true,
+      value: { profiles: ['default', 'prod'], projectDefault: 'default' }
+    })
+    const onWorkspacesChanged = vi.fn()
+    render(<ChatPane workspace={workspaceView('anna')} onWorkspacesChanged={onWorkspacesChanged} />)
+
+    const sets = await screen.findByRole('group', { name: SWITCH })
+    await userEvent.click(within(sets).getByRole('button', { name: 'prod' }))
+
+    expect(octopus().workspaces.setEnvProfile).toHaveBeenCalledWith('planner/anna', 'prod')
+    await waitFor(() => {
+      expect(onWorkspacesChanged).toHaveBeenCalled()
+    })
+  })
+
+  it('shows the set the workspace is already on', async () => {
+    vi.mocked(octopus().projects.envProfiles).mockResolvedValue({
+      ok: true,
+      value: { profiles: ['default', 'prod'], projectDefault: 'default' }
+    })
+    await openChat(workspaceView('anna', { envProfile: 'prod' }))
+
+    const sets = await screen.findByRole('group', { name: SWITCH })
+    expect(within(sets).getByRole('button', { name: 'prod' })).toHaveAttribute(
+      'aria-pressed',
+      'true'
+    )
+  })
+
+  it('says in the conversation why the workspace could not be moved', async () => {
+    vi.mocked(octopus().projects.envProfiles).mockResolvedValue({
+      ok: true,
+      value: { profiles: ['default', 'prod'], projectDefault: 'default' }
+    })
+    vi.mocked(octopus().workspaces.setEnvProfile).mockResolvedValue({ ok: false, error: 'nope' })
+    await openChat()
+
+    const sets = await screen.findByRole('group', { name: SWITCH })
+    await userEvent.click(within(sets).getByRole('button', { name: 'prod' }))
+
+    expect(await screen.findByText(/nope/)).toBeInTheDocument()
+  })
+
+  it('draws nothing for a project with a single set', async () => {
+    // `default` alone is what the stub answers: no choice, so no switch and no
+    // label promising one.
+    await openChat()
+    await waitFor(() => {
+      expect(octopus().projects.envProfiles).toHaveBeenCalled()
+    })
+
+    expect(screen.queryByRole('group', { name: SWITCH })).not.toBeInTheDocument()
+    expect(screen.queryByText('Runs against')).not.toBeInTheDocument()
+  })
+})
+
+describe('a workspace just made', () => {
+  // What somebody knows at this moment is the task, so the caret is already
+  // where it goes.
+  it('puts the caret in the composer', async () => {
+    render(<ChatPane workspace={workspaceView('anna')} focusComposer />)
+
+    await waitFor(() => {
+      expect(screen.getByPlaceholderText(/Ask the agent/)).toHaveFocus()
+    })
+  })
+
+  it('leaves the caret alone on any other visit', async () => {
+    await openChat()
+
+    expect(screen.getByPlaceholderText(/Ask the agent/)).not.toHaveFocus()
   })
 })
 

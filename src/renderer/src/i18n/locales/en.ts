@@ -980,6 +980,9 @@ export const en = {
     retracted: 'The agent took this back after the model declined the turn.',
 
     emptyTitle: 'Start the conversation',
+    /* Beside the switch on the empty conversation: which data the work about to
+       be asked for runs against. */
+    envLabel: 'Runs against',
     emptyBody:
       'The first message starts an agent session in this worktree. The branch already exists.',
 

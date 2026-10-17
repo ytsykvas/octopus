@@ -539,7 +539,7 @@ describe('useWorkspaces', () => {
   })
 
   describe('creating a workspace', () => {
-    it('opens the new workspace for renaming straight away', async () => {
+    it('answers with the new workspace, already in the list, and renames nothing', async () => {
       vi.mocked(window.octopus.workspaces.list)
         .mockResolvedValueOnce({ ok: true, value: [anna] })
         .mockResolvedValue({ ok: true, value: [anna, bob] })
@@ -552,15 +552,20 @@ describe('useWorkspaces', () => {
         expect(result.current.flat).toEqual([anna])
       })
 
-      await act(() => result.current.create('planner'))
+      let made: string | null = null
+      await act(async () => {
+        made = await result.current.create('planner')
+      })
 
       expect(window.octopus.workspaces.create).toHaveBeenCalledWith('planner')
+      expect(made).toBe('planner/bob')
       expect(result.current.flat).toEqual([anna, bob])
-      expect(result.current.editingId).toBe('planner/bob')
+      // The task goes into the conversation the window opens, not a name.
+      expect(result.current.editingId).toBeNull()
       expect(onError).not.toHaveBeenCalledWith(expect.any(String))
     })
 
-    it('explains a refused creation and leaves nothing being renamed', async () => {
+    it('explains a refused creation and answers with nothing to open', async () => {
       workspacesPerProject({ planner: [anna] })
       vi.mocked(window.octopus.workspaces.create).mockResolvedValue({
         ok: false,
@@ -576,10 +581,13 @@ describe('useWorkspaces', () => {
         expect(result.current.flat).toEqual([anna])
       })
 
-      await act(() => result.current.create('planner'))
+      let made: string | null = 'unset'
+      await act(async () => {
+        made = await result.current.create('planner')
+      })
 
       expect(onError).toHaveBeenCalledWith('A branch named ytsykvas/bob already exists.')
-      expect(result.current.editingId).toBeNull()
+      expect(made).toBeNull()
     })
 
     /*
@@ -606,7 +614,7 @@ describe('useWorkspaces', () => {
         expect(result.current.flat).toEqual([anna])
       })
 
-      let first: Promise<void> = Promise.resolve()
+      let first: Promise<string | null> = Promise.resolve(null)
       act(() => {
         first = result.current.create('planner')
       })
@@ -614,8 +622,12 @@ describe('useWorkspaces', () => {
         expect(result.current.creating).toBe(true)
       })
 
-      await act(() => result.current.create('planner'))
+      let second: string | null = 'unset'
+      await act(async () => {
+        second = await result.current.create('planner')
+      })
       expect(window.octopus.workspaces.create).toHaveBeenCalledTimes(1)
+      expect(second).toBeNull()
 
       await act(async () => {
         answer({ ok: true, value: bob })
@@ -647,14 +659,15 @@ describe('useWorkspaces', () => {
 
     it('stops the rename when the editor is closed', async () => {
       workspacesPerProject({ planner: [anna] })
-      vi.mocked(window.octopus.workspaces.create).mockResolvedValue({ ok: true, value: anna })
       const projects = [planner]
 
       const { result } = renderHook(() => useWorkspaces(projects, accepts(), vi.fn<OnError>()))
       await waitFor(() => {
         expect(result.current.flat).toEqual([anna])
       })
-      await act(() => result.current.create('planner'))
+      act(() => {
+        result.current.setEditingId('planner/anna')
+      })
       expect(result.current.editingId).toBe('planner/anna')
 
       act(() => {

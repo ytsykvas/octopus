@@ -49,6 +49,9 @@ function Pane({ workspace = WORKSPACE }: { workspace?: WorkspaceView }): React.J
         onOpenSkillSettings={vi.fn()}
         dismissedTips={[]}
         onDismissTip={vi.fn()}
+        focusComposer={false}
+        projectEnvProfile="default"
+        onWorkspacesChanged={vi.fn()}
       />
       {/* What the right pane's tree does, reduced to a button. */}
       <button
