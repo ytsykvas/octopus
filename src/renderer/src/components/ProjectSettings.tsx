@@ -973,9 +973,9 @@ function IconChoice({
       // two letters inside it, which says nothing about what clicking it does.
       aria-label={label}
       aria-pressed={selected}
-      // The same 36px the tab is: the cell is a preview of it, and a picture
+      // The same 40px the tab is: the cell is a preview of it, and a picture
       // picked at half the size it will be worn is picked half blind.
-      className={`focus-ring flex size-9 items-center justify-center rounded-[var(--radius-control)] transition-colors ${
+      className={`focus-ring flex size-10 items-center justify-center rounded-[var(--radius-control)] transition-colors ${
         selected ? '' : 'text-ink-soft hover:bg-muted hover:text-ink'
       }`}
       style={

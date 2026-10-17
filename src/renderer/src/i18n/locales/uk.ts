@@ -14,6 +14,7 @@ export const uk: Translation = {
   sidebar: {
     empty: 'Поки порожньо. Додайте репозиторій кнопкою «+».',
     addProject: 'Додати репозиторій',
+    projectDone: 'Агент тут закінчив, поки вас не було',
     addFromDisk: 'З диска…',
     addFromDiskHint: 'Репозиторій, який уже є на цьому комп’ютері',
     addFromGitHubHint: 'Клонувати з вашого акаунта GitHub',

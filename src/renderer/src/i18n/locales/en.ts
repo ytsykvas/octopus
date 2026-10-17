@@ -12,6 +12,8 @@ export const en = {
   sidebar: {
     empty: 'Nothing here yet. Add a repository with the "+" button.',
     addProject: 'Add repository',
+    // The dot on a project's tab when one of its agents finished out of sight.
+    projectDone: 'An agent finished here while you were away',
     addFromDisk: 'From disk…',
     addFromDiskHint: 'A repository already on this machine',
     addFromGitHubHint: 'Clone one from your GitHub account',
