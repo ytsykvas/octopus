@@ -54,6 +54,7 @@ describe('a new chat', () => {
       status: 'idle',
       title: null,
       sessionId: null,
+      resumeAt: null,
       model: null,
       planModel: null,
       planEffort: null,
@@ -714,6 +715,7 @@ describe('a conversation continuing another', () => {
     status: 'running',
     title: null,
     sessionId: 'session-old',
+    resumeAt: null,
     model: 'opus',
     planModel: 'sonnet',
     planEffort: 'xhigh',
@@ -770,6 +772,20 @@ describe('a conversation continuing another', () => {
   it('does not inherit planning, nor a turn in flight', () => {
     expect(forked.planMode).toBe(false)
     expect(forked.status).toBe('idle')
+  })
+
+  /*
+   * A cut the source was still waiting to apply names a message in the source's
+   * session. The fork's session was cut there already and renumbered, so the
+   * id is not in it — and resuming at an id a session does not hold fails.
+   */
+  it('does not inherit a cut still waiting to be applied', () => {
+    const waiting = forkChat(
+      { ...source, resumeAt: 'answer-1' },
+      { id: 'chat-3', sessionId: 'session-new', createdAt: '2026-08-11T10:00:00.000Z' }
+    )
+
+    expect(waiting.resumeAt).toBeNull()
   })
 
   // Two tabs called "auth refactor" is a strip that cannot be read.

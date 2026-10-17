@@ -1,10 +1,11 @@
 import { MessageSquarePlus, X } from 'lucide-react'
-import { useRef, useState } from 'react'
+import { useRef } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import type { DiffLine } from '@core/diff.js'
 
 import type { CommentAnchor, DiffComment } from '../../hooks/useDiffComments.js'
+import { NoteEditor } from '../NoteEditor.js'
 
 /** What a row needs to offer a note, hold one, and give it back. */
 export interface CommentSurface {
@@ -136,7 +137,9 @@ export function CommentedRow({
       )}
 
       {editing !== null && open && (
-        <Editor
+        <NoteEditor
+          className="border-line bg-canvas ml-14 border-l-2 px-2 py-1.5"
+          placeholder={t('diff.commentPlaceholder')}
           // The draft wins over the saved text: it is the later of the two, and
           // it is only ever set while this very note is being written.
           initial={comments.readDraft(editing) ?? held?.text ?? ''}
@@ -181,70 +184,6 @@ function Note({
       >
         <X aria-hidden size={12} />
       </button>
-    </div>
-  )
-}
-
-/** Writing one. ⌘Enter saves, Escape leaves the line as it was. */
-function Editor({
-  initial,
-  onChange,
-  onSave,
-  onCancel
-}: {
-  readonly initial: string
-  readonly onChange: (text: string) => void
-  readonly onSave: (text: string) => void
-  readonly onCancel: () => void
-}): React.JSX.Element {
-  const { t } = useTranslation()
-  const [text, setText] = useState(initial)
-
-  const trimmed = text.trim()
-
-  const save = (): void => {
-    if (trimmed !== '') onSave(trimmed)
-  }
-
-  return (
-    <div className="border-line bg-canvas ml-14 flex flex-col gap-1 border-l-2 px-2 py-1.5">
-      <textarea
-        // Focused on arrival: the trigger was a click that says "write here",
-        // and a field that then waits to be clicked again says otherwise.
-        autoFocus
-        value={text}
-        onChange={(event) => {
-          setText(event.target.value)
-          onChange(event.target.value)
-        }}
-        onKeyDown={(event) => {
-          if (event.key === 'Escape') onCancel()
-          if (event.key === 'Enter' && (event.metaKey || event.ctrlKey)) save()
-        }}
-        placeholder={t('diff.commentPlaceholder')}
-        aria-label={t('diff.commentPlaceholder')}
-        rows={2}
-        className="input h-auto resize-none py-1 leading-relaxed"
-      />
-      <div className="flex justify-end gap-1">
-        <button
-          type="button"
-          onClick={onCancel}
-          className="focus-ring text-ink-soft hover:text-ink rounded-[var(--radius-control)] px-2 py-0.5"
-        >
-          {t('diff.commentCancel')}
-        </button>
-        <button
-          type="button"
-          onClick={save}
-          // An empty note has nothing to send, and a button that accepts the
-          // click and does nothing is worse than one that says it cannot.
-          disabled={trimmed === ''}
-          className="focus-ring bg-accent text-on-accent hover:bg-accent-hover rounded-[var(--radius-control)] px-2 py-0.5 disabled:opacity-40"
-        >
-          {t('diff.commentSave')}
-        </button>
-      </div>
     </div>
   )
 }

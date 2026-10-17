@@ -148,6 +148,8 @@ export function useErrorMessage(): (failure: Failure) => string {
           return t('errors.forkFailed')
         case 'rewindBusy':
           return t('errors.rewindBusy')
+        case 'rewindInProgress':
+          return t('errors.rewindInProgress')
         case 'chatClosed':
           return t('errors.chatClosed')
         case 'rewindUnavailable':

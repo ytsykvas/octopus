@@ -417,6 +417,9 @@ describe('channel table', () => {
     'workspaces:resolveReviewThread',
     'files:open',
     'files:search',
+    'files:tree',
+    'files:directory',
+    'files:read',
     'chats:list',
     'chats:open',
     'chats:create',
@@ -1996,6 +1999,46 @@ describe('workspaces of a real project', () => {
     })
   })
 
+  it('reads the file tree, a folder and a file of a workspace', async () => {
+    const projectId = await addProject()
+    const workspace = await createWorkspace(projectId)
+    await mkdir(join(workspace.path, 'node_modules'))
+    await writeFile(join(workspace.path, 'node_modules', 'a.js'), '', 'utf8')
+
+    await expect(invoke('files:tree', workspace.id)).resolves.toMatchObject({
+      ok: true,
+      value: { statuses: {}, truncated: false }
+    })
+    await expect(invoke('files:directory', workspace.id, 'node_modules')).resolves.toEqual({
+      ok: true,
+      value: { entries: [{ name: 'a.js', kind: 'file' }], truncated: false }
+    })
+    await expect(invoke('files:read', workspace.id, 'README.md')).resolves.toMatchObject({
+      ok: true,
+      value: { kind: 'text' }
+    })
+  })
+
+  // Refused at the boundary before the service sees it; the service then
+  // refuses what climbs out, which is a different check.
+  it('refuses a folder or file path that is empty, not a string, or outside', async () => {
+    const projectId = await addProject()
+    const workspace = await createWorkspace(projectId)
+
+    for (const channel of ['files:directory', 'files:read']) {
+      expect(await invoke(channel, workspace.id, '')).toMatchObject({ ok: false })
+      expect(await invoke(channel, workspace.id, 42)).toMatchObject({ ok: false })
+    }
+    expect(await invoke('files:directory', workspace.id, '../..')).toMatchObject({
+      ok: false,
+      code: 'worktreeMissing'
+    })
+    expect(await invoke('files:read', workspace.id, '../../../etc/passwd')).toMatchObject({
+      ok: true,
+      value: { kind: 'missing' }
+    })
+  })
+
   it('refuses a path that is not a string at all', async () => {
     const projectId = await addProject()
     const workspace = await createWorkspace(projectId)
@@ -2146,6 +2189,22 @@ describe('the agent chat', () => {
   })
 
   describe('putting the files back to a message', () => {
+    // What to put back comes from the window too, and only three answers mean
+    // anything.
+    it('refuses a choice it does not know', async () => {
+      const projectId = await addProject()
+      const workspace = await createWorkspace(projectId)
+      const opened = (await invoke('chats:open', workspace.id)) as {
+        ok: true
+        value: { id: string }
+      }
+      const stranger = '00000000-0000-4000-8000-000000000000'
+
+      const refused = await invoke('chats:rewind', opened.value.id, stranger, 'everything')
+      expect(refused).toMatchObject({ ok: false })
+      expect(refused).not.toMatchObject({ code: 'rewindUnavailable' })
+    })
+
     // The id names a point in a conversation, and comes from the window.
     it('refuses an id that is not a uuid', async () => {
       const projectId = await addProject()
@@ -2155,7 +2214,7 @@ describe('the agent chat', () => {
         value: { id: string }
       }
 
-      expect(await invoke('chats:rewind', opened.value.id, 'not-a-uuid')).toMatchObject({
+      expect(await invoke('chats:rewind', opened.value.id, 'not-a-uuid', 'files')).toMatchObject({
         ok: false
       })
       expect(await invoke('chats:rewindPreview', opened.value.id, 42)).toMatchObject({
@@ -2173,7 +2232,9 @@ describe('the agent chat', () => {
       }
       const stranger = '00000000-0000-4000-8000-000000000000'
 
-      await expect(invoke('chats:rewind', opened.value.id, stranger)).resolves.toMatchObject({
+      await expect(
+        invoke('chats:rewind', opened.value.id, stranger, 'both')
+      ).resolves.toMatchObject({
         ok: false,
         code: 'rewindUnavailable'
       })
@@ -2571,7 +2632,12 @@ describe('the agent chat', () => {
 
     const opened = await invoke('chats:open', workspace.id)
 
-    await invoke('chats:send', chatIdOf(opened), 'hello')
+    // Answered with the id the message was sent under, which is what lets the
+    // line already drawn be rewound before the history is read again.
+    await expect(invoke('chats:send', chatIdOf(opened), 'hello')).resolves.toEqual({
+      ok: true,
+      value: expect.stringMatching(/^[0-9a-f-]{36}$/) as unknown
+    })
 
     await vi.waitFor(() => {
       expect(bench.chatEvents.map((entry) => entry.event)).toContainEqual({

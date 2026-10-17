@@ -1,12 +1,14 @@
+import { type CodeNote, codeNoteKey } from '../../hooks/useCodeNotes.js'
 import type { DiffComment } from '../../hooks/useDiffComments.js'
 import { anchorKey } from '../../hooks/useDiffComments.js'
+import { codeReference } from '../codeReference.js'
 import type { PullRequestQuote } from '../../hooks/usePullRequestQuotes.js'
 
 /**
  * Something riding out with the next message.
  *
- * Two kinds now: a note written against the diff, and a remark carried in from
- * a review on GitHub. A union rather than one record with nullable extras,
+ * Three kinds: a note written against the diff, one written on lines of a
+ * file in the viewer, and a remark carried in from a review on GitHub. A union rather than one record with nullable extras,
  * because the two are identified differently — a note by where it is, a remark
  * by the id GitHub gave it — and a single shape would have to answer for a note
  * with an id and no line.
@@ -16,26 +18,39 @@ import type { PullRequestQuote } from '../../hooks/usePullRequestQuotes.js'
  * it can never hold would put an unreachable guard in each of those places.
  */
 export type ChatNote =
-  ({ readonly kind: 'diff' } & DiffComment) | ({ readonly kind: 'pullRequest' } & PullRequestQuote)
+  | ({ readonly kind: 'diff' } & DiffComment)
+  | ({ readonly kind: 'code' } & CodeNote)
+  | ({ readonly kind: 'pullRequest' } & PullRequestQuote)
 
-/** What makes it the same note, across both kinds and both namespaces. */
+/** What makes it the same note, across every kind and namespace. */
 export function noteKey(note: ChatNote): string {
-  return note.kind === 'diff' ? `diff:${anchorKey(note)}` : `pr:${note.key}`
+  switch (note.kind) {
+    case 'diff':
+      return `diff:${anchorKey(note)}`
+    case 'code':
+      return `code:${codeNoteKey(note)}`
+    case 'pullRequest':
+      return `pr:${note.key}`
+  }
 }
 
 /**
- * The two queues as one list, in the order they go out.
+ * The queues as one list, in the order they go out.
  *
  * Diff notes first, because they are about the change being made and the review
  * is about the change as somebody else read it — and a message that answers a
  * reviewer usually ends with the code it is about, not the other way round.
+ * Notes from the viewer sit between: remarks on the code, like the diff's, but
+ * not necessarily on what changed.
  */
 export function mergeNotes(
   comments: readonly DiffComment[],
-  quotes: readonly PullRequestQuote[]
+  quotes: readonly PullRequestQuote[],
+  code: readonly CodeNote[] = []
 ): ChatNote[] {
   return [
     ...comments.map((comment) => ({ kind: 'diff' as const, ...comment })),
+    ...code.map((note) => ({ kind: 'code' as const, ...note })),
     ...quotes.map((quote) => ({ kind: 'pullRequest' as const, ...quote }))
   ]
 }
@@ -85,10 +100,13 @@ export function withNotes(
   if (notes.length === 0 && files.length === 0) return text
 
   const diff = notes.filter((note) => note.kind === 'diff')
+  const code = notes.filter((note) => note.kind === 'code')
   const review = notes.filter((note) => note.kind === 'pullRequest')
 
   // One introduction per kind that is present, rather than one per note: two
-  // headings over a list of six is a shape, six is noise.
+  // headings over a list of six is a shape, six is noise. Notes from the viewer
+  // have none: a path, its lines and the code quoted under them say what they
+  // are, and a heading over lines sent without a word only got in their way.
   const parts = [
     // Files first, and the notes after them: an attachment is usually what the
     // message is about, while a note is a remark on work already there.
@@ -96,6 +114,7 @@ export function withNotes(
     ...(diff.length === 0
       ? []
       : [intros.diff, ...diff.map((note) => fromDiff(note, intros.oldSide))]),
+    ...code.map(fromCode),
     ...(review.length === 0 ? [] : [intros.pullRequest, ...review.map(fromReview)]),
     // The typed message last, so the agent reads the notes and then what to do
     // with them — and an empty one leaves no trailing blank lines behind.
@@ -124,9 +143,20 @@ export function withNotes(
  * recorded rather than resolved.
  */
 function fromDiff(note: { readonly kind: 'diff' } & DiffComment, oldSide: string): string {
-  const where = `${note.path}:${lineRange(note)}${note.side === 'old' ? ` ${oldSide}` : ''}`
+  const where = `${codeReference(note.path, note.line, note.endLine)}${note.side === 'old' ? ` ${oldSide}` : ''}`
 
   return `${where}\n${blockQuote(note.code)}\n${note.text}`
+}
+
+/**
+ * A note from the viewer, in the diff note's shape without a side: the viewer
+ * shows the file as it stands. A note with no words is the reference and the
+ * lines alone, with no empty line left after them.
+ */
+function fromCode(note: { readonly kind: 'code' } & CodeNote): string {
+  const head = `${codeReference(note.path, note.line, note.endLine)}\n${blockQuote(note.code)}`
+
+  return note.text === '' ? head : `${head}\n${note.text}`
 }
 
 /**
@@ -144,13 +174,6 @@ function fromReview(note: { readonly kind: 'pullRequest' } & PullRequestQuote): 
   return [heading, note.quote === null ? null : blockQuote(note.quote), note.body]
     .filter((part) => part !== null && part !== '')
     .join('\n')
-}
-
-/** `42` for a note on one line, `42-47` for one covering a passage. */
-function lineRange(comment: DiffComment): string {
-  return comment.line === comment.endLine
-    ? String(comment.line)
-    : `${String(comment.line)}-${String(comment.endLine)}`
 }
 
 /**

@@ -29,6 +29,7 @@ import type { WorkspaceView } from '@core/workspaces.js'
 
 import { Button } from './Button.js'
 import { DiffPanel } from './diff/DiffPanel.js'
+import { FilesPanel } from './files/FilesPanel.js'
 import { NotesPanel } from './NotesPanel.js'
 import { DropdownMenu } from './DropdownMenu.js'
 import { EnvProfileSwitch } from './EnvProfileSwitch.js'
@@ -47,12 +48,17 @@ import { WorkspaceTerminals } from './WorkspaceTerminals.js'
 const TABS: readonly {
   readonly id: RightPanelTab
   readonly labelKey:
-    'panel.changes' | 'panel.terminal' | 'panel.scripts' | 'panel.pullRequest' | 'panel.notes'
+    | 'panel.files'
+    | 'panel.changes'
+    | 'panel.terminal'
+    | 'panel.scripts'
+    | 'panel.pullRequest'
+    | 'panel.notes'
   /**
    * Drawn instead of the label, where there is one.
    *
-   * Only the notes tab has one, and the reason is the measurement below: the
-   * row sets the pane's narrowest allowed width, so a fifth **word** would
+   * The tools at the two ends have one, and the reason is the measurement
+   * below: the row sets the pane's narrowest allowed width, so another **word** would
    * widen the floor for everybody for ever. An icon costs about a third of it.
    * The label is still what names the button — it moves to `aria-label` and
    * `title` rather than disappearing.
@@ -60,14 +66,17 @@ const TABS: readonly {
   readonly Icon?: LucideIcon
 }[] = [
   /*
-   * An icon, three words, an icon.
+   * An icon, four words, an icon.
    *
-   * The two ends are the tools somebody reaches for — a shell and a scratchpad
-   * — and the three in the middle are about the work itself, which is what the
-   * words are worth spending the width on. Icons between words would read as a
-   * mistake; at the ends they read as what they are.
+   * The ends are the tools somebody reaches for — a shell on one side, a
+   * scratchpad on the other — and the four in the middle are about the work
+   * itself, which is what the words are worth spending the width on. Icons
+   * between words would read as a mistake; at the ends they read as what they
+   * are. Files is a word, beside the shell: a tree icon was too easy to miss
+   * for the tab most of the browsing starts in.
    */
   { id: 'terminal', labelKey: 'panel.terminal', Icon: SquareTerminal },
+  { id: 'files', labelKey: 'panel.files' },
   { id: 'diff', labelKey: 'panel.changes' },
   { id: 'scripts', labelKey: 'panel.scripts' },
   { id: 'pullRequest', labelKey: 'panel.pullRequest' },
@@ -190,6 +199,14 @@ interface RightPanelProps {
   readonly width: number
   /** Persists the width; called when a drag ends, not during it. */
   readonly onWidthChange: (width: number) => void
+  /**
+   * Whether the pane is showing. Folded, it is hidden rather than unmounted:
+   * its terminals and the servers running in them belong to their workspaces,
+   * and unmounting is how a terminal is ended.
+   */
+  readonly open: boolean
+  /** Asked for by a drag past the floor, which folds the pane, and back. */
+  readonly onOpenChange: (open: boolean) => void
   /** The project strip plus the workspace list, or just the strip when folded. */
   readonly leftWidth: number
   /** How the reader asked for diffs to be laid out, across sessions. */
@@ -216,6 +233,12 @@ interface RightPanelProps {
   readonly onRequestChanged: () => void
   /** Removes a workspace, asking first — the sidebar's own flow, by id. */
   readonly onRemoveWorkspace: (workspaceId: string) => void
+  /** The file tab in front of the centre, which the Files tab marks; null when a chat is. */
+  readonly activeFilePath: string | null
+  /** Opens a file from the Files tab in the centre, as a preview or kept open. */
+  readonly onOpenFile: (path: string, pinned: boolean) => void
+  /** Brings the conversation in front of any open file, before a prompt is sent to it. */
+  readonly onConversation: () => void
   readonly onError: (message: string | null) => void
 }
 
@@ -237,6 +260,8 @@ export function RightPanel({
   chatId,
   width,
   onWidthChange,
+  open,
+  onOpenChange,
   leftWidth,
   diffView,
   onDiffView,
@@ -248,6 +273,9 @@ export function RightPanel({
   envFile,
   onRequestChanged,
   onRemoveWorkspace,
+  activeFilePath,
+  onOpenFile,
+  onConversation,
   onError
 }: RightPanelProps): React.JSX.Element {
   const { t, i18n } = useTranslation()
@@ -497,15 +525,10 @@ export function RightPanel({
   const tabs = useRef<HTMLDivElement>(null)
 
   /*
-   * The width the pane last settled on, and the window it settled at.
-   *
-   * One fact in two numbers, because either alone says nothing: what the pane
-   * takes is what it was given plus everything the window has gained or lost
-   * since. Held rather than accumulated — a running total drifts out of step
-   * with the ceiling beside it, and would need a reset nobody would remember.
+   * The width the pane last settled on — dragged, nudged, or read from the
+   * config. The window never moves it; see `applied` below.
    */
   const [settledWidth, setSettledWidth] = useState(width)
-  const [settledWindow, setSettledWindow] = useState(windowWidth)
   /*
    * The stored width as this last saw it.
    *
@@ -525,8 +548,10 @@ export function RightPanel({
   if (width !== storedWidth) {
     setStoredWidth(width)
     setSettledWidth(width)
-    setSettledWindow(windowWidth)
   }
+
+  // Folded, no tab is on screen, so none of them reads git or the disk.
+  const showing = open ? tab : null
 
   const active = workspaces.find((workspace) => workspace.id === activeWorkspaceId) ?? null
 
@@ -560,36 +585,34 @@ export function RightPanel({
     }
   }, [])
 
-  // Re-measured on a language change, which is when the labels get longer.
+  // Re-measured on a language change, which is when the labels get longer —
+  // and on unfolding, since a pane that started folded measured its tabs while
+  // they had no size at all and would otherwise keep a floor of nothing.
   useEffect(() => {
     const row = tabs.current
     // Attached before effects run; guarded only because the ref's type admits null.
     /* v8 ignore next */
     if (!row) return
 
+    if (!open) return
+
     setMinWidth(Math.max(MIN_WIDTH, measureTabs(row)))
-  }, [i18n.language])
+  }, [i18n.language, open])
 
   const maxWidth = maxWidthFor(windowWidth, leftWidth, minWidth)
 
   /*
-   * What the pane takes if nothing stops it.
+   * The pane keeps the width it was given, and the window's edge moves the
+   * centre — the way a sidebar behaves in most desktop applications. It used to
+   * be the other way round: the pane took every pixel the window gained or
+   * lost, on the grounds that the conversation stops widening at 72rem. It
+   * read as the pane having a mind of its own, so it went.
    *
-   * Dragging the window's own edge drags this pane's edge with it, and the
-   * centre keeps the width it had. The centre is the pane with no width of its
-   * own, so until now it absorbed every pixel the window gained or lost — and
-   * the conversation stops widening at 72rem, so what it absorbed was margin,
-   * while the diff and the terminal stayed as narrow as they started.
-   *
-   * Measured from the window rather than accumulated, which is what makes it
-   * symmetrical for free: put the window back where it was and the two
-   * subtractions cancel, so the pane is back where it was too, with nothing
-   * having had to remember the journey.
+   * Clamped on the way out rather than into what was settled: once the centre
+   * is down to its floor the pane gives way, and a width the window has no
+   * room for is kept and comes back when the room does.
    */
-  const grown = settledWidth + (windowWidth - settledWindow)
-  // Clamped on the way out rather than into what was settled, so a width the
-  // window has no room for is kept and comes back when the room does.
-  const applied = Math.min(Math.max(dragWidth ?? grown, minWidth), maxWidth)
+  const applied = Math.min(Math.max(dragWidth ?? settledWidth, minWidth), maxWidth)
 
   return (
     <section
@@ -600,7 +623,10 @@ export function RightPanel({
         // reach for it later.
         ...(color ? ({ '--project-color': `var(--project-${color})` } as React.CSSProperties) : {})
       }}
-      className="border-line bg-surface relative flex shrink-0 flex-col border-l"
+      // Hidden, never unmounted — see `open`. `aria-hidden` beside the class,
+      // as the tabs below do it: the class means nothing without a stylesheet.
+      aria-hidden={!open}
+      className={`border-line bg-surface relative flex shrink-0 flex-col border-l ${open ? '' : 'hidden'}`}
     >
       {/* Outside every tab pane, where the other dialogs of the app are.
           Mounted inside one, it survived a tab change — the pane is hidden with
@@ -621,14 +647,15 @@ export function RightPanel({
         min={minWidth}
         max={maxWidth}
         onResize={setDragWidth}
+        onFold={(folded) => {
+          onOpenChange(!folded)
+        }}
         onCommit={(committed) => {
           setDragWidth(null)
           // Settled here rather than waiting for the config to answer. That
           // round trip takes a frame or two, and falling back to the pre-drag
-          // width in the meantime makes the release bounce — worse, growth
-          // would be measured from the old window and counted twice.
+          // width in the meantime makes the release bounce.
           setSettledWidth(committed)
-          setSettledWindow(windowWidth)
           // `storedWidth` is deliberately left alone: it is what the config
           // says, and the config has not said it yet. So a save that fails
           // leaves the pane where it was dragged while the config keeps the old
@@ -691,6 +718,21 @@ export function RightPanel({
         ))}
       </div>
 
+      {/* Hidden rather than unmounted, like the rest: which folders were open
+          and where the tree was scrolled are what a look elsewhere must not
+          cost. `visible` is what stops it reading git meanwhile. */}
+      <div
+        aria-hidden={tab !== 'files'}
+        className={`flex min-h-0 flex-1 flex-col ${tab === 'files' ? '' : 'hidden'}`}
+      >
+        <FilesPanel
+          workspace={active}
+          visible={showing === 'files'}
+          activePath={activeFilePath}
+          onOpen={onOpenFile}
+        />
+      </div>
+
       {/* Hidden, never unmounted: a session belongs to the workspace, not to
           whether its tab happens to be on screen. Switching to Changes used to
           kill every terminal in the project. */}
@@ -701,7 +743,7 @@ export function RightPanel({
         <WorkspaceTerminals
           workspaces={workspaces}
           activeId={activeWorkspaceId}
-          visible={tab === 'terminal'}
+          visible={showing === 'terminal'}
         />
       </div>
 
@@ -720,7 +762,7 @@ export function RightPanel({
       >
         <DiffPanel
           workspace={active}
-          visible={tab === 'diff'}
+          visible={showing === 'diff'}
           view={diffView}
           onView={onDiffView}
           width={applied}
@@ -1068,7 +1110,7 @@ export function RightPanel({
               activeId={activeWorkspaceId}
               kind="setup"
               scriptFor={(id) => scripts.get(id)?.scripts.setup ?? null}
-              visible={tab === 'scripts'}
+              visible={showing === 'scripts'}
               projectFor={projectFor}
               onOpenSettings={onEditScripts}
               tokenFor={(id) => sequence.runOf(id).build}
@@ -1102,7 +1144,7 @@ export function RightPanel({
             activeId={activeWorkspaceId}
             kind="run"
             scriptFor={(id) => scripts.get(id)?.scripts.run ?? null}
-            visible={tab === 'scripts'}
+            visible={showing === 'scripts'}
             projectFor={projectFor}
             onOpenSettings={onEditScripts}
             tokenFor={(id) => sequence.runOf(id).server}
@@ -1130,7 +1172,7 @@ export function RightPanel({
       >
         <PullRequestPanel
           workspace={active}
-          visible={tab === 'pullRequest'}
+          visible={showing === 'pullRequest'}
           chatId={chatId}
           quotes={quotes}
           envFile={envFile}
@@ -1138,6 +1180,7 @@ export function RightPanel({
           onEditInstructions={onEditInstructions}
           onError={onError}
           onRemoveWorkspace={onRemoveWorkspace}
+          onConversation={onConversation}
         />
       </div>
       {/* The note is the one thing a workspace carries that the agent never

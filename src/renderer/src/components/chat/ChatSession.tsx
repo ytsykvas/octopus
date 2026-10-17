@@ -10,21 +10,26 @@ import { Placeholder } from '../Placeholder.js'
 import { useAttachments } from '../../hooks/useAttachments.js'
 import { useChat } from '../../hooks/useChat.js'
 import type { ChatTab } from '../../hooks/useChatTabs.js'
+import type { CodeNoteController } from '../../hooks/useCodeNotes.js'
 import type { DiffCommentController } from '../../hooks/useDiffComments.js'
 import type { PullRequestQuoteController } from '../../hooks/usePullRequestQuotes.js'
 import { type ChatNote, mergeNotes } from './attachments.js'
 import { useErrorMessage } from '../../hooks/useErrorMessage.js'
 import { useCommands } from '../../hooks/useCommands.js'
 import { useEnvProfiles } from '../../hooks/useEnvProfiles.js'
-import { useConfirm } from '../../hooks/useConfirm.js'
+import { useDayAtTop } from '../../hooks/useDayAtTop.js'
 import { useModels } from '../../hooks/useModels.js'
 import { useRateLimit } from '../../hooks/useRateLimit.js'
+import { useRewindChoice } from '../../hooks/useRewindChoice.js'
 import { useSessionUsage } from '../../hooks/useSessionUsage.js'
 import { useSkills } from '../../hooks/useSkills.js'
 import { ChatLog } from './ChatLog.js'
+import { DayChip } from './DayChip.js'
 import { Composer } from './Composer.js'
+import { HeadsUp } from './HeadsUp.js'
 import { PlanDialog } from './PlanDialog.js'
 import { TodoPanel } from './TodoPanel.js'
+import { currentTip } from './tips.js'
 import { planTitle, readPlan } from './toolSummary.js'
 
 interface ChatSessionProps {
@@ -59,6 +64,11 @@ interface ChatSessionProps {
   /** Remarks carried in from the review on this branch's pull request. */
   readonly quotes: PullRequestQuoteController
   /**
+   * Notes written in the file viewer. Unlike the two above these are aimed:
+   * this conversation shows and sends only the ones addressed to its tab.
+   */
+  readonly codeNotes: CodeNoteController
+  /**
    * What the settings say a new conversation starts with.
    *
    * Passed in rather than read here because the footer has to name what
@@ -79,6 +89,10 @@ interface ChatSessionProps {
   readonly projectEnvProfile: string
   /** The workspace's record changed, and the list should be read again. */
   readonly onWorkspacesChanged: () => void
+  /** Heads-ups the user said they already knew, from the settings. */
+  readonly dismissedTips: readonly string[]
+  /** "I knew this" on a heads-up — kept in the settings, for every conversation. */
+  readonly onDismissTip: (id: string) => void
 }
 
 /**
@@ -98,6 +112,7 @@ export function ChatSession({
   onDraftLeave,
   comments,
   quotes,
+  codeNotes,
   defaultWorkingMode,
   defaultEffort,
   defaultModel,
@@ -105,7 +120,9 @@ export function ChatSession({
   onOpenSkillSettings,
   focusComposer,
   projectEnvProfile,
-  onWorkspacesChanged
+  onWorkspacesChanged,
+  dismissedTips,
+  onDismissTip
 }: ChatSessionProps): React.JSX.Element {
   const { t } = useTranslation()
 
@@ -117,7 +134,10 @@ export function ChatSession({
   // one place it says things.
   const [notice, setNotice] = useState<string | null>(null)
   const attachments = useAttachments(setNotice)
-  const { confirm, dialog: confirmDialog } = useConfirm()
+  const { choose: chooseRewind, dialog: rewindDialog } = useRewindChoice()
+  /* A rewound message on its way back into the composer. The id is what makes
+     the same text handed back twice a second instruction rather than nothing. */
+  const [seed, setSeed] = useState<{ text: string; id: number } | undefined>(undefined)
   // A plan the user is rewriting, by the request it belongs to. Kept here so
   // that looking at another tab does not throw the edits away.
   const [planEdit, setPlanEdit] = useState<{ requestId: string; text: string } | null>(null)
@@ -145,6 +165,18 @@ export function ChatSession({
   // transcript, and it is asked on every render of a pane that re-renders on
   // every streamed token.
   const todos = useMemo(() => latestTodos(chat.entries) ?? [], [chat.entries])
+
+  // Closed here without "I knew this": gone from this conversation while its
+  // workspace is open, and back once `App` rebuilds the pane for another one —
+  // which is the difference between the two buttons.
+  const [closedTips, setClosedTips] = useState<ReadonlySet<string>>(new Set())
+  /* Only between turns: one arriving mid-turn would push the field up while
+     the agent is still writing, and the moment it is worth reading is when
+     the next message is about to be typed. */
+  const tip = useMemo(
+    () => (chat.busy ? null : currentTip(chat.entries, new Set([...dismissedTips, ...closedTips]))),
+    [chat.busy, chat.entries, dismissedTips, closedTips]
+  )
 
   // A refusal is no suggestions rather than a message: the list is a
   // convenience, and an error banner over a half-typed `@` would be the louder
@@ -202,6 +234,7 @@ export function ChatSession({
 
   const scroller = useRef<HTMLDivElement | null>(null)
   const pinnedToBottom = useRef(true)
+  const dayAtTop = useDayAtTop(scroller)
 
   // Answered here rather than in the log because this is where the pending
   // request and the composer's mode meet — the plan's approval decides what the
@@ -214,12 +247,13 @@ export function ChatSession({
   const record = chat.chat
 
   /*
-   * Puts the files back to how they were when a message was sent.
+   * Rewinds to before a message: the conversation, the files, or both.
    *
-   * Asked in two steps, and the first changes nothing: the agent is asked what
-   * it *would* do, so the question the user answers has the numbers in it. The
-   * second repeats the call for real. A rewind overwrites files — including any
-   * the user edited since — so it is never taken on a click alone.
+   * Asked in two steps, and the first changes nothing: what each half *would*
+   * do is fetched first, so the choice the user makes has the numbers and the
+   * reasons in it. A rewind can overwrite files — including any the user
+   * edited since — and drop part of the conversation, so it is never taken on
+   * a click alone.
    */
   const recordId = record?.id ?? null
   const rewind = async (messageId: string): Promise<void> => {
@@ -235,28 +269,25 @@ export function ChatSession({
       return
     }
 
-    const files = preview.value.filesChanged.length
-    if (files === 0) {
-      setNotice(t('chat.rewindNothing'))
+    const scope = await chooseRewind(preview.value)
+    if (scope === null) return
+
+    const done = await window.octopus.chats.rewind(recordId, messageId, scope)
+    if (!done.ok) {
+      setNotice(describeFailure(done))
       return
     }
 
-    const answer = await confirm({
-      title: t('chat.rewindTitle'),
-      message: t('chat.rewindMessage', {
-        count: files,
-        insertions: preview.value.insertions,
-        deletions: preview.value.deletions
-      }),
-      detail: t('chat.rewindDetail'),
-      confirmLabel: t('chat.rewindConfirm'),
-      cancelLabel: t('chat.rewindCancel'),
-      destructive: true
-    })
-    if (!answer.confirmed) return
+    const text = done.value.text
+    if (text === null) return
 
-    const done = await window.octopus.chats.rewind(recordId, messageId)
-    if (!done.ok) setNotice(describeFailure(done))
+    // The message, back in the field to be edited and sent again; the log is
+    // re-read by `useChat` when the core says the conversation was rewound.
+    // The end of the log is where the reader now is, and the session the
+    // context gauge read from has been closed.
+    setSeed((current) => ({ text, id: (current?.id ?? 0) + 1 }))
+    pinnedToBottom.current = true
+    setCompactChoices((count) => count + 1)
   }
   const workingMode = record?.workingMode ?? defaultWorkingMode
   const effort = record?.effort ?? defaultEffort
@@ -284,6 +315,13 @@ export function ChatSession({
     element.scrollTop = element.scrollHeight
   }, [visible, chat.entries, chat.streaming])
 
+  // Read again whenever the log can have moved under a still scroller: a turn
+  // landing, or the tab coming back. Hidden, there is nothing to measure.
+  const { update: updateDayAtTop } = dayAtTop
+  useEffect(() => {
+    if (visible) updateDayAtTop()
+  }, [visible, chat.entries, updateDayAtTop])
+
   return (
     <div
       aria-hidden={!visible}
@@ -301,9 +339,20 @@ export function ChatSession({
           // A few pixels of slack: smooth scrolling and sub-pixel heights mean
           // "at the bottom" is rarely exactly zero.
           pinnedToBottom.current = distance < 40
+          dayAtTop.update()
         }}
         className="min-h-0 flex-1 overflow-auto"
       >
+        {/* The day on screen, floating once its own separator has scrolled
+            away. Sticky only works on a child of the scroller itself, and
+            zero-height so it lays nothing out — it draws over the log rather
+            than pushing it down. `items-start`, or the row's default stretch
+            squeezes the pill to the zero height of its row. */}
+        {dayAtTop.day !== null && (
+          <div className="pointer-events-none sticky top-2 z-10 flex h-0 items-start justify-center overflow-visible">
+            <DayChip day={dayAtTop.day} floating />
+          </div>
+        )}
         {(chat.error ?? notice) !== null && (
           <div className="mx-auto w-full max-w-6xl px-6 pt-5">
             <p className="bg-danger-bg text-danger border-danger/25 rounded-[var(--radius-control)] border px-3 py-2">
@@ -419,8 +468,21 @@ export function ChatSession({
           nobody is doing. The log still holds it. */}
       <TodoPanel todos={chat.busy ? todos : []} />
 
+      {tip !== null && (
+        <HeadsUp
+          tip={tip}
+          onKnown={() => {
+            onDismissTip(tip)
+          }}
+          onClose={() => {
+            setClosedTips((current) => new Set([...current, tip]))
+          }}
+        />
+      )}
+
       <Composer
         initialDraft={draft}
+        seed={seed}
         onDraftLeave={onDraftLeave}
         focusOnMount={focusComposer}
         busy={chat.busy}
@@ -458,14 +520,16 @@ export function ChatSession({
            this is already the layer that adapts a controller to a prop, and the
            composer has no business knowing there are two places a note can come
            from. */
-        notes={mergeNotes(comments.pending, quotes.pending)}
+        notes={mergeNotes(comments.pending, quotes.pending, codeNotes.pendingFor(tab.key))}
         onRemoveNote={(note: ChatNote) => {
           if (note.kind === 'diff') comments.remove(note)
+          else if (note.kind === 'code') codeNotes.remove(tab.key, note)
           else quotes.remove(note)
         }}
         onNotesSent={() => {
           comments.clear()
           quotes.clear()
+          codeNotes.clear(tab.key)
           attachments.clear()
         }}
         files={attachments.files}
@@ -483,7 +547,7 @@ export function ChatSession({
         }}
       />
 
-      {confirmDialog}
+      {rewindDialog}
     </div>
   )
 }

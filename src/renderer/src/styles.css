@@ -421,6 +421,14 @@
     color: var(--shiki-dark, var(--ink));
   }
 
+  /* A file icon that has a variant for each ground (FileIcon.tsx). Keyed on the
+     app's own class, as the syntax colours above are: `dark:` would follow the
+     operating system rather than the theme the user chose. */
+  .dark .icon-on-light,
+  :root:not(.dark) .icon-on-dark {
+    display: none;
+  }
+
   .focus-ring:focus-visible {
     outline: 2px solid var(--accent);
     outline-offset: 2px;

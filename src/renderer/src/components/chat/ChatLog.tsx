@@ -4,6 +4,7 @@ import {
   Archive,
   CircleSlash,
   Eraser,
+  FileCode2,
   Map,
   Pencil,
   Play,
@@ -34,12 +35,14 @@ import { Button } from '../Button.js'
 import { named } from '../diff/invisible.js'
 import { shown } from '../diff/shown.js'
 import type { Streaming } from '../../hooks/useChat.js'
-import { exitCodeOf, formatTokens } from './format.js'
+import { DaySeparator } from './DayChip.js'
+import { exitCodeOf, formatClock, formatFullTime, formatTokens } from './format.js'
 import type { Change, ChangeLine } from './changeSummary.js'
 import { Markdown } from './Markdown.js'
-import { BLOCK_PART, toThreadMessages } from './threadMessages.js'
+import { BLOCK_PART, DAY_PART, toThreadMessages } from './threadMessages.js'
 import { ElicitationCard } from './ElicitationCard.js'
 import { QuestionCard } from './QuestionCard.js'
+import { type MessageBlock, messageBlocks } from './userMessage.js'
 import {
   answersByRequest,
   elicitationsByRequest,
@@ -150,7 +153,7 @@ export function ChatLog({
   // The turns as the library's runtime holds them. Held against the blocks:
   // it caches each message by the object it was handed, and a list rebuilt on
   // every render would make it walk the whole thread for every streamed token.
-  const messages = useMemo(() => toThreadMessages(blocks), [blocks])
+  const messages = useMemo(() => toThreadMessages(blocks, entries), [blocks, entries])
   const runtime = useExternalStoreRuntime<ThreadMessageLike>({
     messages,
     isRunning: false,
@@ -252,8 +255,11 @@ function BlockRow({ block }: { block: LogBlock }): React.JSX.Element | null {
 /** The part that carries a block: typed by what `toThreadMessages` puts in it. */
 const BlockPart = ({ data }: { data: LogBlock }): React.JSX.Element => <BlockRow block={data} />
 
+/** The part that opens a day: typed by what `toThreadMessages` puts in it. */
+const DayPart = ({ data }: { data: string }): React.JSX.Element => <DaySeparator day={data} />
+
 const BLOCK_PARTS = {
-  data: { by_name: { [BLOCK_PART]: BlockPart } }
+  data: { by_name: { [BLOCK_PART]: BlockPart, [DAY_PART]: DayPart } }
 } satisfies NonNullable<React.ComponentProps<typeof MessagePrimitive.Parts>['components']>
 
 /** A turn: its blocks are its parts, in the order they happened. */
@@ -304,6 +310,7 @@ function EntryRow({
     return (
       <UserMessage
         text={entry.text}
+        at={entry.at}
         // Offered only for a message that has an id to rewind to — those sent
         // before ids were kept have none — and not while the agent is working,
         // which the core would refuse anyway: a button that can only fail is a
@@ -539,35 +546,55 @@ function AgentRow({
  */
 function UserMessage({
   text,
+  at,
   onRewind
 }: {
   text: string
+  at: string
   onRewind: (() => void) | null
 }): React.JSX.Element {
   const { t } = useTranslation()
 
   return (
-    <div className="group flex max-w-full items-center gap-1 self-end">
-      {onRewind !== null && (
-        // Held in the layout and revealed on hover, so the bubble does not jump
-        // under the pointer as it crosses a message — the same arrangement as
-        // the tab's menu.
-        <button
-          type="button"
-          onClick={onRewind}
-          title={t('chat.rewind')}
-          aria-label={t('chat.rewind')}
-          className="text-ink-faint hover:text-ink focus-ring flex size-6 shrink-0 items-center justify-center rounded transition-opacity focus:opacity-100 opacity-0 group-hover:opacity-100"
-        >
-          <Undo2 aria-hidden size={13} />
-        </button>
-      )}
-      <UserBubble text={text} />
+    /* The hour sits under the bubble, always shown: a footnote faint enough to
+       read past, and the one thing a long day's log is scanned by. The day is
+       the separator's, so the full date waits in the tooltip. */
+    <div className="flex max-w-full flex-col items-end gap-0.5 self-end">
+      <div className="group flex max-w-full items-center gap-1">
+        {onRewind !== null && (
+          // Held in the layout and revealed on hover, so the bubble does not jump
+          // under the pointer as it crosses a message — the same arrangement as
+          // the tab's menu.
+          <button
+            type="button"
+            onClick={onRewind}
+            title={t('chat.rewind')}
+            aria-label={t('chat.rewind')}
+            className="text-ink-faint hover:text-ink focus-ring flex size-6 shrink-0 items-center justify-center rounded transition-opacity focus:opacity-100 opacity-0 group-hover:opacity-100"
+          >
+            <Undo2 aria-hidden size={13} />
+          </button>
+        )}
+        <UserBubble text={text} />
+      </div>
+      <time
+        dateTime={at}
+        title={formatFullTime(at, t('chat.dateLocale'))}
+        className="text-ink-faint px-1 text-[11px] tabular-nums"
+      >
+        {formatClock(at)}
+      </time>
     </div>
   )
 }
 
 function UserBubble({ text }: { text: string }): React.JSX.Element {
+  const blocks = messageBlocks(text)
+  // Nothing recognised: the characters exactly as they were typed.
+  const plain = blocks.every(
+    (block) => block.kind === 'text' && block.parts.every((part) => typeof part === 'string')
+  )
+
   return (
     /*
      * `max-w-full` and `wrap-anywhere` are what keeps a long message inside the
@@ -584,8 +611,56 @@ function UserBubble({ text }: { text: string }): React.JSX.Element {
      * the intrinsic size, so the bubble is allowed to be narrow instead of
      * merely spilling its text once the width is capped.
      */
-    <div className="bubble-sent max-w-full self-end rounded-[var(--radius-panel)] border px-3 py-2 whitespace-pre-wrap wrap-anywhere">
-      {text}
+    <div className="bubble-sent flex max-w-full min-w-0 flex-col gap-2 self-end rounded-[var(--radius-panel)] border px-3 py-2 whitespace-pre-wrap wrap-anywhere">
+      {plain
+        ? text
+        : blocks.map((block, index) =>
+            block.kind === 'text' ? (
+              <p key={index}>
+                {block.parts.map((part, at) =>
+                  typeof part === 'string' ? (
+                    part
+                  ) : (
+                    <code
+                      key={at}
+                      className="bg-canvas border-line rounded-[var(--radius-control)] border px-1 font-mono text-[11px]"
+                    >
+                      {part.path}:{part.range}
+                    </code>
+                  )
+                )}
+              </p>
+            ) : (
+              <NoteCard key={index} note={block} />
+            )
+          )}
+    </div>
+  )
+}
+
+/**
+ * A note on code inside a sent message: where, the lines as they read, and
+ * what was said about them — the shape the composer's chip promised.
+ */
+function NoteCard({
+  note
+}: {
+  readonly note: Extract<MessageBlock, { kind: 'note' }>
+}): React.JSX.Element {
+  return (
+    <div className="border-line bg-canvas text-ink min-w-0 overflow-hidden rounded-[var(--radius-control)] border">
+      <p className="text-ink-soft border-line flex min-w-0 items-center gap-1.5 border-b px-2 py-1 font-mono text-[11px]">
+        <FileCode2 aria-hidden size={12} className="text-ink-faint shrink-0" />
+        <span className="truncate" title={note.path}>
+          {note.path}:{note.range}
+        </span>
+        {note.suffix !== null && <span className="text-ink-faint shrink-0">{note.suffix}</span>}
+      </p>
+      {/* Not wrapped: code read with its lines broken is code misread. */}
+      <pre className="text-ink-soft overflow-x-auto px-2 py-1 font-mono text-[11px] leading-[16px] whitespace-pre">
+        {note.quote}
+      </pre>
+      {note.text !== '' && <p className="border-line border-t px-2 py-1">{note.text}</p>}
     </div>
   )
 }

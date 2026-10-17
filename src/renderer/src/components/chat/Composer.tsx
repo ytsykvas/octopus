@@ -40,6 +40,15 @@ interface ComposerProps {
    * reported on every keystroke.
    */
   readonly initialDraft: string
+  /**
+   * Text to put in the field now, replacing what is there — a rewound
+   * message, handed back to be edited and sent again.
+   *
+   * Applied once per `id`, so the same text can be handed back twice and a
+   * render that passes the same seed again changes nothing. One present when
+   * the composer mounts is taken as already applied.
+   */
+  readonly seed?: { readonly text: string; readonly id: number } | undefined
   /** Where the text goes when the composer is left, so it is there on return. */
   readonly onDraftLeave: (text: string) => void
   readonly busy: boolean
@@ -221,6 +230,7 @@ export function Composer({
   onRemoveNote,
   onNotesSent,
   initialDraft,
+  seed,
   onDraftLeave,
   focusOnMount = false
 }: ComposerProps): React.JSX.Element {
@@ -275,6 +285,22 @@ export function Composer({
     textarea.current?.setSelectionRange(caretAfterWrite.current, caretAfterWrite.current)
     caretAfterWrite.current = null
   }, [draft])
+
+  // Replaces the draft, as Claude Code's own rewind does: the message is what
+  // was asked for back, and the field is where it is edited. Written through
+  // the same two places `write` keeps, with the caret at the end and the focus
+  // in the field, so the next key continues the message.
+  const seeded = useRef(seed?.id)
+  useEffect(() => {
+    if (seed === undefined || seed.id === seeded.current) return
+
+    seeded.current = seed.id
+    latest.current = seed.text
+    caretAfterWrite.current = seed.text.length
+    setDraft(seed.text)
+    setCaret(seed.text.length)
+    textarea.current?.focus()
+  }, [seed])
   /** Which suggestion Enter would take. */
   const [active, setActive] = useState(0)
   /**

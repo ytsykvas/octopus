@@ -1,12 +1,13 @@
 import { Paperclip, X } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 
+import { codeReference } from '../codeReference.js'
 import { type ChatNote, noteKey } from './attachments.js'
 
 /**
  * What each note is called on its chip.
  *
- * A diff note by the file and the lines it covers; a review remark by the
+ * A note on code by the file and the lines it covers; a review remark by the
  * request and whoever wrote it. Both are the shortest thing that would let
  * somebody find it again.
  *
@@ -15,26 +16,27 @@ import { type ChatNote, noteKey } from './attachments.js'
  * moment before sending when saying so still lets somebody take one back.
  */
 function label(note: ChatNote, oldSide: string): string {
-  if (note.kind === 'diff') {
-    const lines =
-      note.endLine === note.line
-        ? String(note.line)
-        : `${String(note.line)}-${String(note.endLine)}`
-    const mark = note.side === 'old' ? ` ${oldSide}` : ''
+  switch (note.kind) {
+    case 'diff':
+    case 'code': {
+      const mark = note.kind === 'diff' && note.side === 'old' ? ` ${oldSide}` : ''
+      const name = note.path.slice(note.path.lastIndexOf('/') + 1)
 
-    return `${note.path.slice(note.path.lastIndexOf('/') + 1)}:${lines}${mark}`
+      return `${codeReference(name, note.line, note.endLine)}${mark}`
+    }
+    case 'pullRequest': {
+      const place = note.place === null ? null : note.place.slice(note.place.lastIndexOf('/') + 1)
+
+      return [note.reference, note.author === null ? null : `@${note.author}`, place]
+        .filter((part) => part !== null)
+        .join(' ')
+    }
   }
-
-  const place = note.place === null ? null : note.place.slice(note.place.lastIndexOf('/') + 1)
-
-  return [note.reference, note.author === null ? null : `@${note.author}`, place]
-    .filter((part) => part !== null)
-    .join(' ')
 }
 
-/** The remark itself, which is the user's own on a diff note and GitHub's here. */
+/** The remark itself, which is the user's own on a note and GitHub's on a remark. */
 function said(note: ChatNote): string {
-  return note.kind === 'diff' ? note.text : note.body
+  return note.kind === 'pullRequest' ? note.body : note.text
 }
 
 /**

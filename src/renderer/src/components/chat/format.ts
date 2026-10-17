@@ -239,3 +239,67 @@ export function formatResetAt(target: string, from: Date = new Date()): string |
   // `getMonth` counts from zero; nothing else about a date does.
   return `${pad(at.getDate())}.${pad(at.getMonth() + 1)} ${clock}`
 }
+
+/**
+ * The hour a message was sent: `14:32`.
+ *
+ * 24-hour in every language, for the reason `formatResetAt` gives: it sits
+ * under a bubble as a footnote, and `2:32 PM` spends three characters saying
+ * what `14:32` says. The day is the separator's job, not this one's.
+ */
+export function formatClock(at: string): string {
+  const moment = new Date(at)
+  return `${pad(moment.getHours())}:${pad(moment.getMinutes())}`
+}
+
+/**
+ * The calendar day a moment fell on, where the reader is: `2026-10-16`.
+ *
+ * A key rather than a label. It is what the log compares to decide where a day
+ * begins, and what a separator carries — and a label would go stale where a
+ * key does not: "Today" is a fact about the moment of reading, not about the
+ * message, so it is worked out when the chip is drawn.
+ */
+export function localDayKey(at: string): string {
+  return dayKeyOf(new Date(at))
+}
+
+function dayKeyOf(moment: Date): string {
+  // `getMonth` counts from zero; nothing else about a date does.
+  return `${String(moment.getFullYear())}-${pad(moment.getMonth() + 1)}-${pad(moment.getDate())}`
+}
+
+/**
+ * What a day separator says: "Today", "Yesterday", `14 October`, or
+ * `14 October 2025` once it is not this year's.
+ *
+ * The year only when it differs, as a messenger does: a chat read within the
+ * year it was written has no use for it, and one read a year later cannot do
+ * without. "Yesterday" is the day before by the calendar rather than by
+ * subtracting a day's milliseconds, which is wrong twice a year wherever the
+ * clocks change.
+ */
+export function formatDayLabel(
+  day: string,
+  labels: { readonly today: string; readonly yesterday: string; readonly locale: string },
+  from: Date = new Date()
+): string {
+  if (day === dayKeyOf(from)) return labels.today
+
+  const before = new Date(from.getFullYear(), from.getMonth(), from.getDate() - 1)
+  if (day === dayKeyOf(before)) return labels.yesterday
+
+  // Without a zone the string is read as local midnight, which is the day the
+  // key was taken in; with one it would be UTC and could land a day early.
+  const moment = new Date(`${day}T00:00`)
+  return moment.toLocaleDateString(labels.locale, {
+    day: 'numeric',
+    month: 'long',
+    ...(moment.getFullYear() !== from.getFullYear() && { year: 'numeric' })
+  })
+}
+
+/** The whole moment, for a tooltip: `16 October 2026 at 14:32`. */
+export function formatFullTime(at: string, locale: string): string {
+  return new Date(at).toLocaleString(locale, { dateStyle: 'long', timeStyle: 'short' })
+}

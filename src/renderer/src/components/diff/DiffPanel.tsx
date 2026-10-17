@@ -12,7 +12,6 @@ import { useTranslation } from 'react-i18next'
 
 import type { FileDiff } from '@core/diff.js'
 import { shortBranchName } from '@core/branches.js'
-import { AGENT_NAMES } from '@core/chats.js'
 import type { PublishState } from '@core/publish.js'
 import type { WorkspaceView } from '@core/workspaces.js'
 
@@ -30,6 +29,9 @@ import type { DiffView } from './DiffHunk.js'
 import { MIN_SPLIT_COLUMNS, splitThreshold } from './measure.js'
 import { lineAddress, selectionAnchor } from './selectionAnchor.js'
 import { NO_TOKENS, useHighlighting } from './useHighlighting.js'
+import { IconButton, Notice } from '../paneControls.js'
+import { Placeholder } from '../Placeholder.js'
+import { chatName } from '../chat/chatName.js'
 
 /**
  * A file this big starts collapsed.
@@ -141,7 +143,7 @@ export function DiffPanel({
     // are recognisably the same conversation.
     const named = chats.map((chat, index) => ({
       id: chat.id,
-      name: chat.title ?? t('chat.tab', { agent: AGENT_NAMES[chat.agent], number: index + 1 })
+      name: chatName(t, chat, index + 1)
     }))
 
     /*
@@ -384,10 +386,22 @@ export function DiffPanel({
     setSelected(null)
   }
 
-  if (!workspace) return <Notice>{t('diff.noWorkspace')}</Notice>
+  if (!workspace) {
+    return (
+      <Placeholder compact title={t('diff.noWorkspaceTitle')}>
+        {t('diff.noWorkspaceBody')}
+      </Placeholder>
+    )
+  }
   if (error !== null) return <Notice tone="danger">{error}</Notice>
   if (loading) return <Notice>{t('diff.loading')}</Notice>
-  if (!diff || diff.files.length === 0) return <Notice>{t('diff.clean')}</Notice>
+  if (!diff || diff.files.length === 0) {
+    return (
+      <Placeholder compact title={t('diff.cleanTitle')}>
+        {t('diff.cleanBody')}
+      </Placeholder>
+    )
+  }
 
   // Below the guards, so neither of these needs a fallback for a workspace or a
   // diff that the rows calling them could not have been drawn without.
@@ -712,47 +726,6 @@ function quote(lines: ReadonlyMap<string, string>, anchor: CommentAnchor): strin
   }
 
   return covered.join('\n')
-}
-
-function Notice({
-  children,
-  tone = 'soft'
-}: {
-  readonly children: React.ReactNode
-  readonly tone?: 'soft' | 'danger'
-}): React.JSX.Element {
-  return (
-    <div className="flex-1 overflow-auto p-4">
-      <p className={`leading-relaxed ${tone === 'danger' ? 'text-danger' : 'text-ink-faint'}`}>
-        {children}
-      </p>
-    </div>
-  )
-}
-
-function IconButton({
-  label,
-  onClick,
-  disabled = false,
-  children
-}: {
-  readonly label: string
-  readonly onClick: () => void
-  readonly disabled?: boolean
-  readonly children: React.ReactNode
-}): React.JSX.Element {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      disabled={disabled}
-      title={label}
-      aria-label={label}
-      className="focus-ring text-ink-faint hover:text-ink hover:bg-muted rounded-[var(--radius-control)] p-1 disabled:pointer-events-none disabled:opacity-40"
-    >
-      {children}
-    </button>
-  )
 }
 
 /**

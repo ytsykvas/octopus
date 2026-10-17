@@ -111,8 +111,10 @@ describe('loadConfig', () => {
     const config = await loadConfig(file)
     expect(config.language).toBe('en')
     expect(config.rightPanelWidth).toBe(360)
+    expect(config.rightPanelOpen).toBe(true)
     expect(config.rightPanelTab).toBe('diff')
     expect(config.sidebarWidth).toBe(240)
+    expect(config.dismissedTips).toEqual([])
     expect(config.branchPrefix).toBe('ytsykvas')
     // Absent, so the default answers for it.
     expect(config.effort).toBe('medium')
@@ -140,6 +142,17 @@ describe('loadConfig', () => {
       const config = await loadConfig(file)
       expect(config.rightPanelTab).toBe('scripts')
     }
+  })
+
+  it('keeps the Files tab across a save and a load', async () => {
+    const file = join(dir, 'files.json')
+
+    await saveConfig(
+      { ...createDefaultConfig('ytsykvas', NOW, () => UUID), rightPanelTab: 'files' },
+      file
+    )
+
+    expect((await loadConfig(file)).rightPanelTab).toBe('files')
   })
 
   // Cleaned off the disk rather than translated on every read: the schema

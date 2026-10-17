@@ -63,9 +63,11 @@ function config(overrides: Partial<Config> = {}): Config {
     planModel: null,
     alwaysAllowedTools: [],
     disabledSkillDefaults: [],
+    dismissedTips: [],
     theme: 'system',
     language: 'en',
     rightPanelWidth: 360,
+    rightPanelOpen: true,
     rightPanelTab: 'diff',
     diffView: 'unified',
     sidebarWidth: 240,
@@ -193,6 +195,15 @@ function tab(letters: string): HTMLElement {
   return screen.getByRole('button', { name: letters })
 }
 
+/**
+ * The same, waited for. `openApp` waits for the strip's add button, which is
+ * drawn before the projects arrive — so a tab read at once was there on a fast
+ * machine and missing on a loaded CI runner, failing whichever test came first.
+ */
+function findTab(letters: string): Promise<HTMLElement> {
+  return screen.findByRole('button', { name: letters })
+}
+
 /** The right pane: a `<section>`, which carries no role to reach it by. */
 function rightPane(): HTMLElement {
   const section = screen.getByRole('button', { name: 'Changes' }).closest('section')
@@ -259,14 +270,14 @@ describe('App', () => {
   it('points a first-time user at adding a repository', async () => {
     await openApp()
 
-    expect(await screen.findByText('Start with a repository')).toBeInTheDocument()
+    expect(await screen.findByText('Let’s find something to work on')).toBeInTheDocument()
   })
 
   // The screen a first run lands on had the instructions and none of the
   // buttons, which is a strange thing to do with a pane this empty.
   it('offers both ways in from the empty centre', async () => {
     await openApp()
-    await screen.findByText('Start with a repository')
+    await screen.findByText('Let’s find something to work on')
 
     expect(screen.getByRole('button', { name: 'Add from disk…' })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Add from GitHub…' })).toBeInTheDocument()
@@ -278,7 +289,7 @@ describe('App', () => {
       .mockResolvedValueOnce({ ok: true, value: [] })
       .mockResolvedValue({ ok: true, value: [LEDGER] })
     const user = await openApp()
-    await screen.findByText('Start with a repository')
+    await screen.findByText('Let’s find something to work on')
 
     await user.click(screen.getByRole('button', { name: 'Add from disk…' }))
 
@@ -291,7 +302,7 @@ describe('App', () => {
     givenTwoProjects()
 
     await openApp()
-    await screen.findByText('Select a project')
+    await screen.findByText('Which project today?')
 
     expect(screen.getByRole('button', { name: 'Add from disk…' })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Add from GitHub…' })).toBeInTheDocument()
@@ -312,7 +323,7 @@ describe('App', () => {
 
     await openApp()
 
-    expect(await screen.findByText('Select a project')).toBeInTheDocument()
+    expect(await screen.findByText('Which project today?')).toBeInTheDocument()
     expect(
       screen.getByText('Nothing here yet. Add a repository with the "+" button.')
     ).toBeInTheDocument()
@@ -327,7 +338,7 @@ describe('App', () => {
     expect(screen.getByText('/Users/someone/code/ledger')).toBeInTheDocument()
     // A project is open and no workspace is chosen, which is its own screen —
     // it names what to do and offers the way out, rather than describing one.
-    expect(await screen.findByText('Select a workspace')).toBeInTheDocument()
+    expect(await screen.findByText('Which workspace shall we start with?')).toBeInTheDocument()
     expect(
       within(screen.getByRole('main')).getByRole('button', { name: 'New workspace' })
     ).toBeInTheDocument()
@@ -427,7 +438,7 @@ describe('App', () => {
     await user.click(await screen.findByRole('button', { name: 'PL' }))
     await user.click(await screen.findByRole('button', { name: 'Hide workspaces' }))
 
-    await user.click(tab('LE'))
+    await user.click(await findTab('LE'))
 
     expect(await screen.findByText('carol')).toBeInTheDocument()
   })
@@ -504,7 +515,7 @@ describe('App', () => {
     })
     givenTwoProjects()
     const user = await openApp()
-    await user.click(tab('PL'))
+    await user.click(await findTab('PL'))
     await user.click(screen.getByRole('button', { name: /anna/ }))
 
     const [chip] = await screen.findAllByRole('button', { name: 'Skills for this conversation' })
@@ -514,6 +525,101 @@ describe('App', () => {
 
     expect(await screen.findByRole('dialog', { name: 'Settings' })).toBeInTheDocument()
     expect(screen.getByText('Skills everywhere')).toBeInTheDocument()
+  })
+
+  /*
+   * The heads-up is answered in the conversation and kept in the config, three
+   * components apart — each half is tested where it lives, and this is the wire
+   * between them.
+   */
+  describe('a heads-up answered once', () => {
+    const ranACommand = (): void => {
+      vi.mocked(window.octopus.chats.list).mockResolvedValue({
+        ok: true,
+        value: [chat({ workspaceId: 'planner/anna' })]
+      })
+      vi.mocked(window.octopus.chats.history).mockResolvedValue({
+        ok: true,
+        value: [
+          {
+            role: 'agent',
+            at: '2026-08-13T09:00:00.000Z',
+            event: { type: 'tool_use', toolUseId: 'c-1', name: 'Bash', input: { command: 'ls' } }
+          },
+          {
+            role: 'agent',
+            at: '2026-08-13T09:00:01.000Z',
+            event: { type: 'text', text: 'Listed.' }
+          }
+        ]
+      })
+      givenTwoProjects()
+    }
+
+    const openAnna = async (): Promise<ReturnType<typeof userEvent.setup>> => {
+      const user = await openApp()
+      await user.click(await findTab('PL'))
+      await user.click(screen.getByRole('button', { name: /anna/ }))
+      await screen.findByText('Listed.')
+      return user
+    }
+
+    it('is kept in the settings beside the ones answered before', async () => {
+      vi.mocked(window.octopus.config.get).mockResolvedValue({
+        ok: true,
+        value: config({ dismissedTips: ['someOlderTip'] })
+      })
+      ranACommand()
+      const user = await openAnna()
+
+      await user.click(await screen.findByRole('button', { name: 'Knew this already' }))
+
+      expect(window.octopus.config.update).toHaveBeenCalledWith({
+        dismissedTips: ['someOlderTip', 'rewindSkipsCommands']
+      })
+    })
+
+    it('goes once the settings have taken the answer', async () => {
+      vi.mocked(window.octopus.config.update).mockImplementation((patch) =>
+        Promise.resolve({ ok: true, value: config(patch) })
+      )
+      ranACommand()
+      const user = await openAnna()
+
+      await user.click(await screen.findByRole('button', { name: 'Knew this already' }))
+
+      await waitFor(() => {
+        expect(screen.queryByRole('region', { name: 'Heads up' })).not.toBeInTheDocument()
+      })
+    })
+
+    // Dismiss lives in the conversation, and `App` keys the pane by workspace:
+    // leaving and coming back builds it fresh, and the caveat with it.
+    it('comes back after a dismiss once the workspace is left and returned to', async () => {
+      ranACommand()
+      const user = await openAnna()
+      await user.click(await screen.findByRole('button', { name: 'Dismiss' }))
+      expect(screen.queryByRole('region', { name: 'Heads up' })).not.toBeInTheDocument()
+
+      await user.click(screen.getByRole('button', { name: /bob/ }))
+      await user.click(screen.getByRole('button', { name: /anna/ }))
+
+      expect(await screen.findByRole('region', { name: 'Heads up' })).toBeInTheDocument()
+      expect(window.octopus.config.update).not.toHaveBeenCalledWith(
+        expect.objectContaining({ dismissedTips: expect.anything() as unknown })
+      )
+    })
+
+    it('is not shown again once the settings hold it', async () => {
+      vi.mocked(window.octopus.config.get).mockResolvedValue({
+        ok: true,
+        value: config({ dismissedTips: ['rewindSkipsCommands'] })
+      })
+      ranACommand()
+      await openAnna()
+
+      expect(screen.queryByRole('region', { name: 'Heads up' })).not.toBeInTheDocument()
+    })
   })
 
   it('closes the settings dialog again', async () => {
@@ -555,7 +661,7 @@ describe('App', () => {
 
     await user.keyboard('2')
 
-    expect(screen.getByText('Select a project')).toBeInTheDocument()
+    expect(screen.getByText('Which project today?')).toBeInTheDocument()
   })
 
   it('switches workspace with Ctrl and a digit', async () => {
@@ -564,12 +670,69 @@ describe('App', () => {
     await user.click(await screen.findByRole('button', { name: 'PL' }))
     await user.click(screen.getByRole('button', { name: 'Terminal' }))
     expect(
-      screen.getByText('Select a workspace to open a terminal in its directory.')
+      screen.getByText('Select a workspace on the left and a terminal opens in its directory.')
     ).toBeInTheDocument()
 
     await user.keyboard('{Control>}2{/Control}')
 
     expect(await screen.findByText('/tmp/planner/bob')).toBeInTheDocument()
+  })
+
+  /*
+   * Folding the pane away used to unmount it, and unmounting a terminal is how
+   * a terminal is ended — so the button closed every shell and stopped every
+   * dev server in the project. The same node coming back is the assertion: a
+   * terminal remounted would be a new session, whatever it looked like.
+   */
+  it('keeps every terminal running while the pane is folded away', async () => {
+    givenTwoProjects()
+    const user = await openApp()
+    await user.click(await screen.findByRole('button', { name: 'PL' }))
+    await user.click(screen.getByRole('button', { name: 'Terminal' }))
+    await user.keyboard('{Control>}2{/Control}')
+    const terminal = await screen.findByText('/tmp/planner/bob')
+
+    await user.click(screen.getByRole('button', { name: 'Collapse panel' }))
+    expect(screen.getByText('/tmp/planner/bob')).toBe(terminal)
+
+    await user.click(screen.getByRole('button', { name: 'Show panel' }))
+    expect(screen.getByText('/tmp/planner/bob')).toBe(terminal)
+  })
+
+  it('remembers that the pane was folded away', async () => {
+    const user = await openApp()
+
+    await user.click(screen.getByRole('button', { name: 'Collapse panel' }))
+
+    expect(window.octopus.config.update).toHaveBeenLastCalledWith({ rightPanelOpen: false })
+  })
+
+  // The drag decides inside the pane; folding is `App`'s, and so is saving it.
+  it('folds the pane away and remembers it when its edge is dragged past the floor', async () => {
+    await openApp()
+    const [, edge] = screen.getAllByRole('separator', { name: 'Resize panel' })
+    if (!edge) throw new Error('the right pane has no edge')
+
+    fireEvent.pointerDown(edge, { clientX: 500 })
+    fireEvent.pointerMove(window, { clientX: 900 })
+    fireEvent.pointerUp(window)
+
+    expect(screen.queryByRole('button', { name: 'Changes' })).not.toBeInTheDocument()
+    expect(window.octopus.config.update).toHaveBeenCalledWith({ rightPanelOpen: false })
+  })
+
+  it('opens with the pane folded away when it was left that way', async () => {
+    vi.mocked(window.octopus.config.get).mockResolvedValue({
+      ok: true,
+      value: config({ rightPanelOpen: false })
+    })
+
+    await openApp()
+
+    await waitFor(() => {
+      expect(screen.queryByRole('button', { name: 'Changes' })).not.toBeInTheDocument()
+    })
+    expect(screen.getByRole('button', { name: 'Show panel' })).toBeInTheDocument()
   })
 
   it('leaves the workspace alone when the digit points past the last one', async () => {
@@ -581,7 +744,7 @@ describe('App', () => {
     await user.keyboard('{Control>}7{/Control}')
 
     expect(
-      screen.getByText('Select a workspace to open a terminal in its directory.')
+      screen.getByText('Select a workspace on the left and a terminal opens in its directory.')
     ).toBeInTheDocument()
   })
 
@@ -596,7 +759,7 @@ describe('App', () => {
     await user.keyboard('{Control>}1{/Control}')
 
     expect(
-      screen.getByText('Select a workspace to open a terminal in its directory.')
+      screen.getByText('Select a workspace on the left and a terminal opens in its directory.')
     ).toBeInTheDocument()
   })
 
@@ -610,10 +773,12 @@ describe('App', () => {
     await user.keyboard('{Control>}1{/Control}')
     expect(await screen.findByText('/tmp/planner/anna')).toBeInTheDocument()
 
-    await user.click(tab('LE'))
+    await user.click(await findTab('LE'))
 
     expect(
-      await screen.findByText('Select a workspace to open a terminal in its directory.')
+      await screen.findByText(
+        'Select a workspace on the left and a terminal opens in its directory.'
+      )
     ).toBeInTheDocument()
   })
 
@@ -830,7 +995,7 @@ describe('App', () => {
       await abandoned.settle({ ok: true, value: config({ language: 'uk' }) })
     })
 
-    expect(screen.getByText('Start with a repository')).toBeInTheDocument()
+    expect(screen.getByText('Let’s find something to work on')).toBeInTheDocument()
   })
 
   // The language lives in the config so it survives a restart.
@@ -842,7 +1007,7 @@ describe('App', () => {
 
     await openApp()
 
-    expect(await screen.findByText('Почніть з репозиторію')).toBeInTheDocument()
+    expect(await screen.findByText('Знайдімо, над чим працювати')).toBeInTheDocument()
   })
 
   /*
@@ -898,7 +1063,7 @@ describe('App', () => {
       push(config({ language: 'uk' }))
     })
 
-    expect(await screen.findByText('Почніть з репозиторію')).toBeInTheDocument()
+    expect(await screen.findByText('Знайдімо, над чим працювати')).toBeInTheDocument()
   })
 
   it('remembers the width the workspace list was resized to', async () => {
@@ -996,7 +1161,7 @@ describe('App', () => {
     await user.click(screen.getByRole('button', { name: 'Add repository' }))
     await user.click(screen.getByRole('menuitem', { name: /From disk/ }))
 
-    expect(await screen.findByText('Select a project')).toBeInTheDocument()
+    expect(await screen.findByText('Which project today?')).toBeInTheDocument()
   })
 
   it('clears the selection when the project that is open is removed', async () => {
@@ -1010,7 +1175,7 @@ describe('App', () => {
     await user.click(screen.getByRole('menuitem', { name: 'Remove project' }))
     await user.click(await screen.findByRole('button', { name: 'Remove' }))
 
-    expect(await screen.findByText('Select a project')).toBeInTheDocument()
+    expect(await screen.findByText('Which project today?')).toBeInTheDocument()
     expect(window.octopus.projects.remove).toHaveBeenCalledWith('planner')
   })
 
@@ -1077,7 +1242,7 @@ describe('App', () => {
     await user.keyboard('{Control>}1{/Control}')
 
     expect(
-      screen.getByText('Select a workspace to open a terminal in its directory.')
+      screen.getByText('Select a workspace on the left and a terminal opens in its directory.')
     ).toBeInTheDocument()
   })
 
@@ -1090,7 +1255,7 @@ describe('App', () => {
 
     await user.keyboard('{Meta>}a{/Meta}')
 
-    expect(screen.getByText('Select a project')).toBeInTheDocument()
+    expect(screen.getByText('Which project today?')).toBeInTheDocument()
   })
 
   // Tabs are numbered from one, so there is nothing for ⌘0 to address.
@@ -1101,7 +1266,7 @@ describe('App', () => {
 
     await user.keyboard('{Meta>}0{/Meta}')
 
-    expect(screen.getByText('Select a project')).toBeInTheDocument()
+    expect(screen.getByText('Which project today?')).toBeInTheDocument()
   })
 
   it('creates a workspace from the list header', async () => {
@@ -1225,7 +1390,7 @@ describe('App', () => {
     const user = await openApp()
     await user.click(await screen.findByRole('button', { name: 'LE' }))
 
-    expect(await screen.findByText('Create the first workspace')).toBeInTheDocument()
+    expect(await screen.findByText('Your first workspace is one click away')).toBeInTheDocument()
 
     const centre = within(screen.getByRole('main'))
     await user.click(centre.getByRole('button', { name: 'New workspace' }))
@@ -1370,7 +1535,7 @@ describe('App', () => {
       value: { repositories: [LEDGER_REPOSITORY], capped: false, organisations: [] }
     })
     const user = await openApp()
-    await screen.findByText('Start with a repository')
+    await screen.findByText('Let’s find something to work on')
 
     await user.click(screen.getByRole('button', { name: 'Add from GitHub…' }))
 
@@ -1383,7 +1548,7 @@ describe('App', () => {
   // account is there, and Appearance would be a dead end with extra steps.
   it('sends an unconnected user to the Git settings instead of an empty picker', async () => {
     const user = await openApp()
-    await screen.findByText('Start with a repository')
+    await screen.findByText('Let’s find something to work on')
 
     await user.click(screen.getByRole('button', { name: 'Add from GitHub…' }))
 
@@ -1413,7 +1578,7 @@ describe('App', () => {
     const check = pending<Result<GitHubAccount>>()
     vi.mocked(window.octopus.accounts.github).mockReturnValue(check.promise)
     const user = await openApp()
-    await screen.findByText('Start with a repository')
+    await screen.findByText('Let’s find something to work on')
 
     await user.click(screen.getByRole('button', { name: 'Add from GitHub…' }))
 
@@ -1431,7 +1596,7 @@ describe('App', () => {
       error: 'gh: command not found'
     })
     const user = await openApp()
-    await screen.findByText('Start with a repository')
+    await screen.findByText('Let’s find something to work on')
 
     await user.click(screen.getByRole('button', { name: 'Add from GitHub…' }))
 
@@ -1445,7 +1610,7 @@ describe('App', () => {
     const check = pending<Result<GitHubAccount>>()
     vi.mocked(window.octopus.accounts.github).mockReturnValue(check.promise)
     const user = await openApp()
-    await screen.findByText('Start with a repository')
+    await screen.findByText('Let’s find something to work on')
 
     const button = screen.getByRole('button', { name: 'Add from GitHub…' })
     await user.click(button)
@@ -1632,7 +1797,7 @@ describe('App', () => {
     await user.click(await screen.findByText('anna'))
     expect(await screen.findByText('/tmp/planner/setup.sh')).toBeInTheDocument()
 
-    await user.click(tab('LE'))
+    await user.click(await findTab('LE'))
     await user.click(await screen.findByText('carol'))
 
     expect(await screen.findByText(/No build script yet/)).toBeInTheDocument()
@@ -1883,7 +2048,7 @@ describe('App', () => {
     )
     const user = await openApp()
     await user.click(await screen.findByRole('button', { name: 'PL' }))
-    await user.click(tab('LE'))
+    await user.click(await findTab('LE'))
     await user.click(screen.getByRole('button', { name: 'Scripts' }))
     await user.click(await screen.findByText('carol'))
 
@@ -1901,7 +2066,7 @@ describe('App', () => {
   it('opens another conversation with ⌘T', async () => {
     givenTwoProjects()
     const user = await openApp()
-    await user.click(tab('PL'))
+    await user.click(await findTab('PL'))
     await user.click(screen.getByRole('button', { name: /anna/ }))
     await screen.findByRole('navigation', { name: 'Conversations' })
 
@@ -1931,7 +2096,7 @@ describe('App', () => {
     })
     givenTwoProjects()
     const user = await openApp()
-    await user.click(tab('PL'))
+    await user.click(await findTab('PL'))
     await user.click(screen.getByRole('button', { name: /anna/ }))
     await screen.findByRole('navigation', { name: 'Conversations' })
 
@@ -1959,7 +2124,7 @@ describe('App', () => {
     })
     givenTwoProjects()
     const user = await openApp()
-    await user.click(tab('PL'))
+    await user.click(await findTab('PL'))
     await user.click(screen.getByRole('button', { name: /anna/ }))
     await screen.findByRole('button', { name: /^Claude 2: / })
 
@@ -1987,7 +2152,7 @@ describe('App', () => {
     })
     givenTwoProjects()
     const user = await openApp()
-    await user.click(tab('PL'))
+    await user.click(await findTab('PL'))
     await user.click(screen.getByRole('button', { name: /anna/ }))
     await screen.findByRole('button', { name: /^Claude 3: / })
 
@@ -2023,7 +2188,7 @@ describe('App', () => {
     })
     givenTwoProjects()
     const user = await openApp()
-    await user.click(tab('PL'))
+    await user.click(await findTab('PL'))
     await user.click(screen.getByRole('button', { name: /anna/ }))
     const strip = await screen.findByRole('navigation', { name: 'Conversations' })
 
@@ -2049,7 +2214,7 @@ describe('App', () => {
     })
     givenTwoProjects()
     const user = await openApp()
-    await user.click(tab('PL'))
+    await user.click(await findTab('PL'))
     await user.click(screen.getByRole('button', { name: /anna/ }))
     const strip = await screen.findByRole('navigation', { name: 'Conversations' })
 
@@ -2068,7 +2233,7 @@ describe('App', () => {
   it('leaves other ⌥ combinations alone', async () => {
     givenTwoProjects()
     const user = await openApp()
-    await user.click(tab('PL'))
+    await user.click(await findTab('PL'))
     await user.click(screen.getByRole('button', { name: /anna/ }))
     await screen.findByRole('navigation', { name: 'Conversations' })
 
@@ -2080,7 +2245,7 @@ describe('App', () => {
   it('does nothing for a conversation that is not there', async () => {
     givenTwoProjects()
     const user = await openApp()
-    await user.click(tab('PL'))
+    await user.click(await findTab('PL'))
     await user.click(screen.getByRole('button', { name: /anna/ }))
     const strip = await screen.findByRole('navigation', { name: 'Conversations' })
 
@@ -2096,7 +2261,236 @@ describe('App', () => {
 
     fireEvent.keyDown(window, { key: 'D', metaKey: true, shiftKey: true })
 
-    expect(window.octopus.config.update).toHaveBeenLastCalledWith({ rightPanelTab: 'diff' })
+    // Unfolding rides in the same write as the tab, so it is kept as well.
+    expect(window.octopus.config.update).toHaveBeenLastCalledWith({
+      rightPanelTab: 'diff',
+      rightPanelOpen: true
+    })
+  })
+
+  it('opens the files with ⌘⇧E', async () => {
+    givenTwoProjects()
+    await openApp()
+
+    fireEvent.keyDown(window, { key: 'E', metaKey: true, shiftKey: true })
+
+    expect(window.octopus.config.update).toHaveBeenLastCalledWith({
+      rightPanelTab: 'files',
+      rightPanelOpen: true
+    })
+  })
+
+  describe('a file opened from the tree', () => {
+    async function openReadme(): Promise<ReturnType<typeof userEvent.setup>> {
+      givenTwoProjects()
+      vi.mocked(window.octopus.files.tree).mockResolvedValue({
+        ok: true,
+        value: {
+          entries: [{ path: 'README.md', kind: 'file', ignored: false }],
+          statuses: {},
+          truncated: false
+        }
+      })
+      vi.mocked(window.octopus.files.read).mockResolvedValue({
+        ok: true,
+        value: { kind: 'text', text: '# Planner', bytes: 9 }
+      })
+      const user = await openApp()
+      await user.click(await screen.findByRole('button', { name: 'PL' }))
+      await user.click(await screen.findByText('anna'))
+      await user.click(screen.getByRole('button', { name: 'Files' }))
+      await user.click(await screen.findByRole('treeitem', { name: /^README\.md/ }))
+      return user
+    }
+
+    it('comes to the front of the centre, beside the conversations', async () => {
+      await openReadme()
+
+      expect(await screen.findByText('# Planner')).toBeInTheDocument()
+      const files = screen.getByRole('navigation', { name: 'Open files' })
+      expect(within(files).getByRole('button', { name: 'README.md' })).toHaveAttribute(
+        'aria-current',
+        'page'
+      )
+      // No conversation is the one showing while a file is.
+      const conversations = screen.getByRole('navigation', { name: 'Conversations' })
+      expect(within(conversations).queryByRole('button', { current: 'page' })).toBeNull()
+      expect(screen.getByRole('treeitem', { name: /^README\.md/ })).toHaveAttribute(
+        'aria-selected',
+        'true'
+      )
+    })
+
+    // A conversation asked for must not stay behind the file.
+    it('steps back behind a conversation brought forward, and stays open', async () => {
+      const user = await openReadme()
+      await screen.findByText('# Planner')
+
+      const conversations = screen.getByRole('navigation', { name: 'Conversations' })
+      await user.click(within(conversations).getByRole('button', { name: /Claude 1/ }))
+
+      expect(screen.queryByText('# Planner')).not.toBeInTheDocument()
+      expect(screen.getByRole('button', { name: 'README.md' })).not.toHaveAttribute('aria-current')
+    })
+
+    it('closes with ⌘W, which leaves a conversation alone', async () => {
+      await openReadme()
+      await screen.findByText('# Planner')
+
+      fireEvent.keyDown(window, { key: 'w', metaKey: true })
+      expect(screen.queryByText('# Planner')).not.toBeInTheDocument()
+      expect(screen.queryByRole('navigation', { name: 'Open files' })).not.toBeInTheDocument()
+
+      // Nothing to close now; the key is not taken from the system.
+      expect(fireEvent.keyDown(window, { key: 'w', metaKey: true })).toBe(true)
+      expect(screen.getByRole('navigation', { name: 'Conversations' })).toBeInTheDocument()
+    })
+
+    // Every way of asking for a conversation puts the file behind it.
+    it('steps back behind a conversation asked for from the keyboard', async () => {
+      await openReadme()
+      await screen.findByText('# Planner')
+
+      fireEvent.keyDown(window, { key: 't', metaKey: true })
+      await waitFor(() => {
+        expect(screen.queryByText('# Planner')).not.toBeInTheDocument()
+      })
+
+      await userEvent.click(screen.getByRole('button', { name: 'README.md' }))
+      expect(await screen.findByText('# Planner')).toBeInTheDocument()
+      fireEvent.keyDown(window, { key: 'T', metaKey: true, shiftKey: true })
+      await waitFor(() => {
+        expect(screen.queryByText('# Planner')).not.toBeInTheDocument()
+      })
+    })
+
+    it('steps back behind a conversation reopened from the history', async () => {
+      vi.mocked(window.octopus.chats.closed).mockResolvedValue({
+        ok: true,
+        value: [
+          {
+            chat: chat({ id: 'chat-9', workspaceId: 'planner/anna' }),
+            closedAt: '2026-08-20T10:00:00.000Z',
+            preview: 'fix the login bug'
+          }
+        ]
+      })
+      vi.mocked(window.octopus.chats.reopen).mockResolvedValue({
+        ok: true,
+        value: chat({ id: 'chat-9', workspaceId: 'planner/anna' })
+      })
+      const user = await openReadme()
+      await screen.findByText('# Planner')
+
+      await user.click(screen.getByRole('button', { name: 'Closed conversations' }))
+      await user.click(await screen.findByText('fix the login bug'))
+
+      await waitFor(() => {
+        expect(screen.queryByText('# Planner')).not.toBeInTheDocument()
+      })
+    })
+
+    it('steps back behind a conversation continued in a new tab', async () => {
+      vi.mocked(window.octopus.chats.list).mockResolvedValue({
+        ok: true,
+        value: [chat({ workspaceId: 'planner/anna', sessionId: 'session-1' })]
+      })
+      const user = await openReadme()
+      await screen.findByText('# Planner')
+
+      await user.click(screen.getByRole('button', { name: 'Claude 1' }))
+      await user.click(
+        await screen.findByRole('menuitem', { name: /Continue in a new conversation/ })
+      )
+
+      await waitFor(() => {
+        expect(screen.queryByText('# Planner')).not.toBeInTheDocument()
+      })
+    })
+
+    // A note added behind an open file would land in a composer nobody can see.
+    it('steps back behind a review note added from the changes', async () => {
+      vi.mocked(window.octopus.workspaces.diff).mockResolvedValue({
+        ok: true,
+        value: workspaceDiff([fileDiff('src/a.ts')])
+      })
+      const user = await openReadme()
+      await screen.findByText('# Planner')
+
+      await user.click(screen.getByRole('button', { name: 'Changes' }))
+      await user.click(await screen.findByRole('button', { name: 'Comment on line 2' }))
+      await user.type(await screen.findByRole('textbox'), 'rename this')
+      await user.click(screen.getByRole('button', { name: 'Add' }))
+
+      await waitFor(() => {
+        expect(screen.queryByText('# Planner')).not.toBeInTheDocument()
+      })
+    })
+
+    it('steps back behind a remark quoted from the pull request', async () => {
+      vi.mocked(window.octopus.workspaces.pullRequest).mockResolvedValue({
+        ok: true,
+        value: {
+          request: {
+            number: 7,
+            state: 'open',
+            title: 'Rename the thing',
+            url: 'https://github.com/o/p/pull/7'
+          },
+          pushed: true,
+          dirty: false,
+          unpushedCommits: 0,
+          ahead: 0,
+          base: 'main'
+        }
+      })
+      vi.mocked(window.octopus.workspaces.pullRequestDetail).mockResolvedValue({
+        ok: true,
+        value: {
+          state: 'open',
+          title: 'Rename the thing',
+          url: 'https://github.com/o/p/pull/7',
+          draft: false,
+          checks: [],
+          comments: [
+            {
+              kind: 'inline',
+              id: 'PRRC_1',
+              threadId: 'PRRT_1',
+              author: 'olena',
+              body: 'Why the second case?',
+              createdAt: '2026-08-20T11:00:00Z',
+              url: 'https://github.com/o/p/pull/7#discussion_r1',
+              path: 'src/core/git.ts',
+              line: 42,
+              quote: '@@ -1 +1 @@\n-const a = 1',
+              resolved: false
+            }
+          ],
+          decision: null,
+          mergeable: 'mergeable',
+          mergeState: 'clean',
+          capped: false
+        }
+      })
+      const user = await openReadme()
+      await screen.findByText('# Planner')
+
+      await user.click(screen.getByRole('button', { name: 'Pull request' }))
+      await user.click(await screen.findByRole('button', { name: 'Add to chat' }))
+
+      await waitFor(() => {
+        expect(screen.queryByText('# Planner')).not.toBeInTheDocument()
+      })
+    })
+
+    it('is kept open by a double-click in the tree', async () => {
+      const user = await openReadme()
+
+      await user.dblClick(screen.getByRole('treeitem', { name: /^README\.md/ }))
+
+      expect(await screen.findByRole('button', { name: 'README.md' })).not.toHaveClass('italic')
+    })
   })
 
   // Listed in §10.8 since before there was a tab for it to name, which is the
@@ -2184,7 +2578,8 @@ describe('App', () => {
     await user.click(await screen.findByRole('button', { name: 'Create PR' }))
 
     expect(window.octopus.config.update).toHaveBeenLastCalledWith({
-      rightPanelTab: 'pullRequest'
+      rightPanelTab: 'pullRequest',
+      rightPanelOpen: true
     })
   })
 
@@ -2361,21 +2756,25 @@ describe('App', () => {
     fireEvent.keyDown(window, { key: 'P', metaKey: true, shiftKey: true })
 
     expect(window.octopus.config.update).toHaveBeenLastCalledWith({
-      rightPanelTab: 'pullRequest'
+      rightPanelTab: 'pullRequest',
+      rightPanelOpen: true
     })
   })
 
   /*
-   * The pane is unmounted while it is folded away, so a tab kept inside it was
-   * gone the moment it was hidden — which is half of why the value moved out.
+   * The tab lives in the config rather than in the pane, and folding is now a
+   * write of its own — so the fold must not carry the tab back to its default.
    */
   it('keeps the chosen tab across folding the pane away', async () => {
     givenTwoProjects()
-    // The pane reads the tab back from the config it is answered with, so a
-    // stub that ignores the patch would fold a choice nobody ever made.
-    vi.mocked(window.octopus.config.update).mockImplementation((patch) =>
-      Promise.resolve({ ok: true, value: config(patch) })
-    )
+    // The pane reads the tab back from the config it is answered with, so the
+    // stub keeps every patch as the main process does: one that answered with
+    // only the latest would drop the tab when the fold is written.
+    let stored = config()
+    vi.mocked(window.octopus.config.update).mockImplementation((patch) => {
+      stored = { ...stored, ...patch }
+      return Promise.resolve({ ok: true, value: stored })
+    })
     const user = await openApp()
     await user.click(screen.getByRole('button', { name: 'Terminal' }))
 

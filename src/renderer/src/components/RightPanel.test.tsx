@@ -118,6 +118,8 @@ function renderPanel(overrides: Partial<Props> = {}): {
     chatId: null,
     width: 360,
     onWidthChange: vi.fn(),
+    open: true,
+    onOpenChange: vi.fn(),
     leftWidth: LEFT_WIDTH,
     diffView: 'unified',
     onDiffView: vi.fn(),
@@ -129,6 +131,9 @@ function renderPanel(overrides: Partial<Props> = {}): {
     envFile: '.env',
     onRequestChanged: vi.fn(),
     onRemoveWorkspace: vi.fn(),
+    activeFilePath: null,
+    onOpenFile: vi.fn(),
+    onConversation: vi.fn(),
     onError: vi.fn(),
     ...overrides
   }
@@ -298,10 +303,10 @@ describe('RightPanel', () => {
     expect(props.onTab).toHaveBeenCalledWith('scripts')
   })
 
-  it('offers all five tabs', () => {
+  it('offers all six tabs', () => {
     renderPanel()
 
-    for (const label of ['Changes', 'Terminal', 'Scripts', 'Pull request', 'Notes']) {
+    for (const label of ['Files', 'Changes', 'Terminal', 'Scripts', 'Pull request', 'Notes']) {
       expect(screen.getByRole('button', { name: label })).toBeInTheDocument()
     }
   })
@@ -312,6 +317,14 @@ describe('RightPanel', () => {
    * lose along with the word is their name — a tab a screen reader announces as
    * nothing would be the real cost of the saving.
    */
+  it('writes Files out as a word', () => {
+    renderPanel()
+
+    const tab = screen.getByRole('button', { name: 'Files' })
+    expect(tab).toHaveTextContent('Files')
+    expect(tab).not.toHaveAttribute('title')
+  })
+
   it('names the tabs that have no word on them', () => {
     renderPanel()
 
@@ -323,11 +336,11 @@ describe('RightPanel', () => {
   })
 
   /*
-   * An icon, three words, an icon: the ends are the tools somebody reaches for
-   * and the middle is the work. Asserted in order, because nothing else here
-   * would notice the row being shuffled back.
+   * An icon, four words, an icon: the ends are the tools somebody reaches for
+   * and the middle is the work, Files first beside the shell. Asserted in
+   * order, because nothing else here would notice the row being shuffled back.
    */
-  it('opens the row with the terminal and closes it with the notes', () => {
+  it('opens the row with the terminal and the files and closes it with the notes', () => {
     renderPanel()
 
     const row = screen.getByRole('button', { name: 'Terminal' }).parentElement
@@ -335,7 +348,7 @@ describe('RightPanel', () => {
       (one) => one.getAttribute('title') ?? one.textContent
     )
 
-    expect(labels).toEqual(['Terminal', 'Changes', 'Scripts', 'Pull request', 'Notes'])
+    expect(labels).toEqual(['Terminal', 'Files', 'Changes', 'Scripts', 'Pull request', 'Notes'])
   })
 
   /*
@@ -394,7 +407,7 @@ describe('RightPanel', () => {
 
     expect(screen.getByRole('button', { name: 'Terminal' })).toHaveAttribute('aria-current', 'page')
     expect(screen.getByRole('button', { name: 'Changes' })).not.toHaveAttribute('aria-current')
-    expect(screen.getByText(/Select a workspace to open a terminal/)).toBeInTheDocument()
+    expect(screen.getByText(/a terminal opens in its directory/)).toBeInTheDocument()
   })
 
   // A review is built up over several turns, and unmounting the pane would
@@ -1615,15 +1628,85 @@ describe('RightPanel', () => {
 
     await waitFor(() => {
       /*
-       * Five buttons of 90, and jsdom reports padding and gaps as zero — so the
-       * floor is exactly 450. Asserting the number rather than "more than
+       * Six buttons of 90, and jsdom reports padding and gaps as zero — so the
+       * floor is exactly 540. Asserting the number rather than "more than
        * before" is what would catch the measurement itself going wrong.
        *
        * Every button is given the same width here, which the real row does not
-       * have: the notes tab is an icon precisely so that it costs about a third
+       * have: the icon tabs are icons precisely so that each costs about a third
        * of a word. What this pins is that the row decides the floor at all.
        */
-      expect(screen.getByRole('separator')).toHaveAttribute('aria-valuemin', '450')
+      expect(screen.getByRole('separator')).toHaveAttribute('aria-valuemin', '540')
+    })
+  })
+
+  // Folded away, the pane is hidden rather than unmounted — its terminals and
+  // servers belong to their workspaces — and nothing in it reads git meanwhile.
+  it('hides itself when folded and reads nothing until it is shown', async () => {
+    const { rerender } = renderPanel({
+      workspaces: [anna],
+      activeWorkspaceId: anna.id,
+      tab: 'diff',
+      open: false
+    })
+
+    expect(screen.queryByRole('separator')).not.toBeInTheDocument()
+    expect(octopus().workspaces.diff).not.toHaveBeenCalled()
+
+    rerender({ open: true })
+
+    await waitFor(() => {
+      expect(octopus().workspaces.diff).toHaveBeenCalledWith(anna.id)
+    })
+  })
+
+  // A drag well past the floor folds the pane, as a sidebar does elsewhere,
+  // and the same drag coming back brings it out again.
+  it('asks to fold when its edge is dragged well past the floor, and back', () => {
+    const { props } = renderPanel({ width: 360 })
+    const edge = screen.getByRole('separator')
+
+    fireEvent.pointerDown(edge, { clientX: 500 })
+    // 360 − 300 = 60, under half of the 280 floor.
+    fireEvent.pointerMove(window, { clientX: 800 })
+    expect(props.onOpenChange).toHaveBeenLastCalledWith(false)
+
+    fireEvent.pointerMove(window, { clientX: 520 })
+    expect(props.onOpenChange).toHaveBeenLastCalledWith(true)
+
+    fireEvent.pointerUp(window)
+    expect(props.onWidthChange).toHaveBeenCalledExactlyOnceWith(340)
+  })
+
+  /*
+   * A pane that starts folded measures its tabs while they have no size at
+   * all. Measured only then, its floor would be the schema's 280 and the
+   * Ukrainian labels would overflow it once it opens.
+   */
+  it('measures its tabs again when it unfolds', async () => {
+    // A hidden row lays out at nothing, as `display: none` does in a browser.
+    vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(function (
+      this: HTMLElement
+    ) {
+      const width = this.closest('[aria-hidden="true"]') ? 0 : 90
+      return {
+        width,
+        height: 28,
+        top: 0,
+        left: 0,
+        right: 0,
+        bottom: 0,
+        x: 0,
+        y: 0,
+        toJSON: () => ({})
+      }
+    })
+
+    const { rerender } = renderPanel({ width: 280, open: false })
+    rerender({ open: true })
+
+    await waitFor(() => {
+      expect(screen.getByRole('separator')).toHaveAttribute('aria-valuemin', '540')
     })
   })
 
@@ -1692,63 +1775,69 @@ describe('RightPanel', () => {
   })
 
   /*
-   * The window's edge moves this pane's edge, not the centre's.
-   *
-   * The centre is the pane with no width of its own, so it used to absorb every
-   * pixel the window gained or lost — and the conversation stops widening at
-   * 72rem, so what it absorbed was margin, while the diff and the terminal
-   * stayed as narrow as they started.
+   * The pane keeps the width it was given and the window's edge moves the
+   * centre, as a sidebar does in most desktop applications. It used to take
+   * every pixel the window gained or lost, which read as the pane having a mind
+   * of its own.
    */
-  it('takes the room a widened window adds, so the centre keeps the width it had', () => {
+  it('keeps its width when the window widens, so the centre takes the room', () => {
     renderPanel({ width: 360 })
 
     window.innerWidth = 1600
     fireEvent.resize(window)
 
-    expect(screen.getByRole('separator')).toHaveAttribute('aria-valuenow', '560')
+    expect(screen.getByRole('separator')).toHaveAttribute('aria-valuenow', '360')
   })
 
-  it('gives up its own width before the centre when the window narrows', () => {
+  it('keeps its width when the window narrows while the centre has room to give', () => {
     renderPanel({ width: 360 })
 
-    window.innerWidth = 1340
+    // 1100 less the left column's 296 and this pane's 360 leaves the centre
+    // 444 — more than its floor, so the centre is what got narrower.
+    window.innerWidth = 1100
     fireEvent.resize(window)
 
-    expect(screen.getByRole('separator')).toHaveAttribute('aria-valuenow', '300')
+    expect(screen.getByRole('separator')).toHaveAttribute('aria-valuenow', '360')
   })
 
   /*
-   * Where the centre finally starts to lose room. The pane cannot go below what
-   * its tabs need or they overflow it and push the whole window wider.
-   *
-   * jsdom lays nothing out, so the centre's share is not observable from here.
-   * What is, is that the pane refuses to shrink any further — and `main` is the
-   * only flexible child of the layout row in `App`, so every pixel this pane
-   * keeps is a pixel the centre gives up. Nothing in jsdom would notice if
-   * somebody broke that invariant; the aria value would keep reporting a width
-   * the layout no longer used.
+   * Where the pane finally gives way: the centre is down to its own floor of
+   * 360. jsdom lays nothing out, so the centre's share is not observable here;
+   * what is, is that the pane stops claiming what the centre needs — `main` is
+   * the only flexible child of the layout row in `App`, so the two are one
+   * budget.
    */
+  it('gives way only once the centre is down to its floor', () => {
+    renderPanel({ width: 360 })
+    const edge = screen.getByRole('separator')
+
+    // 1000 less 296 less the centre's 360 leaves 344 for the pane.
+    window.innerWidth = 1000
+    fireEvent.resize(window)
+
+    expect(edge).toHaveAttribute('aria-valuenow', '344')
+  })
+
   it('stops at the width its tabs need and leaves the rest to the centre', () => {
     renderPanel({ width: 360 })
     const edge = screen.getByRole('separator')
 
-    window.innerWidth = 1200
+    window.innerWidth = 900
     fireEvent.resize(window)
 
     expect(edge).toHaveAttribute('aria-valuenow', '280')
     expect(edge).toHaveAttribute('aria-valuemin', '280')
   })
 
-  // Measured from the window rather than accumulated, so the two subtractions
-  // cancel and nothing has to remember the journey — including the stretch
-  // spent pinned against the floor.
-  it('comes back to the width it had when the window comes back to its own', () => {
+  // What the window took is shown, never saved — the dragged width comes back
+  // once the room does.
+  it('comes back to the width it was given when the window has room again', () => {
     renderPanel({ width: 360 })
     const edge = screen.getByRole('separator')
 
-    window.innerWidth = 1000
+    window.innerWidth = 900
     fireEvent.resize(window)
-    window.innerWidth = 1400
+    window.innerWidth = 1600
     fireEvent.resize(window)
 
     expect(edge).toHaveAttribute('aria-valuenow', '360')
@@ -1815,12 +1904,24 @@ describe('RightPanel', () => {
 
     // Said in both halves, since neither has a workspace to run in.
     expect(
-      within(buildSection()).getByText('Select a workspace to run this in.')
+      within(buildSection()).getByText('Select a workspace on the left to run its scripts here.')
     ).toBeInTheDocument()
     expect(
-      within(serverSection()).getByText('Select a workspace to run this in.')
+      within(serverSection()).getByText('Select a workspace on the left to run its scripts here.')
     ).toBeInTheDocument()
     expect(within(buildSection()).queryByRole('button', { name: 'Build' })).not.toBeInTheDocument()
+  })
+
+  // The two halves stack in one tab, each with its own empty state, and two
+  // octopuses one above the other read as a rendering glitch. The server half
+  // keeps it because it is the one that is always unfolded.
+  it('draws one octopus for the tab, not one per half', async () => {
+    renderPanel({ workspaces: [anna], activeWorkspaceId: null, scripts: SCRIPTS })
+
+    await userEvent.click(scriptsTab())
+
+    expect(buildSection().querySelector('img')).toBeNull()
+    expect(serverSection().querySelectorAll('img')).toHaveLength(1)
   })
 
   // A session belongs to its workspace, not to whether its tab is on screen.

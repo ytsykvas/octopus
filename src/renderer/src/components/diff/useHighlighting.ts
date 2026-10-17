@@ -31,7 +31,7 @@ const NOTHING: HighlightingByFile = new Map()
  * seconds of a frozen window, spent colouring something nobody will read. The
  * file still draws; it simply draws plain.
  */
-const MAX_LINE_LENGTH = 2_000
+export const MAX_LINE_LENGTH = 2_000
 
 function drawableAsCode(
   hunks: readonly { readonly lines: readonly { readonly text: string }[] }[]

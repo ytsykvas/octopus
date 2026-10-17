@@ -68,25 +68,19 @@ export function installOctopusStub(): Api {
       history: vi.fn(() => ok([])),
       rewindPreview: vi.fn(() =>
         ok({
-          canRewind: true,
-          error: null,
-          filesChanged: [],
-          insertions: 0,
-          deletions: 0,
-          skippedLinks: 0
+          conversation: true,
+          files: {
+            canRewind: true,
+            error: null,
+            filesChanged: [],
+            insertions: 0,
+            deletions: 0,
+            skippedLinks: 0
+          }
         })
       ),
-      rewind: vi.fn(() =>
-        ok({
-          canRewind: true,
-          error: null,
-          filesChanged: [],
-          insertions: 0,
-          deletions: 0,
-          skippedLinks: 0
-        })
-      ),
-      send: vi.fn(() => ok(undefined)),
+      rewind: vi.fn(() => ok({ files: null, text: null })),
+      send: vi.fn(() => ok<string | null>(null)),
       interrupt: vi.fn(() => ok(undefined)),
       setWorkingMode: vi.fn(() => ok(undefined)),
       setPlanMode: vi.fn(() => ok(undefined)),
@@ -165,7 +159,10 @@ export function installOctopusStub(): Api {
     },
     files: {
       open: vi.fn(() => ok(undefined)),
-      search: vi.fn(() => ok([]))
+      search: vi.fn(() => ok([])),
+      tree: vi.fn(() => ok({ entries: [], statuses: {}, truncated: false })),
+      directory: vi.fn(() => ok({ entries: [], truncated: false })),
+      read: vi.fn(() => ok({ kind: 'text' as const, text: '', bytes: 0 }))
     },
     attachments: {
       paste: vi.fn(() => ok('/tmp/paste.png')),
@@ -307,6 +304,7 @@ function chatFixture(): Chat {
     status: 'idle',
     title: null,
     sessionId: null,
+    resumeAt: null,
     model: null,
     planModel: null,
     planEffort: null,
@@ -333,8 +331,10 @@ function defaultConfig(): Config {
     planModel: null,
     alwaysAllowedTools: [],
     disabledSkillDefaults: [],
+    dismissedTips: [],
     theme: 'system' as const,
     language: 'en' as const,
+    rightPanelOpen: true,
     rightPanelTab: 'diff' as const,
     rightPanelWidth: 360,
     diffView: 'unified' as const,
