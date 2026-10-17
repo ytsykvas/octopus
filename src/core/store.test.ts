@@ -92,6 +92,7 @@ function storedChat(overrides: Partial<Chat> = {}): Chat {
     status: 'idle',
     title: null,
     sessionId: null,
+    resumeAt: null,
     model: null,
     planModel: null,
     planEffort: null,
@@ -591,6 +592,7 @@ describe('chats', () => {
       status: 'idle',
       title: null,
       sessionId: null,
+      resumeAt: null,
       model: null,
       planModel: null,
       planEffort: null,
@@ -813,6 +815,17 @@ describe('the remembered model list', () => {
     const state = await loadState(file)
     expect(state.chats[0]?.effort).toBe('medium')
   })
+
+  // Written before a conversation could be rewound: it never was, so there is
+  // no cut waiting to be applied — and the file must still open.
+  it('loads a chat written before a rewind could leave a cut waiting', async () => {
+    const { resumeAt, ...older } = storedChat()
+    expect(resumeAt).toBeNull()
+    await writeFile(file, JSON.stringify({ ...withProject, chats: [older] }), 'utf8')
+
+    const state = await loadState(file)
+    expect(state.chats[0]?.resumeAt).toBeNull()
+  })
 })
 
 /*
@@ -835,6 +848,7 @@ describe('the commands a chat remembers', () => {
     status: 'idle',
     title: null,
     sessionId: null,
+    resumeAt: null,
     model: null,
     planModel: null,
     planEffort: null,

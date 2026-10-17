@@ -18,6 +18,7 @@ export function chat(overrides: Partial<Chat> = {}): Chat {
     status: 'idle',
     title: null,
     sessionId: null,
+    resumeAt: null,
     model: null,
     planModel: null,
     planEffort: null,

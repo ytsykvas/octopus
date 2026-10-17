@@ -37,6 +37,7 @@ Nothing but zod behind them, so a **value** can cross into the window.
 | [`standingPermissions.ts`](../src/core/standingPermissions.ts) | what "always allow" granted, and whether it covers a call. Narrower than the rule says wherever it cannot be sure, because wider is the bug this replaces                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               |
 | [`stores.ts`](../src/core/stores.ts)                           | which of the two directories octopus keeps things for the agent in — the installation's own, or one project's                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           |
 | [`libraryNames.ts`](../src/core/libraryNames.ts)               | what may name a command or a subagent, and which of the two it is. Underscores are allowed where a skill's name refuses them, because a command is typed by the user and `/run_checks` is a name people write                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           |
+| [`rewind.ts`](../src/core/rewind.ts)                           | what a rewind can put back — the conversation, the files, or both — and where the agent's memory is cut for a message, read out of the session's own chain                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              |
 | [`notes.ts`](../src/core/notes.ts)                             | how long a workspace's note may be. Its own module because the **window** enforces the ceiling as the text is typed, and the limit is bounded by `commit` rewriting `state.json` whole rather than by anything about a note                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             |
 | [`skillNames.ts`](../src/core/skillNames.ts)                   | what may name a skill, which scope it came from, and the key the agent knows it by                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      |
 | [`envProfileNames.ts`](../src/core/envProfileNames.ts)         | what may name a set of variables, and the name a project's first one gets. Split out of `envProfiles.ts` when the dialog asking for a name was built: that module reads and writes files, so its rule was unreachable from the field somebody types into                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
@@ -55,7 +56,7 @@ Node imports, rather than being imported out of one that has them.
 | [`persist.ts`](../src/core/persist.ts)             | atomic writes of JSON and of text, validated reads, honest failures                                                                                                                                                                                                                                                                                                                                                                            |
 | [`config.ts`](../src/core/config.ts)               | settings and their bounds                                                                                                                                                                                                                                                                                                                                                                                                                      |
 | [`store.ts`](../src/core/store.ts)                 | projects, workspaces and chats, and the migrations                                                                                                                                                                                                                                                                                                                                                                                             |
-| [`transcript.ts`](../src/core/transcript.ts)       | chat history as append-only JSONL                                                                                                                                                                                                                                                                                                                                                                                                              |
+| [`transcript.ts`](../src/core/transcript.ts)       | chat history as JSONL, appended to and cut back only by a rewind                                                                                                                                                                                                                                                                                                                                                                               |
 | [`frontmatter.ts`](../src/core/frontmatter.ts)     | a markdown document with YAML frontmatter, read the way the agent reads one — and the decision that frontmatter which will not parse is read line by line rather than refused                                                                                                                                                                                                                                                                  |
 | [`parallel.ts`](../src/core/parallel.ts)           | waiting properly. `allOf` makes reads at once and abandons none of them when another fails — `Promise.all` rejects on the first failure and leaves the rest running, which for a child process means a `git` still writing into a directory the caller has moved on from, and that is the `ENOTEMPTY` that failed a full run in five for a month. `within` is the other half: waiting, but not for ever, and saying which of the two happened. |
 | [`download.ts`](../src/core/download.ts)           | fetching one document over https: the scheme, the redirect, the timeout and the size cap, with the caller supplying its own words for a refusal                                                                                                                                                                                                                                                                                                |
@@ -615,21 +616,52 @@ workspace nobody has spoken to gets no record from it being looked at.
 asks for. A flag on the first would have made every caller say which of the two
 it meant.
 
-**Putting the files back** (`rewindChat`, `previewRewind`) asks the agent to
-restore tracked files to how they were when a given user message was sent. It
-rests on three things. Sessions are started with `enableFileCheckpointing`,
-because a checkpoint cannot be taken for work already done. Every message is
-sent with an id octopus makes (`randomUUID`, kept in the transcript as `uuid`),
-since nothing in the stream says it back and the id is the only handle on that
-point. And three checks run before the agent is asked: the **workspace** is
-quiet (the worktree is shared by up to three conversations and a rewind restores
-whatever this one's checkpoint tracked, so it is not enough that this tab is
-idle), the message is one this conversation recorded, and there is a session,
-started from the stored id if the application was restarted since. The quiet is
-checked again after the session is started, since starting took time and a
-message sent in that window began a turn. A real rewind is also written to the
-transcript as `files_rewound`, with the count of files a link kept it from
-restoring. A preview writes nothing.
+**Rewinding to a message** (`rewindChat`, `previewRewind`) puts back the
+conversation, the files, or both (`RewindScope` in `rewind.ts`) to how they were
+just before a given user message was sent. It rests on a few things. Every
+message is sent with an id octopus makes (`randomUUID`, kept in the transcript
+as `uuid`), since nothing in the stream says it back and the id is the only
+handle on that point — and, measured, the CLI records the prompt under exactly
+that id, so it is an entry of the session's own chain.
+
+The **files** half asks the agent: sessions are started with
+`enableFileCheckpointing`, because a checkpoint cannot be taken for work already
+done, and `rewindFiles` restores what it tracked. It needs the **workspace**
+quiet — the worktree is shared by up to three conversations, and the checkpoint
+restores whatever this one tracked — checked before and again after the session
+is started, since a message sent while it started began a turn. It is written to
+the transcript as `files_rewound`, with the count of files a link kept it from
+restoring.
+
+The **conversation** half needs only this conversation quiet. Its cut is found
+in the session's own history (`getSessionMessages`, through the injectable
+`sessionMessages`): `cutBefore` names the entry just before the message, which
+is the last thing the agent will remember; a message nothing precedes leaves
+nothing to keep, and the conversation starts over with no session. A message
+the chain no longer holds — compacted away, or renamed by a fork — is not
+offered at all rather than cut approximately. The cut is stored on the record
+as `resumeAt` and the session is closed, so the next one starts with
+`resumeSessionAt` in the **same** session; measured against the real CLI, a
+session started at the cut and closed unused leaves a plain resume remembering
+everything, which is why the cut is kept until a `result` of the session that
+applied it (only that cut — a later rewind may have stored another), or a new
+session id, clears it. A fork taken while a cut waits passes it as
+`upToMessageId`. Then our transcript is cut back through the write queue
+(`truncateTranscript`, written whole and renamed into place) and the message's
+text comes back for the composer; if that fails the record is put back, which
+is exact, since nothing has been sent on top of the cut. A
+`conversation_rewound` event, never stored, tells every window to read the log
+again.
+
+Everything that can refuse is asked before anything changes; then the files go
+first, while the session that checkpointed them is alive, and their row is
+written after the cut so the cut cannot take it. A message, or a second rewind,
+arriving mid-way is refused with `rewindInProgress`: a send writes its line
+outside the write queue and starts a session, and either would land in the
+history being cut. The preview answers each half for itself — the conversation
+as a yes or no, the files as the agent's dry run, `canRewind` false included,
+or null while another conversation of the workspace works — and changes
+nothing.
 
 A session is built from the record **as it is by the time it is registered**,
 not from the snapshot its starter held: starting takes several awaits, and a

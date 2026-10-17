@@ -68,6 +68,12 @@ export interface SessionOptions {
   readonly cwd: string
   /** A session to continue, or null to start a new one. */
   readonly resume: string | null
+  /**
+   * Where to pick `resume` up, when the conversation was rewound: the last
+   * entry of the session the agent should still remember. Null continues
+   * from the end, and it means nothing without a session to resume.
+   */
+  readonly resumeAt: string | null
   readonly settingSources: readonly SettingSource[]
   readonly permissionMode: PermissionMode
   /** Model override; null leaves the choice to the agent. */
@@ -534,6 +540,9 @@ export function startSession(options: SessionOptions, hooks: SessionHooks): Agen
       // a line between "no override" and "an override that is nothing", and
       // the SDK reads a present `resume` as a session to look for.
       ...(options.resume !== null && { resume: options.resume }),
+      // Only beside `resume`: the CLI refuses the flag on its own.
+      ...(options.resume !== null &&
+        options.resumeAt !== null && { resumeSessionAt: options.resumeAt }),
       ...(options.model !== null && { model: options.model }),
       effort,
       // The flag-settings layer, which is where `ultracode` lives: it is not an

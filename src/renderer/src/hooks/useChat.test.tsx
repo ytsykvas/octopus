@@ -636,6 +636,162 @@ describe('the record the pane creates for itself', () => {
   })
 })
 
+describe('a conversation rewound', () => {
+  const kept: ChatEntry = { role: 'user', at: '2026-08-11T09:00:00.000Z', text: 'look around' }
+  const dropped: ChatEntry = { role: 'user', at: '2026-08-11T09:05:00.000Z', text: 'rename it' }
+
+  // The transcript on disk is already the shorter one, and it is the record:
+  // every window holding the log reads it again rather than cutting its own.
+  it('reads the log again', async () => {
+    givenChat([kept, dropped])
+    const { result } = renderHook(() => useChat(...open()))
+    await waitFor(() => {
+      expect(result.current.entries).toEqual([kept, dropped])
+    })
+
+    vi.mocked(octopus().chats.history).mockResolvedValue({ ok: true, value: [kept] })
+    emitAgentEvent({ type: 'conversation_rewound', messageId: 'm-2' })
+
+    await waitFor(() => {
+      expect(result.current.entries).toEqual([kept])
+    })
+  })
+
+  it('says so when the log cannot be read again', async () => {
+    givenChat([kept, dropped])
+    const { result } = renderHook(() => useChat(...open()))
+    await waitFor(() => {
+      expect(result.current.entries).toHaveLength(2)
+    })
+
+    vi.mocked(octopus().chats.history).mockResolvedValue({ ok: false, error: 'unreadable' })
+    emitAgentEvent({ type: 'conversation_rewound', messageId: 'm-2' })
+
+    await waitFor(() => {
+      expect(result.current.error).toBe('unreadable')
+    })
+    // Nothing is guessed at in its place: the log stays as it was drawn.
+    expect(result.current.entries).toHaveLength(2)
+  })
+})
+
+describe('the id a message is sent under', () => {
+  const MESSAGE = '22222222-2222-4222-8222-222222222222'
+
+  /*
+   * Reported from a running app: the mark that puts the files back appeared
+   * only on messages from before the pane was opened. The one just sent — the
+   * one most often worth undoing — was drawn without its id, and got it only
+   * when the history was read again on the next visit.
+   */
+  it('takes the id the core gave it, so the message can be rewound at once', async () => {
+    const earlier: ChatEntry = {
+      role: 'user',
+      at: '2026-08-11T09:00:00.000Z',
+      text: 'look around',
+      uuid: 'earlier'
+    }
+    givenChat([earlier])
+    vi.mocked(octopus().chats.send).mockResolvedValue({ ok: true, value: MESSAGE })
+    const { result } = renderHook(() => useChat(...open()))
+    await waitFor(() => {
+      expect(result.current.entries).toEqual([earlier])
+    })
+
+    await act(async () => {
+      await result.current.send('rename the helper')
+    })
+
+    // The new line gets its id; the one before it is left exactly as it was.
+    expect(result.current.entries).toEqual([
+      earlier,
+      expect.objectContaining({ role: 'user', text: 'rename the helper', uuid: MESSAGE })
+    ])
+  })
+
+  // `/usage` is answered by octopus and never reaches the agent: there is
+  // nothing to rewind to.
+  it('stays without one when the core gave none', async () => {
+    givenChat()
+    vi.mocked(octopus().chats.send).mockResolvedValue({ ok: true, value: null })
+    const { result } = renderHook(() => useChat(...open()))
+    await waitFor(() => {
+      expect(octopus().chats.history).toHaveBeenCalled()
+    })
+
+    await act(async () => {
+      await result.current.send('/usage')
+    })
+
+    expect(result.current.entries).toHaveLength(1)
+    expect(result.current.entries[0]).not.toHaveProperty('uuid')
+  })
+
+  // The log was replaced while the send was on its way — another conversation,
+  // or a fresh read — and the line it would have stamped is no longer there.
+  it('leaves a log that no longer holds the message alone', async () => {
+    givenChat()
+    const sending = held<Result<string | null>>()
+    vi.mocked(octopus().chats.send).mockReturnValue(sending.promise)
+    const { result } = renderHook(() => useChat(...open()))
+    await waitFor(() => {
+      expect(octopus().chats.history).toHaveBeenCalled()
+    })
+
+    let sent: Promise<boolean> | undefined
+    act(() => {
+      sent = result.current.send('first')
+    })
+    await waitFor(() => {
+      expect(result.current.entries).toHaveLength(1)
+    })
+    act(() => {
+      emitAgentEvent({ type: 'conversation_reset', cleared: true })
+    })
+
+    await act(async () => {
+      sending.resolve({ ok: true, value: MESSAGE })
+      await sent
+    })
+
+    expect(result.current.entries.some((entry) => 'uuid' in entry)).toBe(false)
+  })
+
+  /*
+   * The line is found by identity, not by what it says. A log read again in
+   * the meantime holds a line reading exactly the same, and stamping that one
+   * would hand the id to a message the core may have recorded under another.
+   */
+  it('does not stamp a line that only reads the same', async () => {
+    givenChat()
+    const sending = held<Result<string | null>>()
+    vi.mocked(octopus().chats.send).mockReturnValue(sending.promise)
+    const { result } = renderHook(() => useChat(...open()))
+    await waitFor(() => {
+      expect(octopus().chats.history).toHaveBeenCalled()
+    })
+
+    let sent: Promise<boolean> | undefined
+    act(() => {
+      sent = result.current.send('first')
+    })
+    const lookalike: ChatEntry = { role: 'user', at: '2026-08-11T09:00:00.000Z', text: 'first' }
+    vi.mocked(octopus().chats.history).mockResolvedValue({ ok: true, value: [lookalike] })
+    emitAgentEvent({ type: 'conversation_rewound', messageId: 'm-1' })
+    await waitFor(() => {
+      expect(result.current.entries).toEqual([lookalike])
+    })
+
+    await act(async () => {
+      sending.resolve({ ok: true, value: MESSAGE })
+      await sent
+    })
+
+    expect(result.current.entries).toEqual([lookalike])
+    expect(result.current.entries[0]).not.toHaveProperty('uuid')
+  })
+})
+
 describe('a different conversation in the same pane', () => {
   // Switching tabs is not a continuation: the log, the answer being streamed
   // and the question being waited on all belong to the one being left.
@@ -661,6 +817,44 @@ describe('a different conversation in the same pane', () => {
 
     expect(result.current.entries).toEqual([])
     expect(result.current.chat?.id).toBe('chat-2')
+  })
+
+  /*
+   * A rewind re-reads the log, and the read can still be on its way when the
+   * tab changes. Landing after the switch, it drew the conversation left
+   * behind into the one now in front.
+   */
+  it('keeps a log re-read after a rewind out of the conversation switched to', async () => {
+    const first = chat()
+    const second = chat({ id: 'chat-2' })
+    const kept: ChatEntry = { role: 'user', at: '2026-08-11T09:00:00.000Z', text: 'the first one' }
+    const other: ChatEntry = { role: 'user', at: '2026-08-11T09:00:00.000Z', text: 'the second' }
+    vi.mocked(octopus().chats.history).mockResolvedValue({ ok: true, value: [kept] })
+    const { result, rerender } = renderHook(
+      ({ record }: { record: Chat }) =>
+        useChat(record, 'planner/anna', 'idle', describeFailure, noted),
+      { initialProps: { record: first } }
+    )
+    await waitFor(() => {
+      expect(result.current.entries).toEqual([kept])
+    })
+
+    const reread = held<Result<ChatEntry[]>>()
+    vi.mocked(octopus().chats.history).mockReturnValueOnce(reread.promise)
+    emitAgentEvent({ type: 'conversation_rewound', messageId: 'm-1' })
+
+    vi.mocked(octopus().chats.history).mockResolvedValue({ ok: true, value: [other] })
+    rerender({ record: second })
+    await waitFor(() => {
+      expect(result.current.entries).toEqual([other])
+    })
+
+    await act(async () => {
+      reread.resolve({ ok: true, value: [] })
+      await reread.promise
+    })
+
+    expect(result.current.entries).toEqual([other])
   })
 })
 

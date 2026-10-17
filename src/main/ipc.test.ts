@@ -2189,6 +2189,22 @@ describe('the agent chat', () => {
   })
 
   describe('putting the files back to a message', () => {
+    // What to put back comes from the window too, and only three answers mean
+    // anything.
+    it('refuses a choice it does not know', async () => {
+      const projectId = await addProject()
+      const workspace = await createWorkspace(projectId)
+      const opened = (await invoke('chats:open', workspace.id)) as {
+        ok: true
+        value: { id: string }
+      }
+      const stranger = '00000000-0000-4000-8000-000000000000'
+
+      const refused = await invoke('chats:rewind', opened.value.id, stranger, 'everything')
+      expect(refused).toMatchObject({ ok: false })
+      expect(refused).not.toMatchObject({ code: 'rewindUnavailable' })
+    })
+
     // The id names a point in a conversation, and comes from the window.
     it('refuses an id that is not a uuid', async () => {
       const projectId = await addProject()
@@ -2198,7 +2214,7 @@ describe('the agent chat', () => {
         value: { id: string }
       }
 
-      expect(await invoke('chats:rewind', opened.value.id, 'not-a-uuid')).toMatchObject({
+      expect(await invoke('chats:rewind', opened.value.id, 'not-a-uuid', 'files')).toMatchObject({
         ok: false
       })
       expect(await invoke('chats:rewindPreview', opened.value.id, 42)).toMatchObject({
@@ -2216,7 +2232,9 @@ describe('the agent chat', () => {
       }
       const stranger = '00000000-0000-4000-8000-000000000000'
 
-      await expect(invoke('chats:rewind', opened.value.id, stranger)).resolves.toMatchObject({
+      await expect(
+        invoke('chats:rewind', opened.value.id, stranger, 'both')
+      ).resolves.toMatchObject({
         ok: false,
         code: 'rewindUnavailable'
       })
@@ -2614,7 +2632,12 @@ describe('the agent chat', () => {
 
     const opened = await invoke('chats:open', workspace.id)
 
-    await invoke('chats:send', chatIdOf(opened), 'hello')
+    // Answered with the id the message was sent under, which is what lets the
+    // line already drawn be rewound before the history is read again.
+    await expect(invoke('chats:send', chatIdOf(opened), 'hello')).resolves.toEqual({
+      ok: true,
+      value: expect.stringMatching(/^[0-9a-f-]{36}$/) as unknown
+    })
 
     await vi.waitFor(() => {
       expect(bench.chatEvents.map((entry) => entry.event)).toContainEqual({

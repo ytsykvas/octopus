@@ -297,8 +297,11 @@ export function useChat(
    */
   useEffect(() => {
     if (openChatId === null) return
+    // A read started here can land after the pane has moved to another
+    // conversation; this is what tells it the log it brings is no longer wanted.
+    let listening = true
 
-    return onChatEvent(({ event }) => {
+    const release = onChatEvent(({ event }) => {
       if (event.type === 'text_delta') {
         setStreaming((current) => ({ ...current, text: current.text + event.text }))
         return
@@ -306,6 +309,21 @@ export function useChat(
 
       if (event.type === 'thinking_delta') {
         setStreaming((current) => ({ ...current, thinking: current.thinking + event.text }))
+        return
+      }
+
+      /* The conversation was cut back to before a message. The transcript on
+         disk is already the shorter one, and it is the record — so it is read
+         again rather than the cut repeated here, which would be a second copy
+         of where it falls. Every window holding this log hears it; only the
+         one that asked puts the message back in its field. */
+      if (event.type === 'conversation_rewound') {
+        setStreaming(NOTHING_STREAMING)
+        void window.octopus.chats.history(openChatId).then((history) => {
+          if (!listening) return
+          if (history.ok) setEntries(history.value)
+          else setError(describeFailure(history))
+        })
         return
       }
 
@@ -362,7 +380,12 @@ export function useChat(
         setPendingElicitation(null)
       }
     }, openChatId)
-  }, [openChatId])
+
+    return () => {
+      listening = false
+      release()
+    }
+  }, [openChatId, describeFailure])
 
   /**
    * The conversation's record, created if this is the first thing done to it.
@@ -398,7 +421,8 @@ export function useChat(
 
       // Drawn before the round trip: the message is the user's own, and
       // waiting for the disk to confirm it makes typing feel unresponsive.
-      setEntries((current) => [...current, { role: 'user', at: new Date().toISOString(), text }])
+      const drawn: ChatEntry = { role: 'user', at: new Date().toISOString(), text }
+      setEntries((current) => [...current, drawn])
       setStreaming(NOTHING_STREAMING)
       setBusy(true)
       setError(null)
@@ -428,6 +452,17 @@ export function useChat(
         if (history.ok) setEntries(history.value)
 
         return false
+      }
+
+      /* The id the core recorded it under, put on the line already drawn: it
+         is what the mark that rewinds to this message asks with, and the line
+         had none until now. Matched by identity, so a log replaced in the
+         meantime — another conversation, a cleared one — is left alone. */
+      const uuid = sent.value
+      if (uuid !== null) {
+        setEntries((current) =>
+          current.map((entry) => (entry === drawn ? { ...drawn, uuid } : entry))
+        )
       }
 
       return true

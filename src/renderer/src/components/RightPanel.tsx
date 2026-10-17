@@ -199,6 +199,14 @@ interface RightPanelProps {
   readonly width: number
   /** Persists the width; called when a drag ends, not during it. */
   readonly onWidthChange: (width: number) => void
+  /**
+   * Whether the pane is showing. Folded, it is hidden rather than unmounted:
+   * its terminals and the servers running in them belong to their workspaces,
+   * and unmounting is how a terminal is ended.
+   */
+  readonly open: boolean
+  /** Asked for by a drag past the floor, which folds the pane, and back. */
+  readonly onOpenChange: (open: boolean) => void
   /** The project strip plus the workspace list, or just the strip when folded. */
   readonly leftWidth: number
   /** How the reader asked for diffs to be laid out, across sessions. */
@@ -252,6 +260,8 @@ export function RightPanel({
   chatId,
   width,
   onWidthChange,
+  open,
+  onOpenChange,
   leftWidth,
   diffView,
   onDiffView,
@@ -515,15 +525,10 @@ export function RightPanel({
   const tabs = useRef<HTMLDivElement>(null)
 
   /*
-   * The width the pane last settled on, and the window it settled at.
-   *
-   * One fact in two numbers, because either alone says nothing: what the pane
-   * takes is what it was given plus everything the window has gained or lost
-   * since. Held rather than accumulated — a running total drifts out of step
-   * with the ceiling beside it, and would need a reset nobody would remember.
+   * The width the pane last settled on — dragged, nudged, or read from the
+   * config. The window never moves it; see `applied` below.
    */
   const [settledWidth, setSettledWidth] = useState(width)
-  const [settledWindow, setSettledWindow] = useState(windowWidth)
   /*
    * The stored width as this last saw it.
    *
@@ -543,8 +548,10 @@ export function RightPanel({
   if (width !== storedWidth) {
     setStoredWidth(width)
     setSettledWidth(width)
-    setSettledWindow(windowWidth)
   }
+
+  // Folded, no tab is on screen, so none of them reads git or the disk.
+  const showing = open ? tab : null
 
   const active = workspaces.find((workspace) => workspace.id === activeWorkspaceId) ?? null
 
@@ -578,36 +585,34 @@ export function RightPanel({
     }
   }, [])
 
-  // Re-measured on a language change, which is when the labels get longer.
+  // Re-measured on a language change, which is when the labels get longer —
+  // and on unfolding, since a pane that started folded measured its tabs while
+  // they had no size at all and would otherwise keep a floor of nothing.
   useEffect(() => {
     const row = tabs.current
     // Attached before effects run; guarded only because the ref's type admits null.
     /* v8 ignore next */
     if (!row) return
 
+    if (!open) return
+
     setMinWidth(Math.max(MIN_WIDTH, measureTabs(row)))
-  }, [i18n.language])
+  }, [i18n.language, open])
 
   const maxWidth = maxWidthFor(windowWidth, leftWidth, minWidth)
 
   /*
-   * What the pane takes if nothing stops it.
+   * The pane keeps the width it was given, and the window's edge moves the
+   * centre — the way a sidebar behaves in most desktop applications. It used to
+   * be the other way round: the pane took every pixel the window gained or
+   * lost, on the grounds that the conversation stops widening at 72rem. It
+   * read as the pane having a mind of its own, so it went.
    *
-   * Dragging the window's own edge drags this pane's edge with it, and the
-   * centre keeps the width it had. The centre is the pane with no width of its
-   * own, so until now it absorbed every pixel the window gained or lost — and
-   * the conversation stops widening at 72rem, so what it absorbed was margin,
-   * while the diff and the terminal stayed as narrow as they started.
-   *
-   * Measured from the window rather than accumulated, which is what makes it
-   * symmetrical for free: put the window back where it was and the two
-   * subtractions cancel, so the pane is back where it was too, with nothing
-   * having had to remember the journey.
+   * Clamped on the way out rather than into what was settled: once the centre
+   * is down to its floor the pane gives way, and a width the window has no
+   * room for is kept and comes back when the room does.
    */
-  const grown = settledWidth + (windowWidth - settledWindow)
-  // Clamped on the way out rather than into what was settled, so a width the
-  // window has no room for is kept and comes back when the room does.
-  const applied = Math.min(Math.max(dragWidth ?? grown, minWidth), maxWidth)
+  const applied = Math.min(Math.max(dragWidth ?? settledWidth, minWidth), maxWidth)
 
   return (
     <section
@@ -618,7 +623,10 @@ export function RightPanel({
         // reach for it later.
         ...(color ? ({ '--project-color': `var(--project-${color})` } as React.CSSProperties) : {})
       }}
-      className="border-line bg-surface relative flex shrink-0 flex-col border-l"
+      // Hidden, never unmounted — see `open`. `aria-hidden` beside the class,
+      // as the tabs below do it: the class means nothing without a stylesheet.
+      aria-hidden={!open}
+      className={`border-line bg-surface relative flex shrink-0 flex-col border-l ${open ? '' : 'hidden'}`}
     >
       {/* Outside every tab pane, where the other dialogs of the app are.
           Mounted inside one, it survived a tab change — the pane is hidden with
@@ -639,14 +647,15 @@ export function RightPanel({
         min={minWidth}
         max={maxWidth}
         onResize={setDragWidth}
+        onFold={(folded) => {
+          onOpenChange(!folded)
+        }}
         onCommit={(committed) => {
           setDragWidth(null)
           // Settled here rather than waiting for the config to answer. That
           // round trip takes a frame or two, and falling back to the pre-drag
-          // width in the meantime makes the release bounce — worse, growth
-          // would be measured from the old window and counted twice.
+          // width in the meantime makes the release bounce.
           setSettledWidth(committed)
-          setSettledWindow(windowWidth)
           // `storedWidth` is deliberately left alone: it is what the config
           // says, and the config has not said it yet. So a save that fails
           // leaves the pane where it was dragged while the config keeps the old
@@ -718,7 +727,7 @@ export function RightPanel({
       >
         <FilesPanel
           workspace={active}
-          visible={tab === 'files'}
+          visible={showing === 'files'}
           activePath={activeFilePath}
           onOpen={onOpenFile}
         />
@@ -734,7 +743,7 @@ export function RightPanel({
         <WorkspaceTerminals
           workspaces={workspaces}
           activeId={activeWorkspaceId}
-          visible={tab === 'terminal'}
+          visible={showing === 'terminal'}
         />
       </div>
 
@@ -753,7 +762,7 @@ export function RightPanel({
       >
         <DiffPanel
           workspace={active}
-          visible={tab === 'diff'}
+          visible={showing === 'diff'}
           view={diffView}
           onView={onDiffView}
           width={applied}
@@ -1101,7 +1110,7 @@ export function RightPanel({
               activeId={activeWorkspaceId}
               kind="setup"
               scriptFor={(id) => scripts.get(id)?.scripts.setup ?? null}
-              visible={tab === 'scripts'}
+              visible={showing === 'scripts'}
               projectFor={projectFor}
               onOpenSettings={onEditScripts}
               tokenFor={(id) => sequence.runOf(id).build}
@@ -1135,7 +1144,7 @@ export function RightPanel({
             activeId={activeWorkspaceId}
             kind="run"
             scriptFor={(id) => scripts.get(id)?.scripts.run ?? null}
-            visible={tab === 'scripts'}
+            visible={showing === 'scripts'}
             projectFor={projectFor}
             onOpenSettings={onEditScripts}
             tokenFor={(id) => sequence.runOf(id).server}
@@ -1163,7 +1172,7 @@ export function RightPanel({
       >
         <PullRequestPanel
           workspace={active}
-          visible={tab === 'pullRequest'}
+          visible={showing === 'pullRequest'}
           chatId={chatId}
           quotes={quotes}
           envFile={envFile}

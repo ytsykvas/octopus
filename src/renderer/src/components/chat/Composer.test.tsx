@@ -1450,3 +1450,39 @@ describe('stopping with Escape', () => {
     expect(screen.getByRole('button', { name: 'Stop' })).toHaveAttribute('title', 'Stop (Esc)')
   })
 })
+
+describe('a message handed back', () => {
+  // A rewound message comes back to be edited and sent again: it replaces what
+  // was there, as Claude Code's own rewind does, and the next key continues it.
+  it('takes the place of the draft, with the caret at its end and the focus in the field', () => {
+    const { rerender } = renderComposer({ initialDraft: 'half a thought' })
+
+    rerender({ seed: { text: 'rename it', id: 1 } })
+
+    const field = screen.getByRole('textbox')
+    expect(field).toHaveValue('rename it')
+    expect(field).toHaveFocus()
+    expect((field as HTMLTextAreaElement).selectionStart).toBe('rename it'.length)
+  })
+
+  // A render that passes the same seed again is not a second instruction.
+  it('is applied once per hand-back, and again for the next one', async () => {
+    const user = userEvent.setup()
+    const { rerender } = renderComposer()
+    rerender({ seed: { text: 'rename it', id: 1 } })
+    await user.type(screen.getByRole('textbox'), ' carefully')
+
+    rerender({ seed: { text: 'rename it', id: 1 } })
+    expect(screen.getByRole('textbox')).toHaveValue('rename it carefully')
+
+    rerender({ seed: { text: 'rename it', id: 2 } })
+    expect(screen.getByRole('textbox')).toHaveValue('rename it')
+  })
+
+  // Remounted per workspace: a seed already applied must not come back.
+  it('takes one present when it mounts as already applied', () => {
+    renderComposer({ initialDraft: 'my own words', seed: { text: 'rename it', id: 3 } })
+
+    expect(screen.getByRole('textbox')).toHaveValue('my own words')
+  })
+})

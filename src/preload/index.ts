@@ -11,7 +11,6 @@ import type {
   Chat,
   ClosedChat,
   EffortChoice,
-  FileRewind,
   WorkingMode
 } from '@core/chats.js'
 import type {
@@ -27,6 +26,7 @@ import type {
 } from '@core/service.js'
 import type { ScriptsInWorkspace } from '@core/repoSource.js'
 import type { QuestionAnswer } from '@core/questions.js'
+import type { RewindOutcome, RewindPreview, RewindScope } from '@core/rewind.js'
 import type { ChatEntry } from '@core/transcript.js'
 import type { TerminalExit, TerminalOutput, TerminalSession, TerminalSpec } from '@core/terminal.js'
 import type { Config } from '@core/config.js'
@@ -219,21 +219,29 @@ const api = {
     rename: (chatId: string, title: string): Promise<Result<void>> =>
       ipcRenderer.invoke('chats:rename', chatId, title) as Promise<Result<void>>,
 
-    /** What putting the files back to a message would do, without doing it. */
-    rewindPreview: (chatId: string, messageId: string): Promise<Result<FileRewind>> =>
-      ipcRenderer.invoke('chats:rewindPreview', chatId, messageId) as Promise<Result<FileRewind>>,
+    /** What rewinding to a message could do, without doing any of it. */
+    rewindPreview: (chatId: string, messageId: string): Promise<Result<RewindPreview>> =>
+      ipcRenderer.invoke('chats:rewindPreview', chatId, messageId) as Promise<
+        Result<RewindPreview>
+      >,
 
-    /** Puts the files back to how they were when the message was sent. */
-    rewind: (chatId: string, messageId: string): Promise<Result<FileRewind>> =>
-      ipcRenderer.invoke('chats:rewind', chatId, messageId) as Promise<Result<FileRewind>>,
+    /** Rewinds to just before a message: the conversation, the files, or both. */
+    rewind: (
+      chatId: string,
+      messageId: string,
+      scope: RewindScope
+    ): Promise<Result<RewindOutcome>> =>
+      ipcRenderer.invoke('chats:rewind', chatId, messageId, scope) as Promise<
+        Result<RewindOutcome>
+      >,
 
     /** Everything said in this chat before now. */
     history: (chatId: string): Promise<Result<ChatEntry[]>> =>
       ipcRenderer.invoke('chats:history', chatId) as Promise<Result<ChatEntry[]>>,
 
     /** Sends a message. The answer arrives through `onEvent`, not here. */
-    send: (chatId: string, text: string): Promise<Result<void>> =>
-      ipcRenderer.invoke('chats:send', chatId, text) as Promise<Result<void>>,
+    send: (chatId: string, text: string): Promise<Result<string | null>> =>
+      ipcRenderer.invoke('chats:send', chatId, text) as Promise<Result<string | null>>,
 
     /** Stops the current turn; the session stays open for the next message. */
     interrupt: (chatId: string): Promise<Result<void>> =>

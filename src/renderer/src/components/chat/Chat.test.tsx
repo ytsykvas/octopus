@@ -47,6 +47,8 @@ function Pane({ workspace = WORKSPACE }: { workspace?: WorkspaceView }): React.J
         defaultModel={null}
         defaultPlanModel={null}
         onOpenSkillSettings={vi.fn()}
+        dismissedTips={[]}
+        onDismissTip={vi.fn()}
       />
       {/* What the right pane's tree does, reduced to a button. */}
       <button
@@ -66,6 +68,12 @@ async function openTwo(): Promise<void> {
   render(<Pane />)
   await waitFor(() => {
     expect(screen.getByText('Claude 2')).toBeInTheDocument()
+  })
+  // And both logs read. The strip is drawn from the list, before either pane
+  // has its history; an event delivered in between was drawn and then replaced
+  // by the history landing after it — on a loaded CI runner, now and then.
+  await waitFor(() => {
+    expect(screen.getAllByText('Start the conversation')).toHaveLength(2)
   })
 }
 

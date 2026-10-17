@@ -5,9 +5,10 @@
  * same thing as what the screen has to draw. Without our own record a chat
  * comes back empty after a restart while its session is very much alive.
  *
- * Append-only, and one line per entry, because the alternative is rewriting a
+ * Appended to, one line per entry, because the alternative is rewriting a
  * growing JSON document on every event: a chat that has run for an hour would
- * spend most of its time serialising its own past.
+ * spend most of its time serialising its own past. The one rewrite is a rewind,
+ * which only ever takes lines off the end (`truncateTranscript`).
  */
 
 import { appendFile, copyFile, type FileHandle, mkdir, open, readFile, rm } from 'node:fs/promises'
@@ -17,6 +18,7 @@ import { z } from 'zod'
 
 import { AgentEventSchema } from './events.js'
 import { chatTranscript } from './paths.js'
+import { writeTextFile } from './persist.js'
 import type { ChatId } from './types.js'
 
 export const ChatEntrySchema = z.discriminatedUnion('role', [
@@ -132,6 +134,44 @@ export async function copyTranscript(from: ChatId, to: ChatId, root?: string): P
   } catch {
     // Nothing was said in the source, or nothing can be written for it.
   }
+}
+
+/**
+ * Cuts a chat's history back to just before a message the user sent, and
+ * answers with that message's text — which is what the composer is handed back.
+ *
+ * Null, with the file untouched, when no such message is in it: the caller has
+ * already checked, and a cut at a guess would lose lines for nothing.
+ *
+ * The lines kept are kept byte for byte, an unreadable one included: this takes
+ * a suffix away and has no business reformatting what stays. Written whole and
+ * renamed into place, so a crash leaves either history and never half of one.
+ */
+export async function truncateTranscript(
+  chatId: ChatId,
+  messageId: string,
+  root?: string
+): Promise<string | null> {
+  const path = chatTranscript(chatId, root)
+
+  let contents: string
+  try {
+    contents = await readFile(path, 'utf8')
+  } catch {
+    return null
+  }
+
+  const lines = contents.split('\n')
+  for (const [index, line] of lines.entries()) {
+    const parsed = ChatEntrySchema.safeParse(parseJson(line))
+    if (!parsed.success || parsed.data.role !== 'user' || parsed.data.uuid !== messageId) continue
+
+    const kept = lines.slice(0, index)
+    await writeTextFile(path, kept.length === 0 ? '' : `${kept.join('\n')}\n`)
+    return parsed.data.text
+  }
+
+  return null
 }
 
 /** Discards a chat's history — called when its workspace goes. */

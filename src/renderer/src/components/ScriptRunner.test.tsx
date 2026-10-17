@@ -80,7 +80,10 @@ describe('ScriptRunner', () => {
       />
     )
 
-    expect(screen.getByText(/Select a workspace to run this in/)).toBeInTheDocument()
+    expect(screen.getByText('Nothing to run yet')).toBeInTheDocument()
+    expect(
+      screen.getByText(/Select a workspace on the left to run its scripts here/)
+    ).toBeInTheDocument()
     expect(screen.queryByRole('button')).not.toBeInTheDocument()
   })
 
@@ -97,7 +100,8 @@ describe('ScriptRunner', () => {
       />
     )
 
-    expect(screen.getByText(/No build script yet/)).toBeInTheDocument()
+    expect(screen.getByText('No build script yet')).toBeInTheDocument()
+    expect(screen.getByText(/installing dependencies/)).toBeInTheDocument()
     await userEvent.click(screen.getByRole('button', { name: 'Write the script' }))
 
     expect(onOpenSettings).toHaveBeenCalled()
@@ -115,8 +119,30 @@ describe('ScriptRunner', () => {
       />
     )
 
-    expect(screen.getByText(/No server script yet/)).toBeInTheDocument()
+    expect(screen.getByText('No server script yet')).toBeInTheDocument()
+    expect(screen.getByText(/starts the dev server/)).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Write the script' })).toBeInTheDocument()
+  })
+
+  // A project with neither script shows both of these in one tab, the build
+  // half above the server half. One octopus for the tab, in the server half —
+  // the same rule as the halves with no workspace, held for this case too.
+  it.each([
+    { kind: 'setup' as const, octopuses: 0, half: 'leaves the octopus out of the build half' },
+    { kind: 'run' as const, octopuses: 1, half: 'draws the octopus in the server half' }
+  ])('$half with no script', ({ kind, octopuses }) => {
+    const { container } = render(
+      <ScriptRunner
+        workspace={anna}
+        kind={kind}
+        script={null}
+        port={3111}
+        rootPath="/Users/test/planner"
+        onOpenSettings={vi.fn()}
+      />
+    )
+
+    expect(container.querySelectorAll('img')).toHaveLength(octopuses)
   })
 
   // Both scripts have consequences worth choosing — one installs, the other

@@ -48,22 +48,24 @@ paths alone reported such a workspace as healthy. The parser reads the flag now.
 
 Validated by `ConfigSchema` in [`config.ts`](../src/core/config.ts).
 
-| Field                             | Meaning                                                                                                                                                                                                                               |
-| --------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `version`                         | format version, for future migrations                                                                                                                                                                                                 |
-| `branchPrefix`                    | branches are `<prefix>/<workspace>`                                                                                                                                                                                                   |
-| `cloneDirectory`                  | where GitHub clones land; empty means "ask, then remember"                                                                                                                                                                            |
-| `settingSources`                  | what the agent loads for itself — `all` by default, as the CLI does; `none` is available for isolation (§4)                                                                                                                           |
-| `workingMode`                     | what a new chat may do before asking; planning is not one of them                                                                                                                                                                     |
-| `effort`                          | how much thinking a new chat asks for; `medium` unless changed. Five levels, never `ultracode` — see below                                                                                                                            |
-| `model`, `planModel`              | the pair a new chat starts on — which model writes the code, which one plans                                                                                                                                                          |
-| `alwaysAllowedTools`              | what the user answered "always" for — a tool and, where the bridge named one, the place the question was about. Listed so each can be undone                                                                                          |
-| `disabledSkillDefaults`           | skills off in every new conversation, by the key the agent knows them by. A list of what is **off**, so empty means every skill is available — how Claude Code treats one it discovers                                                |
-| `theme`, `language`               | appearance                                                                                                                                                                                                                            |
-| `rightPanelWidth`, `sidebarWidth` | pane widths in pixels, as last dragged — resizing the **window** moves the right pane without rewriting this                                                                                                                          |
-| `diffView`                        | whether a diff is drawn in one column or two — a preference about how code is read, not a per-session mood                                                                                                                            |
-| `rightPanelTab`                   | which of the right pane's tabs is showing (`files`, `terminal`, `diff`, `scripts`, `pullRequest` or `notes`); whether the pane is folded away is **not** stored — `build` and `server` are still read and become `scripts`, see below |
-| `deviceId`, `installedAt`         | shown in Settings; no other reader                                                                                                                                                                                                    |
+| Field                             | Meaning                                                                                                                                                                                                                           |
+| --------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `version`                         | format version, for future migrations                                                                                                                                                                                             |
+| `branchPrefix`                    | branches are `<prefix>/<workspace>`                                                                                                                                                                                               |
+| `cloneDirectory`                  | where GitHub clones land; empty means "ask, then remember"                                                                                                                                                                        |
+| `settingSources`                  | what the agent loads for itself — `all` by default, as the CLI does; `none` is available for isolation (§4)                                                                                                                       |
+| `workingMode`                     | what a new chat may do before asking; planning is not one of them                                                                                                                                                                 |
+| `effort`                          | how much thinking a new chat asks for; `medium` unless changed. Five levels, never `ultracode` — see below                                                                                                                        |
+| `model`, `planModel`              | the pair a new chat starts on — which model writes the code, which one plans                                                                                                                                                      |
+| `alwaysAllowedTools`              | what the user answered "always" for — a tool and, where the bridge named one, the place the question was about. Listed so each can be undone                                                                                      |
+| `disabledSkillDefaults`           | skills off in every new conversation, by the key the agent knows them by. A list of what is **off**, so empty means every skill is available — how Claude Code treats one it discovers                                            |
+| `dismissedTips`                   | heads-ups above the message field answered with "Knew this already", by id — not shown again in any conversation. Closing one without that answer is not stored                                                                   |
+| `theme`, `language`               | appearance                                                                                                                                                                                                                        |
+| `rightPanelWidth`, `sidebarWidth` | pane widths in pixels, as last dragged — a narrow **window** shows less of the right pane's width without rewriting it                                                                                                            |
+| `rightPanelOpen`                  | whether the right pane is showing or folded away, kept across launches; `true` when absent                                                                                                                                        |
+| `diffView`                        | whether a diff is drawn in one column or two — a preference about how code is read, not a per-session mood                                                                                                                        |
+| `rightPanelTab`                   | which of the right pane's tabs is showing (`files`, `terminal`, `diff`, `scripts`, `pullRequest` or `notes`); whether it is folded away is `rightPanelOpen` — `build` and `server` are still read and become `scripts`, see below |
+| `deviceId`, `installedAt`         | shown in Settings; no other reader                                                                                                                                                                                                |
 
 `alwaysAllowedTools` is filtered on the way in **and on the way out**, and never
 holds `ExitPlanMode`. An entry there is not merely a pre-answered question — it
@@ -277,10 +279,20 @@ can go with the old process.
 from before it reads the same as one after.
 
 **A transcript's user entries carry a `uuid`**: the id the message was sent to
-the agent under, which is what putting the files back to it is asked with. It is
+the agent under, which is what rewinding to it is asked with — the files' checkpoint
+and the point the conversation is cut at both go by it. It is
 optional — a message sent before ids were kept has none, and simply offers no
 rewind. The `files_rewound` event records a rewind with how much it undid and how many
-files a link kept it from restoring (`skippedLinks`, defaulting to 0).
+files a link kept it from restoring (`skippedLinks`, defaulting to 0). A
+transcript is appended to, and the one rewrite is a conversation rewind, which
+cuts it back to just before a user message; `conversation_rewound` is never
+stored, since the history it would describe is already gone.
+
+**`resumeAt` is the cut a rewound conversation is waiting to apply**: the last
+entry of the agent's session it should still remember, handed over as
+`resumeSessionAt` when the next session starts, and cleared once a turn has run
+there. It defaults to null — a record from before rewinding existed was never
+rewound.
 
 **`closedAt` is null while a conversation is a tab** and the time it was closed
 otherwise. It defaults to null, so a record written before it existed loads as

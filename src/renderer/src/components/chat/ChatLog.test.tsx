@@ -192,7 +192,39 @@ describe('a plan the user rewrote', () => {
   })
 })
 
-describe('putting the files back from a message', () => {
+// Kyiv time (`vitest.shared.ts`): 09:00 UTC on 11 August is noon there.
+describe('when things were said', () => {
+  it('writes the hour under a message, with the whole moment on hover', () => {
+    renderLog({ entries: [{ role: 'user', at: AT, text: 'rename the helper' }] })
+
+    const time = screen.getByText('12:00')
+    expect(time.tagName).toBe('TIME')
+    expect(time).toHaveAttribute('dateTime', AT)
+    expect(time).toHaveAttribute('title', expect.stringContaining('11 August 2026'))
+  })
+
+  it('marks where each day begins, and only there', () => {
+    renderLog({
+      entries: [
+        { role: 'user', at: '2025-03-02T09:00:00.000Z', text: 'first' },
+        { role: 'agent', at: '2025-03-02T09:01:00.000Z', event: { type: 'text', text: 'on it' } },
+        { role: 'user', at: '2025-03-02T10:00:00.000Z', text: 'same day' },
+        { role: 'user', at: '2025-03-04T09:00:00.000Z', text: 'two days on' }
+      ]
+    })
+
+    const days = document.querySelectorAll('[data-day]')
+    expect([...days].map((day) => day.getAttribute('data-day'))).toEqual([
+      '2025-03-02',
+      '2025-03-04'
+    ])
+    // Another year than the reader's, so the year is written out.
+    expect(screen.getByText('2 March 2025')).toBeInTheDocument()
+    expect(screen.getByText('4 March 2025')).toBeInTheDocument()
+  })
+})
+
+describe('rewinding from a message', () => {
   const MESSAGE = '11111111-1111-4111-8111-111111111111'
 
   // The log only offers it; the pane asks the question and does the work.
@@ -202,9 +234,7 @@ describe('putting the files back from a message', () => {
       entries: [{ role: 'user', at: AT, text: 'rename the helper', uuid: MESSAGE }]
     })
 
-    await user.click(
-      screen.getByRole('button', { name: 'Put the files back to before this message' })
-    )
+    await user.click(screen.getByRole('button', { name: 'Rewind to before this message' }))
 
     expect(onRewind).toHaveBeenCalledExactlyOnceWith(MESSAGE)
   })
@@ -214,7 +244,7 @@ describe('putting the files back from a message', () => {
     renderLog({ entries: [{ role: 'user', at: AT, text: 'an old message' }] })
 
     expect(
-      screen.queryByRole('button', { name: 'Put the files back to before this message' })
+      screen.queryByRole('button', { name: 'Rewind to before this message' })
     ).not.toBeInTheDocument()
   })
 
@@ -227,7 +257,7 @@ describe('putting the files back from a message', () => {
     })
 
     expect(
-      screen.queryByRole('button', { name: 'Put the files back to before this message' })
+      screen.queryByRole('button', { name: 'Rewind to before this message' })
     ).not.toBeInTheDocument()
   })
 
@@ -1582,6 +1612,58 @@ describe('deciding on an ordinary tool', () => {
  * whether the agent may act, but what it should do. It gets its own card, and
  * the call that carried it draws nothing — the card is already the question.
  */
+/*
+ * A rewind cuts the log back, and the next turn is drawn at positions the cut
+ * turn held. Rows are keyed by position, so whatever a row was holding must not
+ * pass to the different thing now standing where it stood.
+ */
+describe('a log cut back and written again', () => {
+  const asked = (requestId: string, question: string): ChatEntry =>
+    fromAgent({
+      type: 'permission_request',
+      requestId,
+      toolName: 'AskUserQuestion',
+      input: {
+        questions: [
+          {
+            question,
+            header: 'Pick',
+            multiSelect: false,
+            options: [{ label: 'date-fns' }, { label: 'Luxon' }]
+          }
+        ]
+      }
+    })
+
+  it('draws a new question in the old one’s place with nothing chosen', async () => {
+    const user = userEvent.setup()
+    const said: ChatEntry = { role: 'user', at: AT, text: 'pick a library' }
+    const props = {
+      streaming: { text: '', thinking: '' },
+      busy: false,
+      pendingElicitationId: null,
+      onAnswer: vi.fn(),
+      onAnswerElicitation: vi.fn(),
+      onAnswerQuestions: vi.fn(),
+      onExecutePlan: vi.fn(),
+      onRewind: vi.fn()
+    }
+    const { rerender } = render(
+      <ChatLog {...props} entries={[said, asked('r-1', 'Which one?')]} pendingRequestId="r-1" />
+    )
+    await user.click(screen.getByRole('radio', { name: /Luxon/ }))
+    expect(screen.getByRole('radio', { name: /Luxon/ })).toBeChecked()
+
+    rerender(<ChatLog {...props} entries={[said]} pendingRequestId={null} />)
+    rerender(
+      <ChatLog {...props} entries={[said, asked('r-2', 'Which one now?')]} pendingRequestId="r-2" />
+    )
+
+    expect(screen.getByText('Which one now?')).toBeInTheDocument()
+    expect(screen.getByRole('radio', { name: /Luxon/ })).not.toBeChecked()
+  })
+})
+
 describe('a question the agent asked', () => {
   const ASKED = {
     questions: [

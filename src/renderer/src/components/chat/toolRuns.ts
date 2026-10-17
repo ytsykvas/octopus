@@ -48,9 +48,9 @@ function contextsById(entries: readonly ChatEntry[]): Map<string, ChangeContext>
 /**
  * The wire ids the agent has taken back.
  *
- * Gathered rather than applied by filtering. The log is append-only and its
- * React keys are positions in it, so dropping an entry would renumber every row
- * below and remount the rest of the conversation — and the reader would lose
+ * Gathered rather than applied by filtering. The log only grows between rewinds
+ * and its React keys are positions in it, so dropping an entry would renumber
+ * every row below and remount the rest of the conversation — and the reader would lose
  * the fact that the agent started down a road and abandoned it, which is the
  * one thing the retraction is evidence of.
  *
@@ -322,8 +322,10 @@ export function groupToolRuns(
     const [first, ...rest] = run
     if (first === undefined) return
 
-    // Position is the key later on, and the log is append-only, so the first
-    // entry's index identifies the block for as long as it exists.
+    // Position is the key later on, and the log only grows between rewinds, so
+    // the first entry's index identifies the block for as long as it exists. A
+    // rewind cuts the tail off; what is written after it is drawn fresh, and
+    // `ChatLog.test` holds that nothing passes from the old row to the new.
     //
     // A run of one is left as itself: "1 step" that has to be opened to say
     // `Read en.ts` is more work than the row it replaced. Any silent result

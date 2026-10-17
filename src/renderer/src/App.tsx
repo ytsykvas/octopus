@@ -57,6 +57,12 @@ const TAB_STRIP_WIDTH = 56
 const DEFAULT_SIDEBAR_WIDTH = 240
 
 /**
+ * No heads-up answered yet, before the config has been read. One array rather
+ * than a fresh `[]` per render, which would recompute every conversation's tip.
+ */
+const NO_TIPS: readonly string[] = []
+
+/**
  * Whether a keystroke landed somewhere that takes text.
  *
  * The terminal counts, and that is the part worth stating: xterm.js takes its
@@ -88,9 +94,19 @@ export function App(): React.JSX.Element {
   const [settingsSection, setSettingsSection] = useState<SectionId | null>(null)
   const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
+  /*
+   * Whether the right pane is showing, answered at once and saved behind.
+   *
+   * Held here rather than read off the config, so the button folds the pane on
+   * the click instead of a round trip later. The config's own value is tracked
+   * beside it, the way `RightPanel` tracks its stored width: a new value from
+   * the file is adopted, and a save that fails leaves the pane where it was
+   * put while the banner says why.
+   */
   const [rightPanelOpen, setRightPanelOpen] = useState(true)
-  // Not persisted, matching the right pane: which panes are folded away is a
-  // preference for the current session rather than a setting.
+  const [storedPanelOpen, setStoredPanelOpen] = useState<boolean | null>(null)
+  // Not persisted, unlike the right pane: the workspace list's fold lasts for
+  // the session.
   const [sidebarOpen, setSidebarOpen] = useState(true)
   const [pickingRepository, setPickingRepository] = useState(false)
   /* Read off the same check that decides whether the picker opens at all, and
@@ -348,6 +364,27 @@ export function App(): React.JSX.Element {
     [describeFailure]
   )
 
+  if (config && config.rightPanelOpen !== storedPanelOpen) {
+    setStoredPanelOpen(config.rightPanelOpen)
+    setRightPanelOpen(config.rightPanelOpen)
+  }
+
+  /**
+   * Folds or unfolds the right pane, and keeps the choice for the next launch.
+   *
+   * One way in for every caller — the header's button, a drag past the floor,
+   * and the shortcuts that unfold it onto a tab — so none of them can show the
+   * pane without remembering it. A tab that comes along rides in the same
+   * write rather than racing it.
+   */
+  const showRightPanel = useCallback(
+    (open: boolean, patch: Partial<Config> = {}) => {
+      setRightPanelOpen(open)
+      void updateConfig({ ...patch, rightPanelOpen: open })
+    },
+    [updateConfig]
+  )
+
   /**
    * Removes a project and clears anything pointing at it.
    *
@@ -362,9 +399,8 @@ export function App(): React.JSX.Element {
    * of them is touched.
    */
   const showPullRequests = useCallback(() => {
-    setRightPanelOpen(true)
-    void updateConfig({ rightPanelTab: 'pullRequest' })
-  }, [updateConfig])
+    showRightPanel(true, { rightPanelTab: 'pullRequest' })
+  }, [showRightPanel])
 
   const removeProject = useCallback(
     async (projectId: string) => {
@@ -489,16 +525,14 @@ export function App(): React.JSX.Element {
         // nothing while the pane is folded away does nothing in the one place
         // it would save the most. It does not fold the pane shut again either:
         // this names a tab, not a pane.
-        setRightPanelOpen(true)
-        void updateConfig({ rightPanelTab: 'diff' })
+        showRightPanel(true, { rightPanelTab: 'diff' })
         return
       }
 
       // The editor's key for its explorer, and the same shape as ⌘⇧D above.
       if (event.metaKey && event.shiftKey && event.key.toLowerCase() === 'e') {
         event.preventDefault()
-        setRightPanelOpen(true)
-        void updateConfig({ rightPanelTab: 'files' })
+        showRightPanel(true, { rightPanelTab: 'files' })
         return
       }
 
@@ -551,7 +585,16 @@ export function App(): React.JSX.Element {
     return () => {
       window.removeEventListener('keydown', onKey)
     }
-  }, [selectedProjectId, workspaces, projects, updateConfig, showPullRequests, chatTabs, fileTabs])
+  }, [
+    selectedProjectId,
+    workspaces,
+    projects,
+    updateConfig,
+    showPullRequests,
+    showRightPanel,
+    chatTabs,
+    fileTabs
+  ])
 
   const selectedProject = projects.all.find((project) => project.id === selectedProjectId) ?? null
   const projectWorkspaces = selectedProject
@@ -662,6 +705,7 @@ export function App(): React.JSX.Element {
   const defaultEffort = config?.effort ?? DEFAULT_EFFORT
   const defaultModel = config?.model ?? null
   const defaultPlanModel = config?.planModel ?? null
+  const dismissedTips = config?.dismissedTips ?? NO_TIPS
 
   return (
     <div className="bg-canvas text-ink flex h-full flex-col">
@@ -782,7 +826,7 @@ export function App(): React.JSX.Element {
           <button
             type="button"
             onClick={() => {
-              setRightPanelOpen((open) => !open)
+              showRightPanel(!rightPanelOpen)
             }}
             className="text-ink-faint hover:text-ink focus-ring rounded p-1 transition-colors"
             title={rightPanelOpen ? t('panel.collapse') : t('panel.expand')}
@@ -915,93 +959,104 @@ export function App(): React.JSX.Element {
               onOpenSkillSettings={() => {
                 setSettingsSection('skills')
               }}
+              dismissedTips={dismissedTips}
+              onDismissTip={(id) => {
+                // No duplicate to guard against: a tip already in the list is
+                // never on screen to be answered twice.
+                void updateConfig({ dismissedTips: [...dismissedTips, id] })
+              }}
             />
           )}
         </main>
 
-        {rightPanelOpen && (
-          <RightPanel
-            workspaces={workspaces.flat}
-            activeWorkspaceId={selectedWorkspaceId}
-            color={selectedProject?.color ?? null}
-            projectId={openProjectId}
-            scripts={workspaceScripts.scripts}
-            scriptFailures={workspaceScripts.failures}
-            onScriptsChanged={workspaceScripts.refresh}
-            onWorkspacesChanged={() => {
-              void workspaces.refresh()
-            }}
-            /*
-             * Per workspace, from its own project's record.
-             *
-             * These reach every runner — as `$OCTOPUS_ROOT_PATH` and as the env
-             * set a workspace falls back to — and handing down the open project's would build one
-             * workspace against another's checkout. The pane used to filter its
-             * list to the open project because of that, which meant a dev
-             * server died the moment another project was opened.
-             *
-             * Nothing new is read: these sit on records `App` already holds.
-             */
-            projectFor={(workspaceId) => {
-              const owner = projects.all.find((project) =>
-                workspaces.flat.some(
-                  (workspace) => workspace.id === workspaceId && workspace.projectId === project.id
-                )
+        {/* Always mounted, and hidden when folded: the terminals in it and the
+            servers running there belong to their workspaces, and unmounting
+            the pane used to end every one of them. */}
+        <RightPanel
+          open={rightPanelOpen}
+          onOpenChange={(open) => {
+            showRightPanel(open)
+          }}
+          workspaces={workspaces.flat}
+          activeWorkspaceId={selectedWorkspaceId}
+          color={selectedProject?.color ?? null}
+          projectId={openProjectId}
+          scripts={workspaceScripts.scripts}
+          scriptFailures={workspaceScripts.failures}
+          onScriptsChanged={workspaceScripts.refresh}
+          onWorkspacesChanged={() => {
+            void workspaces.refresh()
+          }}
+          /*
+           * Per workspace, from its own project's record.
+           *
+           * These reach every runner — as `$OCTOPUS_ROOT_PATH` and as the env
+           * set a workspace falls back to — and handing down the open project's would build one
+           * workspace against another's checkout. The pane used to filter its
+           * list to the open project because of that, which meant a dev
+           * server died the moment another project was opened.
+           *
+           * Nothing new is read: these sit on records `App` already holds.
+           */
+          projectFor={(workspaceId) => {
+            const owner = projects.all.find((project) =>
+              workspaces.flat.some(
+                (workspace) => workspace.id === workspaceId && workspace.projectId === project.id
               )
+            )
 
-              return {
-                rootPath: owner?.repoPath ?? '',
-                envProfile: owner?.envProfile ?? 'default'
-              }
-            }}
-            defaultEnvProfile={selectedProject?.envProfile ?? 'default'}
-            // No guard: the scripts belong to the open project, so the hint
-            // that calls this exists only while there is one. With none, this
-            // is asked to edit nothing, which is what closing means.
-            onEditScripts={() => {
-              setEditingProjectId(openProjectId)
-              setEditingProjectSection('scripts')
-            }}
-            onEditFiles={() => {
-              setEditingProjectId(openProjectId)
-              setEditingProjectSection('files')
-            }}
-            onEditEnv={() => {
-              setEditingProjectId(openProjectId)
-              setEditingProjectSection('env')
-            }}
-            // The instruction the pull request tab would send is the project's,
-            // so the tab opens the place it is written rather than carrying a
-            // second editor of its own.
-            onEditInstructions={() => {
-              setEditingProjectId(openProjectId)
-              setEditingProjectSection('instructions')
-            }}
-            chatId={activeChatId}
-            width={config?.rightPanelWidth ?? 360}
-            onWidthChange={(rightPanelWidth) => void updateConfig({ rightPanelWidth })}
-            diffView={config?.diffView ?? 'unified'}
-            onDiffView={(diffView) => void updateConfig({ diffView })}
-            tab={config?.rightPanelTab ?? 'diff'}
-            onTab={(rightPanelTab) => void updateConfig({ rightPanelTab })}
-            comments={paneComments}
-            revert={fileRevert}
-            quotes={paneQuotes}
-            envFile={selectedProject?.envFile ?? DEFAULT_ENV_FILE}
-            onRequestChanged={branchRequests.refresh}
-            onRemoveWorkspace={(id) => void workspaces.remove(id)}
-            activeFilePath={fileTabs.active}
-            onConversation={fileTabs.showChat}
-            onOpenFile={(path, pinned) => {
-              if (pinned) fileTabs.open(path)
-              else fileTabs.preview(path)
-            }}
-            onError={setError}
-            // The room the pane must leave alone. Folded away, the list takes
-            // none of it — and the pane may have that room too.
-            leftWidth={TAB_STRIP_WIDTH + (sidebarOpen ? sidebarWidth : 0)}
-          />
-        )}
+            return {
+              rootPath: owner?.repoPath ?? '',
+              envProfile: owner?.envProfile ?? 'default'
+            }
+          }}
+          defaultEnvProfile={selectedProject?.envProfile ?? 'default'}
+          // No guard: the scripts belong to the open project, so the hint
+          // that calls this exists only while there is one. With none, this
+          // is asked to edit nothing, which is what closing means.
+          onEditScripts={() => {
+            setEditingProjectId(openProjectId)
+            setEditingProjectSection('scripts')
+          }}
+          onEditFiles={() => {
+            setEditingProjectId(openProjectId)
+            setEditingProjectSection('files')
+          }}
+          onEditEnv={() => {
+            setEditingProjectId(openProjectId)
+            setEditingProjectSection('env')
+          }}
+          // The instruction the pull request tab would send is the project's,
+          // so the tab opens the place it is written rather than carrying a
+          // second editor of its own.
+          onEditInstructions={() => {
+            setEditingProjectId(openProjectId)
+            setEditingProjectSection('instructions')
+          }}
+          chatId={activeChatId}
+          width={config?.rightPanelWidth ?? 360}
+          onWidthChange={(rightPanelWidth) => void updateConfig({ rightPanelWidth })}
+          diffView={config?.diffView ?? 'unified'}
+          onDiffView={(diffView) => void updateConfig({ diffView })}
+          tab={config?.rightPanelTab ?? 'diff'}
+          onTab={(rightPanelTab) => void updateConfig({ rightPanelTab })}
+          comments={paneComments}
+          revert={fileRevert}
+          quotes={paneQuotes}
+          envFile={selectedProject?.envFile ?? DEFAULT_ENV_FILE}
+          onRequestChanged={branchRequests.refresh}
+          onRemoveWorkspace={(id) => void workspaces.remove(id)}
+          activeFilePath={fileTabs.active}
+          onConversation={fileTabs.showChat}
+          onOpenFile={(path, pinned) => {
+            if (pinned) fileTabs.open(path)
+            else fileTabs.preview(path)
+          }}
+          onError={setError}
+          // The room the pane must leave alone. Folded away, the list takes
+          // none of it — and the pane may have that room too.
+          leftWidth={TAB_STRIP_WIDTH + (sidebarOpen ? sidebarWidth : 0)}
+        />
       </div>
 
       {settingsSection !== null && config && (

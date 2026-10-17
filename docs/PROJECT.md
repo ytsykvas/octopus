@@ -337,7 +337,7 @@ They run in the same worktree with no locking between them, deliberately (§16).
 
 Files opened from the right pane's tree take tabs of their own in the same strip, after the conversations, read-only with syntax colours. One click opens a loose tab, set in italics, that the next one-click file replaces — an editor's preview — and a double-click keeps it. A file in front hides every conversation behind it, still running; asking for a conversation in any way puts the files behind it again. Read-only on purpose: the agent writes these files, and a second writer in the same window would race it with nothing to say which won. "Open in editor" is the way to change one. Selected lines can be sent as a note to any one of the workspace's conversations, chosen by name, while the file stays in front — a review is several files and a note on each, gathered in the conversation that will act on them.
 
-**Right pane — terminal, files, changes, scripts, the pull request and notes** in tabs, pinned to the pane's right edge. Shows what the agent did and gives manual access to the workspace. Draggable, and both its width and which tab is showing persist. Whether it is folded away does not — that is a mood about the current window. Its active tab carries the open project's colour, falling back to the accent while no project is open.
+**Right pane — terminal, files, changes, scripts, the pull request and notes** in tabs, pinned to the pane's right edge. Shows what the agent did and gives manual access to the workspace. Draggable, and its width, which tab is showing and whether it is folded away all persist. It keeps its width when the window is resized — the centre takes the difference — and folding hides it rather than closing it, so its terminals and servers keep running. Its active tab carries the open project's colour, falling back to the accent while no project is open.
 
 #### Shortcuts
 
@@ -600,6 +600,8 @@ The `sessionId` from `SDKSystemMessage` is persisted — that is what enables re
 
 Forking a conversation goes through the SDK's own `forkSession(sessionId, { dir })`, never by copying the id: a plain `resume` continues a session **in place and keeps its id**, so two records holding one would be two agent processes appending to a single session file, each reading the other's turns as part of its own. The SDK's fork returns a new id, and copies what the model remembers; our own transcript is copied beside it, because that is what the screen draws.
 
+Rewinding a conversation to before a message goes through the same session rather than a fork: the SDK's `resumeSessionAt` cuts what the model remembers in place, and the file checkpoints of that session stay usable, which a fork would lose — its file history is not copied. The cut is kept on the record until a turn has run on it, because a session started at the cut and closed unused leaves a plain `resume` remembering everything. The files are rewound by the same session's `rewindFiles`, so the conversation, the files or both can be put back, as Claude Code's own `/rewind` offers.
+
 ### 12.4 The pull request
 
 The tab is the whole of a branch's life after the work is done, and everything
@@ -696,7 +698,7 @@ octopus/
     preload/       contextBridge, the typed API the window is handed
     renderer/
       src/
-        assets/      the mascot, and an octopus per effort level
+        assets/      the mascot, its searching pose, and an octopus per effort level
         components/  UI components
         hooks/       React hooks
         i18n/        localisation, en is the source of truth

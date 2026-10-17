@@ -195,6 +195,20 @@ agent actually did to the working tree. Reasoning is folded away, a successful
 tool result is not shown at all — the output of a `Read` is the file, and pasting
 it in would bury the conversation in the codebase.
 
+**A sent message carries its hour, and each day opens with a chip.** The hour
+sits under the bubble in faint 24-hour figures (`14:32`), always visible, with
+the full date and time in its tooltip — the same 24-hour, day-first reasoning
+`formatResetAt` gives. The first message of each calendar day, in the reader's
+time zone, opens with a pill saying "Today", "Yesterday" or the date, the year
+only once it is not this one's. The label is worked out when the pill is drawn
+and only the day's key is held with the message, so a chip that said "Today"
+says "Yesterday" tomorrow. An agent turn that runs past midnight is dated where
+it began: a mark in the middle of one turn would split an answer from its
+question. Once a day's own pill has scrolled off the top, a copy floats there,
+as a messenger's does — read off the separators' positions on each scroll
+(`useDayAtTop`), since a sticky separator could never leave the message that
+holds it.
+
 **A failed one is shown, and shortened from the middle.** It is the row the user
 has to act on, so it is not summarised away — but it cannot be unbounded either,
 and where it is cut decides what survives. A validation error names the rule at
@@ -234,8 +248,8 @@ banner above them all, or they stop lining up. A ceiling rather than a width: it
 only applies once the panes are dragged that far apart.
 
 **The composer's two rows wrap rather than overflow.** The centre reaches
-`MIN_CENTRE_WIDTH` (360, in `RightPanel.tsx`) — by a drag, or by a window
-narrowed past what the right pane can give up — and at that width the
+`MIN_CENTRE_WIDTH` (360, in `RightPanel.tsx`) — by a drag, or by a narrowed
+window, which the centre absorbs before the right pane gives way — and at that width the
 footer cannot hold its three settings and the send button side by side. It used
 to run past the rounded border and take the send button off the edge of the
 block — Enter still sent, but the pane's primary control was not on screen. Each
@@ -329,25 +343,38 @@ the log, named "Plan, as you edited it", under the one the agent wrote: the log
 has to say what the agent was actually told to do. Rewriting is the whole-plan
 alternative to the feedback field, which sends the plan back to be reworked.
 
-**A message offers to put the files back to before it.** Hovering a message the
-user sent reveals a small undo mark beside it. It is not a conversation rewind —
-what was said stays — it restores the **files** to how they were when that
-message was sent, which is the safety net for letting an agent run unattended.
-Two steps, and the first changes nothing: the agent is asked what it _would_
-do, so the question has the numbers in it ("puts 3 files back … +12 −4"), and
-only the second call does it. The dialog says what the numbers cannot: anything
-changed in those files since — by the agent or by the user — is overwritten.
-Nothing to undo is an answer rather than a question, and says so in the banner.
-The log gains a quiet row afterwards, because the tree changed without the agent
-doing anything, and it says how many files a link kept it from restoring, since
-the rewind never follows one and a bare count would read as though everything
-tracked had come back. It is refused while **any** conversation of the workspace
-is working, not only this one: the worktree is shared, and the checkpoint
-restores whatever it tracked, which can be a file another is editing. The mark is absent while the agent is working (the core would
-refuse it, and a button that can only fail is a promise the interface does not
-keep) and on messages sent before their ids were kept. It needs checkpointing,
-which every session is started with from now on — a checkpoint cannot be taken
-for work already done, so conversations that ran before this have none.
+**A message offers to rewind to before it** — the conversation, the files, or
+both, the three Claude Code's own `/rewind` offers. Hovering a message the user
+sent reveals a small undo mark beside it. Two steps, and the first changes
+nothing: the core is asked what each half _would_ do, so the dialog's rows carry
+the numbers ("puts 3 files back … +12 −4") and picking one is the confirmation.
+A choice that cannot be had stays in its place, disabled, with the reason — the
+conversation was compacted since, or forked from another, so the agent no longer
+holds that point; another conversation of the workspace is working, so the
+files cannot be touched; the agent refused, in its own words; or the files are
+already as they were. A row that vanished would read as a feature that is not
+there, and the reason is the one thing the user can act on. While the files are
+on offer the dialog says once what the numbers cannot: anything changed in them
+since — by the agent or by the user — is overwritten.
+
+Rewinding the conversation drops the message and everything after it from the
+log and from what the agent remembers, and puts the message back in the field,
+replacing whatever was there, with the caret at its end — to be edited and sent
+again, as Claude Code does. Every window holding the log reads it again from
+disk; one whose tab has moved to another conversation by the time that read
+comes back drops it rather than draw the old log into the new one. The log
+scrolls to its new end, and the context gauge reads again: the session it was
+reading from is closed by the cut, and the next one starts from the shorter
+history. Putting the files back adds a quiet row to the log, because the tree
+changed without the agent doing anything, and it says how many
+files a link kept it from restoring, since the rewind never follows one. The
+files are refused while **any** conversation of the workspace is working, not
+only this one: the worktree is shared. The mark is absent while the agent is
+working (the core would refuse it, and a button that can only fail is a promise
+the interface does not keep) and on messages sent before their ids were kept.
+The files need checkpointing, which every session is started with — a
+checkpoint cannot be taken for work already done, so conversations that ran
+before it have none.
 
 **Escape stops a running turn**, as it does in Claude Code, and the button's
 tooltip says so. Only once neither suggestion list has taken the key — those
@@ -494,6 +521,22 @@ instead of showing a bare tool name. Only `TodoWrite` is read; the newer
 `TaskCreate`/`TaskUpdate` tools are not. A list written by a subagent is
 skipped — it is its own task's, and the newest one written would otherwise
 replace the conversation's.
+
+**A heads-up can sit in the same place between turns.** "✦ Heads up · …" is a
+caveat shown at the moment it starts to be true of this conversation, the way
+Claude Code shows its own. The first one says that rewinding files undoes only
+what the agent changed with its editing tools: the SDK's checkpoints do not see
+what a command did, so it appears once the agent — or one of its subagents —
+has run `Bash`. It waits for the turn to end rather than pushing the field up
+mid-answer, and only one is shown at a time. **Learn more** opens a paragraph in
+place; **Knew this already** stores the id in the config's `dismissedTips`, for
+every conversation; **Dismiss** hides it in this conversation for as long as
+its workspace stays open — the conversations are rebuilt when another workspace
+is chosen, and it comes back with them, which is what tells the two buttons
+apart. Claude Code's number keys are left out: the field below takes
+text, and a digit there is a digit. A new heads-up is one entry in
+`components/chat/tips.ts` — an id and the condition on the log — and its
+`title` and `detail` under `tips.<id>` in the locales.
 
 **Typing `@` offers the workspace's files.** The fourth way to attach one — the
 paperclip, a drop and a paste being the others — and it lands in the same place:
@@ -2029,22 +2072,39 @@ down from `App`: it is the project strip plus a list that is resizable and folds
 away, and against the constant it used to be measured by, a list dragged wide
 left the centre nothing at all.
 
-**Dragging the window's own edge drags the right pane's edge with it.** The
-centre used to take every pixel the window gained or lost, being the only pane
-with no width of its own — and the conversation stops widening at 72rem, so what
-it took was margin, while the diff and the terminal stayed as narrow as they
-started. Now the pane absorbs the change and the centre keeps the width it had;
-narrowing takes that width back out of the pane first, and only once the pane is
-down to what its tabs need does the centre begin to lose room. The list on the
-left never yields a pixel: exactly one pane may absorb the change, or "the
-centre keeps the width it had" stops being true and needs a rule for splitting.
+**The right pane keeps the width it was dragged to, and the window's edge moves
+the centre** — the way a sidebar behaves in most desktop applications. Widen the
+window and the pane travels with its right edge at the same width while the
+conversation gets the room; narrow it and the centre gives the room back, until
+it is down to its own 360 and the pane begins to give way, never below what its
+tabs need. The list on the left never yields a pixel.
 
-What the window adds is not saved. The config holds the width that was dragged,
-the pane remembers the window it was dragged at, and what it shows is the
-difference — which is what puts the pane back where it was when the window goes
-back where it was, without anything having to remember the journey. The window's
-own size is not stored either (`src/main/index.ts`), so every launch starts at a
-width where the saved number applies as it stands.
+It was the other way round for a while: the pane absorbed every pixel the window
+gained or lost, on the grounds that the conversation stops widening at 72rem and
+what the centre took was margin. In use it read as the pane having a mind of its
+own — its left edge stayed put while the window was dragged — so it went.
+
+What the window takes is shown, never saved. The config holds the width that was
+dragged, and the pane shows as much of it as the window has room for, so the
+width comes back by itself once the room does.
+
+**Folding the pane hides it; it never unmounts it.** Its terminals and the
+servers running in them belong to their workspaces, and unmounting a terminal is
+how one is ended — so the fold used to close every shell and stop every dev
+server in the project. Hidden with `display: none`, a terminal keeps its size:
+the fit addon reads no height there and does nothing, and the `ResizeObserver`
+fits it again when the pane comes back. While folded no tab counts as visible,
+so nothing in it reads git, and the tab row is measured again on unfolding — a
+pane that started folded measured it at nothing.
+
+The fold is kept across launches (`rightPanelOpen`), and every way of unfolding
+— the header's button, ⌘⇧D, ⌘⇧E, opening a pull request — writes it, the tab
+riding in the same write. Dragging the edge well past the floor folds it too, as
+in most editors: past **half** the floor, so a drag that merely overshoots still
+stops there, and the same drag coming back brings the pane out again. Released
+folded, the width committed is the one the drag began at, so the pane comes back
+at the width it had rather than at the floor it was dragged through. The arrow
+keys never fold it.
 
 **Only the ⌥ shortcuts ask where the focus is.** ⌘ and ⌃ are not typing
 gestures, so a shortcut on them is unambiguous wherever it is pressed — but on
@@ -2584,6 +2644,34 @@ rather than a copy per pane — the centre and the chat each had their own and
 they had already drifted a few pixels apart, on the screen a first-time user
 reads most carefully.
 
+**Every pane that would otherwise be empty uses it** — the centre, and in the
+right column the Terminal, Changes, Files, Scripts, Pull request and Notes tabs
+whenever no workspace is chosen, plus a clean Changes tab, an empty file tree and
+a project without a build or server script. Those tabs used to show one grey line
+each, through four different wrappers. Each now says it in two parts: a short
+title in a lighter voice, and the plain sentence saying what to do. In the
+locales that is a pair of keys, `…Title` and `…Body`, so a new empty state adds
+both — English first — and hands them to `Placeholder`, with `compact` in the
+right column, rather than drawing a `<p>` of its own. `Notice` and the Scripts
+tab's `Hint` stay for what is not emptiness: an error, a file the viewer cannot
+show, a script waiting to be run. The line is
+drawn at the pane: a picker's "Nothing found", a popover or a settings list
+keeps its plain line, because a drawing has no room there and would read as a
+broken image. The sidebar keeps its line too — with no projects, the centre is
+already showing the octopus beside it.
+
+`compact` is the right column's variant: no panel around it, since the column is
+already a panel of its own and a box inside it reads as a dialog nobody opened;
+a smaller drawing; and it scrolls rather than clips, because the server half of
+the Scripts tab is left with little height once the build half is unfolded.
+
+**One octopus per tab.** The Scripts tab stacks a build half over a server half,
+each with its own empty state, and two drawings one above the other read as a
+rendering glitch — so the build half passes `art={false}` and the server half,
+the one that is always unfolded, keeps it. The terminal's stays an overlay over
+the sessions rather than a replacement for them, for the reason its own comment
+gives: returning something else would unmount every terminal.
+
 Those buttons go in `actions`, not in the body. The body renders inside a `<p>`,
 so a button passed as `children` becomes a block element inside a paragraph, and
 the browser silently rearranges it into markup nobody wrote. The slot is a
@@ -2683,14 +2771,18 @@ string names a place, something beside it should go there — and only when goin
 there would help: the picker offers it for an unreachable account and not for a
 failed clone, because signing in again fixes one and not the other.
 
-The mascot comes from `Mascot`, which also signs off the About section in
-settings. A component rather than a repeated `<img>` so the decision it carries
+The mascot comes from `Mascot`, in two poses: the one holding a magnifying
+glass stands in every empty pane — it is looking for something to show — and the
+plain one signs off the About section in settings and is the app's icon. A component rather than a repeated `<img>` so the decision it carries
 is made once: it is `alt=""` and `aria-hidden`, because wherever it appears the
 words beside it already say what the screen is about, and announcing "blue
 octopus" first would add a word and no information.
 
-The source is 256px against 96 on screen, scaled smoothly rather than with
-`image-rendering: pixelated`. Nearest-neighbour at that ratio drops pixels
+Both are drawn far smaller than their sources — the searching one is 360px
+wide against at most 120 on screen, sized by height alone because it is wider
+than it is tall and a square box would squeeze it — and scaled smoothly rather
+than with `image-rendering: pixelated`. Nearest-neighbour at those ratios drops
+pixels
 unevenly and the blocks come out different sizes, which reads as a broken image
 rather than as pixel art.
 

@@ -4,6 +4,7 @@ import { useTranslation } from 'react-i18next'
 import { NOTES_LIMIT } from '@core/notes.js'
 
 import { useErrorMessage } from '../hooks/useErrorMessage.js'
+import { Placeholder } from './Placeholder.js'
 
 /**
  * How long the typing has to stop before the note is written.
@@ -98,9 +99,9 @@ export function NotesPanel({ workspaceId, notes }: NotesPanelProps): React.JSX.E
 
   if (workspaceId === null) {
     return (
-      <div className="min-h-0 flex-1 overflow-auto p-4">
-        <p className="text-ink-faint leading-relaxed">{t('notes.noWorkspace')}</p>
-      </div>
+      <Placeholder compact title={t('notes.noWorkspaceTitle')}>
+        {t('notes.noWorkspaceBody')}
+      </Placeholder>
     )
   }
 

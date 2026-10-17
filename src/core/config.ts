@@ -212,6 +212,15 @@ export const ConfigSchema = z.object({
    */
   disabledSkillDefaults: z.array(z.string()).default([]),
 
+  /**
+   * Heads-ups above the message field the user said they already knew, by id.
+   *
+   * Stored because "I knew this" is a statement about the person, not about one
+   * conversation — a tip answered that way should not come back in the next
+   * one. Closing a tip without that answer is kept in the window and not here.
+   */
+  dismissedTips: z.array(z.string()).default([]),
+
   theme: ThemePreferenceSchema,
 
   /**
@@ -233,12 +242,20 @@ export const ConfigSchema = z.object({
    * pane needs, which depends on the window and on how wide the workspace list
    * has been dragged, and so cannot live here.
    *
-   * Only a drag is written here. Resizing the window moves the pane too — it
-   * takes what the window gains or loses so the centre keeps its width — but
-   * that is measured from this number rather than replacing it, so a window put
-   * back where it was puts the pane back too.
+   * Only a drag is written here. Resizing the window leaves it alone: the
+   * centre takes what the window gains or loses, and the pane gives way only
+   * once the centre is down to its floor — showing less than this number
+   * rather than replacing it, so the room coming back brings the width back.
    */
   rightPanelWidth: z.number().int().min(280).max(4000).default(360),
+
+  /**
+   * Whether the right pane is showing.
+   *
+   * Kept across launches, as a sidebar is elsewhere: somebody who folded it
+   * away to give the conversation the room meant it for longer than one run.
+   */
+  rightPanelOpen: z.boolean().default(true),
 
   /**
    * How a diff is laid out: one column, or the two sides beside each other.
@@ -316,10 +333,12 @@ export function createDefaultConfig(
     planModel: null,
     alwaysAllowedTools: [],
     disabledSkillDefaults: [],
+    dismissedTips: [],
     theme: 'system',
     language: 'en',
     cloneDirectory: '',
     rightPanelWidth: 360,
+    rightPanelOpen: true,
     diffView: 'unified',
     rightPanelTab: 'diff',
     sidebarWidth: 240,

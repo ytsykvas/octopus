@@ -33,6 +33,8 @@ interface PaneProps {
   readonly defaultEffort?: Effort
   readonly defaultModel?: string | null
   readonly defaultPlanModel?: string | null
+  readonly dismissedTips?: readonly string[]
+  readonly onDismissTip?: (id: string) => void
   /** Where a failure the strip owns is reported, as `App` reports it. */
   readonly onError?: (message: string | null) => void
 }
@@ -56,6 +58,8 @@ function ChatPane({
   defaultEffort = 'medium',
   defaultModel = null,
   defaultPlanModel = null,
+  dismissedTips = [],
+  onDismissTip = vi.fn(),
   onError = vi.fn()
 }: PaneProps): React.JSX.Element {
   const tabs = useChatTabs(target.id, vi.fn(), onError)
@@ -82,6 +86,8 @@ function ChatPane({
       defaultModel={defaultModel}
       defaultPlanModel={defaultPlanModel}
       onOpenSkillSettings={vi.fn()}
+      dismissedTips={dismissedTips}
+      onDismissTip={onDismissTip}
     />
   )
 }
@@ -553,6 +559,65 @@ describe('following the conversation', () => {
     fireEvent.scroll(screen.getByRole('log'))
 
     expect(screen.getByRole('menu')).toBeInTheDocument()
+  })
+})
+
+describe('the day on screen', () => {
+  /** Pins where the log and each day's separator sit, as layout would. */
+  function place(log: HTMLElement, tops: Record<string, number>): void {
+    log.getBoundingClientRect = () => ({ top: 0 }) as DOMRect
+    for (const separator of log.querySelectorAll<HTMLElement>('[data-day]')) {
+      const top = tops[separator.dataset.day ?? '']
+      separator.getBoundingClientRect = () => ({ top }) as DOMRect
+    }
+  }
+
+  // Telegram's floating date: once a day's own separator has gone off the
+  // top, a copy of it floats there, and it changes as the next day arrives.
+  it('floats the day being read once its separator has scrolled away', async () => {
+    givenChat([
+      { role: 'user', at: '2025-03-02T09:00:00.000Z', text: 'first' },
+      { role: 'user', at: '2025-03-04T09:00:00.000Z', text: 'later' }
+    ])
+    await openLoadedChat()
+    await screen.findByText('later')
+
+    const log = screen.getByRole('log')
+    // Nothing has scrolled past, so the separators speak for themselves.
+    expect(screen.getAllByText('2 March 2025')).toHaveLength(1)
+
+    place(log, { '2025-03-02': -200, '2025-03-04': 300 })
+    fireEvent.scroll(log)
+    expect(screen.getAllByText('2 March 2025')).toHaveLength(2)
+
+    place(log, { '2025-03-02': -600, '2025-03-04': -10 })
+    fireEvent.scroll(log)
+    expect(screen.getAllByText('2 March 2025')).toHaveLength(1)
+    expect(screen.getAllByText('4 March 2025')).toHaveLength(2)
+  })
+
+  /*
+   * The log can move under a scroller that has not: a turn landing, or a
+   * rewind cutting the days below away. No scroll event comes, so the change
+   * in the log is what asks again.
+   */
+  it('reads the day again when the log changes under a still scroller', async () => {
+    givenChat([
+      { role: 'user', at: '2025-03-02T09:00:00.000Z', text: 'first' },
+      { role: 'user', at: '2025-03-04T09:00:00.000Z', text: 'later' }
+    ])
+    await openLoadedChat()
+    await screen.findByText('later')
+    const log = screen.getByRole('log')
+    place(log, { '2025-03-02': -200, '2025-03-04': 300 })
+    fireEvent.scroll(log)
+    expect(screen.getAllByText('2 March 2025')).toHaveLength(2)
+
+    place(log, { '2025-03-02': -600, '2025-03-04': -10 })
+    emitAgentEvent({ type: 'text', text: 'still here' })
+
+    await screen.findByText('still here')
+    expect(screen.getAllByText('4 March 2025')).toHaveLength(2)
   })
 })
 
@@ -1300,86 +1365,217 @@ describe('the permission mode', () => {
     })
   })
 
-  describe('putting the files back from a message', () => {
+  describe('rewinding to a message', () => {
     const MESSAGE = '11111111-1111-4111-8111-111111111111'
 
     const SAID: ChatEntry[] = [
       { role: 'user', at: '2026-08-13T09:00:00.000Z', text: 'rename it', uuid: MESSAGE }
     ]
 
-    // Two steps, and the first changes nothing: the question the user answers
-    // has the numbers in it, because the agent was asked what it would do.
-    it('asks what it would do, says so, and does it once agreed', async () => {
-      const user = userEvent.setup()
+    /** What the core says a rewind would do: both halves on offer. */
+    function givenPreview(): void {
       vi.mocked(octopus().chats.rewindPreview).mockResolvedValue({
         ok: true,
         value: {
-          canRewind: true,
-          error: null,
-          filesChanged: ['a.ts', 'b.ts'],
-          insertions: 12,
-          deletions: 4,
-          skippedLinks: 0
+          conversation: true,
+          files: {
+            canRewind: true,
+            error: null,
+            filesChanged: ['a.ts', 'b.ts'],
+            insertions: 12,
+            deletions: 4,
+            skippedLinks: 0
+          }
         }
       })
+    }
+
+    const mark = (): Promise<HTMLElement> =>
+      screen.findByRole('button', { name: 'Rewind to before this message' })
+
+    // Two steps, and the first changes nothing: the choice the user makes has
+    // the numbers in it, because the core was asked what each half would do.
+    it('asks what to put back, with what each would do, and does what was chosen', async () => {
+      const user = userEvent.setup()
+      givenPreview()
       givenChat(SAID)
       await openLoadedChat()
 
-      await user.click(await screen.findByRole('button', { name: /Put the files back to before/ }))
+      await user.click(await mark())
 
-      expect(
-        await screen.findByText(
-          'This puts 2 files back to how they were before this message (+12 −4).'
-        )
-      ).toBeInTheDocument()
+      const both = await screen.findByRole('button', { name: /Conversation and files/ })
+      expect(both).toHaveTextContent(
+        'Puts 2 files back to how they were before this message (+12 −4).'
+      )
       expect(octopus().chats.rewind).not.toHaveBeenCalled()
 
-      await user.click(screen.getByRole('button', { name: 'Put files back' }))
+      await user.click(both)
 
       await waitFor(() => {
-        expect(octopus().chats.rewind).toHaveBeenCalledWith(CHAT_ID, MESSAGE)
+        expect(octopus().chats.rewind).toHaveBeenCalledWith(CHAT_ID, MESSAGE, 'both')
       })
     })
 
-    it('does nothing when the question is answered no', async () => {
+    it('does nothing when the dialog is dismissed', async () => {
       const user = userEvent.setup()
-      vi.mocked(octopus().chats.rewindPreview).mockResolvedValue({
-        ok: true,
-        value: {
-          canRewind: true,
-          error: null,
-          filesChanged: ['a.ts'],
-          insertions: 1,
-          deletions: 0,
-          skippedLinks: 0
-        }
-      })
+      givenPreview()
       givenChat(SAID)
       await openLoadedChat()
 
-      await user.click(await screen.findByRole('button', { name: /Put the files back to before/ }))
+      await user.click(await mark())
       await user.click(await screen.findByRole('button', { name: 'Cancel' }))
 
       expect(octopus().chats.rewind).not.toHaveBeenCalled()
     })
 
-    // Nothing to undo is an answer, not a question.
-    it('says so rather than asking when nothing would change', async () => {
+    // Claude Code's own rewind does this: the message comes back to be
+    // edited and sent again, in the field, with the caret at its end.
+    it('hands the message back to the field after the conversation is rewound', async () => {
       const user = userEvent.setup()
+      givenPreview()
+      vi.mocked(octopus().chats.rewind).mockResolvedValue({
+        ok: true,
+        value: { files: null, text: 'rename it' }
+      })
+      givenChat(SAID)
+      await openLoadedChat()
+      await user.type(field(), 'half a thought')
+
+      await user.click(await mark())
+      await user.click(await screen.findByRole('button', { name: /Conversation only/ }))
+
+      await waitFor(() => {
+        expect(field()).toHaveValue('rename it')
+      })
+      expect(field()).toHaveFocus()
+      expect(octopus().chats.rewind).toHaveBeenCalledWith(CHAT_ID, MESSAGE, 'conversation')
+    })
+
+    /*
+     * The whole loop, end to end: rewind, send the message again as it came
+     * back, and the new line can be rewound in its turn — without reopening
+     * the conversation, which is what the id handed back with a send is for.
+     */
+    it('offers to rewind the message sent again after a rewind', async () => {
+      const user = userEvent.setup()
+      const AGAIN = '33333333-3333-4333-8333-333333333333'
+      givenPreview()
+      vi.mocked(octopus().chats.rewind).mockResolvedValue({
+        ok: true,
+        value: { files: null, text: 'rename it' }
+      })
       givenChat(SAID)
       await openLoadedChat()
 
-      await user.click(await screen.findByRole('button', { name: /Put the files back to before/ }))
+      await user.click(await mark())
+      vi.mocked(octopus().chats.history).mockResolvedValue({ ok: true, value: [] })
+      await user.click(await screen.findByRole('button', { name: /Conversation only/ }))
+      emitAgentEvent({ type: 'conversation_rewound', messageId: MESSAGE })
+      await waitFor(() => {
+        expect(field()).toHaveValue('rename it')
+      })
+      await waitFor(() => {
+        expect(
+          screen.queryByRole('button', { name: 'Rewind to before this message' })
+        ).not.toBeInTheDocument()
+      })
 
-      expect(
-        await screen.findByText('The files are already as they were before that message.')
-      ).toBeInTheDocument()
-      expect(octopus().chats.rewind).not.toHaveBeenCalled()
+      vi.mocked(octopus().chats.send).mockResolvedValue({ ok: true, value: AGAIN })
+      await user.keyboard('{Enter}')
+      emitAgentEvent({
+        type: 'result',
+        ok: true,
+        costUsd: null,
+        durationMs: 1000,
+        inputTokens: 10,
+        outputTokens: 10,
+        terminalReason: 'completed'
+      })
+      emitChatStatus(CHAT_ID, 'idle')
+
+      await user.click(await mark())
+      await waitFor(() => {
+        expect(octopus().chats.rewindPreview).toHaveBeenLastCalledWith(CHAT_ID, AGAIN)
+      })
     })
 
-    it('says why when the agent cannot', async () => {
+    // The cut closed the session the gauge was reading, so it reads again
+    // rather than go on showing the longer history's context.
+    it('reads the context again once the conversation is rewound', async () => {
+      const user = userEvent.setup()
+      givenPreview()
+      vi.mocked(octopus().chats.rewind).mockResolvedValue({
+        ok: true,
+        value: { files: null, text: 'rename it' }
+      })
+      givenChat(SAID)
+      await openLoadedChat()
+      await user.click(await mark())
+      await waitFor(() => {
+        expect(octopus().chats.usage).toHaveBeenCalled()
+      })
+      const asked = vi.mocked(octopus().chats.usage).mock.calls.length
+
+      await user.click(await screen.findByRole('button', { name: /Conversation only/ }))
+
+      await waitFor(() => {
+        expect(vi.mocked(octopus().chats.usage).mock.calls.length).toBeGreaterThan(asked)
+      })
+    })
+
+    // Only the files went back: the conversation, and what is being typed,
+    // stay as they were.
+    it('leaves the field alone when only the files were put back', async () => {
+      const user = userEvent.setup()
+      givenPreview()
+      vi.mocked(octopus().chats.rewind).mockResolvedValue({
+        ok: true,
+        value: {
+          files: {
+            canRewind: true,
+            error: null,
+            filesChanged: ['a.ts'],
+            insertions: 1,
+            deletions: 0,
+            skippedLinks: 0
+          },
+          text: null
+        }
+      })
+      givenChat(SAID)
+      await openLoadedChat()
+      await user.type(field(), 'still typing')
+
+      await user.click(await mark())
+      await user.click(await screen.findByRole('button', { name: /Files only/ }))
+
+      await waitFor(() => {
+        expect(octopus().chats.rewind).toHaveBeenCalledWith(CHAT_ID, MESSAGE, 'files')
+      })
+      expect(field()).toHaveValue('still typing')
+    })
+
+    it('says why when it cannot be asked about at all', async () => {
       const user = userEvent.setup()
       vi.mocked(octopus().chats.rewindPreview).mockResolvedValue({
+        ok: false,
+        error: 'busy',
+        code: 'rewindBusy'
+      })
+      givenChat(SAID)
+      await openLoadedChat()
+
+      await user.click(await mark())
+
+      expect(
+        await screen.findByText('The agent is working. Stop it before rewinding.')
+      ).toBeInTheDocument()
+    })
+
+    it('says so when the real rewind is refused after choosing', async () => {
+      const user = userEvent.setup()
+      givenPreview()
+      vi.mocked(octopus().chats.rewind).mockResolvedValue({
         ok: false,
         error: 'No checkpoint for that message',
         code: 'rewindUnavailable',
@@ -1388,41 +1584,13 @@ describe('the permission mode', () => {
       givenChat(SAID)
       await openLoadedChat()
 
-      await user.click(await screen.findByRole('button', { name: /Put the files back to before/ }))
+      await user.click(await mark())
+      await user.click(await screen.findByRole('button', { name: /Files only/ }))
 
       expect(
         await screen.findByText(
-          'The files cannot be put back to that message: No checkpoint for that message'
+          'This conversation cannot be rewound to that message: No checkpoint for that message'
         )
-      ).toBeInTheDocument()
-    })
-
-    it('says so when the real rewind is refused after agreeing', async () => {
-      const user = userEvent.setup()
-      vi.mocked(octopus().chats.rewindPreview).mockResolvedValue({
-        ok: true,
-        value: {
-          canRewind: true,
-          error: null,
-          filesChanged: ['a.ts'],
-          insertions: 1,
-          deletions: 0,
-          skippedLinks: 0
-        }
-      })
-      vi.mocked(octopus().chats.rewind).mockResolvedValue({
-        ok: false,
-        error: 'busy',
-        code: 'rewindBusy'
-      })
-      givenChat(SAID)
-      await openLoadedChat()
-
-      await user.click(await screen.findByRole('button', { name: /Put the files back to before/ }))
-      await user.click(await screen.findByRole('button', { name: 'Put files back' }))
-
-      expect(
-        await screen.findByText('The agent is working. Stop it before putting the files back.')
       ).toBeInTheDocument()
     })
   })
@@ -1775,6 +1943,87 @@ describe('a draft and the workspace it was typed in', () => {
  * somebody has come back to check on it. The list beside the pane says the
  * workspace is working, so the window used to disagree with itself.
  */
+/** The agent ran a command, and then said so: the moment the heads-up waits for. */
+const RAN_A_COMMAND: ChatEntry[] = [
+  {
+    role: 'agent',
+    at: '2026-08-13T09:00:00.000Z',
+    event: { type: 'tool_use', toolUseId: 'call-1', name: 'Bash', input: { command: 'npm test' } }
+  },
+  { role: 'agent', at: '2026-08-13T09:00:01.000Z', event: { type: 'text', text: 'Tests pass.' } }
+]
+
+const headsUp = (): HTMLElement | null => screen.queryByRole('region', { name: 'Heads up' })
+
+describe('a heads-up above the field', () => {
+  it('warns that a rewind leaves commands alone once the agent has run one', async () => {
+    givenChat(RAN_A_COMMAND)
+    await openLoadedChat()
+
+    const region = await screen.findByRole('region', { name: 'Heads up' })
+    expect(region).toHaveTextContent('Changes made by commands in the terminal stay.')
+  })
+
+  it('says nothing in a conversation where no command has run', async () => {
+    givenChat([
+      {
+        role: 'agent',
+        at: '2026-08-13T09:00:00.000Z',
+        event: { type: 'tool_use', toolUseId: 'call-1', name: 'Read', input: { file_path: '/a' } }
+      },
+      { role: 'agent', at: '2026-08-13T09:00:01.000Z', event: { type: 'text', text: 'Read it.' } }
+    ])
+    await openLoadedChat()
+    expect(await screen.findByText('Read it.')).toBeInTheDocument()
+
+    expect(headsUp()).not.toBeInTheDocument()
+  })
+
+  it('waits for the turn to end rather than pushing the field up mid-answer', async () => {
+    givenChat(RAN_A_COMMAND, { status: 'running' })
+    render(<ChatPane workspace={workspaceView('anna')} />)
+    expect(await screen.findByText('Tests pass.')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Stop' })).toBeInTheDocument()
+
+    expect(headsUp()).not.toBeInTheDocument()
+
+    emitChatStatus(CHAT_ID, 'idle')
+
+    expect(await screen.findByRole('region', { name: 'Heads up' })).toBeInTheDocument()
+  })
+
+  it('stays away once the settings say it was already known', async () => {
+    givenChat(RAN_A_COMMAND)
+    render(<ChatPane workspace={workspaceView('anna')} dismissedTips={['rewindSkipsCommands']} />)
+    expect(await screen.findByText('Tests pass.')).toBeInTheDocument()
+
+    expect(headsUp()).not.toBeInTheDocument()
+  })
+
+  it('hands "knew this already" up to be kept in the settings', async () => {
+    const user = userEvent.setup()
+    const onDismissTip = vi.fn()
+    givenChat(RAN_A_COMMAND)
+    render(<ChatPane workspace={workspaceView('anna')} onDismissTip={onDismissTip} />)
+
+    await user.click(await screen.findByRole('button', { name: 'Knew this already' }))
+
+    expect(onDismissTip).toHaveBeenCalledWith('rewindSkipsCommands')
+  })
+
+  it('closes for this conversation alone without writing anything down', async () => {
+    const user = userEvent.setup()
+    const onDismissTip = vi.fn()
+    givenChat(RAN_A_COMMAND)
+    render(<ChatPane workspace={workspaceView('anna')} onDismissTip={onDismissTip} />)
+
+    await user.click(await screen.findByRole('button', { name: 'Dismiss' }))
+
+    expect(headsUp()).not.toBeInTheDocument()
+    expect(onDismissTip).not.toHaveBeenCalled()
+  })
+})
+
 describe('a turn that was left running', () => {
   it('offers to stop a turn found already in flight', async () => {
     givenChat([], { status: 'running' })
