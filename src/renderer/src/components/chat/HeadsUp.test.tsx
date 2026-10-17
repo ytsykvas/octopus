@@ -42,6 +42,33 @@ describe('a heads-up', () => {
     expect(screen.queryByText(DETAIL)).not.toBeInTheDocument()
   })
 
+  // The icons are decoration beside words that already say it, so each is
+  // hidden from a screen reader and the buttons keep their plain names.
+  it('puts an icon in front of each button without renaming it', () => {
+    renderHeadsUp()
+
+    for (const [name, icon] of [
+      ['Learn more', 'lucide-chevron-down'],
+      ['Knew this already', 'lucide-check'],
+      ['Dismiss', 'lucide-x']
+    ] as const) {
+      const svg = screen.getByRole('button', { name }).querySelector('svg')
+      expect(svg).toHaveClass(icon)
+      expect(svg).toHaveAttribute('aria-hidden', 'true')
+    }
+  })
+
+  // The chevron turns over with the paragraph, so the state shows at a glance.
+  it('turns the chevron over once the explanation is open', async () => {
+    const user = userEvent.setup()
+    renderHeadsUp()
+
+    await user.click(screen.getByRole('button', { name: 'Learn more' }))
+
+    const svg = screen.getByRole('button', { name: 'Show less' }).querySelector('svg')
+    expect(svg).toHaveClass('lucide-chevron-up')
+  })
+
   it('tells the two ways out apart', async () => {
     const user = userEvent.setup()
     const { onKnown, onClose } = renderHeadsUp()

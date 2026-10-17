@@ -533,7 +533,9 @@ place; **Knew this already** stores the id in the config's `dismissedTips`, for
 every conversation; **Dismiss** hides it in this conversation for as long as
 its workspace stays open — the conversations are rebuilt when another workspace
 is chosen, and it comes back with them, which is what tells the two buttons
-apart. Claude Code's number keys are left out: the field below takes
+apart. Each button has an icon — a chevron that turns over with the paragraph
+it opens, a check, a cross — hidden from a screen reader, since the words beside
+them say it. Claude Code's number keys are left out: the field below takes
 text, and a digit there is a digit. A new heads-up is one entry in
 `components/chat/tips.ts` — an id and the condition on the log — and its
 `title` and `detail` under `tips.<id>` in the locales.
