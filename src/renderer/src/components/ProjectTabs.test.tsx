@@ -46,6 +46,23 @@ function renderTabs(overrides: Partial<ProjectTabsProps> = {}): ProjectTabsProps
 }
 
 describe('ProjectTabs', () => {
+  // The letters are mixed towards the ink in every state. Measured over the
+  // fifteen colours in both themes: the colour alone, or with `--ink-faint`, was
+  // 3.3:1 on the idle tile in the light theme.
+  it.each([
+    { state: 'idle', activeProjectId: null },
+    { state: 'chosen', activeProjectId: 'planner' }
+  ])(
+    'draws the letters of a $state tab a quarter of the way towards the ink',
+    ({ activeProjectId }) => {
+      renderTabs({ activeProjectId })
+
+      expect(screen.getByRole('button', { name: 'PL' })).toHaveStyle({
+        color: 'color-mix(in srgb, var(--project-color) 75%, var(--ink))'
+      })
+    }
+  )
+
   // A multi-word name gives the first letter of its first two words.
   it('labels a tab with two letters taken from the project name', () => {
     renderTabs({ projects: [project({ id: 'rails', name: 'tsykvas-rails-template' })] })
