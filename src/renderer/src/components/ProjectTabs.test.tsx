@@ -32,6 +32,7 @@ function renderTabs(overrides: Partial<ProjectTabsProps> = {}): ProjectTabsProps
   const props: ProjectTabsProps = {
     projects: [project()],
     activeProjectId: 'planner',
+    marks: new Map(),
     onSelect: vi.fn(),
     onEdit: vi.fn(),
     onRemove: vi.fn(),
@@ -46,6 +47,35 @@ function renderTabs(overrides: Partial<ProjectTabsProps> = {}): ProjectTabsProps
 }
 
 describe('ProjectTabs', () => {
+  // The news a project's agents have for the user, on the tab that holds them.
+  // Its own element, so the tab is still called by its letters.
+  it.each([
+    { mark: 'waiting' as const, label: 'Waiting for your answer', tone: 'bg-warning' },
+    { mark: 'error' as const, label: 'The last turn ended in an error', tone: 'bg-danger' },
+    {
+      mark: 'done' as const,
+      label: 'An agent finished here while you were away',
+      tone: 'bg-success'
+    }
+  ])('marks a project whose agent is $mark', ({ mark, label, tone }) => {
+    renderTabs({ marks: new Map([['planner', mark]]) })
+
+    expect(screen.getByRole('img', { name: label })).toHaveClass(tone)
+    expect(screen.getByRole('button', { name: 'PL' })).toBeInTheDocument()
+  })
+
+  it('marks only the project the news is about', () => {
+    renderTabs({
+      projects: [project(), project({ id: 'tracker', name: 'tracker' })],
+      marks: new Map([['tracker', 'done']])
+    })
+
+    expect(screen.getAllByRole('img')).toHaveLength(1)
+    const tile = screen.getByRole('img').parentElement
+    expect(tile).toContainElement(screen.getByRole('button', { name: 'TR' }))
+    expect(tile).not.toContainElement(screen.getByRole('button', { name: 'PL' }))
+  })
+
   // The letters are mixed towards the ink in every state. Measured over the
   // fifteen colours in both themes: the colour alone, or with `--ink-faint`, was
   // 3.3:1 on the idle tile in the light theme.

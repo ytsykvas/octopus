@@ -323,7 +323,7 @@ The layout of the existing tools is the model — proven by daily use and free o
 └────┴──────────────┴──────────────────────────┴─────────────────────┘
 ```
 
-**Tab strip — projects.** A colour each, and either two initials or an icon chosen in the project's settings. The colour is stored on the project rather than derived from its name: a hash would repaint the project the moment it was renamed, and constancy is what makes it recognisable. Fifteen colours, each measured for contrast in both themes. The initials are the fallback rather than the goal — two letters collide as soon as two repositories start alike, and 36px hold a picture or a pair of letters, not both.
+**Tab strip — projects.** A colour each, and either two initials or an icon chosen in the project's settings. The colour is stored on the project rather than derived from its name: a hash would repaint the project the moment it was renamed, and constancy is what makes it recognisable. Fifteen colours, each measured for contrast in both themes. The initials are the fallback rather than the goal — two letters collide as soon as two repositories start alike, and 40px hold a picture or a pair of letters, not both. A dot in the tile's corner says what the project's agents want of you: amber while one waits on an answer, red for a turn that failed and green for one that finished, both of the last two only until you open the workspace.
 
 **Title bar — where you are.** The project's name, its directory, and the branch of the selected workspace. The branch used to sit in the chat's own header, which spent a whole row on one short string while answering a question about the window rather than about any conversation in it — the row it left belongs to the tab strip now.
 

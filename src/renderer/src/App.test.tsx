@@ -460,8 +460,8 @@ describe('App', () => {
    * width and whether it is folded. Asserted from here because the pane's own
    * tests are handed the number: told the wrong one, every last of them passes.
    *
-   * 1024 less the strip (56), the list at its default (240) and the centre's
-   * own 360 leaves 368; folding the list hands its 240 straight to the pane.
+   * 1024 less the strip (60), the list at its default (240) and the centre's
+   * own 360 leaves 364; folding the list hands its 240 straight to the pane.
    */
   it('offers the pane the room the folded list gives up', async () => {
     givenTwoProjects()
@@ -475,11 +475,11 @@ describe('App', () => {
       return edge
     }
 
-    expect(paneEdge()).toHaveAttribute('aria-valuemax', '368')
+    expect(paneEdge()).toHaveAttribute('aria-valuemax', '364')
 
     await user.click(await screen.findByRole('button', { name: 'Hide workspaces' }))
 
-    expect(paneEdge()).toHaveAttribute('aria-valuemax', '608')
+    expect(paneEdge()).toHaveAttribute('aria-valuemax', '604')
   })
 
   it('opens the settings dialog from the sidebar', async () => {

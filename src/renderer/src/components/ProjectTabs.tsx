@@ -4,6 +4,9 @@ import { useTranslation } from 'react-i18next'
 import { initials } from '@core/initials.js'
 import type { Project } from '@core/store.js'
 
+import type { Mark } from '../attention.js'
+import { DONE_TONE } from './agentStatus.js'
+
 import { DropdownMenu } from './DropdownMenu.js'
 import { ProjectGlyph } from './ProjectGlyph.js'
 
@@ -24,6 +27,8 @@ const LETTERS = 'color-mix(in srgb, var(--project-color) 75%, var(--ink))'
 interface ProjectTabsProps {
   readonly projects: readonly Project[]
   readonly activeProjectId: string | null
+  /** What each project's agents want of the user; a project absent here wants nothing. */
+  readonly marks: ReadonlyMap<string, Mark>
   readonly onSelect: (projectId: string) => void
   readonly onEdit: (projectId: string) => void
   readonly onRemove: (projectId: string) => void
@@ -48,6 +53,7 @@ interface ProjectTabsProps {
 export function ProjectTabs({
   projects,
   activeProjectId,
+  marks,
   onSelect,
   onEdit,
   onRemove,
@@ -58,13 +64,14 @@ export function ProjectTabs({
   const { t } = useTranslation()
 
   return (
-    <nav className="bg-surface flex w-14 shrink-0 flex-col">
+    <nav className="bg-surface flex w-15 shrink-0 flex-col">
       <div className="flex flex-1 flex-col gap-1 overflow-y-auto py-2 pl-2.5">
         {projects.map((project) => (
           <ProjectTab
             key={project.id}
             project={project}
             active={project.id === activeProjectId}
+            mark={marks.get(project.id) ?? null}
             onSelect={() => {
               onSelect(project.id)
             }}
@@ -85,7 +92,7 @@ export function ProjectTabs({
               disabled={busy}
               onClick={onClick}
               title={t('sidebar.addProject')}
-              className="text-ink-faint hover:border-ink-faint hover:text-ink focus-ring border-line mt-1 flex size-9 items-center justify-center rounded-[10px] border border-dashed transition-colors disabled:opacity-50"
+              className="text-ink-faint hover:border-ink-faint hover:text-ink focus-ring border-line mt-1 flex size-10 items-center justify-center rounded-[10px] border border-dashed transition-colors disabled:opacity-50"
             >
               <Plus aria-hidden size={16} />
             </button>
@@ -112,15 +119,33 @@ export function ProjectTabs({
   )
 }
 
+/**
+ * The dot's colour and words — the workspace list's own vocabulary
+ * (`agentStatus.ts`), so a colour learnt in one place means the same here.
+ */
+const MARK_TONES: Record<Mark, string> = {
+  waiting: 'bg-warning',
+  error: 'bg-danger',
+  done: DONE_TONE
+}
+
+const MARK_LABELS = {
+  waiting: 'workspaces.statusWaiting',
+  error: 'workspaces.statusError',
+  done: 'sidebar.projectDone'
+} as const
+
 function ProjectTab({
   project,
   active,
+  mark,
   onSelect,
   onEdit,
   onRemove
 }: {
   project: Project
   active: boolean
+  mark: Mark | null
   onSelect: () => void
   onEdit: () => void
   onRemove: () => void
@@ -147,8 +172,8 @@ function ProjectTab({
             // The active tab runs to the right edge of the strip and squares
             // off there, so it reads as the sidebar reaching back rather than
             // as a button sitting next to it.
-            className={`focus-ring flex h-9 items-center justify-center text-[13px] font-semibold transition-[background-color,color] ${
-              active ? 'w-[46px] rounded-l-[10px]' : 'w-9 rounded-[10px]'
+            className={`focus-ring flex h-10 items-center justify-center text-[14px] font-semibold transition-[background-color,color] ${
+              active ? 'w-[50px] rounded-l-[10px]' : 'w-10 rounded-[10px]'
             }`}
             style={
               active
@@ -164,10 +189,10 @@ function ProjectTab({
                   }
             }
           >
-            {/* An icon replaces the initials rather than joining them: 36px
+            {/* An icon replaces the initials rather than joining them: 40px
                 holds one or the other, and the initials are the fallback for a
                 project nobody has picked a picture for. */}
-            {project.icon ? <ProjectGlyph name={project.icon} size={17} /> : initials(project.name)}
+            {project.icon ? <ProjectGlyph name={project.icon} size={19} /> : initials(project.name)}
           </button>
         )}
         actions={[
@@ -186,6 +211,19 @@ function ProjectTab({
           }
         ]}
       />
+
+      {/* Inside the tile's square, not hanging off its corner: the column
+          scrolls, and anything past its edge is cut. A sibling of the button
+          rather than part of its name, so the tab is still called by its
+          letters. The ring is the strip's own colour, cutting the dot out of
+          the tile. */}
+      {mark !== null && (
+        <span
+          role="img"
+          aria-label={t(MARK_LABELS[mark])}
+          className={`ring-surface pointer-events-none absolute top-[3px] left-[29px] size-2 rounded-full ring-2 ${MARK_TONES[mark]}`}
+        />
+      )}
     </div>
   )
 }

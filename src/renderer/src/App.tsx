@@ -43,15 +43,16 @@ import { useFileTabs } from './hooks/useFileTabs.js'
 import { useProjects } from './hooks/useProjects.js'
 import { useWorkspaceScripts } from './hooks/useWorkspaceScripts.js'
 import { useWorkspaces } from './hooks/useWorkspaces.js'
+import { useAttention } from './hooks/useAttention.js'
 
 /**
- * The project strip's width, `w-14` in `ProjectTabs`.
+ * The project strip's width, `w-15` in `ProjectTabs`.
  *
  * Stated twice, which is once too many — but the right pane has to reserve the
  * left column's room and cannot read a Tailwind class. The strip is the one
  * part of that column whose width is not already a number here.
  */
-const TAB_STRIP_WIDTH = 56
+const TAB_STRIP_WIDTH = 60
 
 /** The schema's own default, for the render before the config has been read. */
 const DEFAULT_SIDEBAR_WIDTH = 240
@@ -153,6 +154,7 @@ export function App(): React.JSX.Element {
 
   const projects = useProjects(confirm, setError)
   const workspaces = useWorkspaces(projects.all, confirm, setError)
+  const attention = useAttention(projects.all, workspaces.flat, selectedWorkspaceId)
 
   /*
    * Makes a workspace and opens it on its empty conversation.
@@ -883,6 +885,7 @@ export function App(): React.JSX.Element {
             <ProjectTabs
               projects={projects.all}
               activeProjectId={selectedProjectId}
+              marks={attention.marks}
               onSelect={(id) => {
                 setSelectedProjectId(id)
                 setSelectedWorkspaceId(null)

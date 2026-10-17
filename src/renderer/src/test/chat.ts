@@ -125,13 +125,17 @@ export function emitChatsChanged(workspaceId = 'planner/anna'): void {
  * Wrapped in `act` because it lands outside React's own event handling: the
  * broadcast arrives from IPC, not from a click.
  */
-export function emitAgentEvent(event: AgentEvent, chatId: string = CHAT_ID): void {
+export function emitAgentEvent(
+  event: AgentEvent,
+  chatId: string = CHAT_ID,
+  workspaceId = 'planner/anna'
+): void {
   const handlers = vi.mocked(octopus().chats.onEvent).mock.calls.map(([handler]) => handler)
   refuseSilence(handlers.length, 'chats.onEvent')
 
   act(() => {
     for (const handler of handlers) {
-      handler({ chatId, workspaceId: 'planner/anna', event })
+      handler({ chatId, workspaceId, event })
     }
   })
 }

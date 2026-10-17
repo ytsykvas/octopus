@@ -28,6 +28,30 @@ so nothing depends on how wide the tab strip happens to be.
 both in one tree outgrows the window and makes a click mean two things — select
 and fold. Splitting them means neither list grows with the other.
 
+**A project's tile says when its agents need you.** Several agents run at once,
+and without this the only way to learn that one had finished or stopped to ask
+was to open each workspace. A dot in the tile's corner, in the workspace list's
+colours: amber while any of its workspaces waits on an answer — read from the
+live status, so it holds until the question is answered — then red for a turn
+that failed and green for one that finished. Those two are news only until it
+is seen: they are recorded only for a workspace that is not on screen, and
+opening the workspace clears them. One notice per conversation, not per
+workspace, or a chat that finished would wipe out another still waiting.
+
+Kept in the window (`useAttention`, `attention.ts`) rather than in
+`state.json`: "seen" is one person looking at one window, and a field under
+`StateSchema` is the kind of change that has stopped the application opening
+once. A restart forgets the green and red dots, and ends every turn anyway.
+No merged-or-not filter is needed, because nothing lights from a state that
+merely persists — a long-merged workspace stays dark unless an agent runs in it
+again.
+
+The dot sits **inside** the tile's square, not off its corner: the strip
+scrolls, and anything past its edge is cut. It is a sibling of the tile's button
+with a name of its own, so the tab is still called by its letters. The tiles
+grew from 36px to 40px to give it room, and the strip from 56px to 60px with
+them.
+
 **The foot of the left column is one footer**, as wide as the strip and the list
 together: the account's limits, and under them a row holding Settings and the
 fold, both icons. The two are the controls that belong to the window rather than
