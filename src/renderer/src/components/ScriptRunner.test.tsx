@@ -80,7 +80,10 @@ describe('ScriptRunner', () => {
       />
     )
 
-    expect(screen.getByText(/Select a workspace to run this in/)).toBeInTheDocument()
+    expect(screen.getByText('Nothing to run yet')).toBeInTheDocument()
+    expect(
+      screen.getByText(/Select a workspace on the left to run its scripts here/)
+    ).toBeInTheDocument()
     expect(screen.queryByRole('button')).not.toBeInTheDocument()
   })
 
@@ -97,7 +100,8 @@ describe('ScriptRunner', () => {
       />
     )
 
-    expect(screen.getByText(/No build script yet/)).toBeInTheDocument()
+    expect(screen.getByText('No build script yet')).toBeInTheDocument()
+    expect(screen.getByText(/installing dependencies/)).toBeInTheDocument()
     await userEvent.click(screen.getByRole('button', { name: 'Write the script' }))
 
     expect(onOpenSettings).toHaveBeenCalled()
@@ -115,7 +119,8 @@ describe('ScriptRunner', () => {
       />
     )
 
-    expect(screen.getByText(/No server script yet/)).toBeInTheDocument()
+    expect(screen.getByText('No server script yet')).toBeInTheDocument()
+    expect(screen.getByText(/starts the dev server/)).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Write the script' })).toBeInTheDocument()
   })
 

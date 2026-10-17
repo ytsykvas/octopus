@@ -269,14 +269,14 @@ describe('App', () => {
   it('points a first-time user at adding a repository', async () => {
     await openApp()
 
-    expect(await screen.findByText('Start with a repository')).toBeInTheDocument()
+    expect(await screen.findByText('Let’s find something to work on')).toBeInTheDocument()
   })
 
   // The screen a first run lands on had the instructions and none of the
   // buttons, which is a strange thing to do with a pane this empty.
   it('offers both ways in from the empty centre', async () => {
     await openApp()
-    await screen.findByText('Start with a repository')
+    await screen.findByText('Let’s find something to work on')
 
     expect(screen.getByRole('button', { name: 'Add from disk…' })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Add from GitHub…' })).toBeInTheDocument()
@@ -288,7 +288,7 @@ describe('App', () => {
       .mockResolvedValueOnce({ ok: true, value: [] })
       .mockResolvedValue({ ok: true, value: [LEDGER] })
     const user = await openApp()
-    await screen.findByText('Start with a repository')
+    await screen.findByText('Let’s find something to work on')
 
     await user.click(screen.getByRole('button', { name: 'Add from disk…' }))
 
@@ -301,7 +301,7 @@ describe('App', () => {
     givenTwoProjects()
 
     await openApp()
-    await screen.findByText('Select a project')
+    await screen.findByText('Which project today?')
 
     expect(screen.getByRole('button', { name: 'Add from disk…' })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Add from GitHub…' })).toBeInTheDocument()
@@ -322,7 +322,7 @@ describe('App', () => {
 
     await openApp()
 
-    expect(await screen.findByText('Select a project')).toBeInTheDocument()
+    expect(await screen.findByText('Which project today?')).toBeInTheDocument()
     expect(
       screen.getByText('Nothing here yet. Add a repository with the "+" button.')
     ).toBeInTheDocument()
@@ -337,7 +337,7 @@ describe('App', () => {
     expect(screen.getByText('/Users/someone/code/ledger')).toBeInTheDocument()
     // A project is open and no workspace is chosen, which is its own screen —
     // it names what to do and offers the way out, rather than describing one.
-    expect(await screen.findByText('Select a workspace')).toBeInTheDocument()
+    expect(await screen.findByText('Which workspace shall we start with?')).toBeInTheDocument()
     expect(
       within(screen.getByRole('main')).getByRole('button', { name: 'New workspace' })
     ).toBeInTheDocument()
@@ -660,7 +660,7 @@ describe('App', () => {
 
     await user.keyboard('2')
 
-    expect(screen.getByText('Select a project')).toBeInTheDocument()
+    expect(screen.getByText('Which project today?')).toBeInTheDocument()
   })
 
   it('switches workspace with Ctrl and a digit', async () => {
@@ -669,7 +669,7 @@ describe('App', () => {
     await user.click(await screen.findByRole('button', { name: 'PL' }))
     await user.click(screen.getByRole('button', { name: 'Terminal' }))
     expect(
-      screen.getByText('Select a workspace to open a terminal in its directory.')
+      screen.getByText('Select a workspace on the left and a terminal opens in its directory.')
     ).toBeInTheDocument()
 
     await user.keyboard('{Control>}2{/Control}')
@@ -686,7 +686,7 @@ describe('App', () => {
     await user.keyboard('{Control>}7{/Control}')
 
     expect(
-      screen.getByText('Select a workspace to open a terminal in its directory.')
+      screen.getByText('Select a workspace on the left and a terminal opens in its directory.')
     ).toBeInTheDocument()
   })
 
@@ -701,7 +701,7 @@ describe('App', () => {
     await user.keyboard('{Control>}1{/Control}')
 
     expect(
-      screen.getByText('Select a workspace to open a terminal in its directory.')
+      screen.getByText('Select a workspace on the left and a terminal opens in its directory.')
     ).toBeInTheDocument()
   })
 
@@ -718,7 +718,9 @@ describe('App', () => {
     await user.click(await findTab('LE'))
 
     expect(
-      await screen.findByText('Select a workspace to open a terminal in its directory.')
+      await screen.findByText(
+        'Select a workspace on the left and a terminal opens in its directory.'
+      )
     ).toBeInTheDocument()
   })
 
@@ -935,7 +937,7 @@ describe('App', () => {
       await abandoned.settle({ ok: true, value: config({ language: 'uk' }) })
     })
 
-    expect(screen.getByText('Start with a repository')).toBeInTheDocument()
+    expect(screen.getByText('Let’s find something to work on')).toBeInTheDocument()
   })
 
   // The language lives in the config so it survives a restart.
@@ -947,7 +949,7 @@ describe('App', () => {
 
     await openApp()
 
-    expect(await screen.findByText('Почніть з репозиторію')).toBeInTheDocument()
+    expect(await screen.findByText('Знайдімо, над чим працювати')).toBeInTheDocument()
   })
 
   /*
@@ -1003,7 +1005,7 @@ describe('App', () => {
       push(config({ language: 'uk' }))
     })
 
-    expect(await screen.findByText('Почніть з репозиторію')).toBeInTheDocument()
+    expect(await screen.findByText('Знайдімо, над чим працювати')).toBeInTheDocument()
   })
 
   it('remembers the width the workspace list was resized to', async () => {
@@ -1101,7 +1103,7 @@ describe('App', () => {
     await user.click(screen.getByRole('button', { name: 'Add repository' }))
     await user.click(screen.getByRole('menuitem', { name: /From disk/ }))
 
-    expect(await screen.findByText('Select a project')).toBeInTheDocument()
+    expect(await screen.findByText('Which project today?')).toBeInTheDocument()
   })
 
   it('clears the selection when the project that is open is removed', async () => {
@@ -1115,7 +1117,7 @@ describe('App', () => {
     await user.click(screen.getByRole('menuitem', { name: 'Remove project' }))
     await user.click(await screen.findByRole('button', { name: 'Remove' }))
 
-    expect(await screen.findByText('Select a project')).toBeInTheDocument()
+    expect(await screen.findByText('Which project today?')).toBeInTheDocument()
     expect(window.octopus.projects.remove).toHaveBeenCalledWith('planner')
   })
 
@@ -1182,7 +1184,7 @@ describe('App', () => {
     await user.keyboard('{Control>}1{/Control}')
 
     expect(
-      screen.getByText('Select a workspace to open a terminal in its directory.')
+      screen.getByText('Select a workspace on the left and a terminal opens in its directory.')
     ).toBeInTheDocument()
   })
 
@@ -1195,7 +1197,7 @@ describe('App', () => {
 
     await user.keyboard('{Meta>}a{/Meta}')
 
-    expect(screen.getByText('Select a project')).toBeInTheDocument()
+    expect(screen.getByText('Which project today?')).toBeInTheDocument()
   })
 
   // Tabs are numbered from one, so there is nothing for ⌘0 to address.
@@ -1206,7 +1208,7 @@ describe('App', () => {
 
     await user.keyboard('{Meta>}0{/Meta}')
 
-    expect(screen.getByText('Select a project')).toBeInTheDocument()
+    expect(screen.getByText('Which project today?')).toBeInTheDocument()
   })
 
   it('creates a workspace from the list header', async () => {
@@ -1238,7 +1240,7 @@ describe('App', () => {
     const user = await openApp()
     await user.click(await screen.findByRole('button', { name: 'LE' }))
 
-    expect(await screen.findByText('Create the first workspace')).toBeInTheDocument()
+    expect(await screen.findByText('Your first workspace is one click away')).toBeInTheDocument()
 
     const centre = within(screen.getByRole('main'))
     await user.click(centre.getByRole('button', { name: 'New workspace' }))
@@ -1383,7 +1385,7 @@ describe('App', () => {
       value: { repositories: [LEDGER_REPOSITORY], capped: false, organisations: [] }
     })
     const user = await openApp()
-    await screen.findByText('Start with a repository')
+    await screen.findByText('Let’s find something to work on')
 
     await user.click(screen.getByRole('button', { name: 'Add from GitHub…' }))
 
@@ -1396,7 +1398,7 @@ describe('App', () => {
   // account is there, and Appearance would be a dead end with extra steps.
   it('sends an unconnected user to the Git settings instead of an empty picker', async () => {
     const user = await openApp()
-    await screen.findByText('Start with a repository')
+    await screen.findByText('Let’s find something to work on')
 
     await user.click(screen.getByRole('button', { name: 'Add from GitHub…' }))
 
@@ -1426,7 +1428,7 @@ describe('App', () => {
     const check = pending<Result<GitHubAccount>>()
     vi.mocked(window.octopus.accounts.github).mockReturnValue(check.promise)
     const user = await openApp()
-    await screen.findByText('Start with a repository')
+    await screen.findByText('Let’s find something to work on')
 
     await user.click(screen.getByRole('button', { name: 'Add from GitHub…' }))
 
@@ -1444,7 +1446,7 @@ describe('App', () => {
       error: 'gh: command not found'
     })
     const user = await openApp()
-    await screen.findByText('Start with a repository')
+    await screen.findByText('Let’s find something to work on')
 
     await user.click(screen.getByRole('button', { name: 'Add from GitHub…' }))
 
@@ -1458,7 +1460,7 @@ describe('App', () => {
     const check = pending<Result<GitHubAccount>>()
     vi.mocked(window.octopus.accounts.github).mockReturnValue(check.promise)
     const user = await openApp()
-    await screen.findByText('Start with a repository')
+    await screen.findByText('Let’s find something to work on')
 
     const button = screen.getByRole('button', { name: 'Add from GitHub…' })
     await user.click(button)

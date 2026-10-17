@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next'
 
 import type { WorkspaceView } from '@core/workspaces.js'
 
+import { Placeholder } from './Placeholder.js'
 import { Terminal } from './Terminal.js'
 
 interface WorkspaceTerminalsProps {
@@ -66,7 +67,11 @@ export function WorkspaceTerminals({
           already-active project clears the selection, so a stray click used to
           kill a dev server. */}
       {activeId === null && (
-        <p className="text-ink-faint p-4 leading-relaxed">{t('panel.terminalPlaceholder')}</p>
+        <div className="absolute inset-0 flex">
+          <Placeholder compact title={t('panel.terminalPlaceholderTitle')}>
+            {t('panel.terminalPlaceholderBody')}
+          </Placeholder>
+        </div>
       )}
 
       {opened.map((workspace) => (

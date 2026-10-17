@@ -81,7 +81,10 @@ describe('FilesPanel', () => {
   it('asks for a workspace when none is chosen', () => {
     renderPanel({ workspace: null })
 
-    expect(screen.getByText('Select a workspace to see its files.')).toBeInTheDocument()
+    expect(screen.getByText('Nothing to look through yet')).toBeInTheDocument()
+    expect(
+      screen.getByText('Select a workspace on the left to browse its files.')
+    ).toBeInTheDocument()
   })
 
   it('says it is reading, and then why it could not', async () => {
@@ -98,7 +101,8 @@ describe('FilesPanel', () => {
 
     renderPanel()
 
-    expect(await screen.findByText('This workspace has no files yet.')).toBeInTheDocument()
+    expect(await screen.findByText('Not a file in sight')).toBeInTheDocument()
+    expect(screen.getByText('This workspace has no files yet.')).toBeInTheDocument()
   })
 
   it('says when the listing was cut short', async () => {

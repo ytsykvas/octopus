@@ -12,6 +12,7 @@ import type { WorkspaceView } from '@core/workspaces.js'
 
 import { useFileTree } from '../../hooks/useFileTree.js'
 import { IconButton, Notice } from '../paneControls.js'
+import { Placeholder } from '../Placeholder.js'
 import { TREE_STATUS_MARKS } from '../statusMarks.js'
 import { FileIcon } from './FileIcon.js'
 import { type TreeRow, visibleRows } from './treeRows.js'
@@ -65,7 +66,13 @@ export function FilesPanel({ workspace, ...rest }: FilesPanelProps): React.JSX.E
   // workspace is chosen.
   const [expandedBy, setExpandedBy] = useState<Readonly<Record<string, ReadonlySet<string>>>>({})
 
-  if (workspace === null) return <Notice>{t('files.noWorkspace')}</Notice>
+  if (workspace === null) {
+    return (
+      <Placeholder compact title={t('files.noWorkspaceTitle')}>
+        {t('files.noWorkspaceBody')}
+      </Placeholder>
+    )
+  }
 
   const id = workspace.id
   return (
@@ -268,7 +275,9 @@ function WorkspaceTree({
       )}
 
       {rows.length === 0 ? (
-        <Notice>{t('files.empty')}</Notice>
+        <Placeholder compact title={t('files.emptyTitle')}>
+          {t('files.emptyBody')}
+        </Placeholder>
       ) : (
         <div
           ref={attach}

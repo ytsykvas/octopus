@@ -16,7 +16,53 @@ describe('an empty pane', () => {
     const image = container.querySelector('img')
 
     expect(image).toBeInTheDocument()
-    expect(image?.getAttribute('src')).toContain('octopus')
+    // The searching pose, not the one that signs off the About section.
+    expect(image?.getAttribute('src')).toContain('octopus-searching')
+  })
+
+  // The right column is already a panel of its own, and a box inside it reads
+  // as a dialog nobody opened.
+  it('draws no box of its own in a narrow column', () => {
+    const { container } = render(
+      <Placeholder compact title="All quiet here">
+        Select a workspace.
+      </Placeholder>
+    )
+
+    expect(screen.getByText('All quiet here')).toBeInTheDocument()
+    expect(container.querySelector('img')).toBeInTheDocument()
+    expect(container.querySelector('.panel')).toBeNull()
+  })
+
+  it('keeps its box in the centre', () => {
+    const { container } = render(<Placeholder title="Which project today?">Pick one.</Placeholder>)
+
+    expect(container.querySelector('.panel')).toBeInTheDocument()
+  })
+
+  it('leaves the octopus out when told another empty state shares the tab', () => {
+    const { container } = render(
+      <Placeholder compact art={false} title="Nothing to run yet">
+        Select a workspace.
+      </Placeholder>
+    )
+
+    expect(screen.getByText('Nothing to run yet')).toBeInTheDocument()
+    expect(container.querySelector('img')).toBeNull()
+  })
+
+  it('offers its actions in a narrow column too', () => {
+    render(
+      <Placeholder
+        compact
+        title="No build script yet"
+        actions={<button type="button">Write</button>}
+      >
+        It runs in a fresh workspace.
+      </Placeholder>
+    )
+
+    expect(screen.getByRole('button', { name: 'Write' }).closest('p')).toBeNull()
   })
 
   // Decorative: a screen reader announcing "blue octopus" before "Select a

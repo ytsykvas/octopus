@@ -39,7 +39,10 @@ describe('a note about one workspace', () => {
   it('asks for a workspace when none is chosen', () => {
     renderNotes({ workspaceId: null })
 
-    expect(screen.getByText('Choose a workspace to write a note about it.')).toBeInTheDocument()
+    expect(screen.getByText('Nowhere to write yet')).toBeInTheDocument()
+    expect(
+      screen.getByText('Select a workspace on the left to keep notes about it.')
+    ).toBeInTheDocument()
     expect(screen.queryByLabelText('Notes')).not.toBeInTheDocument()
   })
 })

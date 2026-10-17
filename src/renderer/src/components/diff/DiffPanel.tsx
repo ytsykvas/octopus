@@ -30,6 +30,7 @@ import { MIN_SPLIT_COLUMNS, splitThreshold } from './measure.js'
 import { lineAddress, selectionAnchor } from './selectionAnchor.js'
 import { NO_TOKENS, useHighlighting } from './useHighlighting.js'
 import { IconButton, Notice } from '../paneControls.js'
+import { Placeholder } from '../Placeholder.js'
 import { chatName } from '../chat/chatName.js'
 
 /**
@@ -385,10 +386,22 @@ export function DiffPanel({
     setSelected(null)
   }
 
-  if (!workspace) return <Notice>{t('diff.noWorkspace')}</Notice>
+  if (!workspace) {
+    return (
+      <Placeholder compact title={t('diff.noWorkspaceTitle')}>
+        {t('diff.noWorkspaceBody')}
+      </Placeholder>
+    )
+  }
   if (error !== null) return <Notice tone="danger">{error}</Notice>
   if (loading) return <Notice>{t('diff.loading')}</Notice>
-  if (!diff || diff.files.length === 0) return <Notice>{t('diff.clean')}</Notice>
+  if (!diff || diff.files.length === 0) {
+    return (
+      <Placeholder compact title={t('diff.cleanTitle')}>
+        {t('diff.cleanBody')}
+      </Placeholder>
+    )
+  }
 
   // Below the guards, so neither of these needs a fallback for a workspace or a
   // diff that the rows calling them could not have been drawn without.

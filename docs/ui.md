@@ -2610,6 +2610,29 @@ rather than a copy per pane — the centre and the chat each had their own and
 they had already drifted a few pixels apart, on the screen a first-time user
 reads most carefully.
 
+**Every pane that would otherwise be empty uses it** — the centre, and in the
+right column the Terminal, Changes, Files, Scripts, Pull request and Notes tabs
+whenever no workspace is chosen, plus a clean Changes tab, an empty file tree and
+a project without a build or server script. Those tabs used to show one grey line
+each, through four different wrappers. Each now says it in two parts: a short
+title in a lighter voice, and the plain sentence saying what to do. The line is
+drawn at the pane: a picker's "Nothing found", a popover or a settings list
+keeps its plain line, because a drawing has no room there and would read as a
+broken image. The sidebar keeps its line too — with no projects, the centre is
+already showing the octopus beside it.
+
+`compact` is the right column's variant: no panel around it, since the column is
+already a panel of its own and a box inside it reads as a dialog nobody opened;
+a smaller drawing; and it scrolls rather than clips, because the server half of
+the Scripts tab is left with little height once the build half is unfolded.
+
+**One octopus per tab.** The Scripts tab stacks a build half over a server half,
+each with its own empty state, and two drawings one above the other read as a
+rendering glitch — so the build half passes `art={false}` and the server half,
+the one that is always unfolded, keeps it. The terminal's stays an overlay over
+the sessions rather than a replacement for them, for the reason its own comment
+gives: returning something else would unmount every terminal.
+
 Those buttons go in `actions`, not in the body. The body renders inside a `<p>`,
 so a button passed as `children` becomes a block element inside a paragraph, and
 the browser silently rearranges it into markup nobody wrote. The slot is a
@@ -2709,14 +2732,18 @@ string names a place, something beside it should go there — and only when goin
 there would help: the picker offers it for an unreachable account and not for a
 failed clone, because signing in again fixes one and not the other.
 
-The mascot comes from `Mascot`, which also signs off the About section in
-settings. A component rather than a repeated `<img>` so the decision it carries
+The mascot comes from `Mascot`, in two poses: the one holding a magnifying
+glass stands in every empty pane — it is looking for something to show — and the
+plain one signs off the About section in settings and is the app's icon. A component rather than a repeated `<img>` so the decision it carries
 is made once: it is `alt=""` and `aria-hidden`, because wherever it appears the
 words beside it already say what the screen is about, and announcing "blue
 octopus" first would add a word and no information.
 
-The source is 256px against 96 on screen, scaled smoothly rather than with
-`image-rendering: pixelated`. Nearest-neighbour at that ratio drops pixels
+Both are drawn far smaller than their sources — the searching one is 360px
+wide against at most 120 on screen, sized by height alone because it is wider
+than it is tall and a square box would squeeze it — and scaled smoothly rather
+than with `image-rendering: pixelated`. Nearest-neighbour at those ratios drops
+pixels
 unevenly and the blocks come out different sizes, which reads as a broken image
 rather than as pixel art.
 

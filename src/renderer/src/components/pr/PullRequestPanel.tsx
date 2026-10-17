@@ -14,6 +14,7 @@ import { usePullRequest } from '../../hooks/usePullRequest.js'
 import { usePullRequestDetail } from '../../hooks/usePullRequestDetail.js'
 import { type PullRequestQuoteController, toQuote } from '../../hooks/usePullRequestQuotes.js'
 import { Button } from '../Button.js'
+import { Placeholder } from '../Placeholder.js'
 import { ChecksList } from './ChecksList.js'
 import { CommentList } from './CommentList.js'
 import { NewPullRequestForm } from './NewPullRequestForm.js'
@@ -125,7 +126,13 @@ export function PullRequestPanel({
     }
   }, [visible, workspace, envFile])
 
-  if (!workspace) return <Notice>{t('pullRequest.noWorkspace')}</Notice>
+  if (!workspace) {
+    return (
+      <Placeholder compact title={t('pullRequest.noWorkspaceTitle')}>
+        {t('pullRequest.noWorkspaceBody')}
+      </Placeholder>
+    )
+  }
   if (error !== null) return <Notice tone="danger">{error}</Notice>
   if (loading || !view) return <Notice>{t('pullRequest.loading')}</Notice>
 

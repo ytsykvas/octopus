@@ -17,7 +17,8 @@ describe('WorkspaceTerminals', () => {
   it('asks for a workspace when none is open', () => {
     render(<WorkspaceTerminals visible workspaces={[anna]} activeId={null} />)
 
-    expect(screen.getByText(/Select a workspace to open a terminal/)).toBeInTheDocument()
+    expect(screen.getByText('All quiet here')).toBeInTheDocument()
+    expect(screen.getByText(/a terminal opens in its directory/)).toBeInTheDocument()
     expect(octopus().terminal.create).not.toHaveBeenCalled()
   })
 
