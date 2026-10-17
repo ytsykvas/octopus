@@ -1,3 +1,4 @@
+import { Check, ChevronDown, ChevronUp, X } from 'lucide-react'
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
@@ -20,6 +21,10 @@ interface HeadsUpProps {
  *
  * The explanation opens in place rather than in a browser, because what it
  * says is about this app and fits in a paragraph.
+ *
+ * Each button carries an icon, as the buttons elsewhere in the window do. The
+ * chevron is the one that says something: it turns over with the paragraph it
+ * opens, so the state shows without reading `aria-expanded`.
  */
 export function HeadsUp({ tip, onKnown, onClose }: HeadsUpProps): React.JSX.Element {
   const { t } = useTranslation()
@@ -52,12 +57,15 @@ export function HeadsUp({ tip, onKnown, onClose }: HeadsUpProps): React.JSX.Elem
               setOpen((current) => !current)
             }}
           >
+            {open ? <ChevronUp aria-hidden size={13} /> : <ChevronDown aria-hidden size={13} />}
             {open ? t('tips.showLess') : t('tips.learnMore')}
           </Button>
           <Button size="sm" onClick={onKnown}>
+            <Check aria-hidden size={13} />
             {t('tips.knewIt')}
           </Button>
           <Button size="sm" onClick={onClose}>
+            <X aria-hidden size={13} />
             {t('tips.dismiss')}
           </Button>
         </div>
