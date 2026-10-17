@@ -385,11 +385,14 @@ export const en = {
     /* Said rather than enforced: the script belongs to whoever wrote it, and
        being wrong about it must not take the link or the controls away. */
     portSilent: 'Running, but nothing is listening on {{port}}. Does the script use $OCTOPUS_PORT?',
-    noWorkspace: 'Select a workspace to run this in.',
-    noSetup:
-      'No build script yet. It runs in a fresh workspace — installing dependencies, whatever a checkout needs before work can start.',
-    noRun:
-      'No server script yet. It starts the dev server, and receives a port of its own so several workspaces can serve at once.',
+    noWorkspaceTitle: 'Nothing to run yet',
+    noWorkspaceBody: 'Select a workspace on the left to run its scripts here.',
+    noSetupTitle: 'No build script yet',
+    noSetupBody:
+      'It runs in a fresh workspace — installing dependencies, whatever a checkout needs before work can start.',
+    noRunTitle: 'No server script yet',
+    noRunBody:
+      'It starts the dev server, and receives a port of its own so several workspaces can serve at once.',
     placeholder: '#!/bin/sh',
     setupIdle: 'Runs setup.sh in this workspace.',
     runIdle: 'Starts the dev server for this workspace.'
@@ -411,7 +414,9 @@ export const en = {
     notes: 'Notes',
     collapse: 'Collapse panel',
     expand: 'Show panel',
-    terminalPlaceholder: 'Select a workspace to open a terminal in its directory.',
+    terminalPlaceholderTitle: 'All quiet here',
+    terminalPlaceholderBody:
+      'Select a workspace on the left and a terminal opens in its directory.',
     resize: 'Resize panel'
   },
 
@@ -420,9 +425,11 @@ export const en = {
     tree: 'Files of this workspace',
     refresh: 'Refresh',
     collapseAll: 'Collapse all folders',
-    noWorkspace: 'Select a workspace to see its files.',
+    noWorkspaceTitle: 'Nothing to look through yet',
+    noWorkspaceBody: 'Select a workspace on the left to browse its files.',
     loading: 'Reading files…',
-    empty: 'This workspace has no files yet.',
+    emptyTitle: 'Not a file in sight',
+    emptyBody: 'This workspace has no files yet.',
     truncated: 'Only the first {{limit}} files are listed.',
     loadingFolder: 'Reading…',
     folderFailed: 'This folder could not be read.',
@@ -536,7 +543,8 @@ export const en = {
        reasoning about it. */
     capped:
       'GitHub was asked for the most recent hundred comments and fifty threads, and answered with that many \u2014 so there may be older ones this pane is not showing. The request on GitHub has all of them.',
-    noWorkspace: 'Select a workspace to open a pull request for it.',
+    noWorkspaceTitle: 'Nothing to propose yet',
+    noWorkspaceBody: 'Select a workspace on the left to open a pull request from its branch.',
     loading: 'Asking GitHub about this branch…',
     /* The branch is the whole subject: it is what a pull request is made of,
        and what its name will be on GitHub. */
@@ -716,8 +724,11 @@ export const en = {
   },
 
   diff: {
-    noWorkspace: 'Select a workspace to see what it changed.',
-    clean: 'Nothing has changed in this workspace yet.',
+    noWorkspaceTitle: 'Nothing to compare yet',
+    noWorkspaceBody: 'Select a workspace on the left to see what it has changed.',
+    cleanTitle: 'Not a single change',
+    cleanBody:
+      'Nothing has changed in this workspace yet. Edits — yours or the agent’s — show up here.',
     loading: 'Reading the changes…',
     against: 'against {{branch}}',
     fileCount_one: '{{count}} file',
@@ -1228,18 +1239,18 @@ export const en = {
   },
 
   center: {
-    noProjectsTitle: 'Start with a repository',
+    noProjectsTitle: 'Let’s find something to work on',
     noProjectsBody:
       'Add one from this machine, or clone it from GitHub. Workspaces are created inside it — each with its own branch, directory and agent session.',
-    noSelectionTitle: 'Select a project',
+    noSelectionTitle: 'Which project today?',
     noSelectionBody: 'Pick one from the list on the left, or add another repository.',
     /* The workspace half of the same pane. A project is chosen and the centre
        still has nothing to show, which is two different situations: one where
        there is nothing to pick, and one where nothing has been picked. */
-    firstWorkspaceTitle: 'Create the first workspace',
+    firstWorkspaceTitle: 'Your first workspace is one click away',
     firstWorkspaceBody:
       'A workspace is a copy of this project on a branch of its own, with its own folder and its own agent session. Nothing you do in one touches another.',
-    noWorkspaceTitle: 'Select a workspace',
+    noWorkspaceTitle: 'Which workspace shall we start with?',
     noWorkspaceBody:
       'Every conversation belongs to one workspace. The agent works on that workspace’s own copy of the project, and what it changes lands on that workspace’s branch.',
     addFromDisk: 'Add from disk…',
@@ -1604,7 +1615,8 @@ export const en = {
     /* The one thing a workspace carries that the agent never reads. Everything
        else in the pane is something it acts on; this is only for the person. */
     placeholder: 'A line to yourself about this workspace. The agent never reads it.',
-    noWorkspace: 'Choose a workspace to write a note about it.',
+    noWorkspaceTitle: 'Nowhere to write yet',
+    noWorkspaceBody: 'Select a workspace on the left to keep notes about it.',
     /* Shown only as the ceiling comes close. The limit is not about the note:
        the state file is rewritten whole on every save. */
     remaining_one: '{{count}} character left',

@@ -114,14 +114,18 @@ describe('DiffPanel', () => {
       />
     )
 
-    expect(screen.getByText(/Select a workspace/)).toBeInTheDocument()
+    expect(screen.getByText('Nothing to compare yet')).toBeInTheDocument()
+    expect(
+      screen.getByText('Select a workspace on the left to see what it has changed.')
+    ).toBeInTheDocument()
     expect(octopus().workspaces.diff).not.toHaveBeenCalled()
   })
 
   it('says so when the workspace has changed nothing', async () => {
     renderPanel()
 
-    expect(await screen.findByText(/Nothing has changed/)).toBeInTheDocument()
+    expect(await screen.findByText('Not a single change')).toBeInTheDocument()
+    expect(screen.getByText(/Nothing has changed/)).toBeInTheDocument()
   })
 
   it('counts the files and the lines, and names what they are measured against', async () => {

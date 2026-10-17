@@ -698,7 +698,7 @@ octopus/
     preload/       contextBridge, the typed API the window is handed
     renderer/
       src/
-        assets/      the mascot, and an octopus per effort level
+        assets/      the mascot, its searching pose, and an octopus per effort level
         components/  UI components
         hooks/       React hooks
         i18n/        localisation, en is the source of truth

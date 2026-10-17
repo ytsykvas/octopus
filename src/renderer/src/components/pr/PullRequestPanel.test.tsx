@@ -154,8 +154,9 @@ describe('the pull request tab', () => {
   it('asks for a workspace before anything else', () => {
     renderPanel({ workspace: null })
 
+    expect(screen.getByText('Nothing to propose yet')).toBeInTheDocument()
     expect(
-      screen.getByText('Select a workspace to open a pull request for it.')
+      screen.getByText('Select a workspace on the left to open a pull request from its branch.')
     ).toBeInTheDocument()
     expect(octopus().workspaces.pullRequest).not.toHaveBeenCalled()
   })

@@ -8,6 +8,7 @@ import type { WorkspaceView } from '@core/workspaces.js'
 
 import { useErrorMessage } from '../hooks/useErrorMessage.js'
 import { Button } from './Button.js'
+import { Placeholder } from './Placeholder.js'
 import { Terminal } from './Terminal.js'
 
 interface ScriptRunnerProps {
@@ -87,18 +88,28 @@ export function ScriptRunner({
 }: ScriptRunnerProps): React.JSX.Element {
   const { t } = useTranslation()
 
+  // The build half sits above the server half in the same tab, so only the
+  // server half draws the octopus — two stacked read as a glitch.
+  const art = kind === 'run'
+
   if (!workspace) {
-    return <Hint>{t('scripts.noWorkspace')}</Hint>
+    return (
+      <Placeholder compact art={art} title={t('scripts.noWorkspaceTitle')}>
+        {t('scripts.noWorkspaceBody')}
+      </Placeholder>
+    )
   }
 
   if (script === null) {
     return (
-      <Hint>
-        {t(kind === 'setup' ? 'scripts.noSetup' : 'scripts.noRun')}
-        <Button className="mt-3" onClick={onOpenSettings}>
-          {t('scripts.edit')}
-        </Button>
-      </Hint>
+      <Placeholder
+        compact
+        art={art}
+        title={t(kind === 'setup' ? 'scripts.noSetupTitle' : 'scripts.noRunTitle')}
+        actions={<Button onClick={onOpenSettings}>{t('scripts.edit')}</Button>}
+      >
+        {t(kind === 'setup' ? 'scripts.noSetupBody' : 'scripts.noRunBody')}
+      </Placeholder>
     )
   }
 

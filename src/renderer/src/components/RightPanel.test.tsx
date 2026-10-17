@@ -404,7 +404,7 @@ describe('RightPanel', () => {
 
     expect(screen.getByRole('button', { name: 'Terminal' })).toHaveAttribute('aria-current', 'page')
     expect(screen.getByRole('button', { name: 'Changes' })).not.toHaveAttribute('aria-current')
-    expect(screen.getByText(/Select a workspace to open a terminal/)).toBeInTheDocument()
+    expect(screen.getByText(/a terminal opens in its directory/)).toBeInTheDocument()
   })
 
   // A review is built up over several turns, and unmounting the pane would
@@ -1734,12 +1734,24 @@ describe('RightPanel', () => {
 
     // Said in both halves, since neither has a workspace to run in.
     expect(
-      within(buildSection()).getByText('Select a workspace to run this in.')
+      within(buildSection()).getByText('Select a workspace on the left to run its scripts here.')
     ).toBeInTheDocument()
     expect(
-      within(serverSection()).getByText('Select a workspace to run this in.')
+      within(serverSection()).getByText('Select a workspace on the left to run its scripts here.')
     ).toBeInTheDocument()
     expect(within(buildSection()).queryByRole('button', { name: 'Build' })).not.toBeInTheDocument()
+  })
+
+  // The two halves stack in one tab, each with its own empty state, and two
+  // octopuses one above the other read as a rendering glitch. The server half
+  // keeps it because it is the one that is always unfolded.
+  it('draws one octopus for the tab, not one per half', async () => {
+    renderPanel({ workspaces: [anna], activeWorkspaceId: null, scripts: SCRIPTS })
+
+    await userEvent.click(scriptsTab())
+
+    expect(buildSection().querySelector('img')).toBeNull()
+    expect(serverSection().querySelectorAll('img')).toHaveLength(1)
   })
 
   // A session belongs to its workspace, not to whether its tab is on screen.
