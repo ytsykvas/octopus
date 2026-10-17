@@ -1652,6 +1652,7 @@ export const en = {
     headsUp: 'Heads up',
     learnMore: 'Learn more',
     showLess: 'Show less',
+    addToChat: 'Add to chat',
     knewIt: 'Knew this already',
     dismiss: 'Dismiss',
     rewindSkipsCommands: {

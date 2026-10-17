@@ -1266,6 +1266,7 @@ export const uk: Translation = {
     headsUp: 'Зверніть увагу',
     learnMore: 'Детальніше',
     showLess: 'Сховати',
+    addToChat: 'Додати в чат',
     knewIt: 'Вже знаю',
     dismiss: 'Закрити',
     rewindSkipsCommands: {

@@ -529,12 +529,22 @@ what the agent changed with its editing tools: the SDK's checkpoints do not see
 what a command did, so it appears once the agent — or one of its subagents —
 has run `Bash`. It waits for the turn to end rather than pushing the field up
 mid-answer, and only one is shown at a time. **Learn more** opens a paragraph in
-place; **Knew this already** stores the id in the config's `dismissedTips`, for
+place; **Add to chat** puts what is on screen into the message field — the one
+line, and the paragraph as well while it is open — after whatever is already
+written, on a line of its own, and hides the heads-up for this conversation,
+since a second press would put the words in twice. It is on every heads-up, not
+only this one, because it reads the tip's own `title` and `detail`; the text goes
+in the language the window is in. A caveat about what the agent cannot undo is
+often what the next message is about, and retyping it is the part nobody should
+have to do. It is the composer's `seed` again — the channel a rewound message
+comes back through — with `append` set, because a rewound message _is_ the draft
+and this is only added to it: replacing would throw away a half-written question.
+**Knew this already** stores the id in the config's `dismissedTips`, for
 every conversation; **Dismiss** hides it in this conversation for as long as
 its workspace stays open — the conversations are rebuilt when another workspace
 is chosen, and it comes back with them, which is what tells the two buttons
 apart. Each button has an icon — a chevron that turns over with the paragraph
-it opens, a check, a cross — hidden from a screen reader, since the words beside
+it opens, a speech bubble with a plus, a check, a cross — hidden from a screen reader, since the words beside
 them say it. Claude Code's number keys are left out: the field below takes
 text, and a digit there is a digit. A new heads-up is one entry in
 `components/chat/tips.ts` — an id and the condition on the log — and its
