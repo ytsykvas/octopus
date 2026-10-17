@@ -291,15 +291,18 @@ describe('RightPanel', () => {
   })
 
   /*
-   * Everything under the tabs shares the project's wash, as the workspace list
-   * does — carried by one element wrapped round the views, so the gradient
-   * starts where the chosen tab ends. Without a project there is no colour to
-   * wash with, and the pane keeps its plain surface.
+   * The top of what is under the tabs carries the project's wash, fading out
+   * within a short distance — carried by one element wrapped round the views,
+   * so the gradient starts where the chosen tab ends. Not the full-height
+   * `project-tinted` of the workspace list: this pane is read for code. Without
+   * a project there is no colour to wash with, and the pane keeps its plain
+   * surface.
    */
-  it('washes the views in the colour of the project that is open', () => {
+  it('washes the top of the views in the colour of the project that is open', () => {
     renderPanel({ color: 'teal' })
 
-    const tinted = pane().querySelector('.project-tinted')
+    const tinted = pane().querySelector('.project-tinted-top')
+    expect(pane().querySelector('.project-tinted')).not.toBeInTheDocument()
     expect(tinted).toBeInTheDocument()
     // The view on screen is inside it; the row of tabs, whose line it starts
     // under, is not.
@@ -310,7 +313,7 @@ describe('RightPanel', () => {
   it('leaves the views unwashed until a project is chosen', () => {
     renderPanel()
 
-    expect(pane().querySelector('.project-tinted')).not.toBeInTheDocument()
+    expect(pane().querySelector('.project-tinted-top')).not.toBeInTheDocument()
   })
 
   /*

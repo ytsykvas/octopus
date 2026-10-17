@@ -246,6 +246,25 @@
     );
   }
 
+  /* The same wash, but only across the top. The workspace list is a column of
+     little else, so it carries the colour down its whole height; the right pane
+     holds code, a terminal and file trees, where a tinted ground behind a long
+     read tires the eye. So the colour starts where the chosen tab ends — 18%,
+     the tab's own fill, or the join shows — and is gone by the time the content
+     has begun, leaving the plain surface the rest of the way.
+
+     The end stop is `--surface` rather than `transparent`: interpolating towards
+     transparent passes through a greyed midpoint in some engines, and the
+     surface is what the pane is anyway. */
+  .project-tinted-top {
+    background-image: linear-gradient(
+      to bottom,
+      color-mix(in srgb, var(--project-color) 18%, var(--surface)),
+      var(--surface) 160px
+    );
+    background-repeat: no-repeat;
+  }
+
   /* A message you sent, carrying the project's colour the same way the sidebar
      and the active tab do — an 18% wash, so identity reads alike everywhere.
      A saturated fill was available and deliberately not used: the palette is

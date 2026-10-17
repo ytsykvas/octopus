@@ -2587,12 +2587,15 @@ what a wider pane gains. There is no outline: a drawn edge made the tab look lik
 a box resting on the row rather than part of it.
 
 **The colour carries on below the tabs.** Everything under the row is wrapped in
-one element with `.project-tinted`, the wash the workspace list has, so the view
-is the same colour the chosen tab ends in. One wrapper rather than the class on
-the pane: the gradient starts at the top of the element that carries it, and it
-has to start exactly where the tab stops — the tab is the colour the gradient
-begins with, 18%, which is why `.tab-selected` is 18% and no longer the 16% it
-was. The row itself stays neutral. On a tinted row the tiles would lie on a
+one element with `.project-tinted-top`: the wash the workspace list has, but only
+across the top, from the tab's own 18% to the plain surface within 160px. The
+list is a column of little else and carries the colour down its whole height; this
+pane holds code, a terminal and file trees, where a tinted ground behind a long
+read tires the eye — so the colour is a lead-in to the view rather than its
+ground. One wrapper rather than the class on the pane: the gradient starts at the
+top of the element that carries it, and it has to start exactly where the tab
+stops — the tab is the colour the gradient begins with, 18%, which is why
+`.tab-selected` is 18% and no longer the 16% it was. The row itself stays neutral. On a tinted row the tiles would lie on a
 ground already holding 18% of their own colour and all but vanish, and the
 chosen tab, which takes that ground's colour, would look paler than they do —
 the strip works the same way, a neutral column of tiles beside a tinted list.
@@ -2618,7 +2621,8 @@ variable optional; setting it to an empty value instead would leave `color-mix`
 invalid and the tab with no fill at all.
 
 **The terminal has no ground of its own**, so the wash reaches it too — a dark slab
-under the first tab would have been the one view that did not join. Two things
+under the first tab would have been the one view that did not join, and the
+terminal is where the fade is most in view. Two things
 paint it and both are cleared in `Terminal`'s host with `!important` utilities:
 xterm puts the theme's background inline on its scrollable element, and its own
 stylesheet gives the viewport beneath a `#000`. Important because one is inline
@@ -2828,7 +2832,7 @@ rather than as pixel art.
 
 `.panel` · `.row` / `.row-selected` · `.input` · `.choice` / `.choice-danger` ·
 `.section-label` · `.focus-ring` · `.titlebar-drag` · `.project-tinted` ·
-`.bubble-sent` · `.tab-selected` / `.tab-idle`
+`.project-tinted-top` · `.bubble-sent` · `.tab-selected` / `.tab-idle`
 
 **`.choice` goes on every checkbox and radio**, and being absent from this list
 is why three of the six were left painted by the platform for months. Without

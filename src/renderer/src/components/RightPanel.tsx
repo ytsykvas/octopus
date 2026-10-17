@@ -670,7 +670,7 @@ export function RightPanel({
           to the line that closes the row and breaks through it, so it reads as
           the view below reaching up — the same relationship the project strip
           has with the sidebar, whose wash the view below now carries too
-          (`project-tinted`, further down). `items-end` and the margins are what
+          (`project-tinted-top`, further down). `items-end` and the margins are what
           place them against the line rather than above it.
 
           Pinned to the right edge with `justify-end`: the pane is dragged by
@@ -727,14 +727,16 @@ export function RightPanel({
         ))}
       </div>
 
-      {/* Everything under the tabs shares one ground, the project's wash, the
-          way the workspace list does. One wrapper rather than the class on the
-          section: the gradient starts at the top of the element that carries
-          it, and it has to start exactly where the chosen tab ends — the tab is
-          the colour the gradient begins with, and a row's height of drift is
-          enough for the join to show. Without a project the class is left off
-          and the pane keeps its plain surface. */}
-      <div className={`flex min-h-0 flex-1 flex-col ${color ? 'project-tinted' : ''}`}>
+      {/* The project's wash across the top of what is under the tabs, fading
+          out within the first 160px — the way the workspace list is washed, but
+          not all the way down: this pane is read for code and terminal output.
+          One wrapper rather than the class on the section: the gradient starts
+          at the top of the element that carries it, and it has to start exactly
+          where the chosen tab ends — the tab is the colour the gradient begins
+          with, and a row's height of drift is enough for the join to show.
+          Without a project the class is left off and the pane keeps its plain
+          surface. */}
+      <div className={`flex min-h-0 flex-1 flex-col ${color ? 'project-tinted-top' : ''}`}>
         {/* Hidden rather than unmounted, like the rest: which folders were open
           and where the tree was scrolled are what a look elsewhere must not
           cost. `visible` is what stops it reading git meanwhile. */}
