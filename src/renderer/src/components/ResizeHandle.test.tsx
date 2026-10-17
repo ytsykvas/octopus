@@ -65,6 +65,90 @@ afterEach(() => {
   document.body.removeAttribute('style')
 })
 
+describe('a drag past the floor', () => {
+  function renderFolding(): Rendered & { readonly onFold: Mock<(folded: boolean) => void> } {
+    const onResize: WidthSpy = vi.fn()
+    const onCommit: WidthSpy = vi.fn()
+    const onFold = vi.fn<(folded: boolean) => void>()
+    const { container } = render(
+      <ResizeHandle
+        width={300}
+        {...bounds}
+        onResize={onResize}
+        onCommit={onCommit}
+        onFold={onFold}
+      />
+    )
+    const own = within(container)
+    return {
+      handle: own.getByRole('separator'),
+      named: (name) => own.getByRole('separator', { name }),
+      onResize,
+      onCommit,
+      setWidth: () => undefined,
+      onFold
+    }
+  }
+
+  // Just past the floor the pane still stops there: folding needs the pointer
+  // well beyond it, at half the floor, or every overshoot would fold it.
+  it('stops at the floor when the drag only overshoots it', () => {
+    const { handle, onFold } = renderFolding()
+
+    grab(handle, 500)
+    // 300 − 150 = 150: below the floor of 200, above half of it.
+    movePointerTo(650)
+
+    expect(onFold).not.toHaveBeenCalled()
+  })
+
+  it('folds the pane once, as the pointer passes half the floor', () => {
+    const { handle, onFold } = renderFolding()
+
+    grab(handle, 500)
+    movePointerTo(620)
+    // 300 − 210 = 90: under half of 200.
+    movePointerTo(710)
+    movePointerTo(760)
+
+    expect(onFold).toHaveBeenCalledExactlyOnceWith(true)
+  })
+
+  it('brings it back out when the same drag returns', () => {
+    const { handle, onFold, onResize } = renderFolding()
+
+    grab(handle, 500)
+    movePointerTo(760)
+    movePointerTo(560)
+
+    expect(onFold.mock.calls).toEqual([[true], [false]])
+    expect(onResize).toHaveBeenLastCalledWith(240)
+  })
+
+  // Released folded, the width that is committed is the one the drag began at,
+  // so the pane comes back out at the width it had rather than at the floor it
+  // was dragged through.
+  it('commits the width it started at when released folded', () => {
+    const { handle, onCommit } = renderFolding()
+
+    grab(handle, 500)
+    movePointerTo(600)
+    movePointerTo(760)
+    releasePointer()
+
+    expect(onCommit).toHaveBeenCalledExactlyOnceWith(300)
+  })
+
+  it('never folds from the keyboard', async () => {
+    const { handle, onFold } = renderFolding()
+
+    handle.focus()
+    for (let press = 0; press < 20; press++) await userEvent.keyboard('{ArrowRight}')
+
+    expect(onFold).not.toHaveBeenCalled()
+  })
+})
+
 describe('ResizeHandle', () => {
   it('reports every width while the pointer moves and commits once on release', () => {
     const { handle, onResize, onCommit } = renderHandle({ width: 300 })

@@ -67,6 +67,7 @@ function config(overrides: Partial<Config> = {}): Config {
     theme: 'system',
     language: 'en',
     rightPanelWidth: 360,
+    rightPanelOpen: true,
     rightPanelTab: 'diff',
     diffView: 'unified',
     sidebarWidth: 240,
@@ -675,6 +676,63 @@ describe('App', () => {
     await user.keyboard('{Control>}2{/Control}')
 
     expect(await screen.findByText('/tmp/planner/bob')).toBeInTheDocument()
+  })
+
+  /*
+   * Folding the pane away used to unmount it, and unmounting a terminal is how
+   * a terminal is ended — so the button closed every shell and stopped every
+   * dev server in the project. The same node coming back is the assertion: a
+   * terminal remounted would be a new session, whatever it looked like.
+   */
+  it('keeps every terminal running while the pane is folded away', async () => {
+    givenTwoProjects()
+    const user = await openApp()
+    await user.click(await screen.findByRole('button', { name: 'PL' }))
+    await user.click(screen.getByRole('button', { name: 'Terminal' }))
+    await user.keyboard('{Control>}2{/Control}')
+    const terminal = await screen.findByText('/tmp/planner/bob')
+
+    await user.click(screen.getByRole('button', { name: 'Collapse panel' }))
+    expect(screen.getByText('/tmp/planner/bob')).toBe(terminal)
+
+    await user.click(screen.getByRole('button', { name: 'Show panel' }))
+    expect(screen.getByText('/tmp/planner/bob')).toBe(terminal)
+  })
+
+  it('remembers that the pane was folded away', async () => {
+    const user = await openApp()
+
+    await user.click(screen.getByRole('button', { name: 'Collapse panel' }))
+
+    expect(window.octopus.config.update).toHaveBeenLastCalledWith({ rightPanelOpen: false })
+  })
+
+  // The drag decides inside the pane; folding is `App`'s, and so is saving it.
+  it('folds the pane away and remembers it when its edge is dragged past the floor', async () => {
+    await openApp()
+    const [, edge] = screen.getAllByRole('separator', { name: 'Resize panel' })
+    if (!edge) throw new Error('the right pane has no edge')
+
+    fireEvent.pointerDown(edge, { clientX: 500 })
+    fireEvent.pointerMove(window, { clientX: 900 })
+    fireEvent.pointerUp(window)
+
+    expect(screen.queryByRole('button', { name: 'Changes' })).not.toBeInTheDocument()
+    expect(window.octopus.config.update).toHaveBeenCalledWith({ rightPanelOpen: false })
+  })
+
+  it('opens with the pane folded away when it was left that way', async () => {
+    vi.mocked(window.octopus.config.get).mockResolvedValue({
+      ok: true,
+      value: config({ rightPanelOpen: false })
+    })
+
+    await openApp()
+
+    await waitFor(() => {
+      expect(screen.queryByRole('button', { name: 'Changes' })).not.toBeInTheDocument()
+    })
+    expect(screen.getByRole('button', { name: 'Show panel' })).toBeInTheDocument()
   })
 
   it('leaves the workspace alone when the digit points past the last one', async () => {
@@ -2053,7 +2111,11 @@ describe('App', () => {
 
     fireEvent.keyDown(window, { key: 'D', metaKey: true, shiftKey: true })
 
-    expect(window.octopus.config.update).toHaveBeenLastCalledWith({ rightPanelTab: 'diff' })
+    // Unfolding rides in the same write as the tab, so it is kept as well.
+    expect(window.octopus.config.update).toHaveBeenLastCalledWith({
+      rightPanelTab: 'diff',
+      rightPanelOpen: true
+    })
   })
 
   it('opens the files with ⌘⇧E', async () => {
@@ -2062,7 +2124,10 @@ describe('App', () => {
 
     fireEvent.keyDown(window, { key: 'E', metaKey: true, shiftKey: true })
 
-    expect(window.octopus.config.update).toHaveBeenLastCalledWith({ rightPanelTab: 'files' })
+    expect(window.octopus.config.update).toHaveBeenLastCalledWith({
+      rightPanelTab: 'files',
+      rightPanelOpen: true
+    })
   })
 
   describe('a file opened from the tree', () => {
@@ -2363,7 +2428,8 @@ describe('App', () => {
     await user.click(await screen.findByRole('button', { name: 'Create PR' }))
 
     expect(window.octopus.config.update).toHaveBeenLastCalledWith({
-      rightPanelTab: 'pullRequest'
+      rightPanelTab: 'pullRequest',
+      rightPanelOpen: true
     })
   })
 
@@ -2540,21 +2606,25 @@ describe('App', () => {
     fireEvent.keyDown(window, { key: 'P', metaKey: true, shiftKey: true })
 
     expect(window.octopus.config.update).toHaveBeenLastCalledWith({
-      rightPanelTab: 'pullRequest'
+      rightPanelTab: 'pullRequest',
+      rightPanelOpen: true
     })
   })
 
   /*
-   * The pane is unmounted while it is folded away, so a tab kept inside it was
-   * gone the moment it was hidden — which is half of why the value moved out.
+   * The tab lives in the config rather than in the pane, and folding is now a
+   * write of its own — so the fold must not carry the tab back to its default.
    */
   it('keeps the chosen tab across folding the pane away', async () => {
     givenTwoProjects()
-    // The pane reads the tab back from the config it is answered with, so a
-    // stub that ignores the patch would fold a choice nobody ever made.
-    vi.mocked(window.octopus.config.update).mockImplementation((patch) =>
-      Promise.resolve({ ok: true, value: config(patch) })
-    )
+    // The pane reads the tab back from the config it is answered with, so the
+    // stub keeps every patch as the main process does: one that answered with
+    // only the latest would drop the tab when the fold is written.
+    let stored = config()
+    vi.mocked(window.octopus.config.update).mockImplementation((patch) => {
+      stored = { ...stored, ...patch }
+      return Promise.resolve({ ok: true, value: stored })
+    })
     const user = await openApp()
     await user.click(screen.getByRole('button', { name: 'Terminal' }))
 

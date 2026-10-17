@@ -27,6 +27,7 @@ function config(overrides: Partial<Config> = {}): Config {
     theme: 'system',
     language: 'en',
     rightPanelWidth: 360,
+    rightPanelOpen: true,
     rightPanelTab: 'diff',
     diffView: 'unified',
     sidebarWidth: 240,
