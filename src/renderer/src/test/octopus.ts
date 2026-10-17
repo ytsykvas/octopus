@@ -334,6 +334,7 @@ function defaultConfig(): Config {
     dismissedTips: [],
     theme: 'system' as const,
     language: 'en' as const,
+    rightPanelOpen: true,
     rightPanelTab: 'diff' as const,
     rightPanelWidth: 360,
     diffView: 'unified' as const,

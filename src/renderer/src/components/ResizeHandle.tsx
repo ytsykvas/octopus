@@ -15,10 +15,26 @@ interface ResizeHandleProps {
    * `right` for a pane on the left of the window, `left` for one on the right.
    */
   readonly grows?: 'left' | 'right'
+  /**
+   * Called as a drag crosses the line past which the pane folds away, and back.
+   *
+   * Without it the pane only ever stops at `min`, as the workspace list does.
+   * With it, dragging well past the floor folds the pane, the way a sidebar
+   * folds in most desktop applications, and dragging back within the same
+   * gesture brings it out again.
+   */
+  readonly onFold?: (folded: boolean) => void
 }
 
 /** How far one arrow key moves the edge. */
 const STEP = 16
+
+/**
+ * How far past the floor a drag has to go before the pane folds: below half of
+ * `min`. Far enough that a drag which merely overshoots the floor still stops
+ * there, near enough that folding by dragging does not need the whole window.
+ */
+const FOLD_AT = 0.5
 
 /**
  * Draggable edge of the right pane.
@@ -32,7 +48,8 @@ export function ResizeHandle({
   max,
   onResize,
   onCommit,
-  grows = 'left'
+  grows = 'left',
+  onFold
 }: ResizeHandleProps): React.JSX.Element {
   const { t } = useTranslation()
   // The pointer handlers live on window for the length of a drag, so they read
@@ -54,10 +71,29 @@ export function ResizeHandle({
     // needs no special case.
     const startX = event.clientX
     const startWidth = latest.current
+    let folded = false
 
     const onMove = (move: PointerEvent): void => {
       const travelled = move.clientX - startX
-      const next = clamp(startWidth + (grows === 'right' ? travelled : -travelled))
+      const wanted = startWidth + (grows === 'right' ? travelled : -travelled)
+
+      if (onFold) {
+        const fold = wanted < min * FOLD_AT
+        if (fold !== folded) {
+          folded = fold
+          onFold(fold)
+        }
+        // Folded, the width goes back to where the drag began, so the release
+        // commits that — and the pane comes back out at the width it had,
+        // not at the floor it was dragged through on the way.
+        if (fold) {
+          latest.current = startWidth
+          onResize(startWidth)
+          return
+        }
+      }
+
+      const next = clamp(wanted)
       latest.current = next
       onResize(next)
     }

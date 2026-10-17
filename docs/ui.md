@@ -248,8 +248,8 @@ banner above them all, or they stop lining up. A ceiling rather than a width: it
 only applies once the panes are dragged that far apart.
 
 **The composer's two rows wrap rather than overflow.** The centre reaches
-`MIN_CENTRE_WIDTH` (360, in `RightPanel.tsx`) — by a drag, or by a window
-narrowed past what the right pane can give up — and at that width the
+`MIN_CENTRE_WIDTH` (360, in `RightPanel.tsx`) — by a drag, or by a narrowed
+window, which the centre absorbs before the right pane gives way — and at that width the
 footer cannot hold its three settings and the send button side by side. It used
 to run past the rounded border and take the send button off the edge of the
 block — Enter still sent, but the pane's primary control was not on screen. Each
@@ -2055,22 +2055,39 @@ down from `App`: it is the project strip plus a list that is resizable and folds
 away, and against the constant it used to be measured by, a list dragged wide
 left the centre nothing at all.
 
-**Dragging the window's own edge drags the right pane's edge with it.** The
-centre used to take every pixel the window gained or lost, being the only pane
-with no width of its own — and the conversation stops widening at 72rem, so what
-it took was margin, while the diff and the terminal stayed as narrow as they
-started. Now the pane absorbs the change and the centre keeps the width it had;
-narrowing takes that width back out of the pane first, and only once the pane is
-down to what its tabs need does the centre begin to lose room. The list on the
-left never yields a pixel: exactly one pane may absorb the change, or "the
-centre keeps the width it had" stops being true and needs a rule for splitting.
+**The right pane keeps the width it was dragged to, and the window's edge moves
+the centre** — the way a sidebar behaves in most desktop applications. Widen the
+window and the pane travels with its right edge at the same width while the
+conversation gets the room; narrow it and the centre gives the room back, until
+it is down to its own 360 and the pane begins to give way, never below what its
+tabs need. The list on the left never yields a pixel.
 
-What the window adds is not saved. The config holds the width that was dragged,
-the pane remembers the window it was dragged at, and what it shows is the
-difference — which is what puts the pane back where it was when the window goes
-back where it was, without anything having to remember the journey. The window's
-own size is not stored either (`src/main/index.ts`), so every launch starts at a
-width where the saved number applies as it stands.
+It was the other way round for a while: the pane absorbed every pixel the window
+gained or lost, on the grounds that the conversation stops widening at 72rem and
+what the centre took was margin. In use it read as the pane having a mind of its
+own — its left edge stayed put while the window was dragged — so it went.
+
+What the window takes is shown, never saved. The config holds the width that was
+dragged, and the pane shows as much of it as the window has room for, so the
+width comes back by itself once the room does.
+
+**Folding the pane hides it; it never unmounts it.** Its terminals and the
+servers running in them belong to their workspaces, and unmounting a terminal is
+how one is ended — so the fold used to close every shell and stop every dev
+server in the project. Hidden with `display: none`, a terminal keeps its size:
+the fit addon reads no height there and does nothing, and the `ResizeObserver`
+fits it again when the pane comes back. While folded no tab counts as visible,
+so nothing in it reads git, and the tab row is measured again on unfolding — a
+pane that started folded measured it at nothing.
+
+The fold is kept across launches (`rightPanelOpen`), and every way of unfolding
+— the header's button, ⌘⇧D, ⌘⇧E, opening a pull request — writes it, the tab
+riding in the same write. Dragging the edge well past the floor folds it too, as
+in most editors: past **half** the floor, so a drag that merely overshoots still
+stops there, and the same drag coming back brings the pane out again. Released
+folded, the width committed is the one the drag began at, so the pane comes back
+at the width it had rather than at the floor it was dragged through. The arrow
+keys never fold it.
 
 **Only the ⌥ shortcuts ask where the focus is.** ⌘ and ⌃ are not typing
 gestures, so a shortcut on them is unambiguous wherever it is pressed — but on
