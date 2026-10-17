@@ -47,6 +47,16 @@ export const WORKSPACE_VARIABLE = 'OCTOPUS_WORKSPACE_NAME'
 export const SLUG_VARIABLE = 'OCTOPUS_WORKSPACE_SLUG'
 
 /**
+ * Which of the project's sets of variables this workspace runs with.
+ *
+ * The variables themselves arrive beside it; the name is for the script that
+ * has to choose something the variables cannot carry — which dump to pull is
+ * the worked example, where `prod` and `dev` differ in more than one value and
+ * a `case` on the name is the plainest way to say so.
+ */
+export const PROFILE_VARIABLE = 'OCTOPUS_ENV_PROFILE'
+
+/**
  * How much of the name a slug keeps.
  *
  * Postgres truncates an identifier at 63 characters and does it silently, so
@@ -105,21 +115,28 @@ export function blockPorts(port: number): number[] {
   return Array.from({ length: BLOCK }, (_, offset) => port + offset)
 }
 
+/** What a script's environment is built from — the workspace, as a script sees it. */
+export interface ScriptValues {
+  readonly rootPath: string
+  readonly workspaceName: string
+  readonly port: number
+  /** The set of variables in effect, by name. */
+  readonly profile: string
+}
+
 /**
  * The environment a script is given.
  *
- * All three get the root and the name, in both forms; only the server gets the
- * ports, which are the one thing that is about serving rather than about the
- * workspace.
+ * All three get the root, the name in both forms and the set of variables in
+ * effect; only the server gets the ports, which are the one thing that is
+ * about serving rather than about the workspace.
  */
-export function scriptEnv(
-  kind: ScriptKind,
-  values: { readonly rootPath: string; readonly workspaceName: string; readonly port: number }
-): Record<string, string> {
+export function scriptEnv(kind: ScriptKind, values: ScriptValues): Record<string, string> {
   const env: Record<string, string> = {
     [ROOT_VARIABLE]: values.rootPath,
     [WORKSPACE_VARIABLE]: values.workspaceName,
-    [SLUG_VARIABLE]: workspaceSlug(values.workspaceName)
+    [SLUG_VARIABLE]: workspaceSlug(values.workspaceName),
+    [PROFILE_VARIABLE]: values.profile
   }
 
   /*

@@ -860,6 +860,29 @@ project's default. A workspace pinned to a production set must not silently
 receive dev credentials; nothing written is a run that fails on a missing
 variable, which is loud.
 
+**The scripts are given the set as well as the file.** `workspace:prepare`
+answers with the set's name and its variables, `$OCTOPUS_*` already filled in,
+and the build and the server start with both in their own environment — the
+name as `$OCTOPUS_ENV_PROFILE`. The cleanup script gets the same from the
+service. A build that pulls a dump then reads `$DUMP_URL` rather than sourcing
+`.env` with whatever quoting its shell disagrees with dotenv about. Our own
+names are laid over the set's, so a set cannot move `$OCTOPUS_PORT` or point a
+cleanup at another checkout.
+
+**Only what reads the same as in dotenv goes into the environment**, because
+dotenv, Vite and Ruby's `Dotenv.load` all leave a variable that is already there
+alone — a value read differently here would beat the right one in the file. Kept:
+`export`, a value between matching quotes, an unquoted one cut at its first `#`,
+the last of a repeated name. Left out, and left to the file: a value spanning
+lines (with every line inside it, since a base64 line ending `==` would otherwise
+read as an assignment), a backtick-quoted one, an escape in double quotes, and a
+`$` outside single quotes once our own names are filled in — what dotenv-expand
+would expand. A script that needs one of those reads `.env` itself.
+
+The cleanup reads the set in effect **at removal**, not the one the last build
+ran with — by then it is the only one there is. A cleanup that names what it
+drops from `$OCTOPUS_WORKSPACE_SLUG` is unaffected.
+
 ## Env overrides typed against a project
 
 `projects/<projectId>/envs/<name>` holds one **named set** of variables typed in
@@ -923,7 +946,8 @@ was live: credentials, and a port frozen at the moment of the switch.
 
 **`$OCTOPUS_PORT` in the block becomes the workspace's own port**, along with
 the rest of the names the scripts get — `$OCTOPUS_PORT_1`…`_9`,
-`$OCTOPUS_ROOT_PATH`, `$OCTOPUS_WORKSPACE_NAME` and `$OCTOPUS_WORKSPACE_SLUG`,
+`$OCTOPUS_ROOT_PATH`, `$OCTOPUS_WORKSPACE_NAME`, `$OCTOPUS_WORKSPACE_SLUG` and
+`$OCTOPUS_ENV_PROFILE`,
 in either the bare or the
 `${…}` form. The block is one text for the whole project and the port is the one
 thing that differs per workspace, so without this a value naming a port could

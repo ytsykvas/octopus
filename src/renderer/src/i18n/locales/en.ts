@@ -236,7 +236,7 @@ export const en = {
       'Which file in the workspace the variables are written into, relative to its root. .env suits most stacks; Vite reads .env.local and would ignore anything written beside it.',
     envProfile: 'Set of variables',
     envProfileHint:
-      'A project may keep several \u2014 a dev set and a production one, say \u2014 and each workspace uses one. Which is a choice made here rather than by commenting a block in and out of a file, where the last edit wins silently. They never travel to the repository: the repository decides what runs, this machine decides what it runs against.',
+      'A project may keep several \u2014 a dev set and a production one, say \u2014 and each workspace uses one. Which is a choice made here rather than by commenting a block in and out of a file, where the last edit wins silently. They never travel to the repository: the repository decides what runs, this machine decides what it runs against. Which set a workspace uses is chosen in the Run row on the right.',
     /* The label on the field, which is the whole of the question. It used to be
        the argument to `window.prompt` — a dialog Electron replaces with a
        function that throws, so it was never seen. */
@@ -266,7 +266,7 @@ export const en = {
     envOf: 'Variables in \u201c{{name}}\u201d',
     envPlaceholder: 'MYSQL_HOST=dev.example\nAPP_URL=http://localhost:$OCTOPUS_PORT',
     envHint:
-      'One KEY=value per line. Written at the end of {{file}} in the workspace, so they win over whatever was copied — and they are the whole file where a clone had none to copy. $OCTOPUS_PORT becomes the workspace\u2019s own port, and $OCTOPUS_WORKSPACE_SLUG its name in a form an identifier can hold \u2014 lowercased, everything else an underscore \u2014 which is what a database named after the workspace needs. Kept on this machine, never in the repository.',
+      'One KEY=value per line. Written at the end of {{file}} in the workspace, so they win over whatever was copied — and they are the whole file where a clone had none to copy. $OCTOPUS_PORT becomes the workspace\u2019s own port, and $OCTOPUS_WORKSPACE_SLUG its name in a form an identifier can hold \u2014 lowercased, everything else an underscore \u2014 which is what a database named after the workspace needs. The build, server and cleanup scripts are given these variables in their own environment too, with $OCTOPUS_ENV_PROFILE naming the set \u2014 so one setup.sh can pull a different dump for each. Kept on this machine, never in the repository.',
     envNotIgnored:
       'git does not ignore {{file}} in this repository, so what you type here will show up in the workspace as a change — and can be committed. Add it to .gitignore, or if the repository tracks it, stop tracking it first.',
     envMarker:
@@ -357,6 +357,13 @@ export const en = {
     env: 'Env',
     envRestart:
       'The server is still running with the previous set of variables. Restart it to pick up the change.',
+    /* Read aloud for the row of set names in the Run row, which is all a
+       screen reader would otherwise have to go on. */
+    envSwitch: 'Set of variables this workspace runs with',
+    /* A restart starts the server again without building, so it cannot undo a
+       build made with the other set — the dump it restored stays. */
+    envRebuild:
+      'Built with \u201c{{built}}\u201d. A restart keeps that build \u2014 stop, then run again to build with \u201c{{current}}\u201d.',
     envFollow: 'Follow the project ({{name}})',
     editEnv: 'Variables…',
     repoUnreadable:

@@ -1,6 +1,12 @@
 import { describe, expect, it } from 'vitest'
 
-import { checkEnvBody, substituteEnv, withoutMarkers, type WorkspaceValues } from './envBlock.js'
+import {
+  checkEnvBody,
+  parseEnvBody,
+  substituteEnv,
+  withoutMarkers,
+  type WorkspaceValues
+} from './envBlock.js'
 
 /** The values a workspace stands for while the block is written. */
 function values(): WorkspaceValues {
@@ -9,7 +15,8 @@ function values(): WorkspaceValues {
     envFile: '.env',
     rootPath: '/Users/test/planner',
     workspaceName: 'anna',
-    port: 3100
+    port: 3100,
+    profile: 'dev'
   }
 }
 
@@ -39,6 +46,12 @@ describe('substituteEnv', () => {
     expect(
       substituteEnv('DB=planner_$OCTOPUS_WORKSPACE_NAME\nROOT=$OCTOPUS_ROOT_PATH', values())
     ).toBe('DB=planner_anna\nROOT=/Users/test/planner')
+  })
+
+  it('knows which set of variables is in effect', () => {
+    // So one text can still differ by set where only the name has to.
+    expect(substituteEnv('SENTRY_ENV=$OCTOPUS_ENV_PROFILE', values())).toBe('SENTRY_ENV=dev')
+    expect(checkEnvBody('SENTRY_ENV=$OCTOPUS_ENV_PROFILE')).toEqual([])
   })
 
   /*
@@ -72,6 +85,106 @@ describe('substituteEnv', () => {
 
   it('changes nothing in a block that asks for nothing', () => {
     expect(substituteEnv('MYSQL_HOST=dev.example', values())).toBe('MYSQL_HOST=dev.example')
+  })
+})
+
+describe('parseEnvBody', () => {
+  it('reads one name and value per line', () => {
+    expect(parseEnvBody('DUMP_URL=s3://staging/latest.sql\nMYSQL_HOST=dev.example')).toEqual({
+      DUMP_URL: 's3://staging/latest.sql',
+      MYSQL_HOST: 'dev.example'
+    })
+  })
+
+  it('leaves out blank lines, comments, and our markers', () => {
+    expect(
+      parseEnvBody('# >>> octopus: project overrides\n\n# staging\nA=1\n# <<< octopus')
+    ).toEqual({ A: '1' })
+  })
+
+  it('accepts export, and spaces around the equals sign', () => {
+    expect(parseEnvBody('export A=1\n  B = 2  ')).toEqual({ A: '1', B: '2' })
+  })
+
+  it('keeps everything after the first equals sign', () => {
+    // A connection string is the ordinary case of a value holding one.
+    expect(parseEnvBody('DATABASE_URL=postgres://u:p@h/db?sslmode=require&a=b')).toEqual({
+      DATABASE_URL: 'postgres://u:p@h/db?sslmode=require&a=b'
+    })
+  })
+
+  it('takes a quoted value between its quotes, # and all', () => {
+    expect(parseEnvBody('A="pa#ss word" # note\nB=\'x y\'')).toEqual({
+      A: 'pa#ss word',
+      B: 'x y'
+    })
+  })
+
+  it('cuts an unquoted value at its first #, as dotenv does', () => {
+    // The value a script sees has to be the value the app reads out of the
+    // same file, and both dotenvs stop there.
+    expect(parseEnvBody('A=abc # note\nB=pa#ss')).toEqual({ A: 'abc', B: 'pa' })
+  })
+
+  /*
+   * The server starts with these in its environment, and dotenv never replaces
+   * a variable already there — so anything read differently here would beat the
+   * right value in the file. Each of these is read differently, so each is left
+   * to the file.
+   */
+  it('leaves out a value spanning lines, and every line inside it', () => {
+    const pem = 'KEY="-----BEGIN KEY-----\nMIIBabc==\n-----END KEY-----"\nAFTER=1'
+    expect(parseEnvBody(pem)).toEqual({ AFTER: '1' })
+  })
+
+  it('leaves out a value whose single or backtick quote does not close on its line', () => {
+    expect(parseEnvBody("A='x\nB=inside'\nC=1")).toEqual({ C: '1' })
+    expect(parseEnvBody('A=`x\nB=inside`\nC=1')).toEqual({ C: '1' })
+  })
+
+  it('leaves out a backtick-quoted value', () => {
+    expect(parseEnvBody('A=`tick`\nB=1')).toEqual({ B: '1' })
+  })
+
+  it('leaves out an escape in double quotes, which dotenv turns into a newline', () => {
+    expect(parseEnvBody('PEM="a\\nb"\nB=1')).toEqual({ B: '1' })
+  })
+
+  it('leaves out a reference to another variable, which dotenv-expand fills in', () => {
+    expect(parseEnvBody('A=${HOME}/x\nB="$HOME"\nC=1')).toEqual({ C: '1' })
+  })
+
+  it('keeps a $ in single quotes, which nothing expands', () => {
+    expect(parseEnvBody("PASSWORD='pa$$word'")).toEqual({ PASSWORD: 'pa$$word' })
+  })
+
+  it('leaves out text after a closing quote', () => {
+    expect(parseEnvBody('A="x"y\nB=1')).toEqual({ B: '1' })
+  })
+
+  it('reads an empty value as empty', () => {
+    expect(parseEnvBody('A=')).toEqual({ A: '' })
+  })
+
+  it('keeps the last of a name written twice', () => {
+    expect(parseEnvBody('A=1\nA=2')).toEqual({ A: '2' })
+  })
+
+  it('leaves out a line that is not an assignment or has a name no parser accepts', () => {
+    expect(parseEnvBody('just words\n1BAD=x\nGOOD=y')).toEqual({ GOOD: 'y' })
+  })
+
+  it('reads lines that end in a carriage return', () => {
+    expect(parseEnvBody('A=1\r\nB=2\r')).toEqual({ A: '1', B: '2' })
+  })
+
+  it('treats __proto__ as a name like any other', () => {
+    // Assigned to a plain object it would set the prototype instead, and the
+    // variable would silently not exist.
+    const parsed = parseEnvBody('__proto__=x')
+
+    expect(Object.getPrototypeOf(parsed)).toBe(Object.prototype)
+    expect(Object.entries(parsed)).toEqual([['__proto__', 'x']])
   })
 })
 

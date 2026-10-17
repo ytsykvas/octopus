@@ -86,11 +86,13 @@ import {
 } from './attachments.js'
 import { type CliPermission, readCliPermissions } from './cliPermissions.js'
 import { allowedStanding, type StandingPermission, withStanding } from './standingPermissions.js'
-import type { CarryReport } from './carry.js'
+import type { CarryReport, PreparedWorkspace } from './carry.js'
 import { applyEnvOverrides, discardIfOnlyBlock, removeEnvBlock, readWorkspaceEnv } from './env.js'
+import { parseEnvBody, substituteEnv } from './envBlock.js'
 import { DEFAULT_PROFILE } from './envProfileNames.js'
 import {
   createProfile,
+  effectiveProfile,
   listProfiles,
   migrateEnvProfiles,
   readEffectiveEnv,
@@ -100,6 +102,7 @@ import {
   writeProfile
 } from './envProfiles.js'
 import { runArchiveScript } from './archive.js'
+import type { ScriptValues } from './scriptEnv.js'
 import { type UsageReport, type UsageWindows, windowsFrom } from './usage.js'
 import {
   type Config,
@@ -807,9 +810,10 @@ export interface OctopusService {
    * either changed picks the change up rather than staying broken until it is
    * recreated.
    *
-   * Answers with the files it copied; nothing is ever overwritten.
+   * Answers with the files it copied — nothing is ever overwritten — and the
+   * set of variables the scripts about to start are to be given.
    */
-  prepareWorkspace(workspaceId: string): Promise<CarryReport>
+  prepareWorkspace(workspaceId: string): Promise<PreparedWorkspace>
 
   /**
    * Whether anything is listening on the port this workspace was given.
@@ -2946,10 +2950,42 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
     return (await isIgnored(makeExec(workspace.path), envFile)) ? envFile : project.envFile
   }
 
+  /**
+   * The workspace as its scripts see it, and the set of variables behind it.
+   *
+   * One place for the run and both cleanups, so the two read a set the same
+   * way. The cleanup reads the set in effect **at removal** — the only one
+   * there is by then, even where the last build ran on another.
+   */
+  async function scriptSetFor(
+    project: Project,
+    workspace: Workspace
+  ): Promise<
+    Pick<PreparedWorkspace, 'variables'> & {
+      readonly values: ScriptValues
+      readonly stored: string
+    }
+  > {
+    const values: ScriptValues = {
+      rootPath: project.repoPath,
+      workspaceName: workspace.name,
+      port: workspace.port,
+      profile: effectiveProfile(project, workspace)
+    }
+    const stored = await readEffectiveEnv(project, workspace, dataRoot)
+
+    return { values, stored, variables: parseEnvBody(substituteEnv(stored, values)) }
+  }
+
   async function prepare(
     project: Project,
     workspace: Workspace
-  ): Promise<{ readonly report: CarryReport; readonly envFile: string }> {
+  ): Promise<
+    Pick<PreparedWorkspace, 'profile' | 'variables'> & {
+      readonly report: CarryReport
+      readonly envFile: string
+    }
+  > {
     const envFile = await envFileFor(project, workspace)
 
     /*
@@ -2967,15 +3003,10 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
 
     const report = await carryInto(project.id, project.repoPath, workspace.path, dataRoot)
 
-    await applyEnvOverrides(await readEffectiveEnv(project, workspace, dataRoot), {
-      path: workspace.path,
-      envFile,
-      rootPath: project.repoPath,
-      workspaceName: workspace.name,
-      port: workspace.port
-    })
+    const { values, stored, variables } = await scriptSetFor(project, workspace)
+    await applyEnvOverrides(stored, { ...values, path: workspace.path, envFile })
 
-    return { report, envFile }
+    return { report, envFile, profile: values.profile, variables }
   }
 
   /**
@@ -4094,13 +4125,16 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
 
     async prepareWorkspace(workspaceId) {
       const workspace = requireWorkspace(workspaceId)
-      const { report, envFile } = await prepare(requireProject(workspace.projectId), workspace)
+      const { report, envFile, profile, variables } = await prepare(
+        requireProject(workspace.projectId),
+        workspace
+      )
       if (envFile !== workspace.envFileApplied) {
         await commit((current) =>
           updateWorkspace(current, workspaceId, { envFileApplied: envFile })
         )
       }
-      return report
+      return { ...report, profile, variables }
     },
 
     async isWorkspaceServing(workspaceId) {
@@ -4407,11 +4441,11 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
            * its workspaces had been given — the accumulation the script exists
            * to prevent, at the one moment there is most of it to clean up.
            */
+          const { values, variables } = await scriptSetFor(project, workspace)
           await runArchiveScript(await cleanupFor(project, workspace), {
-            rootPath: project.repoPath,
-            workspaceName: workspace.name,
+            ...values,
             path: workspace.path,
-            port: workspace.port
+            variables
           })
 
           // Best-effort, one by one: a worktree already deleted from outside
@@ -4580,11 +4614,11 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
        * is the lesser of the two: the alternative is executing shell that
        * arrived with a `git pull` at the one moment the user is not looking.
        */
+      const { values, variables } = await scriptSetFor(project, workspace)
       await runArchiveScript(await cleanupFor(project, workspace), {
-        rootPath: project.repoPath,
-        workspaceName: workspace.name,
+        ...values,
         path: workspace.path,
-        port: workspace.port
+        variables
       })
 
       /*

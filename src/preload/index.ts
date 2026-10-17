@@ -57,7 +57,7 @@ import type { Store } from '@core/stores.js'
 import type { InstructionSource } from '@core/instructionSources.js'
 import type { UsageWindows } from '@core/usage.js'
 import type { RepoConfigView, RepoItemId } from '@core/repoConfig.js'
-import type { CarryReport } from '@core/carry.js'
+import type { PreparedWorkspace } from '@core/carry.js'
 import type { RepositoryTrust } from '@core/repoTrust.js'
 import type { SourceView } from '@core/sourceItems.js'
 import type { Project, ProjectPatch } from '@core/store.js'
@@ -610,8 +610,8 @@ const api = {
      * got — the second half being the one a run needs, since a missing file is
      * how a build fails while complaining about something else.
      */
-    prepare: (workspaceId: string): Promise<Result<CarryReport>> =>
-      ipcRenderer.invoke('workspace:prepare', workspaceId) as Promise<Result<CarryReport>>,
+    prepare: (workspaceId: string): Promise<Result<PreparedWorkspace>> =>
+      ipcRenderer.invoke('workspace:prepare', workspaceId) as Promise<Result<PreparedWorkspace>>,
 
     /** What this repository can grant itself, and whether it was approved. */
     trust: (workspaceId: string): Promise<Result<RepositoryTrust>> =>

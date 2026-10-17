@@ -155,6 +155,12 @@ All three get these:
 | `$OCTOPUS_ROOT_PATH`      | the project's own checkout, which the worktree is not |
 | `$OCTOPUS_WORKSPACE_NAME` | the label as typed — spaces and capitals and all      |
 | `$OCTOPUS_WORKSPACE_SLUG` | the same thing as an identifier                       |
+| `$OCTOPUS_ENV_PROFILE`    | the env set in effect, by name — `dev`, `prod`        |
+
+And every variable of that env set, `$OCTOPUS_*` filled in. So something that
+differs between environments — which dump a build pulls — is a variable in each
+set (`DUMP_URL=…`), read as `$DUMP_URL`; a `case` on `$OCTOPUS_ENV_PROFILE` is
+for what a value cannot say.
 
 `run.sh` also gets `$OCTOPUS_PORT` and `$OCTOPUS_PORT_1` … `$OCTOPUS_PORT_9` —
 ten ports, so a stack that is more than one process has somewhere to put the

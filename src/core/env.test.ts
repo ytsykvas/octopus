@@ -17,7 +17,8 @@ function values(): WorkspaceValues {
     envFile: '.env',
     rootPath: '/Users/test/planner',
     workspaceName: 'anna',
-    port: 3100
+    port: 3100,
+    profile: 'dev'
   }
 }
 
