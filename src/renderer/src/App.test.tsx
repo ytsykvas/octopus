@@ -2419,6 +2419,8 @@ describe('App', () => {
       await screen.findByText('# Planner')
 
       await user.click(screen.getByRole('button', { name: 'Changes' }))
+      // Every file starts collapsed; the line is under the header.
+      await user.click(await screen.findByRole('button', { name: 'src/a.ts' }))
       await user.click(await screen.findByRole('button', { name: 'Comment on line 2' }))
       await user.type(await screen.findByRole('textbox'), 'rename this')
       await user.click(screen.getByRole('button', { name: 'Add' }))
