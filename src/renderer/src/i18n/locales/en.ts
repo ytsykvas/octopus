@@ -796,6 +796,14 @@ export const en = {
     publishPushedLabel: 'On GitHub, and nothing here is newer',
     publishStale: 'The pull request still shows an older version of this file.',
     publishNoRemote: 'This branch is not on GitHub yet.',
+    /* What the strip draws; `publishNoRemote` is its tooltip. The full
+       sentence beside the rung counts wrapped the strip onto a second line on
+       the pane's default width. */
+    publishNoRemoteShort: 'not on GitHub',
+    /* A changed file's state in words. The row draws it as dots and the colour
+       of the name, so the tooltip and a screen reader get these instead. */
+    pathWithStatus: '{{status}}: {{path}}',
+    fileState: '{{status}} · {{stage}}',
     /* Said in place of everything else this strip carries, because everything
        else rests on HEAD being this workspace's branch: the rungs, both counts
        and Push are all measured from it. Not `publishNoRemote` — "not on GitHub
@@ -803,13 +811,7 @@ export const en = {
     publishHeadElsewhere:
       'HEAD is not on this workspace\u2019s branch {{branch}}, so nothing here can be said about GitHub. Check it out in the terminal.',
     publishAllSent: 'Everything here is on GitHub.',
-    /* Two sentences for one count of zero, because the count means opposite
-       things either side of a remote copy: commits ahead of the base where the
-       branch has none, commits ahead of the copy where it has one. One string
-       told a pushed branch that nothing was committed yet, next to its own
-       "2 pushed" badge. */
-    publishNothingToPush: 'Nothing is committed yet, so there is nothing to push.',
-    publishAllCommitsSent: 'Everything committed is already on GitHub.',
+    // Push's tooltip. The button is only drawn when this count is above zero.
     publishUnpushed_one: '{{count}} commit not pushed',
     publishUnpushed_few: '{{count}} commits not pushed',
     publishUnpushed_many: '{{count}} commits not pushed',
@@ -844,10 +846,10 @@ export const en = {
     statusUntrackedLabel: 'Untracked',
     comment: 'Comment on line {{line}}',
     commentOld: 'Comment on line {{line}} of the file as it was',
-    /* What the button floating at a selection says. "Ask" rather than
-       "comment": the passage was chosen to be asked about, and the field it
-       opens is the same one the gutter's trigger opens. */
-    askSelection: 'Ask about the selected code',
+    /* What the button floating at a selection says, as visible text: the
+       icon alone was easy to miss. Worded like the file viewer's "Add to …",
+       which opens the same kind of note. */
+    addToChat: 'Add to chat',
     commentPlaceholder: 'What should the agent change here?',
     commentSave: 'Add',
     commentCancel: 'Cancel',

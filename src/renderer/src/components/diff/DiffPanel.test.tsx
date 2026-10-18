@@ -1,4 +1,4 @@
-import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
@@ -745,7 +745,7 @@ describe('DiffPanel', () => {
      * lands a tick after the event does — `getBy` looked before it had.
      */
     const askButton = (): Promise<HTMLElement> =>
-      screen.findByRole('button', { name: 'Ask about the selected code' })
+      screen.findByRole('button', { name: 'Add to chat' })
 
     it('offers to ask about a passage that was selected', async () => {
       answer(workspaceDiff([fileDiff('src/a.ts')]))
@@ -757,6 +757,25 @@ describe('DiffPanel', () => {
       selectAcross(lines[0]!, lines[2]!)
 
       expect(await askButton()).toBeInTheDocument()
+    })
+
+    /* The button carries words now, so it starts at the selection's left edge
+       rather than centring on it — centred near the window's edge it hung half
+       off — and never closer to that edge than the window allows. */
+    it('places the button at the selection’s left edge, clear of the window’s', async () => {
+      answer(workspaceDiff([fileDiff('src/a.ts')]))
+      renderWithComments()
+      await screen.findByText('kept')
+      const lines = codeLines()
+
+      selectAcross(lines[0]!, lines[2]!)
+      expect(await askButton()).toHaveStyle({ left: '20px', top: '70px' })
+
+      Range.prototype.getBoundingClientRect = () => new DOMRect(2, 100, 80, 16)
+      selectAcross(lines[0]!, lines[1]!)
+      await waitFor(async () => {
+        expect(await askButton()).toHaveStyle({ left: '12px' })
+      })
     })
 
     // Reading is not asking. The button appears where a passage was chosen, and
@@ -773,16 +792,14 @@ describe('DiffPanel', () => {
       // never registered and neither dispatch reached anything.
       const lines = codeLines()
       selectAcross(lines[0]!, lines[0]!)
-      await screen.findByRole('button', { name: 'Ask about the selected code' })
+      await screen.findByRole('button', { name: 'Add to chat' })
 
       act(() => {
         window.getSelection()!.removeAllRanges()
         document.dispatchEvent(new Event('selectionchange'))
       })
 
-      expect(
-        screen.queryByRole('button', { name: 'Ask about the selected code' })
-      ).not.toBeInTheDocument()
+      expect(screen.queryByRole('button', { name: 'Add to chat' })).not.toBeInTheDocument()
     })
 
     /*
@@ -897,16 +914,14 @@ describe('DiffPanel', () => {
       // null answer rather than a listener that was never registered.
       const lines = codeLines()
       selectAcross(lines[0]!, lines[0]!)
-      await screen.findByRole('button', { name: 'Ask about the selected code' })
+      await screen.findByRole('button', { name: 'Add to chat' })
 
       vi.spyOn(window, 'getSelection').mockReturnValue(null)
       act(() => {
         document.dispatchEvent(new Event('selectionchange'))
       })
 
-      expect(
-        screen.queryByRole('button', { name: 'Ask about the selected code' })
-      ).not.toBeInTheDocument()
+      expect(screen.queryByRole('button', { name: 'Add to chat' })).not.toBeInTheDocument()
     })
 
     // The file header, the gutters, the counts in the toolbar: a selection that
@@ -924,14 +939,12 @@ describe('DiffPanel', () => {
       // button is missing for the wrong reason. This half proves it is live.
       const lines = codeLines()
       selectAcross(lines[0]!, lines[0]!)
-      await screen.findByRole('button', { name: 'Ask about the selected code' })
+      await screen.findByRole('button', { name: 'Add to chat' })
 
       selectAcross(screen.getByText('src/'), screen.getByText('a.ts'))
 
       await waitFor(() => {
-        expect(
-          screen.queryByRole('button', { name: 'Ask about the selected code' })
-        ).not.toBeInTheDocument()
+        expect(screen.queryByRole('button', { name: 'Add to chat' })).not.toBeInTheDocument()
       })
     })
 
@@ -1073,9 +1086,7 @@ describe('DiffPanel', () => {
       selectAcross(lines[0]!, lines[2]!)
       await user.click(await askButton())
 
-      expect(
-        screen.queryByRole('button', { name: 'Ask about the selected code' })
-      ).not.toBeInTheDocument()
+      expect(screen.queryByRole('button', { name: 'Add to chat' })).not.toBeInTheDocument()
     })
 
     // Written against three lines, shown against the first of them — the same
@@ -1910,10 +1921,59 @@ describe('what has reached GitHub', () => {
     expect(await screen.findByText('1 not committed')).toBeInTheDocument()
     expect(screen.getByText('1 committed')).toBeInTheDocument()
     expect(screen.getByText('1 pushed')).toBeInTheDocument()
-    expect(screen.getByText('2 commits not pushed')).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Push' })).toBeInTheDocument()
-    // And not the sentence for a branch that has no copy on the remote.
-    expect(screen.queryByText('This branch is not on GitHub yet.')).not.toBeInTheDocument()
+    // How many commits go is the button's tooltip, not a sentence beside it.
+    expect(screen.getByRole('button', { name: 'Push' })).toHaveAttribute(
+      'title',
+      '2 commits not pushed'
+    )
+    expect(screen.queryByText('2 commits not pushed')).not.toBeInTheDocument()
+    // And not the mark for a branch that has no copy on the remote.
+    expect(screen.queryByText('not on GitHub')).not.toBeInTheDocument()
+  })
+
+  /* The letter used to stand here. What happened to the file is now on its
+     name, and the row speaks both facts to a screen reader in words. */
+  it('marks a row with its rung where the status letter was, and no letter', async () => {
+    answer(
+      workspaceDiff(
+        [
+          fileDiff('src/gone.ts', { status: 'deleted', publish: 'uncommitted' }),
+          fileDiff('src/fresh.ts', { status: 'untracked', publish: 'uncommitted' }),
+          fileDiff('src/held.ts', { status: 'modified', publish: 'committed' })
+        ],
+        { remoteCommit: 'remote01', unpushedCommits: 1 }
+      )
+    )
+    renderPanel()
+
+    const gone = await screen.findByRole('button', { name: 'src/gone.ts' })
+    expect(within(gone).queryByText('D')).not.toBeInTheDocument()
+    expect(within(gone).getByTitle(/Not committed/)).toBeInTheDocument()
+    expect(screen.getByText('Deleted · not committed')).toBeInTheDocument()
+    expect(screen.getByText('Untracked · not committed')).toBeInTheDocument()
+    expect(screen.getByText('Modified · committed')).toBeInTheDocument()
+  })
+
+  it('draws a deleted file struck through and a new one green', async () => {
+    answer(
+      workspaceDiff(
+        [
+          fileDiff('src/gone.ts', { status: 'deleted' }),
+          fileDiff('src/fresh.ts', { status: 'added' }),
+          fileDiff('src/same.ts', { status: 'modified' })
+        ],
+        { unpushedCommits: 0 }
+      )
+    )
+    renderPanel()
+
+    await screen.findByRole('button', { name: 'src/gone.ts' })
+    expect(screen.getByText('gone.ts')).toHaveClass('text-danger', 'line-through')
+    expect(screen.getByText('fresh.ts')).toHaveClass('text-success')
+    expect(screen.getByText('same.ts')).toHaveClass('text-ink')
+    expect(screen.getByTitle('Deleted: src/gone.ts')).toBeInTheDocument()
+    // With nothing to tell apart the rows carry no rung, and the words say so.
+    expect(screen.getByText('Added')).toBeInTheDocument()
   })
 
   it('marks each file with how far its change has got', async () => {
@@ -1938,7 +1998,9 @@ describe('what has reached GitHub', () => {
     )
     renderPanel()
 
-    expect(await screen.findByText('1 file is out of date in the request')).toBeInTheDocument()
+    expect(
+      await screen.findByRole('img', { name: '1 file is out of date in the request' })
+    ).toHaveTextContent('1')
     expect(screen.getByRole('img', { name: /older version of this file/ })).toBeInTheDocument()
   })
 
@@ -1951,7 +2013,11 @@ describe('what has reached GitHub', () => {
     )
     renderPanel()
 
-    expect(await screen.findByText(/not on GitHub yet/)).toBeInTheDocument()
+    // Short on the strip, the whole sentence on hover.
+    expect(await screen.findByText('not on GitHub')).toHaveAttribute(
+      'title',
+      'This branch is not on GitHub yet.'
+    )
     expect(screen.getByRole('button', { name: 'Push' })).toBeInTheDocument()
   })
 
@@ -1966,17 +2032,15 @@ describe('what has reached GitHub', () => {
     )
     renderPanel()
 
-    expect(
-      await screen.findByText('Nothing is committed yet, so there is nothing to push.')
-    ).toBeInTheDocument()
+    expect(await screen.findByText('not on GitHub')).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Push' })).not.toBeInTheDocument()
   })
 
-  /* The everyday state a single sentence for zero got wrong: the branch is
-     pushed and one file has been edited since, so "nothing is committed yet"
-     stood beside a "2 pushed" badge contradicting it. The count means
-     different things either side of a remote copy. */
-  it('says what a zero means on a branch that has been pushed', async () => {
+  /* A count of zero means opposite things either side of a remote copy, and
+     the sentence once written for each was most of the strip. Nothing is said
+     now: the badges already show what is left, and saying nothing cannot
+     contradict the "2 pushed" beside it the way one sentence for both did. */
+  it('says nothing more than the badges when no commit is waiting', async () => {
     answer(
       workspaceDiff(
         [
@@ -1989,10 +2053,10 @@ describe('what has reached GitHub', () => {
     )
     renderPanel()
 
-    expect(
-      await screen.findByText('Everything committed is already on GitHub.')
-    ).toBeInTheDocument()
-    expect(screen.queryByText(/is committed yet/)).not.toBeInTheDocument()
+    expect(await screen.findByText('2 pushed')).toBeInTheDocument()
+    expect(screen.getByText('1 not committed')).toBeInTheDocument()
+    expect(screen.queryByText('not on GitHub')).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Push' })).not.toBeInTheDocument()
   })
 
   /* A project needs a repository, a commit and a base branch — never a remote.
@@ -2027,8 +2091,10 @@ describe('what has reached GitHub', () => {
     )
     renderPanel()
 
-    expect(await screen.findByText('1 commit not pushed')).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Push' })).toBeInTheDocument()
+    expect(await screen.findByRole('button', { name: 'Push' })).toHaveAttribute(
+      'title',
+      '1 commit not pushed'
+    )
     expect(screen.queryByText('Everything here is on GitHub.')).not.toBeInTheDocument()
   })
 

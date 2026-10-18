@@ -11,7 +11,7 @@ import {
 import { memo, useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
-import type { FileDiff } from '@core/diff.js'
+import type { FileDiff, FileStatus } from '@core/diff.js'
 import type { PublishState } from '@core/publish.js'
 
 import { DropdownMenu } from '../DropdownMenu.js'
@@ -57,6 +57,30 @@ const PUBLISH_KEYS: Record<PublishState, PublishMark> = {
     tone: 'text-ink-faint',
     reached: 3
   }
+}
+
+/**
+ * What happened to a file, drawn on its name instead of as a letter.
+ *
+ * The letter column now holds the rung, so the kind of change moves onto the
+ * name, the way an editor's file list draws it: a new file's name is green, a
+ * deleted one is struck through in red, and everything else stays plain. A
+ * rename says what it was renamed from under the header, and a change of mode
+ * says so there too, so neither needs a colour of its own.
+ *
+ * Only two of the seven are coloured on purpose. The counts beside the name
+ * already tell a new file (only `+`) and a deleted one (only `−`) from the
+ * rest, and a colour per status is the confetti this pane is trying to stop
+ * being. The words are in the tooltip and read out to a screen reader.
+ */
+const NAME_STYLES: Record<FileStatus, { readonly directory: string; readonly base: string }> = {
+  added: { directory: 'text-ink-faint', base: 'text-success' },
+  untracked: { directory: 'text-ink-faint', base: 'text-success' },
+  deleted: { directory: 'text-danger line-through', base: 'text-danger line-through' },
+  modified: { directory: 'text-ink-faint', base: 'text-ink' },
+  renamed: { directory: 'text-ink-faint', base: 'text-ink' },
+  copied: { directory: 'text-ink-faint', base: 'text-ink' },
+  typeChanged: { directory: 'text-ink-faint', base: 'text-ink' }
 }
 
 /** The rungs, as a constant so the map below builds no array per render. */
@@ -137,15 +161,15 @@ interface DiffFileProps {
  * would quietly turn this back into what it was.
  */
 /**
- * Where one file stands against the remote, as a word and a filled ladder.
+ * Where one file stands against the remote, as a filled ladder.
  *
- * The word carries it for a reader and for a screen reader; the dots carry it
- * for the corner of the eye scrolling past twenty of these. The fuller sentence
- * is the tooltip, the way the status letter beside it does the same.
+ * On the strip at the top of the pane it carries a count and a word, which is
+ * what makes the strip the legend. On a row it is the dots alone, in the place
+ * a status letter used to take: the word on every row was a second line per
+ * file saying the same thing twenty times down the column. The fuller sentence
+ * is the tooltip either way.
  *
- * Exported because the strip at the top of the pane draws the same three with a
- * count beside each, which is what makes that strip the legend for these — one
- * table, so the two can never disagree about a colour.
+ * One component for both, so the two can never disagree about a colour.
  */
 export function PublishBadge({
   state,
@@ -175,7 +199,7 @@ export function PublishBadge({
           />
         ))}
       </span>
-      {count === undefined ? t(mark.word) : t('diff.publishCount', { count, state: t(mark.word) })}
+      {count !== undefined && t('diff.publishCount', { count, state: t(mark.word) })}
     </span>
   )
 }
@@ -216,6 +240,7 @@ export const DiffFile = memo(function DiffFile({
   const [copied, setCopied] = useState<Copied>('idle')
 
   const status = FILE_STATUS_MARKS[file.status]
+  const nameStyle = NAME_STYLES[file.status]
   const Chevron = collapsed ? ChevronRight : ChevronDown
 
   // Back to offering the action on its own, and cleared on the way out: a row
@@ -246,7 +271,7 @@ export const DiffFile = memo(function DiffFile({
 
   return (
     <div className="border-line border-b">
-      <div className="bg-surface border-line sticky top-0 z-10 flex flex-col gap-1 border-b px-2 py-1.5">
+      <div className="bg-surface border-line sticky top-0 z-10 border-b px-2 py-1.5">
         <div className="flex items-center gap-2">
           <button
             type="button"
@@ -254,19 +279,19 @@ export const DiffFile = memo(function DiffFile({
               onToggle(file.path, !collapsed)
             }}
             aria-expanded={!collapsed}
-            // The path rather than the whole header: what is drawn inside is a
-            // status letter and two counts that read as noise when spoken one
-            // after another, and the path is what identifies the row.
+            // The path rather than the whole header: what is drawn inside is
+            // dots and two counts that read as noise when spoken one after
+            // another, and the path is what identifies the row.
             aria-label={file.path}
             className="focus-ring row flex min-w-0 flex-1 items-center gap-2 px-1 py-0.5 text-left"
           >
             <Chevron aria-hidden className="text-ink-faint shrink-0" size={12} />
-            <span
-              className={`shrink-0 font-mono text-[11px] ${status.tone}`}
-              title={t(status.label)}
-            >
-              {t(status.letter)}
-            </span>
+            {/* Where the status letter used to be. The letter is gone from this
+                tab: what happened to the file is on its name below, and the
+                Ukrainian `З` for "changed" read as the digit 3 in front of a
+                path. False when every file is in the same place — the strip
+                at the top says it once instead. */}
+            {showPublish && <PublishBadge state={file.publish} />}
             {/* The directory is what gives way. Truncating the whole path cut the
               filename off the end — the one part that identifies the row — so
               the two are separate boxes and only the leading one shrinks. */}
@@ -274,9 +299,14 @@ export const DiffFile = memo(function DiffFile({
               it is drawn from the same bytes and reorders the same way, and a
               name that reads as an image while ending in `.js` is the version
               of this that costs a reviewer a click rather than a line. */}
-            <span className="flex min-w-0 font-mono text-[11px]" title={file.path}>
-              <span className="text-ink-faint truncate">{shown(directoryOf(file.path))}</span>
-              <span className="text-ink shrink-0">{shown(basenameOf(file.path))}</span>
+            <span
+              className="flex min-w-0 font-mono text-[11px]"
+              title={t('diff.pathWithStatus', { status: t(status.label), path: file.path })}
+            >
+              <span className={`truncate ${nameStyle.directory}`}>
+                {shown(directoryOf(file.path))}
+              </span>
+              <span className={`shrink-0 ${nameStyle.base}`}>{shown(basenameOf(file.path))}</span>
             </span>
             <span className="ml-auto shrink-0 font-mono text-[11px]">
               {file.added > 0 && <span className="text-success">+{file.added}</span>}
@@ -316,6 +346,32 @@ export const DiffFile = memo(function DiffFile({
               <TriangleAlert aria-hidden size={12} />
             </span>
           )}
+
+          {/* Marked up like the invisible-characters warning above, and
+              outside the button for the same reason. Kept to the rows that
+              draw their rung: both are claims about GitHub. */}
+          {showPublish && file.staleOnRemote && (
+            <span
+              role="img"
+              aria-label={t('diff.publishStale')}
+              title={t('diff.publishStale')}
+              className="text-danger shrink-0"
+            >
+              <CloudAlert aria-hidden size={12} />
+            </span>
+          )}
+
+          {/* What the dots and the colour of the name say, in words, for a
+              screen reader. Outside the button, whose accessible name is the
+              path alone, because a label nested in it is not heard. */}
+          <span className="sr-only">
+            {showPublish
+              ? t('diff.fileState', {
+                  status: t(status.label),
+                  stage: t(PUBLISH_KEYS[file.publish].word)
+                })
+              : t(status.label)}
+          </span>
 
           {/* Named after the file rather than "Revert": twenty buttons sharing
             one name identify nothing, and this is the row's only destructive
@@ -363,30 +419,6 @@ export const DiffFile = memo(function DiffFile({
             )}
           />
         </div>
-
-        {/* A second line rather than more on the first: the row above is
-            already a path competing with four controls at the pane's 280px
-            floor, and the path is what identifies it. Indented to sit under
-            the path rather than under the chevron. */}
-        {showPublish && (
-          <div className="flex items-center gap-2 pl-7">
-            <PublishBadge state={file.publish} />
-
-            {/* Marked up like the invisible-characters warning above, and
-                outside the button for the same reason: that button owns the
-                whole row as its accessible name. */}
-            {file.staleOnRemote && (
-              <span
-                role="img"
-                aria-label={t('diff.publishStale')}
-                title={t('diff.publishStale')}
-                className="text-danger shrink-0"
-              >
-                <CloudAlert aria-hidden size={12} />
-              </span>
-            )}
-          </div>
-        )}
       </div>
 
       {file.oldPath !== null && !collapsed && (

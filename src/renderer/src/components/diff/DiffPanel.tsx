@@ -1,6 +1,7 @@
 import {
   ChevronsDownUp,
   ChevronsUpDown,
+  CloudAlert,
   Columns2,
   MessageSquarePlus,
   RefreshCw,
@@ -550,46 +551,53 @@ export function DiffPanel({
               <PublishBadge key={state} state={state} count={counts[state]} />
             ))}
 
+            {/* The cloud the rows carry, with a count: the sentence it replaces
+                was the longest thing on a strip meant to fit one line. */}
             {stale > 0 && (
-              <span className="text-danger">{t('diff.publishStaleCount', { count: stale })}</span>
+              <span
+                role="img"
+                aria-label={t('diff.publishStaleCount', { count: stale })}
+                title={t('diff.publishStaleCount', { count: stale })}
+                className="text-danger flex items-center gap-1"
+              >
+                <CloudAlert aria-hidden size={12} />
+                {stale}
+              </span>
             )}
 
-            {/* Everything from here down is about GitHub, and a project is
+            {/* Everything from here on is about GitHub, and a project is
                 allowed to have no remote at all — a repository, a commit and a
                 base branch is all `projects.ts` asks for. A permanent band
                 about a service such a project has nothing to do with is one
-                that can never come true and cannot be dismissed. */}
-            {diff.hasRemote && (
-              <>
-                {diff.remoteCommit === null && (
-                  <span className="text-ink-faint">{t('diff.publishNoRemote')}</span>
-                )}
+                that can never come true and cannot be dismissed.
 
-                {/* Three states, not two. `unpushedCommits` means different
-                    things either side of a remote copy — commits ahead of the
-                    base where there is none, commits ahead of the copy where
-                    there is — so one sentence for zero told a pushed branch
-                    that nothing was committed yet, beside its own "2 pushed". */}
-                <span className="text-ink-faint ml-auto">
-                  {diff.unpushedCommits > 0
-                    ? t('diff.publishUnpushed', { count: diff.unpushedCommits })
-                    : t(
-                        diff.remoteCommit === null
-                          ? 'diff.publishNothingToPush'
-                          : 'diff.publishAllCommitsSent'
-                      )}
-                </span>
+                Words only where there is something to do or to know. With no
+                commit waiting nothing is said at all: the badges already show
+                what is left, and the two sentences that used to fill the gap
+                — one per meaning of zero — were most of the strip's height. */}
+            {diff.hasRemote && (
+              <span className="ml-auto flex items-center gap-3">
+                {diff.remoteCommit === null && (
+                  <span className="text-ink-faint" title={t('diff.publishNoRemote')}>
+                    {t('diff.publishNoRemoteShort')}
+                  </span>
+                )}
 
                 {/* Offered only where it would do something. A disabled button
                     is one more thing to read past on a pane that is mostly
-                    reading. */}
+                    reading. How many commits it sends is its tooltip. */}
                 {diff.unpushedCommits > 0 && (
-                  <Button size="sm" onClick={push} disabled={pushingIn === workspace.id}>
+                  <Button
+                    size="sm"
+                    onClick={push}
+                    disabled={pushingIn === workspace.id}
+                    title={t('diff.publishUnpushed', { count: diff.unpushedCommits })}
+                  >
                     <Upload aria-hidden size={12} />
                     {t(pushingIn === workspace.id ? 'diff.pushing' : 'diff.push')}
                   </Button>
                 )}
-              </>
+              </span>
             )}
           </>
         )}
@@ -664,11 +672,17 @@ export function DiffPanel({
             setEditing(selected.anchor)
             setSelected(null)
           }}
-          aria-label={t('diff.askSelection')}
-          style={{ top: selected.top - SELECTION_BUTTON_GAP, left: selected.left }}
-          className="focus-ring bg-surface border-line text-ink-soft hover:text-accent fixed z-40 -translate-x-1/2 rounded-[var(--radius-control)] border p-1 shadow-[var(--shadow-pop)]"
+          style={{
+            top: selected.top - SELECTION_BUTTON_GAP,
+            left: Math.max(WINDOW_EDGE, selected.left)
+          }}
+          // The file viewer's toolbar button, so the two ways of pointing at
+          // code look like one feature. Filled, with words: the bare icon it
+          // replaces was easy to miss.
+          className="focus-ring bg-accent text-on-accent hover:bg-accent-hover fixed z-40 flex h-6 items-center gap-1 rounded-[var(--radius-control)] px-2 text-[12px] whitespace-nowrap shadow-[var(--shadow-pop)]"
         >
-          <MessageSquarePlus aria-hidden size={13} />
+          <MessageSquarePlus aria-hidden size={12} />
+          {t('diff.addToChat')}
         </button>
       )}
     </div>
@@ -678,13 +692,21 @@ export function DiffPanel({
 /** A selection, reduced to the note it would make and where to offer it. */
 interface Passage {
   readonly anchor: CommentAnchor
-  /** Window coordinates of the top of the selection, and its middle. */
+  /**
+   * Window coordinates of the top of the selection and its left edge.
+   *
+   * The left edge rather than the middle: the button carries words now, and
+   * centred on a selection near the window's edge it hung half off it.
+   */
   readonly top: number
   readonly left: number
 }
 
 /** Clear of the text, so the button does not sit on what was selected. */
 const SELECTION_BUTTON_GAP = 30
+
+/** The least room kept between the button and the window's left edge. */
+const WINDOW_EDGE = 12
 
 /**
  * What is selected inside the pane, or null when that is nothing it can use.
@@ -711,7 +733,7 @@ function passageIn(container: HTMLElement, selection: Selection | null): Passage
   if (anchor === null) return null
 
   const rect = range.getBoundingClientRect()
-  return { anchor, top: rect.top, left: rect.left + rect.width / 2 }
+  return { anchor, top: rect.top, left: rect.left }
 }
 
 /**
