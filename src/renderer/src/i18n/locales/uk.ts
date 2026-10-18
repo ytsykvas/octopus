@@ -13,6 +13,7 @@ export const uk: Translation = {
 
   sidebar: {
     empty: 'Поки порожньо. Додайте репозиторій кнопкою «+».',
+    pick: 'Оберіть проєкт на смузі ліворуч.',
     addProject: 'Додати репозиторій',
     projectDone: 'Агент тут закінчив, поки вас не було',
     addFromDisk: 'З диска…',

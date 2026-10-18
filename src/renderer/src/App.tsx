@@ -929,6 +929,7 @@ export function App(): React.JSX.Element {
             {sidebarOpen && (
               <Sidebar
                 project={selectedProject}
+                hasProjects={projects.all.length > 0}
                 workspaces={projectWorkspaces}
                 requests={branchRequests.byBranch}
                 selectedWorkspaceId={selectedWorkspaceId}

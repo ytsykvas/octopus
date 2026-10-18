@@ -327,9 +327,9 @@ describe('App', () => {
     await openApp()
 
     expect(await screen.findByText('Which project today?')).toBeInTheDocument()
-    expect(
-      screen.getByText('Nothing here yet. Add a repository with the "+" button.')
-    ).toBeInTheDocument()
+    // The list points at the strip rather than asking for a repository, which
+    // the two tabs beside it already are.
+    expect(screen.getByText('Pick a project on the far left.')).toBeInTheDocument()
   })
 
   it('opens the project whose tab was clicked', async () => {

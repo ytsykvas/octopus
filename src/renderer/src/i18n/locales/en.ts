@@ -11,6 +11,7 @@ export const en = {
 
   sidebar: {
     empty: 'Nothing here yet. Add a repository with the "+" button.',
+    pick: 'Pick a project on the far left.',
     addProject: 'Add repository',
     // The dot on a project's tab when one of its agents finished out of sight.
     projectDone: 'An agent finished here while you were away',
