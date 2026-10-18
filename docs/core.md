@@ -878,6 +878,13 @@ to build from at all, and the next switch of anything else dropped the rest.
 well as `'off'`, because a key left out does not undo a withhold the session
 started with. The write therefore asks the session nothing.
 
+**The map is built inside the commit and read back after it.** `setChatSkill`
+used to spread the record it read before its write, so two switches flipped in
+quick succession both started from the same map and the second wrote the
+first one's key back — in the record and in what the session was told. The
+key is now added to the record as the write's turn finds it, and the session is
+sent the map read back from the committed state.
+
 **And a withheld skill keeps its row.** Its name and description are gone from
 the answer the moment the switch works, so `knownSkills` in `state.json`
 remembers what sessions said of the fourth group (`rememberSkills`, merged by
