@@ -196,7 +196,7 @@ export function RepositoryPicker({
       <div className="border-line bg-canvas sticky top-0 z-10 border-b p-3">
         <input
           type="search"
-          autoFocus
+          data-autofocus
           value={query}
           placeholder={t('repositories.search')}
           spellCheck={false}

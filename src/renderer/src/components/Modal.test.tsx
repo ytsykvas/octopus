@@ -2,6 +2,7 @@ import { fireEvent, render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest'
 
+import { focusAsShowModalDoes } from '../test/dialog.js'
 import { Modal } from './Modal.js'
 
 /**
@@ -19,6 +20,7 @@ beforeAll(() => {
   dialogs.showModal = function showModal(this: HTMLDialogElement): void {
     this.setAttribute('open', '')
     openDialogs.add(this)
+    focusAsShowModalDoes(this)
   }
 
   dialogs.close = function close(this: HTMLDialogElement): void {
@@ -44,6 +46,18 @@ afterEach(() => {
 })
 
 describe('Modal', () => {
+  // `showModal` would put it on the ×: React's `autoFocus` fires while the
+  // dialog is still closed, so the element meant to start with it is marked.
+  it('starts on the element marked to take the focus', () => {
+    render(
+      <Modal title="Rename workspace" onClose={vi.fn()}>
+        <input aria-label="Name" data-autofocus />
+      </Modal>
+    )
+
+    expect(screen.getByRole('textbox', { name: 'Name' })).toHaveFocus()
+  })
+
   it('names the dialog with its title', () => {
     render(
       <Modal title="Rename workspace" onClose={vi.fn()}>

@@ -78,8 +78,12 @@ export function useConfirm(): Confirmation {
         }}
         footer={
           <>
+            {/* Enter answers what starts with the focus: yes to a question,
+                and no to one that destroys something, so a stray key is never
+                what removes it. */}
             <Button
               variant="quiet"
+              data-autofocus={request.destructive === true ? true : undefined}
               onClick={() => {
                 close(false)
               }}
@@ -88,7 +92,7 @@ export function useConfirm(): Confirmation {
             </Button>
             <Button
               variant={request.destructive === true ? 'destructive' : 'accent'}
-              autoFocus
+              data-autofocus={request.destructive === true ? undefined : true}
               onClick={() => {
                 close(true)
               }}

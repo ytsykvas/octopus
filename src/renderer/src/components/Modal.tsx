@@ -58,6 +58,9 @@ const HEIGHTS = {
  * Built on the native `<dialog>` element, which brings focus trapping, the
  * Escape key and inertness of the page behind it for free — all of which are
  * easy to get subtly wrong by hand.
+ *
+ * The element that should start with the focus carries `data-autofocus`, not
+ * `autoFocus`, for the reason the effect gives.
  */
 export function Modal({
   title,
@@ -77,6 +80,11 @@ export function Modal({
     if (!element) return
 
     element.showModal()
+    // `showModal` focuses the first thing that takes focus — the × below.
+    // React's `autoFocus` cannot say otherwise: it focuses its element while
+    // the dialog is still closed, and never renders the attribute the platform
+    // would look for. So the element meant to start with it is marked instead.
+    element.querySelector<HTMLElement>('[data-autofocus]')?.focus()
     return () => {
       element.close()
     }

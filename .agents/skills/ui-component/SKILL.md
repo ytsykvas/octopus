@@ -132,6 +132,11 @@ is not a plain button (a `Button`, a tree row, a `<summary>`).
 `Modal` deliberately leaves its body without padding so a list can span the
 full width — a form inside it brings its own.
 
+**Inside a `Modal`, the element that starts with the focus is marked
+`data-autofocus`, not `autoFocus`.** React's fires while the dialog is still
+closed, and `showModal()` then focuses the × in the header instead — green in
+jsdom until the stub learned to move focus the way the window does.
+
 `DropdownMenu` positions its panel against the **window**, not its trigger.
 An `absolute` panel is clipped by any scrolling ancestor, and the project tab
 strip is one — the menu came out sliced to the width of a 56px column. The cost
