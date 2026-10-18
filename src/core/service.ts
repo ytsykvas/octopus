@@ -4634,11 +4634,19 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
     },
 
     async setChatSkill(chatId, key, enabled) {
-      const chat = requireChat(chatId)
-      const workspace = requireWorkspace(chat.workspaceId)
-      const skillOverrides = { ...chat.skillOverrides, [key]: enabled }
+      const workspace = requireWorkspace(requireChat(chatId).workspaceId)
 
-      await commit((current) => updateChat(current, chatId, { skillOverrides }))
+      // Built from the record as the write's turn finds it, not as it was read
+      // before: two switches flipped together otherwise both started from the
+      // same map, and the second wrote the first one's key back.
+      await commit((current) =>
+        updateChat(current, chatId, {
+          skillOverrides: { ...findChat(current, chatId)?.skillOverrides, [key]: enabled }
+        })
+      )
+      // Read back rather than kept from above: the session is told the record's
+      // whole answer, including a switch that landed while this one waited.
+      const { skillOverrides } = requireChat(chatId)
 
       // A running conversation is told at once rather than on its next start.
       // A switch whose effect waits for a restart is a switch that looks
