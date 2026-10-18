@@ -355,14 +355,6 @@ export function ChatSession({
             <DayChip day={dayAtTop.day} floating />
           </div>
         )}
-        {(chat.error ?? notice) !== null && (
-          <div className="mx-auto w-full max-w-6xl px-6 pt-5">
-            <p className="bg-danger-bg text-danger border-danger/25 rounded-[var(--radius-control)] border px-3 py-2">
-              {chat.error ?? notice}
-            </p>
-          </div>
-        )}
-
         {/* Streaming counts as content even before the first entry lands:
             without it the answer to the very first message would draw over the
             placeholder, and the pane would say "start the conversation" while
@@ -487,6 +479,19 @@ export function ChatSession({
             setClosedTips((current) => new Set([...current, tip]))
           }}
         />
+      )}
+
+      {/* Beside the field, outside the log. It used to be the log's first
+          child, and in a conversation of any length that is thousands of
+          pixels above what is on screen: a send that failed looked like an
+          agent ignoring the message, for days. What it reports is about the
+          message being written, so it sits where that message is. */}
+      {(chat.error ?? notice) !== null && (
+        <div className="mx-auto w-full max-w-6xl px-6 pt-2">
+          <p className="bg-danger-bg text-danger border-danger/25 rounded-[var(--radius-control)] border px-3 py-2">
+            {chat.error ?? notice}
+          </p>
+        </div>
       )}
 
       <Composer

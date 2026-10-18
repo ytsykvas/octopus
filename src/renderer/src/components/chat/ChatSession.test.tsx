@@ -399,6 +399,20 @@ describe('sending the first message', () => {
     // Back to offering a send: nothing is running to stop.
     expect(await screen.findByRole('button', { name: 'Send' })).toBeInTheDocument()
   })
+
+  // Inside the log it was drawn above every message — out of sight in any
+  // conversation long enough to scroll, so a failed send looked like silence.
+  it('says it beside the field rather than at the top of the log', async () => {
+    const user = userEvent.setup()
+    vi.mocked(octopus().chats.send).mockResolvedValue({ ok: false, error: 'the agent is gone' })
+    await openChat()
+
+    await user.type(field(), 'add a test{Enter}')
+
+    const banner = await screen.findByText(/the agent is gone/)
+    expect(banner.closest('.overflow-auto')).toBeNull()
+    expect(banner.compareDocumentPosition(field()) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+  })
 })
 
 describe('an existing conversation', () => {
