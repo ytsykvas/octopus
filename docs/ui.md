@@ -287,7 +287,10 @@ on a row it would read as the cost of that turn while meaning the running total.
 A made-up number in a currency, in a place the eye trusts.
 
 **The conversation is capped at 72rem** — the log, the composer and the error
-banner above them all, or they stop lining up. A ceiling rather than a width: it
+banner between them, or they stop lining up. The banner sits directly above the
+composer, outside the scrolling log: as the log's first child it was thousands of
+pixels above the screen in any long conversation, and a send that failed looked
+like an agent that never answered. A ceiling rather than a width: it
 only applies once the panes are dragged that far apart.
 
 **The composer's two rows wrap rather than overflow.** The centre reaches
