@@ -10393,14 +10393,17 @@ describe('the agent chat', () => {
         expect(agent().flagSettings().at(-1)?.skillOverrides).toEqual({ loop: 'on' })
       })
 
-      it('is drawn once while the session still names it', async () => {
+      /* From the answer, not the memory, which may be older. */
+      it('is drawn once, as the session says it, while the session still names it', async () => {
         const { service, chatId } = await withLoopOff()
-        skillReload = () => Promise.resolve({ skills: [loop, dataviz] })
+        await service.setChatSkill(chatId, 'loop', false)
+        skillReload = () =>
+          Promise.resolve({ skills: [{ ...loop, description: 'Reworded.' }, dataviz] })
 
-        expect((await service.skillsForChat(chatId)).map((skill) => skill.key)).toEqual([
-          'dataviz',
-          'loop'
-        ])
+        const listing = await service.skillsForChat(chatId)
+
+        expect(listing.map((skill) => skill.key)).toEqual(['dataviz', 'loop'])
+        expect(listing[1]?.description).toBe('Reworded.')
       })
 
       /* Only beside an answer: the group exists once a session does. */
@@ -10411,15 +10414,65 @@ describe('the agent chat', () => {
         await expect(service.skillsForChat(chatId)).resolves.toEqual([])
       })
 
-      /* More often than not a skill deleted while it was off. */
-      it('is not drawn when no session ever described it', async () => {
+      /*
+       * A record switched off before anything was remembered — or a skill
+       * deleted while it was off. Drawn either way: a stale row goes when it is
+       * switched on, while a withhold with no row could never be undone.
+       */
+      it('is drawn by name alone when no session ever described it', async () => {
         const { service, chatId } = await withLoopOff()
         await service.setChatSkill(chatId, 'gone', false)
+
+        await expect(service.skillsForChat(chatId)).resolves.toContainEqual({
+          key: 'gone',
+          name: 'gone',
+          description: '',
+          scope: 'session',
+          source: 'own',
+          enabled: false
+        })
+      })
+
+      /* A plugin's skill is never withheld: missing from the answer, it is gone. */
+      it('does not draw a plugin\u2019s skill the answer no longer names', async () => {
+        const { service, chatId } = await withLoopOff()
+        await service.setChatSkill(chatId, 'tools:lint', false)
 
         expect((await service.skillsForChat(chatId)).map((skill) => skill.key)).toEqual([
           'dataviz',
           'loop'
         ])
+      })
+
+      /* The default lists are edited in settings, which lists our directories. */
+      it('does not draw a key the default lists switch off', async () => {
+        const { service, chatId } = await withLoopOff()
+        await service.updateConfig({ disabledSkillDefaults: ['review'] })
+
+        expect((await service.skillsForChat(chatId)).map((skill) => skill.key)).toEqual([
+          'dataviz',
+          'loop'
+        ])
+      })
+
+      /* Ours are read from disk every time, and a checkout's remembered here
+         would turn up as the session's in a workspace without it. */
+      it('remembers only what the directories do not hold', async () => {
+        const { service, workspaceId } = await withWorkspace()
+        await service.saveStoredSkill({ kind: 'global' }, 'review', { kind: 'raw', text: DOCUMENT })
+        skillReload = () =>
+          Promise.resolve({
+            skills: [{ name: 'review', description: 'Ours.', argumentHint: '' }, dataviz]
+          })
+
+        const chat = await service.openChat(workspaceId)
+        await service.sendToChat(chat.id, 'work')
+        await service.skillsForChat(chat.id)
+
+        const stored = JSON.parse(await readFile(join(dir, 'state.json'), 'utf8')) as {
+          knownSkills: { name: string }[]
+        }
+        expect(stored.knownSkills.map((skill) => skill.name)).toEqual(['dataviz'])
       })
 
       it('is remembered in the state file, which is written only when the answer is new', async () => {
@@ -10700,7 +10753,7 @@ describe('the agent chat', () => {
     /*
      * The guarantee behind the switch on a repository row in project settings.
      * We never edit that file — it is the checkout's — so switching it off has
-     * to work entirely through the deny-list, and the key it goes in under is
+     * to work entirely through `skillOverrides`, and the key it goes in under is
      * the bare name, the same one a store skill would use.
      *
      * Asserted at the session rather than at the listing, because a listing
@@ -10721,7 +10774,7 @@ describe('the agent chat', () => {
         skillOverrides: { 'xibo-bridge': 'off' }
       })
       // Our own stores go over as they always do — this skill is not in either
-      // of them, and the deny-list is what keeps it out rather than the roots.
+      // of them, and `skillOverrides` is what keeps it out rather than the roots.
       expect(agents[0]?.options().additionalDirectories).toEqual([
         join(dir, 'data', 'skills'),
         join(dir, 'data', 'projects', 'planner', 'skills'),

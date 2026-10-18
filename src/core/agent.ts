@@ -530,14 +530,15 @@ export function startSession(options: SessionOptions, hooks: SessionHooks): Agen
    * `applyFlagSettings` replaces a top-level key outright rather than merging
    * into it, so a call carrying only the skills would leave the effort at
    * whatever the last one said and a call carrying only the effort would put
-   * every withheld skill back. One function that always sends both is the only
+   * back every skill withheld since the start (one withheld *at* the start
+   * stays withheld until an explicit `'on'` — `skillOverridesFor`). One function that always sends both is the only
    * arrangement where neither can happen, and it is cheaper than reasoning
    * about the merge twice.
    */
   let effortChoice = options.effort
   /** What each model holds, as the turns' results said — see `ContextUsage.modelWindow`. */
   const modelWindows = new Map<string, number>()
-  let withheld: Readonly<Record<string, SkillOverride>> = options.skillOverrides
+  let skills: Readonly<Record<string, SkillOverride>> = options.skillOverrides
 
   async function applyFlags(): Promise<void> {
     const current = sessionEffort(effortChoice)
@@ -546,7 +547,7 @@ export function startSession(options: SessionOptions, hooks: SessionHooks): Agen
       effortLevel: current.effort,
       ultracode: current.ultracode,
       enableWorkflows: current.ultracode,
-      skillOverrides: withheld
+      skillOverrides: skills
     })
   }
 
@@ -779,7 +780,7 @@ export function startSession(options: SessionOptions, hooks: SessionHooks): Agen
       // flag together, and the map is the record's whole answer. Turning a
       // skill back on is an explicit `'on'` in it — a key left out does not
       // undo a withhold the session started with (`skillOverridesFor`).
-      withheld = skillOverrides
+      skills = skillOverrides
       await applyFlags()
     },
 

@@ -3383,25 +3383,34 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
     const accounted = new Set(listing.map((item) => item.key))
 
     /*
-     * And what this conversation withholds, which the session leaves out of its
-     * answer — so its row comes from what a session said about it earlier.
+     * And what this conversation switched off, which the session leaves out of
+     * its answer — so its row comes from what a session said about it earlier.
      * Without it the switch that withheld a skill was the last anyone saw of
      * it, and nothing could turn it back on.
      *
-     * Only beside an answer: the group exists once a session does, and a
-     * withheld skill alone under it would claim a list that was never read. A
-     * key octopus never saw described is not drawn either — that is a skill
-     * deleted while it was off, more often than not.
+     * The chat's own answers only: the two default lists are edited in
+     * settings, which lists the directories, so a key in them is a skill of
+     * ours. Only beside an answer, since the group exists once a session does.
+     *
+     * A key no session ever described is still drawn, by name alone. A stale
+     * row — a skill deleted while it was off — goes the moment it is switched
+     * on, while a withhold with no row could never be undone; and a record
+     * switched off before anything was remembered is exactly that.
      *
      * Where the answer names one too — a session that has not applied the
-     * switch yet — `accounted` draws it once.
+     * switch yet — `accounted` draws it once, from the answer.
      */
+    const remembered = new Map(state.knownSkills.map((skill) => [skill.name, skill]))
     const withheld =
       held.length === 0
         ? []
-        : state.knownSkills.filter(
-            (skill) => !skillEnabled(skill.name, defaults, chat.skillOverrides)
-          )
+        : Object.entries(chat.skillOverrides)
+            .filter(([, on]) => !on)
+            .map(([name]) => remembered.get(name) ?? { name, description: '', builtin: false })
+            // A plugin's skill is never withheld, so one the answer leaves out
+            // is gone — and its row, drawn with no switch, could never clear
+            // the `false` an older panel wrote.
+            .filter((skill) => withholdable(describeSessionSkill(skill).source))
 
     // By name, because the CLI's order follows how it happened to load them and
     // a list people scan for one entry reads better alphabetically.
@@ -4439,12 +4448,6 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
           ?.refreshSkills()
           .catch(() => [])) ?? []
 
-      // Before the skill can be switched off, which is the last time the
-      // session will describe it (`knownSkills`).
-      if (!skillsRemembered(state, held)) {
-        await commit((current) => rememberSkills(current, held))
-      }
-
       const { listing } = await sessionSkills(
         requireProject(workspace.projectId),
         workspace,
@@ -4452,6 +4455,16 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
         await sourcesFor(workspace),
         held
       )
+
+      // Before the skill can be switched off, which is the last time the
+      // session will describe it (`knownSkills`). Only the fourth group's: the
+      // directories describe their own every time, and a skill of a checkout
+      // remembered here would turn up as the session's in another one.
+      const theirs = new Set(listing.filter((row) => row.scope === 'session').map((row) => row.key))
+      const described = held.filter((skill) => theirs.has(skill.name))
+      if (!skillsRemembered(state, described)) {
+        await commit((current) => rememberSkills(current, described))
+      }
 
       return listing
     },

@@ -584,8 +584,9 @@ are now exactly as switchable as the checkout's own. `probe`-style scripts
 under `docs/` are not kept, but the readings are: 19 skills in the session, 18
 of them untouched, the one named in the override gone.
 
-Three details follow from that. It is a **deny-list**: only what is off is
-named, so the bundled skills are never hidden by accident. It is a **context
+Three details follow from that. It is **not an allow-list**: only what the
+record has an answer for is named — off, or explicitly back on — so the bundled
+skills are never hidden by accident. It is a **context
 filter and not a sandbox** — the SDK's own words — so a skill switched off is
 out of the listing and still on a disk the agent can read, which the panel says
 in as many words. And because a root's skills are discovered exactly as the
