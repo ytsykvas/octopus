@@ -1344,8 +1344,8 @@ the repository.
 Without it the page was empty of controls in the ordinary case: most projects
 keep no skills of their own, so the two the agent would actually load were the
 two with nothing beside them. Nothing in core had to change for it — the
-deny-list `sessionSkills` builds already covers all three scopes, keyed by the
-bare name.
+map `skillOverridesFor` builds from the record already covers all three
+scopes, keyed by the bare name.
 
 **Commands and subagents get a section of their own, in both dialogs, holding
 both kinds.** They live in the same two stores as the skills and reach a session

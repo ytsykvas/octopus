@@ -870,11 +870,15 @@ started with. The write therefore asks the session nothing.
 
 **And a withheld skill keeps its row.** Its name and description are gone from
 the answer the moment the switch works, so `knownSkills` in `state.json`
-remembers what sessions said (`rememberSkills`, merged by name), and the fourth
-group adds every remembered skill the conversation has switched off. Only beside
-an answer, since the group exists once a session does; and a withheld key no
-session ever described is not drawn — more often than not a skill deleted while
-it was off.
+remembers what sessions said of the fourth group (`rememberSkills`, merged by
+name — never our directories' skills, which would turn up as the session's in a
+checkout without them), and the group adds every skill the conversation itself
+has switched off. Only beside an answer, since the group exists once a session
+does, and only the chat's own answers: the default lists are edited in
+settings, which lists our directories. A key no session ever described is drawn
+by name alone — a record switched off before anything was remembered, or a skill
+deleted while it was off. The second is a stale row that goes the moment it is
+switched on; not drawing either would leave a withhold nobody could undo.
 
 A session that will not answer costs the fourth group and nothing else. The
 three above it are read from disk and still true, and a closed transport is the
