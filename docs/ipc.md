@@ -116,12 +116,12 @@ listing reports the plugin in.
 | Channel                   | Arguments                 | Notes                                                                                                                                                                       |
 | ------------------------- | ------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `plugins:list`            | —                         | every installed plugin in every scope, with its description and what it brings, read leniently from its own folder                                                          |
-| `plugins:catalog`         | —                         | what the connected marketplaces offer, and whether the official one is connected — an empty store has to say why                                                            |
+| `plugins:catalog`         | —                         | what the official marketplace offers, and whether it is connected — an empty store has to say why                                                                           |
 | `plugins:install`         | `id`, `acceptCommand?`    | into the `user` scope. Answers `installed`, or `needsConsent` with the command the marketplace would run; the digest of one a person has read comes back as `acceptCommand` |
 | `plugins:uninstall`       | `id`, `target`            | from the scope it was installed in, data directory included                                                                                                                 |
 | `plugins:setEnabled`      | `id`, `enabled`, `target` | a switch already in that state counts as done                                                                                                                               |
 | `plugins:connectOfficial` | —                         | adds `anthropics/claude-plugins-official`, which Claude Code otherwise adds only on a first terminal session                                                                |
-| `plugins:refresh`         | —                         | pulls every connected marketplace again, each by name                                                                                                                       |
+| `plugins:refresh`         | —                         | pulls the official marketplace again, by name                                                                                                                               |
 
 The three that change what a conversation loads answer with `{ reloaded }`: how
 many open conversations took the change at once. The two marketplace channels

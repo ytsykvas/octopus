@@ -222,7 +222,7 @@ import {
   type PluginCli,
   pluginCli,
   type PluginTarget,
-  refreshMarketplaces,
+  refreshOfficialMarketplace,
   setPluginEnabled,
   uninstallPlugin
 } from './plugins.js'
@@ -980,7 +980,7 @@ export interface OctopusService {
   readStoredSkill(store: Store, folder: string): Promise<SkillDocument>
   /** Every installed Claude Code plugin, in every scope. */
   listPlugins(): Promise<InstalledPlugin[]>
-  /** What the connected marketplaces offer. */
+  /** What the official marketplace offers. */
   pluginCatalog(): Promise<PluginCatalog>
   /**
    * Installs a plugin for every project, or reports the command its
@@ -993,7 +993,7 @@ export interface OctopusService {
   setPluginEnabled(id: string, enabled: boolean, target: PluginTarget): Promise<PluginApplied>
   /** Adds the official marketplace; a catalog change, so nothing reloads. */
   connectOfficialMarketplace(): Promise<void>
-  /** Pulls every connected marketplace again, for plugins added since. */
+  /** Pulls the official marketplace again, for plugins added since. */
   refreshPluginCatalog(): Promise<void>
   saveStoredSkill(store: Store, folder: string, save: SkillSave): Promise<SkillEntry>
   removeStoredSkill(store: Store, folder: string): Promise<void>
@@ -4408,7 +4408,7 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
     },
 
     refreshPluginCatalog() {
-      return pluginWrite(() => refreshMarketplaces(plugins))
+      return pluginWrite(() => refreshOfficialMarketplace(plugins))
     },
 
     async readStoredSkill(store, folder) {

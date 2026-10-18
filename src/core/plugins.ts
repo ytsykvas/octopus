@@ -74,14 +74,9 @@ export const PluginTargetSchema = z.union([
 export type PluginTarget = z.infer<typeof PluginTargetSchema>
 
 /**
- * A name as it may reach the CLI as an argument: starting with a letter or
- * digit, so it cannot be read as a flag.
- */
-const ARGUMENT_NAME = /^[A-Za-z0-9][A-Za-z0-9._-]*$/
-
-/**
- * A plugin id as it may reach the CLI: `name@marketplace`, both halves held to
- * {@link ARGUMENT_NAME}. Every one of the 3,820 ids `--available` listed fits.
+ * A plugin id as it may reach the CLI: `name@marketplace`, each half starting
+ * with a letter or digit so it cannot be read as a flag. Every one of the 3,820
+ * ids `--available` listed fits.
  */
 export const PluginIdSchema = z
   .string()
@@ -123,7 +118,7 @@ export interface InstalledPlugin {
   readonly errors: readonly string[]
 }
 
-/** One plugin a connected marketplace offers. */
+/** One plugin the official marketplace offers. */
 export interface CatalogPlugin {
   readonly id: string
   readonly name: string
@@ -146,7 +141,6 @@ export interface PluginCatalog {
    * agent through the SDK may not have it — and an empty store has to say why.
    */
   readonly officialConnected: boolean
-  readonly marketplaces: readonly string[]
   readonly plugins: readonly CatalogPlugin[]
 }
 
@@ -373,32 +367,26 @@ async function listItems(
 }
 
 /**
- * Everything the connected marketplaces offer.
+ * What the official marketplace offers.
  *
- * Filtered to those marketplaces on purpose. `--available` also lists Claude
- * Code's built-in directory — some 3,500 entries, most of them other
- * marketplaces' plugins under a second name — and the store was decided to be
- * the official marketplace and whatever the user added.
+ * Only that one, on purpose. `--available` also lists Claude Code's built-in
+ * directory — some 3,500 entries, most of them other marketplaces' plugins
+ * under a second name — and any marketplace added from a terminal, and the
+ * store was decided to be Anthropic's own catalog and nothing else.
  */
 export async function catalog(cli: PluginCli): Promise<PluginCatalog> {
-  const marketplaces = await listMarketplaces(cli)
-  const names = marketplaces.map((marketplace) => marketplace.name)
-  const officialConnected = names.includes(OFFICIAL_MARKETPLACE)
+  const official = (await listMarketplaces(cli)).find(
+    (marketplace) => marketplace.name === OFFICIAL_MARKETPLACE
+  )
 
   // Nothing to offer, so the slow listing is not worth starting.
-  if (names.length === 0) return { officialConnected, marketplaces: names, plugins: [] }
+  if (official === undefined) return { officialConnected: false, plugins: [] }
 
   const { available, installed } = readDocument(
     await run(cli, ['plugin', 'list', '--available']),
     AvailableSchema
   )
-  const entries = new Map(
-    await Promise.all(
-      marketplaces.map(
-        async (marketplace) => [marketplace.name, await marketplaceEntries(marketplace)] as const
-      )
-    )
-  )
+  const entries = await marketplaceEntries(official)
 
   // Measured on 2.1.299: `available` leaves out a plugin once it is installed
   // for every project, so the store would lose a card the moment its install
@@ -413,15 +401,15 @@ export async function catalog(cli: PluginCli): Promise<PluginCatalog> {
         pluginId: id,
         name,
         marketplaceName: marketplace,
-        description: entries.get(marketplace)?.get(name)?.description
+        description: entries.get(name)?.description
       }
     })
 
   const plugins = [...available, ...returned]
-    .filter((item) => names.includes(item.marketplaceName))
-    .map((item) => describeAvailable(item, entries.get(item.marketplaceName)?.get(item.name)))
+    .filter((item) => item.marketplaceName === OFFICIAL_MARKETPLACE)
+    .map((item) => describeAvailable(item, entries.get(item.name)))
 
-  return { officialConnected, marketplaces: names, plugins }
+  return { officialConnected: true, plugins }
 }
 
 /** Installs into the user scope, or reports the command it would have to run. */
@@ -486,40 +474,11 @@ export async function connectOfficialMarketplace(cli: PluginCli): Promise<void> 
 }
 
 /**
- * Pulls every connected marketplace again.
- *
- * One at a time and by name, because `marketplace update` with no name has no
- * JSON result to read. Every marketplace is tried before the first failure is
- * reported, whatever the failure — so one unreachable source does not leave the
- * rest stale.
- *
- * A name is a marketplace's own word for itself and goes back to the CLI as an
- * argument, so one that could be read as a flag is refused rather than passed.
+ * Pulls the official marketplace again, by name: `marketplace update` with no
+ * name has no JSON result to read.
  */
-export async function refreshMarketplaces(cli: PluginCli): Promise<void> {
-  let failure: PluginError | null = null
-
-  for (const { name } of await listMarketplaces(cli)) {
-    if (!ARGUMENT_NAME.test(name)) {
-      failure ??= new PluginError(
-        'pluginActionFailed',
-        { message: `refused marketplace name "${name}"` },
-        `Refused marketplace name: ${name}`
-      )
-      continue
-    }
-
-    try {
-      const result = await act(cli, ['plugin', 'marketplace', 'update', name])
-      if (result.outcome !== 'ok') failure ??= failed(result)
-    } catch (error) {
-      // Only ours are a marketplace's failure; anything else is a fault here.
-      if (!(error instanceof PluginError)) throw error
-      failure ??= error
-    }
-  }
-
-  if (failure !== null) throw failure
+export async function refreshOfficialMarketplace(cli: PluginCli): Promise<void> {
+  settle(await act(cli, ['plugin', 'marketplace', 'update', OFFICIAL_MARKETPLACE]))
 }
 
 /**

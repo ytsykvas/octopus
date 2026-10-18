@@ -11,7 +11,7 @@ import {
   listInstalled,
   pluginCli,
   PluginError,
-  refreshMarketplaces,
+  refreshOfficialMarketplace,
   setPluginEnabled,
   uninstallPlugin,
   type CliOutput,
@@ -260,7 +260,12 @@ describe('the store', () => {
     installLocation: location
   })
 
-  it('offers only the connected marketplaces, with what their own file adds', async () => {
+  /*
+   * The store is Anthropic's catalog only: a marketplace added from a
+   * terminal, and the built-in directory `--available` also lists, are left
+   * out on purpose.
+   */
+  it('offers only the official marketplace, with what its own file adds', async () => {
     const location = join(home, 'marketplaces', 'official')
     await writeJson(join(location, '.claude-plugin', 'marketplace.json'), {
       name: 'claude-plugins-official',
@@ -279,10 +284,14 @@ describe('the store', () => {
     })
 
     const { cli } = fakeCli({
-      'plugin marketplace list --json': JSON.stringify([official(location)]),
+      'plugin marketplace list --json': JSON.stringify([
+        { name: 'team-tools', source: 'git' },
+        official(location)
+      ]),
       'plugin list --available --json': JSON.stringify({
         installed: [],
         available: [
+          { pluginId: 'lint@team-tools', name: 'lint', marketplaceName: 'team-tools' },
           {
             pluginId: 'context7@claude-plugins-official',
             name: 'context7',
@@ -314,7 +323,6 @@ describe('the store', () => {
 
     await expect(catalog(cli)).resolves.toEqual({
       officialConnected: true,
-      marketplaces: ['claude-plugins-official'],
       plugins: [
         {
           id: 'context7@claude-plugins-official',
@@ -358,17 +366,16 @@ describe('the store', () => {
 
   /*
    * Measured: with no marketplace connected, `--available` still lists some
-   * 3,500 entries from the built-in directory. None of them is the store, so
-   * the listing is not even started.
+   * 3,500 entries from the built-in directory. None of them is the store, and
+   * nor is a marketplace added from a terminal, so the listing is not even
+   * started.
    */
-  it('has nothing to offer, and says why, with no marketplace connected', async () => {
-    const { cli, calls } = fakeCli({ 'plugin marketplace list --json': '[]\n' })
-
-    await expect(catalog(cli)).resolves.toEqual({
-      officialConnected: false,
-      marketplaces: [],
-      plugins: []
+  it('has nothing to offer, and says why, without the official marketplace', async () => {
+    const { cli, calls } = fakeCli({
+      'plugin marketplace list --json': JSON.stringify([{ name: 'team-tools', source: 'git' }])
     })
+
+    await expect(catalog(cli)).resolves.toEqual({ officialConnected: false, plugins: [] })
     expect(calls).toHaveLength(1)
   })
 
@@ -396,7 +403,7 @@ describe('the store', () => {
           { id: 'explanatory-output-style@claude-plugins-official', scope: 'local' },
           { id: 'explanatory-output-style@claude-plugins-official', scope: 'user' },
           { id: 'undescribed@claude-plugins-official', scope: 'user' },
-          { id: 'elsewhere@unconnected', scope: 'user' },
+          { id: 'lint@team-tools', scope: 'user' },
           { id: 'context7@claude-plugins-official', scope: 'local' }
         ],
         available: [
@@ -420,29 +427,35 @@ describe('the store', () => {
     expect(plugins[1]?.category).toBe('learning')
   })
 
-  it('still offers a marketplace whose own file is missing', async () => {
+  it.each([
+    ['no location', null],
+    ['a location that has gone', 'missing']
+  ])('still offers the marketplace when its own file has %s', async (_, location) => {
+    const marketplace =
+      location === null
+        ? { name: 'claude-plugins-official', source: 'github' }
+        : official(join(home, location))
     const { cli } = fakeCli({
-      'plugin marketplace list --json': JSON.stringify([
-        { name: 'team-tools', source: 'git' },
-        { name: 'elsewhere', source: 'directory', installLocation: join(home, 'missing') }
-      ]),
+      'plugin marketplace list --json': JSON.stringify([marketplace]),
       'plugin list --available --json': JSON.stringify({
         available: [
-          { pluginId: 'lint@team-tools', name: 'lint', marketplaceName: 'team-tools' },
-          { pluginId: 'far@elsewhere', name: 'far', marketplaceName: 'elsewhere' }
+          {
+            pluginId: 'lint@claude-plugins-official',
+            name: 'lint',
+            marketplaceName: 'claude-plugins-official'
+          }
         ]
       })
     })
     const store = await catalog(cli)
 
-    expect(store.officialConnected).toBe(false)
+    expect(store.officialConnected).toBe(true)
     expect(store.plugins.map((plugin) => [plugin.id, plugin.category])).toEqual([
-      ['lint@team-tools', null],
-      ['far@elsewhere', null]
+      ['lint@claude-plugins-official', null]
     ])
   })
 
-  it('still offers a marketplace whose own file is not a catalog', async () => {
+  it('still offers the marketplace when its own file is not a catalog', async () => {
     const location = join(home, 'marketplaces', 'odd')
     await writeJson(join(location, '.claude-plugin', 'marketplace.json'), { plugins: 'none' })
 
@@ -796,73 +809,28 @@ describe('marketplaces', () => {
     expect(calls).toHaveLength(1)
   })
 
-  it('updates every marketplace by name, and reports the first that failed', async () => {
+  // By name: `marketplace update` with none has no JSON result to read.
+  it('updates the official marketplace by name', async () => {
     const { cli, calls } = fakeCli({
-      'plugin marketplace list --json': JSON.stringify([
-        { name: 'one' },
-        { name: 'two' },
-        { name: 'three' },
-        { name: 'four' }
-      ]),
-      'plugin marketplace update one --json': line({ outcome: 'failed', message: 'one is down' }),
-      // Not a result at all: tried past it all the same.
-      'plugin marketplace update two --json': 'Cloning…\n',
-      'plugin marketplace update three --json': line({ outcome: 'failed', message: 'three' }),
-      'plugin marketplace update four --json': line({ outcome: 'ok' })
+      'plugin marketplace update claude-plugins-official --json': line({ outcome: 'ok' })
     })
 
-    await expect(refreshMarketplaces(cli)).rejects.toMatchObject({
-      params: { message: 'one is down' }
-    })
-    // Tried to the end: one unreachable source must not leave the rest stale.
-    expect(calls.map((call) => call.args[3])).toEqual(['--json', 'one', 'two', 'three', 'four'])
+    await expect(refreshOfficialMarketplace(cli)).resolves.toBeUndefined()
+    expect(calls).toHaveLength(1)
   })
 
-  it('reports an update that printed no result, when it is the first failure', async () => {
+  it('reports an update that failed', async () => {
     const { cli } = fakeCli({
-      'plugin marketplace list --json': JSON.stringify([{ name: 'one' }, { name: 'two' }]),
-      'plugin marketplace update one --json': { stdout: '', stderr: 'git: not found' },
-      'plugin marketplace update two --json': line({ outcome: 'ok' })
+      'plugin marketplace update claude-plugins-official --json': line({
+        outcome: 'failed',
+        message: 'github is down'
+      })
     })
 
-    await expect(refreshMarketplaces(cli)).rejects.toMatchObject({
-      code: 'pluginOutputUnreadable',
-      params: { message: 'git: not found' }
-    })
-  })
-
-  /*
-   * A name is a marketplace's own word for itself and goes back to the CLI as
-   * an argument. One starting with `-` would be read as a flag.
-   */
-  it('refuses a marketplace name that would be read as a flag, and updates the rest', async () => {
-    const { cli, calls } = fakeCli({
-      'plugin marketplace list --json': JSON.stringify([{ name: '--scope' }, { name: 'fine' }]),
-      'plugin marketplace update fine --json': line({ outcome: 'ok' })
-    })
-
-    await expect(refreshMarketplaces(cli)).rejects.toMatchObject({
+    await expect(refreshOfficialMarketplace(cli)).rejects.toMatchObject({
       code: 'pluginActionFailed',
-      params: { message: 'refused marketplace name "--scope"' }
+      params: { message: 'github is down' }
     })
-    expect(calls.map((call) => call.args[3])).toEqual(['--json', 'fine'])
-  })
-
-  it('stops at a failure that is not a marketplace’s', async () => {
-    const { cli } = fakeCli({
-      'plugin marketplace list --json': JSON.stringify([{ name: 'unanswered' }])
-    })
-
-    await expect(refreshMarketplaces(cli)).rejects.toThrow('unexpected: plugin marketplace update')
-  })
-
-  it('updates quietly when every marketplace answers', async () => {
-    const { cli } = fakeCli({
-      'plugin marketplace list --json': JSON.stringify([{ name: 'one' }]),
-      'plugin marketplace update one --json': line({ outcome: 'ok' })
-    })
-
-    await expect(refreshMarketplaces(cli)).resolves.toBeUndefined()
   })
 })
 

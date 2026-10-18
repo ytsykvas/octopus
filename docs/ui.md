@@ -114,8 +114,10 @@ import dialogs' pills:
   description, keywords, the homepage, and a note that a plugin runs with
   Claude Code's own access. An empty store with no official marketplace says
   why and offers to connect it, and a catalog that could not be read offers to
-  read it again — the refresh button needs a catalog to refresh, and pulsing
-  cards for ever would hide the way out.
+  read it again — the refresh button needs the marketplace connected to update it,
+  and pulsing cards for ever would hide the way out. The store is the official
+  marketplace only; the installed list still shows a plugin from anywhere, so
+  one installed from a terminal can be switched off or removed here.
 
 A plugin whose marketplace installs it by **running a command** comes back
 from the first install as `needsConsent`. The store shows that command whole

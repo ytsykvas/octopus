@@ -91,13 +91,17 @@ describe('PluginsWindow', () => {
     expect(plugins.readCatalog).toHaveBeenCalledOnce()
   })
 
-  it('refreshes the marketplaces from the store, once there is a catalog to refresh', async () => {
+  it('refreshes the official marketplace from the store, once it is connected', async () => {
     const user = userEvent.setup()
     const { plugins, rerender } = draw()
 
-    const name = 'Check the marketplaces for new plugins'
+    const name = 'Check the official marketplace for new plugins'
     expect(screen.queryByRole('button', { name })).toBeNull()
     await user.click(screen.getByRole('tab', { name: 'Store' }))
+    expect(screen.getByRole('button', { name })).toBeDisabled()
+
+    // Not connected: there is nothing to update, and connecting is the way on.
+    rerender({ catalog: catalogOf([], false) })
     expect(screen.getByRole('button', { name })).toBeDisabled()
 
     rerender({ catalog: catalogOf([]) })

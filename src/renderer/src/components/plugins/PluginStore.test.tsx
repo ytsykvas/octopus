@@ -92,15 +92,6 @@ describe('PluginStore', () => {
     expect(screen.getByRole('button', { name: 'Connecting…' })).toBeDisabled()
   })
 
-  it('still offers the official marketplace beside another one', () => {
-    draw({ catalog: catalogOf([FIGMA], false) })
-
-    expect(
-      screen.getByText('The official Claude Code marketplace is not connected.')
-    ).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Connect the official marketplace' })).toBeEnabled()
-  })
-
   it('orders the cards by installs, the uncounted last and by name', () => {
     // Before the installed list has answered, too: nothing is marked installed.
     draw({ catalog: catalogOf([ODD, LONELY, FIGMA, CONTEXT7]), installed: null })
