@@ -1,19 +1,11 @@
-import {
-  ChevronDown,
-  ChevronRight,
-  CloudAlert,
-  Copy,
-  ExternalLink,
-  MoreHorizontal,
-  TriangleAlert,
-  Undo2
-} from 'lucide-react'
+import { CloudAlert, Copy, ExternalLink, MoreHorizontal, TriangleAlert, Undo2 } from 'lucide-react'
 import { memo, useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import type { FileDiff, FileStatus } from '@core/diff.js'
 import type { PublishState } from '@core/publish.js'
 
+import { DisclosureButton } from '../Disclosure.js'
 import { DropdownMenu } from '../DropdownMenu.js'
 import { FILE_STATUS_MARKS } from '../statusMarks.js'
 import { type DiffView, DiffHunk } from './DiffHunk.js'
@@ -241,7 +233,6 @@ export const DiffFile = memo(function DiffFile({
 
   const status = FILE_STATUS_MARKS[file.status]
   const nameStyle = NAME_STYLES[file.status]
-  const Chevron = collapsed ? ChevronRight : ChevronDown
 
   // Back to offering the action on its own, and cleared on the way out: a row
   // still claiming a copy happened is describing a clipboard that has moved on,
@@ -273,19 +264,17 @@ export const DiffFile = memo(function DiffFile({
     <div className="border-line border-b">
       <div className="bg-surface border-line sticky top-0 z-10 border-b px-2 py-1.5">
         <div className="flex items-center gap-2">
-          <button
-            type="button"
-            onClick={() => {
-              onToggle(file.path, !collapsed)
+          <DisclosureButton
+            open={!collapsed}
+            onOpenChange={(open) => {
+              onToggle(file.path, !open)
             }}
-            aria-expanded={!collapsed}
             // The path rather than the whole header: what is drawn inside is
             // dots and two counts that read as noise when spoken one after
             // another, and the path is what identifies the row.
-            aria-label={file.path}
+            label={file.path}
             className="focus-ring row flex min-w-0 flex-1 items-center gap-2 px-1 py-0.5 text-left"
           >
-            <Chevron aria-hidden className="text-ink-faint shrink-0" size={12} />
             {/* Where the status letter used to be. The letter is gone from this
                 tab: what happened to the file is on its name below, and the
                 Ukrainian `З` for "changed" read as the digit 3 in front of a
@@ -313,7 +302,7 @@ export const DiffFile = memo(function DiffFile({
               {file.added > 0 && file.removed > 0 && ' '}
               {file.removed > 0 && <span className="text-danger">−{file.removed}</span>}
             </span>
-          </button>
+          </DisclosureButton>
 
           {/* Who wrote it, when more than one conversation could have.
             Outside the button for the reason the warning below it is: the

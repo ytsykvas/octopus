@@ -1,6 +1,4 @@
 import {
-  ChevronDown,
-  ChevronRight,
   ExternalLink,
   type LucideIcon,
   NotebookPen,
@@ -31,6 +29,7 @@ import { Button } from './Button.js'
 import { DiffPanel } from './diff/DiffPanel.js'
 import { FilesPanel } from './files/FilesPanel.js'
 import { NotesPanel } from './NotesPanel.js'
+import { DisclosureButton } from './Disclosure.js'
 import { DropdownMenu } from './DropdownMenu.js'
 import { EnvProfileSwitch } from './EnvProfileSwitch.js'
 import type { DiffView } from './diff/DiffHunk.js'
@@ -1025,25 +1024,17 @@ export function RightPanel({
               sibling rather than a child, so reaching for it cannot fold the
               build away by accident. */}
             <div className="border-line flex shrink-0 items-center gap-2 border-b pr-2">
-              <button
-                type="button"
-                onClick={() => {
-                  setBuildOpen(!buildOpen)
-                }}
-                aria-expanded={buildOpen}
+              <DisclosureButton
+                open={buildOpen}
+                onOpenChange={setBuildOpen}
                 // Named for what it does rather than for the word on it:
                 // `Build` is also the heading it carries, and two controls with
                 // one name are ambiguous to anything reading the pane aloud.
-                aria-label={t(buildOpen ? 'scripts.foldBuild' : 'scripts.unfoldBuild')}
+                label={t(buildOpen ? 'scripts.foldBuild' : 'scripts.unfoldBuild')}
                 className="focus-ring section-label hover:bg-muted flex min-w-0 flex-1 items-center gap-1.5 px-3 py-1.5 text-left"
               >
-                {buildOpen ? (
-                  <ChevronDown aria-hidden size={12} className="text-ink-faint shrink-0" />
-                ) : (
-                  <ChevronRight aria-hidden size={12} className="text-ink-faint shrink-0" />
-                )}
                 {t('scripts.build')}
-              </button>
+              </DisclosureButton>
 
               {/* Always here, not only while the build script is missing. The env
                 is the thing a build most often turns out to be lacking, and by

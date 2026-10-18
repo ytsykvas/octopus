@@ -1,8 +1,9 @@
-import { Check, ChevronDown, ChevronUp, MessageSquarePlus, X } from 'lucide-react'
+import { Check, MessageSquarePlus, X } from 'lucide-react'
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import { Button } from '../Button.js'
+import { DisclosureChevron } from '../Disclosure.js'
 import type { TipId } from './tips.js'
 
 interface HeadsUpProps {
@@ -64,7 +65,7 @@ export function HeadsUp({ tip, onKnown, onClose, onAdd }: HeadsUpProps): React.J
               setOpen((current) => !current)
             }}
           >
-            {open ? <ChevronUp aria-hidden size={13} /> : <ChevronDown aria-hidden size={13} />}
+            <DisclosureChevron open={open} size={13} />
             {open ? t('tips.showLess') : t('tips.learnMore')}
           </Button>
           <Button

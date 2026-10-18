@@ -1,4 +1,4 @@
-import { ChevronDown, ChevronRight, ChevronsDownUp, RefreshCw } from 'lucide-react'
+import { ChevronsDownUp, RefreshCw } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
@@ -11,6 +11,7 @@ import {
 import type { WorkspaceView } from '@core/workspaces.js'
 
 import { useFileTree } from '../../hooks/useFileTree.js'
+import { DisclosureChevron } from '../Disclosure.js'
 import { IconButton, Notice } from '../paneControls.js'
 import { Placeholder } from '../Placeholder.js'
 import { TREE_STATUS_MARKS } from '../statusMarks.js'
@@ -372,7 +373,6 @@ function Row({
   const directory = node.kind === 'directory'
 
   const tone = node.ignored ? 'text-ink-faint' : (mark?.tone ?? 'text-ink-soft')
-  const Chevron = expanded ? ChevronDown : ChevronRight
 
   return (
     <div
@@ -392,7 +392,7 @@ function Row({
       } ${focused ? 'group-focus-visible/tree:outline-accent group-focus-visible/tree:outline group-focus-visible/tree:-outline-offset-1' : ''}`}
     >
       {directory ? (
-        <Chevron aria-hidden size={14} className="text-ink-faint shrink-0" />
+        <DisclosureChevron open={expanded} size={14} className="text-ink-faint" />
       ) : (
         <span aria-hidden className="w-3.5 shrink-0" />
       )}

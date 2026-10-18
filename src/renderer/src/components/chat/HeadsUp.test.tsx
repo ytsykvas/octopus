@@ -53,7 +53,7 @@ describe('a heads-up', () => {
     renderHeadsUp()
 
     for (const [name, icon] of [
-      ['Learn more', 'lucide-chevron-down'],
+      ['Learn more', 'lucide-chevron-right'],
       ['Add to chat', 'lucide-message-square-plus'],
       ['Knew this already', 'lucide-check'],
       ['Dismiss', 'lucide-x']
@@ -72,7 +72,7 @@ describe('a heads-up', () => {
     await user.click(screen.getByRole('button', { name: 'Learn more' }))
 
     const svg = screen.getByRole('button', { name: 'Show less' }).querySelector('svg')
-    expect(svg).toHaveClass('lucide-chevron-up')
+    expect(svg).toHaveClass('lucide-chevron-right', 'rotate-90')
   })
 
   // What is on screen is what goes into the field: the one line while the

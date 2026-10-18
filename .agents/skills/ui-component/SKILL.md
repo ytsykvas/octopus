@@ -125,7 +125,9 @@ components.
 
 Existing pieces, worth checking before writing another: `Modal`,
 `DropdownMenu`, `Combobox` (a select with search), `Field`, `NameEditor`,
-`ResizeHandle`, `Terminal`.
+`ResizeHandle`, `Terminal`, and `Disclosure` for anything that folds —
+`DisclosureButton` for the toggle, `DisclosureChevron` alone where the control
+is not a plain button (a `Button`, a tree row, a `<summary>`).
 
 `Modal` deliberately leaves its body without padding so a list can span the
 full width — a form inside it brings its own.

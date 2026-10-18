@@ -1,4 +1,4 @@
-import { Blocks, ChevronDown, ChevronRight } from 'lucide-react'
+import { Blocks } from 'lucide-react'
 import { type ReactNode, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
@@ -7,6 +7,7 @@ import type { OwnSkillScope } from '@core/skillNames.js'
 import type { SkillListing } from '@core/skills.js'
 
 import { useAnchoredPanel } from '../../hooks/useAnchoredPanel.js'
+import { DisclosureButton } from '../Disclosure.js'
 import { Switch } from '../Switch.js'
 import {
   countIn,
@@ -225,22 +226,18 @@ function SkillGroup({ heading, fold, children }: SkillGroupProps): React.JSX.Ele
     )
   }
 
-  const Chevron = fold.open ? ChevronDown : ChevronRight
-
   return (
     <div>
-      <button
-        type="button"
-        aria-expanded={fold.open}
-        onClick={() => {
-          fold.onOpenChange(!fold.open)
-        }}
+      <DisclosureButton
+        open={fold.open}
+        onOpenChange={fold.onOpenChange}
+        // The heading's own colour, so the mark brightens with it on hover.
+        chevron={{ className: '' }}
         className="section-label focus-ring hover:text-ink flex w-full items-center gap-1 px-3 pt-2 pb-1 text-left transition-colors"
       >
-        <Chevron aria-hidden size={11} className="shrink-0" />
         <span className="min-w-0 flex-1 truncate">{heading}</span>
         <span className="text-ink-faint font-normal tabular-nums">{fold.summary}</span>
-      </button>
+      </DisclosureButton>
       {fold.open && children}
     </div>
   )
