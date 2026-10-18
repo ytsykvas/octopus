@@ -3,7 +3,7 @@ import { join } from 'node:path'
 import { describe, expect, it, vi } from 'vitest'
 
 import type { QueryFn } from './agent.js'
-import { unpackedAgentBinary, withAgentBinary } from './agentBinary.js'
+import { agentBinary, unpackedAgentBinary, withAgentBinary } from './agentBinary.js'
 
 const RESOURCES = join('/', 'Applications', 'Octopus.app', 'Contents', 'Resources')
 const PACKAGE = join('node_modules', '@anthropic-ai', 'claude-agent-sdk-darwin-arm64', 'claude')
@@ -59,6 +59,34 @@ describe('unpackedAgentBinary', () => {
   // correct — and no throw from the default resolver.
   it('finds nothing to correct in a checkout', () => {
     expect(unpackedAgentBinary()).toBeNull()
+  })
+})
+
+describe('agentBinary', () => {
+  // Run directly rather than through the SDK, so it has to be the startable
+  // copy in a package and the package's own file everywhere else.
+  it('answers with the unpacked copy in a package', () => {
+    expect(agentBinary(() => join(RESOURCES, 'app.asar', PACKAGE), 'darwin', 'arm64')).toBe(
+      join(RESOURCES, 'app.asar.unpacked', PACKAGE)
+    )
+  })
+
+  it('answers with the package\u2019s own file in a checkout', () => {
+    expect(agentBinary(() => join('/', 'repo', PACKAGE), 'darwin', 'arm64')).toBe(
+      join('/', 'repo', PACKAGE)
+    )
+  })
+
+  it('has no answer when the platform package cannot be found', () => {
+    const resolve = (): string => {
+      throw new Error('Cannot find module')
+    }
+
+    expect(agentBinary(resolve, 'darwin', 'arm64')).toBeNull()
+  })
+
+  it('finds the real binary here by default', () => {
+    expect(agentBinary()).toMatch(/claude-agent-sdk-.*claude$/)
   })
 })
 

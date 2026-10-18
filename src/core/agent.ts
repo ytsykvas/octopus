@@ -295,6 +295,17 @@ export interface AgentSession {
    * checkout.
    */
   refreshSkills: () => Promise<AgentSkill[]>
+  /**
+   * Re-reads the installed plugins, for one installed, removed or switched
+   * while this conversation was open.
+   *
+   * Nothing else would: no watcher picks a plugin change up, and without this
+   * the session goes on with what it loaded at start. Measured on 2.1.299: the
+   * plugin's commands and skills arrive, the session announces them itself with
+   * `commands_changed`, and a plugin's MCP server connects — the docs say it
+   * waits for a new session, and it did not.
+   */
+  reloadPlugins: () => Promise<void>
   /** What this account may use, as the agent reported when the session began. */
   models: () => Promise<AgentModel[]>
   /** The slash commands this session offers, agent's own and the project's. */
@@ -795,6 +806,15 @@ export function startSession(options: SessionOptions, hooks: SessionHooks): Agen
         description: skill.description,
         builtin: skill.builtin === true
       }))
+    },
+
+    async reloadPlugins() {
+      // No \`holdOnCacheImpact\`: the decision was to reload at once even when
+      // it costs the next turn its prompt cache. The answer — commands, the
+      // plugins loaded, \`error_count\` — is dropped; the window reads a
+      // plugin's errors from the CLI's listing, and the session announces its
+      // new commands itself.
+      await conversation.reloadPlugins()
     },
 
     close() {

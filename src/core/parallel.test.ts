@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
 
-import { allOf, within } from './parallel.js'
+import { allOf, oneAtATime, within } from './parallel.js'
 
 /** A promise that settles after a tick, so "waited for" is observable. */
 function later<T>(value: T, ms: number, done?: () => void): Promise<T> {
@@ -148,5 +148,36 @@ describe('waiting, but not for ever', () => {
     } finally {
       vi.useRealTimers()
     }
+  })
+})
+
+describe('one at a time', () => {
+  it('starts each task only once the one before has settled', async () => {
+    const line = oneAtATime()
+    const order: string[] = []
+
+    const first = line(() => later('first', 20, () => order.push('first ends')))
+    const second = line(() => {
+      order.push('second starts')
+      return later('second', 1)
+    })
+
+    await expect(Promise.all([first, second])).resolves.toEqual(['first', 'second'])
+    expect(order).toEqual(['first ends', 'second starts'])
+  })
+
+  it('hands a failure to its caller and keeps the line moving', async () => {
+    const line = oneAtATime()
+    const order: string[] = []
+
+    const failing = line(() => failsLater(new Error('refused'), 10, () => order.push('failed')))
+    const after = line(() => {
+      order.push('after starts')
+      return Promise.resolve('after')
+    })
+
+    await expect(failing).rejects.toThrow('refused')
+    await expect(after).resolves.toBe('after')
+    expect(order).toEqual(['failed', 'after starts'])
   })
 })

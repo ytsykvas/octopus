@@ -102,3 +102,25 @@ export async function within(ms: number, work: Promise<unknown>): Promise<boolea
     clearTimeout(timer)
   }
 }
+
+/**
+ * A line that tasks wait in, each starting once the one before has settled.
+ *
+ * For work whose **choice** has to be serialised, not only its write: anything
+ * that reads, decides and then writes, where two overlapping in the middle would
+ * both decide from the same picture. A failure does not stop the line — the
+ * caller still gets the rejection, and the task behind it still runs.
+ */
+export function oneAtATime(): <T>(task: () => Promise<T>) => Promise<T> {
+  let last: Promise<unknown> = Promise.resolve()
+
+  return <T>(task: () => Promise<T>): Promise<T> => {
+    // Wrapped: handed straight to `then`, a task would be called with the
+    // previous one's value or rejection reason.
+    const start = (): Promise<T> => task()
+    const next = last.then(start, start)
+    last = next.catch(() => undefined)
+
+    return next
+  }
+}

@@ -55,6 +55,7 @@ import { LibraryImportSchema, LibraryRawSchema } from '../core/library.js'
 import { LibraryKindSchema, LibraryNameSchema } from '../core/libraryNames.js'
 import { NotesBodySchema } from '../core/notes.js'
 import { StoreSchema } from '../core/stores.js'
+import { CommandDigestSchema, PluginIdSchema, PluginTargetSchema } from '../core/plugins.js'
 import type {
   ChatEvent,
   ChatsChangedEvent,
@@ -670,6 +671,46 @@ export function registerIpc(
       )
     )
   )
+
+  /*
+   * Claude Code's plugins. Each argument here becomes an argument to a
+   * process, so the id is held to `name@marketplace` — which also keeps a
+   * leading `-` from being read as a flag. The target is a scope and its
+   * project as one value: `project` with no path cannot be expressed, and core
+   * then holds the path to one the CLI itself recorded.
+   */
+  host.handle('plugins:list', () => attempt(() => service.listPlugins()))
+
+  host.handle('plugins:catalog', () => attempt(() => service.pluginCatalog()))
+
+  host.handle('plugins:install', (_event, id: unknown, acceptCommand: unknown) =>
+    attempt(() =>
+      service.installPlugin(
+        PluginIdSchema.parse(id),
+        CommandDigestSchema.optional().parse(acceptCommand)
+      )
+    )
+  )
+
+  host.handle('plugins:uninstall', (_event, id: unknown, target: unknown) =>
+    attempt(() =>
+      service.uninstallPlugin(PluginIdSchema.parse(id), PluginTargetSchema.parse(target))
+    )
+  )
+
+  host.handle('plugins:setEnabled', (_event, id: unknown, enabled: unknown, target: unknown) =>
+    attempt(() =>
+      service.setPluginEnabled(
+        PluginIdSchema.parse(id),
+        z.boolean().parse(enabled),
+        PluginTargetSchema.parse(target)
+      )
+    )
+  )
+
+  host.handle('plugins:connectOfficial', () => attempt(() => service.connectOfficialMarketplace()))
+
+  host.handle('plugins:refresh', () => attempt(() => service.refreshPluginCatalog()))
 
   host.handle('projects:remove', (_event, projectId: string) =>
     attempt(() => service.removeProjectById(projectId))

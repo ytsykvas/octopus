@@ -290,8 +290,13 @@ const CONNECTED: AccountsStatus = {
 const started: OctopusService[] = []
 
 async function createService(options: ServiceOptions = {}): Promise<OctopusService> {
-  // Not the machine's own `~/.claude` and environment, which the default reads.
-  const made = await makeService({ windowOverride: () => Promise.resolve(null), ...options })
+  // Not the machine's own `~/.claude` and environment, which the default reads
+  // — and never the real plugin CLI, which would write into that `~/.claude`.
+  const made = await makeService({
+    windowOverride: () => Promise.resolve(null),
+    pluginCli: () => Promise.reject(new Error('the plugin CLI is not run in tests')),
+    ...options
+  })
   started.push(made)
   return made
 }
@@ -383,6 +388,13 @@ describe('channel table', () => {
     'skills:forChat',
     'skills:forWorkspace',
     'skills:setForChat',
+    'plugins:list',
+    'plugins:catalog',
+    'plugins:install',
+    'plugins:uninstall',
+    'plugins:setEnabled',
+    'plugins:connectOfficial',
+    'plugins:refresh',
     'library:list',
     'library:read',
     'library:save',
@@ -846,6 +858,86 @@ describe('skills', () => {
     await expect(invoke('skills:setForChat', 'c', 'review', 'yes')).resolves.toMatchObject({
       ok: false
     })
+  })
+})
+
+describe('plugins', () => {
+  const ok = `${JSON.stringify({ outcome: 'ok' })}\n`
+
+  /** A service whose plugin CLI records what it was asked to run. */
+  async function withCli(): Promise<string[][]> {
+    const ran: string[][] = []
+    await useService({
+      pluginCli: (args, cwd) => {
+        ran.push([...args, `cwd=${cwd ?? ''}`])
+        const listing =
+          args[1] === 'list'
+            ? JSON.stringify([
+                { id: 'a@m', scope: 'user', enabled: true },
+                { id: 'a@m', scope: 'project', projectPath: dir, enabled: true }
+              ])
+            : args[2] === 'list'
+              ? '[]'
+              : ok
+        return Promise.resolve({ stdout: listing, stderr: '' })
+      }
+    })
+    return ran
+  }
+
+  it('carries every action through to the CLI', async () => {
+    const ran = await withCli()
+    const sha = 'f'.repeat(64)
+
+    await expect(invoke('plugins:list')).resolves.toMatchObject({ ok: true })
+    await expect(invoke('plugins:catalog')).resolves.toMatchObject({ ok: true })
+    await expect(invoke('plugins:install', 'a@m', sha)).resolves.toMatchObject({
+      ok: true,
+      value: { kind: 'installed' }
+    })
+    await expect(
+      invoke('plugins:setEnabled', 'a@m', false, { scope: 'project', projectPath: dir })
+    ).resolves.toEqual({ ok: true, value: { reloaded: 0 } })
+    await expect(invoke('plugins:uninstall', 'a@m', { scope: 'user' })).resolves.toMatchObject({
+      ok: true
+    })
+    await expect(invoke('plugins:connectOfficial')).resolves.toMatchObject({ ok: true })
+    await expect(invoke('plugins:refresh')).resolves.toMatchObject({ ok: true })
+
+    expect(ran.filter((call) => call[1] !== 'list')).toEqual([
+      ['plugin', 'marketplace', 'list', '--json', 'cwd='],
+      ['plugin', 'install', 'a@m', '--scope', 'user', '--accept-command', sha, '--json', 'cwd='],
+      ['plugin', 'disable', 'a@m', '--scope', 'project', '--json', `cwd=${dir}`],
+      ['plugin', 'uninstall', 'a@m', '--scope', 'user', '--json', 'cwd='],
+      ['plugin', 'marketplace', 'add', 'anthropics/claude-plugins-official', '--json', 'cwd='],
+      ['plugin', 'marketplace', 'list', '--json', 'cwd=']
+    ])
+  })
+
+  /*
+   * Each of these becomes an argument to a process. An id starting with `-`
+   * would be read as a flag; a project scope with no project would run from
+   * home and edit the user's own settings; a relative project would be
+   * wherever the app stands.
+   */
+  it('refuses what would reach the CLI as something else', async () => {
+    const ran = await withCli()
+
+    for (const call of [
+      ['plugins:install', '--scope@m'],
+      ['plugins:install', 'no-marketplace'],
+      ['plugins:install', 'a@m', 'not-a-digest'],
+      ['plugins:setEnabled', 'a@m', 'yes', { scope: 'user' }],
+      ['plugins:setEnabled', 'a@m', true, { scope: 'managed' }],
+      ['plugins:setEnabled', 'a@m', true, { scope: 'project' }],
+      ['plugins:setEnabled', 'a@m', true, { scope: 'project', projectPath: 'relative/path' }],
+      ['plugins:uninstall', 'a@m', 'user'],
+      ['plugins:uninstall', 'a@m', { scope: 'local' }]
+    ] as const) {
+      const [channel, ...args] = call
+      await expect(invoke(channel, ...args)).resolves.toMatchObject({ ok: false })
+    }
+    expect(ran).toEqual([])
   })
 })
 

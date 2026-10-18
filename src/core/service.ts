@@ -166,7 +166,7 @@ import {
   stateTempFile
 } from './paths.js'
 import { DOWNLOAD_TIMEOUT_MS } from './download.js'
-import { within } from './parallel.js'
+import { oneAtATime, within } from './parallel.js'
 import {
   ensureLibrary,
   importLibraryItem,
@@ -211,6 +211,21 @@ import { type OwnSkillScope, skillKey } from './skillNames.js'
 import type { Store } from './stores.js'
 import { type QuestionAnswer, readQuestions, withAnswers } from './questions.js'
 import { describeError } from './persist.js'
+import {
+  catalog,
+  connectOfficialMarketplace,
+  type InstalledPlugin,
+  installPlugin,
+  type InstallOutcome,
+  listInstalled,
+  type PluginCatalog,
+  type PluginCli,
+  pluginCli,
+  type PluginTarget,
+  refreshMarketplaces,
+  setPluginEnabled,
+  uninstallPlugin
+} from './plugins.js'
 import {
   appendEntry,
   type ChatEntry,
@@ -325,6 +340,13 @@ import {
 const STALE_AFTER_MS = 6 * 60_000
 
 /**
+ * How long one conversation is given to load its plugins again. The measured
+ * reload takes well under a second; a session past this is counted out, and
+ * picks the plugin up when it next starts.
+ */
+const PLUGIN_RELOAD_MS = 10_000
+
+/**
  * The events that mean the model itself spoke — what a session's headers are
  * refreshed by. Deltas count: they are the response in progress.
  */
@@ -396,6 +418,14 @@ export interface ServiceOptions {
    */
   readonly query?: QueryFn
   /**
+   * Claude Code's CLI, for plugins. Injected for the reason `makeGh` is: the
+   * real one writes into `~/.claude`, and a suite that used it would install
+   * plugins on the machine running it.
+   */
+  readonly pluginCli?: PluginCli
+  /** How long a running conversation is given to reload its plugins. */
+  readonly pluginReloadMs?: number
+  /**
    * How a skill is downloaded, injected for the reason `makeGh` is: the real
    * one leaves the machine, and a suite that used it would be testing
    * somebody's web server.
@@ -430,6 +460,17 @@ export interface ServiceOptions {
     cwd: string,
     sources: readonly SettingSourceName[]
   ) => Promise<WindowOverride | null>
+}
+
+/**
+ * What a plugin write came to in the conversations already open.
+ *
+ * Counted rather than promised: a session that would not reload is not a
+ * failed write — the plugin is installed either way, and that conversation
+ * picks it up when it next starts.
+ */
+export interface PluginApplied {
+  readonly reloaded: number
 }
 
 /** An agent event together with where it came from. */
@@ -937,6 +978,23 @@ export interface OctopusService {
    * directories claim one.
    */
   readStoredSkill(store: Store, folder: string): Promise<SkillDocument>
+  /** Every installed Claude Code plugin, in every scope. */
+  listPlugins(): Promise<InstalledPlugin[]>
+  /** What the connected marketplaces offer. */
+  pluginCatalog(): Promise<PluginCatalog>
+  /**
+   * Installs a plugin for every project, or reports the command its
+   * marketplace would run — to be shown, then accepted by its digest.
+   */
+  installPlugin(id: string, acceptCommand?: string): Promise<InstallOutcome & PluginApplied>
+  /** Removes a plugin, and its data, from the scope it was installed in. */
+  uninstallPlugin(id: string, target: PluginTarget): Promise<PluginApplied>
+  /** Switches a plugin on or off where it was installed. */
+  setPluginEnabled(id: string, enabled: boolean, target: PluginTarget): Promise<PluginApplied>
+  /** Adds the official marketplace; a catalog change, so nothing reloads. */
+  connectOfficialMarketplace(): Promise<void>
+  /** Pulls every connected marketplace again, for plugins added since. */
+  refreshPluginCatalog(): Promise<void>
   saveStoredSkill(store: Store, folder: string, save: SkillSave): Promise<SkillEntry>
   removeStoredSkill(store: Store, folder: string): Promise<void>
   /**
@@ -1404,6 +1462,8 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
   // Corrected for the packaged app, where the SDK's own guess points into
   // `app.asar` and cannot be started (`agentBinary.ts`).
   const runQuery = options.query ?? withAgentBinary(defaultQuery, unpackedAgentBinary())
+  const plugins = options.pluginCli ?? pluginCli()
+  const pluginReloadMs = options.pluginReloadMs ?? PLUGIN_RELOAD_MS
   const runForkSession = options.forkSession ?? defaultForkSession
   const runSessionMessages = options.sessionMessages ?? defaultSessionMessages
   const uuid = options.uuid ?? randomUUID
@@ -1955,16 +2015,17 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
    * Two settlements overlapping inside that window both saw a pool in which
    * neither had moved, and both took the same free block.
    */
-  let portChoices: Promise<unknown> = Promise.resolve()
+  const settlingOneAtATime = oneAtATime()
 
-  function settlingOneAtATime<T>(choose: () => Promise<T>): Promise<T> {
-    const next = portChoices.then(choose, choose)
-    // Swallowed on the chain only: the caller still gets the rejection, and a
-    // failure must not stop the workspace behind it from being served.
-    portChoices = next.catch(() => undefined)
-
-    return next
-  }
+  /**
+   * Plugin writes, one after another.
+   *
+   * Two CLI processes racing on `settings.json` and `installed_plugins.json`
+   * is what this rules out: each reads the file, changes it and writes it
+   * back, and the second to finish would put back what the first removed.
+   * Reads are left out — they write nothing.
+   */
+  const pluginWrite = oneAtATime()
 
   function emit(event: ChatEvent): void {
     for (const listener of listeners) listener(event)
@@ -3472,6 +3533,31 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
     )
   }
 
+  /**
+   * Tells every running conversation to load the plugins again, and counts
+   * the ones that did.
+   *
+   * After every plugin write, always and without holding for the prompt
+   * cache: a plugin switched off and still answering in an open conversation
+   * reads as a switch that did not work. A session that will not answer is
+   * left out of the count rather than failing a write that has landed.
+   */
+  async function reloadRunningPlugins(): Promise<PluginApplied> {
+    const answers = await Promise.all(
+      [...sessions.values()].map(async (session) => {
+        const answer = session.reloadPlugins().then(
+          () => 1,
+          () => 0
+        )
+        // Bounded, because this runs inside the write queue: one session that
+        // never answers would otherwise hold every later plugin write behind it.
+        return (await within(pluginReloadMs, answer)) ? answer : 0
+      })
+    )
+
+    return { reloaded: answers.reduce((sum, answer) => sum + answer, 0) }
+  }
+
   async function sourcesFor(workspace: Workspace): Promise<SettingSourceName[]> {
     // `requireProject`, not a lookup with a fallback: a workspace whose project
     // is gone is a broken state, and quietly handing it the full set of sources
@@ -4281,6 +4367,48 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
 
     async listRepositorySkills(workspaceId) {
       return readSkillsIn(join(requireWorkspace(workspaceId).path, '.claude', 'skills'))
+    },
+
+    listPlugins() {
+      return listInstalled(plugins)
+    },
+
+    pluginCatalog() {
+      return catalog(plugins)
+    },
+
+    installPlugin(id, acceptCommand) {
+      return pluginWrite(async () => {
+        const outcome = await installPlugin(plugins, id, acceptCommand)
+        // Nothing changed until a person has read the command.
+        if (outcome.kind === 'needsConsent') return { ...outcome, reloaded: 0 }
+
+        return { ...outcome, ...(await reloadRunningPlugins()) }
+      })
+    },
+
+    uninstallPlugin(id, target) {
+      return pluginWrite(async () => {
+        await uninstallPlugin(plugins, id, target)
+        return reloadRunningPlugins()
+      })
+    },
+
+    setPluginEnabled(id, enabled, target) {
+      return pluginWrite(async () => {
+        await setPluginEnabled(plugins, id, enabled, target)
+        return reloadRunningPlugins()
+      })
+    },
+
+    connectOfficialMarketplace() {
+      // A catalog change only: no conversation loads a marketplace, so there
+      // is nothing to reload.
+      return pluginWrite(() => connectOfficialMarketplace(plugins))
+    },
+
+    refreshPluginCatalog() {
+      return pluginWrite(() => refreshMarketplaces(plugins))
     },
 
     async readStoredSkill(store, folder) {
