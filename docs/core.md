@@ -392,8 +392,10 @@ cost a dollar, and its `result` reported `input_tokens: 0` and
 `output_tokens: 0` — so the footer read `65.9s · 0 tokens` under a turn that was
 neither idle nor free. Nothing reads those figures for anything but display, so
 this costs only the reading; it is written down because a zero that looks like a
-bug is worth recognising as the agent's own answer. The compaction itself is
-announced on `compact_boundary`, which is dropped.
+bug is worth recognising as the agent's own answer. The compaction itself
+arrives apart from that `result`, on `compact_boundary`, which `mapMessage` turns
+into `conversation_compacted` (read through zod, above): that is what draws the
+compaction row in the log and moves the context gauge to its `postTokens`.
 
 ### An answer travels as the tool's own arguments
 
