@@ -765,6 +765,7 @@ describe('DiffPanel', () => {
     it('places the button at the selection’s left edge, clear of the window’s', async () => {
       answer(workspaceDiff([fileDiff('src/a.ts')]))
       renderWithComments()
+      await expandAll()
       await screen.findByText('kept')
       const lines = codeLines()
 
