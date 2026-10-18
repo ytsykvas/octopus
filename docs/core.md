@@ -875,7 +875,9 @@ name — never our directories' skills, which would turn up as the session's in 
 checkout without them), and the group adds every skill the conversation itself
 has switched off. Only beside an answer, since the group exists once a session
 does, and only the chat's own answers: the default lists are edited in
-settings, which lists our directories. A key no session ever described is drawn
+settings, which lists our directories. A plugin's skill is left out — never
+withheld, so one missing from the answer is gone, and a row with no switch could
+never clear an old `false`. A key no session ever described is drawn
 by name alone — a record switched off before anything was remembered, or a skill
 deleted while it was off. The second is a stale row that goes the moment it is
 switched on; not drawing either would leave a withhold nobody could undo.

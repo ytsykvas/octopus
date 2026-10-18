@@ -3407,6 +3407,10 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
         : Object.entries(chat.skillOverrides)
             .filter(([, on]) => !on)
             .map(([name]) => remembered.get(name) ?? { name, description: '', builtin: false })
+            // A plugin's skill is never withheld, so one the answer leaves out
+            // is gone — and its row, drawn with no switch, could never clear
+            // the `false` an older panel wrote.
+            .filter((skill) => withholdable(describeSessionSkill(skill).source))
 
     // By name, because the CLI's order follows how it happened to load them and
     // a list people scan for one entry reads better alphabetically.

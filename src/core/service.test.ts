@@ -10433,6 +10433,17 @@ describe('the agent chat', () => {
         })
       })
 
+      /* A plugin's skill is never withheld: missing from the answer, it is gone. */
+      it('does not draw a plugin\u2019s skill the answer no longer names', async () => {
+        const { service, chatId } = await withLoopOff()
+        await service.setChatSkill(chatId, 'tools:lint', false)
+
+        expect((await service.skillsForChat(chatId)).map((skill) => skill.key)).toEqual([
+          'dataviz',
+          'loop'
+        ])
+      })
+
       /* The default lists are edited in settings, which lists our directories. */
       it('does not draw a key the default lists switch off', async () => {
         const { service, chatId } = await withLoopOff()
