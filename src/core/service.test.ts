@@ -10322,8 +10322,139 @@ describe('the agent chat', () => {
       })
     })
 
-    /* The same swallow as the read, on the write: a session that cannot say
-       what it holds still takes the overrides for everything we do know. */
+    /*
+     * A session leaves a skill it withholds out of its answer, name and
+     * description both. Built from that answer alone, the panel lost the row
+     * the moment its switch was used, and with it the only way back on.
+     */
+    describe('a switched-off skill of the session\u2019s own', () => {
+      const loop = {
+        name: 'loop',
+        description: 'Run it on a loop.',
+        argumentHint: '',
+        builtin: true
+      }
+      const dataviz = { name: 'dataviz', description: 'Charts.', argumentHint: '', builtin: true }
+
+      /** A conversation whose session has described both, then withholds `loop`. */
+      async function withLoopOff(): Promise<{ service: OctopusService; chatId: string }> {
+        const { service, workspaceId } = await withWorkspace()
+        skillReload = () => Promise.resolve({ skills: [loop, dataviz] })
+
+        const chat = await service.openChat(workspaceId)
+        await service.sendToChat(chat.id, 'work')
+        await service.skillsForChat(chat.id)
+        await service.setChatSkill(chat.id, 'loop', false)
+        skillReload = () => Promise.resolve({ skills: [dataviz] })
+
+        return { service, chatId: chat.id }
+      }
+
+      it('stays listed, off, as the session last described it', async () => {
+        const { service, chatId } = await withLoopOff()
+
+        await expect(service.skillsForChat(chatId)).resolves.toEqual([
+          {
+            key: 'dataviz',
+            name: 'dataviz',
+            description: 'Charts.',
+            scope: 'session',
+            source: 'builtin',
+            enabled: true
+          },
+          {
+            key: 'loop',
+            name: 'loop',
+            description: 'Run it on a loop.',
+            scope: 'session',
+            source: 'builtin',
+            enabled: false
+          }
+        ])
+      })
+
+      /* The map used to be rebuilt from the answer, which no longer named it. */
+      it('stays withheld when another skill is switched', async () => {
+        const { service, chatId } = await withLoopOff()
+
+        await service.setChatSkill(chatId, 'dataviz', false)
+
+        expect(agent().flagSettings().at(-1)?.skillOverrides).toEqual({
+          loop: 'off',
+          dataviz: 'off'
+        })
+      })
+
+      it('can be switched back on from its row', async () => {
+        const { service, chatId } = await withLoopOff()
+
+        await service.setChatSkill(chatId, 'loop', true)
+
+        expect(agent().flagSettings().at(-1)?.skillOverrides).toEqual({ loop: 'on' })
+      })
+
+      it('is drawn once while the session still names it', async () => {
+        const { service, chatId } = await withLoopOff()
+        skillReload = () => Promise.resolve({ skills: [loop, dataviz] })
+
+        expect((await service.skillsForChat(chatId)).map((skill) => skill.key)).toEqual([
+          'dataviz',
+          'loop'
+        ])
+      })
+
+      /* Only beside an answer: the group exists once a session does. */
+      it('is not drawn when the session will not answer', async () => {
+        const { service, chatId } = await withLoopOff()
+        skillReload = () => Promise.reject(new Error('the transport is closed'))
+
+        await expect(service.skillsForChat(chatId)).resolves.toEqual([])
+      })
+
+      /* More often than not a skill deleted while it was off. */
+      it('is not drawn when no session ever described it', async () => {
+        const { service, chatId } = await withLoopOff()
+        await service.setChatSkill(chatId, 'gone', false)
+
+        expect((await service.skillsForChat(chatId)).map((skill) => skill.key)).toEqual([
+          'dataviz',
+          'loop'
+        ])
+      })
+
+      it('is remembered in the state file, which is written only when the answer is new', async () => {
+        const { service, chatId } = await withLoopOff()
+        const file = join(dir, 'state.json')
+
+        const stored = JSON.parse(await readFile(file, 'utf8')) as { knownSkills: unknown }
+        expect(stored.knownSkills).toEqual([
+          { name: 'loop', description: 'Run it on a loop.', builtin: true },
+          { name: 'dataviz', description: 'Charts.', builtin: true }
+        ])
+
+        const before = (await stat(file)).mtimeMs
+        await service.skillsForChat(chatId)
+        expect((await stat(file)).mtimeMs).toBe(before)
+      })
+    })
+
+    /*
+     * The start-up map used to be built before there was any answer to build
+     * it from, so after a restart a skill of the session's own that somebody
+     * had switched off was offered anyway — with its switch still drawn off.
+     */
+    it('withholds a skill of the session\u2019s own from the moment a session starts', async () => {
+      const { service, workspaceId } = await withWorkspace()
+
+      const chat = await service.openChat(workspaceId)
+      await service.setChatSkill(chat.id, 'loop', false)
+      await service.sendToChat(chat.id, 'hello')
+
+      expect(agents[0]?.options().settings).toMatchObject({ skillOverrides: { loop: 'off' } })
+    })
+
+    /* The write does not ask the session anything: the map comes from the
+       record, so a session that cannot say what it holds still takes it. */
     it('still switches off what it wrote when the session will not answer', async () => {
       const { service, workspaceId } = await withWorkspace()
       await service.saveStoredSkill({ kind: 'global' }, 'review', { kind: 'raw', text: DOCUMENT })
@@ -10625,7 +10756,9 @@ describe('the agent chat', () => {
 
       await service.setChatSkill(chat.id, 'review', true)
 
-      expect(agents[0]?.flagSettings().at(-1)?.skillOverrides).toEqual({})
+      // Said out loud: a key left out does not undo a withhold the session
+      // started with, measured against a live one.
+      expect(agents[0]?.flagSettings().at(-1)?.skillOverrides).toEqual({ review: 'on' })
     })
 
     it('records the answer even with no session to tell', async () => {

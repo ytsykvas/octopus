@@ -25,11 +25,13 @@ import {
   loadState,
   migrate,
   modelsUnchanged,
+  skillsRemembered,
   PROJECT_COLORS,
   type Project,
   ProjectSchema,
   recordApproval,
   rememberModels,
+  rememberSkills,
   removeProject,
   removeWorkspace,
   updateProject,
@@ -257,6 +259,7 @@ describe('migration', () => {
       workspaces: [],
       chats: [],
       knownModels: [],
+      knownSkills: [],
       usageWindows: null
     }
 
@@ -271,6 +274,7 @@ describe('migration', () => {
       workspaces: [],
       chats: [],
       knownModels: [],
+      knownSkills: [],
       usageWindows: null
     }
 
@@ -289,6 +293,7 @@ describe('migration', () => {
       workspaces: [],
       chats: [],
       knownModels: [],
+      knownSkills: [],
       usageWindows: null
     }
 
@@ -727,6 +732,47 @@ describe('chats', () => {
   })
 })
 
+describe('the remembered skills', () => {
+  const loop = { name: 'loop', description: 'Run it on a loop.', builtin: true }
+  const docx = { name: 'docx', description: 'Word documents. (claude.ai sync)', builtin: false }
+
+  it('starts empty', () => {
+    expect(EMPTY_STATE.knownSkills).toEqual([])
+  })
+
+  /* The answer that follows a switch leaves the withheld skill out, and that
+     is the one whose description the panel still needs. */
+  it('keeps a skill the next answer leaves out', () => {
+    const first = rememberSkills(EMPTY_STATE, [loop, docx])
+    const second = rememberSkills(first, [docx])
+
+    expect(second.knownSkills).toEqual([loop, docx])
+  })
+
+  it('takes the newest description of one it already had', () => {
+    const first = rememberSkills(EMPTY_STATE, [loop])
+    const second = rememberSkills(first, [{ ...loop, description: 'Loop, reworded.' }])
+
+    expect(second.knownSkills).toEqual([{ ...loop, description: 'Loop, reworded.' }])
+  })
+
+  it('keeps only the fields it draws from', () => {
+    const extra = { ...loop, argumentHint: '[interval]' }
+
+    expect(rememberSkills(EMPTY_STATE, [extra]).knownSkills).toEqual([loop])
+  })
+
+  it('recognises an answer it holds already, and one that says something new', () => {
+    const stored = rememberSkills(EMPTY_STATE, [loop, docx])
+
+    expect(skillsRemembered(stored, [docx])).toBe(true)
+    expect(skillsRemembered(stored, [])).toBe(true)
+    expect(skillsRemembered(stored, [{ ...loop, description: 'New.' }])).toBe(false)
+    expect(skillsRemembered(stored, [{ ...loop, builtin: false }])).toBe(false)
+    expect(skillsRemembered(stored, [{ ...loop, name: 'schedule' }])).toBe(false)
+  })
+})
+
 describe('the remembered model list', () => {
   const opus = { value: 'claude-opus-5', displayName: 'Opus 5', description: '' }
   const model = AgentModelSchema.parse(opus)
@@ -755,6 +801,12 @@ describe('the remembered model list', () => {
     await writeFile(file, JSON.stringify({ ...withProject, chats: [] }), 'utf8')
 
     await expect(loadState(file)).resolves.toMatchObject({ knownModels: [] })
+  })
+
+  it('loads a state written before skills were remembered', async () => {
+    await writeFile(file, JSON.stringify({ ...withProject, chats: [] }), 'utf8')
+
+    await expect(loadState(file)).resolves.toMatchObject({ knownSkills: [] })
   })
 
   /*

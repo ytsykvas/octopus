@@ -16,6 +16,8 @@ import { withApproval } from './repoTrust.js'
 import { SourceItemIdSchema } from './sourceItems.js'
 import { UsageWindowsSchema } from './usage.js'
 
+import type { AgentSkill } from './agent.js'
+
 import {
   type AgentCommand,
   type AgentModel,
@@ -233,6 +235,13 @@ export const WorkspaceSchema = z.object({
   ownerId: z.string().nullable()
 })
 
+/** One skill as a session described it — `AgentSkill`, kept. */
+const KnownSkillSchema = z.object({
+  name: z.string(),
+  description: z.string(),
+  builtin: z.boolean()
+}) satisfies z.ZodType<AgentSkill>
+
 export const StateSchema = z.object({
   version: z.literal(1),
   projects: z.array(ProjectSchema),
@@ -258,6 +267,18 @@ export const StateSchema = z.object({
    * at the next session start.
    */
   knownModels: z.array(AgentModelSchema).default([]),
+  /**
+   * The skills sessions last described, beyond the directories octopus reads.
+   *
+   * Here for the same two reasons as the models above, and remembered for a
+   * reason of its own: a session leaves a skill it was told to withhold out of
+   * its answer, name and description both. So the moment somebody switches one
+   * of Claude Code's skills off is the moment the panel can no longer say what
+   * it was — and without a row there is no switch to turn it back on. Kept as
+   * the agent said it, so which group a skill belongs to is still decided in
+   * one place (`describeSessionSkill`).
+   */
+  knownSkills: z.array(KnownSkillSchema).default([]),
   /**
    * How much of the account's windows the agent last said were gone.
    *
@@ -301,6 +322,7 @@ export const EMPTY_STATE: State = {
   workspaces: [],
   chats: [],
   knownModels: [],
+  knownSkills: [],
   usageWindows: null
 }
 
@@ -843,6 +865,36 @@ export function rememberModels(state: State, models: readonly AgentModel[]): Sta
 /** Whether the remembered list already says exactly this — a write to avoid. */
 export function modelsUnchanged(state: State, models: readonly AgentModel[]): boolean {
   return JSON.stringify(state.knownModels) === JSON.stringify(models)
+}
+
+/**
+ * Adds what a session just said about its skills to what was remembered.
+ *
+ * Merged by name rather than replaced, unlike the models: an answer leaves out
+ * every skill the conversation withholds, and those are exactly the ones whose
+ * description is needed. A skill the session no longer holds at all stays
+ * remembered and is inert — the panel draws a remembered skill only while
+ * somebody has it switched off.
+ */
+export function rememberSkills(state: State, held: readonly AgentSkill[]): State {
+  const known = new Map(state.knownSkills.map((skill) => [skill.name, skill]))
+
+  for (const { name, description, builtin } of held) {
+    known.set(name, { name, description, builtin })
+  }
+
+  return { ...state, knownSkills: [...known.values()] }
+}
+
+/** Whether every skill in this answer is already remembered as it is — a write to avoid. */
+export function skillsRemembered(state: State, held: readonly AgentSkill[]): boolean {
+  const known = new Map(state.knownSkills.map((skill) => [skill.name, skill]))
+
+  return held.every((skill) => {
+    const kept = known.get(skill.name)
+
+    return kept?.description === skill.description && kept.builtin === skill.builtin
+  })
 }
 
 /**
