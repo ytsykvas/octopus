@@ -20,11 +20,15 @@ gh pr create --fill
 
 ```bash
 npm run check
+npm run test:race
 ```
 
-Format, lint, types, and both test runs. It must pass before a commit, and CI
-runs the same command on every pull request — so a red run is a change that
-cannot merge, not a note to consider.
+`check` is format, lint, types, and both test runs; it must pass before a
+commit. `test:race` runs the interface's tests again with React's scheduler
+made to lose a race the suite otherwise wins only most of the time — a test that
+reads a component before its effects have run fails there every time
+(`docs/testing.md`). CI runs both on every pull request, so a red run is a
+change that cannot merge, not a note to consider.
 
 **Coverage is 100% across `src`,** enforced by a threshold that fails the build.
 This is not aspirational: a change arrives with its tests. Never lower the

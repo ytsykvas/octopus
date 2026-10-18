@@ -36,3 +36,8 @@ jobs:
 
       # Format, lint, types, and both test runs with the 100% threshold.
       - run: npm run check
+
+      # The renderer suite again with React's scheduler made to lose the race
+      # `setup.ts` waits out, so a test reading a component before its effects
+      # have run fails here every time rather than once in five runs.
+      - run: npm run test:race

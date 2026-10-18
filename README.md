@@ -142,9 +142,10 @@ that branch with it, ticked by default.
 ## Development
 
 ```bash
-npm run check    # full gate: format, lint, types, tests with coverage
-npm test         # tests
-npm run build    # typecheck and build
+npm run check      # full gate: format, lint, types, tests with coverage
+npm run test:race  # interface tests with React's scheduler made to lose (CI runs it)
+npm test           # tests
+npm run build      # typecheck and build
 ```
 
 `npm run check` must pass before every change lands. Coverage is held at **100%
