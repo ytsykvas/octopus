@@ -40,6 +40,7 @@ Nothing but zod behind them, so a **value** can cross into the window.
 | [`rewind.ts`](../src/core/rewind.ts)                           | what a rewind can put back — the conversation, the files, or both — and where the agent's memory is cut for a message, read out of the session's own chain                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              |
 | [`notes.ts`](../src/core/notes.ts)                             | how long a workspace's note may be. Its own module because the **window** enforces the ceiling as the text is typed, and the limit is bounded by `commit` rewriting `state.json` whole rather than by anything about a note                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             |
 | [`skillNames.ts`](../src/core/skillNames.ts)                   | what may name a skill, which scope it came from, and the key the agent knows it by                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      |
+| [`sessionSkills.ts`](../src/core/sessionSkills.ts)             | which of Claude Code's own sources a skill the session holds came from — built in, a plugin, synced from claude.ai, or the user's — and the order the panel draws them in. Its one import is a type                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
 | [`envProfileNames.ts`](../src/core/envProfileNames.ts)         | what may name a set of variables, and the name a project's first one gets. Split out of `envProfiles.ts` when the dialog asking for a name was built: that module reads and writes files, so its rule was unreachable from the field somebody types into                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
 
 The last is the one that has to be **kept** pure. `SCRIPT_KINDS` began life in
@@ -855,6 +856,24 @@ from it would be switched off in the record and left on in the session.
 A session that will not answer costs the fourth group and nothing else. The
 three above it are read from disk and still true, and a closed transport is the
 ordinary way that happens.
+
+**The fourth group says where each skill came from.** `describeSessionSkill`
+(`sessionSkills.ts`) sorts a held skill into one of four sources. The checks run
+from the best-founded signal to the weakest:
+
+1. `builtin` is the SDK's documented flag for Claude Code's own.
+2. A description ending in ` (claude.ai sync)` marks a skill synced from the
+   account. This is observed CLI output, not documented — on all thirteen
+   synced skills of a live session, and on nothing else. It comes before the
+   namespace check because `anthropic-skills:deep-research` carries both.
+3. A `plugin:skill` name marks a plugin's skill.
+4. Anything else is the user's own.
+
+The label the source puts in the text — the suffix, or the plugin's
+`(name)` leading the description — is taken off, since the heading says it. The
+key is never touched, so if the CLI changes the suffix, a skill lands under the
+wrong heading and is still switchable. The session's rows are sorted by name,
+because the CLI's order follows how it happened to load them.
 
 ### A question nobody can answer is withdrawn
 

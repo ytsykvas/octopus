@@ -33,7 +33,8 @@ import { CodedError } from './codedError.js'
 import { parseFrontmatter, setFields } from './frontmatter.js'
 import { type Download, fetchDocument } from './download.js'
 import { skillsDirOf } from './paths.js'
-import { isSkillName, type SkillScope } from './skillNames.js'
+import type { SessionSkillSource } from './sessionSkills.js'
+import { isSkillName, type OwnSkillScope } from './skillNames.js'
 
 /** The one file a skill must have, named as Claude Code names it. */
 const SKILL_FILE = 'SKILL.md'
@@ -133,7 +134,6 @@ export const SkillImportSchema = z.discriminatedUnion('kind', [
 ])
 export type SkillImport = z.infer<typeof SkillImportSchema>
 
-/** One row of the panel: a skill, where it came from, and whether it is on. */
 /**
  * One row of the composer's skills panel.
  *
@@ -142,13 +142,20 @@ export type SkillImport = z.infer<typeof SkillImportSchema>
  * panel reads neither — it needs a name, a description, the key an answer is
  * stored under, and whether it is on. The Settings screens address a skill by
  * its folder and read `SkillEntry` for exactly that reason.
+ *
+ * Two shapes, told apart by `scope`. Only a skill the session reports has a
+ * `source` — the three scopes octopus reads itself are already told apart by
+ * the scope, and a field restating it could only disagree.
  */
-export interface SkillListing {
+export type SkillListing =
+  | (ListedSkill & { readonly scope: OwnSkillScope })
+  | (ListedSkill & { readonly scope: 'session'; readonly source: SessionSkillSource })
+
+interface ListedSkill {
   readonly name: string
   readonly description: string
   /** The name the agent knows it by, and the key every stored answer uses. */
   readonly key: string
-  readonly scope: SkillScope
   readonly enabled: boolean
 }
 

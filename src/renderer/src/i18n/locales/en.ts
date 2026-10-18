@@ -1033,8 +1033,11 @@ export const en = {
     clearCancel: 'Cancel',
 
     /* The composer's own name for the panel, and the count beside it: how many
-       skills this conversation may reach for. A count rather than a fraction —
-       the interesting number is what the agent has, not what it is missing. */
+       of the skills octopus reads itself — ours and the checkout's — are on.
+       Claude Code's own are left out of it: they come from the running agent,
+       so counting them made the number change by itself, and they carry a
+       count of their own in the panel. A count rather than a fraction — the
+       interesting number is what the agent has, not what it is missing. */
     skills: 'Skills',
     skillsTitle: 'Skills for this conversation',
     skillsGlobal: 'Everywhere',
@@ -1044,6 +1047,13 @@ export const en = {
        own, the user's `~/.claude/skills`, a plugin's. Named for where they come
        from rather than for what they are, like the three above it. */
     skillsSession: 'From Claude Code',
+    /* Read as "{{count}} of them are on", beside the folded group's heading. */
+    skillsSessionCount: '{{count}} on',
+    /* Where each of Claude Code's own came from, as the group's subheadings. */
+    skillsBuiltin: 'Built into Claude Code',
+    skillsPlugin: 'Plugins',
+    skillsSynced: 'Synced from claude.ai',
+    skillsOwn: 'Your own',
     /* Said once at the foot of the panel, because a switch that looks like a
        lock is worse than no switch. The SDK's own words for this mechanism are
        "a context filter, not a sandbox". */

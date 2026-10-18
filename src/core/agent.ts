@@ -119,13 +119,19 @@ export interface SessionOptions {
  * One skill a running session holds, as it names it.
  *
  * Ours rather than the SDK's `SlashCommand`, and narrower: the two fields the
- * panel draws. The SDK's own doc calls `name` "Skill name (without the leading
+ * panel draws and the one that says which group it goes in. The SDK's own doc calls `name` "Skill name (without the leading
  * slash)", which is the key `skillOverrides` is written under — a bare name for
  * an ordinary skill, `plugin:skill` for a plugin's.
  */
 export interface AgentSkill {
   readonly name: string
   readonly description: string
+  /**
+   * Claude Code's own, as `SlashCommand.builtin` documents it — absent from
+   * the SDK's answer for anything a user, project, plugin or MCP server
+   * defined, and false here for all of those.
+   */
+  readonly builtin: boolean
 }
 
 export interface PermissionAsk {
@@ -780,7 +786,11 @@ export function startSession(options: SessionOptions, hooks: SessionHooks): Agen
       // the panel would show a skill the agent cannot see.
       const { skills } = await conversation.reloadSkills()
 
-      return skills.map((skill) => ({ name: skill.name, description: skill.description }))
+      return skills.map((skill) => ({
+        name: skill.name,
+        description: skill.description,
+        builtin: skill.builtin === true
+      }))
     },
 
     close() {

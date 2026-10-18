@@ -10225,19 +10225,38 @@ describe('the agent chat', () => {
       skillReload = () =>
         Promise.resolve({
           skills: [
-            { name: 'dataviz', description: 'Charts.', argumentHint: '' },
-            { name: 'commit-commands:commit', description: 'Commit.', argumentHint: '' }
+            { name: 'dataviz', description: 'Charts.', argumentHint: '', builtin: true },
+            {
+              name: 'commit-commands:commit',
+              description: '(commit-commands) Commit.',
+              argumentHint: ''
+            }
           ]
         })
 
       const chat = await service.openChat(workspaceId)
       await service.sendToChat(chat.id, 'work')
 
-      await expect(service.skillsForChat(chat.id)).resolves.toMatchObject([
-        { key: 'dataviz', scope: 'session', enabled: true },
-        // A plugin's key is `plugin:skill`, which is what the CLI knows it by
-        // and therefore what an override has to name.
-        { key: 'commit-commands:commit', scope: 'session', enabled: true }
+      // By name rather than in the CLI's order, each told where it came from.
+      await expect(service.skillsForChat(chat.id)).resolves.toEqual([
+        {
+          // A plugin's key is `plugin:skill`, which is what the CLI knows it by
+          // and therefore what an override has to name.
+          key: 'commit-commands:commit',
+          name: 'commit-commands:commit',
+          description: 'Commit.',
+          scope: 'session',
+          source: 'plugin',
+          enabled: true
+        },
+        {
+          key: 'dataviz',
+          name: 'dataviz',
+          description: 'Charts.',
+          scope: 'session',
+          source: 'builtin',
+          enabled: true
+        }
       ])
     })
 

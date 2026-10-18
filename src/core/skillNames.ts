@@ -25,6 +25,9 @@ import { z } from 'zod'
 export const SkillScopeSchema = z.enum(['global', 'project', 'repository', 'session'])
 export type SkillScope = z.infer<typeof SkillScopeSchema>
 
+/** The three scopes octopus reads from disk itself, as against the session's. */
+export type OwnSkillScope = Exclude<SkillScope, 'session'>
+
 /**
  * A skill's name, which is also the directory it lives in.
  *
