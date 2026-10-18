@@ -4,6 +4,7 @@ import type { Chat } from '@core/chats.js'
 import type { SkillListing } from '@core/skills.js'
 
 import type { Result } from '../../../preload/index.js'
+import { useSessionStarted } from './useSessionStarted.js'
 
 /**
  * Who to ask about, in the one place that decides.
@@ -39,8 +40,14 @@ export interface SkillsController {
  * are the whole answer, and switching one is the moment the record is created:
  * the same thing the model and effort pickers beside it already do.
  *
- * Re-read when the panel is opened rather than kept live, because the things
- * that change it — a skill written in settings, a project's defaults edited —
+ * **Re-read when the session starts.** The last group is asked of the running
+ * agent, and the agent starts on the first message — after the read the pane
+ * opened with. Without this the count went on describing a conversation with
+ * no session behind it, and then jumped the first time somebody opened the
+ * panel, which is what made it look wrong.
+ *
+ * Also re-read when the panel is opened, because the things that change the
+ * rest of it — a skill written in settings, a project's defaults edited —
  * happen in another window entirely. The toggle applies its own answer
  * optimistically so the switch does not lag a round trip behind the finger.
  */
@@ -106,6 +113,8 @@ export function useSkills(
   const refresh = useCallback(() => {
     void read()
   }, [read])
+
+  useSessionStarted(chatId, refresh)
 
   return { skills, toggle, refresh }
 }
