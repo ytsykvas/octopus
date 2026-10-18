@@ -4,7 +4,7 @@ import { describe, expect, it, vi } from 'vitest'
 import type { Chat } from '@core/chats.js'
 import type { SkillListing } from '@core/skills.js'
 
-import { chat as chatRecord } from '../test/chat.js'
+import { chat as chatRecord, emitAgentEvent } from '../test/chat.js'
 import { octopus } from '../test/octopus.js'
 import { useSkills } from './useSkills.js'
 
@@ -206,6 +206,27 @@ describe('which skills a conversation may reach for', () => {
 
     await waitFor(() => {
       expect(result.current.skills).toHaveLength(1)
+    })
+  })
+
+  /*
+   * The last group comes from the running agent, and the agent starts on the
+   * first message — after the read the pane opened with. Without this the
+   * count stayed at what the disk holds and jumped the first time somebody
+   * opened the panel.
+   */
+  it('reads again when the session starts, so the agent’s own skills are in it', async () => {
+    answering([listing()])
+    const { result } = renderHook(() => useSkills(CHAT, WORKSPACE, ensuring()))
+    await waitFor(() => {
+      expect(result.current.skills).toHaveLength(1)
+    })
+
+    answering([listing(), listing({ key: 'dataviz', name: 'dataviz', scope: 'session' })])
+    emitAgentEvent({ type: 'session_started', sessionId: 'sess-1' }, CHAT)
+
+    await waitFor(() => {
+      expect(result.current.skills).toHaveLength(2)
     })
   })
 })
