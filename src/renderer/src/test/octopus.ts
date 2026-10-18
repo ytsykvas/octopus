@@ -249,7 +249,7 @@ export function installOctopusStub(): Api {
     },
     plugins: {
       list: vi.fn(() => ok([])),
-      catalog: vi.fn(() => ok({ officialConnected: true, marketplaces: [], plugins: [] })),
+      catalog: vi.fn(() => ok({ officialConnected: true, plugins: [] })),
       install: vi.fn(() => ok({ kind: 'installed' as const, reloaded: 0 })),
       uninstall: vi.fn(() => ok({ reloaded: 0 })),
       setEnabled: vi.fn(() => ok({ reloaded: 0 })),

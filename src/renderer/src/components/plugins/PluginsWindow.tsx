@@ -95,7 +95,7 @@ export function PluginsWindow({
         {tab === 'store' && (
           <IconButton
             label={t('plugins.refresh')}
-            disabled={plugins.busy.has(CATALOG_BUSY) || plugins.catalog === null}
+            disabled={plugins.busy.has(CATALOG_BUSY) || plugins.catalog?.officialConnected !== true}
             onClick={() => void plugins.refreshCatalog()}
           >
             <RefreshCw aria-hidden size={14} />

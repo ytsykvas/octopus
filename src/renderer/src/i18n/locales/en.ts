@@ -1770,10 +1770,9 @@ export const en = {
     connectTitle: 'The store is empty',
     connectHint:
       'The official Claude Code marketplace is not connected on this machine yet. Connecting it downloads its catalogue from GitHub.',
-    officialMissing: 'The official Claude Code marketplace is not connected.',
     connect: 'Connect the official marketplace',
     connecting: 'Connecting…',
-    refresh: 'Check the marketplaces for new plugins',
+    refresh: 'Check the official marketplace for new plugins',
     catalogFailedTitle: 'The store could not be read',
     catalogFailedHint: 'Claude Code did not answer with the list of plugins. The reason is above.',
     retry: 'Try again'

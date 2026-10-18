@@ -11133,7 +11133,7 @@ describe('the agent chat', () => {
         'plugin list --json',
         'plugin marketplace list --json',
         'plugin marketplace add anthropics/claude-plugins-official --json',
-        'plugin marketplace list --json'
+        'plugin marketplace update claude-plugins-official --json'
       ])
       // A marketplace is not something a conversation loads.
       expect(agents.map((session) => session.pluginReloads())).toEqual([0, 0])

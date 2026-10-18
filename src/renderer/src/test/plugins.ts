@@ -41,11 +41,7 @@ export function catalogPlugin(overrides: Partial<CatalogPlugin> = {}): CatalogPl
 }
 
 export function catalogOf(plugins: CatalogPlugin[], officialConnected = true): PluginCatalog {
-  return {
-    officialConnected,
-    marketplaces: officialConnected ? ['claude-plugins-official'] : [],
-    plugins
-  }
+  return { officialConnected, plugins }
 }
 
 /**

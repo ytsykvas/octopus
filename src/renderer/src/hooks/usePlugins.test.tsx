@@ -23,11 +23,7 @@ const CONTEXT7: InstalledPlugin = {
   errors: []
 }
 
-const CATALOG: PluginCatalog = {
-  officialConnected: true,
-  marketplaces: ['claude-plugins-official'],
-  plugins: []
-}
+const CATALOG: PluginCatalog = { officialConnected: true, plugins: [] }
 
 interface Listing {
   ok: true

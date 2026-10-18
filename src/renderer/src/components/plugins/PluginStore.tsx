@@ -36,7 +36,7 @@ const KNOWN_CATEGORIES = [
 const OTHER = '#other'
 
 /**
- * What the connected marketplaces offer: a search, a row of categories, and
+ * What the official marketplace offers: a search, a row of categories, and
  * cards ordered by how many people installed them.
  *
  * Popularity rather than the alphabet because the official catalog runs to
@@ -98,7 +98,7 @@ export function PluginStore({
     </Button>
   )
 
-  if (catalog.plugins.length === 0 && !catalog.officialConnected) {
+  if (!catalog.officialConnected) {
     return (
       <Placeholder title={t('plugins.connectTitle')} actions={connect}>
         {t('plugins.connectHint')}
@@ -174,13 +174,6 @@ export function PluginStore({
       </PluginSearch>
 
       <div className="space-y-3 p-4">
-        {!catalog.officialConnected && (
-          <div className="border-line flex items-center justify-between gap-3 rounded-[var(--radius-panel)] border px-3 py-2">
-            <span className="text-ink-soft">{t('plugins.officialMissing')}</span>
-            {connect}
-          </div>
-        )}
-
         {shown.length === 0 ? (
           <p className="text-ink-faint">{t('plugins.noMatch', { query })}</p>
         ) : (

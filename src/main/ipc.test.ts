@@ -910,7 +910,7 @@ describe('plugins', () => {
       ['plugin', 'disable', 'a@m', '--scope', 'project', '--json', `cwd=${dir}`],
       ['plugin', 'uninstall', 'a@m', '--scope', 'user', '--json', 'cwd='],
       ['plugin', 'marketplace', 'add', 'anthropics/claude-plugins-official', '--json', 'cwd='],
-      ['plugin', 'marketplace', 'list', '--json', 'cwd=']
+      ['plugin', 'marketplace', 'update', 'claude-plugins-official', '--json', 'cwd=']
     ])
   })
 
