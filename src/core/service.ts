@@ -4644,17 +4644,17 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
           skillOverrides: { ...findChat(current, chatId)?.skillOverrides, [key]: enabled }
         })
       )
-      // Read back rather than kept from above: the session is told the record's
-      // whole answer, including a switch that landed while this one waited.
       const { skillOverrides } = requireChat(chatId)
 
       // A running conversation is told at once rather than on its next start.
       // A switch whose effect waits for a restart is a switch that looks
       // broken, and the flag layer takes this the way it takes the effort.
       //
-      // The record's whole answer, not only this key: `setSkills` replaces the
-      // map, and the map is read off the record rather than off what the
-      // session lists — which leaves out every skill it withholds.
+      // The record's whole answer, read back after the write — so it includes
+      // a switch that landed while this one waited — and not only this key:
+      // `setSkills` replaces the map, and the map is read off the record rather
+      // than off what the session lists, which leaves out every skill it
+      // withholds.
       await sessions
         .get(chatId)
         ?.setSkills(
