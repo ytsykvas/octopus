@@ -231,6 +231,8 @@ function SkillGroup({ heading, fold, children }: SkillGroupProps): React.JSX.Ele
       <DisclosureButton
         open={fold.open}
         onOpenChange={fold.onOpenChange}
+        // The heading's own colour, so the mark brightens with it on hover.
+        chevron={{ className: '' }}
         className="section-label focus-ring hover:text-ink flex w-full items-center gap-1 px-3 pt-2 pb-1 text-left transition-colors"
       >
         <span className="min-w-0 flex-1 truncate">{heading}</span>
