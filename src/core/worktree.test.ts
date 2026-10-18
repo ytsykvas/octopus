@@ -7,7 +7,7 @@
  */
 
 import { execFile } from 'node:child_process'
-import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
+import { mkdir, mkdtemp, rm, stat, utimes, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { promisify } from 'node:util'
@@ -384,6 +384,23 @@ describe('changedFiles', () => {
     await writeFile(join(dir, 'src', 'three.ts'), 'x\n', 'utf8')
 
     await expect(changedFiles(exec)).resolves.toHaveLength(3)
+  })
+
+  /*
+   * Without `--no-optional-locks` the status takes `index.lock` and, having
+   * refreshed a file whose times moved while its contents did not, writes the
+   * index back. The inode says whether it did: the lock is renamed over the
+   * index, so a rewritten one is always a new file.
+   */
+  it('reads the status without rewriting the index', async () => {
+    const later = new Date(Date.now() + 60_000)
+    await utimes(join(dir, 'README.md'), later, later)
+    const before = (await stat(join(dir, '.git', 'index'))).ino
+
+    // Not counted either: the file's contents are what they were.
+    await expect(changedFiles(exec)).resolves.toEqual([])
+
+    expect((await stat(join(dir, '.git', 'index'))).ino).toBe(before)
   })
 })
 
