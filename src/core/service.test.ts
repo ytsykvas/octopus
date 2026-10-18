@@ -10433,6 +10433,17 @@ describe('the agent chat', () => {
         })
       })
 
+      /* A plugin's skill is never withheld: missing from the answer, it is gone. */
+      it('does not draw a plugin\u2019s skill the answer no longer names', async () => {
+        const { service, chatId } = await withLoopOff()
+        await service.setChatSkill(chatId, 'tools:lint', false)
+
+        expect((await service.skillsForChat(chatId)).map((skill) => skill.key)).toEqual([
+          'dataviz',
+          'loop'
+        ])
+      })
+
       /* The default lists are edited in settings, which lists our directories. */
       it('does not draw a key the default lists switch off', async () => {
         const { service, chatId } = await withLoopOff()
@@ -10493,6 +10504,27 @@ describe('the agent chat', () => {
       await service.sendToChat(chat.id, 'hello')
 
       expect(agents[0]?.options().settings).toMatchObject({ skillOverrides: { loop: 'off' } })
+    })
+
+    /*
+     * The CLI ignores `skillOverrides` for a plugin's skill, so the record's
+     * `false` — one left from before the panel stopped offering the switch —
+     * is not what the session does, and the row says what it does.
+     */
+    it('draws a plugin\u2019s skill as on whatever the record says', async () => {
+      const { service, workspaceId } = await withWorkspace()
+      skillReload = () =>
+        Promise.resolve({
+          skills: [{ name: 'commit-commands:commit', description: 'Commit.', argumentHint: '' }]
+        })
+
+      const chat = await service.openChat(workspaceId)
+      await service.sendToChat(chat.id, 'work')
+      await service.setChatSkill(chat.id, 'commit-commands:commit', false)
+
+      await expect(service.skillsForChat(chat.id)).resolves.toMatchObject([
+        { key: 'commit-commands:commit', source: 'plugin', enabled: true }
+      ])
     })
 
     /* The write does not ask the session anything: the map comes from the

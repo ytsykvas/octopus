@@ -19,6 +19,21 @@ import type { AgentSkill } from './agent.js'
 export const SESSION_SKILL_SOURCES = ['builtin', 'plugin', 'synced', 'own'] as const
 export type SessionSkillSource = (typeof SESSION_SKILL_SOURCES)[number]
 
+/**
+ * Whether a skill from this source can be kept from the agent one at a time.
+ *
+ * Not a plugin's. Read out of the CLI itself (agent SDK 0.3.299): the
+ * function that resolves a skill's override returns "on" for any command whose
+ * source is a plugin, before it looks at `skillOverrides`. Measured too — a
+ * live session kept `commit-commands:commit` with it set to `off` while
+ * `dataviz` and `docx` beside it left. A plugin goes as a whole, through
+ * Claude Code's `/plugin`, and a switch here would be a promise with nothing
+ * behind it.
+ */
+export function withholdable(source: SessionSkillSource): boolean {
+  return source !== 'plugin'
+}
+
 export interface DescribedSkill {
   readonly source: SessionSkillSource
   /** The key the CLI knows it by, unchanged — `plugin:skill` reads unambiguously. */

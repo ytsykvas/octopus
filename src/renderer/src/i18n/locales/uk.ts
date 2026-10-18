@@ -791,6 +791,7 @@ export const uk: Translation = {
     skillsSessionCount: 'Увімкнено: {{count}}',
     skillsBuiltin: 'Вбудовані в Claude Code',
     skillsPlugin: 'Плагіни',
+    skillsPluginNote: 'Вмикаються й вимикаються разом із плагіном — командою /plugin у Claude Code',
     skillsSynced: 'Синхронізовані з claude.ai',
     skillsOwn: 'Власні',
     skillsNote: 'Вимкнений скіл не потрапляє в список агента. Файли залишаються на диску.',

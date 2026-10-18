@@ -8,7 +8,14 @@ import type { SkillListing } from '@core/skills.js'
 
 import { useAnchoredPanel } from '../../hooks/useAnchoredPanel.js'
 import { Switch } from '../Switch.js'
-import { countIn, heldSections, ownSections, panelHeight } from './skillSections.js'
+import {
+  countIn,
+  hasSwitch,
+  heldSections,
+  ownSections,
+  panelHeight,
+  switchedElsewhere
+} from './skillSections.js'
 
 /** Room for a name, a description and a switch without either wrapping twice. */
 const PANEL_WIDTH = 320
@@ -53,8 +60,11 @@ interface SkillsPanelProps {
  * component stays mounted with the composer — and goes with the pane, which is
  * as long as anyone needs it.
  *
- * The switch works on all four. `skillOverrides` names a skill by the key the
- * CLI knows it by, and that is what the fourth group carries.
+ * The switch works on every row but a plugin's. `skillOverrides` names a skill
+ * by the key the CLI knows it by, and that is what the fourth group carries —
+ * but the CLI keeps a plugin's skill whatever it says, so those rows are listed
+ * without one, under a line saying a plugin is turned off whole, in Claude
+ * Code's `/plugin`.
  */
 export function SkillsPanel({
   skills,
@@ -162,6 +172,11 @@ export function SkillsPanel({
                       <p className="text-ink-faint px-3 pt-1.5 pb-0.5 text-[11px]">
                         {sourceHeadings[section.id]}
                       </p>
+                      {switchedElsewhere(section) && (
+                        <p className="text-ink-faint px-3 pb-1 text-[11px] leading-snug">
+                          {t('chat.skillsPluginNote')}
+                        </p>
+                      )}
                       {rowsOf(section.rows)}
                     </div>
                   ))}
@@ -236,17 +251,25 @@ interface SkillRowProps {
   readonly onToggle: (key: string, enabled: boolean) => void
 }
 
-/** A skill, what it is for, and the switch that keeps it from the agent. */
+/**
+ * A skill, what it is for, and the switch that keeps it from the agent — where
+ * one would do anything. Without it the switch's room is kept, so the names in
+ * a group still start in one column.
+ */
 function SkillRow({ skill, onToggle }: SkillRowProps): React.JSX.Element {
   return (
     <div className="flex items-start gap-2 px-3 py-1.5">
-      <Switch
-        checked={skill.enabled}
-        label={skill.name}
-        onChange={(next) => {
-          onToggle(skill.key, next)
-        }}
-      />
+      {hasSwitch(skill) ? (
+        <Switch
+          checked={skill.enabled}
+          label={skill.name}
+          onChange={(next) => {
+            onToggle(skill.key, next)
+          }}
+        />
+      ) : (
+        <span aria-hidden className="w-7 shrink-0" />
+      )}
       <span className="min-w-0">
         <span className="text-ink block truncate text-[13px]">{skill.name}</span>
         {skill.description !== '' && (
