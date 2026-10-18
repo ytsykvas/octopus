@@ -2547,6 +2547,14 @@ right unit for "this line is wrong" and the wrong one for a condition spanning
 three, the two halves of a rename, or a block that should not be there — each of
 which used to mean several notes and the hope that the agent joined them up.
 
+**Both controls are filled with the accent.** The gutter's is a small `+`
+square over the line numbers, shown under the pointer and on keyboard focus, the
+way GitHub draws it; the selection's says **Add to chat** in words and is the
+file viewer's toolbar button, so the two ways of pointing at code read as one
+feature. Both started as faint outlined icons, which people under the pointer
+still missed. The selection's button starts at the selection's left edge rather
+than centring on it, and keeps clear of the window's edge.
+
 The selection is trimmed to the file and the side it **started** in. Dragging
 past the end of a file is how a reader selects the end of a file, and a gesture
 that answers nothing because it went one line too far teaches people to drag

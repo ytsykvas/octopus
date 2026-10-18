@@ -1,4 +1,4 @@
-import { MessageSquarePlus, X } from 'lucide-react'
+import { Plus, X } from 'lucide-react'
 import { useRef } from 'react'
 import { useTranslation } from 'react-i18next'
 
@@ -120,9 +120,12 @@ export function CommentedRow({
         aria-label={t(anchor.side === 'old' ? 'diff.commentOld' : 'diff.comment', {
           line: anchor.line
         })}
-        className="focus-ring bg-surface border-line text-ink-faint hover:text-accent absolute top-0 left-0.5 rounded-[var(--radius-control)] border p-0.5 opacity-0 transition-opacity group-hover:opacity-100 focus-visible:opacity-100"
+        /* Filled with the accent, the way GitHub draws the same control: a
+           faint outline over the line numbers was easy to miss even under
+           the pointer. Sized to the 18px row so it covers no neighbour. */
+        className="focus-ring bg-accent text-on-accent hover:bg-accent-hover absolute top-px left-0.5 flex size-4 items-center justify-center rounded-[4px] opacity-0 transition-opacity group-hover:opacity-100 focus-visible:opacity-100"
       >
-        <MessageSquarePlus aria-hidden size={11} />
+        <Plus aria-hidden size={12} strokeWidth={2.5} />
       </button>
 
       {/* Not while it is being edited: the editor already holds this text, and

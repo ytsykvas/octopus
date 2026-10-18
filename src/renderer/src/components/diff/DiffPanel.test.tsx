@@ -670,7 +670,7 @@ describe('DiffPanel', () => {
      * lands a tick after the event does — `getBy` looked before it had.
      */
     const askButton = (): Promise<HTMLElement> =>
-      screen.findByRole('button', { name: 'Ask about the selected code' })
+      screen.findByRole('button', { name: 'Add to chat' })
 
     it('offers to ask about a passage that was selected', async () => {
       answer(workspaceDiff([fileDiff('src/a.ts')]))
@@ -681,6 +681,25 @@ describe('DiffPanel', () => {
       selectAcross(lines[0]!, lines[2]!)
 
       expect(await askButton()).toBeInTheDocument()
+    })
+
+    /* The button carries words now, so it starts at the selection's left edge
+       rather than centring on it — centred near the window's edge it hung half
+       off — and never closer to that edge than the window allows. */
+    it('places the button at the selection’s left edge, clear of the window’s', async () => {
+      answer(workspaceDiff([fileDiff('src/a.ts')]))
+      renderWithComments()
+      await screen.findByText('kept')
+      const lines = codeLines()
+
+      selectAcross(lines[0]!, lines[2]!)
+      expect(await askButton()).toHaveStyle({ left: '20px', top: '70px' })
+
+      Range.prototype.getBoundingClientRect = () => new DOMRect(2, 100, 80, 16)
+      selectAcross(lines[0]!, lines[1]!)
+      await waitFor(async () => {
+        expect(await askButton()).toHaveStyle({ left: '12px' })
+      })
     })
 
     // Reading is not asking. The button appears where a passage was chosen, and
@@ -696,16 +715,14 @@ describe('DiffPanel', () => {
       // never registered and neither dispatch reached anything.
       const lines = codeLines()
       selectAcross(lines[0]!, lines[0]!)
-      await screen.findByRole('button', { name: 'Ask about the selected code' })
+      await screen.findByRole('button', { name: 'Add to chat' })
 
       act(() => {
         window.getSelection()!.removeAllRanges()
         document.dispatchEvent(new Event('selectionchange'))
       })
 
-      expect(
-        screen.queryByRole('button', { name: 'Ask about the selected code' })
-      ).not.toBeInTheDocument()
+      expect(screen.queryByRole('button', { name: 'Add to chat' })).not.toBeInTheDocument()
     })
 
     /*
@@ -815,16 +832,14 @@ describe('DiffPanel', () => {
       // null answer rather than a listener that was never registered.
       const lines = codeLines()
       selectAcross(lines[0]!, lines[0]!)
-      await screen.findByRole('button', { name: 'Ask about the selected code' })
+      await screen.findByRole('button', { name: 'Add to chat' })
 
       vi.spyOn(window, 'getSelection').mockReturnValue(null)
       act(() => {
         document.dispatchEvent(new Event('selectionchange'))
       })
 
-      expect(
-        screen.queryByRole('button', { name: 'Ask about the selected code' })
-      ).not.toBeInTheDocument()
+      expect(screen.queryByRole('button', { name: 'Add to chat' })).not.toBeInTheDocument()
     })
 
     // The file header, the gutters, the counts in the toolbar: a selection that
@@ -841,14 +856,12 @@ describe('DiffPanel', () => {
       // button is missing for the wrong reason. This half proves it is live.
       const lines = codeLines()
       selectAcross(lines[0]!, lines[0]!)
-      await screen.findByRole('button', { name: 'Ask about the selected code' })
+      await screen.findByRole('button', { name: 'Add to chat' })
 
       selectAcross(screen.getByText('src/'), screen.getByText('a.ts'))
 
       await waitFor(() => {
-        expect(
-          screen.queryByRole('button', { name: 'Ask about the selected code' })
-        ).not.toBeInTheDocument()
+        expect(screen.queryByRole('button', { name: 'Add to chat' })).not.toBeInTheDocument()
       })
     })
 
@@ -986,9 +999,7 @@ describe('DiffPanel', () => {
       selectAcross(lines[0]!, lines[2]!)
       await user.click(await askButton())
 
-      expect(
-        screen.queryByRole('button', { name: 'Ask about the selected code' })
-      ).not.toBeInTheDocument()
+      expect(screen.queryByRole('button', { name: 'Add to chat' })).not.toBeInTheDocument()
     })
 
     // Written against three lines, shown against the first of them — the same
