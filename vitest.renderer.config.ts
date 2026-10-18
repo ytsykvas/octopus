@@ -9,7 +9,13 @@ export default defineConfig({
     globals: true,
     environment: 'jsdom',
     env: testEnv,
-    setupFiles: ['src/renderer/src/test/setup.ts'],
+    // `test:race` puts the scheduler at a disadvantage first; see `schedulerLoses.ts`.
+    setupFiles: [
+      ...(process.env.OCTOPUS_SCHEDULER_LOSES === '1'
+        ? ['src/renderer/src/test/schedulerLoses.ts']
+        : []),
+      'src/renderer/src/test/setup.ts'
+    ],
     include: ['src/renderer/**/*.{test,spec}.{ts,tsx}'],
     coverage: {
       provider: 'v8',
