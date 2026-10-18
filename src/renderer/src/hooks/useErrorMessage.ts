@@ -189,6 +189,18 @@ export function useErrorMessage(): (failure: Failure) => string {
           return t('errors.libraryUrlRefused', { url: failure.params?.url ?? '' })
         case 'librarySubagentNeedsDescription':
           return t('errors.librarySubagentNeedsDescription')
+        case 'pluginCliUnavailable':
+          return t('errors.pluginCliUnavailable', { message: failure.params?.message ?? '' })
+        case 'pluginTimedOut':
+          return t('errors.pluginTimedOut', { seconds: failure.params?.seconds ?? '' })
+        case 'pluginActionFailed':
+          return t('errors.pluginActionFailed', { message: failure.params?.message ?? '' })
+        case 'pluginOutputUnreadable':
+          return t('errors.pluginOutputUnreadable', { message: failure.params?.message ?? '' })
+        case 'pluginNotInstalled':
+          return t('errors.pluginNotInstalled')
+        case 'pluginProjectMissing':
+          return t('errors.pluginProjectMissing', { path: failure.params?.path ?? '' })
         default:
           return t('errors.unknown', { message: failure.error })
       }

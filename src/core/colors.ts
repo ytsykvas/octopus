@@ -70,3 +70,23 @@ export function nextProjectColor(taken: readonly string[]): ProjectColor {
 
   return best
 }
+
+/**
+ * A colour that follows from a name, the same one on every render.
+ *
+ * For a tile that stands for something with no colour of its own — a plugin
+ * — where the point is only that two neighbours rarely match and one never
+ * changes between visits. A small string hash, not a cryptographic one.
+ */
+export function colorFor(key: string): ProjectColor {
+  let hash = 0
+  for (const char of key) hash = (hash * 31 + char.charCodeAt(0)) | 0
+
+  const index = Math.abs(hash) % PROJECT_COLORS.length
+  let chosen: ProjectColor = FALLBACK
+  // Walked rather than indexed: an indexed read is `ProjectColor | undefined`
+  // under `noUncheckedIndexedAccess`, and asserting it away is forbidden.
+  for (const [at, colour] of PROJECT_COLORS.entries()) if (at === index) chosen = colour
+
+  return chosen
+}

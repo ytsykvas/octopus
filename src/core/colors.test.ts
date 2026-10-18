@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { nextProjectColor, PROJECT_COLORS } from './colors.js'
+import { colorFor, nextProjectColor, PROJECT_COLORS } from './colors.js'
 
 describe('nextProjectColor', () => {
   it('starts at the top of the palette', () => {
@@ -40,5 +40,20 @@ describe('nextProjectColor', () => {
 
   it('ignores a colour that is not in the palette', () => {
     expect(nextProjectColor(['chartreuse'])).toBe(PROJECT_COLORS[0])
+  })
+})
+
+describe('colorFor', () => {
+  it('answers the same colour for the same name, every time', () => {
+    expect(colorFor('context7@claude-plugins-official')).toBe(
+      colorFor('context7@claude-plugins-official')
+    )
+  })
+
+  it('spreads names over the palette', () => {
+    const names = Array.from({ length: 60 }, (_, index) => `plugin-${String(index)}@market`)
+
+    expect(new Set(names.map(colorFor)).size).toBeGreaterThan(8)
+    for (const name of names) expect(PROJECT_COLORS).toContain(colorFor(name))
   })
 })

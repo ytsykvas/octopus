@@ -38,7 +38,8 @@ export const en = {
     removeCancel: 'Cancel',
     collapse: 'Hide workspaces',
     expand: 'Show workspaces',
-    settings: 'Settings'
+    settings: 'Settings',
+    plugins: 'Plugins'
   },
 
   repositories: {
@@ -1679,6 +1680,105 @@ export const en = {
     dismiss: 'Dismiss'
   },
 
+  plugins: {
+    title: 'Plugins',
+    troubleDot: 'A plugin would not load',
+    tabInstalled: 'Installed',
+    tabInstalledCount: 'Installed · {{count}}',
+    tabStore: 'Store',
+    userLayerOff:
+      'Settings → Agent leaves your user settings out, and that is where plugins installed for every project are switched on. They stay installed, but conversations here will not load them.',
+    openAgentSettings: 'Open Agent settings',
+    applied_one: 'Applied to {{count}} open conversation.',
+    applied_few: 'Applied to {{count}} open conversations.',
+    applied_many: 'Applied to {{count}} open conversations.',
+    applied_other: 'Applied to {{count}} open conversations.',
+    appliedNone: 'Applied. Conversations started from now on will load it.',
+    searchInstalled: 'Filter installed plugins',
+    searchStore: 'Search plugins by name, description or keyword',
+    loading: 'Reading plugins…',
+    noneInstalled: 'No plugins yet',
+    noneInstalledHint:
+      'Plugins add skills, commands, agents and tools to Claude Code. Find one in the store.',
+    browseStore: 'Browse the store',
+    noMatch: 'Nothing matches “{{query}}”.',
+    scope: {
+      user: 'All projects',
+      project: 'Project',
+      local: 'Project, just you',
+      managed: 'Managed'
+    },
+    switchLabel: 'Use {{name}}',
+    stateOn: 'On',
+    stateOff: 'Off',
+    managedNote: 'Set up by your organisation, so it cannot be changed here.',
+    unreachableNote:
+      'Claude Code did not say where this one is installed, so it cannot be changed here.',
+    homepage: 'Homepage',
+    remove: 'Remove {{name}}',
+    removeTitle: 'Remove plugin?',
+    removeMessage: 'Remove “{{name}}”?',
+    removeDetail:
+      'Its data directory goes with it — its settings and anything it stored. Open conversations stop using it at once.',
+    removeConfirm: 'Remove',
+    cancel: 'Cancel',
+    loadErrors: 'Would not load: {{errors}}',
+    components: {
+      skills: 'Skills',
+      commands: 'Commands',
+      agents: 'Agents',
+      hooks: 'Hooks',
+      mcp: 'MCP',
+      lsp: 'LSP'
+    },
+    allCategories: 'All',
+    categoriesLabel: 'Categories',
+    categories: {
+      development: 'Development',
+      productivity: 'Productivity',
+      database: 'Databases',
+      monitoring: 'Monitoring',
+      security: 'Security',
+      deployment: 'Deployment',
+      design: 'Design',
+      automation: 'Automation',
+      learning: 'Learning',
+      location: 'Location',
+      testing: 'Testing',
+      math: 'Maths',
+      migration: 'Migration'
+    },
+    otherCategory: 'Other',
+    installs_one: '{{formatted}} install',
+    installs_few: '{{formatted}} installs',
+    installs_many: '{{formatted}} installs',
+    installs_other: '{{formatted}} installs',
+    install: 'Install',
+    installing: 'Installing…',
+    installed: 'Installed',
+    by: 'by {{author}}',
+    from: 'From {{marketplace}}',
+    version: 'Version {{version}}',
+    noDescription: 'No description.',
+    closeDetails: 'Close details',
+    trustNote:
+      'A plugin runs with the same access as Claude Code: its hooks and servers run commands on this machine. Install only what you trust.',
+    consentTitle: 'Run this command?',
+    consentMessage:
+      '“{{name}}” is installed by running a command its marketplace supplies. Read it before going on.',
+    consentConfirm: 'Run it and install',
+    connectTitle: 'The store is empty',
+    connectHint:
+      'The official Claude Code marketplace is not connected on this machine yet. Connecting it downloads its catalogue from GitHub.',
+    officialMissing: 'The official Claude Code marketplace is not connected.',
+    connect: 'Connect the official marketplace',
+    connecting: 'Connecting…',
+    refresh: 'Check the marketplaces for new plugins',
+    catalogFailedTitle: 'The store could not be read',
+    catalogFailedHint: 'Claude Code did not answer with the list of plugins. The reason is above.',
+    retry: 'Try again'
+  },
+
   tips: {
     headsUp: 'Heads up',
     learnMore: 'Learn more',
@@ -1694,6 +1794,13 @@ export const en = {
     }
   },
   errors: {
+    pluginCliUnavailable: 'Claude Code could not be run: {{message}}',
+    pluginTimedOut:
+      'Claude Code did not finish within {{seconds}} seconds. A slow network is the usual reason — try again.',
+    pluginActionFailed: 'Claude Code refused: {{message}}',
+    pluginOutputUnreadable: 'Claude Code answered with something unexpected: {{message}}',
+    pluginNotInstalled: 'That plugin is no longer installed there. The list has been read again.',
+    pluginProjectMissing: 'The project this plugin belongs to is gone: {{path}}',
     /* Commands and subagents. Each says what the reader can do about it, which
        for a name is "choose another" and for a document is "it is not one". */
     libraryNameInvalid:
