@@ -19,6 +19,7 @@ import type {
   ChatStatusEvent,
   PermissionAnswer,
   PermissionRequest,
+  PluginApplied,
   RateLimit,
   SessionUsage,
   UsageOutcome,
@@ -62,6 +63,7 @@ import type { RepositoryTrust } from '@core/repoTrust.js'
 import type { SourceView } from '@core/sourceItems.js'
 import type { Project, ProjectPatch } from '@core/store.js'
 import type { ThemeName } from '@core/types.js'
+import type { InstalledPlugin, InstallOutcome, PluginCatalog, PluginTarget } from '@core/plugins.js'
 
 /**
  * A core operation either succeeded or explained why not — see `attempt` in main.
@@ -821,6 +823,49 @@ const api = {
     /** Switches one skill for one conversation, a running session included. */
     setForChat: (chatId: string, key: string, enabled: boolean): Promise<Result<void>> =>
       ipcRenderer.invoke('skills:setForChat', chatId, key, enabled) as Promise<Result<void>>
+  },
+
+  /**
+   * Claude Code's plugins, through Claude Code's own CLI. Every write reloads
+   * the conversations already open and answers with how many it reached.
+   */
+  plugins: {
+    list: (): Promise<Result<InstalledPlugin[]>> =>
+      ipcRenderer.invoke('plugins:list') as Promise<Result<InstalledPlugin[]>>,
+
+    catalog: (): Promise<Result<PluginCatalog>> =>
+      ipcRenderer.invoke('plugins:catalog') as Promise<Result<PluginCatalog>>,
+
+    /**
+     * Installs for every project. `acceptCommand` is the digest of a command
+     * the window has shown and the person accepted.
+     */
+    install: (
+      id: string,
+      acceptCommand?: string
+    ): Promise<Result<InstallOutcome & PluginApplied>> =>
+      ipcRenderer.invoke('plugins:install', id, acceptCommand) as Promise<
+        Result<InstallOutcome & PluginApplied>
+      >,
+
+    /** Removes a plugin, data included, from where it was installed. */
+    uninstall: (id: string, target: PluginTarget): Promise<Result<PluginApplied>> =>
+      ipcRenderer.invoke('plugins:uninstall', id, target) as Promise<Result<PluginApplied>>,
+
+    setEnabled: (
+      id: string,
+      enabled: boolean,
+      target: PluginTarget
+    ): Promise<Result<PluginApplied>> =>
+      ipcRenderer.invoke('plugins:setEnabled', id, enabled, target) as Promise<
+        Result<PluginApplied>
+      >,
+
+    connectOfficial: (): Promise<Result<void>> =>
+      ipcRenderer.invoke('plugins:connectOfficial') as Promise<Result<void>>,
+
+    refresh: (): Promise<Result<void>> =>
+      ipcRenderer.invoke('plugins:refresh') as Promise<Result<void>>
   },
 
   settings: {

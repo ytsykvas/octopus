@@ -75,6 +75,7 @@ describe('the exposed bridge', () => {
       'dialog',
       'files',
       'library',
+      'plugins',
       'projects',
       'settings',
       'skills',
@@ -558,6 +559,30 @@ describe('channel names', () => {
       () => method('skills', 'setForChat')('c' as never, 'k' as never, false as never),
       'skills:setForChat'
     ],
+    ['plugins.list', () => method('plugins', 'list')(), 'plugins:list'],
+    ['plugins.catalog', () => method('plugins', 'catalog')(), 'plugins:catalog'],
+    [
+      'plugins.install',
+      () => method('plugins', 'install')('a@m' as never, undefined as never),
+      'plugins:install'
+    ],
+    [
+      'plugins.uninstall',
+      () => method('plugins', 'uninstall')('a@m' as never, { scope: 'user' } as never),
+      'plugins:uninstall'
+    ],
+    [
+      'plugins.setEnabled',
+      () =>
+        method('plugins', 'setEnabled')('a@m' as never, true as never, { scope: 'user' } as never),
+      'plugins:setEnabled'
+    ],
+    [
+      'plugins.connectOfficial',
+      () => method('plugins', 'connectOfficial')(),
+      'plugins:connectOfficial'
+    ],
+    ['plugins.refresh', () => method('plugins', 'refresh')(), 'plugins:refresh'],
     ['terminal.create', () => method('terminal', 'create')({} as never), 'terminal:create'],
     [
       'accounts.signOut',

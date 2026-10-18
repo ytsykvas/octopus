@@ -102,6 +102,31 @@ The default marks need no channel of their own: they are a field on the config
 and a field on the project, so they travel on `config:update` and
 `projects:update` like any other setting.
 
+### Plugins
+
+Claude Code's plugins, through Claude Code's own CLI (see "Plugins go through
+Claude Code's CLI" in `core.md`). Every argument here becomes an argument to a
+process: `PluginIdSchema` holds an id to `name@marketplace` with both halves
+starting with a letter or digit, which also keeps a leading `-` from being read
+as a flag. `PluginTargetSchema` takes the scope and its project as one value —
+`{ scope: 'user' }`, or `project`/`local` with an absolute `projectPath`, since
+it becomes the CLI's working directory — and core then holds it to a place the
+listing reports the plugin in.
+
+| Channel                   | Arguments                 | Notes                                                                                                                                                                       |
+| ------------------------- | ------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `plugins:list`            | —                         | every installed plugin in every scope, with its description and what it brings, read leniently from its own folder                                                          |
+| `plugins:catalog`         | —                         | what the connected marketplaces offer, and whether the official one is connected — an empty store has to say why                                                            |
+| `plugins:install`         | `id`, `acceptCommand?`    | into the `user` scope. Answers `installed`, or `needsConsent` with the command the marketplace would run; the digest of one a person has read comes back as `acceptCommand` |
+| `plugins:uninstall`       | `id`, `target`            | from the scope it was installed in, data directory included                                                                                                                 |
+| `plugins:setEnabled`      | `id`, `enabled`, `target` | a switch already in that state counts as done                                                                                                                               |
+| `plugins:connectOfficial` | —                         | adds `anthropics/claude-plugins-official`, which Claude Code otherwise adds only on a first terminal session                                                                |
+| `plugins:refresh`         | —                         | pulls every connected marketplace again, each by name                                                                                                                       |
+
+The three that change what a conversation loads answer with `{ reloaded }`: how
+many open conversations took the change at once. The two marketplace channels
+change only the catalog and reload nothing.
+
 ### Commands and subagents
 
 The same two stores the skills live in, because Claude Code finds

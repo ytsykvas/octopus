@@ -247,6 +247,15 @@ export function installOctopusStub(): Api {
       forWorkspace: vi.fn(() => ok([])),
       setForChat: vi.fn(() => ok(undefined))
     },
+    plugins: {
+      list: vi.fn(() => ok([])),
+      catalog: vi.fn(() => ok({ officialConnected: true, marketplaces: [], plugins: [] })),
+      install: vi.fn(() => ok({ kind: 'installed' as const, reloaded: 0 })),
+      uninstall: vi.fn(() => ok({ reloaded: 0 })),
+      setEnabled: vi.fn(() => ok({ reloaded: 0 })),
+      connectOfficial: vi.fn(() => ok(undefined)),
+      refresh: vi.fn(() => ok(undefined))
+    },
     settings: {
       onOpen: vi.fn(subscription)
     },

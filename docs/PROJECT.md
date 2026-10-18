@@ -594,6 +594,8 @@ checkout's are, they **follow `settingSources`**: under "load nothing" the
 panel is empty and the agent has none of them, which is the honest reading of
 that setting.
 
+**Plugins are installed, switched and removed through Claude Code's own CLI.** The SDK reloads plugins but cannot install one, so octopus runs the bundled `claude plugin … --json` and never writes Claude Code's files itself. The store offers the official marketplace and any marketplace the user added, installs into the `user` scope as `/plugin` does, and every write reloads the conversations already open (`core.md`, "Plugins go through Claude Code's CLI").
+
 **One slash command is answered here rather than by the CLI.** A harness does not filter what reaches the agent, and this is not that: `/usage` asks the local process to print figures it already holds structured, and the CLI prints them as prose. `usage_EXPERIMENTAL_MAY_CHANGE_DO_NOT_RELY_ON_THIS_API_YET` is documented as "the structured data behind the `/usage` command", so the service recognises the command, reads the report and draws a card of bars — plan windows and when they reset, what the session spent, and the local scan of what has been eating the limit. Everything else, `/clear` included, goes to the agent as ordinary message text. The card is the only surface in the app that shows a session's cost in dollars, for the reason given in §16.
 
 Session control: `interrupt()`, `setModel()`, `setPermissionMode()`, `streamInput()`, `close()`.

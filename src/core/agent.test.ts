@@ -50,6 +50,7 @@ interface FakeQuery {
   /** Settings pushed onto a running session — where effort changes land. */
   readonly flagSettings: () => Record<string, unknown>[]
   readonly skillReloads: () => number
+  readonly pluginReloads: () => number
   /** Models asked for mid-session; `undefined` is "back to the default". */
   readonly requestedModels: () => (string | undefined)[]
   /** Every `rewindFiles` the session issued, with the `dryRun` it passed. */
@@ -81,6 +82,7 @@ function fakeAgent(
   const modes: string[] = []
   const flagSettings: Record<string, unknown>[] = []
   let skillReloads = 0
+  let pluginReloads = 0
   const requestedModels: (string | undefined)[] = []
   const rewinds: { messageId: string; dryRun: boolean | undefined }[] = []
   const offeredModels = hooks.models ?? []
@@ -137,6 +139,16 @@ function fakeAgent(
     reloadSkills: () => {
       skillReloads += 1
       return Promise.resolve({ skills: [] })
+    },
+    reloadPlugins: () => {
+      pluginReloads += 1
+      return Promise.resolve({
+        commands: [],
+        agents: [],
+        plugins: [],
+        mcpServers: [],
+        error_count: 0
+      })
     },
     applyFlagSettings: (settings: Record<string, unknown>) => {
       flagSettings.push(settings)
@@ -218,6 +230,7 @@ function fakeAgent(
       modes: () => modes,
       flagSettings: () => flagSettings,
       skillReloads: () => skillReloads,
+      pluginReloads: () => pluginReloads,
       requestedModels: () => requestedModels,
       rewinds: () => rewinds,
       closed: () => closed
@@ -1387,6 +1400,14 @@ describe('a session', () => {
     await agent.session.refreshSkills()
 
     expect(agent.skillReloads()).toBe(1)
+  })
+
+  it('re-reads the plugins on request', async () => {
+    const { agent } = fakeAgent()
+
+    await agent.session.reloadPlugins()
+
+    expect(agent.pluginReloads()).toBe(1)
   })
 
   it('asks for an effort at start-up when the chat has one', () => {

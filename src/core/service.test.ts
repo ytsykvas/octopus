@@ -46,6 +46,7 @@ import {
   type UsageOutcome,
   type WorkspaceStatusEvent
 } from './service.js'
+import type { CliOutput, PluginCli } from './plugins.js'
 import { POOL_START } from './ports.js'
 import type { ChatEntry } from './transcript.js'
 import type { UsageLimit, UsageWindows } from './usage.js'
@@ -3730,6 +3731,8 @@ describe('the agent chat', () => {
     /** Models asked for mid-session; `undefined` is "back to the default". */
     readonly requestedModels: () => (string | undefined)[]
     readonly options: () => Record<string, unknown>
+    /** How many times the session was told to load the plugins again. */
+    readonly pluginReloads: () => number
   }
 
   /** Both responses as build 2.1.228 actually sent them, trimmed. */
@@ -3778,6 +3781,7 @@ describe('the agent chat', () => {
   /** What the session answers about its context window, and the account's. */
   let contextAnswer: () => Promise<unknown>
   let skillReload: () => Promise<unknown>
+  let pluginReload: () => Promise<unknown>
   let usageAnswer: () => Promise<unknown>
   /** What the session answers when asked to put the files back to a message. */
   let rewindAnswer: () => Promise<unknown>
@@ -3797,6 +3801,7 @@ describe('the agent chat', () => {
       let interrupted = 0
       let closed = 0
       let usageAsked = 0
+      let pluginReloads = 0
       const usageOptions: unknown[] = []
 
       const options = (params.options ?? {}) as unknown as Record<string, unknown>
@@ -3892,7 +3897,8 @@ describe('the agent chat', () => {
         flagSettings: () => flagSettings,
         requestedModels: () => requestedModels,
         modes: () => modes,
-        options: () => options
+        options: () => options,
+        pluginReloads: () => pluginReloads
       })
 
       return Object.assign(stream(), {
@@ -3908,6 +3914,10 @@ describe('the agent chat', () => {
           return Promise.resolve()
         },
         reloadSkills: () => skillReload(),
+        reloadPlugins: () => {
+          pluginReloads++
+          return pluginReload()
+        },
         rewindFiles: (messageId: string, rewindOptions?: { dryRun?: boolean }) => {
           rewinds.push({ messageId, dryRun: rewindOptions?.dryRun === true })
           return rewindAnswer()
@@ -4024,6 +4034,8 @@ describe('the agent chat', () => {
     offeredCommands = () => Promise.resolve([])
     contextAnswer = () => Promise.resolve(CONTEXT_RESPONSE)
     skillReload = () => Promise.resolve({ skills: [] })
+    pluginReload = () =>
+      Promise.resolve({ commands: [], agents: [], plugins: [], mcpServers: [], error_count: 0 })
     usageAnswer = () => Promise.resolve(USAGE_RESPONSE)
     rewindAnswer = () =>
       Promise.resolve({
@@ -10934,6 +10946,199 @@ describe('the agent chat', () => {
 
     return found.event.requestId
   }
+
+  describe('Claude Code plugins', () => {
+    const ok = `${JSON.stringify({ outcome: 'ok' })}\n`
+    /** `a@m`, installed for the user — what a switch or a removal checks first. */
+    const installed = JSON.stringify([{ id: 'a@m', scope: 'user', enabled: true }])
+
+    const out = (stdout: string): Promise<CliOutput> => Promise.resolve({ stdout, stderr: '' })
+
+    /** A CLI answering every write with success, and recording what it ran. */
+    function okCli(): { cli: PluginCli; ran: string[] } {
+      const ran: string[] = []
+      const cli: PluginCli = (args) => {
+        const command = args.join(' ')
+        ran.push(command)
+        return out(command === 'plugin list --json' ? installed : ok)
+      }
+
+      return { cli, ran }
+    }
+
+    /** Two conversations, each with a session, in one workspace. */
+    async function twoRunning(cli: PluginCli, extra: ServiceOptions = {}): Promise<OctopusService> {
+      const { service, workspaceId } = await withWorkspace({ pluginCli: cli, ...extra })
+      const first = await service.openChat(workspaceId)
+      // `createChat`, not a second `openChat`: that answers with the first.
+      const second = await service.createChat(workspaceId)
+      await service.sendToChat(first.id, 'one')
+      await service.sendToChat(second.id, 'two')
+
+      return service
+    }
+
+    /*
+     * Measured on 2.1.299: nothing picks a plugin change up by itself. Without
+     * the reload an open conversation goes on offering a plugin that was just
+     * switched off, and the switch looks broken.
+     */
+    it('reloads every running conversation after each write, and counts them', async () => {
+      const { cli, ran } = okCli()
+      const service = await twoRunning(cli)
+
+      await expect(service.installPlugin('a@m')).resolves.toEqual({
+        kind: 'installed',
+        reloaded: 2
+      })
+      await expect(service.setPluginEnabled('a@m', false, { scope: 'user' })).resolves.toEqual({
+        reloaded: 2
+      })
+      await expect(service.uninstallPlugin('a@m', { scope: 'user' })).resolves.toEqual({
+        reloaded: 2
+      })
+
+      expect(agents.map((session) => session.pluginReloads())).toEqual([3, 3])
+      expect(ran.filter((command) => command !== 'plugin list --json')).toEqual([
+        'plugin install a@m --scope user --json',
+        'plugin disable a@m --scope user --json',
+        'plugin uninstall a@m --scope user --json'
+      ])
+    })
+
+    it('counts a conversation that would not reload out, and the write stands', async () => {
+      const { cli } = okCli()
+      const service = await twoRunning(cli)
+      let calls = 0
+      pluginReload = () => {
+        calls++
+        return calls === 1
+          ? Promise.reject(new Error('the transport is closed'))
+          : Promise.resolve({})
+      }
+
+      await expect(service.setPluginEnabled('a@m', true, { scope: 'user' })).resolves.toEqual({
+        reloaded: 1
+      })
+    })
+
+    /*
+     * The reload runs inside the write queue. Unbounded, one session that never
+     * answered held every later install, switch and removal behind it.
+     */
+    it('gives up on a conversation that never answers, and the next write goes ahead', async () => {
+      const { cli } = okCli()
+      const service = await twoRunning(cli, { pluginReloadMs: 50 })
+      let calls = 0
+      pluginReload = () => {
+        calls++
+        return calls === 1 ? new Promise(() => undefined) : Promise.resolve({})
+      }
+
+      await expect(service.setPluginEnabled('a@m', false, { scope: 'user' })).resolves.toEqual({
+        reloaded: 1
+      })
+      await expect(service.setPluginEnabled('a@m', true, { scope: 'user' })).resolves.toEqual({
+        reloaded: 2
+      })
+    })
+
+    it('reloads nothing while an install waits for a person to read its command', async () => {
+      const sha = 'c'.repeat(64)
+      const cli: PluginCli = () =>
+        out(
+          `${JSON.stringify({ outcome: 'failed', shownCommand: { command: 'npx run', sha256: sha } })}\n`
+        )
+      const service = await twoRunning(cli)
+
+      await expect(service.installPlugin('a@m')).resolves.toEqual({
+        kind: 'needsConsent',
+        command: 'npx run',
+        sha256: sha,
+        reloaded: 0
+      })
+      expect(agents.map((session) => session.pluginReloads())).toEqual([0, 0])
+    })
+
+    it('reloads nothing for a write that failed', async () => {
+      const cli: PluginCli = (args) =>
+        out(
+          args[1] === 'list'
+            ? installed
+            : `${JSON.stringify({ outcome: 'failed', message: 'nope' })}\n`
+        )
+      const service = await twoRunning(cli)
+
+      await expect(service.uninstallPlugin('a@m', { scope: 'user' })).rejects.toMatchObject({
+        code: 'pluginActionFailed'
+      })
+      expect(agents.map((session) => session.pluginReloads())).toEqual([0, 0])
+    })
+
+    /*
+     * Each CLI process reads `settings.json`, changes it and writes it back.
+     * Two at once and the second to finish puts back what the first removed.
+     */
+    it('runs one write at a time, even after one fails', async () => {
+      const log: string[] = []
+      let release: () => void = () => undefined
+      const held = new Promise<void>((resolve) => {
+        release = resolve
+      })
+      const cli: PluginCli = async (args) => {
+        const verb = args[1] ?? ''
+        if (verb === 'list') return { stdout: installed, stderr: '' }
+        log.push(`${verb} starts`)
+        if (verb === 'install') {
+          await held
+          log.push('install ends')
+          return {
+            stdout: `${JSON.stringify({ outcome: 'failed', message: 'clone failed' })}\n`,
+            stderr: ''
+          }
+        }
+        return { stdout: ok, stderr: '' }
+      }
+      const { service } = await withWorkspace({ pluginCli: cli })
+
+      const install = service.installPlugin('a@m')
+      const disable = service.setPluginEnabled('a@m', false, { scope: 'user' })
+      await vi.waitFor(() => {
+        expect(log).toEqual(['install starts'])
+      })
+      release()
+
+      await expect(install).rejects.toMatchObject({ code: 'pluginActionFailed' })
+      await expect(disable).resolves.toEqual({ reloaded: 0 })
+      expect(log).toEqual(['install starts', 'install ends', 'disable starts'])
+    })
+
+    it('reads the lists and changes the catalog through the CLI', async () => {
+      const ran: string[] = []
+      const cli: PluginCli = (args) => {
+        const command = args.join(' ')
+        ran.push(command)
+        if (command === 'plugin list --json') return out('[]')
+        if (command === 'plugin marketplace list --json') return out('[]')
+        return out(ok)
+      }
+      const service = await twoRunning(cli)
+
+      await expect(service.listPlugins()).resolves.toEqual([])
+      await expect(service.pluginCatalog()).resolves.toMatchObject({ officialConnected: false })
+      await service.connectOfficialMarketplace()
+      await service.refreshPluginCatalog()
+
+      expect(ran).toEqual([
+        'plugin list --json',
+        'plugin marketplace list --json',
+        'plugin marketplace add anthropics/claude-plugins-official --json',
+        'plugin marketplace list --json'
+      ])
+      // A marketplace is not something a conversation loads.
+      expect(agents.map((session) => session.pluginReloads())).toEqual([0, 0])
+    })
+  })
 
   describe('who wrote which file', () => {
     /** The workspace as the changes pane reads it. */

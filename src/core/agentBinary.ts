@@ -31,14 +31,41 @@ export function unpackedAgentBinary(
   platform: string = process.platform,
   arch: string = process.arch
 ): string | null {
-  let found: string
+  return unpackedOf(resolveAgentBinary(resolve, platform, arch))
+}
+
+/**
+ * The binary the SDK runs, as a path that can be started in every build — the
+ * unpacked copy when packaged, the package's own file otherwise.
+ *
+ * For running the CLI directly rather than through the SDK, which `plugins.ts`
+ * does: the same file the sessions run, so a plugin installed through it is
+ * read by a CLI of the same version. Null when there is no platform package.
+ */
+export function agentBinary(
+  resolve: (id: string) => string = createRequire(import.meta.url).resolve,
+  platform: string = process.platform,
+  arch: string = process.arch
+): string | null {
+  const found = resolveAgentBinary(resolve, platform, arch)
+
+  return unpackedOf(found) ?? found
+}
+
+function unpackedOf(found: string | null): string | null {
+  return found?.includes(ARCHIVE) ? found.replace(ARCHIVE, UNPACKED) : null
+}
+
+function resolveAgentBinary(
+  resolve: (id: string) => string,
+  platform: string,
+  arch: string
+): string | null {
   try {
-    found = resolve(`@anthropic-ai/claude-agent-sdk-${platform}-${arch}/claude`)
+    return resolve(`@anthropic-ai/claude-agent-sdk-${platform}-${arch}/claude`)
   } catch {
     return null
   }
-
-  return found.includes(ARCHIVE) ? found.replace(ARCHIVE, UNPACKED) : null
 }
 
 /**
