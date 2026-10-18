@@ -2220,10 +2220,11 @@ workspace too.
 Changes tab uses. The tree answers "what have I not committed", which is what an
 editor's explorer means by a coloured name; Changes answers "what will this
 branch deliver". After a commit the tree goes clean while Changes still lists
-the files — both right, and not a bug. The colours and letters are the diff's
-own (`statusMarks.ts`, shared): green for new, blue for edited, red for deleted
-and conflicted, the conflict marked `!` because a diff against a merge base
-never sees one. A folder with work below it carries a dot in the colour of the
+the files — both right, and not a bug. The colours and letters come from
+`statusMarks.ts`: green for new, blue for edited, red for deleted and
+conflicted, the conflict marked `!` because a diff against a merge base never
+sees one. Changes no longer draws the letters — its letter column holds the
+rung, and the kind of change is on the name there. A folder with work below it carries a dot in the colour of the
 strongest change inside, so a collapsed folder still says there is something in
 it. Each mark is said aloud after the name; the colour alone says nothing.
 
@@ -2330,8 +2331,15 @@ unstaged work into a single pile — which is not the question a reviewer has on
 a request is open. Two facts answer that one, drawn as two marks so that neither
 hides the other.
 
-The first is a ladder of three rungs, filled up to the one reached, with the word
-beside it: **not committed** (amber), **committed** (blue), **pushed** (faint).
+The first is a ladder of three rungs, filled up to the one reached: **not
+committed** (amber), **committed** (blue), **pushed** (faint). On a row it is the
+dots alone, standing where a status letter used to, and the header stays one
+line. The word on every row was a second line per file saying the same thing
+down the whole column, and the letter it displaced had its own trouble: the
+Ukrainian `З` for "changed" read as the digit 3 in front of a path. What
+happened to the file moves onto its name instead — a new file's name is green, a
+deleted one is struck through in red, the rest are plain — and both facts are in
+the path's tooltip and read out after the row in words.
 The furthest-behind rung wins, so a file committed once and edited again reads
 "not committed", because committing it again is the work still to do. The second
 is a red cloud, and only where the remote's copy of the branch already changed
@@ -2345,23 +2353,26 @@ belongs. A **stable** sort, so git's order survives inside each rung and a file
 only moves when its state actually changes; and applied before the writers filter
 narrows the list, so pressing a chip still never reshuffles anything.
 
-A strip above the list carries the same three badges with a count each, which is
-what makes it the legend for the rows rather than a second vocabulary. It says
-when the branch is not on GitHub at all, how many commits are waiting, and how
-many files are out of date in the request — and it carries **Push**, offered only
-where there is a commit to send. Pushing publishes nothing uncommitted, and a
+A strip above the list carries the same three badges with a count and the word,
+which is what makes it the legend for the rows rather than a second vocabulary.
+It is meant to fit one line, so everything else on it is short: a red cloud with
+the number of files out of date in the request, a faint "not on GitHub" when the
+branch has no copy there, and **Push**, offered only where there is a commit to
+send, with how many in its tooltip. The full sentences are the tooltips. Pushing publishes nothing uncommitted, and a
 button here that committed on the reader's behalf would be choosing a commit
 message for them; that decision belongs to the pull request tab, which has a
 field for it. The counts are taken over the whole branch and not over what a
 writers chip left on screen: the strip answers where the branch stands, which a
 way of reading the list does not change.
 
-**A count of zero waiting commits means two different things**, so it gets two
-sentences. On a branch with no copy on the remote the count is measured from the
-base, and zero means nothing has been committed yet. On a branch that has one it
-is measured from that copy, and zero means everything committed is already
-there. One sentence for both told a pushed branch that nothing was committed
-yet, directly beside its own "2 pushed" badge.
+**With no commit waiting, the strip says nothing about it.** Zero means two
+different things — on a branch with no copy on the remote the count is measured
+from the base, and zero means nothing has been committed yet; on a branch that
+has one it is measured from that copy, and zero means everything committed is
+already there. One sentence for both once told a pushed branch that nothing was
+committed yet, beside its own "2 pushed" badge; a sentence for each fixed that
+and made those two sentences most of the strip. The badges already show what is
+left to do, and silence cannot contradict them.
 
 When the branch has nothing left to send, the strip says so in one line and
 **the per-file marks are not drawn at all** — the same rule the writers mark
@@ -2980,7 +2991,7 @@ field styling had already drifted by a few pixels of height.
 | `ProjectGlyph`                                         | a project's icon, `aria-hidden`: wherever it appears the element around it is already named                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             |
 | `Field`                                                | a labelled form row, in two shapes. Given a **function** it hands over an id and draws a real `<label htmlFor>`; given ordinary children it leaves the label a paragraph, because `htmlFor` names one element and this row is also used for a grid of swatches, a radio list and a select beside three buttons. Those name themselves — wrapping them here in a second group called the same thing was tried, and every such row then answered to its own name twice                                                                                                                                                                                                                                                                                                                                    |
 | `IconButton`, `Notice`                                 | the quiet toolbar button and the message drawn in place of content, shared by the right pane's tabs (`paneControls.tsx`) since the Files tab became the second to need both                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             |
-| `statusMarks`                                          | the letter, word and colour of a changed file — `A`, `M`, `D`, `U`, and the tree's `!` for a conflict — so a file reads the same in Changes and in Files                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
+| `statusMarks`                                          | the letter, word and colour of a changed file — `A`, `M`, `D`, `U`, and the tree's `!` for a conflict. The Files tab draws the letter; Changes reads only the word, for its tooltip and screen reader                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
 | `FileIcon`                                             | a file's or folder's Catppuccin icon, plain until the theme has loaded and when it names nothing. Decorative throughout: the name beside it says what the row is                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
 | `fileSize`                                             | a size in the reader's own numbering, through `Intl` — kilobytes, then megabytes                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
 | `FileEditor`, `NameEditor`, `ResizeHandle`, `Terminal` |                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
