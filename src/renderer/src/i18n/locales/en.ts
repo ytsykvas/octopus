@@ -844,10 +844,10 @@ export const en = {
     statusUntrackedLabel: 'Untracked',
     comment: 'Comment on line {{line}}',
     commentOld: 'Comment on line {{line}} of the file as it was',
-    /* What the button floating at a selection says. "Ask" rather than
-       "comment": the passage was chosen to be asked about, and the field it
-       opens is the same one the gutter's trigger opens. */
-    askSelection: 'Ask about the selected code',
+    /* What the button floating at a selection says, as visible text: the
+       icon alone was easy to miss. Worded like the file viewer's "Add to …",
+       which opens the same kind of note. */
+    addToChat: 'Add to chat',
     commentPlaceholder: 'What should the agent change here?',
     commentSave: 'Add',
     commentCancel: 'Cancel',
