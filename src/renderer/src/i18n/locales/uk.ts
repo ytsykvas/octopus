@@ -1288,6 +1288,7 @@ export const uk: Translation = {
     title: 'Плагіни',
     troubleDot: 'Плагін не завантажився',
     tabInstalled: 'Встановлені',
+    tabInstalledCount: 'Встановлені · {{count}}',
     tabStore: 'Магазин',
     userLayerOff:
       'Налаштування → Агент не завантажують ваші користувацькі налаштування, а саме там увімкнено плагіни, встановлені для всіх проєктів. Вони лишаються встановленими, але розмови тут їх не завантажать.',
@@ -1298,7 +1299,7 @@ export const uk: Translation = {
     applied_other: 'Застосовано до {{count}} відкритих розмов.',
     appliedNone: 'Застосовано. Нові розмови вже завантажать його.',
     searchInstalled: 'Фільтр встановлених плагінів',
-    searchStore: 'Пошук плагінів за назвою чи описом',
+    searchStore: 'Пошук плагінів за назвою, описом чи ключовим словом',
     loading: 'Читаю плагіни…',
     noneInstalled: 'Плагінів ще немає',
     noneInstalledHint:
@@ -1315,6 +1316,8 @@ export const uk: Translation = {
     stateOn: 'Увімкнено',
     stateOff: 'Вимкнено',
     managedNote: 'Налаштовано вашою організацією, тож тут його не змінити.',
+    unreachableNote:
+      'Claude Code не повідомив, де встановлено цей плагін, тож тут його не змінити.',
     homepage: 'Сайт',
     remove: 'Видалити {{name}}',
     removeTitle: 'Видалити плагін?',
@@ -1323,7 +1326,7 @@ export const uk: Translation = {
       'Разом із ним видаляється його тека з даними — налаштування й усе, що він зберіг. Відкриті розмови одразу перестануть ним користуватися.',
     removeConfirm: 'Видалити',
     cancel: 'Скасувати',
-    loadErrors: 'Не завантажився',
+    loadErrors: 'Не завантажився: {{errors}}',
     components: {
       skills: 'Навички',
       commands: 'Команди',
@@ -1333,6 +1336,7 @@ export const uk: Translation = {
       lsp: 'LSP'
     },
     allCategories: 'Усі',
+    categoriesLabel: 'Категорії',
     categories: {
       development: 'Розробка',
       productivity: 'Продуктивність',
@@ -1373,7 +1377,10 @@ export const uk: Translation = {
     officialMissing: 'Офіційний маркетплейс Claude Code не підключено.',
     connect: 'Підключити офіційний маркетплейс',
     connecting: 'Підключаю…',
-    refresh: 'Перевірити маркетплейси на нові плагіни'
+    refresh: 'Перевірити маркетплейси на нові плагіни',
+    catalogFailedTitle: 'Не вдалося прочитати магазин',
+    catalogFailedHint: 'Claude Code не віддав список плагінів. Причина — вище.',
+    retry: 'Спробувати ще раз'
   },
 
   tips: {

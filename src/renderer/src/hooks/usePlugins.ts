@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 
 import type { InstalledPlugin, InstallOutcome, PluginCatalog, PluginTarget } from '@core/plugins.js'
 
@@ -11,12 +11,17 @@ export interface PluginsController {
   /** Null until the store has been opened once. */
   readonly catalog: PluginCatalog | null
   readonly catalogLoading: boolean
-  /** Ids with an action under way, so their buttons can say so. */
+  /** Store ids and installed rows ({@link rowKey}) with an action under way. */
   readonly busy: ReadonlySet<string>
   /** How many open conversations the last write reached, or null before one. */
   readonly applied: number | null
-  /** The last failure in words, or null; cleared by the next attempt that works. */
+  /**
+   * The last failure in words, or null. An action's outranks a read's, and each
+   * is cleared by the next of its own kind that works.
+   */
   readonly error: string | null
+  /** Forgets the last action's count and failure, for a window opened afresh. */
+  readonly clearNote: () => void
   readonly readInstalled: () => Promise<void>
   readonly readCatalog: () => Promise<void>
   /**
@@ -32,6 +37,15 @@ export interface PluginsController {
   readonly setEnabled: (id: string, enabled: boolean, target: PluginTarget) => Promise<void>
   readonly connectOfficial: () => Promise<void>
   readonly refreshCatalog: () => Promise<void>
+}
+
+/**
+ * What a row's action is marked busy under: one plugin can be installed for
+ * every project and in a project as well, and acting on one row must not hold
+ * the other.
+ */
+export function rowKey(id: string, target: PluginTarget): string {
+  return target.scope === 'user' ? `${id} user` : `${id} ${target.scope} ${target.projectPath}`
 }
 
 /** The id the marketplace actions are marked busy under, beside plugin ids. */
@@ -71,37 +85,72 @@ export function usePlugins(): PluginsController {
   const [catalogLoading, setCatalogLoading] = useState(false)
   const [busy, setBusy] = useState<ReadonlySet<string>>(new Set())
   const [applied, setApplied] = useState<number | null>(null)
-  const [error, setError] = useState<string | null>(null)
+  // Two failures, kept apart: a write's refusal is followed by a re-read that
+  // works, and one shared field would have the re-read clear the refusal the
+  // moment it was shown. A read clears only its own.
+  const [readFailure, setReadFailure] = useState<string | null>(null)
+  const [actionFailure, setActionFailure] = useState<string | null>(null)
   const describeFailure = useErrorMessage()
 
+  /*
+   * Each read claims a number before its await and draws only if it is still
+   * the newest. Two switches on two plugins re-read the list twice at once, and
+   * the older reply landing last would flip the first switch back on screen.
+   */
+  const installedRead = useRef(0)
+  const catalogRead = useRef(0)
+
+  const showInstalled = useCallback(
+    (answer: { ok: true; value: InstalledPlugin[] } | Failure) => {
+      if (answer.ok) {
+        setInstalled(answer.value)
+        setReadFailure(null)
+      } else {
+        setReadFailure(describeFailure(answer))
+      }
+    },
+    [describeFailure]
+  )
+
   const readInstalled = useCallback(async () => {
+    const claim = ++installedRead.current
     const answer = await window.octopus.plugins.list()
-    if (answer.ok) setInstalled(answer.value)
-    else setError(describeFailure(answer))
-  }, [describeFailure])
+    if (claim === installedRead.current) showInstalled(answer)
+  }, [showInstalled])
 
   const readCatalog = useCallback(async () => {
+    const claim = ++catalogRead.current
     setCatalogLoading(true)
     const answer = await window.octopus.plugins.catalog()
+    if (claim !== catalogRead.current) return
+
     setCatalogLoading(false)
-    if (answer.ok) setCatalog(answer.value)
-    else setError(describeFailure(answer))
+    if (answer.ok) {
+      setCatalog(answer.value)
+      setReadFailure(null)
+    } else {
+      setReadFailure(describeFailure(answer))
+    }
   }, [describeFailure])
 
   useEffect(() => {
-    const controller = new AbortController()
-
-    void (async () => {
-      const answer = await window.octopus.plugins.list()
-      if (controller.signal.aborted) return
-      if (answer.ok) setInstalled(answer.value)
-      else setError(describeFailure(answer))
-    })()
+    const claim = ++installedRead.current
+    let live = true
+    void window.octopus.plugins.list().then((answer) => {
+      // Dropped for a window that has gone — or, under `StrictMode`, for the
+      // first of two mounts — and for a reply a newer read has overtaken.
+      if (live && claim === installedRead.current) showInstalled(answer)
+    })
 
     return () => {
-      controller.abort()
+      live = false
     }
-  }, [describeFailure])
+  }, [showInstalled])
+
+  const clearNote = useCallback(() => {
+    setApplied(null)
+    setActionFailure(null)
+  }, [])
 
   /** Runs one action under a busy mark, and reads both lists again after it. */
   const run = useCallback(
@@ -117,8 +166,7 @@ export function usePlugins(): PluginsController {
         return next
       })
 
-      if (answer.ok) setError(null)
-      else setError(describeFailure(answer))
+      setActionFailure(answer.ok ? null : describeFailure(answer))
 
       await Promise.all([readInstalled(), catalog === null ? undefined : readCatalog()])
 
@@ -141,7 +189,9 @@ export function usePlugins(): PluginsController {
 
   const uninstall = useCallback(
     async (id: string, target: PluginTarget) => {
-      const result = await run(id, () => window.octopus.plugins.uninstall(id, target))
+      const result = await run(rowKey(id, target), () =>
+        window.octopus.plugins.uninstall(id, target)
+      )
       if (result !== null) setApplied(result.reloaded)
     },
     [run]
@@ -149,7 +199,9 @@ export function usePlugins(): PluginsController {
 
   const setEnabled = useCallback(
     async (id: string, enabled: boolean, target: PluginTarget) => {
-      const result = await run(id, () => window.octopus.plugins.setEnabled(id, enabled, target))
+      const result = await run(rowKey(id, target), () =>
+        window.octopus.plugins.setEnabled(id, enabled, target)
+      )
       if (result !== null) setApplied(result.reloaded)
     },
     [run]
@@ -169,7 +221,8 @@ export function usePlugins(): PluginsController {
     catalogLoading,
     busy,
     applied,
-    error,
+    error: actionFailure ?? readFailure,
+    clearNote,
     readInstalled,
     readCatalog,
     install,

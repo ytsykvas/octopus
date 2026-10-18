@@ -51,7 +51,7 @@ export function PluginsWindow({
       label:
         plugins.installed === null
           ? t('plugins.tabInstalled')
-          : `${t('plugins.tabInstalled')} · ${String(plugins.installed.length)}`
+          : t('plugins.tabInstalledCount', { count: plugins.installed.length })
     },
     { id: 'store', label: t('plugins.tabStore') }
   ]

@@ -1,5 +1,5 @@
 import { ArrowLeft, Check, ExternalLink, ShieldAlert } from 'lucide-react'
-import { useState } from 'react'
+import { useId, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import type { CatalogPlugin } from '@core/plugins.js'
@@ -72,7 +72,24 @@ export function PluginStore({
     if (confirmed) await plugins.install(plugin.id, consent.sha256)
   }
 
-  if (catalog === null) return <Skeleton />
+  if (catalog === null) {
+    // Null is "not read" as well as "reading": a read that failed leaves it
+    // so, and pulsing cards for ever would hide the one way out.
+    if (plugins.catalogLoading) return <Skeleton />
+
+    return (
+      <Placeholder
+        title={t('plugins.catalogFailedTitle')}
+        actions={
+          <Button variant="accent" onClick={() => void plugins.readCatalog()}>
+            {t('plugins.retry')}
+          </Button>
+        }
+      >
+        {t('plugins.catalogFailedHint')}
+      </Placeholder>
+    )
+  }
 
   const connecting = plugins.busy.has(CATALOG_BUSY)
   const connect = (
@@ -131,7 +148,7 @@ export function PluginStore({
         {categories.length > 1 && (
           <div
             role="radiogroup"
-            aria-label={t('plugins.tabStore')}
+            aria-label={t('plugins.categoriesLabel')}
             className="flex flex-wrap gap-1"
           >
             {[null, ...categories].map((value) => (
@@ -274,6 +291,7 @@ function PluginCard({
   readonly onInstall: () => void
 }): React.JSX.Element {
   const { t } = useTranslation()
+  const describedBy = useId()
 
   return (
     <article className="panel hover:border-line-strong flex h-full flex-col p-3 transition-colors">
@@ -283,6 +301,8 @@ function PluginCard({
         type="button"
         onClick={onOpen}
         aria-label={plugin.name}
+        // The name alone, and the description as what it says about itself.
+        aria-describedby={describedBy}
         className="focus-ring -m-1 flex min-w-0 flex-1 flex-col rounded-[var(--radius-control)] p-1 text-left"
       >
         <span className="flex items-center gap-2.5">
@@ -297,7 +317,7 @@ function PluginCard({
           </span>
         </span>
 
-        <span className="text-ink-soft mt-2 line-clamp-3 leading-relaxed">
+        <span id={describedBy} className="text-ink-soft mt-2 line-clamp-3 leading-relaxed">
           {plugin.description ?? t('plugins.noDescription')}
         </span>
       </button>

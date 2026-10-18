@@ -304,7 +304,7 @@ describe('ProjectTabs', () => {
       )
     })
 
-    it('marks a plugin that would not load, and nothing otherwise', () => {
+    it('draws no mark when every plugin loads', () => {
       renderTabs()
       expect(screen.queryByRole('img', { name: 'A plugin would not load' })).toBeNull()
     })

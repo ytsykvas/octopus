@@ -51,9 +51,24 @@ describe('PluginStore', () => {
   })
 
   it('draws cards in outline while the catalog is read', () => {
-    draw({ catalog: null })
+    draw({ catalog: null, catalogLoading: true })
 
     expect(screen.getByRole('status', { name: 'Reading plugins…' })).toBeInTheDocument()
+  })
+
+  /*
+   * A read that failed leaves the catalog unread, and the refresh button
+   * needs a catalog to refresh: pulsing cards for ever hid the one way out.
+   */
+  it('offers to read again when the catalog could not be read', async () => {
+    const user = userEvent.setup()
+    const plugins = draw({ catalog: null, catalogLoading: false })
+
+    expect(screen.queryByRole('status')).toBeNull()
+    expect(screen.getByText('The store could not be read')).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: 'Try again' }))
+
+    expect(plugins.readCatalog).toHaveBeenCalledOnce()
   })
 
   /*
@@ -134,7 +149,9 @@ describe('PluginStore', () => {
       ])
     })
 
-    const pills = within(screen.getByRole('radiogroup')).getAllByRole('radio')
+    const pills = within(screen.getByRole('radiogroup', { name: 'Categories' })).getAllByRole(
+      'radio'
+    )
     expect(pills.map((pill) => pill.textContent)).toEqual([
       'All',
       'Development',
@@ -161,7 +178,7 @@ describe('PluginStore', () => {
     expect(screen.queryByRole('radiogroup')).toBeNull()
   })
 
-  it('installs from a card, and says so while it does', async () => {
+  it('installs from a card', async () => {
     const user = userEvent.setup()
     const plugins = draw({ catalog: catalogOf([CONTEXT7, FIGMA]) })
 
@@ -234,6 +251,10 @@ describe('PluginStore', () => {
     })
     const plugins = draw({ catalog: catalogOf([detailed, FIGMA]) })
 
+    // Named by the plugin and described by its own words.
+    expect(screen.getByRole('button', { name: 'context7' })).toHaveAccessibleDescription(
+      'Up-to-date documentation lookup'
+    )
     await user.click(screen.getByRole('button', { name: 'context7' }))
 
     expect(screen.getByRole('heading', { name: 'context7' })).toBeInTheDocument()

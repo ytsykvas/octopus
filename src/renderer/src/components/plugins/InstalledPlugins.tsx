@@ -5,7 +5,7 @@ import { useTranslation } from 'react-i18next'
 import type { InstalledPlugin, PluginTarget } from '@core/plugins.js'
 
 import { useConfirm } from '../../hooks/useConfirm.js'
-import { type PluginsController, targetOf } from '../../hooks/usePlugins.js'
+import { type PluginsController, rowKey, targetOf } from '../../hooks/usePlugins.js'
 import { Button } from '../Button.js'
 import { IconButton } from '../paneControls.js'
 import { Placeholder } from '../Placeholder.js'
@@ -79,7 +79,7 @@ export function InstalledPlugins({
               <InstalledRow
                 key={`${plugin.id} ${plugin.scope} ${plugin.projectPath ?? ''}`}
                 plugin={plugin}
-                busy={plugins.busy.has(plugin.id)}
+                busy={plugins.busy}
                 onToggle={(enabled, target) => void plugins.setEnabled(plugin.id, enabled, target)}
                 onRemove={(target) => void remove(plugin, target)}
               />
@@ -99,13 +99,14 @@ function InstalledRow({
   onToggle,
   onRemove
 }: {
-  plugin: InstalledPlugin
-  busy: boolean
-  onToggle: (enabled: boolean, target: PluginTarget) => void
-  onRemove: (target: PluginTarget) => void
+  readonly plugin: InstalledPlugin
+  readonly busy: ReadonlySet<string>
+  readonly onToggle: (enabled: boolean, target: PluginTarget) => void
+  readonly onRemove: (target: PluginTarget) => void
 }): React.JSX.Element {
   const { t } = useTranslation()
   const target = targetOf(plugin)
+  const held = target !== null && busy.has(rowKey(plugin.id, target))
   const homepage = safeHomepage(plugin.homepage)
   const scope = (['user', 'project', 'local', 'managed'] as const).find(
     (known) => known === plugin.scope
@@ -153,14 +154,15 @@ function InstalledRow({
         )}
 
         {plugin.errors.length > 0 && (
-          <div className="text-danger mt-2 text-[12px]">
-            <span className="font-medium">{t('plugins.loadErrors')}: </span>
-            {plugin.errors.join('; ')}
-          </div>
+          <p className="text-danger mt-2 text-[12px]">
+            {t('plugins.loadErrors', { errors: plugin.errors.join('; ') })}
+          </p>
         )}
 
         {target === null && (
-          <p className="text-ink-faint mt-1 text-[12px]">{t('plugins.managedNote')}</p>
+          <p className="text-ink-faint mt-1 text-[12px]">
+            {plugin.scope === 'managed' ? t('plugins.managedNote') : t('plugins.unreachableNote')}
+          </p>
         )}
       </div>
 
@@ -181,7 +183,7 @@ function InstalledRow({
         {target !== null && (
           <IconButton
             label={t('plugins.remove', { name: plugin.name })}
-            disabled={busy}
+            disabled={held}
             onClick={() => {
               onRemove(target)
             }}
@@ -201,7 +203,7 @@ function InstalledRow({
             <Switch
               checked={plugin.enabled}
               label={t('plugins.switchLabel', { name: plugin.name })}
-              disabled={busy}
+              disabled={held}
               onChange={(enabled) => {
                 onToggle(enabled, target)
               }}

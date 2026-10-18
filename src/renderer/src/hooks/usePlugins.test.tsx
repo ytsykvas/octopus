@@ -6,7 +6,7 @@ import type { InstalledPlugin, PluginCatalog } from '@core/plugins.js'
 
 import { held } from '../test/held.js'
 import { octopus } from '../test/octopus.js'
-import { CATALOG_BUSY, targetOf, usePlugins } from './usePlugins.js'
+import { CATALOG_BUSY, rowKey, targetOf, usePlugins } from './usePlugins.js'
 
 const CONTEXT7: InstalledPlugin = {
   id: 'context7@claude-plugins-official',
@@ -150,14 +150,14 @@ describe('usePlugins', () => {
     act(() => {
       write = result.current.setEnabled(CONTEXT7.id, false, { scope: 'user' })
     })
-    expect(result.current.busy.has(CONTEXT7.id)).toBe(true)
+    expect(result.current.busy.has(rowKey(CONTEXT7.id, { scope: 'user' }))).toBe(true)
 
     await act(async () => {
       pending.resolve({ ok: true, value: { reloaded: 3 } })
       await write
     })
 
-    expect(result.current.busy.has(CONTEXT7.id)).toBe(false)
+    expect(result.current.busy.size).toBe(0)
     expect(result.current.applied).toBe(3)
     expect(octopus().plugins.setEnabled).toHaveBeenCalledWith(CONTEXT7.id, false, {
       scope: 'user'
@@ -284,5 +284,161 @@ describe('usePlugins', () => {
 
     await act(() => result.current.refreshCatalog())
     expect(octopus().plugins.refresh).toHaveBeenCalledOnce()
+  })
+
+  /*
+   * A start-up listing that timed out, then a window opened that reads it
+   * again: the good list must not be drawn under the old failure.
+   */
+  it('clears a read’s failure once a read works', async () => {
+    vi.mocked(octopus().plugins.list)
+      .mockResolvedValueOnce({
+        ok: false,
+        error: 'x',
+        code: 'pluginTimedOut',
+        params: { seconds: '120' }
+      })
+      .mockResolvedValue({ ok: true, value: [CONTEXT7] })
+    vi.mocked(octopus().plugins.catalog).mockResolvedValueOnce({
+      ok: false,
+      error: 'x',
+      code: 'pluginCliUnavailable',
+      params: { message: 'EACCES' }
+    })
+    const { result } = renderHook(() => usePlugins())
+    await waitFor(() => {
+      expect(result.current.error).toContain('120')
+    })
+
+    await act(() => result.current.readInstalled())
+    expect(result.current.error).toBeNull()
+
+    await act(() => result.current.readCatalog())
+    expect(result.current.error).toContain('EACCES')
+    expect(result.current.catalogLoading).toBe(false)
+    await act(() => result.current.readCatalog())
+    expect(result.current.error).toBeNull()
+  })
+
+  // A refusal is followed by a re-read that works; that must not clear it.
+  it('keeps an action’s failure through the re-read that follows it', async () => {
+    vi.mocked(octopus().plugins.setEnabled).mockResolvedValueOnce({
+      ok: false,
+      error: 'x',
+      code: 'pluginActionFailed',
+      params: { message: 'blocked' }
+    })
+    const { result } = renderHook(() => usePlugins())
+
+    await act(() => result.current.setEnabled(CONTEXT7.id, false, { scope: 'user' }))
+
+    expect(result.current.installed).toEqual([])
+    expect(result.current.error).toBe('Claude Code refused: blocked')
+  })
+
+  // The action is the newer news: what the user just did, and why it did not.
+  it('says why an action failed over why a read did', async () => {
+    vi.mocked(octopus().plugins.list).mockResolvedValue({
+      ok: false,
+      error: 'x',
+      code: 'pluginTimedOut',
+      params: { seconds: '120' }
+    })
+    vi.mocked(octopus().plugins.setEnabled).mockResolvedValueOnce({
+      ok: false,
+      error: 'x',
+      code: 'pluginActionFailed',
+      params: { message: 'blocked' }
+    })
+    const { result } = renderHook(() => usePlugins())
+
+    await act(() => result.current.setEnabled(CONTEXT7.id, false, { scope: 'user' }))
+
+    expect(result.current.error).toBe('Claude Code refused: blocked')
+  })
+
+  /*
+   * Two switches on two plugins re-read the list twice at once. The older
+   * reply landing last flipped the first switch back on screen.
+   */
+  it('draws the newest listing, whichever reply lands last', async () => {
+    const { result } = renderHook(() => usePlugins())
+    await waitFor(() => {
+      expect(result.current.installed).toEqual([])
+    })
+    const older = held<Listing>()
+    const newer = held<Listing>()
+    vi.mocked(octopus().plugins.list)
+      .mockReturnValueOnce(older.promise)
+      .mockReturnValueOnce(newer.promise)
+
+    let first: Promise<void> = Promise.resolve()
+    let second: Promise<void> = Promise.resolve()
+    act(() => {
+      first = result.current.readInstalled()
+      second = result.current.readInstalled()
+    })
+    await act(async () => {
+      newer.resolve({ ok: true, value: [{ ...CONTEXT7, enabled: false }] })
+      await second
+      older.resolve({ ok: true, value: [CONTEXT7] })
+      await first
+    })
+
+    expect(result.current.installed).toEqual([{ ...CONTEXT7, enabled: false }])
+  })
+
+  it('draws the newest catalog, whichever reply lands last', async () => {
+    const { result } = renderHook(() => usePlugins())
+    const older = held<{ ok: true; value: PluginCatalog }>()
+    const newer = held<{ ok: true; value: PluginCatalog }>()
+    vi.mocked(octopus().plugins.catalog)
+      .mockReturnValueOnce(older.promise)
+      .mockReturnValueOnce(newer.promise)
+
+    let first: Promise<void> = Promise.resolve()
+    let second: Promise<void> = Promise.resolve()
+    act(() => {
+      first = result.current.readCatalog()
+      second = result.current.readCatalog()
+    })
+    await act(async () => {
+      newer.resolve({ ok: true, value: CATALOG })
+      await second
+      older.resolve({ ok: true, value: { ...CATALOG, officialConnected: false } })
+      await first
+    })
+
+    expect(result.current.catalog).toEqual(CATALOG)
+    expect(result.current.catalogLoading).toBe(false)
+  })
+
+  // The window is opened afresh; the last visit's count is not news on it.
+  it('forgets the last count and failure when asked', async () => {
+    vi.mocked(octopus().plugins.uninstall).mockResolvedValueOnce({
+      ok: false,
+      error: 'x',
+      code: 'pluginNotInstalled'
+    })
+    const { result } = renderHook(() => usePlugins())
+    await act(() => result.current.setEnabled(CONTEXT7.id, true, { scope: 'user' }))
+    await act(() => result.current.uninstall(CONTEXT7.id, { scope: 'user' }))
+    expect(result.current.error).not.toBeNull()
+
+    act(() => {
+      result.current.clearNote()
+    })
+
+    expect(result.current.applied).toBeNull()
+    expect(result.current.error).toBeNull()
+  })
+
+  it('keys a row by where it is installed', () => {
+    expect(rowKey('a@m', { scope: 'user' })).not.toBe(
+      rowKey('a@m', { scope: 'local', projectPath: '/work' })
+    )
+    expect(rowKey('a@m', { scope: 'local', projectPath: '/work' })).not.toBe(
+      rowKey('a@m', { scope: 'project', projectPath: '/work' })
+    )
   })
 })

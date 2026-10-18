@@ -113,7 +113,9 @@ import dialogs' pills:
   whatever starts with a digit. A card opens its details — the whole
   description, keywords, the homepage, and a note that a plugin runs with
   Claude Code's own access. An empty store with no official marketplace says
-  why and offers to connect it.
+  why and offers to connect it, and a catalog that could not be read offers to
+  read it again — the refresh button needs a catalog to refresh, and pulsing
+  cards for ever would hide the way out.
 
 A plugin whose marketplace installs it by **running a command** comes back
 from the first install as `needsConsent`. The store shows that command whole
@@ -122,7 +124,11 @@ in a confirmation and installs with its digest only on a yes.
 **Every change says how far it reached**: the line under the tabs reads
 "Applied to 3 open conversations" from the count core returns, or "Conversations
 started from now on will load it" when none was open — so a switch that
-worked is seen to have worked. A failure takes the same line.
+worked is seen to have worked. A failure takes the same line, an action's over a
+read's, and the line is cleared each time the window opens: the last visit's
+count is not news. Each list read claims a number before its await and draws
+only if it is still the newest, since two switches re-read the list twice at
+once.
 
 **When Settings → Agent leaves the user's settings out**, a plugin installed for
 every project is installed and loads nowhere here, because that is the layer
@@ -3072,8 +3078,8 @@ rather than a system box is being able to answer before the round trip.
 
 ## State
 
-Four hooks own everything that talks to IPC: `useProjects`, `useWorkspaces`,
-`useChat` and `useRateLimit`. A component that lays out a window should not also
+Hooks own everything that talks to IPC — `useProjects`, `useWorkspaces`,
+`useChat`, `useRateLimit`, `usePlugins` and the rest. A component that lays out a window should not also
 know what an IPC failure looks like.
 
 `useRateLimit` is separate from `useChat` because the figure belongs to the

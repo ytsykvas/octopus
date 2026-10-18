@@ -1684,6 +1684,7 @@ export const en = {
     title: 'Plugins',
     troubleDot: 'A plugin would not load',
     tabInstalled: 'Installed',
+    tabInstalledCount: 'Installed · {{count}}',
     tabStore: 'Store',
     userLayerOff:
       'Settings → Agent leaves your user settings out, and that is where plugins installed for every project are switched on. They stay installed, but conversations here will not load them.',
@@ -1694,7 +1695,7 @@ export const en = {
     applied_other: 'Applied to {{count}} open conversations.',
     appliedNone: 'Applied. Conversations started from now on will load it.',
     searchInstalled: 'Filter installed plugins',
-    searchStore: 'Search plugins by name or description',
+    searchStore: 'Search plugins by name, description or keyword',
     loading: 'Reading plugins…',
     noneInstalled: 'No plugins yet',
     noneInstalledHint:
@@ -1711,6 +1712,8 @@ export const en = {
     stateOn: 'On',
     stateOff: 'Off',
     managedNote: 'Set up by your organisation, so it cannot be changed here.',
+    unreachableNote:
+      'Claude Code did not say where this one is installed, so it cannot be changed here.',
     homepage: 'Homepage',
     remove: 'Remove {{name}}',
     removeTitle: 'Remove plugin?',
@@ -1719,7 +1722,7 @@ export const en = {
       'Its data directory goes with it — its settings and anything it stored. Open conversations stop using it at once.',
     removeConfirm: 'Remove',
     cancel: 'Cancel',
-    loadErrors: 'Would not load',
+    loadErrors: 'Would not load: {{errors}}',
     components: {
       skills: 'Skills',
       commands: 'Commands',
@@ -1729,6 +1732,7 @@ export const en = {
       lsp: 'LSP'
     },
     allCategories: 'All',
+    categoriesLabel: 'Categories',
     categories: {
       development: 'Development',
       productivity: 'Productivity',
@@ -1769,7 +1773,10 @@ export const en = {
     officialMissing: 'The official Claude Code marketplace is not connected.',
     connect: 'Connect the official marketplace',
     connecting: 'Connecting…',
-    refresh: 'Check the marketplaces for new plugins'
+    refresh: 'Check the marketplaces for new plugins',
+    catalogFailedTitle: 'The store could not be read',
+    catalogFailedHint: 'Claude Code did not answer with the list of plugins. The reason is above.',
+    retry: 'Try again'
   },
 
   tips: {

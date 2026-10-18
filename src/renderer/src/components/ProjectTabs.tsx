@@ -8,21 +8,8 @@ import type { Mark } from '../attention.js'
 import { DONE_TONE } from './agentStatus.js'
 
 import { DropdownMenu } from './DropdownMenu.js'
+import { LETTERS, TILE_WASH } from './projectTint.js'
 import { ProjectGlyph } from './ProjectGlyph.js'
-
-/**
- * What the initials or the icon are drawn in: the project's colour, a quarter
- * of the way towards the ink.
- *
- * The colour alone, or mixed with `--ink-faint` as these were, left the worst of
- * the fifteen at 3.3:1 in the light theme on the tile (lime) — under the 4.5:1
- * text needs, and these are letters. A quarter of ink brings every colour to at
- * least 5.2:1 on an idle tile and 4.8:1 on the chosen one, in both themes, and
- * leaves the hue plain: the tab is how a project is recognised, so it is not
- * pushed further towards grey than that. The same mix the right pane's chosen
- * tab uses.
- */
-export const LETTERS = 'color-mix(in srgb, var(--project-color) 75%, var(--ink))'
 
 interface ProjectTabsProps {
   readonly projects: readonly Project[]
@@ -148,9 +135,9 @@ function PluginsTile({
   trouble,
   onOpen
 }: {
-  open: boolean
-  trouble: boolean
-  onOpen: () => void
+  readonly open: boolean
+  readonly trouble: boolean
+  readonly onOpen: () => void
 }): React.JSX.Element {
   const { t } = useTranslation()
 
@@ -252,7 +239,7 @@ function ProjectTab({
                     color: LETTERS
                   }
                 : {
-                    backgroundColor: 'color-mix(in srgb, var(--project-color) 14%, transparent)',
+                    backgroundColor: TILE_WASH,
                     color: LETTERS
                   }
             }

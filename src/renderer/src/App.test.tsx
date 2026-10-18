@@ -508,6 +508,43 @@ describe('App', () => {
       expect(screen.queryByRole('dialog', { name: 'Plugins' })).toBeNull()
     })
 
+    it('opens afresh, without the last visit’s note', async () => {
+      vi.mocked(window.octopus.plugins.list).mockResolvedValue({
+        ok: true,
+        value: [
+          {
+            id: 'context7@m',
+            name: 'context7',
+            marketplace: 'm',
+            version: null,
+            scope: 'user',
+            enabled: true,
+            projectPath: null,
+            description: null,
+            author: null,
+            homepage: null,
+            components: [],
+            errors: []
+          }
+        ]
+      })
+      vi.mocked(window.octopus.plugins.setEnabled).mockResolvedValue({
+        ok: true,
+        value: { reloaded: 2 }
+      })
+      const user = await openApp()
+
+      await user.click(screen.getByRole('button', { name: 'Plugins' }))
+      await user.click(await screen.findByRole('switch', { name: 'Use context7' }))
+      expect(await screen.findByText('Applied to 2 open conversations.')).toBeInTheDocument()
+
+      await user.click(screen.getByRole('button', { name: 'Close' }))
+      await user.click(screen.getByRole('button', { name: 'Plugins' }))
+
+      await screen.findByRole('switch', { name: 'Use context7' })
+      expect(screen.queryByText('Applied to 2 open conversations.')).toBeNull()
+    })
+
     // At start-up, before anybody opens anything: the tile is how they learn.
     it('marks the tile when an installed plugin would not load', async () => {
       vi.mocked(window.octopus.plugins.list).mockResolvedValue({

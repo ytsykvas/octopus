@@ -4,6 +4,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import type { PluginsController } from '../../hooks/usePlugins.js'
 import { stubDialogElement } from '../../test/dialog.js'
+import { rowKey } from '../../hooks/usePlugins.js'
 import { installedPlugin, pluginsController } from '../../test/plugins.js'
 import { InstalledPlugins } from './InstalledPlugins.js'
 
@@ -139,11 +140,23 @@ describe('InstalledPlugins', () => {
     })
   })
 
-  it('holds a plugin’s controls while its action runs', () => {
-    draw({ installed: [installedPlugin()], busy: new Set(['context7@claude-plugins-official']) })
+  /*
+   * One plugin can be installed for every project and in a project as well:
+   * acting on one row holds that row, not its twin.
+   */
+  it('holds a row’s controls while its action runs, and only that row’s', () => {
+    draw({
+      installed: [
+        installedPlugin(),
+        installedPlugin({ scope: 'local', projectPath: '/work/site' })
+      ],
+      busy: new Set([rowKey('context7@claude-plugins-official', { scope: 'user' })])
+    })
 
-    expect(screen.getByRole('switch', { name: 'Use context7' })).toBeDisabled()
-    expect(screen.getByRole('button', { name: 'Remove context7' })).toBeDisabled()
+    const [held, free] = screen.getAllByRole('switch', { name: 'Use context7' })
+    expect(held).toBeDisabled()
+    expect(free).toBeEnabled()
+    expect(screen.getAllByRole('button', { name: 'Remove context7' })[0]).toBeDisabled()
   })
 
   /*
@@ -165,6 +178,9 @@ describe('InstalledPlugins', () => {
     // A scope the window has no word for is shown as the CLI wrote it.
     expect(odd).toHaveTextContent('enterprise')
     expect(odd).toHaveTextContent('Off')
+    // Not an organisation's: Claude Code just did not say where it is.
+    expect(odd).toHaveTextContent('Claude Code did not say where this one is installed')
+    expect(odd).not.toHaveTextContent('organisation')
     expect(screen.queryByRole('switch')).toBeNull()
     expect(screen.queryByRole('button', { name: /^Remove/ })).toBeNull()
   })

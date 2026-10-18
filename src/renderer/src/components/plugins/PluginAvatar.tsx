@@ -1,7 +1,7 @@
 import { colorFor } from '@core/colors.js'
 import { initials } from '@core/initials.js'
 
-import { LETTERS } from '../ProjectTabs.js'
+import { LETTERS, TILE_WASH } from '../projectTint.js'
 
 /**
  * A plugin's tile: two letters on a colour that follows from its id.
@@ -29,7 +29,7 @@ export function PluginAvatar({
       style={
         {
           '--project-color': `var(--project-${colorFor(id)})`,
-          backgroundColor: 'color-mix(in srgb, var(--project-color) 14%, transparent)',
+          backgroundColor: TILE_WASH,
           color: LETTERS
         } as React.CSSProperties
       }

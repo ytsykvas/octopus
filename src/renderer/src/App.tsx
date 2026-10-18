@@ -919,6 +919,8 @@ export function App(): React.JSX.Element {
               pluginTrouble={(plugins.installed ?? []).some((plugin) => plugin.errors.length > 0)}
               onOpenPlugins={() => {
                 setPluginsOpen(true)
+                // The last visit's count is not news on this one.
+                plugins.clearNote()
                 // Installed from a terminal since the app started, or removed.
                 void plugins.readInstalled()
               }}

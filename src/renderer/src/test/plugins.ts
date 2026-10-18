@@ -60,6 +60,7 @@ export function pluginsController(overrides: Partial<PluginsController> = {}): P
     busy: new Set(),
     applied: null,
     error: null,
+    clearNote: vi.fn(),
     readInstalled: vi.fn(() => Promise.resolve()),
     readCatalog: vi.fn(() => Promise.resolve()),
     install: vi.fn(() => Promise.resolve(null)),
