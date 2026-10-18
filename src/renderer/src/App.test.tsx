@@ -274,6 +274,9 @@ describe('App', () => {
     await openApp()
 
     expect(await screen.findByText('Let’s find something to work on')).toBeInTheDocument()
+    expect(
+      screen.getByText('Nothing here yet. Add a repository with the "+" button.')
+    ).toBeInTheDocument()
   })
 
   // The screen a first run lands on had the instructions and none of the
@@ -327,8 +330,8 @@ describe('App', () => {
     await openApp()
 
     expect(await screen.findByText('Which project today?')).toBeInTheDocument()
-    // The list points at the strip rather than asking for a repository, which
-    // the two tabs beside it already are.
+    // The list points at the strip rather than asking for a repository when two
+    // are already on it.
     expect(screen.getByText('Pick a project on the far left.')).toBeInTheDocument()
   })
 
