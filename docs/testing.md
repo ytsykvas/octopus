@@ -3,12 +3,13 @@
 ## The gate
 
 ```bash
-npm run check    # format, lint, types, tests with coverage
+npm run check      # format, lint, types, tests with coverage
+npm run test:race  # the renderer suite with React's scheduler made to lose
 ```
 
-It must pass before every commit. Coverage is **100% across `src`**, enforced by
-a threshold that fails the build. Never lower it and never disable a lint rule
-to get past — if coverage drops, there is untested code.
+`check` must pass before every commit; CI runs both. Coverage is **100% across
+`src`**, enforced by a threshold that fails the build. Never lower it and never
+disable a lint rule to get past — if coverage drops, there is untested code.
 
 ## Two runs, not two projects
 
@@ -282,6 +283,50 @@ A selection's ends belong in **text** nodes, not in the elements around them,
 and once the highlighter has run a line's text sits inside however many token
 spans shiki produced. A range anchored to the element instead models a selection
 no browser makes, and stops exercising the nesting the running app always has.
+
+### A wait ends after the work React had already queued
+
+React's scheduler posts its work with `setImmediate`, and Testing Library ends
+every `waitFor` and `findBy` with a `setTimeout(0)`. Node does not order the
+two, so now and then a wait came back after a render had committed but before
+its effects had run — a `selectionchange` listener not yet attached, a read not
+yet started — and the next line acted on a component that was not ready. That
+was the "fails once in five runs" red that lasted two months: the viewer's
+selection toolbar, ⌘T in `App.test.tsx`, a background conversation in
+`Chat.test.tsx`, on CI and locally, never in a file run alone often enough to
+catch it.
+
+`setup.ts` wraps Testing Library's `asyncWrapper` so each wait ends with one
+more `setImmediate`, queued behind whatever the scheduler had queued when the
+wait finished. That covers a wait that ended **because the DOM changed**. It
+does not cover work the scheduler queues afterwards, which leaves three shapes
+a test can still get wrong:
+
+- **`getBy` right after an action whose result is a round trip** — a list read
+  over IPC, a `<dialog>` that `showModal()` opens in an effect. Use `findBy`.
+- **A user-event action, or a `waitFor` on a mock having been called, whose
+  result arrives through a promise.** The wait can end before that render is
+  even queued, and a commit always yields before its effects, so the DOM can be
+  drawn with the effects still to come. `findBy` on something the effect
+  produces.
+- **A `setTimeout(0)` of the test's own** standing in for "let it settle". It
+  races the scheduler the same way — and a `setTimeout(0)` before asserting that
+  _nothing more_ happened passes on broken code. Settle the very promise the
+  component is awaiting, inside `act`, as `useAccounts.test.tsx` does, or wait
+  out the delay being counted, as `useWorkspaces.test.tsx` does.
+
+**`vi.useFakeTimers()` without `shouldAdvanceTime`** now holds a wait until a
+real `setImmediate` has run: advancing the fake clock while a `waitFor` is
+pending no longer releases it, and the test times out. Use `shouldAdvanceTime`,
+as `RightPanel.test.tsx` and `FileViewer.test.tsx` do.
+
+**`npm run test:race` makes the scheduler lose the race every time.**
+`schedulerLoses.ts` holds each `setImmediate` back behind a real timer, loaded
+before `setup.ts` because the scheduler captures the function when it loads, and
+the renderer suite then runs as usual. CI runs it after the gate. With
+`setup.ts`'s wait removed, 36–39 tests failed this way on 2026-10-19, depending
+on the run; with it, none. A test that reads a component before its effects
+have run fails there every time instead of once in a while.
 
 ## Main and preload
 

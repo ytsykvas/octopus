@@ -43,9 +43,6 @@ const deferred = <T,>(): { promise: Promise<T>; settle: (value: T) => void } => 
   }
 }
 
-/** Lets every promise already queued run before the assertion that follows. */
-const settled = (): Promise<void> => new Promise((resolve) => setTimeout(resolve, 0))
-
 /** Answers the bridge gives to successive status reads; the last one repeats. */
 const statusIs = (...answers: Result<AccountsStatus>[]): void => {
   const status = vi.mocked(octopus().accounts.status)
@@ -61,10 +58,14 @@ async function mounted(
 ): Promise<RenderHookResult<AccountsController, undefined>> {
   statusIs(...status)
   const rendered = renderHook(() => useAccounts())
-  await waitFor(() => {
-    expect(octopus().accounts.status).toHaveBeenCalled()
+  // The read starts in the mount effect, which `renderHook` has already run.
+  // Its answer is settled inside `act`, so what the hook sets is drawn before
+  // this returns. Waiting for the call first, outside `act`, let the answer land
+  // in between — and then nothing waited for the render that followed.
+  expect(octopus().accounts.status).toHaveBeenCalled()
+  await act(async () => {
+    await vi.mocked(octopus().accounts.status).mock.results[0]?.value
   })
-  await act(settled)
   return rendered
 }
 
