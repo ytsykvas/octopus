@@ -89,6 +89,20 @@ describe('the notice an event amounts to', () => {
     })
   })
 
+  // A form holds the turn as a question does, and is put to the user as one.
+  it("reads an MCP server's form as a question", () => {
+    expect(
+      from({
+        type: 'elicitation_request',
+        requestId: 'f',
+        serverName: 'ledger',
+        message: 'Which token?',
+        title: '',
+        fields: []
+      })?.kind
+    ).toBe('question')
+  })
+
   it('is nothing for an event that is not news', () => {
     expect(from({ type: 'text', text: 'hi' })).toBeNull()
   })

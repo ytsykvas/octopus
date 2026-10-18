@@ -7764,6 +7764,7 @@ describe('the agent chat', () => {
     /** A session with a question from a server already on the books. */
     async function asked(): Promise<{
       service: OctopusService
+      workspaceId: string
       chatId: string
       events: ChatEvent[]
       answer: Promise<{ action: string }>
@@ -7786,7 +7787,7 @@ describe('the agent chat', () => {
       const raised = events.find((entry) => entry.event.type === 'elicitation_request')?.event
       if (raised?.type !== 'elicitation_request') throw new Error('no request was raised')
 
-      return { service, chatId: chat.id, events, answer, requestId: raised.requestId }
+      return { service, workspaceId, chatId: chat.id, events, answer, requestId: raised.requestId }
     }
 
     it('reaches the window with the form already read', async () => {
@@ -7857,6 +7858,74 @@ describe('the agent chat', () => {
         expect(events.map((entry) => entry.event)).toContainEqual(
           expect.objectContaining({ type: 'elicitation_answered', action: 'cancel' })
         )
+      })
+    })
+
+    /*
+     * A form holds the turn exactly as a permission does. Left `running`, the
+     * workspace's dot, the project's mark and the notice all said "busy" while
+     * the agent sat waiting on the user.
+     */
+    it('marks the conversation as waiting until it is answered', async () => {
+      const { service, workspaceId, chatId, requestId } = await asked()
+      const status = (): string | undefined =>
+        service.listChats(workspaceId).find((chat) => chat.id === chatId)?.status
+
+      await vi.waitFor(() => {
+        expect(status()).toBe('waiting_permission')
+      })
+
+      await service.answerElicitation(requestId, 'decline')
+
+      expect(status()).toBe('running')
+    })
+
+    /*
+     * Two tool calls can wait at once. Answering one of them is not the end of
+     * waiting while the other is still open — either way round.
+     */
+    describe('beside a permission in the same turn', () => {
+      async function both(): Promise<{
+        service: OctopusService
+        status: () => string | undefined
+        formId: string
+        permissionId: string
+      }> {
+        const { service, workspaceId, chatId, requestId, events } = await asked()
+        void agent().ask('Bash', { command: 'ls' })
+
+        await vi.waitFor(() => {
+          expect(events.some((entry) => entry.event.type === 'permission_request')).toBe(true)
+        })
+        const raised = events.find((entry) => entry.event.type === 'permission_request')?.event
+        if (raised?.type !== 'permission_request') throw new Error('no permission was raised')
+
+        return {
+          service,
+          status: () => service.listChats(workspaceId).find((chat) => chat.id === chatId)?.status,
+          formId: requestId,
+          permissionId: raised.requestId
+        }
+      }
+
+      it('stays waiting when the form is answered first', async () => {
+        const { service, status, formId, permissionId } = await both()
+
+        await service.answerElicitation(formId, 'decline')
+        expect(status()).toBe('waiting_permission')
+
+        await service.answerPermission(permissionId, 'deny')
+        expect(status()).toBe('running')
+      })
+
+      it('stays waiting when the permission is answered first', async () => {
+        const { service, status, formId, permissionId } = await both()
+
+        await service.answerPermission(permissionId, 'deny')
+        expect(status()).toBe('waiting_permission')
+
+        await service.answerElicitation(formId, 'decline')
+        expect(status()).toBe('running')
       })
     })
 
