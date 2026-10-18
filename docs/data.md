@@ -125,10 +125,10 @@ corrupt value, which is the one thing this reader exists to shout about.
 
 ## One process owns this directory
 
-Writes to `state.json` are serialised — `commit` in
-[`service.ts`](../src/core/service.ts) chains them — and each one is written to a
-temp file and renamed, so a crash cannot leave a truncated file behind. Both are
-about **one** process. Neither is exclusive.
+Writes to `state.json` and `config.json` are serialised — `commit` and
+`applyConfig` in [`service.ts`](../src/core/service.ts) chain them — and each
+one is written to a temp file and renamed, so a crash cannot leave a truncated
+file behind. Both are about **one** process. Neither is exclusive.
 
 Two copies of the app open the same file, hold it in memory and write it whole,
 so the last writer wins: what the other window did is not merged and not
@@ -231,8 +231,8 @@ being a record rather than a session.
 last said this account may use, kept only so the model picker works before the
 first message — the agent can be asked solely while a session is open. It is
 replaced whole at the next session start, and it lives here rather than in
-`config.json` because that file is written unqueued and would race the user's
-own edits.
+`config.json` because that file holds settings the user can read and shorten,
+and a cache the application writes for itself is not a setting.
 
 Each entry **may** carry a `resolvedModel` — the full name a short one stands
 for, `sonnet` → `claude-sonnet-5`. Both names are in circulation and they arrive
