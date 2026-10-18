@@ -11,7 +11,7 @@
 │ OC ├──────────────┤                          │                      │
 │    │  ● anna      │                          │                      │
 │ +  │  ○ maria     │                          │                      │
-│    │              │                          │                      │
+│ ✣  │              │                          │                      │  ✣ plugins
 ├────┴──────────────┤                          │                      │
 │ Claude   5h 31%   │                          │                      │
 │ ⚙               ⊟ │                          │                      │
@@ -84,6 +84,55 @@ Folded, the column is only the strip: the limits are not drawn, and Settings and
 the fold stack instead of sitting side by side. The label on Settings went with
 the move — beside an icon it was a word restating the icon, and the name is
 still there as a tooltip and for assistive technology.
+
+**The rail ends in a tile of its own**: a puzzle piece the size of a project
+tab, in a **foot** under the list rather than at the end of it. The list
+scrolls, and a tile at its end would ride up and down with the number of
+projects; the plugins are the agent's rather than a project's, so they sit
+apart from the projects as well. It is tinted with the accent where the "+"
+is drawn in the line colour — the "+" is an empty slot, this is a place — and
+the piece turns a few degrees under the pointer, the one motion on the rail,
+gone under `prefers-reduced-motion`. A ring says the window is open. An amber
+dot in the project dot's place says an installed plugin would not load, which
+is why `usePlugins` reads the installed list when the app starts rather than
+when the window opens.
+
+**`PluginsWindow`** is a `Modal` of the large size with two tabs, styled as the
+import dialogs' pills:
+
+- **Installed** — every scope, a project's own installs included and labelled
+  with their project. A switch and a removal on each row; the removal asks
+  first, because the plugin's data goes with it. A row octopus cannot change
+  (`managed`) is shown with words — "On", "Off" — rather than a switch nobody
+  can move, which would read as "not now" where the truth is "not here".
+- **Store** — read the first time the tab is shown, since the listing takes a
+  second or two, with outlined cards meanwhile. A search over name, description
+  and keywords, a row of category pills (largest first, the uncategorised last
+  as "Other"), and cards ordered by installs: the official catalog runs to some
+  three hundred plugins, and the first screen of an alphabetical one is
+  whatever starts with a digit. A card opens its details — the whole
+  description, keywords, the homepage, and a note that a plugin runs with
+  Claude Code's own access. An empty store with no official marketplace says
+  why and offers to connect it.
+
+A plugin whose marketplace installs it by **running a command** comes back
+from the first install as `needsConsent`. The store shows that command whole
+in a confirmation and installs with its digest only on a yes.
+
+**Every change says how far it reached**: the line under the tabs reads
+"Applied to 3 open conversations" from the count core returns, or "Conversations
+started from now on will load it" when none was open — so a switch that
+worked is seen to have worked. A failure takes the same line.
+
+**When Settings → Agent leaves the user's settings out**, a plugin installed for
+every project is installed and loads nowhere here, because that is the layer
+that switches it on. The window says so above the tabs and links to the
+setting, rather than letting every switch look broken.
+
+A homepage is linked only when it is `https:` — a marketplace writes it, and
+`shell.openExternal` will start any scheme the system knows. A plugin's tile is
+its initials on a colour that follows from its id (`colorFor`), built as a
+project tab is, so it reads as one of the family.
 
 **The centre is the agent chat**, scoped to the selected workspace: its worktree
 is the agent's working directory and its branch is where the work lands. A

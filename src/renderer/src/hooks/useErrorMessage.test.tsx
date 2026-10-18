@@ -7,6 +7,7 @@ import type { DiffErrorCode } from '@core/diff.js'
 import type { EnvProfileCode } from '@core/envProfiles.js'
 import type { GitHubErrorCode } from '@core/github.js'
 import type { InvalidFileCode } from '@core/persist.js'
+import type { PluginErrorCode } from '@core/plugins.js'
 import type { ProjectValidationCode } from '@core/projects.js'
 import type { RepoConfigCode } from '@core/repoConfig.js'
 import type { LibraryErrorCode } from '@core/library.js'
@@ -38,6 +39,7 @@ type CoreErrorCode =
   | GitHubErrorCode
   | InvalidFileCode
   | LibraryErrorCode
+  | PluginErrorCode
   // Raised at the bridge rather than in core: `attempt` is where a `ZodError`
   // becomes something the window can say.
   | 'valueRefused'
@@ -65,6 +67,12 @@ const CODE_PARAMETERS: Record<CoreErrorCode, Interpolated> = {
   libraryTooLarge: { limit: '64000' },
   libraryUrlRefused: { url: 'https://example.test/ship.md' },
   librarySubagentNeedsDescription: null,
+  pluginCliUnavailable: { message: 'spawn claude EACCES' },
+  pluginTimedOut: { seconds: '120' },
+  pluginActionFailed: { message: 'Plugin not found in marketplace' },
+  pluginOutputUnreadable: { message: 'Cloning…' },
+  pluginNotInstalled: null,
+  pluginProjectMissing: { path: '/work/site' },
   attachmentType: { type: 'application/x-sh' },
   envProfileExists: { name: 'prod' },
   envProfileMissing: { name: 'prod' },

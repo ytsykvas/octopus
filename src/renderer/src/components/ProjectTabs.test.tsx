@@ -39,6 +39,9 @@ function renderTabs(overrides: Partial<ProjectTabsProps> = {}): ProjectTabsProps
     onAddFromDisk: vi.fn(),
     onAddFromGitHub: vi.fn(),
     busy: false,
+    pluginsOpen: false,
+    pluginTrouble: false,
+    onOpenPlugins: vi.fn(),
     ...overrides
   }
 
@@ -268,5 +271,48 @@ describe('ProjectTabs', () => {
     renderTabs({ projects: [], activeProjectId: null })
 
     expect(screen.getByTitle('Add repository')).toBeEnabled()
+  })
+
+  describe('the plugins tile', () => {
+    it('opens the plugins window', async () => {
+      const user = userEvent.setup()
+      const props = renderTabs()
+
+      await user.click(screen.getByRole('button', { name: 'Plugins' }))
+
+      expect(props.onOpenPlugins).toHaveBeenCalledOnce()
+    })
+
+    // Below the scrolling list, not at its end: forty projects must not push
+    // it out of sight, and none must not pull it up under the "+".
+    it('sits in a foot of its own, outside the list that scrolls', () => {
+      renderTabs({ projects: [project(), project({ id: 'ledger', name: 'ledger' })] })
+
+      const tile = screen.getByRole('button', { name: 'Plugins' })
+      const list = screen.getByTitle('Add repository').closest('.overflow-y-auto')
+
+      expect(list).not.toBeNull()
+      expect(list?.contains(tile)).toBe(false)
+    })
+
+    it('says whether the window is open', () => {
+      renderTabs({ pluginsOpen: true })
+
+      expect(screen.getByRole('button', { name: 'Plugins' })).toHaveAttribute(
+        'aria-expanded',
+        'true'
+      )
+    })
+
+    it('marks a plugin that would not load, and nothing otherwise', () => {
+      renderTabs()
+      expect(screen.queryByRole('img', { name: 'A plugin would not load' })).toBeNull()
+    })
+
+    it('marks a plugin that would not load', () => {
+      renderTabs({ pluginTrouble: true })
+
+      expect(screen.getByRole('img', { name: 'A plugin would not load' })).toHaveClass('bg-warning')
+    })
   })
 })

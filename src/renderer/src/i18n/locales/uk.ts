@@ -39,7 +39,8 @@ export const uk: Translation = {
     removeCancel: 'Скасувати',
     collapse: 'Сховати воркспейси',
     expand: 'Показати воркспейси',
-    settings: 'Налаштування'
+    settings: 'Налаштування',
+    plugins: 'Плагіни'
   },
 
   repositories: {
@@ -1283,6 +1284,98 @@ export const uk: Translation = {
     dismiss: 'Закрити'
   },
 
+  plugins: {
+    title: 'Плагіни',
+    troubleDot: 'Плагін не завантажився',
+    tabInstalled: 'Встановлені',
+    tabStore: 'Магазин',
+    userLayerOff:
+      'Налаштування → Агент не завантажують ваші користувацькі налаштування, а саме там увімкнено плагіни, встановлені для всіх проєктів. Вони лишаються встановленими, але розмови тут їх не завантажать.',
+    openAgentSettings: 'Відкрити налаштування агента',
+    applied_one: 'Застосовано до {{count}} відкритої розмови.',
+    applied_few: 'Застосовано до {{count}} відкритих розмов.',
+    applied_many: 'Застосовано до {{count}} відкритих розмов.',
+    applied_other: 'Застосовано до {{count}} відкритих розмов.',
+    appliedNone: 'Застосовано. Нові розмови вже завантажать його.',
+    searchInstalled: 'Фільтр встановлених плагінів',
+    searchStore: 'Пошук плагінів за назвою чи описом',
+    loading: 'Читаю плагіни…',
+    noneInstalled: 'Плагінів ще немає',
+    noneInstalledHint:
+      'Плагіни додають Claude Code навички, команди, агентів та інструменти. Знайдіть потрібний у магазині.',
+    browseStore: 'Перейти до магазину',
+    noMatch: 'Нічого не знайдено за «{{query}}».',
+    scope: {
+      user: 'Усі проєкти',
+      project: 'Проєкт',
+      local: 'Проєкт, лише ви',
+      managed: 'Керований'
+    },
+    switchLabel: 'Використовувати {{name}}',
+    stateOn: 'Увімкнено',
+    stateOff: 'Вимкнено',
+    managedNote: 'Налаштовано вашою організацією, тож тут його не змінити.',
+    homepage: 'Сайт',
+    remove: 'Видалити {{name}}',
+    removeTitle: 'Видалити плагін?',
+    removeMessage: 'Видалити «{{name}}»?',
+    removeDetail:
+      'Разом із ним видаляється його тека з даними — налаштування й усе, що він зберіг. Відкриті розмови одразу перестануть ним користуватися.',
+    removeConfirm: 'Видалити',
+    cancel: 'Скасувати',
+    loadErrors: 'Не завантажився',
+    components: {
+      skills: 'Навички',
+      commands: 'Команди',
+      agents: 'Агенти',
+      hooks: 'Хуки',
+      mcp: 'MCP',
+      lsp: 'LSP'
+    },
+    allCategories: 'Усі',
+    categories: {
+      development: 'Розробка',
+      productivity: 'Продуктивність',
+      database: 'Бази даних',
+      monitoring: 'Моніторинг',
+      security: 'Безпека',
+      deployment: 'Розгортання',
+      design: 'Дизайн',
+      automation: 'Автоматизація',
+      learning: 'Навчання',
+      location: 'Геолокація',
+      testing: 'Тестування',
+      math: 'Математика',
+      migration: 'Міграція'
+    },
+    otherCategory: 'Інше',
+    installs_one: '{{formatted}} встановлення',
+    installs_few: '{{formatted}} встановлення',
+    installs_many: '{{formatted}} встановлень',
+    installs_other: '{{formatted}} встановлення',
+    install: 'Встановити',
+    installing: 'Встановлюю…',
+    installed: 'Встановлено',
+    by: 'від {{author}}',
+    from: 'З {{marketplace}}',
+    version: 'Версія {{version}}',
+    noDescription: 'Без опису.',
+    closeDetails: 'Закрити подробиці',
+    trustNote:
+      'Плагін має ті самі права, що й Claude Code: його хуки й сервери виконують команди на цьому комп’ютері. Встановлюйте лише те, чому довіряєте.',
+    consentTitle: 'Виконати цю команду?',
+    consentMessage:
+      '«{{name}}» встановлюється командою, яку надає його маркетплейс. Прочитайте її, перш ніж продовжити.',
+    consentConfirm: 'Виконати й встановити',
+    connectTitle: 'Магазин порожній',
+    connectHint:
+      'Офіційний маркетплейс Claude Code ще не підключено на цьому комп’ютері. Підключення завантажить його каталог із GitHub.',
+    officialMissing: 'Офіційний маркетплейс Claude Code не підключено.',
+    connect: 'Підключити офіційний маркетплейс',
+    connecting: 'Підключаю…',
+    refresh: 'Перевірити маркетплейси на нові плагіни'
+  },
+
   tips: {
     headsUp: 'Зверніть увагу',
     learnMore: 'Детальніше',
@@ -1298,6 +1391,13 @@ export const uk: Translation = {
     }
   },
   errors: {
+    pluginCliUnavailable: 'Не вдалося запустити Claude Code: {{message}}',
+    pluginTimedOut:
+      'Claude Code не впорався за {{seconds}} с. Зазвичай причина в повільній мережі — спробуйте ще раз.',
+    pluginActionFailed: 'Claude Code відмовив: {{message}}',
+    pluginOutputUnreadable: 'Claude Code відповів чимось неочікуваним: {{message}}',
+    pluginNotInstalled: 'Цей плагін там більше не встановлено. Список прочитано наново.',
+    pluginProjectMissing: 'Проєкту, до якого належить цей плагін, більше немає: {{path}}',
     libraryNameInvalid:
       '\u201c{{name}}\u201d не може бути назвою: використовуйте малі літери, цифри, дефіси й підкреслення. Назва стає іменем файлу, а в цій файловій системі \u201cShip\u201d і \u201cship\u201d — це одне й те саме.',
     libraryExists: 'Щось на ім’я \u201c{{name}}\u201d уже є тут або в сусідньому сховищі.',

@@ -281,7 +281,10 @@ const AvailableItemSchema = z.looseObject({
   installCount: z.number().optional()
 })
 
-const AvailableSchema = z.looseObject({ available: z.array(AvailableItemSchema) })
+const AvailableSchema = z.looseObject({
+  available: z.array(AvailableItemSchema),
+  installed: z.array(z.looseObject({ id: z.string() })).default([])
+})
 
 const MarketplaceSchema = z.looseObject({
   name: z.string(),
@@ -308,6 +311,7 @@ const ManifestSchema = z.looseObject({
 /** The parts of a marketplace's entry the `--available` listing leaves out. */
 const MarketplaceEntrySchema = z.looseObject({
   name: z.string(),
+  description: z.string().optional(),
   category: z.string().optional(),
   author: AuthorSchema.optional(),
   homepage: z.string().optional(),
@@ -384,7 +388,7 @@ export async function catalog(cli: PluginCli): Promise<PluginCatalog> {
   // Nothing to offer, so the slow listing is not worth starting.
   if (names.length === 0) return { officialConnected, marketplaces: names, plugins: [] }
 
-  const { available } = readDocument(
+  const { available, installed } = readDocument(
     await run(cli, ['plugin', 'list', '--available']),
     AvailableSchema
   )
@@ -396,7 +400,24 @@ export async function catalog(cli: PluginCli): Promise<PluginCatalog> {
     )
   )
 
-  const plugins = available
+  // Measured on 2.1.299: `available` leaves out a plugin once it is installed
+  // for every project, so the store would lose a card the moment its install
+  // worked. It comes back from the marketplace's own entry — without a count,
+  // which only the listing carries.
+  const listed = new Set(available.map((item) => item.pluginId))
+  const returned = [...new Set(installed.map((item) => item.id))]
+    .filter((id) => !listed.has(id))
+    .map((id) => {
+      const { name, marketplace } = splitId(id)
+      return {
+        pluginId: id,
+        name,
+        marketplaceName: marketplace,
+        description: entries.get(marketplace)?.get(name)?.description
+      }
+    })
+
+  const plugins = [...available, ...returned]
     .filter((item) => names.includes(item.marketplaceName))
     .map((item) => describeAvailable(item, entries.get(item.marketplaceName)?.get(item.name)))
 

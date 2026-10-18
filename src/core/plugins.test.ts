@@ -372,6 +372,54 @@ describe('the store', () => {
     expect(calls).toHaveLength(1)
   })
 
+  /*
+   * Measured on 2.1.299: `available` drops a plugin once it is installed for
+   * every project — the store lost the card the moment the install worked.
+   */
+  it('keeps an installed plugin in the store, from its marketplace’s own entry', async () => {
+    const location = join(home, 'marketplaces', 'official')
+    await writeJson(join(location, '.claude-plugin', 'marketplace.json'), {
+      plugins: [
+        {
+          name: 'explanatory-output-style',
+          description: 'Explains as it goes',
+          category: 'learning'
+        }
+      ]
+    })
+
+    const { cli } = fakeCli({
+      'plugin marketplace list --json': JSON.stringify([official(location)]),
+      'plugin list --available --json': JSON.stringify({
+        installed: [
+          // Twice — a project's install and the user's — and listed once.
+          { id: 'explanatory-output-style@claude-plugins-official', scope: 'local' },
+          { id: 'explanatory-output-style@claude-plugins-official', scope: 'user' },
+          { id: 'undescribed@claude-plugins-official', scope: 'user' },
+          { id: 'elsewhere@unconnected', scope: 'user' },
+          { id: 'context7@claude-plugins-official', scope: 'local' }
+        ],
+        available: [
+          {
+            pluginId: 'context7@claude-plugins-official',
+            name: 'context7',
+            marketplaceName: 'claude-plugins-official',
+            installCount: 5
+          }
+        ]
+      })
+    })
+
+    const { plugins } = await catalog(cli)
+
+    expect(plugins.map((plugin) => [plugin.id, plugin.description, plugin.installs])).toEqual([
+      ['context7@claude-plugins-official', null, 5],
+      ['explanatory-output-style@claude-plugins-official', 'Explains as it goes', null],
+      ['undescribed@claude-plugins-official', null, null]
+    ])
+    expect(plugins[1]?.category).toBe('learning')
+  })
+
   it('still offers a marketplace whose own file is missing', async () => {
     const { cli } = fakeCli({
       'plugin marketplace list --json': JSON.stringify([

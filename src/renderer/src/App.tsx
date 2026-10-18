@@ -25,6 +25,7 @@ import { RepositoryPicker } from './components/RepositoryPicker.js'
 import { Placeholder } from './components/Placeholder.js'
 import { ProjectSettings, type SectionId as ProjectSection } from './components/ProjectSettings.js'
 import { ProjectTabs } from './components/ProjectTabs.js'
+import { PluginsWindow } from './components/plugins/PluginsWindow.js'
 import { RightPanel } from './components/RightPanel.js'
 import { type SectionId, Settings } from './components/Settings.js'
 import { Sidebar } from './components/Sidebar.js'
@@ -40,6 +41,7 @@ import { useBranchRequests } from './hooks/useBranchRequests.js'
 import { usePullRequestQuotes } from './hooks/usePullRequestQuotes.js'
 import { type ChatTab, type ChatTabsController, useChatTabs } from './hooks/useChatTabs.js'
 import { useFileTabs } from './hooks/useFileTabs.js'
+import { usePlugins } from './hooks/usePlugins.js'
 import { useProjects } from './hooks/useProjects.js'
 import { useWorkspaceScripts } from './hooks/useWorkspaceScripts.js'
 import { useWorkspaces } from './hooks/useWorkspaces.js'
@@ -94,6 +96,10 @@ export function App(): React.JSX.Element {
   // dialog that opens on Appearance instead has sent the user nowhere useful.
   // `null` is closed.
   const [settingsSection, setSettingsSection] = useState<SectionId | null>(null)
+  const [pluginsOpen, setPluginsOpen] = useState(false)
+  // Read at start-up rather than on opening the window: the rail's tile marks a
+  // plugin that would not load, and has to know before anybody looks.
+  const plugins = usePlugins()
   const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   /*
@@ -744,6 +750,10 @@ export function App(): React.JSX.Element {
   // schema's own defaults stand in until the file has been read.
   const defaultWorkingMode = config?.workingMode ?? 'default'
   const defaultEffort = config?.effort ?? DEFAULT_EFFORT
+  // Whether a plugin installed for every project can load here: that layer is
+  // where it is switched on. Before the config is read the default stands, and
+  // the default loads every layer — so no warning flashes up and goes again.
+  const userLayerLoaded = (config?.settingSources ?? 'all') === 'all'
   const defaultModel = config?.model ?? null
   const defaultPlanModel = config?.planModel ?? null
   const dismissedTips = config?.dismissedTips ?? NO_TIPS
@@ -905,6 +915,13 @@ export function App(): React.JSX.Element {
               onAddFromDisk={() => void addFromDisk()}
               onAddFromGitHub={() => void addFromGitHub()}
               busy={projects.busy || checkingGitHub}
+              pluginsOpen={pluginsOpen}
+              pluginTrouble={(plugins.installed ?? []).some((plugin) => plugin.errors.length > 0)}
+              onOpenPlugins={() => {
+                setPluginsOpen(true)
+                // Installed from a terminal since the app started, or removed.
+                void plugins.readInstalled()
+              }}
             />
 
             {sidebarOpen && (
@@ -1127,6 +1144,20 @@ export function App(): React.JSX.Element {
           initialSection={settingsSection}
           onClose={() => {
             setSettingsSection(null)
+          }}
+        />
+      )}
+
+      {pluginsOpen && (
+        <PluginsWindow
+          plugins={plugins}
+          userLayerLoaded={userLayerLoaded}
+          onOpenAgentSettings={() => {
+            setPluginsOpen(false)
+            setSettingsSection('agent')
+          }}
+          onClose={() => {
+            setPluginsOpen(false)
           }}
         />
       )}

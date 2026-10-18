@@ -491,6 +491,67 @@ describe('App', () => {
     expect(await screen.findByRole('dialog', { name: 'Settings' })).toBeInTheDocument()
   })
 
+  describe('the plugins window', () => {
+    it('opens from the rail and reads the installed list again', async () => {
+      const user = await openApp()
+      await waitFor(() => {
+        expect(window.octopus.plugins.list).toHaveBeenCalledTimes(1)
+      })
+
+      await user.click(screen.getByRole('button', { name: 'Plugins' }))
+
+      expect(await screen.findByRole('dialog', { name: 'Plugins' })).toBeInTheDocument()
+      // Installed from a terminal since the app started, or removed.
+      expect(window.octopus.plugins.list).toHaveBeenCalledTimes(2)
+
+      await user.click(screen.getByRole('button', { name: 'Close' }))
+      expect(screen.queryByRole('dialog', { name: 'Plugins' })).toBeNull()
+    })
+
+    // At start-up, before anybody opens anything: the tile is how they learn.
+    it('marks the tile when an installed plugin would not load', async () => {
+      vi.mocked(window.octopus.plugins.list).mockResolvedValue({
+        ok: true,
+        value: [
+          {
+            id: 'broken@m',
+            name: 'broken',
+            marketplace: 'm',
+            version: null,
+            scope: 'user',
+            enabled: true,
+            projectPath: null,
+            description: null,
+            author: null,
+            homepage: null,
+            components: [],
+            errors: ['MCP server failed']
+          }
+        ]
+      })
+      await openApp()
+
+      expect(
+        await screen.findByRole('img', { name: 'A plugin would not load' })
+      ).toBeInTheDocument()
+    })
+
+    it('sends the user to Settings → Agent when that keeps the plugins from loading', async () => {
+      vi.mocked(window.octopus.config.get).mockResolvedValue({
+        ok: true,
+        value: config({ settingSources: 'project' })
+      })
+      const user = await openApp()
+
+      await user.click(screen.getByRole('button', { name: 'Plugins' }))
+      await user.click(await screen.findByRole('button', { name: 'Open Agent settings' }))
+
+      expect(screen.queryByRole('dialog', { name: 'Plugins' })).toBeNull()
+      expect(await screen.findByRole('dialog', { name: 'Settings' })).toBeInTheDocument()
+      expect(screen.getByRole('button', { name: 'Agent' })).toHaveAttribute('aria-current', 'true')
+    })
+  })
+
   // ⌘, belongs to the native menu on macOS; the renderer only reacts to it.
   it('opens the settings dialog when the native menu asks for it', async () => {
     await openApp()

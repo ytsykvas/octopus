@@ -1,4 +1,4 @@
-import { CloudDownload, FolderOpen, Pencil, Plus, Trash2 } from 'lucide-react'
+import { CloudDownload, FolderOpen, Pencil, Plus, Puzzle, Trash2 } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 
 import { initials } from '@core/initials.js'
@@ -22,7 +22,7 @@ import { ProjectGlyph } from './ProjectGlyph.js'
  * pushed further towards grey than that. The same mix the right pane's chosen
  * tab uses.
  */
-const LETTERS = 'color-mix(in srgb, var(--project-color) 75%, var(--ink))'
+export const LETTERS = 'color-mix(in srgb, var(--project-color) 75%, var(--ink))'
 
 interface ProjectTabsProps {
   readonly projects: readonly Project[]
@@ -35,6 +35,11 @@ interface ProjectTabsProps {
   readonly onAddFromDisk: () => void
   readonly onAddFromGitHub: () => void
   readonly busy: boolean
+  /** Whether the plugins window is open, which the foot's tile shows. */
+  readonly pluginsOpen: boolean
+  /** An installed plugin reports that it would not load. */
+  readonly pluginTrouble: boolean
+  readonly onOpenPlugins: () => void
 }
 
 /**
@@ -59,7 +64,10 @@ export function ProjectTabs({
   onRemove,
   onAddFromDisk,
   onAddFromGitHub,
-  busy
+  busy,
+  pluginsOpen,
+  pluginTrouble,
+  onOpenPlugins
 }: ProjectTabsProps): React.JSX.Element {
   const { t } = useTranslation()
 
@@ -115,7 +123,67 @@ export function ProjectTabs({
           ]}
         />
       </div>
+
+      {/* A foot of its own rather than the end of the list above: the list
+          scrolls, and a tile at the bottom of it would ride up and down with
+          the number of projects. The plugins are the agent's, not a
+          project's, so they sit apart from the projects. */}
+      <div className="shrink-0 py-2 pl-2.5">
+        <PluginsTile open={pluginsOpen} trouble={pluginTrouble} onOpen={onOpenPlugins} />
+      </div>
     </nav>
+  )
+}
+
+/**
+ * The way into the plugins window, the size of a project tab.
+ *
+ * Tinted with the accent rather than drawn in the line colour the "+" uses:
+ * the "+" is an empty slot, and this is a place of its own. The piece turns a
+ * few degrees under the pointer — the one motion on the rail, and gone for
+ * anyone who asked for less.
+ */
+function PluginsTile({
+  open,
+  trouble,
+  onOpen
+}: {
+  open: boolean
+  trouble: boolean
+  onOpen: () => void
+}): React.JSX.Element {
+  const { t } = useTranslation()
+
+  return (
+    <div className="relative">
+      <button
+        type="button"
+        onClick={onOpen}
+        title={t('sidebar.plugins')}
+        aria-label={t('sidebar.plugins')}
+        aria-expanded={open}
+        aria-haspopup="dialog"
+        className={`group focus-ring text-accent bg-accent/12 hover:bg-accent/20 flex size-10 items-center justify-center rounded-[10px] transition-[background-color,box-shadow] ${
+          open ? 'ring-accent/50 ring-1' : ''
+        }`}
+      >
+        <Puzzle
+          aria-hidden
+          size={19}
+          className="transition-transform duration-200 group-hover:-rotate-12 motion-reduce:transition-none motion-reduce:group-hover:rotate-0"
+        />
+      </button>
+
+      {/* The same place and ring as a project's attention dot, so the two
+          read as one signal: something here wants a look. */}
+      {trouble && (
+        <span
+          role="img"
+          aria-label={t('plugins.troubleDot')}
+          className="ring-surface bg-warning pointer-events-none absolute top-[3px] left-[29px] size-2 rounded-full ring-2"
+        />
+      )}
+    </div>
   )
 }
 
