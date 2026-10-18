@@ -62,6 +62,26 @@ describe('a labelled form row', () => {
     expect(screen.getByText('Build script')).toHaveClass('sr-only')
   })
 
+  /*
+   * `sr-only` is `position: absolute`, so it is placed against the nearest
+   * positioned ancestor and only clipped by scrollers inside that one. With the
+   * row unpositioned, that ancestor was the `<dialog>`: each hidden label below
+   * the fold escaped the scrolling pane and grew the dialog's own scroll, and
+   * Project settings scrolled 1664px past its footer onto an empty box. jsdom
+   * has no layout to measure, so the test pins the anchor itself.
+   */
+  it('keeps the hidden label positioned inside its own row', () => {
+    render(
+      <Field label="Server script" hideLabel>
+        {(id) => <textarea id={id} />}
+      </Field>
+    )
+
+    const row = screen.getByText('Server script').parentElement
+    expect(row).toHaveClass('relative')
+    expect(row).toContainElement(screen.getByLabelText('Server script'))
+  })
+
   // Two rows on one screen must not share an id, or the second label points at
   // the first row's control.
   it('gives each row its own id', () => {
