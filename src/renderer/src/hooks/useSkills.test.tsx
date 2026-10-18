@@ -6,21 +6,11 @@ import type { SkillListing } from '@core/skills.js'
 
 import { chat as chatRecord, emitAgentEvent } from '../test/chat.js'
 import { octopus } from '../test/octopus.js'
+import { heldSkill, ownSkill } from '../test/skills.js'
 import { useSkills } from './useSkills.js'
 
 const CHAT = 'chat-1'
 const WORKSPACE = 'planner/lily'
-
-function listing(overrides: Partial<SkillListing> = {}): SkillListing {
-  return {
-    key: 'review',
-    name: 'review',
-    description: 'When reviewing.',
-    scope: 'global',
-    enabled: true,
-    ...overrides
-  }
-}
 
 const answering = (skills: readonly SkillListing[]): void => {
   vi.mocked(octopus().skills.forChat).mockResolvedValue({ ok: true, value: [...skills] })
@@ -34,7 +24,7 @@ function ensuring(record: Chat | null = chatRecord({ id: CHAT })): () => Promise
 
 describe('which skills a conversation may reach for', () => {
   it('asks about the conversation once there is one', async () => {
-    answering([listing()])
+    answering([ownSkill()])
 
     const { result } = renderHook(() => useSkills(CHAT, WORKSPACE, ensuring()))
 
@@ -51,7 +41,7 @@ describe('which skills a conversation may reach for', () => {
    * it first. The defaults are the whole answer at that point.
    */
   it('asks about the workspace before the first message', async () => {
-    answering([listing()])
+    answering([ownSkill()])
 
     const { result } = renderHook(() => useSkills(null, WORKSPACE, ensuring()))
 
@@ -67,7 +57,7 @@ describe('which skills a conversation may reach for', () => {
    * refuses here anyway.
    */
   it('drops the list the moment the conversation changes', async () => {
-    answering([listing()])
+    answering([ownSkill()])
     const { result, rerender } = renderHook(({ id }) => useSkills(id, WORKSPACE, ensuring()), {
       initialProps: { id: CHAT }
     })
@@ -82,7 +72,7 @@ describe('which skills a conversation may reach for', () => {
   })
 
   it('switches one, and shows the answer without waiting for the round trip', async () => {
-    answering([listing()])
+    answering([ownSkill()])
     const { result } = renderHook(() => useSkills(CHAT, WORKSPACE, ensuring()))
     await waitFor(() => {
       expect(result.current.skills).toHaveLength(1)
@@ -97,7 +87,7 @@ describe('which skills a conversation may reach for', () => {
   })
 
   it('moves the one it was asked about and leaves the rest alone', async () => {
-    answering([listing(), listing({ key: 'ship', name: 'ship' })])
+    answering([ownSkill(), ownSkill({ key: 'ship', name: 'ship' })])
     const { result } = renderHook(() => useSkills(CHAT, WORKSPACE, ensuring()))
     await waitFor(() => {
       expect(result.current.skills).toHaveLength(2)
@@ -115,7 +105,7 @@ describe('which skills a conversation may reach for', () => {
    * created — the same thing the model and effort pickers beside it do.
    */
   it('creates the conversation it needs to write to', async () => {
-    answering([listing()])
+    answering([ownSkill()])
     const ensure = ensuring()
     const { result } = renderHook(() => useSkills(null, WORKSPACE, ensure))
     await waitFor(() => {
@@ -133,7 +123,7 @@ describe('which skills a conversation may reach for', () => {
   })
 
   it('writes nothing when the conversation could not be created', async () => {
-    answering([listing()])
+    answering([ownSkill()])
     const { result } = renderHook(() => useSkills(null, WORKSPACE, ensuring(null)))
     await waitFor(() => {
       expect(result.current.skills).toHaveLength(1)
@@ -151,7 +141,7 @@ describe('which skills a conversation may reach for', () => {
   // The switch must never show a state the agent is not in, so a write that
   // did not land is followed by the service's own answer rather than left.
   it('puts the switch back when the write is refused', async () => {
-    answering([listing()])
+    answering([ownSkill()])
     const { result } = renderHook(() => useSkills(CHAT, WORKSPACE, ensuring()))
     await waitFor(() => {
       expect(result.current.skills).toHaveLength(1)
@@ -174,13 +164,13 @@ describe('which skills a conversation may reach for', () => {
    * and opening the panel is the moment worth being right.
    */
   it('re-reads on request', async () => {
-    answering([listing()])
+    answering([ownSkill()])
     const { result } = renderHook(() => useSkills(CHAT, WORKSPACE, ensuring()))
     await waitFor(() => {
       expect(result.current.skills).toHaveLength(1)
     })
 
-    answering([listing(), listing({ key: 'ship', name: 'ship' })])
+    answering([ownSkill(), ownSkill({ key: 'ship', name: 'ship' })])
     act(() => {
       result.current.refresh()
     })
@@ -193,7 +183,7 @@ describe('which skills a conversation may reach for', () => {
   // "Could not ask" and "there are none" are different statements, and an
   // emptied panel would make the first look like the second.
   it('leaves the last good list standing when a read fails', async () => {
-    answering([listing()])
+    answering([ownSkill()])
     const { result } = renderHook(() => useSkills(CHAT, WORKSPACE, ensuring()))
     await waitFor(() => {
       expect(result.current.skills).toHaveLength(1)
@@ -216,13 +206,13 @@ describe('which skills a conversation may reach for', () => {
    * opened the panel.
    */
   it('reads again when the session starts, so the agent’s own skills are in it', async () => {
-    answering([listing()])
+    answering([ownSkill()])
     const { result } = renderHook(() => useSkills(CHAT, WORKSPACE, ensuring()))
     await waitFor(() => {
       expect(result.current.skills).toHaveLength(1)
     })
 
-    answering([listing(), listing({ key: 'dataviz', name: 'dataviz', scope: 'session' })])
+    answering([ownSkill(), heldSkill()])
     emitAgentEvent({ type: 'session_started', sessionId: 'sess-1' }, CHAT)
 
     await waitFor(() => {

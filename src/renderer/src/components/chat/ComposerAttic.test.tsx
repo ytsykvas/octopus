@@ -7,6 +7,7 @@ import type { RateLimit, SessionUsage } from '@core/service.js'
 import type { SkillListing } from '@core/skills.js'
 
 import { stubDialogElement } from '../../test/dialog.js'
+import { ownSkill } from '../../test/skills.js'
 import { ComposerAttic } from './ComposerAttic.js'
 
 // The `/clear` row asks before it sends, and the question is a `Modal`.
@@ -27,17 +28,6 @@ const NOTHING: SessionUsage = { context: null, autoCompact: null }
 
 function limitWith(status: RateLimit['status']): RateLimit {
   return { type: 'rate_limit', status, window: 'five_hour', utilization: null, resetsAt: null }
-}
-
-function skill(overrides: Partial<SkillListing> = {}): SkillListing {
-  return {
-    key: 'octopus:review',
-    name: 'review',
-    description: 'When reviewing.',
-    scope: 'global',
-    enabled: true,
-    ...overrides
-  }
 }
 
 function renderAttic(
@@ -288,7 +278,7 @@ describe('the way out of a full context window', () => {
 describe('the controls on the right', () => {
   it('opens the skills panel and asks for a fresh list on the way in', async () => {
     const user = userEvent.setup()
-    const { onRefreshSkills } = renderAttic(FULL, null, [skill()])
+    const { onRefreshSkills } = renderAttic(FULL, null, [ownSkill()])
 
     await user.click(screen.getByRole('button', { name: 'Skills for this conversation' }))
 
@@ -297,7 +287,10 @@ describe('the controls on the right', () => {
   })
 
   it('counts what the conversation may reach for, not what it may not', () => {
-    renderAttic(FULL, null, [skill(), skill({ key: 'octopus:ship', name: 'ship', enabled: false })])
+    renderAttic(FULL, null, [
+      ownSkill(),
+      ownSkill({ key: 'octopus:ship', name: 'ship', enabled: false })
+    ])
 
     expect(screen.getByRole('button', { name: 'Skills for this conversation' })).toHaveTextContent(
       'Skills1'
@@ -314,12 +307,12 @@ describe('the controls on the right', () => {
 
   it('switches one, by the key the agent knows it under', async () => {
     const user = userEvent.setup()
-    const { onToggleSkill } = renderAttic(FULL, null, [skill()])
+    const { onToggleSkill } = renderAttic(FULL, null, [ownSkill()])
 
     await user.click(screen.getByRole('button', { name: 'Skills for this conversation' }))
     await user.click(screen.getByRole('switch', { name: 'review' }))
 
-    expect(onToggleSkill).toHaveBeenCalledExactlyOnceWith('octopus:review', false)
+    expect(onToggleSkill).toHaveBeenCalledExactlyOnceWith('review', false)
   })
 
   /* The visible one of three ways in: a file is more often dragged onto the

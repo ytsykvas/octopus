@@ -203,7 +203,8 @@ import {
   writeRawSkill,
   writeSkill
 } from './skills.js'
-import { skillKey, type SkillScope } from './skillNames.js'
+import { describeSessionSkill } from './sessionSkills.js'
+import { type OwnSkillScope, skillKey } from './skillNames.js'
 import type { Store } from './stores.js'
 import { type QuestionAnswer, readQuestions, withAnswers } from './questions.js'
 import { describeError } from './persist.js'
@@ -3350,7 +3351,7 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
       project: project.disabledSkillDefaults
     }
 
-    const row = (scope: SkillScope, skill: SkillEntry): SkillListing => {
+    const row = (scope: OwnSkillScope, skill: SkillEntry): SkillListing => {
       const key = skillKey(skill.name)
 
       return { ...skill, key, scope, enabled: skillEnabled(key, defaults, chat.skillOverrides) }
@@ -3374,18 +3375,23 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
      */
     const accounted = new Set(listing.map((item) => item.key))
 
-    for (const skill of held) {
+    // By name, because the CLI's order follows how it happened to load them and
+    // a list people scan for one entry reads better alphabetically.
+    for (const skill of held.toSorted((a, b) => a.name.localeCompare(b.name))) {
       if (accounted.has(skill.name)) continue
       accounted.add(skill.name)
 
+      const { source, name, description } = describeSessionSkill(skill)
+
       listing.push({
-        name: skill.name,
-        description: skill.description,
+        name,
+        description,
         // The key the CLI knows it by, which is what `skillOverrides` names —
         // a bare name for an ordinary skill, `plugin:skill` for a plugin's.
-        key: skill.name,
+        key: name,
         scope: 'session',
-        enabled: skillEnabled(skill.name, defaults, chat.skillOverrides)
+        source,
+        enabled: skillEnabled(name, defaults, chat.skillOverrides)
       })
     }
 
