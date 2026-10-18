@@ -7,7 +7,7 @@
  */
 
 import { execFile } from 'node:child_process'
-import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
+import { mkdir, mkdtemp, rm, stat, utimes, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { promisify } from 'node:util'
@@ -384,6 +384,25 @@ describe('changedFiles', () => {
     await writeFile(join(dir, 'src', 'three.ts'), 'x\n', 'utf8')
 
     await expect(changedFiles(exec)).resolves.toHaveLength(3)
+  })
+
+  /*
+   * A plain `git status` refreshes the index and writes it back under
+   * `index.lock`. This runs after every turn in the worktree the agent works
+   * in, and a commit or an `add` of the agent's landing in that moment failed
+   * with "Unable to create index.lock: File exists" — four times in 150 when
+   * raced on purpose, none with the flag. A file whose times moved while its
+   * contents did not is what makes git want to write; the inode says whether
+   * it did, since the lock is renamed over the index.
+   */
+  it('reads the status without rewriting the index', async () => {
+    const later = new Date(Date.now() + 60_000)
+    await utimes(join(dir, 'README.md'), later, later)
+    const before = (await stat(join(dir, '.git', 'index'))).ino
+
+    await changedFiles(exec)
+
+    expect((await stat(join(dir, '.git', 'index'))).ino).toBe(before)
   })
 })
 
