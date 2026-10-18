@@ -482,6 +482,12 @@ two moments: planning turned on or off, and a plan approved. `pushModel` handles
 both, and the guard in it is what keeps the paragraph above true — it sends
 nothing unless the value actually changed, so a conversation whose two jobs
 share a model is never pushed at, and a `/model` given to it still stands.
+"Changed" is measured against the value in force **just before this change's
+commit**, read inside it by `changeInForce`. Read before the commit, two
+changes in flight both saw the same value: planning switched on and off at once
+moved the session onto the plan model, and the second change, finding what it
+wanted equal to what it had read, sent nothing back — the record said planning
+was off over a session still on the plan model.
 
 That is a change **this application made and knows the moment of**, which is the
 whole difference from re-asserting per message: sending a message moves nothing,

@@ -2004,8 +2004,14 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
     return workspace
   }
 
-  function requireChat(chatId: string): Chat {
-    const chat = findChat(state, chatId)
+  /**
+   * The chat, or the refusal a missing one gets.
+   *
+   * `from` is for a commit's callback, which decides against `current` rather
+   * than against what was held when the call began.
+   */
+  function requireChat(chatId: string, from: State = state): Chat {
+    const chat = findChat(from, chatId)
     if (!chat) {
       throw new WorkspaceError('worktreeMissing', { chatId }, `Chat ${chatId} not found.`)
     }
@@ -2668,17 +2674,40 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
    * what the other half says, not merely "not planning".
    */
   async function applyMode(chatId: string, patch: Partial<Chat>): Promise<void> {
-    const before = sessionModel(requireChat(chatId))
-    const beforeEffort = effortInForce(requireChat(chatId))
-    await commit((current) => updateChat(current, chatId, patch))
+    const before = await changeInForce(chatId, () => patch)
 
     // Applied to the running session too, so the choice takes effect on the
     // current turn rather than only on the next one. Read back after the write
     // rather than merged by hand: the session wants both halves, and only one
     // of them is in the patch.
     await sessions.get(chatId)?.setPermissionMode(sessionMode(requireChat(chatId)))
-    await pushModel(chatId, before)
-    await pushEffort(chatId, beforeEffort)
+    await pushModel(chatId, before.model)
+    await pushEffort(chatId, before.effort)
+  }
+
+  /**
+   * Commits a change to a chat and answers with the model and effort that were
+   * in force just before it, for `pushModel` and `pushEffort` to compare with.
+   *
+   * Read inside the commit, where the change is decided. Read before it, two
+   * changes in flight both saw the same value: planning switched on and off at
+   * once moved the session onto the plan model, and the second change, finding
+   * the model it wanted equal to what it had read, never sent it back.
+   */
+  async function changeInForce(
+    chatId: string,
+    change: (chat: Chat) => Partial<Chat>
+  ): Promise<{ readonly model: string | null; readonly effort: EffortChoice }> {
+    const chat = requireChat(chatId)
+    let before = { model: sessionModel(chat), effort: effortInForce(chat) }
+
+    await commit((current) => {
+      const latest = requireChat(chatId, current)
+      before = { model: sessionModel(latest), effort: effortInForce(latest) }
+      return updateChat(current, chatId, change(latest))
+    })
+
+    return before
   }
 
   /**
@@ -5511,13 +5540,12 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
     },
 
     async setChatEffort(chatId, effort) {
-      const before = effortInForce(requireChat(chatId))
-      await commit((current) => updateChat(current, chatId, { effort }))
+      const before = await changeInForce(chatId, () => ({ effort }))
       // Through the same guard as the two toggles: while planning is on and a
       // plan effort is set, changing the working one moves nothing that is
       // running, and pushing it would drop the session to the wrong level
       // mid-plan.
-      await pushEffort(chatId, before)
+      await pushEffort(chatId, before.effort)
     },
 
     async setChatAutoCompact(chatId, window) {
@@ -5527,9 +5555,8 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
     },
 
     async setChatPlanEffort(chatId, effort) {
-      const before = effortInForce(requireChat(chatId))
-      await commit((current) => updateChat(current, chatId, { planEffort: effort }))
-      await pushEffort(chatId, before)
+      const before = await changeInForce(chatId, () => ({ planEffort: effort }))
+      await pushEffort(chatId, before.effort)
     },
 
     async setChatModel(chatId, model) {
@@ -5668,8 +5695,6 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
       // session does not start by planning again, and the running session, so
       // the work the plan describes can actually begin.
       if (leaving) {
-        const before = sessionModel(requireChat(request.chatId))
-        const beforeEffort = effortInForce(requireChat(request.chatId))
         // An approved plan goes on in `acceptEdits`. The composer holds one
         // control that cycles through asking, accepting and planning, so there
         // is no second one left to say what should follow a plan — and a plan
@@ -5678,24 +5703,21 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
         // Only out of planning, though. The agent may call the plan tool from
         // any mode, and handing over there would let it raise a conversation
         // the user set to ask first into one that does not, by asking once.
-        const planning = requireChat(request.chatId).planMode
-        await commit((current) =>
-          updateChat(current, request.chatId, {
-            planMode: false,
-            ...(planning && { workingMode: 'acceptEdits' as const })
-          })
-        )
+        const before = await changeInForce(request.chatId, (chat) => ({
+          planMode: false,
+          ...(chat.planMode && { workingMode: 'acceptEdits' as const })
+        }))
 
         // The model leaves planning with the record. Before the reply, never
         // after it: the reply is what releases the tool call, so a model sent
         // behind it would reach a session already editing files on the model
         // that wrote the plan. The reply carries a mode and has no field for a
         // model, so this is the closest to riding along that there is.
-        await pushModel(request.chatId, before)
+        await pushModel(request.chatId, before.model)
         // Effort leaves planning with the model, and for the same reason: the
         // reply is what releases the tool call, so anything sent after it
         // reaches a session already editing files at the level the plan wanted.
-        await pushEffort(request.chatId, beforeEffort)
+        await pushEffort(request.chatId, before.effort)
       }
 
       const chat = findChat(state, request.chatId)
