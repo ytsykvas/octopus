@@ -1698,15 +1698,36 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
     return run
   }
 
-  async function applyConfig(patch: Partial<Config>): Promise<Config> {
-    // Parsed on the way in, not only on the way out. `saveConfig` parses before
-    // writing, so the file was always valid while the copy held here was
-    // whatever arrived — and the two could disagree until the next restart.
-    // This is the same parse that is about to happen anyway, one step earlier.
-    const next: Config = ConfigSchema.parse({ ...config, ...patch })
-    await saveConfig(next, configPath)
-    config = next
-    return next
+  /** Config writes, run one after another for the reasons `stateWrites` gives. */
+  let configWrites: Promise<void> = Promise.resolve()
+
+  /**
+   * Applies a change to the config and persists it, in turn.
+   *
+   * The same shape as `commit`, for the same two reasons: two writes in flight
+   * raced for the one temporary file, and each built its result from a config
+   * the other had not stored yet. Nothing inside `change` may call
+   * `applyConfig` again, or it waits for itself.
+   *
+   * Parsed on the way in as well as on the way out: `saveConfig` parses before
+   * writing, so the file was always valid while the copy held here was
+   * whatever arrived — and the two could disagree until the next restart.
+   */
+  function applyConfig(change: (current: Config) => Partial<Config>): Promise<Config> {
+    const apply = async (): Promise<Config> => {
+      const next: Config = ConfigSchema.parse({ ...config, ...change(config) })
+      await saveConfig(next, configPath)
+      config = next
+      return next
+    }
+
+    const run = configWrites.then(apply, apply)
+    configWrites = run.then(
+      () => undefined,
+      () => undefined
+    )
+
+    return run
   }
 
   /**
@@ -2486,9 +2507,10 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
       await Promise.allSettled([...inFlight].map((entry) => entry.promise))
     }
 
-    // State writes are serialised on a chain of their own, which the work above
-    // will have added to.
+    // State and config writes are serialised on chains of their own, which the
+    // work above will have added to.
     await stateWrites
+    await configWrites
   }
 
   /**
@@ -3872,7 +3894,7 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
     },
 
     updateConfig(patch) {
-      return applyConfig(patch)
+      return applyConfig(() => patch)
     },
 
     listProjects() {
@@ -4452,11 +4474,12 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
       const from = skillKey(folder)
       const key = skillKey(to)
 
-      if (config.disabledSkillDefaults.includes(from)) {
-        await applyConfig({
-          disabledSkillDefaults: renamedIn(config.disabledSkillDefaults, from, key)
-        })
-      }
+      // Unconditional, like the commit below: whether the key is there is
+      // decided when the write's turn comes, not before the queue — a switch
+      // still waiting in it would otherwise be missed.
+      await applyConfig((current) => ({
+        disabledSkillDefaults: renamedIn(current.disabledSkillDefaults, from, key)
+      }))
 
       await commit((current) => ({
         ...current,
@@ -5627,9 +5650,9 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
           : null
 
       if (granted) {
-        await applyConfig({
-          alwaysAllowedTools: withStanding(config.alwaysAllowedTools, granted)
-        })
+        await applyConfig((current) => ({
+          alwaysAllowedTools: withStanding(current.alwaysAllowedTools, granted)
+        }))
       }
 
       // Approving a plan is the moment planning ends. Both halves of that have

@@ -254,12 +254,9 @@ export const StateSchema = z.object({
   /**
    * Models the agent last said the account may use.
    *
-   * Here rather than in `config.json` for two reasons. The config is written
-   * unqueued, so a list saved whenever a session starts would race the user's
-   * own edit in Settings and drop a field; this file is written through
-   * `commit`, which serialises. And the config is a file §4 promises the user
-   * can read and shorten — a cache the application writes for itself is not a
-   * setting.
+   * Here rather than in `config.json` because the config is a file §4 promises
+   * the user can read and shorten — a cache the application writes for itself
+   * is not a setting.
    *
    * Remembered only so the picker is usable before the first message, since the
    * agent can list its models solely while a session is running. Replaced whole
@@ -269,7 +266,7 @@ export const StateSchema = z.object({
   /**
    * The skills sessions last described, beyond the directories octopus reads.
    *
-   * Here for the same two reasons as the models above, and remembered for a
+   * Here for the same reason as the models above, and remembered for a
    * reason of its own: a session leaves a skill it was told to withhold out of
    * its answer, name and description both. So the moment somebody switches one
    * of Claude Code's skills off is the moment the panel can no longer say what
@@ -281,7 +278,7 @@ export const StateSchema = z.object({
   /**
    * How much of the account's windows the agent last said were gone.
    *
-   * Here for the same two reasons as the models above, and remembered for the
+   * Here for the same reason as the models above, and remembered for the
    * same one: the figures arrive from a running session's control channel, so
    * without this the sidebar has nothing to show for the second it takes the
    * first read to answer. A reading is a fact about the account rather than
