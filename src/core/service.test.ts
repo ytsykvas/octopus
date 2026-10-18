@@ -123,15 +123,29 @@ function paths(root: string): Parameters<typeof createService>[0] {
  */
 const started: OctopusService[] = []
 
+/**
+ * The ports something answers on, as far as every service here is concerned.
+ *
+ * Empty unless a test fills it. The default probe opens a socket, and the
+ * developer's own dev server on 3110 made "gives the next workspace the next
+ * block" hand out 3120 — a test describing the pool reading the machine.
+ */
+const answering = new Set<number>()
+
 async function createService(options: ServiceOptions = {}): Promise<OctopusService> {
   // Nobody outranks a window unless a test says so: the default reads the
   // machine's own `~/.claude/settings.json` and environment.
-  const made = await makeService({ windowOverride: () => Promise.resolve(null), ...options })
+  const made = await makeService({
+    windowOverride: () => Promise.resolve(null),
+    listening: (port) => Promise.resolve(answering.has(port)),
+    ...options
+  })
   started.push(made)
   return made
 }
 
 beforeEach(async () => {
+  answering.clear()
   dir = await mkdtemp(join(tmpdir(), 'octopus-service-'))
   service = await createService(paths(dir))
 })
@@ -3426,21 +3440,13 @@ describe('the port a workspace serves on', () => {
     const project = service.listProjects()[0]
     await service.createWorkspaceIn(project?.id ?? '')
 
-    const squatter = createServer()
-    await new Promise<void>((resolve) => {
-      squatter.listen(port, '127.0.0.1', resolve)
-    })
+    answering.add(port)
 
-    try {
-      const settled = await service.ensureWorkspacePort(id)
+    const settled = await service.ensureWorkspacePort(id)
 
-      expect(settled).not.toBe(port)
-      // Persisted, not just answered: the pane and the link both read it back.
-      expect(service.listWorkspaces.length).toBeGreaterThan(0)
-      await expect(service.ensureWorkspacePort(id)).resolves.toBe(settled)
-    } finally {
-      await new Promise((resolve) => squatter.close(resolve))
-    }
+    expect(settled).not.toBe(port)
+    // Persisted, not just answered: the pane and the link both read it back.
+    await expect(service.ensureWorkspacePort(id)).resolves.toBe(settled)
   })
 
   /*
@@ -3456,21 +3462,14 @@ describe('the port a workspace serves on', () => {
 
     // Something on the first workspace's port, so both have to move — which is
     // what puts them in the window where they can choose alike.
-    const squatter = createServer()
-    await new Promise<void>((resolve) => {
-      squatter.listen(port, '127.0.0.1', resolve)
-    })
+    answering.add(port)
 
-    try {
-      const [a, b] = await Promise.all([
-        service.ensureWorkspacePort(first),
-        service.ensureWorkspacePort(second.id)
-      ])
+    const [a, b] = await Promise.all([
+      service.ensureWorkspacePort(first),
+      service.ensureWorkspacePort(second.id)
+    ])
 
-      expect(a).not.toBe(b)
-    } finally {
-      await new Promise((resolve) => squatter.close(resolve))
-    }
+    expect(a).not.toBe(b)
   })
 
   // A failure must not stop the workspace queued behind it from being served.
@@ -3501,6 +3500,37 @@ describe('a workspace\u2019s port', () => {
     const workspace = await service.createWorkspaceIn(project.id)
 
     await expect(service.isWorkspaceServing(workspace.id)).resolves.toBe(false)
+  })
+
+  it('reports a server once something answers on its port', async () => {
+    const repo = join(dir, 'planner')
+    await initRepo(repo)
+    const project = await service.addProjectFromPath(repo)
+    const workspace = await service.createWorkspaceIn(project.id)
+    answering.add(workspace.port)
+
+    await expect(service.isWorkspaceServing(workspace.id)).resolves.toBe(true)
+  })
+
+  // The probe a test does not replace is the real one, which opens a socket.
+  it('asks the machine when no probe is given', async () => {
+    const real = await makeService(paths(dir))
+    started.push(real)
+    const repo = join(dir, 'planner')
+    await initRepo(repo)
+    const project = await real.addProjectFromPath(repo)
+    const workspace = await real.createWorkspaceIn(project.id)
+    const server = createServer()
+    await new Promise<void>((resolve, reject) => {
+      server.once('error', reject)
+      server.listen(workspace.port, '127.0.0.1', resolve)
+    })
+
+    try {
+      await expect(real.isWorkspaceServing(workspace.id)).resolves.toBe(true)
+    } finally {
+      await new Promise((resolve) => server.close(resolve))
+    }
   })
 
   it('refuses to ask about a workspace that does not exist', async () => {

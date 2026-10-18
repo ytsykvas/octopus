@@ -115,7 +115,7 @@ export async function firstFreeBlock(
 export async function settlePort(
   current: number,
   claimedByOthers: readonly number[],
-  answers: (port: number) => Promise<boolean> = (port) => isListening(port)
+  answers: (port: number) => Promise<boolean>
 ): Promise<number> {
   if (!(await answers(current))) return current
 

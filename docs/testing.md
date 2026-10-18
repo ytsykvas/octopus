@@ -150,6 +150,14 @@ and the two usage readings.
 
 **Never call `query()` from a test.**
 
+**Nor read the machine's ports.** Whether something answers on a port is the
+`listening` option of `createService`, and `service.test.ts` hands every service
+it makes a probe over a set the test fills (`answering`). The default opens a
+socket, and the developer's own dev server holding 3110 once made "gives the
+next workspace the next block" receive 3120 — a test about the pool reading the
+machine it ran on. One test keeps the real probe, on a port it has just been
+told is free.
+
 A fake earns its keep only if it can fail. `setPermissionMode` on the fake once
 discarded its argument while the test asserted the call merely resolved: deleting
 the line from the service left the suite green. If the promise being made is
