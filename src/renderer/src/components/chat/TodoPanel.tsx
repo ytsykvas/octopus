@@ -1,8 +1,10 @@
-import { Check, ChevronDown, ChevronRight, Circle, LoaderCircle } from 'lucide-react'
+import { Check, Circle, LoaderCircle } from 'lucide-react'
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import type { Todo } from '@core/todos.js'
+
+import { DisclosureButton } from '../Disclosure.js'
 
 interface TodoPanelProps {
   readonly todos: readonly Todo[]
@@ -36,25 +38,17 @@ export function TodoPanel({ todos }: TodoPanelProps): React.JSX.Element | null {
   return (
     <div className="mx-auto w-full max-w-6xl px-6 pb-2">
       <div className="border-line bg-surface rounded-[var(--radius-control)] border">
-        <button
-          type="button"
-          aria-expanded={open}
-          onClick={() => {
-            setOpen((current) => !current)
-          }}
+        <DisclosureButton
+          open={open}
+          onOpenChange={setOpen}
           className="focus-ring flex w-full items-center gap-2 rounded-[var(--radius-control)] px-2.5 py-1.5 text-left"
         >
-          {open ? (
-            <ChevronDown aria-hidden size={12} className="text-ink-faint shrink-0" />
-          ) : (
-            <ChevronRight aria-hidden size={12} className="text-ink-faint shrink-0" />
-          )}
           <span className="text-ink-soft shrink-0 font-medium">{t('chat.todos')}</span>
           <span className="text-ink-faint shrink-0 tabular-nums">
             {t('chat.todosProgress', { done, total: todos.length })}
           </span>
           {now !== null && <span className="text-ink-soft min-w-0 flex-1 truncate">{now}</span>}
-        </button>
+        </DisclosureButton>
 
         {open && (
           <ul className="border-line border-t px-2.5 py-1.5">

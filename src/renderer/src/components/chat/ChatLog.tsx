@@ -1,6 +1,5 @@
 import {
   Check,
-  ChevronRight,
   Archive,
   CircleSlash,
   Eraser,
@@ -32,6 +31,7 @@ import { readTodos } from '@core/todos.js'
 import type { ChatEntry } from '@core/transcript.js'
 
 import { Button } from '../Button.js'
+import { DisclosureChevron } from '../Disclosure.js'
 import { named } from '../diff/invisible.js'
 import { shown } from '../diff/shown.js'
 import type { Streaming } from '../../hooks/useChat.js'
@@ -686,7 +686,7 @@ function Thinking({ text }: { text: string }): React.JSX.Element {
   return (
     <details className="text-ink-faint">
       <summary className="focus-ring cursor-pointer list-none select-none">
-        <ChevronRight aria-hidden className="mr-1 inline align-[-2px]" size={12} />
+        <DisclosureChevron inSummary className="mr-1 inline align-[-2px]" />
         {t('chat.thinking')}
       </summary>
       {/* The same prose with the same markup, so drawn the same way. Being
@@ -722,7 +722,7 @@ function ToolRun({
   return (
     <details className="text-ink-faint">
       <summary className="focus-ring cursor-pointer list-none select-none">
-        <ChevronRight aria-hidden className="mr-1 inline align-[-2px]" size={12} />
+        <DisclosureChevron inSummary className="mr-1 inline align-[-2px]" />
         {t('chat.toolSteps', { count })}
       </summary>
 
@@ -930,7 +930,7 @@ function SubagentSteps({
   return (
     <details className="text-ink-faint ml-5">
       <summary className="focus-ring cursor-pointer list-none text-[11px] select-none">
-        <ChevronRight aria-hidden className="mr-1 inline align-[-2px]" size={12} />
+        <DisclosureChevron inSummary className="mr-1 inline align-[-2px]" />
         {t('chat.subagentSteps', {
           count: steps.filter((event) => event.type === 'tool_use').length
         })}

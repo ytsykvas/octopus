@@ -102,6 +102,22 @@ describe('a subagent’s work', () => {
     expect(screen.getByText('Grep').closest('details')).not.toHaveAttribute('open')
   })
 
+  /*
+   * The browser holds a `<details>`' state, so the mark follows it with CSS —
+   * by the summary's own direct path, since these folds nest and an inner one
+   * must not turn because the outer one is open.
+   */
+  it('marks each fold with a chevron that turns with its own details', () => {
+    renderLog({ entries })
+
+    const summaries = [...document.querySelectorAll('summary')]
+    expect(summaries).not.toHaveLength(0)
+    for (const summary of summaries) {
+      const mark = summary.querySelector(':scope > svg')
+      expect(mark).toHaveClass('lucide-chevron-right', '[details[open]>summary>&]:rotate-90')
+    }
+  })
+
   it('shows what it did and said when opened', async () => {
     const user = userEvent.setup()
     renderLog({ entries })
