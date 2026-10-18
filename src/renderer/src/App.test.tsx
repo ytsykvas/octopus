@@ -241,6 +241,8 @@ async function openRepositoryPicker(
   givenGitHubConnected()
   await user.click(screen.getByRole('button', { name: 'Add repository' }))
   await user.click(screen.getByRole('menuitem', { name: /From GitHub/ }))
+  // The dialog, not its list: the repositories arrive in a read of their own,
+  // so a test that needs one of them finds it rather than gets it.
   return screen.findByRole('dialog', { name: 'Add from GitHub' })
 }
 
@@ -1600,7 +1602,7 @@ describe('App', () => {
 
     const picker = await openRepositoryPicker(user)
 
-    expect(within(picker).getByText('someone/ledger')).toBeInTheDocument()
+    expect(await within(picker).findByText('someone/ledger')).toBeInTheDocument()
   })
 
   /*
@@ -1765,7 +1767,7 @@ describe('App', () => {
     const user = await openApp()
     const picker = await openRepositoryPicker(user)
 
-    await user.click(within(picker).getByRole('button', { name: 'Add' }))
+    await user.click(await within(picker).findByRole('button', { name: 'Add' }))
 
     expect(screen.queryByRole('dialog', { name: 'Add from GitHub' })).not.toBeInTheDocument()
     expect(await screen.findByRole('button', { name: 'LE' })).toBeInTheDocument()
@@ -2106,7 +2108,7 @@ describe('App', () => {
     vi.mocked(window.octopus.projects.list).mockResolvedValue({ ok: true, value: [LEDGER] })
     vi.mocked(window.octopus.workspaces.list).mockReturnValue(new Promise(() => undefined))
     const picker = await openRepositoryPicker(user)
-    await user.click(within(picker).getByRole('button', { name: 'Add' }))
+    await user.click(await within(picker).findByRole('button', { name: 'Add' }))
 
     await waitFor(() => {
       expect(

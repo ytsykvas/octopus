@@ -283,6 +283,42 @@ and once the highlighter has run a line's text sits inside however many token
 spans shiki produced. A range anchored to the element instead models a selection
 no browser makes, and stops exercising the nesting the running app always has.
 
+### A wait returns after React's queued work, not before
+
+React's scheduler posts its work with `setImmediate`, and Testing Library ends
+every `waitFor` and `findBy` with a `setTimeout(0)`. Node does not order the
+two, so now and then a wait came back after a render had committed but before
+its effects had run — a `selectionchange` listener not yet attached, a read not
+yet started — and the next line acted on a component that was not ready. That
+was the "fails once in five runs" red that lasted two months: the viewer's
+selection toolbar, ⌘T in `App.test.tsx`, a background conversation in
+`Chat.test.tsx`, on CI and locally, never in a file run alone often enough to
+catch it.
+
+`setup.ts` wraps Testing Library's `asyncWrapper` so each wait ends with one
+more `setImmediate`, queued behind the scheduler's. Two shapes a test can still
+get wrong, because no wait is involved:
+
+- **`getBy` right after an action whose result is a round trip** — a list read
+  over IPC, a `<dialog>` that `showModal()` opens in an effect. Use `findBy`.
+- **A `setTimeout(0)` of the test's own** standing in for "let it settle". It
+  races the scheduler the same way. Settle the very promise the component is
+  awaiting, inside `act`, as `useAccounts.test.tsx` does.
+
+**To see every test that depends on the race, make the scheduler lose it.** A
+setup file listed **before** `setup.ts` (the scheduler captures `setImmediate`
+when it loads) that delays it through the real `setTimeout`:
+
+```ts
+const real = globalThis.setImmediate
+const realTimeout = globalThis.setTimeout
+globalThis.setImmediate = ((fn: (...args: unknown[]) => void, ...args: unknown[]) =>
+  realTimeout(() => real(fn, ...args), 5)) as unknown as typeof setImmediate
+```
+
+With `setup.ts`'s wait removed, 36 tests failed this way on 2026-10-19; with it,
+none. Run it after adding a test that waits on an effect.
+
 ## Main and preload
 
 `registerIpc` takes its Electron surface as a parameter, so `ipc.test.ts`
