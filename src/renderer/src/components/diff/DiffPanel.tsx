@@ -660,11 +660,17 @@ export function DiffPanel({
             setEditing(selected.anchor)
             setSelected(null)
           }}
-          aria-label={t('diff.askSelection')}
-          style={{ top: selected.top - SELECTION_BUTTON_GAP, left: selected.left }}
-          className="focus-ring bg-surface border-line text-ink-soft hover:text-accent fixed z-40 -translate-x-1/2 rounded-[var(--radius-control)] border p-1 shadow-[var(--shadow-pop)]"
+          style={{
+            top: selected.top - SELECTION_BUTTON_GAP,
+            left: Math.max(WINDOW_EDGE, selected.left)
+          }}
+          // The file viewer's toolbar button, so the two ways of pointing at
+          // code look like one feature. Filled, with words: the bare icon it
+          // replaces was easy to miss.
+          className="focus-ring bg-accent text-on-accent hover:bg-accent-hover fixed z-40 flex h-6 items-center gap-1 rounded-[var(--radius-control)] px-2 text-[12px] whitespace-nowrap shadow-[var(--shadow-pop)]"
         >
-          <MessageSquarePlus aria-hidden size={13} />
+          <MessageSquarePlus aria-hidden size={12} />
+          {t('diff.addToChat')}
         </button>
       )}
     </div>
@@ -674,13 +680,21 @@ export function DiffPanel({
 /** A selection, reduced to the note it would make and where to offer it. */
 interface Passage {
   readonly anchor: CommentAnchor
-  /** Window coordinates of the top of the selection, and its middle. */
+  /**
+   * Window coordinates of the top of the selection and its left edge.
+   *
+   * The left edge rather than the middle: the button carries words now, and
+   * centred on a selection near the window's edge it hung half off it.
+   */
   readonly top: number
   readonly left: number
 }
 
 /** Clear of the text, so the button does not sit on what was selected. */
 const SELECTION_BUTTON_GAP = 30
+
+/** The least room kept between the button and the window's left edge. */
+const WINDOW_EDGE = 12
 
 /**
  * What is selected inside the pane, or null when that is nothing it can use.
@@ -707,7 +721,7 @@ function passageIn(container: HTMLElement, selection: Selection | null): Passage
   if (anchor === null) return null
 
   const rect = range.getBoundingClientRect()
-  return { anchor, top: rect.top, left: rect.left + rect.width / 2 }
+  return { anchor, top: rect.top, left: rect.left }
 }
 
 /**
