@@ -18,10 +18,6 @@ export function PluginSearch({
     <div className="border-line bg-canvas sticky top-0 z-10 space-y-2 border-b p-3">
       <input
         type="search"
-        // Both: the mark for the dialog's opening, when `autoFocus` fires too
-        // early (see `Modal`), and `autoFocus` for a search that mounts into a
-        // dialog already open — the other tab, or a list that answered late.
-        data-autofocus
         autoFocus
         value={value}
         placeholder={placeholder}

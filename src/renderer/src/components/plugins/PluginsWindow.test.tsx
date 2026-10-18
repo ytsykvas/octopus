@@ -53,7 +53,7 @@ describe('PluginsWindow', () => {
     expect(screen.getByRole('tabpanel')).toHaveTextContent('context7')
   })
 
-  it('starts in the search, and in the next one a tab switch brings', async () => {
+  it('starts in the search, and moves to the store\u2019s on a tab switch', async () => {
     const user = userEvent.setup()
     draw({ installed: [installedPlugin()], catalog: catalogOf([]) })
 

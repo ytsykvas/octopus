@@ -83,7 +83,7 @@ export function useConfirm(): Confirmation {
                 what removes it. */}
             <Button
               variant="quiet"
-              data-autofocus={request.destructive === true ? true : undefined}
+              autoFocus={request.destructive === true}
               onClick={() => {
                 close(false)
               }}
@@ -92,7 +92,7 @@ export function useConfirm(): Confirmation {
             </Button>
             <Button
               variant={request.destructive === true ? 'destructive' : 'accent'}
-              data-autofocus={request.destructive === true ? undefined : true}
+              autoFocus={request.destructive !== true}
               onClick={() => {
                 close(true)
               }}

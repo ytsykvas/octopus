@@ -46,12 +46,12 @@ afterEach(() => {
 })
 
 describe('Modal', () => {
-  // `showModal` would put it on the ×: React's `autoFocus` fires while the
-  // dialog is still closed, so the element meant to start with it is marked.
-  it('starts on the element marked to take the focus', () => {
+  // `showModal` puts it on the ×. The body mounts after it, so an
+  // `autoFocus` inside is not spent on a dialog that is still closed.
+  it('gives the focus to what asks for it on opening', () => {
     render(
       <Modal title="Rename workspace" onClose={vi.fn()}>
-        <input aria-label="Name" data-autofocus />
+        <input aria-label="Name" autoFocus />
       </Modal>
     )
 

@@ -111,7 +111,7 @@ export function useAskText(): AskText {
           <label className="block space-y-1.5">
             <span className="text-ink-soft">{request.label}</span>
             <input
-              data-autofocus
+              autoFocus
               value={value}
               spellCheck={false}
               onChange={(event) => {
