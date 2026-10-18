@@ -10,5 +10,8 @@
 const immediate = globalThis.setImmediate
 const timeout = globalThis.setTimeout
 
+/** Long enough that Testing Library's `setTimeout(0)` always fires first. */
+const HELD_BACK_MS = 5
+
 globalThis.setImmediate = ((callback: (...args: unknown[]) => void, ...args: unknown[]) =>
-  timeout(() => immediate(callback, ...args), 5)) as unknown as typeof setImmediate
+  timeout(() => immediate(callback, ...args), HELD_BACK_MS)) as unknown as typeof setImmediate

@@ -7,9 +7,9 @@ npm run check      # format, lint, types, tests with coverage
 npm run test:race  # the renderer suite with React's scheduler made to lose
 ```
 
-`check` must pass before every commit; CI runs both. Coverage is **100% across `src`**, enforced by
-a threshold that fails the build. Never lower it and never disable a lint rule
-to get past — if coverage drops, there is untested code.
+`check` must pass before every commit; CI runs both. Coverage is **100% across
+`src`**, enforced by a threshold that fails the build. Never lower it and never
+disable a lint rule to get past — if coverage drops, there is untested code.
 
 ## Two runs, not two projects
 

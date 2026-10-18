@@ -26,6 +26,7 @@ npm run build        # typecheck + build
 npm run check        # full gate: format + lint + types + tests with coverage
 npm test             # tests
 npm run test:watch   # tests in watch mode
+npm run test:race    # renderer suite with React's scheduler made to lose (CI runs it)
 ```
 
 `npm run check` must pass before every commit.
