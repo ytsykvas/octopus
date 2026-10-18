@@ -1,6 +1,7 @@
 import {
   ChevronsDownUp,
   ChevronsUpDown,
+  CloudAlert,
   Columns2,
   MessageSquarePlus,
   RefreshCw,
@@ -546,46 +547,53 @@ export function DiffPanel({
               <PublishBadge key={state} state={state} count={counts[state]} />
             ))}
 
+            {/* The cloud the rows carry, with a count: the sentence it replaces
+                was the longest thing on a strip meant to fit one line. */}
             {stale > 0 && (
-              <span className="text-danger">{t('diff.publishStaleCount', { count: stale })}</span>
+              <span
+                role="img"
+                aria-label={t('diff.publishStaleCount', { count: stale })}
+                title={t('diff.publishStaleCount', { count: stale })}
+                className="text-danger flex items-center gap-1"
+              >
+                <CloudAlert aria-hidden size={12} />
+                {stale}
+              </span>
             )}
 
-            {/* Everything from here down is about GitHub, and a project is
+            {/* Everything from here on is about GitHub, and a project is
                 allowed to have no remote at all — a repository, a commit and a
                 base branch is all `projects.ts` asks for. A permanent band
                 about a service such a project has nothing to do with is one
-                that can never come true and cannot be dismissed. */}
-            {diff.hasRemote && (
-              <>
-                {diff.remoteCommit === null && (
-                  <span className="text-ink-faint">{t('diff.publishNoRemote')}</span>
-                )}
+                that can never come true and cannot be dismissed.
 
-                {/* Three states, not two. `unpushedCommits` means different
-                    things either side of a remote copy — commits ahead of the
-                    base where there is none, commits ahead of the copy where
-                    there is — so one sentence for zero told a pushed branch
-                    that nothing was committed yet, beside its own "2 pushed". */}
-                <span className="text-ink-faint ml-auto">
-                  {diff.unpushedCommits > 0
-                    ? t('diff.publishUnpushed', { count: diff.unpushedCommits })
-                    : t(
-                        diff.remoteCommit === null
-                          ? 'diff.publishNothingToPush'
-                          : 'diff.publishAllCommitsSent'
-                      )}
-                </span>
+                Words only where there is something to do or to know. With no
+                commit waiting nothing is said at all: the badges already show
+                what is left, and the two sentences that used to fill the gap
+                — one per meaning of zero — were most of the strip's height. */}
+            {diff.hasRemote && (
+              <span className="ml-auto flex items-center gap-3">
+                {diff.remoteCommit === null && (
+                  <span className="text-ink-faint" title={t('diff.publishNoRemote')}>
+                    {t('diff.publishNoRemoteShort')}
+                  </span>
+                )}
 
                 {/* Offered only where it would do something. A disabled button
                     is one more thing to read past on a pane that is mostly
-                    reading. */}
+                    reading. How many commits it sends is its tooltip. */}
                 {diff.unpushedCommits > 0 && (
-                  <Button size="sm" onClick={push} disabled={pushingIn === workspace.id}>
+                  <Button
+                    size="sm"
+                    onClick={push}
+                    disabled={pushingIn === workspace.id}
+                    title={t('diff.publishUnpushed', { count: diff.unpushedCommits })}
+                  >
                     <Upload aria-hidden size={12} />
                     {t(pushingIn === workspace.id ? 'diff.pushing' : 'diff.push')}
                   </Button>
                 )}
-              </>
+              </span>
             )}
           </>
         )}
