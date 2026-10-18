@@ -813,6 +813,14 @@ Self-correcting rather than a second thing to remember — the turn always ends 
 a `result`, which writes `idle` or `error`, and `settleStatuses` clears a
 `running` left by a crash.
 
+**Back to `running` only when nothing else is asked** (`carryOn`). An MCP
+server's form sets `waiting_permission` as a permission does, and two tool calls
+can wait at once — a form and a permission, or two permissions. Every answer,
+withdrawal and refusal therefore goes through one function that writes
+`running` only when no other question of that conversation is still open, and
+leaves it waiting otherwise; writing `running` unconditionally put the amber
+mark out over a question still on the screen.
+
 ### The skills panel lists what the session holds, not what we can see
 
 Three of its four groups are directories octopus reads. The fourth is the

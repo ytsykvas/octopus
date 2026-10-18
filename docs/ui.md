@@ -1526,6 +1526,12 @@ asking**. This is the one thing in the log written by software nobody here
 chose, and a form asking for a token with no visible author is the shape a
 phishing prompt has.
 
+**It marks the conversation as waiting**, as a permission does: the turn is held
+on it just the same. So the workspace's amber dot, the project tile's mark and a
+"has a question for you" notice all appear for it, and answering puts the
+conversation back to working. It used to stay `running`, and an agent stuck on a
+form looked busy rather than stuck.
+
 Two things are refused rather than drawn, and both would otherwise be this app
 pretending. A `url` mode asks the host to send somebody to an address a
 repository chose, which is an outward-facing act and is not taken on a server's

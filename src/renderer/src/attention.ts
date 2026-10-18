@@ -51,6 +51,8 @@ export function noticeFrom(
 
   if (event.type === 'result') return { ...notice, kind: event.ok ? 'done' : 'error' }
   if (event.type === 'error') return { ...notice, kind: 'error' }
+  // An MCP server's form is a question to the user like any other.
+  if (event.type === 'elicitation_request') return { ...notice, kind: 'question' }
   if (event.type !== 'permission_request') return null
 
   // A question and a plan are permission requests in shape only, and the user

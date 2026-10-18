@@ -2150,6 +2150,21 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
    * different moments: a second tab finishing leaves a workspace whose first
    * tab is still running exactly where it was.
    */
+  /**
+   * Back to `running` once a question is answered — unless the same chat is
+   * still asking another.
+   *
+   * Two tool calls can wait at once: a permission and an MCP server's form, or
+   * two permissions. Answering one used to write `running` regardless, and the
+   * amber "come and answer this" went out over a question still open.
+   */
+  function carryOn(chatId: string): Promise<void> {
+    const asking = [...pending.values(), ...pendingElicitations.values()].some(
+      (request) => request.chatId === chatId
+    )
+    return setChatStatus(chatId, asking ? 'waiting_permission' : 'running')
+  }
+
   function setChatStatus(chatId: string, status: ChatStatus): Promise<void> {
     const before = findChat(state, chatId)
     // A closing session goes on emitting for a moment after its conversation
@@ -2266,7 +2281,10 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
 
     if (event.type === 'commands_changed') rememberCommands(chat, event.commands)
 
-    if (event.type === 'permission_request') {
+    // An MCP server's form holds the turn exactly as a permission does, so it
+    // is the same "come and answer this" — the workspace's amber dot, the
+    // project's mark and the notice all read this status.
+    if (event.type === 'permission_request' || event.type === 'elicitation_request') {
       background(chat, setChatStatus(chat.id, 'waiting_permission'))
     }
 
@@ -2460,7 +2478,7 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
 
           resolve({ allow: false, message: ABANDONED })
           handleEvent(chat, { type: 'permission_withdrawn', requestId })
-          background(chat, setChatStatus(chat.id, 'running'))
+          background(chat, carryOn(chat.id))
         },
         { once: true }
       )
@@ -5361,13 +5379,13 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
       )
 
       const chat = findChat(state, request.chatId)
-      // The turn carries on either way — a declined question is an answer the
-      // server acts on, not the end of anything — so nothing here writes a
-      // status. The record is written so a reopened conversation shows what
-      // became of the question rather than showing it still waiting.
+      // The record is written so a reopened conversation shows what became of
+      // the question rather than showing it still waiting.
       if (chat) handleEvent(chat, { type: 'elicitation_answered', requestId, action: answer })
 
-      await Promise.resolve()
+      // The turn carries on either way — a declined question is an answer the
+      // server acts on, not the end of anything.
+      await carryOn(request.chatId)
     },
 
     async answerPermission(requestId, answer, feedback, editedPlan) {
@@ -5406,7 +5424,7 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
          * `idle` or `error`, and `settleStatuses` clears a `running` a crash
          * left behind.
          */
-        await setChatStatus(request.chatId, 'running')
+        await carryOn(request.chatId)
         return
       }
 
@@ -5502,7 +5520,7 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
          */
         ...(granted && request.suggestions && { standing: request.suggestions })
       })
-      await setChatStatus(request.chatId, 'running')
+      await carryOn(request.chatId)
     },
 
     async answerQuestions(requestId, answers) {
@@ -5533,7 +5551,7 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
       // The whole point: the tool reads the user's choices off its own input,
       // so the reply that releases it carries them.
       request.resolve({ allow: true, updatedInput: withAnswers(asked, answers) })
-      await setChatStatus(request.chatId, 'running')
+      await carryOn(request.chatId)
     },
 
     getRateLimit() {
