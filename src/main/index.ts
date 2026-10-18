@@ -22,6 +22,7 @@ import { applyLoginShellPath } from './loginPath.js'
 import { canvasColor, resolveTheme } from './theme.js'
 import { TerminalManager } from './terminals.js'
 import { focusExisting } from './windows.js'
+import { quitAfter } from './quit.js'
 
 /** Canvas colours from the design system (§10) — so the window does not flash white on launch. */
 
@@ -181,34 +182,16 @@ async function start(): Promise<void> {
 
   const terminals = new TerminalManager()
 
-  /*
-   * The quit waits for what the sessions were writing, and then goes.
-   *
-   * `will-quit` is synchronous, so waiting means the usual dance: refuse the
-   * first pass, quit again once the promise settles, and a flag so the second
-   * pass falls through. Thrown away with `void`, as it was, the process exited
-   * with a transcript append wherever it had got to — and a transcript is
-   * append-only JSONL, so a line cut in half is a conversation that will not
-   * reopen.
-   *
-   * It cannot hang: `closeChats` is bounded by `SHUTDOWN_GRACE_MS`, and what
-   * ends at that ceiling is the waiting rather than the write.
-   */
-  let leaving = false
-  app.on('will-quit', (event) => {
-    if (leaving) return
-
-    leaving = true
-    event.preventDefault()
-
+  // `quit.ts` holds why the quit waits, and why its second pass waits a tick.
+  quitAfter(
+    app,
     // First and synchronously: each holds a pseudo-terminal, and one not
     // disposed outlives the application whatever happens after this line.
-    terminals.disposeAll()
-
-    void service.closeChats().finally(() => {
-      app.quit()
-    })
-  })
+    () => {
+      terminals.disposeAll()
+    },
+    () => service.closeChats()
+  )
 
   registerIpc(service, terminals, {
     // The cast goes through `unknown`: the injected signature is deliberately

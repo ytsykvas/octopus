@@ -1482,7 +1482,16 @@ one more `git` per workspace on a list that re-reads after every agent turn.
 transcript is append-only JSONL, so a write cut in half leaves a partial line the
 reader refuses — and the reader is what a reopened conversation is drawn from.
 `will-quit` is synchronous, so waiting means refusing the first pass, quitting
-again once the promise settles, and a flag so the second falls through.
+again once the promise settles, and a flag so the second falls through
+(`src/main/quit.ts`).
+
+**The second quit waits for the next turn of the loop.** With nothing to close,
+the wait settles at once and its callback ran as a microtask inside the refused
+`will-quit`, while Electron still counted itself as quitting — and it ignores a
+quit asked for then. The window went and the process stayed, measured at more
+than four minutes after a `SIGTERM`; a relaunch onto it lost the single-instance
+lock and showed the old build. Deferred with `setTimeout`, the same quit takes
+about a second.
 
 The ceiling is `SHUTDOWN_GRACE_MS`, and what ends at it is the **waiting**
 rather than the write: a filesystem write in flight cannot be called back, and
