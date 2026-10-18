@@ -186,6 +186,25 @@ describe('the skills a conversation may reach for', () => {
     it('switches one of theirs by the key the agent knows it under', async () => {
       const { onToggle } = renderPanel([
         heldSkill({
+          key: 'anthropic-skills:deep-research',
+          name: 'anthropic-skills:deep-research',
+          source: 'synced'
+        })
+      ])
+
+      await openPanel()
+      await userEvent.click(fold())
+      await userEvent.click(screen.getByRole('switch', { name: 'anthropic-skills:deep-research' }))
+
+      expect(onToggle).toHaveBeenCalledExactlyOnceWith('anthropic-skills:deep-research', false)
+    })
+
+    /* Claude Code keeps a plugin's skill whatever `skillOverrides` says, so a
+       switch there would be a promise with nothing behind it. */
+    it('offers no switch on a plugin\u2019s skill, and says where a plugin is turned off', async () => {
+      renderPanel([
+        heldSkill(),
+        heldSkill({
           key: 'commit-commands:commit',
           name: 'commit-commands:commit',
           source: 'plugin'
@@ -194,9 +213,24 @@ describe('the skills a conversation may reach for', () => {
 
       await openPanel()
       await userEvent.click(fold())
-      await userEvent.click(screen.getByRole('switch', { name: 'commit-commands:commit' }))
 
-      expect(onToggle).toHaveBeenCalledExactlyOnceWith('commit-commands:commit', false)
+      expect(screen.getByText('commit-commands:commit')).toBeInTheDocument()
+      expect(
+        screen.queryByRole('switch', { name: 'commit-commands:commit' })
+      ).not.toBeInTheDocument()
+      expect(
+        screen.getByText('Turned on and off with the whole plugin, through /plugin in Claude Code')
+      ).toBeInTheDocument()
+      expect(screen.getByRole('switch', { name: 'dataviz' })).toBeInTheDocument()
+    })
+
+    it('says nothing about plugins where there are none', async () => {
+      renderPanel([heldSkill()])
+
+      await openPanel()
+      await userEvent.click(fold())
+
+      expect(screen.queryByText(/through \/plugin/)).not.toBeInTheDocument()
     })
 
     it('stays open across closing the panel and opening it again', async () => {

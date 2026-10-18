@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 
 import type { AgentSkill } from './agent.js'
-import { describeSessionSkill, SESSION_SKILL_SOURCES } from './sessionSkills.js'
+import { describeSessionSkill, SESSION_SKILL_SOURCES, withholdable } from './sessionSkills.js'
 
 const skill = (name: string, description: string, builtin = false): AgentSkill => ({
   name,
@@ -70,5 +70,12 @@ describe('where a skill the agent holds comes from', () => {
 
   it('names the sources in the order the panel draws them', () => {
     expect(SESSION_SKILL_SOURCES).toEqual(['builtin', 'plugin', 'synced', 'own'])
+  })
+})
+
+/* The CLI ignores `skillOverrides` for a plugin's skill; every other source obeys it. */
+describe('which sources can be withheld one skill at a time', () => {
+  it('takes every source but a plugin', () => {
+    expect(SESSION_SKILL_SOURCES.filter(withholdable)).toEqual(['builtin', 'synced', 'own'])
   })
 })

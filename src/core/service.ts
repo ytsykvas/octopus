@@ -206,7 +206,7 @@ import {
   writeRawSkill,
   writeSkill
 } from './skills.js'
-import { describeSessionSkill } from './sessionSkills.js'
+import { describeSessionSkill, withholdable } from './sessionSkills.js'
 import { type OwnSkillScope, skillKey } from './skillNames.js'
 import type { Store } from './stores.js'
 import { type QuestionAnswer, readQuestions, withAnswers } from './questions.js'
@@ -3419,7 +3419,9 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
         key: name,
         scope: 'session',
         source,
-        enabled: skillEnabled(name, defaults, chat.skillOverrides)
+        // What the session does rather than what the record says, where the
+        // two can differ: a plugin's skill is on whatever was switched.
+        enabled: !withholdable(source) || skillEnabled(name, defaults, chat.skillOverrides)
       })
     }
 

@@ -1052,6 +1052,9 @@ export const en = {
     /* Where each of Claude Code's own came from, as the group's subheadings. */
     skillsBuiltin: 'Built into Claude Code',
     skillsPlugin: 'Plugins',
+    // Under the plugins' heading, where their rows carry no switch: Claude Code
+    // keeps a plugin's skill whatever octopus says, and turns a plugin off whole.
+    skillsPluginNote: 'Turned on and off with the whole plugin, through /plugin in Claude Code',
     skillsSynced: 'Synced from claude.ai',
     skillsOwn: 'Your own',
     /* Said once at the foot of the panel, because a switch that looks like a

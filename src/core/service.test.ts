@@ -10453,6 +10453,27 @@ describe('the agent chat', () => {
       expect(agents[0]?.options().settings).toMatchObject({ skillOverrides: { loop: 'off' } })
     })
 
+    /*
+     * The CLI ignores `skillOverrides` for a plugin's skill, so the record's
+     * `false` — one left from before the panel stopped offering the switch —
+     * is not what the session does, and the row says what it does.
+     */
+    it('draws a plugin\u2019s skill as on whatever the record says', async () => {
+      const { service, workspaceId } = await withWorkspace()
+      skillReload = () =>
+        Promise.resolve({
+          skills: [{ name: 'commit-commands:commit', description: 'Commit.', argumentHint: '' }]
+        })
+
+      const chat = await service.openChat(workspaceId)
+      await service.sendToChat(chat.id, 'work')
+      await service.setChatSkill(chat.id, 'commit-commands:commit', false)
+
+      await expect(service.skillsForChat(chat.id)).resolves.toMatchObject([
+        { key: 'commit-commands:commit', source: 'plugin', enabled: true }
+      ])
+    })
+
     /* The write does not ask the session anything: the map comes from the
        record, so a session that cannot say what it holds still takes it. */
     it('still switches off what it wrote when the session will not answer', async () => {

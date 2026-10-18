@@ -1,4 +1,8 @@
-import { SESSION_SKILL_SOURCES, type SessionSkillSource } from '@core/sessionSkills.js'
+import {
+  SESSION_SKILL_SOURCES,
+  type SessionSkillSource,
+  withholdable
+} from '@core/sessionSkills.js'
 import type { OwnSkillScope } from '@core/skillNames.js'
 import type { SkillListing } from '@core/skills.js'
 
@@ -56,6 +60,22 @@ export function heldSections(skills: readonly SkillListing[]): SkillSection<Sess
   )
 }
 
+/**
+ * Whether a row's switch would do anything.
+ *
+ * Every row but a plugin's: Claude Code keeps a plugin's skill whatever
+ * `skillOverrides` says, so that group is listed without switches and with a
+ * line saying where a plugin is turned off instead.
+ */
+export function hasSwitch(skill: SkillListing): boolean {
+  return skill.scope !== 'session' || withholdable(skill.source)
+}
+
+/** Whether the group needs the line saying its rows are switched elsewhere. */
+export function switchedElsewhere(section: SkillSection<SessionSkillSource>): boolean {
+  return !withholdable(section.id)
+}
+
 /** How many rows the groups hold, and how many of those are on. */
 export function countIn(sections: readonly SkillSection<string>[]): {
   readonly total: number
@@ -74,6 +94,8 @@ export function countIn(sections: readonly SkillSection<string>[]): {
 const ROW_HEIGHT = 50
 const GROUP_HEADING = 30
 const SUBHEADING = 25
+/** The plugins' note, budgeted at two lines: it wraps at this width in Ukrainian. */
+const ELSEWHERE_NOTE = 32
 const PANEL_CHROME = 96
 /** The list's `max-h-80`; past it the list scrolls rather than the panel growing. */
 const LIST_CAP = 320
@@ -91,10 +113,12 @@ const LIST_CAP = 320
  */
 export function panelHeight(
   own: readonly SkillSection<string>[],
-  held: readonly SkillSection<string>[]
+  held: readonly SkillSection<SessionSkillSource>[]
 ): number {
   const headings = own.length * GROUP_HEADING + (held.length === 0 ? 0 : GROUP_HEADING)
+  const subheadings = held.length * SUBHEADING
+  const notes = held.filter(switchedElsewhere).length * ELSEWHERE_NOTE
   const rows = (countIn(own).total + countIn(held).total) * ROW_HEIGHT
 
-  return PANEL_CHROME + Math.min(LIST_CAP, headings + held.length * SUBHEADING + rows)
+  return PANEL_CHROME + Math.min(LIST_CAP, headings + subheadings + notes + rows)
 }

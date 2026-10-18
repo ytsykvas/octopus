@@ -1,7 +1,14 @@
 import { describe, expect, it } from 'vitest'
 
 import { heldSkill, ownSkill } from '../../test/skills.js'
-import { countIn, heldSections, ownSections, panelHeight } from './skillSections.js'
+import {
+  countIn,
+  hasSwitch,
+  heldSections,
+  ownSections,
+  panelHeight,
+  switchedElsewhere
+} from './skillSections.js'
 
 const ids = (sections: readonly { readonly id: string }[]): string[] =>
   sections.map((section) => section.id)
@@ -61,7 +68,31 @@ describe('how tall the panel can grow', () => {
     expect(panelHeight(own.slice(0, 0), held.slice(0, 1))).toBe(96 + 30 + 25 + 2 * 50)
   })
 
+  // And the plugins' line saying where they are switched, budgeted at two lines.
+  it('counts the plugins\u2019 note under their heading', () => {
+    expect(panelHeight([], held.slice(1))).toBe(96 + 30 + 25 + 32 + 50)
+  })
+
   it('stops where the list starts scrolling', () => {
     expect(panelHeight(own, held)).toBe(96 + 320)
+  })
+})
+
+/* Claude Code keeps a plugin's skill whatever `skillOverrides` says. */
+describe('which rows carry a switch', () => {
+  it('gives every row one but a plugin\u2019s', () => {
+    expect(hasSwitch(ownSkill())).toBe(true)
+    expect(hasSwitch(heldSkill({ source: 'builtin' }))).toBe(true)
+    expect(hasSwitch(heldSkill({ source: 'synced' }))).toBe(true)
+    expect(hasSwitch(heldSkill({ source: 'plugin' }))).toBe(false)
+  })
+
+  it('says where a plugin is switched under the plugins\u2019 heading alone', () => {
+    const sections = heldSections([
+      heldSkill({ key: 'dataviz' }),
+      heldSkill({ key: 'tools:lint', source: 'plugin' })
+    ])
+
+    expect(sections.filter(switchedElsewhere).map((section) => section.id)).toEqual(['plugin'])
   })
 })
