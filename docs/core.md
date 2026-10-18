@@ -584,11 +584,20 @@ nothing here, and a lock file would live inside somebody's repository.
 That function also **re-asserts the mode** rather than passing it to `writeFile`,
 whose `mode` option reaches `open(2)` and is ignored unless the call creates the
 file. Appending credentials to a `.env` carried in from a checkout would
-otherwise leave it as readable as the copy was. Agent events arrive from a callback nobody awaits, so a status change
+otherwise leave it as readable as the copy was.
+
+Agent events arrive from a callback nobody awaits, so a status change
 from the agent and one the user asked for genuinely do land together. `commit`
 serialises them, and takes a **function** of the current state rather than a
 finished one: a queued write computed from a stale snapshot would silently undo
 whatever landed while it waited.
+
+`config.json` has a queue of its own of the same shape, in `applyConfig`, which
+also takes a function of the current config for the same reason. It was written
+unqueued until ten arrow-key nudges of the right pane's edge — each one an
+update — showed both halves: the second rename failing with `ENOENT`, and a
+patch built from a config the previous write had not stored yet putting that
+write's field back.
 
 Transcript appends have their own chain. They do not read the state, so making
 them wait for a save would only slow the log down — what they need is order.

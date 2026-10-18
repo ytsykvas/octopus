@@ -1193,6 +1193,47 @@ describe('config', () => {
 
     expect(service.getConfig().rightPanelWidth).toBe(before)
   })
+
+  /*
+   * Two updates in flight used to race. Each wrote the one temporary file and
+   * renamed it, so the second rename found it gone and rejected with ENOENT —
+   * "Something went wrong" in the window — and each built its result from a
+   * config the other had not stored yet, so the slower one put the faster
+   * one's field back. Ten arrow-key nudges of the right pane's edge did it.
+   */
+  it('keeps both of two updates made at once', async () => {
+    const both = Promise.all([
+      service.updateConfig({ rightPanelWidth: 400 }),
+      service.updateConfig({ theme: 'dark' })
+    ])
+
+    await expect(both).resolves.toHaveLength(2)
+    expect(service.getConfig()).toMatchObject({ rightPanelWidth: 400, theme: 'dark' })
+    const restarted = await createService(paths(dir))
+    expect(restarted.getConfig()).toMatchObject({ rightPanelWidth: 400, theme: 'dark' })
+  })
+
+  // A write that failed is not a reason to stop making the rest.
+  it('goes on writing after an update it refused', async () => {
+    const refused = service.updateConfig({ rightPanelWidth: 12 })
+    const accepted = service.updateConfig({ theme: 'dark' })
+
+    // The schema's refusal, not a lost race for the temporary file.
+    await expect(refused).rejects.toMatchObject({ name: 'ZodError' })
+    await expect(accepted).resolves.toMatchObject({ theme: 'dark' })
+  })
+
+  // Quitting waits for a write still being made, or the old file survives the
+  // last change before Cmd-Q and a temporary file is left beside it.
+  it('finishes a config write before it is done shutting down', async () => {
+    const writing = service.updateConfig({ theme: 'dark' })
+
+    await service.closeChats()
+
+    const onDisk: unknown = JSON.parse(await readFile(join(dir, 'config.json'), 'utf8'))
+    expect(onDisk).toMatchObject({ theme: 'dark' })
+    await writing
+  })
 })
 
 describe('projects', () => {
@@ -6227,6 +6268,34 @@ describe('the agent chat', () => {
 
       // The second call must not ask at all.
       await expect(agent().ask('Edit')).resolves.toMatchObject({ behavior: 'allow' })
+    })
+
+    /*
+     * Each rule is worked out from the list as its write comes round, not as
+     * it was when the answer arrived — two answered together otherwise both
+     * started from the empty list, and the second stored only itself.
+     */
+    it('keeps both of two "always" answers given together', async () => {
+      const { service, workspaceId, events } = await withWorkspace()
+      const chat = await service.openChat(workspaceId)
+      await service.sendToChat(chat.id, 'edit it')
+
+      void agent().ask('Edit')
+      void agent().ask('Write')
+      const requests = (): string[] =>
+        events.flatMap(({ event }) =>
+          event.type === 'permission_request' ? [event.requestId] : []
+        )
+      await vi.waitFor(() => {
+        expect(requests()).toHaveLength(2)
+      })
+
+      await Promise.all(requests().map((id) => service.answerPermission(id, 'always')))
+
+      expect(service.getConfig().alwaysAllowedTools).toEqual([
+        { toolName: 'Edit', ruleContent: null },
+        { toolName: 'Write', ruleContent: null }
+      ])
     })
 
     /*
