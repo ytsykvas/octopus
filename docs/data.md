@@ -260,14 +260,15 @@ catalogue was copied out of a live `state.json` rather than written from the
 type — which is the only reason the second shape is known to exist.
 
 `knownSkills` is the same kind of thing for the skills panel: each skill a
-session described — `name`, `description` and the SDK's `builtin` flag, as the
-agent said them. It exists
+session described that our directories do not hold — `name`, `description` and
+the SDK's `builtin` flag, as the agent said them. It exists
 for one moment: a session leaves a skill it was told to withhold out of its
 answer, so the switch that withheld one of Claude Code's own would otherwise be
 the last anyone saw of it. **Merged by name rather than replaced**, the opposite
 of `knownModels`, because the entries that matter are exactly the ones the
 latest answer leaves out. Never pruned, and harmless for it: the panel draws a
-remembered skill only while a conversation has it switched off. Written only
+remembered skill only while a conversation has it switched off, and draws one it
+never heard of by name alone. Written only
 when an answer says something new, since the panel asks on every open.
 
 A **chat** is a conversation with one agent inside one workspace: `id`,

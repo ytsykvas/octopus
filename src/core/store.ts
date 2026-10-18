@@ -12,11 +12,10 @@ import { z } from 'zod'
 
 import { CodedError } from './codedError.js'
 import { NotesBodySchema } from './notes.js'
+import type { AgentSkill } from './agent.js'
 import { withApproval } from './repoTrust.js'
 import { SourceItemIdSchema } from './sourceItems.js'
 import { UsageWindowsSchema } from './usage.js'
-
-import type { AgentSkill } from './agent.js'
 
 import {
   type AgentCommand,
