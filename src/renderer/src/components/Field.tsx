@@ -46,7 +46,11 @@ export function Field({
   const id = useId()
 
   return (
-    <div>
+    // `relative` holds the hidden label in its row. `sr-only` is absolutely
+    // positioned, and without a positioned ancestor nearer than the dialog it
+    // skipped the scrolling pane and stretched the `<dialog>` itself: Project
+    // settings scrolled 1664px past its footer onto nothing.
+    <div className="relative">
       {typeof children === 'function' ? (
         <>
           <label htmlFor={id} className={hideLabel ? 'sr-only' : 'mb-1.5 block font-medium'}>
