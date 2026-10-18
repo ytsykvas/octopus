@@ -2452,8 +2452,15 @@ Tokens then line up with lines **by number** rather than by walking, which is
 the whole difference: the tokens describe every line of the file and the hunks
 describe some of them, so there is no shared walk to keep in step.
 
-**Files over 500 changed lines start collapsed**, and what the core left undrawn
-is said in the header rather than quietly appearing unchanged.
+**Every file starts collapsed**, and what the core left undrawn is said in the
+header rather than quietly appearing unchanged. Opening the tab shows the list,
+not the lines: the reader picks what to read, and one long file no longer
+pushes the rest out of sight. It used to be only files over 500 changed lines.
+What the reader opens or closes is remembered **per workspace** for as long as
+the window is open — a visit to another workspace no longer folds everything
+back, and the same path there is another file, so it does not open with it. A
+restart starts everything collapsed again; this is a way of reading, not a
+setting.
 
 **A character that does not draw as itself is named where it stands.** Text goes
 on screen through the browser's bidirectional algorithm, so a right-to-left
@@ -2468,7 +2475,7 @@ that is about to run.
 Such a character is replaced by a chip naming its code point, `U+202E`, which
 stops the reordering as well as reporting it — a marker elsewhere on the row
 would name the problem and leave it standing. The file header carries a warning
-too, since a large file starts collapsed and an unread line is the one most
+too, since every file starts collapsed and an unread line is the one most
 likely to be approved. The path gets the same treatment, being drawn from the
 same bytes: a file can be named to read as an image while ending in `.js`.
 

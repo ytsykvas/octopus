@@ -84,6 +84,16 @@ function emitTurnEnd(): void {
 
 const WIDE = 900
 
+/**
+ * Opens every file, as a reader does before reading the lines.
+ *
+ * Every file starts collapsed, so a test about what is drawn under a header
+ * presses the same button the reader would.
+ */
+async function expandAll(): Promise<void> {
+  fireEvent.click(await screen.findByRole('button', { name: 'Expand every file' }))
+}
+
 function renderPanel(workspace = anna, visible = true): void {
   render(
     <DiffPanel
@@ -147,6 +157,7 @@ describe('DiffPanel', () => {
     answer(workspaceDiff([fileDiff('src/a.ts')]))
     renderPanel()
 
+    await expandAll()
     expect(await screen.findByText('is here now')).toBeInTheDocument()
     expect(screen.getByText('was here')).toBeInTheDocument()
     expect(screen.getByText('kept')).toBeInTheDocument()
@@ -157,6 +168,7 @@ describe('DiffPanel', () => {
     answer(workspaceDiff([fileDiff('src/a.ts')]))
     renderPanel()
 
+    await expandAll()
     const header = await screen.findByRole('button', { name: 'src/a.ts' })
     expect(header).toHaveAttribute('aria-expanded', 'true')
 
@@ -180,13 +192,61 @@ describe('DiffPanel', () => {
     expect(screen.getAllByText('is here now')).toHaveLength(2)
   })
 
-  // A generated file or a wholesale rewrite is not read line by line, and
-  // putting it in the way of the files that are is what makes review tedious.
-  it('starts a very large file collapsed', async () => {
-    answer(workspaceDiff([fileDiff('generated.ts', { added: 900, removed: 900 })]))
+  // Opening the tab shows the list, not the lines: the reader picks what to
+  // read, and one long file no longer pushes the rest out of sight.
+  it('starts every file collapsed, small ones included', async () => {
+    answer(workspaceDiff([fileDiff('src/a.ts'), fileDiff('src/b.ts')]))
     renderPanel()
 
-    expect(await screen.findByRole('button', { name: 'generated.ts' })).toHaveAttribute(
+    expect(await screen.findByRole('button', { name: 'src/a.ts' })).toHaveAttribute(
+      'aria-expanded',
+      'false'
+    )
+    expect(screen.getByRole('button', { name: 'src/b.ts' })).toHaveAttribute(
+      'aria-expanded',
+      'false'
+    )
+    expect(screen.queryByText('is here now')).not.toBeInTheDocument()
+  })
+
+  /* Remembered per workspace for as long as the window is open: a visit to
+     another workspace used to fold everything back, and the same path in that
+     other workspace is a different file, so it must not open with it. */
+  it('keeps a file opened in one workspace open after a visit to another', async () => {
+    const user = userEvent.setup()
+    answer(workspaceDiff([fileDiff('src/a.ts'), fileDiff('src/b.ts')]))
+    const panel = (workspace: typeof anna): React.JSX.Element => (
+      <DiffPanel
+        workspace={workspace}
+        visible
+        view="unified"
+        onView={vi.fn()}
+        width={WIDE}
+        comments={commentController()}
+        revert={revertController()}
+        onError={vi.fn()}
+      />
+    )
+    const { rerender } = render(panel(anna))
+    await user.click(await screen.findByRole('button', { name: 'src/a.ts' }))
+
+    rerender(panel(bob))
+    await waitFor(() => {
+      expect(octopus().workspaces.diff).toHaveBeenCalledWith(bob.id)
+    })
+    expect(await screen.findByRole('button', { name: 'src/a.ts' })).toHaveAttribute(
+      'aria-expanded',
+      'false'
+    )
+
+    rerender(panel(anna))
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: 'src/a.ts' })).toHaveAttribute(
+        'aria-expanded',
+        'true'
+      )
+    })
+    expect(screen.getByRole('button', { name: 'src/b.ts' })).toHaveAttribute(
       'aria-expanded',
       'false'
     )
@@ -196,6 +256,7 @@ describe('DiffPanel', () => {
     answer(workspaceDiff([fileDiff('src/b.ts', { oldPath: 'src/a.ts', status: 'renamed' })]))
     renderPanel()
 
+    await expandAll()
     expect(await screen.findByText('moved from src/a.ts')).toBeInTheDocument()
   })
 
@@ -210,6 +271,7 @@ describe('DiffPanel', () => {
     )
     renderPanel()
 
+    await expandAll()
     expect(await screen.findByText('made executable')).toBeInTheDocument()
   })
 
@@ -221,6 +283,7 @@ describe('DiffPanel', () => {
     )
     renderPanel()
 
+    await expandAll()
     expect(await screen.findByText('no longer executable')).toBeInTheDocument()
   })
 
@@ -232,6 +295,7 @@ describe('DiffPanel', () => {
     answer(workspaceDiff([fileDiff('link', { mode: { from: '100644', to: '120000' }, hunks: [] })]))
     renderPanel()
 
+    await expandAll()
     expect(await screen.findByText('mode 100644 \u2192 120000')).toBeInTheDocument()
   })
 
@@ -249,6 +313,7 @@ describe('DiffPanel', () => {
     answer(workspaceDiff([fileDiff('logo.png', { omitted: 'binary', hunks: [] })]))
     renderPanel()
 
+    await expandAll()
     expect(await screen.findByText(/Binary file/)).toBeInTheDocument()
   })
 
@@ -260,6 +325,7 @@ describe('DiffPanel', () => {
     )
     renderPanel()
 
+    await expandAll()
     expect(await screen.findByText(/Too large to draw/)).toBeInTheDocument()
     expect(screen.getByText('1 file is too large to draw')).toBeInTheDocument()
   })
@@ -292,6 +358,7 @@ describe('DiffPanel', () => {
     )
     renderPanel()
 
+    await expandAll()
     expect(await screen.findByText('U+202E')).toBeInTheDocument()
     expect(screen.getByLabelText(/characters that do not draw as themselves/)).toBeInTheDocument()
   })
@@ -332,6 +399,7 @@ describe('DiffPanel', () => {
     )
     renderPanel()
 
+    await expandAll()
     expect(await screen.findByText('tokenised')).toBeInTheDocument()
     expect(screen.getByText('U+202E')).toBeInTheDocument()
   })
@@ -353,6 +421,7 @@ describe('DiffPanel', () => {
     answer(workspaceDiff([fileDiff('src/auth.ts')]))
     renderPanel()
 
+    await expandAll()
     await screen.findByText('is here now')
     expect(
       screen.queryByLabelText(/characters that do not draw as themselves/)
@@ -369,6 +438,7 @@ describe('DiffPanel', () => {
     )
     renderPanel()
 
+    await expandAll()
     expect(await screen.findByText('moved from a.ts')).toBeInTheDocument()
     expect(screen.queryByText('is here now')).not.toBeInTheDocument()
   })
@@ -379,6 +449,7 @@ describe('DiffPanel', () => {
     )
     renderPanel()
 
+    await expandAll()
     expect(await screen.findByText('function greet()')).toBeInTheDocument()
   })
 
@@ -453,6 +524,7 @@ describe('DiffPanel', () => {
       />
     )
 
+    await expandAll()
     expect(await screen.findByRole('button', { name: 'One column' })).toBeInTheDocument()
     // Context sits on both sides in split view, which is what tells the two
     // columns apart from the single one.
@@ -520,6 +592,7 @@ describe('DiffPanel', () => {
 
     // Waits for the measurement: the toggle only offers the way back to one
     // column once the pane has worked out that two of them fit.
+    await expandAll()
     await screen.findByRole('button', { name: 'One column' })
 
     // Once, not twice: a context line occupies both columns, and an addition
@@ -565,6 +638,7 @@ describe('DiffPanel', () => {
       />
     )
 
+    await expandAll()
     await screen.findByRole('button', { name: 'One column' })
 
     expect(screen.getByText('10')).toBeInTheDocument()
@@ -589,6 +663,7 @@ describe('DiffPanel', () => {
       />
     )
 
+    await expandAll()
     await screen.findByText('is here now')
     expect(screen.getAllByText('kept')).toHaveLength(1)
     expect(screen.getByRole('button', { name: /too narrow/ })).toBeDisabled()
@@ -675,6 +750,7 @@ describe('DiffPanel', () => {
     it('offers to ask about a passage that was selected', async () => {
       answer(workspaceDiff([fileDiff('src/a.ts')]))
       renderWithComments()
+      await expandAll()
       await screen.findByText('kept')
 
       const lines = codeLines()
@@ -689,6 +765,7 @@ describe('DiffPanel', () => {
     it('places the button at the selection’s left edge, clear of the window’s', async () => {
       answer(workspaceDiff([fileDiff('src/a.ts')]))
       renderWithComments()
+      await expandAll()
       await screen.findByText('kept')
       const lines = codeLines()
 
@@ -707,6 +784,7 @@ describe('DiffPanel', () => {
     it('offers nothing for a selection that is only a cursor', async () => {
       answer(workspaceDiff([fileDiff('src/a.ts')]))
       renderWithComments()
+      await expandAll()
       await screen.findByText('kept')
 
       // Awaited rather than left implied: the selection below is what the test
@@ -734,6 +812,7 @@ describe('DiffPanel', () => {
       const user = userEvent.setup()
       answer(workspaceDiff([fileDiff('src/a.ts')]))
       const comments = renderWithComments()
+      await expandAll()
       await screen.findByText('kept')
 
       const lines = codeLines()
@@ -758,6 +837,7 @@ describe('DiffPanel', () => {
       const user = userEvent.setup()
       answer(workspaceDiff([fileDiff('src/a.ts')]))
       const comments = renderWithComments()
+      await expandAll()
       await screen.findByText('kept')
 
       const text = textIn(codeLines()[0]!)
@@ -786,6 +866,7 @@ describe('DiffPanel', () => {
       const comments = renderWithComments()
       // Both files carry the same three lines, so the count is what says the
       // second one has arrived — its path is drawn in two spans, not one.
+      await expandAll()
       await waitFor(() => {
         expect(codeLines()).toHaveLength(6)
       })
@@ -808,6 +889,7 @@ describe('DiffPanel', () => {
       const user = userEvent.setup()
       answer(workspaceDiff([fileDiff('src/a.ts')]))
       renderWithComments()
+      await expandAll()
       await screen.findByText('kept')
 
       const lines = codeLines()
@@ -825,6 +907,7 @@ describe('DiffPanel', () => {
     it('offers nothing when the browser reports no selection', async () => {
       answer(workspaceDiff([fileDiff('src/a.ts')]))
       renderWithComments()
+      await expandAll()
       await screen.findByText('kept')
 
       // A real selection first — `selectAcross` needs the genuine article, and
@@ -847,6 +930,7 @@ describe('DiffPanel', () => {
     it('offers nothing for a selection that touched no code', async () => {
       answer(workspaceDiff([fileDiff('src/a.ts')]))
       renderWithComments()
+      await expandAll()
       await screen.findByText('kept')
 
       // Select real code first and wait for the button. Asserting an absence
@@ -895,6 +979,7 @@ describe('DiffPanel', () => {
         ])
       )
       const comments = renderWithComments()
+      await expandAll()
       await screen.findByText('far below')
 
       const lines = codeLines()
@@ -946,6 +1031,7 @@ describe('DiffPanel', () => {
 
       // The token, not the line: a fall back to the plain branch would leave
       // this element out of the document entirely.
+      await expandAll()
       const token = await screen.findByText('answer')
       selectAcross(token, token)
       await user.click(await askButton())
@@ -975,6 +1061,7 @@ describe('DiffPanel', () => {
           onError={vi.fn()}
         />
       )
+      await expandAll()
       await screen.findByText('was here')
 
       selectAcross(screen.getByText('was here'), screen.getByText('was here'))
@@ -993,6 +1080,7 @@ describe('DiffPanel', () => {
       const user = userEvent.setup()
       answer(workspaceDiff([fileDiff('src/a.ts')]))
       renderWithComments()
+      await expandAll()
       await screen.findByText('kept')
 
       const lines = codeLines()
@@ -1020,6 +1108,7 @@ describe('DiffPanel', () => {
         ]
       })
 
+      await expandAll()
       const note = await screen.findByText('this pair is wrong')
       expect(note.compareDocumentPosition(screen.getByText('is here now'))).toBe(
         Node.DOCUMENT_POSITION_FOLLOWING
@@ -1031,6 +1120,7 @@ describe('DiffPanel', () => {
       renderWithComments()
 
       // The added line is line 2 of the file as it now stands.
+      await expandAll()
       expect(await screen.findByRole('button', { name: 'Comment on line 2' })).toBeInTheDocument()
     })
 
@@ -1039,6 +1129,7 @@ describe('DiffPanel', () => {
       answer(workspaceDiff([fileDiff('src/a.ts')]))
       const comments = renderWithComments()
 
+      await expandAll()
       await user.click(await screen.findByRole('button', { name: 'Comment on line 2' }))
       await user.type(await screen.findByRole('textbox'), 'call this something else')
       await user.click(screen.getByRole('button', { name: 'Add' }))
@@ -1061,6 +1152,7 @@ describe('DiffPanel', () => {
       answer(workspaceDiff([fileDiff('src/a.ts')]))
       const comments = renderWithComments()
 
+      await expandAll()
       await user.click(
         await screen.findByRole('button', { name: 'Comment on line 2 of the file as it was' })
       )
@@ -1082,6 +1174,7 @@ describe('DiffPanel', () => {
       answer(workspaceDiff([fileDiff('src/a.ts')]))
       const comments = renderWithComments()
 
+      await expandAll()
       await user.click(await screen.findByRole('button', { name: 'Comment on line 2' }))
       await user.type(await screen.findByRole('textbox'), 'never mind')
       await user.click(screen.getByRole('button', { name: 'Cancel' }))
@@ -1104,6 +1197,7 @@ describe('DiffPanel', () => {
       answer(workspaceDiff([fileDiff('src/a.ts')]))
       renderWithComments()
 
+      await expandAll()
       await user.click(await screen.findByRole('button', { name: 'Comment on line 2' }))
       await user.type(await screen.findByRole('textbox'), 'half a thought')
 
@@ -1128,6 +1222,7 @@ describe('DiffPanel', () => {
       answer(workspaceDiff([fileDiff('src/a.ts')]))
       renderWithComments()
 
+      await expandAll()
       await user.click(await screen.findByRole('button', { name: 'Comment on line 2' }))
       await user.type(await screen.findByRole('textbox'), 'half a thought')
 
@@ -1146,6 +1241,7 @@ describe('DiffPanel', () => {
       answer(workspaceDiff([fileDiff('src/a.ts')]))
       renderWithComments()
 
+      await expandAll()
       const trigger = await screen.findByRole('button', { name: 'Comment on line 2' })
       await user.click(trigger)
       await user.type(await screen.findByRole('textbox'), 'never mind')
@@ -1159,6 +1255,7 @@ describe('DiffPanel', () => {
       answer(workspaceDiff([fileDiff('src/a.ts')]))
       const comments = renderWithComments()
 
+      await expandAll()
       await user.click(await screen.findByRole('button', { name: 'Comment on line 2' }))
       await user.click(screen.getByRole('button', { name: 'Add' }))
 
@@ -1180,6 +1277,7 @@ describe('DiffPanel', () => {
         ]
       })
 
+      await expandAll()
       expect(await screen.findByText('rename this')).toBeInTheDocument()
     })
 
@@ -1196,6 +1294,7 @@ describe('DiffPanel', () => {
       answer(workspaceDiff([fileDiff('src/a.ts')]))
       const comments = renderWithComments({ pending: [held] })
 
+      await expandAll()
       await user.click(await screen.findByRole('button', { name: 'Remove this note' }))
 
       expect(comments.remove).toHaveBeenCalledWith(held)
@@ -1206,6 +1305,7 @@ describe('DiffPanel', () => {
       answer(workspaceDiff([fileDiff('src/a.ts')]))
       const comments = renderWithComments()
 
+      await expandAll()
       await user.click(await screen.findByRole('button', { name: 'Comment on line 2' }))
       await user.type(await screen.findByRole('textbox'), 'shorter{Meta>}{Enter}{/Meta}')
 
@@ -1218,6 +1318,7 @@ describe('DiffPanel', () => {
       answer(workspaceDiff([fileDiff('src/a.ts')]))
       const comments = renderWithComments()
 
+      await expandAll()
       await user.click(await screen.findByRole('button', { name: 'Comment on line 2' }))
       await user.type(await screen.findByRole('textbox'), 'shorter{Control>}{Enter}{/Control}')
 
@@ -1230,6 +1331,7 @@ describe('DiffPanel', () => {
       answer(workspaceDiff([fileDiff('src/a.ts')]))
       const comments = renderWithComments()
 
+      await expandAll()
       await user.click(await screen.findByRole('button', { name: 'Comment on line 2' }))
       await user.type(await screen.findByRole('textbox'), '  {Meta>}{Enter}{/Meta}')
 
@@ -1241,6 +1343,7 @@ describe('DiffPanel', () => {
       answer(workspaceDiff([fileDiff('src/a.ts')]))
       const comments = renderWithComments()
 
+      await expandAll()
       await user.click(await screen.findByRole('button', { name: 'Comment on line 2' }))
       await user.type(await screen.findByRole('textbox'), 'never mind{Escape}')
 
@@ -1272,6 +1375,7 @@ describe('DiffPanel', () => {
       )
       renderWithComments()
 
+      await expandAll()
       expect(await screen.findByText('nowhere')).toBeInTheDocument()
       expect(screen.queryByRole('button', { name: /Comment on line/ })).not.toBeInTheDocument()
     })
@@ -1318,6 +1422,7 @@ describe('DiffPanel', () => {
 
       // Waits for the measurement: until it lands the pane is still drawing one
       // column, and the row clicked would be unmounted mid-click.
+      await expandAll()
       await screen.findByRole('button', { name: 'One column' })
 
       await user.click(
@@ -1334,6 +1439,7 @@ describe('DiffPanel', () => {
       answer(workspaceDiff([fileDiff('src/a.ts')]))
       renderWithComments()
 
+      await expandAll()
       const trigger = await screen.findByRole('button', { name: 'Comment on line 2' })
       await user.click(trigger)
       expect(screen.getByRole('textbox')).toBeInTheDocument()
@@ -1394,6 +1500,7 @@ describe('DiffPanel', () => {
         onError={vi.fn()}
       />
     )
+    await expandAll()
     await screen.findByText('is here now')
 
     rerender(
@@ -1782,6 +1889,7 @@ describe('what has reached GitHub', () => {
     answer(threeRungs())
     renderPanel()
 
+    await expandAll()
     await screen.findByRole('button', { name: 'src/sent.ts' })
     expect(order()).toEqual(['src/sent.ts', 'src/held.ts', 'src/loose.ts'])
   })
@@ -1802,6 +1910,7 @@ describe('what has reached GitHub', () => {
     )
     renderPanel()
 
+    await expandAll()
     await screen.findByRole('button', { name: 'src/sent.ts' })
     expect(order()).toEqual(['src/sent.ts', 'src/z.ts', 'src/a.ts'])
   })

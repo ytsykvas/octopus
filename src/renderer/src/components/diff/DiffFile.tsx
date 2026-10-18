@@ -334,7 +334,7 @@ export const DiffFile = memo(function DiffFile({
           {/* Outside the button rather than inside it: the button already
             carries the path as its whole accessible name, and a label nested
             in one is a label nobody hears. Said on the header as well as in
-            the line because a large file starts collapsed, and a line nobody
+            the line because every file starts collapsed, and a line nobody
             has looked at is the one most likely to be approved unread. */}
           {fileHasInvisible(file) && (
             <span

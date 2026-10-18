@@ -35,15 +35,6 @@ import { Placeholder } from '../Placeholder.js'
 import { chatName } from '../chat/chatName.js'
 
 /**
- * A file this big starts collapsed.
- *
- * Chosen against what a reviewer scrolls past rather than what the machine can
- * draw: a generated file or a wholesale rewrite is not read line by line, and
- * putting it in the way of the files that are is what makes a review tedious.
- */
-const AUTO_COLLAPSE_LINES = 500
-
-/**
  * The order the pane lists files in: least left to do first.
  *
  * Settled work at the top and the work still in hand at the bottom, so the
@@ -170,13 +161,21 @@ export function DiffPanel({
   const effectiveView: DiffView = view === 'split' && roomForSplit ? 'split' : 'unified'
 
   /*
-   * Only the files the reader has had an opinion about.
+   * Only the files the reader has had an opinion about, per workspace.
    *
-   * Everything else falls back to the size rule below, so a refresh after the
-   * agent's turn keeps the choices already made without having to reconcile a
-   * set of paths against a diff that has moved on.
+   * Everything else starts collapsed, so a refresh after the agent's turn
+   * keeps the choices already made without having to reconcile a set of paths
+   * against a diff that has moved on.
+   *
+   * Kept per workspace rather than cleared on a switch: going to another
+   * workspace and back should find the files that were open still open. Held
+   * in memory only — the pane is never unmounted, so this lasts as long as
+   * the window, and a restart starts every file collapsed again.
    */
-  const [choices, setChoices] = useState<ReadonlyMap<string, boolean>>(new Map())
+  const [choicesIn, setChoicesIn] = useState<ReadonlyMap<string, ReadonlyMap<string, boolean>>>(
+    new Map()
+  )
+  const choices = choicesIn.get(workspace?.id ?? '') ?? NO_CHOICES
   /** Where the open note sits; one at a time across the whole pane. */
   const [editing, setEditing] = useState<CommentAnchor | null>(null)
   const [selected, setSelected] = useState<Passage | null>(null)
@@ -248,10 +247,6 @@ export function DiffPanel({
    * That is also why they are no longer written below the guards, where a
    * workspace and a diff are known to exist. A hook cannot go there.
    */
-  const toggleFile = useCallback((path: string, collapsed: boolean) => {
-    setChoices((current) => new Map(current).set(path, collapsed))
-  }, [])
-
   /*
    * Which workspace the rows belong to, kept where a steady handler can read it.
    *
@@ -264,6 +259,15 @@ export function DiffPanel({
   useEffect(() => {
     openIn.current = workspace?.id ?? ''
   }, [workspace])
+
+  // Reads the workspace from the ref for the same reason `openFile` does: a
+  // toggle that closed over it would hand every memoised row a new function.
+  const toggleFile = useCallback((path: string, collapsed: boolean) => {
+    const workspaceId = openIn.current
+    setChoicesIn((all) =>
+      new Map(all).set(workspaceId, new Map(all.get(workspaceId)).set(path, collapsed))
+    )
+  }, [])
 
   const openFile = useCallback(
     (path: string) => {
@@ -377,12 +381,11 @@ export function DiffPanel({
       },
       onRemove: remove
     }),
-    [pending, editing, add, remove, lines, readDraft, onDraft]
+    [pending, editing, add, remove, lines, readDraft, onDraft, setEditing]
   )
 
   if ((workspace?.id ?? null) !== shownId) {
     setShownId(workspace?.id ?? null)
-    setChoices(new Map())
     setEditing(null)
     setSelected(null)
   }
@@ -406,11 +409,12 @@ export function DiffPanel({
 
   // Below the guards, so neither of these needs a fallback for a workspace or a
   // diff that the rows calling them could not have been drawn without.
-  const isCollapsed = (file: FileDiff): boolean =>
-    choices.get(file.path) ?? file.added + file.removed > AUTO_COLLAPSE_LINES
+  const isCollapsed = (file: FileDiff): boolean => choices.get(file.path) ?? true
 
   const setAll = (collapsed: boolean): void => {
-    setChoices(new Map(diff.files.map((file) => [file.path, collapsed])))
+    setChoicesIn((all) =>
+      new Map(all).set(workspace.id, new Map(diff.files.map((file) => [file.path, collapsed])))
+    )
   }
 
   const { named, marks } = attribution
@@ -841,4 +845,5 @@ const NO_WRITERS: readonly string[] = []
  * on something that holds still while there is nothing to key on.
  */
 const NO_CHATS: WorkspaceView['chats'] = []
+const NO_CHOICES: ReadonlyMap<string, boolean> = new Map()
 const NO_RECORD: WorkspaceView['writers'] = {}
