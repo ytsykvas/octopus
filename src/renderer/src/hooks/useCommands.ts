@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react'
 
 import type { AgentCommand } from '@core/chats.js'
 import { onChatEvent } from './chatEvents.js'
+import { useSessionStarted } from './useSessionStarted.js'
 
 /**
  * The slash commands this chat may use.
@@ -59,10 +60,6 @@ export function useCommands(chatId: string | null): readonly AgentCommand[] {
       // the two to disagree. Replaced wholesale — a command withdrawn
       // upstream has to leave the list.
       if (announced.event.type === 'commands_changed') setCommands(announced.event.commands)
-
-      // A session has started, which is the one moment a list that was empty
-      // can stop being empty.
-      if (announced.event.type === 'session_started') void refresh(chatId)
       // Subscribed for this chat alone — the second argument. Without it the
       // handler sat in the everything-list and took every conversation's
       // commands as its own, so the composer offered another project's
@@ -70,7 +67,13 @@ export function useCommands(chatId: string | null): readonly AgentCommand[] {
       // not define. The comment on the reset above said what must not
       // happen; this is the line that made it true.
     }, chatId)
-  }, [chatId, refresh])
+  }, [chatId])
+
+  // A session has started, which is the one moment a list that was empty can
+  // stop being empty.
+  useSessionStarted(chatId, (id) => {
+    void refresh(id)
+  })
 
   return commands
 }
