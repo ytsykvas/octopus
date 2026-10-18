@@ -9,30 +9,29 @@ import '../i18n/index.js'
 import { installOctopusStub } from './octopus.js'
 
 /*
- * `waitFor` and every `findBy` return only once React's queued work has run.
+ * `waitFor` and every `findBy` end after the work React's scheduler had already
+ * queued, not before it.
  *
- * React's scheduler posts its work with `setImmediate`, and Testing Library
- * ends a wait with a `setTimeout(0)`. Node does not order the two, so now and
- * then the wait came back after a render had committed but before its effects
- * ran — a listener not yet attached, a read not yet started — and the next line
- * of the test acted on a component that was not ready. That was the "now and
- * then" red in this suite: forced to lose the race, 126 tests failed, the
- * viewer's selection toolbar and ⌘T among them.
+ * The scheduler posts its work with `setImmediate`, and Testing Library ends a
+ * wait with a `setTimeout(0)`, which Node does not order against it — so now
+ * and then a wait came back between a commit and its effects. One more
+ * `setImmediate` after the wait queues behind the scheduler's. It is the
+ * function the scheduler captured, taken before any test can fake the timers.
+ * `docs/testing.md` has the story and what this does not cover.
  *
- * One more `setImmediate` after the wait queues behind the scheduler's. It is
- * the same function the scheduler captured, taken here before any test can
- * fake the timers.
+ * Inside the library's own wrapper, so what that last task renders still runs
+ * with act switched off, as the wait itself did.
  */
-const afterScheduled = globalThis.setImmediate
-// The config object as it is now: `configure` replaces it rather than mutating
-// it, so this keeps Testing Library's own wrapper, act environment and all.
+const schedulersSetImmediate = globalThis.setImmediate
+// Held whole rather than read later: after `configure`, `getConfig()` answers
+// with the wrapper below, which would then call itself.
 const library = getConfig()
 configure({
   asyncWrapper: (wait) =>
     library.asyncWrapper(async () => {
       const result: unknown = await wait()
       await new Promise<void>((resolve) => {
-        afterScheduled(resolve)
+        schedulersSetImmediate(resolve)
       })
       return result
     })

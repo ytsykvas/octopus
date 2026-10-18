@@ -297,7 +297,9 @@ describe('useWorkspaces', () => {
       expect(window.octopus.workspaces.list).toHaveBeenCalledTimes(reads + 1)
     })
 
-    await settled()
+    // Past the window a second read would have waited out. A `setTimeout(0)`
+    // here asserted before that read could have happened, and passed either way.
+    await after(400)
     expect(window.octopus.workspaces.list).toHaveBeenCalledTimes(reads + 1)
   })
 
