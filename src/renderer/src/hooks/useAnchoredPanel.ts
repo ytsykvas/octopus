@@ -11,10 +11,24 @@ export interface PanelSize {
   readonly height: number
 }
 
+/**
+ * Where to draw a panel, in window coordinates, ready to spread into `style`.
+ *
+ * Pinned by its top edge when it opens below the trigger and by its **bottom**
+ * edge when it opens above. A panel above the trigger that was pinned by its
+ * top sat wherever the estimated height put it: a little shorter than the
+ * estimate and it floated free of the control, and anything it grew by — a
+ * group unfolded — ran down over the trigger. Pinned by the bottom it hugs the
+ * trigger whatever its height, and grows away from it.
+ */
+export type PanelPosition =
+  | { readonly top: number; readonly left: number }
+  | { readonly bottom: number; readonly left: number }
+
 export interface AnchoredPanel {
   readonly open: boolean
-  /** Where to draw it, in window coordinates; null until it is opened. */
-  readonly position: { readonly top: number; readonly left: number } | null
+  /** Where to draw it; null until it is opened. */
+  readonly position: PanelPosition | null
   /** Goes on the element wrapping trigger and panel — a click inside is theirs. */
   readonly container: RefObject<HTMLDivElement | null>
   /** Opens against the trigger, or closes if this one is already open. */
@@ -41,7 +55,7 @@ export interface AnchoredPanel {
  */
 export function useAnchoredPanel(): AnchoredPanel {
   const [open, setOpen] = useState(false)
-  const [position, setPosition] = useState<{ top: number; left: number } | null>(null)
+  const [position, setPosition] = useState<PanelPosition | null>(null)
   const container = useRef<HTMLDivElement>(null)
 
   const close = useCallback(() => {
@@ -83,19 +97,26 @@ export function useAnchoredPanel(): AnchoredPanel {
 
       const rect = trigger.getBoundingClientRect()
 
-      setPosition({
-        // Erring high is the safe way to be wrong about the height: it flips the
-        // panel above the trigger sooner than it must, where erring low would
-        // run it off the bottom of the window.
-        top:
-          rect.bottom + GAP + size.height > window.innerHeight
-            ? Math.max(GAP, rect.top - size.height - GAP)
-            : rect.bottom + GAP,
-        // Lined up with the trigger's left edge, and clamped so a narrow window
-        // cannot push the panel off the right.
-        left: Math.min(Math.max(GAP, rect.left), window.innerWidth - size.width - GAP)
-      })
+      // Lined up with the trigger's left edge, and clamped so a narrow window
+      // cannot push the panel off the right.
+      const left = Math.min(Math.max(GAP, rect.left), window.innerWidth - size.width - GAP)
 
+      // Erring high is the safe way to be wrong about the height: it flips the
+      // panel above the trigger sooner than it must, where — pinned by its
+      // bottom — a panel shorter than the guess still meets the trigger. Erring
+      // low runs it off the bottom of the window.
+      const fitsBelow = rect.bottom + GAP + size.height <= window.innerHeight
+      const fitsAbove = rect.top - GAP - size.height >= GAP
+
+      setPosition(
+        fitsBelow
+          ? { top: rect.bottom + GAP, left }
+          : fitsAbove
+            ? { bottom: window.innerHeight - rect.top + GAP, left }
+            : // No room either way: from the top of the window, so what is cut
+              // off is the end of a list rather than its beginning.
+              { top: GAP, left }
+      )
       setOpen(true)
     },
     [open]

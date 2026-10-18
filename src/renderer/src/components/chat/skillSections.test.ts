@@ -40,10 +40,11 @@ describe('cutting the skills into groups', () => {
 })
 
 /*
- * The panel is anchored with this height before it draws, so it decides
- * whether the panel opens above or below the composer.
+ * The panel is placed with this height before it draws, so it decides whether
+ * the panel opens above or below the composer. It is the most the panel can
+ * grow to — a group unfolded after placing must not run off the window.
  */
-describe('how tall the panel comes out', () => {
+describe('how tall the panel can grow', () => {
   const own = ownSections([ownSkill({ key: 'a' }), ownSkill({ key: 'b' })])
   const held = heldSections([
     heldSkill({ key: 'x' }),
@@ -51,16 +52,16 @@ describe('how tall the panel comes out', () => {
     heldSkill({ key: 'z', source: 'plugin' })
   ])
 
-  // Chrome 84, then a 24px heading per group and 44px per row.
+  // Chrome 96, then 30px per group heading, 25px per source and 50px per row.
   it('is the chrome and our rows when Claude Code has nothing', () => {
-    expect(panelHeight(own, [], false)).toBe(84 + 24 + 2 * 44)
+    expect(panelHeight(own, [])).toBe(96 + 30 + 2 * 50)
   })
 
-  it('counts a folded group as its heading alone', () => {
-    expect(panelHeight(own, held, false)).toBe(84 + 24 + 2 * 44 + 24)
+  it('counts Claude Code’s group as though it were open', () => {
+    expect(panelHeight(own.slice(0, 0), held.slice(0, 1))).toBe(96 + 30 + 25 + 2 * 50)
   })
 
-  it('adds a subheading per source and every row once it is open', () => {
-    expect(panelHeight(own, held, true)).toBe(84 + 24 + 2 * 44 + 24 + 2 * 20 + 3 * 44)
+  it('stops where the list starts scrolling', () => {
+    expect(panelHeight(own, held)).toBe(96 + 320)
   })
 })

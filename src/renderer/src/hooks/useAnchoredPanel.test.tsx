@@ -29,7 +29,7 @@ function Harness({ size }: { size: PanelSize }): React.JSX.Element {
         </button>
 
         {open && position && (
-          <div data-testid="panel" style={{ top: position.top, left: position.left }}>
+          <div data-testid="panel" style={position}>
             <p>Panel contents</p>
             <button type="button" onClick={close}>
               Dismiss
@@ -82,10 +82,16 @@ describe('where the panel lands', () => {
     expect(panel()).toHaveStyle({ top: '130px', left: '50px' })
   })
 
-  it('flips above the trigger when the space below runs out', async () => {
+  /*
+   * Pinned by its bottom edge, 6px above the trigger: a panel that turns out
+   * shorter than its estimate, or grows once open, still meets the control
+   * instead of floating free of it or running down over it.
+   */
+  it('flips above the trigger when the space below runs out, pinned by its bottom', async () => {
     await openAt({ top: 700, left: 50 })
 
-    expect(panel()).toHaveStyle({ top: '594px' })
+    expect(panel()).toHaveStyle({ bottom: '74px' })
+    expect(panel().style.top).toBe('')
   })
 
   // A panel taller than the window has nowhere good to go, so it starts at the

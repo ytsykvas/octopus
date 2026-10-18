@@ -186,7 +186,7 @@ export function EffortPicker({
         <div
           role="dialog"
           aria-label={t('chat.effortScale')}
-          style={{ top: position.top, left: position.left, width: PANEL_WIDTH }}
+          style={{ ...position, width: PANEL_WIDTH }}
           className="border-line bg-canvas fixed z-50 rounded-[var(--radius-panel)] border p-4 shadow-[var(--shadow-pop)]"
         >
           {/* Two tabs over one scale. Which job you are setting is the only

@@ -163,7 +163,7 @@ export function ModelPicker({
         <div
           role="dialog"
           aria-label={t('chat.modelsTitle')}
-          style={{ top: position.top, left: position.left, width: PANEL_WIDTH }}
+          style={{ ...position, width: PANEL_WIDTH }}
           className="border-line bg-canvas fixed z-50 rounded-[var(--radius-panel)] border shadow-[var(--shadow-pop)]"
         >
           <p className="border-line text-ink-faint border-b px-3 py-2">{t('chat.modelsTitle')}</p>

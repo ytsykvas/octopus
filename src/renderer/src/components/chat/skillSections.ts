@@ -66,31 +66,35 @@ export function countIn(sections: readonly SkillSection<string>[]): {
   return { total: rows.length, enabled: rows.filter((skill) => skill.enabled).length }
 }
 
-const ROW_HEIGHT = 44
-const GROUP_HEADING = 24
-const SUBHEADING = 20
-/** The title above the list and the note below it. */
-const PANEL_CHROME = 84
+/*
+ * Measured in the window, each rounded up: a row with a description is 49px, a
+ * heading 29px, a source's subheading 25px. The chrome is the title, the note
+ * — two lines at this width — the borders and the list's own padding.
+ */
+const ROW_HEIGHT = 50
+const GROUP_HEADING = 30
+const SUBHEADING = 25
+const PANEL_CHROME = 96
+/** The list's `max-h-80`; past it the list scrolls rather than the panel growing. */
+const LIST_CAP = 320
 
 /**
- * The panel's height, given at the moment of opening so it can be flipped and
- * clamped against the window.
+ * The tallest the panel can become while it is open — every group unfolded,
+ * up to the point where the list starts scrolling.
  *
- * The folded group is one heading tall; open, it adds a subheading per source
- * and its rows. The list scrolls past a cap of its own, so a group opened after
- * the panel is placed grows inside it and nothing has to be placed again.
+ * The most rather than the current height, because folding happens after the
+ * panel is placed: placed below the trigger for its folded height, it ran off
+ * the bottom of the window the moment the group opened. Sized for the most it
+ * can hold, it opens above whenever that would not fit below, pinned there by
+ * its bottom edge (`useAnchoredPanel`) so the folded panel still meets the
+ * trigger.
  */
 export function panelHeight(
   own: readonly SkillSection<string>[],
-  held: readonly SkillSection<string>[],
-  heldOpen: boolean
+  held: readonly SkillSection<string>[]
 ): number {
-  const ownHeight = own.length * GROUP_HEADING + countIn(own).total * ROW_HEIGHT
+  const headings = own.length * GROUP_HEADING + (held.length === 0 ? 0 : GROUP_HEADING)
+  const rows = (countIn(own).total + countIn(held).total) * ROW_HEIGHT
 
-  const heldHeight =
-    held.length === 0
-      ? 0
-      : GROUP_HEADING + (heldOpen ? held.length * SUBHEADING + countIn(held).total * ROW_HEIGHT : 0)
-
-  return PANEL_CHROME + ownHeight + heldHeight
+  return PANEL_CHROME + Math.min(LIST_CAP, headings + held.length * SUBHEADING + rows)
 }

@@ -99,7 +99,7 @@ export function SkillsPanel({
           if (!open) onOpen()
           toggle(event.currentTarget, {
             width: PANEL_WIDTH,
-            height: panelHeight(own, held, heldOpen)
+            height: panelHeight(own, held)
           })
         }}
         // The attic's own hover surface, cancelled by negative margins so the
@@ -118,7 +118,7 @@ export function SkillsPanel({
         <div
           role="dialog"
           aria-label={t('chat.skillsTitle')}
-          style={{ top: position.top, left: position.left, width: PANEL_WIDTH }}
+          style={{ ...position, width: PANEL_WIDTH }}
           className="border-line bg-canvas fixed z-50 rounded-[var(--radius-panel)] border shadow-[var(--shadow-pop)]"
         >
           <p className="border-line text-ink-faint border-b px-3 py-2 text-[11px]">

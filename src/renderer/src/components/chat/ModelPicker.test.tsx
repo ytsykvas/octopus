@@ -245,8 +245,7 @@ describe('the room it asks for', () => {
 
     await user.click(chip())
 
-    expect(Number.parseInt(screen.getByRole('dialog').style.top, 10)).toBeLessThan(
-      window.innerHeight - 40
-    )
+    // Pinned 6px above the chip by its bottom edge.
+    expect(screen.getByRole('dialog')).toHaveStyle({ bottom: '46px' })
   })
 })
