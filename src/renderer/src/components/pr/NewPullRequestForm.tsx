@@ -54,8 +54,6 @@ export function NewPullRequestForm({
   const [draft, setDraft] = useState(false)
   /** Whether what is in the fields was written by the agent rather than typed. */
   const [written, setWritten] = useState(false)
-  /** The commit message the agent wrote, kept apart from the one typed here. */
-  const [draftedCommit, setDraftedCommit] = useState<string | null>(null)
 
   const committing = commitMessage.trim() !== ''
   const untitled = title.trim() === ''
@@ -78,7 +76,16 @@ export function NewPullRequestForm({
             if (written_ === null) return
             setTitle(written_.title)
             setBody(written_.body)
-            setDraftedCommit(written_.commitMessage)
+            /* Into the field, like the title and the description. It used to
+               be kept out of sight and committed under on the next press, so
+               the one text that stays in the history for good was the one
+               nobody read. A message typed before the answer arrived is the
+               person's own and stays — read from the state as it is now, not
+               as it was when the button was pressed. */
+            const drafted = written_.commitMessage
+            if (drafted !== null) {
+              setCommitMessage((typed) => (typed.trim() === '' ? drafted : typed))
+            }
             setWritten(true)
           })
           return
@@ -96,16 +103,12 @@ export function NewPullRequestForm({
            * refusal — the branch had nothing on it, and gh said so after the
            * agent had already written the description.
            *
-           * Typed first, then what the agent wrote, then the title. The title
-           * is a last resort and never empty by here: an empty one drafts
-           * rather than opens. Null only when there is nothing to commit,
-           * which git would refuse anyway.
+           * The field — typed, or filled in by the agent's draft — else the
+           * title. The title is a last resort and never empty by here: an
+           * empty one drafts rather than opens. Null only when there is
+           * nothing to commit, which git would refuse anyway.
            */
-          commitMessage: view.dirty
-            ? committing
-              ? commitMessage.trim()
-              : (draftedCommit ?? title.trim())
-            : null
+          commitMessage: view.dirty ? (committing ? commitMessage.trim() : title.trim()) : null
         })
       }}
       className="flex flex-col gap-2"
@@ -116,10 +119,10 @@ export function NewPullRequestForm({
 
       {view.dirty && (
         <div className="flex flex-col gap-1">
-          {/* Left empty, the commit still happens — under what the agent wrote
-              or under the title. The two strings differ in which; neither of
-              them is the old "the work stays behind", which stopped being true
-              when this field stopped deciding. */}
+          {/* Left empty, the commit still happens — under the title, or under
+              what the agent writes into this field. Neither string is the old
+              "the work stays behind", which stopped being true when this field
+              stopped deciding. */}
           <CommitMessageField
             value={commitMessage}
             onChange={setCommitMessage}

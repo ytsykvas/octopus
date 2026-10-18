@@ -612,9 +612,12 @@ it does goes through `gh` — which already holds the account in the keychain, s
 the app never sees a token (§10.9).
 
 - **Opening one.** Title, description, a draft flag, and — while the workspace
-  is dirty — a commit message. Left empty, the uncommitted work stays behind;
-  filled in, everything here is committed first, because a workspace whose only
-  work is uncommitted is zero commits ahead of its base until that lands. The
+  is dirty — a commit message. Everything here is committed first, because a
+  workspace whose only work is uncommitted is zero commits ahead of its base
+  until that lands: under the message in the field, or under the title when it
+  is empty. The agent's draft writes the message **into the field**, beside the
+  title and the description, and never over one already typed — it is the one
+  text that stays in the history, so it is not committed unread. The
   field warns when git does not ignore the env file octopus writes this
   workspace's variables into: `add -A` would otherwise commit credentials and
   the push would publish them.

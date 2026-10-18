@@ -1681,7 +1681,7 @@ and this is a mood about the run in front of you.
 than cloning.** It names the branch, and then either reports the request there
 is — number, title, a link out — or offers the form that opens one. Two things
 are said **before** the button rather than after it fails: that opening will push
-a branch that is not pushed, and that uncommitted work stays behind. Pushing
+a branch that is not pushed, and that uncommitted work is committed with it. Pushing
 touches somebody else's machine, and a button that does that silently is one
 people learn to distrust.
 
@@ -1693,9 +1693,13 @@ to disagree.
 
 **The form's own draft button is a different thing from the one below**, and the
 difference is what makes it fragile. It asks the agent once, with read-only
-tools and no session, for nothing but the title and the description — while the
-instruction it hands over is written for the whole act of opening a request, and
-a good one says to run the project's checks first.
+tools and no session, for nothing but the title, the description and — while
+the workspace is dirty — the commit message, each put into its own field to be
+read before anything is opened or committed. The message never replaces one
+already typed: it used to be held out of sight and committed under on the next
+press, which made the one text that stays in the history the one nobody saw.
+Meanwhile the instruction it hands over is written for the whole act of opening
+a request, and a good one says to run the project's checks first.
 
 So the prompt says what the task is not before handing the instruction over:
 nothing is run, committed, pushed or opened, and only what the instruction says
@@ -1818,8 +1822,9 @@ under one button is worse than the quieter one going.
 same one the create form carries — one component, because two fields for one idea
 drift, and this app has already spent a commit deleting a second copy of a
 function for that reason. What differs is the sentence under it and the fallback:
-the form commits under the drafted text or the title when the field is empty,
-and here there is neither, so an empty field means the press cannot say what it
+the form commits under the title when its field is empty, and the agent's draft
+fills that field rather than standing behind it, and here there is neither, so
+an empty field means the press cannot say what it
 did. It was fixed at "Answer the review" until this, on every press, whether or
 not anybody had reviewed anything.
 

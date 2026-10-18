@@ -293,8 +293,63 @@ describe('the pull request tab', () => {
 
     expect(octopus().workspaces.createPullRequest).toHaveBeenCalledWith(
       anna.id,
-      expect.objectContaining({ commitMessage: 'Written by the agent' })
+      expect.objectContaining({ commitMessage: 'Commit written by the agent' })
     )
+  })
+
+  /*
+   * The commit message is the one text here that stays in the history for good,
+   * and it used to be the one nobody saw: kept out of the field and committed
+   * under on the next press. It lands in the field now, beside the title and
+   * the description it was written with.
+   */
+  it('shows the commit message the agent wrote in its field', async () => {
+    const user = userEvent.setup()
+    answer(view({ dirty: true }))
+    renderPanel()
+
+    await user.click(await screen.findByRole('button', { name: 'Ask the agent to describe it' }))
+
+    // Waited for: the field is there from the start, so finding it says
+    // nothing about whether the answer has arrived.
+    await waitFor(() => {
+      expect(screen.getByLabelText('Commit message')).toHaveValue('Commit written by the agent')
+    })
+  })
+
+  // Shown so it can be changed — and the change is what gets committed.
+  it('commits under the agent’s message as edited in the field', async () => {
+    const user = userEvent.setup()
+    answer(view({ dirty: true }))
+    renderPanel()
+
+    await user.click(await screen.findByRole('button', { name: 'Ask the agent to describe it' }))
+    const field = await screen.findByLabelText('Commit message')
+    await waitFor(() => {
+      expect(field).toHaveValue('Commit written by the agent')
+    })
+    await user.clear(field)
+    await user.type(field, 'Say what it does')
+    await user.click(screen.getByRole('button', { name: 'Open pull request' }))
+
+    expect(octopus().workspaces.createPullRequest).toHaveBeenCalledWith(
+      anna.id,
+      expect.objectContaining({ commitMessage: 'Say what it does' })
+    )
+  })
+
+  // A message typed before asking is the person's own; the draft does not
+  // write over it.
+  it('keeps a commit message typed before the agent was asked', async () => {
+    const user = userEvent.setup()
+    answer(view({ dirty: true }))
+    renderPanel()
+
+    await user.type(await screen.findByLabelText('Commit message'), 'Mine')
+    await user.click(screen.getByRole('button', { name: 'Ask the agent to describe it' }))
+
+    expect(await screen.findByLabelText('Title')).toHaveValue('Written by the agent')
+    expect(screen.getByLabelText('Commit message')).toHaveValue('Mine')
   })
 
   // Null only when git would refuse a commit anyway.
@@ -362,6 +417,12 @@ describe('the pull request tab', () => {
   // agent's rather than empty.
   it('opens the request the agent described once it has been read', async () => {
     const user = userEvent.setup()
+    // A clean worktree, so the agent was asked for no commit message — the
+    // shape the service answers with when there is nothing to commit.
+    vi.mocked(octopus().workspaces.draftPullRequest).mockResolvedValue({
+      ok: true,
+      value: { title: 'Written by the agent', body: 'Because of this.', commitMessage: null }
+    })
     answer(view())
     renderPanel()
 

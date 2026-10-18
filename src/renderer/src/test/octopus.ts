@@ -133,7 +133,9 @@ export function installOctopusStub(): Api {
         ok({
           title: 'Written by the agent',
           body: 'Because of this.',
-          commitMessage: 'Written by the agent'
+          // Not the title: a test of which one a commit went under cannot
+          // tell them apart when the two read the same.
+          commitMessage: 'Commit written by the agent'
         })
       ),
       commitAndPush: vi.fn(() => ok(undefined)),
