@@ -18,6 +18,7 @@ import {
   renameSkill,
   SkillError,
   skillEnabled,
+  skillOverridesFor,
   writeRawSkill,
   writeSkill
 } from './skills.js'
@@ -940,5 +941,33 @@ describe('skillEnabled', () => {
 
     expect(skillEnabled('review', defaults, {})).toBe(true)
     expect(skillEnabled('octopus-project:review', defaults, {})).toBe(true)
+  })
+})
+
+describe('skillOverridesFor', () => {
+  const none = { global: [], project: [] }
+
+  it('tells the agent nothing when the record says nothing', () => {
+    expect(skillOverridesFor(none, {})).toEqual({})
+  })
+
+  /* The session's own skills are in no list octopus reads, so the record is
+     the only place their answer is kept. */
+  it('withholds what the conversation switched off, listed or not', () => {
+    expect(skillOverridesFor(none, { loop: false })).toEqual({ loop: 'off' })
+  })
+
+  it('withholds what either default list names', () => {
+    expect(skillOverridesFor({ global: ['review'], project: ['deploy'] }, {})).toEqual({
+      review: 'off',
+      deploy: 'off'
+    })
+  })
+
+  /* A key left out does not undo a withhold the session started with. */
+  it('says on out loud for one the conversation turned back on', () => {
+    expect(
+      skillOverridesFor({ global: ['review'], project: [] }, { review: true, loop: true })
+    ).toEqual({ review: 'on', loop: 'on' })
   })
 })

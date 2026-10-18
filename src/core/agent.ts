@@ -31,6 +31,7 @@ import { sessionEffort } from './chats.js'
 import { type AnswerValue, type ElicitationField, readForm } from './elicitation.js'
 import type { AgentEvent } from './events.js'
 import { describeError } from './persist.js'
+import type { SkillOverride } from './skills.js'
 import type { UsageReport } from './usage.js'
 import { toUsageReport } from './usage.js'
 
@@ -93,14 +94,15 @@ export interface SessionOptions {
    */
   readonly additionalDirectories: readonly string[]
   /**
-   * Skills this conversation is not to be offered, by the name the agent knows.
+   * What this conversation was told about each skill the record names, by the
+   * name the agent knows (`skillOverridesFor`).
    *
-   * A deny-list, because an allow-list would silently hide everything octopus
-   * failed to enumerate — Claude Code's own bundled skills first among them.
-   * Naming only what is off leaves a conversation with nothing switched off
-   * behaving exactly as it did before any of this existed.
+   * Not an allow-list, which would silently hide everything octopus failed to
+   * enumerate — Claude Code's own bundled skills first among them. A skill the
+   * record says nothing about is not in the map, so a conversation with nothing
+   * switched behaves exactly as it did before any of this existed.
    */
-  readonly skillOverrides: Readonly<Record<string, 'off'>>
+  readonly skillOverrides: Readonly<Record<string, SkillOverride>>
   /**
    * Where the conversation compacts itself, in tokens; null leaves it to the
    * agent.
@@ -275,8 +277,8 @@ export interface AgentSession {
   setEffort: (effort: EffortChoice) => Promise<void>
   /** Changes the model for what follows; null hands the choice back. */
   setModel: (model: string | null) => Promise<void>
-  /** Replaces the set of skills withheld from this conversation, mid-turn. */
-  setSkills: (skillOverrides: Readonly<Record<string, 'off'>>) => Promise<void>
+  /** Tells this conversation what is on and off now, mid-turn. */
+  setSkills: (skillOverrides: Readonly<Record<string, SkillOverride>>) => Promise<void>
   /**
    * Re-reads the skill directories and answers with everything the session has.
    *
@@ -528,14 +530,15 @@ export function startSession(options: SessionOptions, hooks: SessionHooks): Agen
    * `applyFlagSettings` replaces a top-level key outright rather than merging
    * into it, so a call carrying only the skills would leave the effort at
    * whatever the last one said and a call carrying only the effort would put
-   * every withheld skill back. One function that always sends both is the only
+   * back every skill withheld since the start (one withheld *at* the start
+   * stays withheld until an explicit `'on'` — `skillOverridesFor`). One function that always sends both is the only
    * arrangement where neither can happen, and it is cheaper than reasoning
    * about the merge twice.
    */
   let effortChoice = options.effort
   /** What each model holds, as the turns' results said — see `ContextUsage.modelWindow`. */
   const modelWindows = new Map<string, number>()
-  let withheld: Readonly<Record<string, 'off'>> = options.skillOverrides
+  let skills: Readonly<Record<string, SkillOverride>> = options.skillOverrides
 
   async function applyFlags(): Promise<void> {
     const current = sessionEffort(effortChoice)
@@ -544,7 +547,7 @@ export function startSession(options: SessionOptions, hooks: SessionHooks): Agen
       effortLevel: current.effort,
       ultracode: current.ultracode,
       enableWorkflows: current.ultracode,
-      skillOverrides: withheld
+      skillOverrides: skills
     })
   }
 
@@ -773,10 +776,11 @@ export function startSession(options: SessionOptions, hooks: SessionHooks): Agen
     },
 
     async setSkills(skillOverrides) {
-      // The whole map every time, never a difference: turning a skill back on
-      // is saying its key is no longer there, and there is no way to say that
-      // one key at a time.
-      withheld = skillOverrides
+      // The whole map every time, never a difference: `applyFlags` sends every
+      // flag together, and the map is the record's whole answer. Turning a
+      // skill back on is an explicit `'on'` in it — a key left out does not
+      // undo a withhold the session started with (`skillOverridesFor`).
+      skills = skillOverrides
       await applyFlags()
     },
 

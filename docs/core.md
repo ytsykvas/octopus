@@ -849,9 +849,28 @@ beside them are in it.
 
 The switch works on all four, because `skillOverrides` names a skill by the key
 the CLI knows it by and that is what the fourth group carries — a bare name
-ordinarily, `plugin:skill` for a plugin's. The list is asked for on the write as
-well as the read: the deny-list is built from the listing, so a skill missing
-from it would be switched off in the record and left on in the session.
+ordinarily, `plugin:skill` for a plugin's.
+
+**What the session is told comes from the record, never from its listing.** A
+session leaves a skill it withholds out of `reloadSkills()` — and out of
+`supportedCommands()` too, measured — so a map built from the listing lost every
+skill of the fourth group that was switched off: the start-up map had no listing
+to build from at all, and the next switch of anything else dropped the rest.
+`skillOverridesFor` (`skills.ts`) reads the record instead, and says `'on'` as
+well as `'off'`, because a key left out does not undo a withhold the session
+started with. The write therefore asks the session nothing.
+
+**And a withheld skill keeps its row.** Its name and description are gone from
+the answer the moment the switch works, so `knownSkills` in `state.json`
+remembers what sessions said of the fourth group (`rememberSkills`, merged by
+name — never our directories' skills, which would turn up as the session's in a
+checkout without them), and the group adds every skill the conversation itself
+has switched off. Only beside an answer, since the group exists once a session
+does, and only the chat's own answers: the default lists are edited in
+settings, which lists our directories. A key no session ever described is drawn
+by name alone — a record switched off before anything was remembered, or a skill
+deleted while it was off. The second is a stale row that goes the moment it is
+switched on; not drawing either would leave a withhold nobody could undo.
 
 A session that will not answer costs the fourth group and nothing else. The
 three above it are read from disk and still true, and a closed transport is the

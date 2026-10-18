@@ -195,9 +195,12 @@ import {
   renameSkill,
   type SkillDocument,
   type SkillEntry,
+  type SkillDefaults,
   skillEnabled,
   type SkillImport,
   type SkillListing,
+  type SkillOverride,
+  skillOverridesFor,
   type SkillPreview,
   type SkillSave,
   writeRawSkill,
@@ -277,11 +280,13 @@ import {
   modelsUnchanged,
   type Project,
   rememberModels,
+  rememberSkills,
   removeChat,
   removeProject,
   type ProjectPatch,
   removeWorkspace as removeWorkspaceRecord,
   saveState,
+  skillsRemembered,
   type State,
   updateChat,
   recordApproval,
@@ -3287,10 +3292,15 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
     return listings.flat().map((entry) => entry.name)
   }
 
+  /** The installation's and the project's lists of what is off unless a chat says otherwise. */
+  function skillDefaultsOf(project: Project): SkillDefaults {
+    return { global: config.disabledSkillDefaults, project: project.disabledSkillDefaults }
+  }
+
   interface SessionSkills {
     /** Extra roots to hand the session, so it finds the stores' skills. */
     readonly roots: string[]
-    readonly overrides: Record<string, 'off'>
+    readonly overrides: Record<string, SkillOverride>
     readonly listing: SkillListing[]
   }
 
@@ -3346,10 +3356,7 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
       loaded ? readSkillsIn(join(workspace.path, '.claude', 'skills')) : []
     ])
 
-    const defaults = {
-      global: config.disabledSkillDefaults,
-      project: project.disabledSkillDefaults
-    }
+    const defaults = skillDefaultsOf(project)
 
     const row = (scope: OwnSkillScope, skill: SkillEntry): SkillListing => {
       const key = skillKey(skill.name)
@@ -3375,9 +3382,35 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
      */
     const accounted = new Set(listing.map((item) => item.key))
 
+    /*
+     * And what this conversation switched off, which the session leaves out of
+     * its answer — so its row comes from what a session said about it earlier.
+     * Without it the switch that withheld a skill was the last anyone saw of
+     * it, and nothing could turn it back on.
+     *
+     * The chat's own answers only: the two default lists are edited in
+     * settings, which lists the directories, so a key in them is a skill of
+     * ours. Only beside an answer, since the group exists once a session does.
+     *
+     * A key no session ever described is still drawn, by name alone. A stale
+     * row — a skill deleted while it was off — goes the moment it is switched
+     * on, while a withhold with no row could never be undone; and a record
+     * switched off before anything was remembered is exactly that.
+     *
+     * Where the answer names one too — a session that has not applied the
+     * switch yet — `accounted` draws it once, from the answer.
+     */
+    const remembered = new Map(state.knownSkills.map((skill) => [skill.name, skill]))
+    const withheld =
+      held.length === 0
+        ? []
+        : Object.entries(chat.skillOverrides)
+            .filter(([, on]) => !on)
+            .map(([name]) => remembered.get(name) ?? { name, description: '', builtin: false })
+
     // By name, because the CLI's order follows how it happened to load them and
     // a list people scan for one entry reads better alphabetically.
-    for (const skill of held.toSorted((a, b) => a.name.localeCompare(b.name))) {
+    for (const skill of [...held, ...withheld].toSorted((a, b) => a.name.localeCompare(b.name))) {
       if (accounted.has(skill.name)) continue
       accounted.add(skill.name)
 
@@ -3393,11 +3426,6 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
         source,
         enabled: skillEnabled(name, defaults, chat.skillOverrides)
       })
-    }
-
-    const overrides: Record<string, 'off'> = {}
-    for (const item of listing) {
-      if (!item.enabled) overrides[item.key] = 'off'
     }
 
     return {
@@ -3420,7 +3448,7 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
        * would buy nothing.
        */
       roots: loaded ? [globalRoot, projectRoot] : [],
-      overrides,
+      overrides: skillOverridesFor(defaults, chat.skillOverrides),
       listing
     }
   }
@@ -4400,24 +4428,37 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
       const chat = requireChat(chatId)
       const workspace = requireWorkspace(chat.workspaceId)
 
+      /* The panel is the one place this is worth a control request: it is
+         opened by somebody about to read it, and there is nothing else to ask —
+         no message reports the list.
+
+         Swallowed, because a session that will not answer is a fourth group
+         missing rather than a panel that fails. A closed transport is the
+         ordinary way that happens, and the three groups above it are read from
+         disk and still true. */
+      const held =
+        (await sessions
+          .get(chatId)
+          ?.refreshSkills()
+          .catch(() => [])) ?? []
+
       const { listing } = await sessionSkills(
         requireProject(workspace.projectId),
         workspace,
         chat,
         await sourcesFor(workspace),
-        /* The panel is the one place this is worth a control request: it is
-           opened by somebody about to read it, and there is nothing else to
-           ask — no message reports the list.
-
-           Swallowed, because a session that will not answer is a fourth group
-           missing rather than a panel that fails. A closed transport is the
-           ordinary way that happens, and the three groups above it are read
-           from disk and still true. */
-        (await sessions
-          .get(chatId)
-          ?.refreshSkills()
-          .catch(() => [])) ?? []
+        held
       )
+
+      // Before the skill can be switched off, which is the last time the
+      // session will describe it (`knownSkills`). Only the fourth group's: the
+      // directories describe their own every time, and a skill of a checkout
+      // remembered here would turn up as the session's in another one.
+      const theirs = new Set(listing.filter((row) => row.scope === 'session').map((row) => row.key))
+      const described = held.filter((skill) => theirs.has(skill.name))
+      if (!skillsRemembered(state, described)) {
+        await commit((current) => rememberSkills(current, described))
+      }
 
       return listing
     },
@@ -4445,21 +4486,15 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
       // A running conversation is told at once rather than on its next start.
       // A switch whose effect waits for a restart is a switch that looks
       // broken, and the flag layer takes this the way it takes the effort.
-      const session = sessions.get(chatId)
-      if (session) {
-        const { overrides } = await sessionSkills(
-          requireProject(workspace.projectId),
-          workspace,
-          { ...chat, skillOverrides },
-          await sourcesFor(workspace),
-          // Asked here as well as on the read: the deny-list is built from the
-          // listing, so a skill the directories do not account for would be
-          // switched off in the record and left on in the session.
-          await session.refreshSkills().catch(() => [])
+      //
+      // The record's whole answer, not only this key: `setSkills` replaces the
+      // map, and the map is read off the record rather than off what the
+      // session lists — which leaves out every skill it withholds.
+      await sessions
+        .get(chatId)
+        ?.setSkills(
+          skillOverridesFor(skillDefaultsOf(requireProject(workspace.projectId)), skillOverrides)
         )
-
-        await session.setSkills(overrides)
-      }
     },
 
     async removeProjectById(projectId) {

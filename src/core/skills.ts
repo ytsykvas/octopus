@@ -217,6 +217,38 @@ export function skillEnabled(
   return !defaults.global.includes(key) && !defaults.project.includes(key)
 }
 
+/** What the agent is told about one skill — the two of the CLI's four values octopus uses. */
+export type SkillOverride = 'on' | 'off'
+
+/**
+ * Every skill the record has an answer for, as the agent's `skillOverrides`.
+ *
+ * Built from the record, not from what the session lists. It used to be built
+ * from the listing, and a session leaves a withheld skill out of its listing —
+ * so the next switch of anything else dropped it from the map and the agent
+ * had it back, and a session starting with no listing yet was never told at
+ * all.
+ *
+ * `'on'` is said as well as `'off'`, because leaving a key out does not undo
+ * one. Measured against a live session (agent SDK 0.3.299): a skill withheld
+ * by the start-up settings stays withheld when a later map omits it, and comes
+ * back only for an explicit `'on'`. A key with no skill behind it — one
+ * deleted while off, say — costs nothing: the CLI looks skills up by name.
+ */
+export function skillOverridesFor(
+  defaults: SkillDefaults,
+  overrides: Readonly<Record<string, boolean>>
+): Record<string, SkillOverride> {
+  const keys = new Set([...defaults.global, ...defaults.project, ...Object.keys(overrides)])
+  const answer: Record<string, SkillOverride> = {}
+
+  for (const key of keys) {
+    answer[key] = skillEnabled(key, defaults, overrides) ? 'on' : 'off'
+  }
+
+  return answer
+}
+
 /**
  * The skill's directory, with the name checked before it becomes a path.
  *

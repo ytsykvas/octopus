@@ -259,6 +259,18 @@ The fixtures for both shapes are in `chats.test.ts`, and the one for this
 catalogue was copied out of a live `state.json` rather than written from the
 type — which is the only reason the second shape is known to exist.
 
+`knownSkills` is the same kind of thing for the skills panel: each skill a
+session described that our directories do not hold — `name`, `description` and
+the SDK's `builtin` flag, as the agent said them. It exists
+for one moment: a session leaves a skill it was told to withhold out of its
+answer, so the switch that withheld one of Claude Code's own would otherwise be
+the last anyone saw of it. **Merged by name rather than replaced**, the opposite
+of `knownModels`, because the entries that matter are exactly the ones the
+latest answer leaves out. Never pruned, and harmless for it: the panel draws a
+remembered skill only while a conversation has it switched off, and draws one it
+never heard of by name alone. Written only
+when an answer says something new, since the panel asks on every open.
+
 A **chat** is a conversation with one agent inside one workspace: `id`,
 `workspaceId`, `agent`, `sessionId`, `model`, `planModel`, `effort`,
 `workingMode`, `planMode`, `autoCompactWindow`, `knownCommands`,
@@ -322,6 +334,14 @@ resolved answer instead would freeze it: a skill added, renamed or removed after
 the conversation started would be stuck at a copy of defaults that no longer
 exist, and a conversation nobody has opened the panel in would carry a record of
 every skill on the machine.
+
+**And it is what the agent is told, not what the agent lists.** `skillOverridesFor`
+in `skills.ts` turns every key the three layers mention into the session's
+`skillOverrides`, `'on'` as well as `'off'`. It was built from the session's own
+listing once, and a session leaves out what it withholds — so after a restart a
+skill switched off was never withheld, and the next switch of anything else
+handed it back. `'on'` is said out loud because leaving a key out does not undo
+a withhold the session started with; measured against a live session.
 
 **It is keyed by the bare name, whichever source the skill came from.** The keys
 were once qualified — `octopus:review` for one of ours — on the theory that the
