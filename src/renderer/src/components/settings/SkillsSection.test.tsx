@@ -238,7 +238,8 @@ describe('writing a skill', () => {
 
     await userEvent.click(screen.getByRole('button', { name: 'What to do with review' }))
     await userEvent.click(screen.getByRole('menuitem', { name: 'Edit' }))
-    await userEvent.click(screen.getByRole('button', { name: 'Show SKILL.md' }))
+    // Offered once the skill has been read, which is a round trip.
+    await userEvent.click(await screen.findByRole('button', { name: 'Show SKILL.md' }))
 
     expect(screen.getByRole('textbox', { name: 'Instructions' })).toHaveValue(
       '---\nname: review\nallowed-tools: Read\n---\n\n# Review\n'
@@ -269,7 +270,8 @@ describe('writing a skill', () => {
 
     await userEvent.click(screen.getByRole('button', { name: 'What to do with review' }))
     await userEvent.click(screen.getByRole('menuitem', { name: 'Edit' }))
-    await userEvent.click(screen.getByRole('button', { name: 'Show SKILL.md' }))
+    // Offered once the skill has been read, which is a round trip.
+    await userEvent.click(await screen.findByRole('button', { name: 'Show SKILL.md' }))
     await userEvent.click(screen.getByRole('button', { name: 'Back to the form' }))
 
     expect(screen.getByLabelText('Name')).toBeInTheDocument()

@@ -24,6 +24,7 @@
     "vendor:icons": "node --experimental-strip-types scripts/vendor-icons.ts",
     "test": "vitest run && vitest run --config vitest.renderer.config.ts",
     "test:watch": "vitest",
+    "test:race": "OCTOPUS_SCHEDULER_LOSES=1 vitest run --config vitest.renderer.config.ts",
     "test:coverage": "vitest run --coverage && vitest run --config vitest.renderer.config.ts --coverage",
     "check": "npm run format:check && npm run lint && npm run typecheck && npm run test:coverage",
     "postinstall": "electron-builder install-app-deps"

@@ -225,11 +225,13 @@ describe('PluginStore', () => {
 
     await user.click(screen.getByRole('button', { name: 'Install' }))
     expect(screen.getByText('npx -y runner@latest')).toBeInTheDocument()
-    await user.click(screen.getByRole('button', { name: 'Cancel' }))
+    // Found, not got: the question is a `<dialog>` that `showModal()` opens in
+    // an effect, and until then its buttons are not there to a user.
+    await user.click(await screen.findByRole('button', { name: 'Cancel' }))
     expect(install).toHaveBeenCalledTimes(1)
 
     await user.click(screen.getByRole('button', { name: 'Install' }))
-    await user.click(screen.getByRole('button', { name: 'Run it and install' }))
+    await user.click(await screen.findByRole('button', { name: 'Run it and install' }))
     expect(install).toHaveBeenLastCalledWith(CONTEXT7.id, sha)
   })
 
