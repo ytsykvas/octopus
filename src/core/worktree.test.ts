@@ -387,20 +387,18 @@ describe('changedFiles', () => {
   })
 
   /*
-   * A plain `git status` refreshes the index and writes it back under
-   * `index.lock`. This runs after every turn in the worktree the agent works
-   * in, and a commit or an `add` of the agent's landing in that moment failed
-   * with "Unable to create index.lock: File exists" — four times in 150 when
-   * raced on purpose, none with the flag. A file whose times moved while its
-   * contents did not is what makes git want to write; the inode says whether
-   * it did, since the lock is renamed over the index.
+   * Without `--no-optional-locks` the status takes `index.lock` and, having
+   * refreshed a file whose times moved while its contents did not, writes the
+   * index back. The inode says whether it did: the lock is renamed over the
+   * index, so a rewritten one is always a new file.
    */
   it('reads the status without rewriting the index', async () => {
     const later = new Date(Date.now() + 60_000)
     await utimes(join(dir, 'README.md'), later, later)
     const before = (await stat(join(dir, '.git', 'index'))).ino
 
-    await changedFiles(exec)
+    // Not counted either: the file's contents are what they were.
+    await expect(changedFiles(exec)).resolves.toEqual([])
 
     expect((await stat(join(dir, '.git', 'index'))).ino).toBe(before)
   })

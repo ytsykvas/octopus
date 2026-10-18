@@ -252,10 +252,12 @@ export async function renameBranch(exec: GitExec, from: string, to: string): Pro
  * work, and an agent that wrote thirty files into one new folder read as one
  * changed file.
  *
- * `--no-optional-locks` because a plain `status` refreshes the index and writes
- * it back under `index.lock`, in the worktree where the agent runs its own git:
- * a commit of the agent's landing in that moment failed with "Unable to create
- * index.lock: File exists". `readFileTree` passes it for the same reason.
+ * `--no-optional-locks` because a plain `status` holds `index.lock` for as long
+ * as it scans, and writes the index back when it refreshed anything. This runs
+ * when a turn ends, in a worktree where another conversation, the terminal or a
+ * hook may be running git too — and a `git add` or `git commit` there at that
+ * moment fails with "Unable to create index.lock: File exists". `readFileTree`
+ * passes it for the same reason.
  */
 export async function changedFiles(exec: GitExec): Promise<string[]> {
   const output = await exec(['--no-optional-locks', 'status', '--porcelain', '-uall'])
