@@ -3380,6 +3380,35 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
     return { global: config.disabledSkillDefaults, project: project.disabledSkillDefaults }
   }
 
+  /**
+   * The skills a running session of this chat is told, as its record answers.
+   *
+   * The whole answer, not a change: `setSkills` replaces the map, and the map is
+   * read off the record rather than off what the session lists — which leaves
+   * out every skill it withholds.
+   */
+  function skillMapOf(chat: Chat): Record<string, SkillOverride> {
+    const { projectId } = requireWorkspace(chat.workspaceId)
+    return skillOverridesFor(skillDefaultsOf(requireProject(projectId)), chat.skillOverrides)
+  }
+
+  /**
+   * Tells every running conversation the skills its record now gives it.
+   *
+   * After a write that moves the answer for all of them — either default list,
+   * or a rename — as `setChatSkill` does for its one. The panel reads the
+   * record at once, so a session left on the map it started with is a switch
+   * that looks broken. Settled rather than awaited whole: the write has landed,
+   * and a session that will not answer must not fail it for the rest.
+   */
+  async function pushSkillsToRunning(): Promise<void> {
+    await Promise.allSettled(
+      [...sessions].map(async ([chatId, session]) => {
+        await session.setSkills(skillMapOf(requireChat(chatId)))
+      })
+    )
+  }
+
   interface SessionSkills {
     /** Extra roots to hand the session, so it finds the stores' skills. */
     readonly roots: string[]
@@ -3893,8 +3922,10 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
       return config
     },
 
-    updateConfig(patch) {
-      return applyConfig(() => patch)
+    async updateConfig(patch) {
+      const next = await applyConfig(() => patch)
+      if (patch.disabledSkillDefaults !== undefined) await pushSkillsToRunning()
+      return next
     },
 
     listProjects() {
@@ -3949,6 +3980,7 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
       const wasEnvFile = (await liveProject(project)).envFile
 
       await commit((current) => updateProject(current, projectId, applied))
+      if (patch.disabledSkillDefaults !== undefined) await pushSkillsToRunning()
 
       /*
        * The block in the file the project used to name.
@@ -4493,7 +4525,10 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
         }))
       }))
 
+      // Listed again first, so each session knows the skill by its new name
+      // before it is told what to withhold under that name.
       await refreshRunningSkills()
+      await pushSkillsToRunning()
 
       return renamed
     },
@@ -4634,7 +4669,7 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
     },
 
     async setChatSkill(chatId, key, enabled) {
-      const workspace = requireWorkspace(requireChat(chatId).workspaceId)
+      requireChat(chatId)
 
       // Built from the record as the write's turn finds it, not as it was read
       // before: two switches flipped together otherwise both started from the
@@ -4644,22 +4679,9 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
           skillOverrides: { ...findChat(current, chatId)?.skillOverrides, [key]: enabled }
         })
       )
-      const { skillOverrides } = requireChat(chatId)
-
-      // A running conversation is told at once rather than on its next start.
-      // A switch whose effect waits for a restart is a switch that looks
-      // broken, and the flag layer takes this the way it takes the effort.
-      //
-      // The record's whole answer, read back after the write — so it includes
-      // a switch that landed while this one waited — and not only this key:
-      // `setSkills` replaces the map, and the map is read off the record rather
-      // than off what the session lists, which leaves out every skill it
-      // withholds.
-      await sessions
-        .get(chatId)
-        ?.setSkills(
-          skillOverridesFor(skillDefaultsOf(requireProject(workspace.projectId)), skillOverrides)
-        )
+      // Read back after the write, so it includes a switch that landed while
+      // this one waited.
+      await sessions.get(chatId)?.setSkills(skillMapOf(requireChat(chatId)))
     },
 
     async removeProjectById(projectId) {

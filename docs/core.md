@@ -885,6 +885,17 @@ first one's key back — in the record and in what the session was told. The
 key is now added to the record as the write's turn finds it, and the session is
 sent the map read back from the committed state.
 
+**Every write that moves the answer tells the running sessions, not only a
+chat's own switch.** Either default list and a rename change the map just as
+much, and they used to reach a conversation only on its next start — the panel
+read the new record at once while the agent went on with the old one.
+`pushSkillsToRunning` sends each running session its own record's map after
+those three writes (`skillMapOf`, which `setChatSkill` uses for its one). A
+rename lists the skills again first, so the session knows the new name before
+it is told what to withhold under it. Settled rather than awaited whole: the
+write has landed, and one session that will not answer must not fail it for the
+others.
+
 **And a withheld skill keeps its row.** Its name and description are gone from
 the answer the moment the switch works, so `knownSkills` in `state.json`
 remembers what sessions said of the fourth group (`rememberSkills`, merged by
