@@ -10446,6 +10446,30 @@ describe('the agent chat', () => {
     })
 
     /*
+     * Two switches flipped in quick succession used to keep one. Each built the
+     * whole map from the record as it read it before its own write, so the
+     * second, read before the first landed, wrote the first key back — and told
+     * the session the same truncated map.
+     */
+    it('keeps both of two switches flipped together', async () => {
+      const { service, workspaceId } = await withWorkspace()
+      const chat = await service.openChat(workspaceId)
+      await service.sendToChat(chat.id, 'work')
+
+      await Promise.all([
+        service.setChatSkill(chat.id, 'loop', false),
+        service.setChatSkill(chat.id, 'dataviz', false)
+      ])
+
+      const stored = service.listChats(workspaceId).find((one) => one.id === chat.id)
+      expect(stored?.skillOverrides).toEqual({ loop: false, dataviz: false })
+      expect(agent().flagSettings().at(-1)?.skillOverrides).toEqual({
+        loop: 'off',
+        dataviz: 'off'
+      })
+    })
+
+    /*
      * A session leaves a skill it withholds out of its answer, name and
      * description both. Built from that answer alone, the panel lost the row
      * the moment its switch was used, and with it the only way back on.
