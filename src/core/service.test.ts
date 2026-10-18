@@ -125,10 +125,8 @@ const started: OctopusService[] = []
 
 /**
  * The ports something answers on, as far as every service here is concerned.
- *
- * Empty unless a test fills it. The default probe opens a socket, and the
- * developer's own dev server on 3110 made "gives the next workspace the next
- * block" hand out 3120 — a test describing the pool reading the machine.
+ * Empty unless a test fills it; `docs/testing.md` says why it is not the
+ * machine's.
  */
 const answering = new Set<number>()
 
@@ -3421,6 +3419,15 @@ describe('the port a workspace serves on', () => {
     expect(second.port).toBe(first.port + BLOCK)
   })
 
+  // A block is free only if nothing answers on it — ours or anybody else's.
+  it('steps over a block something else already answers on', async () => {
+    answering.add(POOL_START)
+
+    const { port } = await withWorkspace()
+
+    expect(port).toBe(POOL_START + BLOCK)
+  })
+
   // Nothing of ours is running, so whatever answers is somebody else's — which
   // is exactly what makes the answer knowable here.
   it('keeps the port when nothing is answering on it', async () => {
@@ -3446,7 +3453,8 @@ describe('the port a workspace serves on', () => {
 
     expect(settled).not.toBe(port)
     // Persisted, not just answered: the pane and the link both read it back.
-    await expect(service.ensureWorkspacePort(id)).resolves.toBe(settled)
+    const stored = await service.listWorkspaces(project?.id ?? '')
+    expect(stored.find((workspace) => workspace.id === id)?.port).toBe(settled)
   })
 
   /*
@@ -4259,7 +4267,11 @@ describe('the agent chat', () => {
         const repo = join(dir, 'planner')
         await initRepo(repo)
         agents = []
-        const plain = await makeService({ ...paths(dir), query: fakeQuery() })
+        const plain = await makeService({
+          ...paths(dir),
+          query: fakeQuery(),
+          listening: () => Promise.resolve(false)
+        })
         started.push(plain)
         const project = await plain.addProjectFromPath(repo)
         const workspace = await plain.createWorkspaceIn(project.id)

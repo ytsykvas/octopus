@@ -18,7 +18,7 @@ import { fetchRemote, resolveBase } from './remotes.js'
 import { nextWorkspaceName, type Random } from './names.js'
 import { workspacePath } from './paths.js'
 import { workspaceSlug } from './scriptEnv.js'
-import { firstFreeBlock, POOL_START } from './ports.js'
+import { firstFreeBlock, POOL_START, type PortProbe } from './ports.js'
 import type { Project, State, Workspace } from './store.js'
 import { allOf } from './parallel.js'
 import {
@@ -157,8 +157,11 @@ interface CreateOptions {
   readonly exists?: (path: string) => Promise<boolean>
   /** Injectable so tests get a fixed name instead of a random one. */
   readonly random?: Random
-  /** Injectable so a test never opens a socket to find a free port. */
-  readonly answers?: (port: number) => Promise<boolean>
+  /**
+   * Whether something answers on a port. Required so a test states its own and
+   * never opens a socket to find a free one.
+   */
+  readonly answers: PortProbe
   /**
    * The executor the fetch runs through, when it must differ from the rest.
    *
@@ -211,7 +214,7 @@ export async function createWorkspace(
   project: Project,
   state: State,
   exec: GitExec,
-  options: CreateOptions = {}
+  options: CreateOptions
 ): Promise<Workspace> {
   const exists = options.exists ?? pathExists
   const fetchExec = options.fetchExec ?? exec

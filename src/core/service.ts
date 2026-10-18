@@ -68,7 +68,7 @@ import {
 } from './diff.js'
 import { revertFile } from './revert.js'
 import { draftPullRequest, type DraftedPullRequest } from './pullRequestDraft.js'
-import { isListening, settlePort } from './ports.js'
+import { isListening, type PortProbe, settlePort } from './ports.js'
 import {
   carriedFiles,
   carryInto,
@@ -454,11 +454,10 @@ export interface ServiceOptions {
    * Whether something answers on a port, asked when a workspace is made, when
    * its port is settled before a run and when the pane asks if it is serving.
    *
-   * Opens a socket by default. A parameter so a test sees the machine it
-   * describes rather than the one it runs on, where a dev server of the
-   * developer's own can hold the port the test expects to be handed.
+   * Opens a socket by default; a parameter so a test sees the machine it
+   * describes rather than the one it runs on (`docs/testing.md`).
    */
-  readonly listening?: (port: number) => Promise<boolean>
+  readonly listening?: PortProbe
   /**
    * Who outranks a chat's compaction window for a session about to start.
    *
