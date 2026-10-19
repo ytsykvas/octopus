@@ -1239,7 +1239,7 @@ export const en = {
     copyFailed: 'Copy failed',
     planReady: 'The plan is ready',
     planExecute: 'Execute',
-    planEdit: 'Edit the plan',
+    planEdit: 'Edit',
     planEditDone: 'Back to the plan',
     planEditLabel: 'The plan, as markdown',
     planEdited: 'Plan, as you edited it',
