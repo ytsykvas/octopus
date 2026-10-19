@@ -11,7 +11,7 @@
  * not outlive a restart — which ends every turn anyway.
  */
 
-import { EXIT_PLAN_MODE } from '@core/chats.js'
+import { type ChatStatus, EXIT_PLAN_MODE } from '@core/chats.js'
 import { readQuestions } from '@core/questions.js'
 import type { ChatEvent } from '@core/service.js'
 import type { WorkspaceView } from '@core/workspaces.js'
@@ -85,19 +85,28 @@ const WAITING: ReadonlySet<NoticeKind> = new Set(['question', 'plan', 'permissio
  *
  * A wait ends when its conversation stops waiting — answered in another
  * window, or the turn stopped — so one whose chat is no longer
- * `waiting_permission` says nothing any more. The list itself when nothing
- * changed, so a caller memoising on it does not redraw for nothing.
+ * `waiting_permission` says nothing any more. A finished turn stops being news
+ * when its conversation runs again: a message left in the agent's queue runs
+ * as a turn of its own once the last one ended, after a Stop always, and "done"
+ * over a working tab is wrong. A failure stays — it is still news. The list
+ * itself when nothing changed, so a caller memoising on it does not redraw for
+ * nothing.
  */
 export function settle(
   list: readonly Notice[],
   workspaces: readonly WorkspaceView[]
 ): readonly Notice[] {
-  const waiting = new Set(
-    workspaces.flatMap((workspace) =>
-      workspace.chats.filter((chat) => chat.status === 'waiting_permission').map((chat) => chat.id)
-    )
+  const chats = workspaces.flatMap((workspace) => workspace.chats)
+  const withStatus = (status: ChatStatus): ReadonlySet<string> =>
+    new Set(chats.filter((chat) => chat.status === status).map((chat) => chat.id))
+  const waiting = withStatus('waiting_permission')
+  const running = withStatus('running')
+
+  const kept = list.filter((notice) =>
+    WAITING.has(notice.kind)
+      ? waiting.has(notice.chatId)
+      : notice.kind !== 'done' || !running.has(notice.chatId)
   )
-  const kept = list.filter((notice) => !WAITING.has(notice.kind) || waiting.has(notice.chatId))
 
   return kept.length === list.length ? list : kept
 }
