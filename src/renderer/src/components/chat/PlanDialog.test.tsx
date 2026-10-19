@@ -32,7 +32,7 @@ function renderDialog(overrides: Partial<Props> = {}): {
   render(
     <Held
       plan={PLAN}
-      accepting
+      goesOnIn="acceptEdits"
       onExecute={onExecute}
       onKeepPlanning={onKeepPlanning}
       {...overrides}
@@ -68,8 +68,22 @@ describe('the two ways out', () => {
   // A plan the agent offered unasked changes no mode, so there is nothing to
   // warn about — and a warning that is not true is one nobody reads twice.
   it('says nothing about Accept edits when executing changes no mode', () => {
-    renderDialog({ accepting: false })
+    renderDialog({ goesOnIn: null })
 
+    expect(screen.queryByText(/Runs with Accept edits on/)).not.toBeInTheDocument()
+    expect(screen.queryByText(/Runs in Auto/)).not.toBeInTheDocument()
+  })
+
+  // Carried out in Auto, the line says so instead: the steps are decided for
+  // the user rather than accepted wholesale, which is a different promise.
+  it('says executing runs in Auto when that is where it goes', () => {
+    renderDialog({ goesOnIn: 'auto' })
+
+    expect(
+      screen.getByText(
+        'Runs in Auto — each step is approved or refused for you, and anything unclear is asked.'
+      )
+    ).toBeInTheDocument()
     expect(screen.queryByText(/Runs with Accept edits on/)).not.toBeInTheDocument()
   })
 

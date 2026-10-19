@@ -24,9 +24,10 @@ import { join } from 'node:path'
 
 import { z } from 'zod'
 
-import { mergeBase } from './diff.js'
+import { DiffError, mergeBase } from './diff.js'
 import type { GitExec } from './git.js'
 import { insideWorktree } from './paths.js'
+import { describeError, isNotFound } from './persist.js'
 
 export interface RevertOptions {
   /** Resolved to the merge base, exactly as the diff read resolves it. */
@@ -105,9 +106,13 @@ async function revertPath(exec: GitExec, base: string, root: string, path: strin
   // Untracked, so git has no record to undo — the file simply goes.
   try {
     await unlink(join(root, path))
-  } catch {
-    // Already gone. Somebody deleting a file between the pane being drawn and
+  } catch (error) {
+    // Already gone: somebody deleting a file between the pane being drawn and
     // the button being pressed has arrived at the same place by another road.
+    // Anything else — a folder, a file this user may not delete — is still on
+    // disk, and a destructive button must not report success over it.
+    if (isNotFound(error)) return
+    throw new DiffError('notRemoved', { path }, `could not remove ${path}: ${describeError(error)}`)
   }
 }
 

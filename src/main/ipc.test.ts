@@ -2438,6 +2438,11 @@ describe('the agent chat', () => {
       ok: true,
       value: undefined
     })
+
+    await expect(invoke('chats:mode', chatIdOf(opened), 'auto')).resolves.toEqual({
+      ok: true,
+      value: undefined
+    })
   })
 
   it('takes planning as the boolean it now is', async () => {

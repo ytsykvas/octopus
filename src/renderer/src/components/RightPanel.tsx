@@ -20,7 +20,7 @@ import type { FileRevertController } from '../hooks/useFileRevert.js'
 import type { PullRequestQuoteController } from '../hooks/usePullRequestQuotes.js'
 import type { Failure } from '../../../preload/index.js'
 import { useErrorMessage } from '../hooks/useErrorMessage.js'
-import { useRunSequence } from '../hooks/useRunSequence.js'
+import type { ServerControls } from '../hooks/useServerControls.js'
 import { useEnvProfiles } from '../hooks/useEnvProfiles.js'
 import { useServingPort } from '../hooks/useServingPort.js'
 import type { WorkspaceView } from '@core/workspaces.js'
@@ -234,11 +234,18 @@ interface RightPanelProps {
   readonly onRemoveWorkspace: (workspaceId: string) => void
   /** The file tab in front of the centre, which the Files tab marks; null when a chat is. */
   readonly activeFilePath: string | null
-  /** Opens a file from the Files tab in the centre, as a preview or kept open. */
+  /** Opens a file in the centre — from the Files tab as a preview or kept, from a changed file's menu kept. */
   readonly onOpenFile: (path: string, pinned: boolean) => void
   /** Brings the conversation in front of any open file, before a prompt is sent to it. */
   readonly onConversation: () => void
   readonly onError: (message: string | null) => void
+  /**
+   * Build-then-serve for the selected workspace.
+   *
+   * Owned by `App` because the title bar offers the same Run and Stop, and two
+   * copies of the state would disagree the moment either was pressed.
+   */
+  readonly server: ServerControls
 }
 
 export function RightPanel({
@@ -275,7 +282,8 @@ export function RightPanel({
   activeFilePath,
   onOpenFile,
   onConversation,
-  onError
+  onError,
+  server
 }: RightPanelProps): React.JSX.Element {
   const { t, i18n } = useTranslation()
   const describeFailure = useErrorMessage()
@@ -301,14 +309,6 @@ export function RightPanel({
   const [buildOpen, setBuildOpen] = useState(false)
   const [showingEnv, setShowingEnv] = useState(false)
   /*
-   * Where each workspace's server actually ended up.
-   *
-   * The workspaces list carries the port as it was last written to disk, and
-   * nothing refreshes it after a run settles on another block — so the header
-   * linked to the port the run had just moved away from.
-   */
-  const [settledPorts, setSettledPorts] = useState<Record<string, number>>({})
-  /*
    * The env dialog belongs to the workspace it was opened from.
    *
    * Adjusted during render rather than in an effect, the way `useServingPort`
@@ -320,9 +320,16 @@ export function RightPanel({
     setEnvFor(activeWorkspaceId)
     if (showingEnv) setShowingEnv(false)
   }
-  // One button that takes a workspace from a bare checkout to a running
-  // server. It lives above both halves because neither half can see the other.
-  const sequence = useRunSequence()
+  const {
+    sequence,
+    activeWorkspace,
+    activeRun,
+    building,
+    servingAt,
+    runAll,
+    restartServer,
+    stopRun
+  } = server
 
   /*
    * The sequence lives above both halves and holds nothing but which step is
@@ -351,31 +358,7 @@ export function RightPanel({
     },
     [adopt]
   )
-  const activeRun = sequence.runOf(activeWorkspaceId)
-  // The build is the step that takes the time, and a second press during it
-  // would start it over rather than do anything anybody meant.
-  const building = activeRun.stage === 'building'
-  /*
-   * The workspace every control here acts on, or null where there is none.
-   *
-   * One value for both halves of "there is nothing to act on": no workspace
-   * chosen, or one whose directory has gone. A missing one matters as much as
-   * an absent one — `WorkspaceScripts` drops it, which unmounts its runner and
-   * disposes the session, so nothing is left for a token to reach. Left in, the
-   * header would offer a link to a refused port and a Restart that nobody
-   * hears.
-   */
-  const found = workspaces.find((item) => item.id === activeWorkspaceId) ?? null
-  const activeWorkspace = found !== null && !found.missing ? found : null
 
-  /*
-   * What Run does, or nothing where it has nothing to do: no workspace chosen,
-   * no server script to start, or a build already going.
-   *
-   * A handler that is absent rather than one that guards inside itself — the
-   * guard could only ever be reached through a button that is disabled, and an
-   * unreachable line is a claim about behaviour nobody can check.
-   */
   /** The sets of variables this project holds, so a workspace can be put on one. */
   const {
     profiles: envProfiles,
@@ -406,55 +389,6 @@ export function RightPanel({
 
   /** What this workspace would run, and whether it is allowed to yet. */
   const activeScripts = activeWorkspaceId === null ? undefined : scripts.get(activeWorkspaceId)
-
-  const runAll =
-    activeWorkspace === null ||
-    activeScripts?.scripts.run === undefined ||
-    // A repository's scripts that nobody has read do not run, and the panel
-    // below says so rather than leaving a button that quietly does nothing.
-    !activeScripts.approved ||
-    building
-      ? undefined
-      : (): void => {
-          void (async () => {
-            /*
-             * The port is settled here, before the build, rather than by the
-             * server half after it.
-             *
-             * The build prepares the workspace too, and `prepare` writes the
-             * env block with whatever port the workspace holds at that moment.
-             * Settled afterwards, a port that had to move left the build
-             * holding the number it moved away from — and a bundler reading
-             * `VITE_*` or `NEXT_PUBLIC_*` at build time bakes that in, so the
-             * pages served on the new port point at the old one.
-             *
-             * Asking here is safe for the reason the button above gives: `Run`
-             * is not offered while a server is up, so nothing of ours can be
-             * listening, and anything answering belongs to somebody else. That
-             * is the precondition `ports.ts` states in words, kept by the shape
-             * of the header rather than by a flag.
-             *
-             * The server half settles again on its way in, which is what covers
-             * a port taken during the build — rarer than the case this fixes,
-             * and there the choice is a stale bundle or a server that cannot
-             * bind at all.
-             */
-            const settled = await window.octopus.workspaces.port(activeWorkspace.id)
-            if (!settled.ok) {
-              onError(describeFailure(settled))
-              return
-            }
-
-            // Nothing is recorded here. `ensureWorkspacePort` commits the port
-            // to the workspace, which is what the build then prepares with, and
-            // the server half announces where it actually ended up — this only
-            // has to happen before the build, not to be remembered.
-            // Skipping a build nobody wrote rather than waiting for it: §4 says
-            // no step is mandatory, and the half is showing an invitation to
-            // write one rather than a runner that could answer.
-            sequence.start(activeWorkspace.id, activeScripts.scripts.setup !== undefined)
-          })()
-        }
 
   /** What the repository supplies, in the order the scripts run. */
   const suppliedScripts = SCRIPT_KINDS.flatMap((kind) => {
@@ -499,27 +433,9 @@ export function RightPanel({
           ? t('scripts.envRestart')
           : null
 
-  const servingAt =
-    activeWorkspace !== null && activeRun.stage === 'serving'
-      ? { ...activeWorkspace, port: settledPorts[activeWorkspace.id] ?? activeWorkspace.port }
-      : null
   // Asked only while something is serving: a port nothing was told to bind is
   // not a port anybody is waiting on.
   const silentPort = useServingPort(servingAt?.id ?? null, activeRun.server)
-
-  const restartServer =
-    servingAt === null
-      ? undefined
-      : (): void => {
-          sequence.restart(servingAt.id)
-        }
-
-  const stopRun =
-    servingAt === null
-      ? undefined
-      : (): void => {
-          sequence.stop(servingAt.id)
-        }
 
   const tabs = useRef<HTMLDivElement>(null)
 
@@ -787,6 +703,7 @@ export function RightPanel({
             comments={comments}
             revert={revert}
             onError={onError}
+            onOpenFile={onOpenFile}
           />
         </div>
 
@@ -1166,7 +1083,7 @@ export function RightPanel({
               }}
               onRunning={adoptServer}
               onPort={(workspace, settled) => {
-                setSettledPorts((current) => ({ ...current, [workspace.id]: settled }))
+                server.settlePort(workspace.id, settled)
               }}
               // From the call that wrote the `.env` the server is about to read,
               // not from the list: the list can still be on the set before a
