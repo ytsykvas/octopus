@@ -33,8 +33,11 @@ export type ReadBytes = (path: string) => Promise<Uint8Array>
 /** A file's size, asked before its contents — the same reason a parameter. */
 export type StatBytes = (path: string) => Promise<number>
 
-/** Failures a user can act on, as opposed to git falling over (§13). */
-export type DiffErrorCode = 'baseUnknown'
+/**
+ * Failures a user can act on, as opposed to git falling over (§13).
+ * `notRemoved` is a revert that could not take an untracked path away.
+ */
+export type DiffErrorCode = 'baseUnknown' | 'notRemoved'
 
 export class DiffError extends CodedError<DiffErrorCode> {
   override readonly name = 'DiffError'

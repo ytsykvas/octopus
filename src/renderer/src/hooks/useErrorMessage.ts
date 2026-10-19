@@ -57,6 +57,8 @@ export function useErrorMessage(): (failure: Failure) => string {
           return t('errors.noBaseBranch', { path: failure.params?.path ?? '' })
         case 'baseUnknown':
           return t('errors.baseUnknown', { branch: failure.params?.branch ?? '' })
+        case 'notRemoved':
+          return t('errors.notRemoved', { path: failure.params?.path ?? '' })
         case 'duplicateProject':
           return t('errors.duplicateProject', { name: failure.params?.name ?? '' })
         case 'notConnected':

@@ -2717,6 +2717,9 @@ file back to the state the workspace branched from, which is the pane's own
 scope, so the row leaves the pane. It always asks first, and what the dialog
 says is the asymmetry: committed work survives, undone by a change in the
 working tree, while uncommitted work is gone and nothing in git holds a copy.
+An untracked path already gone counts as reverted; one that could not be
+removed — a folder, a file this user may not delete — says so in the banner
+rather than letting the row come back as though the click had worked.
 
 ## Colour
 
