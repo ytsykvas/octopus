@@ -10,9 +10,14 @@ import { commentController, quoteController, revertController } from '../test/co
 import type { ResolvedScript, ScriptsInWorkspace } from '@core/repoSource.js'
 import type { ScriptKind } from '@core/scripts.js'
 import { workspaceView } from '../test/workspaces.js'
+import { useServerControls } from '../hooks/useServerControls.js'
 import { RightPanel } from './RightPanel.js'
 
-type Props = ComponentProps<typeof RightPanel>
+/*
+ * Everything but the run state, which `App` owns and `Tabbed` stands in for —
+ * the tests drive it through the pane's own buttons, as somebody would.
+ */
+type Props = Omit<ComponentProps<typeof RightPanel>, 'server'>
 
 const anna = workspaceView('anna')
 const bob = workspaceView('bob', { port: 3222 })
@@ -72,16 +77,23 @@ const LEFT_WIDTH = 296
 /**
  * The pane, with something above it holding the tab.
  *
- * `App` owns that value now, so a test clicking a tab and expecting the pane
- * to follow has to play the parent — otherwise the click reports a choice
+ * `App` owns that value now, and the run state with it, so a test clicking a
+ * tab and expecting the pane to follow has to play the parent — otherwise the click reports a choice
  * nobody acts on, and every such test would assert that nothing happened.
  */
 function Tabbed(props: Props): React.JSX.Element {
   const [tab, setTab] = useState(props.tab)
+  const server = useServerControls({
+    workspaces: props.workspaces,
+    activeWorkspaceId: props.activeWorkspaceId,
+    scripts: props.scripts,
+    onError: props.onError
+  })
 
   return (
     <RightPanel
       {...props}
+      server={server}
       tab={tab}
       onTab={(next) => {
         props.onTab(next)
