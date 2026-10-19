@@ -314,7 +314,7 @@ holds it.
 agent takes it.** The CLI holds such a message in its queue and folds it into
 the running turn between tool rounds, or starts a turn for it once the current
 one ends — measured on a live session, seconds after it was sent. It says so in
-`command_lifecycle` frames, which `mapMessage` turns into `message_waiting` and
+`command_lifecycle` frames, which `mapMessage` turns into `message_queue` and
 `useChat` keeps as a set of message ids; a turn ending empties the set, so a
 mark cannot outlive the session that held its message. A message is marked only
 once it has waited a quarter of a second: every message passes through

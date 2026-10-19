@@ -167,9 +167,9 @@ describe('a reading that belongs to the account rather than the conversation', (
  */
 describe('a message the agent has not taken yet', () => {
   const waiting = (messageId: string, held: boolean): AgentEvent => ({
-    type: 'message_waiting',
+    type: 'message_queue',
     messageId,
-    waiting: held
+    state: held ? 'queued' : 'started'
   })
 
   /** Long enough for the grace before a mark to have passed. */

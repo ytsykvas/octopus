@@ -368,10 +368,10 @@ export function useChat(
         return
       }
 
-      if (event.type === 'message_waiting') {
+      if (event.type === 'message_queue') {
         const { messageId } = event
         const timer = queuing.current.get(messageId)
-        if (event.waiting) {
+        if (event.state === 'queued') {
           if (timer !== undefined) return
           queuing.current.set(
             messageId,

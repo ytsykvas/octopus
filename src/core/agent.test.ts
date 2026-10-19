@@ -273,20 +273,17 @@ describe('mapping SDK messages', () => {
       ...extra
     }) as unknown as SDKMessage
 
-  it('says a message is waiting while the CLI holds it in its queue', () => {
-    expect(mapMessage(lifecycle('queued'))).toEqual([
-      { type: 'message_waiting', messageId: 'msg-1', waiting: true }
+  it.each([
+    ['queued', 'queued'],
+    ['started', 'started'],
+    // Both arrive after the turn's result, and neither starts anything.
+    ['completed', 'finished'],
+    ['cancelled', 'finished']
+  ])('says a message the CLI calls %s is %s', (state, said) => {
+    expect(mapMessage(lifecycle(state))).toEqual([
+      { type: 'message_queue', messageId: 'msg-1', state: said }
     ])
   })
-
-  it.each(['started', 'completed', 'cancelled'])(
-    'says a message %s is waiting no more',
-    (state) => {
-      expect(mapMessage(lifecycle(state))).toEqual([
-        { type: 'message_waiting', messageId: 'msg-1', waiting: false }
-      ])
-    }
-  )
 
   // A state added upstream, or a frame missing its message, says nothing
   // rather than something guessed.

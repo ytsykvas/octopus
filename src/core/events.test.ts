@@ -87,7 +87,7 @@ describe('what gets stored', () => {
   // Where a message waits is news only while it waits: read back, every one of
   // them was taken long ago.
   it('treats a message waiting in the queue as live only', () => {
-    expect(isEphemeral({ type: 'message_waiting', messageId: 'm-1', waiting: true })).toBe(true)
+    expect(isEphemeral({ type: 'message_queue', messageId: 'm-1', state: 'queued' })).toBe(true)
   })
 
   it('treats completed blocks and everything else as worth keeping', () => {

@@ -913,7 +913,13 @@ function fromLifecycle(message: unknown): AgentEvent[] {
   if (!lifecycle.success) return []
 
   const { command_uuid: messageId, state } = lifecycle.data
-  return [{ type: 'message_waiting', messageId, waiting: state === 'queued' }]
+  return [
+    {
+      type: 'message_queue',
+      messageId,
+      state: state === 'completed' || state === 'cancelled' ? 'finished' : state
+    }
+  ]
 }
 
 export function mapMessage(message: SDKMessage): AgentEvent[] {
