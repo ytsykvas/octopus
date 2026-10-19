@@ -102,6 +102,7 @@ describe('channel names', () => {
       'projects:update'
     ],
     ['projects.edit', () => method('projects', 'edit')('p' as never, {} as never), 'projects:edit'],
+    ['projects.reorder', () => method('projects', 'reorder')(['p'] as never), 'projects:reorder'],
     ['projects.remove', () => method('projects', 'remove')('p' as never), 'projects:remove'],
     ['projects.branches', () => method('projects', 'branches')('p' as never), 'projects:branches'],
     [

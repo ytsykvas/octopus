@@ -36,6 +36,7 @@ function renderTabs(overrides: Partial<ProjectTabsProps> = {}): ProjectTabsProps
     onSelect: vi.fn(),
     onEdit: vi.fn(),
     onRemove: vi.fn(),
+    onReorder: vi.fn(),
     onAddFromDisk: vi.fn(),
     onAddFromGitHub: vi.fn(),
     busy: false,
@@ -313,6 +314,84 @@ describe('ProjectTabs', () => {
       renderTabs({ pluginTrouble: true })
 
       expect(screen.getByRole('img', { name: 'A plugin would not load' })).toHaveClass('bg-warning')
+    })
+  })
+
+  describe('dragging a tab', () => {
+    const three = [
+      project({ id: 'planner', name: 'planner' }),
+      project({ id: 'ledger', name: 'ledger' }),
+      project({ id: 'esl', name: 'esl' })
+    ]
+    const tab = (name: string): HTMLElement => screen.getByRole('button', { name })
+
+    it('moves a project down onto the tile it is dropped on', () => {
+      const props = renderTabs({ projects: three })
+
+      fireEvent.dragStart(tab('PL'))
+      fireEvent.dragOver(tab('ES'))
+      fireEvent.drop(tab('ES'))
+
+      expect(props.onReorder).toHaveBeenCalledWith(['ledger', 'esl', 'planner'])
+    })
+
+    it('moves a project up onto the tile it is dropped on', () => {
+      const props = renderTabs({ projects: three })
+
+      fireEvent.dragStart(tab('ES'))
+      fireEvent.drop(tab('PL'))
+
+      expect(props.onReorder).toHaveBeenCalledWith(['esl', 'planner', 'ledger'])
+    })
+
+    it('does nothing when a tile is dropped on itself', () => {
+      const props = renderTabs({ projects: three })
+
+      fireEvent.dragStart(tab('LE'))
+      fireEvent.drop(tab('LE'))
+
+      expect(props.onReorder).not.toHaveBeenCalled()
+    })
+
+    it('does nothing for a drop with no drag behind it', () => {
+      const props = renderTabs({ projects: three })
+
+      fireEvent.drop(tab('LE'))
+
+      expect(props.onReorder).not.toHaveBeenCalled()
+    })
+
+    it('draws the line on the edge the project would land against', () => {
+      renderTabs({ projects: three })
+
+      fireEvent.dragStart(tab('LE'))
+      fireEvent.dragOver(tab('ES'))
+      expect(screen.getByTestId('drop-line').className).toContain('-bottom-')
+
+      fireEvent.dragOver(tab('PL'))
+      expect(screen.getByTestId('drop-line').className).toContain('-top-')
+    })
+
+    it('draws no line over the tile being dragged, and none once it ends', () => {
+      renderTabs({ projects: three })
+
+      fireEvent.dragStart(tab('LE'))
+      fireEvent.dragOver(tab('LE'))
+      expect(screen.queryByTestId('drop-line')).toBeNull()
+
+      fireEvent.dragOver(tab('ES'))
+      expect(screen.getByTestId('drop-line')).toBeInTheDocument()
+
+      fireEvent.dragEnd(tab('LE'))
+      expect(screen.queryByTestId('drop-line')).toBeNull()
+    })
+
+    it('still selects on a click', async () => {
+      const props = renderTabs({ projects: three })
+
+      await userEvent.click(tab('ES'))
+
+      expect(props.onSelect).toHaveBeenCalledWith('esl')
     })
   })
 })

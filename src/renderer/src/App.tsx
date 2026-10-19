@@ -955,6 +955,7 @@ export function App(): React.JSX.Element {
               }}
               onEdit={setEditingProjectId}
               onRemove={(id) => void removeProject(id)}
+              onReorder={(ids) => void projects.reorder(ids)}
               onAddFromDisk={() => void addFromDisk()}
               onAddFromGitHub={() => void addFromGitHub()}
               busy={projects.busy || checkingGitHub}

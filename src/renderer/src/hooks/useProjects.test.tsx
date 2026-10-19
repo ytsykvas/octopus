@@ -294,6 +294,22 @@ describe('useProjects', () => {
       expect(result.current.all).toEqual([{ ...planner, disabledSkillDefaults: ['review'] }])
     })
 
+    it('saves the order and reloads the list', async () => {
+      listReturns(planner)
+      const onError = vi.fn<OnError>()
+
+      const { result } = renderHook(() => useProjects(accepts(), onError))
+      await waitFor(() => {
+        expect(result.current.all).toEqual([planner])
+      })
+
+      const saved = await act(() => result.current.reorder(['planner']))
+
+      expect(saved).toBe(true)
+      expect(window.octopus.projects.reorder).toHaveBeenCalledWith(['planner'])
+      expect(window.octopus.projects.list).toHaveBeenCalledTimes(2)
+    })
+
     // The dialog keeps itself open on a refusal, which it can only do if the
     // hook tells it the change did not go through.
     it('reports a refusal instead of pretending the change went through', async () => {

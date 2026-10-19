@@ -714,6 +714,10 @@ export function registerIpc(
 
   host.handle('plugins:refresh', () => attempt(() => service.refreshPluginCatalog()))
 
+  host.handle('projects:reorder', (_event, orderedIds: unknown) =>
+    attempt(() => service.reorderProjects(z.array(z.string()).parse(orderedIds)))
+  )
+
   host.handle('projects:remove', (_event, projectId: string) =>
     attempt(() => service.removeProjectById(projectId))
   )

@@ -19,6 +19,8 @@ interface UseProjects {
   readonly update: (projectId: string, patch: ProjectPatch) => Promise<boolean>
   /** One list changed by an operation — the counterpart of `update` for lists. */
   readonly edit: (projectId: string, edit: ProjectEdit) => Promise<boolean>
+  /** Saves the order of the project tabs, first to last. */
+  readonly reorder: (orderedIds: readonly string[]) => Promise<boolean>
   /** Asks first, then removes the project and everything it owns. */
   readonly remove: (projectId: string, workspaceCount: number) => Promise<boolean>
 }
@@ -121,6 +123,11 @@ export function useProjects(
     [write]
   )
 
+  const reorder = useCallback(
+    (orderedIds: readonly string[]) => write(() => window.octopus.projects.reorder(orderedIds)),
+    [write]
+  )
+
   const remove = useCallback(
     async (projectId: string, workspaceCount: number): Promise<boolean> => {
       const project = all.find((item) => item.id === projectId)
@@ -155,5 +162,5 @@ export function useProjects(
     [all, confirm, refresh, describeFailure, onError, t]
   )
 
-  return { all, busy, refresh, addFromDisk, update, edit, remove }
+  return { all, busy, refresh, addFromDisk, update, edit, reorder, remove }
 }

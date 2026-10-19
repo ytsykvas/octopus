@@ -305,6 +305,7 @@ import {
   rememberSkills,
   removeChat,
   removeProject,
+  reorderProjects,
   type ProjectPatch,
   type ProjectEdit,
   editProject,
@@ -712,6 +713,8 @@ export interface OctopusService {
   /** Changes one list of a project, applied to it as the write finds it (`ProjectEdit`). */
   editProjectById(projectId: string, edit: ProjectEdit): Promise<void>
   removeProjectById(projectId: string): Promise<void>
+  /** Saves the order the tab strip shows the projects in. */
+  reorderProjects(orderedIds: readonly string[]): Promise<void>
   /** Branches the project's repository offers as a base, remotes included. */
   listProjectBranches(projectId: string): Promise<string[]>
 
@@ -4984,6 +4987,10 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
       // Read back after the write, so it includes a switch that landed while
       // this one waited.
       await sessions.get(chatId)?.setSkills(skillMapOf(requireChat(chatId)))
+    },
+
+    async reorderProjects(orderedIds) {
+      await commit((current) => reorderProjects(current, orderedIds))
     },
 
     async removeProjectById(projectId) {

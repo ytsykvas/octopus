@@ -1996,6 +1996,17 @@ describe('App', () => {
     })
   })
 
+  it('saves the order a project tab is dragged into', async () => {
+    givenTwoProjects()
+    await openApp()
+    const ledger = await screen.findByRole('button', { name: 'LE' })
+
+    fireEvent.dragStart(ledger)
+    fireEvent.drop(screen.getByRole('button', { name: 'PL' }))
+
+    expect(window.octopus.projects.reorder).toHaveBeenCalledWith(['ledger', 'planner'])
+  })
+
   it('closes the project settings again', async () => {
     givenTwoProjects()
     const user = await openApp()
