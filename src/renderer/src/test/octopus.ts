@@ -35,6 +35,7 @@ export function installOctopusStub(): Api {
     config: {
       get: vi.fn(() => ok(defaultConfig())),
       update: vi.fn((patch) => ok({ ...defaultConfig(), ...patch })),
+      edit: vi.fn(() => ok(defaultConfig())),
       onChange: vi.fn(subscription)
     },
     accounts: {
@@ -265,6 +266,7 @@ export function installOctopusStub(): Api {
       list: vi.fn(() => ok([])),
       add: vi.fn(() => ok(null)),
       update: vi.fn(() => ok(undefined)),
+      edit: vi.fn(() => ok(undefined)),
       remove: vi.fn(() => ok(undefined)),
       listRemote: vi.fn(() => ok({ repositories: [], capped: false, organisations: [] })),
       addFromGitHub: vi.fn(() => ok(null)),

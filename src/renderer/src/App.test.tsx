@@ -669,7 +669,9 @@ describe('App', () => {
       return user
     }
 
-    it('is kept in the settings beside the ones answered before', async () => {
+    // The one tip answered, as an operation: keeping the others is the core's
+    // (`ConfigEditSchema`).
+    it('sends the tip answered, not the list it would make', async () => {
       vi.mocked(window.octopus.config.get).mockResolvedValue({
         ok: true,
         value: config({ dismissedTips: ['someOlderTip'] })
@@ -679,15 +681,18 @@ describe('App', () => {
 
       await user.click(await screen.findByRole('button', { name: 'Knew this already' }))
 
-      expect(window.octopus.config.update).toHaveBeenCalledWith({
-        dismissedTips: ['someOlderTip', 'rewindSkipsCommands']
+      expect(window.octopus.config.edit).toHaveBeenCalledExactlyOnceWith({
+        kind: 'dismissTip',
+        id: 'rewindSkipsCommands'
       })
+      expect(window.octopus.config.update).not.toHaveBeenCalled()
     })
 
     it('goes once the settings have taken the answer', async () => {
-      vi.mocked(window.octopus.config.update).mockImplementation((patch) =>
-        Promise.resolve({ ok: true, value: config(patch) })
-      )
+      vi.mocked(window.octopus.config.edit).mockResolvedValue({
+        ok: true,
+        value: config({ dismissedTips: ['rewindSkipsCommands'] })
+      })
       ranACommand()
       const user = await openAnna()
 
@@ -1962,6 +1967,27 @@ describe('App', () => {
     await user.click(within(dialog).getByRole('button', { name: 'cyan' }))
 
     expect(window.octopus.projects.update).toHaveBeenCalledWith('ledger', { color: 'cyan' })
+  })
+
+  // A switch over one of the project's lists goes as the switch, not the list.
+  it('sends a skill switched in the project settings as one edit', async () => {
+    givenTwoProjects()
+    vi.mocked(window.octopus.skills.list).mockResolvedValue({
+      ok: true,
+      value: [{ name: 'deploy', description: '', folder: 'deploy', path: '/data/skills/deploy' }]
+    })
+    const user = await openApp()
+    await screen.findByRole('button', { name: 'LE' })
+    const dialog = await openProjectSettings(user, 'LE')
+
+    await user.click(within(dialog).getByRole('button', { name: 'Skills' }))
+    await user.click(await within(dialog).findByRole('switch', { name: 'On by default' }))
+
+    expect(window.octopus.projects.edit).toHaveBeenCalledWith('ledger', {
+      kind: 'skillDefault',
+      key: 'deploy',
+      enabled: false
+    })
   })
 
   // The confirmation would otherwise appear behind the dialog that raised it.

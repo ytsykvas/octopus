@@ -42,6 +42,7 @@ Nothing but zod behind them, so a **value** can cross into the window.
 | [`skillNames.ts`](../src/core/skillNames.ts)                   | what may name a skill, which scope it came from, and the key the agent knows it by                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
 | [`sessionSkills.ts`](../src/core/sessionSkills.ts)             | which of Claude Code's own sources a skill the session holds came from — built in, a plugin, synced from claude.ai, or the user's — the order the panel draws them in, and which of them a switch can withhold. Its one import is a type                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
 | [`envProfileNames.ts`](../src/core/envProfileNames.ts)         | what may name a set of variables, and the name a project's first one gets. Split out of `envProfiles.ts` when the dialog asking for a name was built: that module reads and writes files, so its rule was unreachable from the field somebody types into                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
+| [`lists.ts`](../src/core/lists.ts)                             | `withMember`: a stored list with one item in it or out of it — the shape every switch over a list takes, in the config and in a project alike                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
 
 The last is the one that has to be **kept** pure. `SCRIPT_KINDS` began life in
 `repoSource.ts`, which reaches `node:fs` — importing it into the window passed
@@ -637,6 +638,16 @@ update — showed both halves: the second rename failing with `ENOENT`, and a
 patch built from a config the previous write had not stored yet putting that
 write's field back.
 
+The same reasoning reaches past the process boundary. **A list is never sent
+whole from the window**: a list built from the copy the window last received
+is a snapshot, and two switches flipped inside one round trip both started
+from it — the second wrote the first one back out, and a standing permission
+the core recorded while Settings removed another was dropped by the list
+Settings sent. The window sends one operation instead (`ConfigEdit`,
+`ProjectEdit`), applied inside the write's turn by `editedConfig` and
+`editProject`, with `withMember` (`lists.ts`) as the one shape of a switch over
+a list.
+
 Transcript appends have their own line. They do not read the state, so making
 them wait for a save would only slow the log down — what they need is order.
 
@@ -954,8 +965,9 @@ chat's own switch.** Either default list and a rename change the map just as
 much, and they used to reach a conversation only on its next start — the panel
 read the new record at once while the agent went on with the old one.
 `pushSkillsToRunning` sends each running session its own record's map after
-every `updateConfig`, every `updateProjectById` and a rename (`skillMapOf`,
-which `setChatSkill` uses for its one). Settled rather than awaited whole: the write
+every config write (`updateConfig`, `editConfig`), every project write
+(`commitProject`, behind both `updateProjectById` and `editProjectById`) and a
+rename (`skillMapOf`, which `setChatSkill` uses for its one). Settled rather than awaited whole: the write
 has landed, and one session that will not answer must not fail it for the
 others.
 

@@ -9,8 +9,9 @@ import { randomUUID } from 'node:crypto'
 import { z } from 'zod'
 
 import { BranchPrefixSchema, DEFAULT_BRANCH_PREFIX } from './branches.js'
-
-import { StandingPermissionSchema } from './standingPermissions.js'
+import { withMember } from './lists.js'
+import { SkillKeySchema } from './skillNames.js'
+import { StandingPermissionSchema, withoutStanding } from './standingPermissions.js'
 
 import {
   DEFAULT_EFFORT,
@@ -327,6 +328,49 @@ export const ConfigSchema = z.object({
 })
 
 export type Config = z.infer<typeof ConfigSchema>
+
+/**
+ * One change to a list in the config, as the window asks for it.
+ *
+ * An operation rather than the finished list. The window used to send the list
+ * it worked out from the config it last received, so two clicks inside one
+ * round trip both started from the same copy and the second wrote the first
+ * one back out — and a standing permission the core recorded while Settings
+ * removed another was dropped by the list Settings sent. Applied to the config
+ * as the write finds it (`editedConfig`), it cannot undo anything. Every other
+ * mention of this points here.
+ */
+export const ConfigEditSchema = z.discriminatedUnion('kind', [
+  z.object({ kind: z.literal('skillDefault'), key: SkillKeySchema, enabled: z.boolean() }),
+  z.object({ kind: z.literal('dismissTip'), id: z.string().min(1).max(200) }),
+  z.object({ kind: z.literal('forgetStanding'), rule: StandingPermissionSchema })
+])
+
+export type ConfigEdit = z.infer<typeof ConfigEditSchema>
+
+/** The part of the config an edit changes, worked out from the config as it stands. */
+/**
+ * What the window may change by sending the new value: every setting except the
+ * lists, which change one switch at a time through `ConfigEdit`. A list sent
+ * whole is a snapshot of the window's copy, and two switches inside one round
+ * trip wrote the first back out.
+ */
+export type ConfigPatch = Partial<
+  Omit<Config, 'disabledSkillDefaults' | 'dismissedTips' | 'alwaysAllowedTools'>
+>
+
+export function editedConfig(config: Config, edit: ConfigEdit): Partial<Config> {
+  switch (edit.kind) {
+    case 'skillDefault':
+      return {
+        disabledSkillDefaults: withMember(config.disabledSkillDefaults, edit.key, !edit.enabled)
+      }
+    case 'dismissTip':
+      return { dismissedTips: withMember(config.dismissedTips, edit.id, true) }
+    case 'forgetStanding':
+      return { alwaysAllowedTools: withoutStanding(config.alwaysAllowedTools, edit.rule) }
+  }
+}
 
 /**
  * Builds the first-run config.

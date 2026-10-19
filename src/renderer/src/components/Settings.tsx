@@ -24,6 +24,8 @@ import {
 } from '@core/chats.js'
 import type {
   Config,
+  ConfigEdit,
+  ConfigPatch,
   LanguagePreference,
   SettingSourcesMode,
   ThemePreference
@@ -51,7 +53,9 @@ import { fileSize } from './fileSize.js'
 
 interface SettingsProps {
   readonly config: Config
-  readonly onChange: (patch: Partial<Config>) => Promise<void>
+  readonly onChange: (patch: ConfigPatch) => Promise<void>
+  /** A list changed by an operation, never sent whole (`ConfigEdit`). */
+  readonly onEdit: (edit: ConfigEdit) => Promise<void>
   readonly onClose: () => void
   /**
    * Which section to land on, for callers sending the user somewhere specific —
@@ -104,6 +108,7 @@ const SECTIONS: readonly {
 export function Settings({
   config,
   onChange,
+  onEdit,
   onClose,
   initialSection
 }: SettingsProps): React.JSX.Element {
@@ -126,13 +131,15 @@ export function Settings({
           {section === 'git' && (
             <GitSection config={config} onChange={onChange} accounts={accounts} />
           )}
-          {section === 'agent' && <AgentSection config={config} onChange={onChange} />}
+          {section === 'agent' && (
+            <AgentSection config={config} onChange={onChange} onEdit={onEdit} />
+          )}
           {section === 'skills' && (
             <SkillsSection
               store={{ kind: 'global' }}
               disabledDefaults={config.disabledSkillDefaults}
-              onDefaults={(disabledSkillDefaults) => {
-                void onChange({ disabledSkillDefaults })
+              onDefault={(key, enabled) => {
+                void onEdit({ kind: 'skillDefault', key, enabled })
               }}
             />
           )}
@@ -157,7 +164,7 @@ export function Settings({
 
 interface SectionProps {
   readonly config: Config
-  readonly onChange: (patch: Partial<Config>) => Promise<void>
+  readonly onChange: (patch: ConfigPatch) => Promise<void>
 }
 
 /**
@@ -291,7 +298,11 @@ function GitSection({
   )
 }
 
-function AgentSection({ config, onChange }: SectionProps): React.JSX.Element {
+function AgentSection({
+  config,
+  onChange,
+  onEdit
+}: SectionProps & { readonly onEdit: (edit: ConfigEdit) => Promise<void> }): React.JSX.Element {
   const { t } = useTranslation()
 
   return (
@@ -393,7 +404,7 @@ function AgentSection({ config, onChange }: SectionProps): React.JSX.Element {
 
       <DefaultModels config={config} onChange={onChange} />
 
-      <AlwaysAllowed tools={config.alwaysAllowedTools} onChange={onChange} />
+      <AlwaysAllowed tools={config.alwaysAllowedTools} onEdit={onEdit} />
     </div>
   )
 }
@@ -424,7 +435,7 @@ function DefaultModels({
   onChange
 }: {
   config: Config
-  onChange: (patch: Partial<Config>) => Promise<void>
+  onChange: (patch: ConfigPatch) => Promise<void>
 }): React.JSX.Element {
   const { t } = useTranslation()
   const models = useModels()
@@ -495,10 +506,10 @@ function DefaultModels({
  */
 function AlwaysAllowed({
   tools,
-  onChange
+  onEdit
 }: {
   tools: readonly StandingPermission[]
-  onChange: (patch: Partial<Config>) => Promise<void>
+  onEdit: (edit: ConfigEdit) => Promise<void>
 }): React.JSX.Element {
   const { t } = useTranslation()
 
@@ -528,11 +539,8 @@ function AlwaysAllowed({
                   size="sm"
                   className="shrink-0"
                   onClick={() =>
-                    void onChange({
-                      alwaysAllowedTools: tools.filter(
-                        (existing) => standingKey(existing) !== standingKey(rule)
-                      )
-                    })
+                    // The rule, not the list without it (`ConfigEditSchema`).
+                    void onEdit({ kind: 'forgetStanding', rule })
                   }
                 >
                   {t('settings.alwaysAllowedRemove')}

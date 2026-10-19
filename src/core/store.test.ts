@@ -29,6 +29,8 @@ import {
   PROJECT_COLORS,
   type Project,
   ProjectSchema,
+  editProject,
+  ProjectEditSchema,
   recordApproval,
   rememberModels,
   rememberSkills,
@@ -411,8 +413,6 @@ describe('projects', () => {
     envProfile: 'prod',
     trustRepoScripts: true,
     trustRepository: true,
-    preferLocal: ['script.setup'],
-    disabledSkillDefaults: ['review'],
     repoPath: '/repos/moved'
   }
 
@@ -1129,7 +1129,17 @@ describe('choosing your own over the repository', () => {
 
   // Only the items that can come from a repository can be chosen against it.
   it('refuses an item that is not one', () => {
-    expect(ProjectPatchSchema.safeParse({ preferLocal: ['script.lint'] }).success).toBe(false)
+    expect(
+      ProjectEditSchema.safeParse({ kind: 'preferLocal', item: 'script.lint', on: true }).success
+    ).toBe(false)
+  })
+
+  // A list travels as one switch, never whole: a patch carrying one is a list
+  // built from a stale copy, the bug the edit exists to prevent.
+  it('takes no list in a patch', () => {
+    expect(
+      ProjectPatchSchema.parse({ preferLocal: ['script.setup'], disabledSkillDefaults: ['review'] })
+    ).toEqual({})
   })
 
   // The carry list joined the items later; a project that chose its own keeps it.
@@ -1172,6 +1182,65 @@ describe('recording an approval', () => {
     const next = recordApproval(state, 'planner', 'approvedScripts', 'second')
 
     expect(next.projects[0]?.approvedScripts).toEqual(['first', 'second'])
+  })
+})
+
+// The config's list edits one layer down — `ProjectEditSchema`.
+describe('editing a list of a project', () => {
+  const ledger: Project = { ...project, id: 'ledger', name: 'ledger', repoPath: '/repos/ledger' }
+
+  it('switches a skill off by default for that project alone', () => {
+    const state = { ...EMPTY_STATE, projects: [project, ledger] }
+
+    const next = editProject(state, 'planner', {
+      kind: 'skillDefault',
+      key: 'review',
+      enabled: false
+    })
+
+    expect(next.projects[0]?.disabledSkillDefaults).toEqual(['review'])
+    expect(next.projects[1]).toEqual(ledger)
+  })
+
+  it('keeps what the record already holds', () => {
+    const state = {
+      ...EMPTY_STATE,
+      projects: [
+        { ...project, disabledSkillDefaults: ['ship'], preferLocal: ['project.envFile' as const] }
+      ]
+    }
+
+    const skills = editProject(state, 'planner', {
+      kind: 'skillDefault',
+      key: 'review',
+      enabled: false
+    })
+    const local = editProject(skills, 'planner', {
+      kind: 'preferLocal',
+      item: 'project.baseBranch',
+      on: true
+    })
+    const back = editProject(local, 'planner', {
+      kind: 'preferLocal',
+      item: 'project.envFile',
+      on: false
+    })
+
+    expect(back.projects[0]?.disabledSkillDefaults).toEqual(['ship', 'review'])
+    expect(back.projects[0]?.preferLocal).toEqual(['project.baseBranch'])
+  })
+
+  it('refuses a project that is not there', () => {
+    expect(() =>
+      editProject(EMPTY_STATE, 'gone', { kind: 'skillDefault', key: 'review', enabled: true })
+    ).toThrow(StateConflictError)
+  })
+
+  it('refuses an item that is not one octopus can prefer locally', () => {
+    expect(
+      ProjectEditSchema.safeParse({ kind: 'preferLocal', item: 'project.nothing', on: true })
+        .success
+    ).toBe(false)
   })
 })
 

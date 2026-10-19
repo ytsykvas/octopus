@@ -30,7 +30,7 @@ import type { QuestionAnswer } from '@core/questions.js'
 import type { RewindOutcome, RewindPreview, RewindScope } from '@core/rewind.js'
 import type { ChatEntry } from '@core/transcript.js'
 import type { TerminalExit, TerminalOutput, TerminalSession, TerminalSpec } from '@core/terminal.js'
-import type { Config } from '@core/config.js'
+import type { Config, ConfigEdit, ConfigPatch } from '@core/config.js'
 import type { CliPermission } from '@core/cliPermissions.js'
 import type { FileSides, WorkspaceDiff } from '@core/diff.js'
 import type { MergeMethod, PullRequestDraft, PullRequestView } from '@core/pullRequests.js'
@@ -61,7 +61,7 @@ import type { RepoConfigView, RepoItemId } from '@core/repoConfig.js'
 import type { PreparedWorkspace } from '@core/carry.js'
 import type { RepositoryTrust } from '@core/repoTrust.js'
 import type { SourceView } from '@core/sourceItems.js'
-import type { Project, ProjectPatch } from '@core/store.js'
+import type { Project, ProjectEdit, ProjectPatch } from '@core/store.js'
 import type { ThemeName } from '@core/types.js'
 import type { InstalledPlugin, InstallOutcome, PluginCatalog, PluginTarget } from '@core/plugins.js'
 
@@ -103,8 +103,12 @@ const api = {
   config: {
     get: (): Promise<Result<Config>> => ipcRenderer.invoke('config:get') as Promise<Result<Config>>,
 
-    update: (patch: Partial<Config>): Promise<Result<Config>> =>
+    update: (patch: ConfigPatch): Promise<Result<Config>> =>
       ipcRenderer.invoke('config:update', patch) as Promise<Result<Config>>,
+
+    /** Changes one list in the config — an operation, never the finished list. */
+    edit: (edit: ConfigEdit): Promise<Result<Config>> =>
+      ipcRenderer.invoke('config:edit', edit) as Promise<Result<Config>>,
 
     /**
      * The config as it now stands, whenever main writes it.
@@ -892,6 +896,10 @@ const api = {
     /** Changes a project's editable fields; omitted keys are left alone. */
     update: (projectId: string, patch: ProjectPatch): Promise<Result<void>> =>
       ipcRenderer.invoke('projects:update', projectId, patch) as Promise<Result<void>>,
+
+    /** Changes one list of a project — an operation, never the finished list. */
+    edit: (projectId: string, edit: ProjectEdit): Promise<Result<void>> =>
+      ipcRenderer.invoke('projects:edit', projectId, edit) as Promise<Result<void>>,
 
     /** Branches the repository offers as a base, remotes included. */
     branches: (projectId: string): Promise<Result<string[]>> =>
