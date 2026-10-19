@@ -1430,9 +1430,9 @@ describe('RightPanel', () => {
     expect(screen.queryByRole('button', { name: 'Stop' })).not.toBeInTheDocument()
   })
 
-  // A build is not a server: it ends on its own, and until it does there is
-  // nothing to restart either.
-  it('offers neither while only the build is going', async () => {
+  // A build is not a server: until it ends there is nothing to restart. It can
+  // still hang, though, and a build nobody could stop left Run disabled for good.
+  it('offers Stop but not Restart while only the build is going', async () => {
     renderPanel({ workspaces: [anna], activeWorkspaceId: anna.id, scripts: SCRIPTS })
 
     await userEvent.click(scriptsTab())
@@ -1440,7 +1440,43 @@ describe('RightPanel', () => {
     await sessionsOpened(1)
 
     expect(screen.queryByRole('button', { name: 'Restart' })).not.toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: 'Stop' })).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Stop' })).toBeInTheDocument()
+  })
+
+  // Stopped mid-build, the workspace goes back to offering Run — and the exit
+  // the stop causes neither starts the server nor marks the build failed.
+  it('stops a build without starting the server or failing it', async () => {
+    renderPanel({ workspaces: [anna], activeWorkspaceId: anna.id, scripts: SCRIPTS })
+
+    await userEvent.click(scriptsTab())
+    await userEvent.click(runButton())
+    await sessionsOpened(1)
+    await userEvent.click(screen.getByRole('button', { name: 'Stop' }))
+
+    expect(octopus().terminal.dispose).toHaveBeenCalledWith(sessionId(1))
+    expect(runButton()).toBeEnabled()
+
+    processExits(1)
+
+    expect(octopus().terminal.create).toHaveBeenCalledTimes(1)
+    expect(runButton()).toBeEnabled()
+    expect(screen.queryByText(/build failed/i)).not.toBeInTheDocument()
+  })
+
+  it('builds and serves again after a stopped build', async () => {
+    renderPanel({ workspaces: [anna], activeWorkspaceId: anna.id, scripts: SCRIPTS })
+
+    await userEvent.click(scriptsTab())
+    await userEvent.click(runButton())
+    await sessionsOpened(1)
+    await userEvent.click(screen.getByRole('button', { name: 'Stop' }))
+
+    await userEvent.click(runButton())
+    await sessionsOpened(2)
+    processExits(2)
+
+    await sessionsOpened(3)
+    expect(screen.getByRole('button', { name: 'Restart' })).toBeInTheDocument()
   })
 
   // The server ended on its own — crashed, or was killed from outside. The

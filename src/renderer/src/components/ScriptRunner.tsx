@@ -207,6 +207,10 @@ function Runner({
    * environment.
    */
   const [port, setPort] = useState(recordedPort)
+  // Bumped to end a build's session while its terminal stays on screen.
+  const [endToken, setEndToken] = useState(0)
+  // Which run that ending was for; the exit it causes arrives later.
+  const [stoppedRun, setStoppedRun] = useState<number | null>(null)
   /*
    * The set of variables this run was prepared with, for the script's own
    * environment.
@@ -427,13 +431,24 @@ function Runner({
   if (stopToken !== seenStop) {
     setSeenStop(stopToken)
 
-    // Only a half that is still going. A build has already exited by the time a
-    // server can be stopped, and unmounting its terminal would throw away the
-    // log somebody is reading — the one thing `started` exists to keep.
-    if (running) {
+    // Only a half that is still going. A build is ended through its terminal
+    // rather than by unmounting it, so the log somebody is reading stays — the
+    // one thing `started` exists to keep. Not running from here on, or the
+    // half would announce itself again and put the sequence back on building.
+    if (running && kind === 'setup') {
+      setRunning(false)
+      setEndToken((current) => current + 1)
+      setStoppedRun(run)
+    } else if (running) {
       setStarted(false)
       setRunning(false)
     }
+  }
+
+  // The run that was stopped reports nothing: its outcome is not the sequence's
+  // to hear, and a late one would mark the build after it as failed.
+  const reportOutcome = (ok: boolean): void => {
+    if (stoppedRun !== run) onOutcome?.(ok)
   }
 
   return (
@@ -482,9 +497,10 @@ function Runner({
                 profile: envSet.profile
               })
             }}
+            stopToken={endToken}
             onExit={(exitCode) => {
               setRunning(false)
-              onOutcome?.(exitCode === 0)
+              reportOutcome(exitCode === 0)
             }}
             /*
              * The third door, and the one that was unguarded.
@@ -503,7 +519,7 @@ function Runner({
             onFailed={(reason) => {
               setRunning(false)
               setError(reason)
-              onOutcome?.(false)
+              reportOutcome(false)
             }}
             onClosed={() => {
               // The port is free now, which is the whole reason the restart

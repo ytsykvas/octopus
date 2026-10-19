@@ -1073,6 +1073,19 @@ describe('App', () => {
       expect(within(rightPane()).getByRole('button', { name: 'Building\u2026' })).toBeDisabled()
     })
 
+    it('stops a build from the title bar', async () => {
+      const user = await onAnna({ setup: '/tmp/planner/setup.sh', ...SERVER_ONLY })
+      const bar = titleBar()
+
+      await user.click(await within(bar).findByRole('button', { name: 'Run' }))
+      await waitFor(() => {
+        expect(window.octopus.workspaces.prepare).toHaveBeenCalledWith('planner/anna')
+      })
+      await user.click(await within(bar).findByRole('button', { name: 'Stop' }))
+
+      expect(await within(bar).findByRole('button', { name: 'Run' })).toBeEnabled()
+    })
+
     // The pane is hidden rather than unmounted when folded, so the runner a
     // press reaches is still there — which is what makes the title bar the
     // place to run from with the pane out of the way.
@@ -1082,9 +1095,45 @@ describe('App', () => {
       await user.click(within(bar).getByRole('button', { name: 'Collapse panel' }))
 
       await user.click(await within(bar).findByRole('button', { name: 'Run' }))
+      // Only a runner prepares the workspace, so this is what proves the press
+      // reached one rather than only moving the sequence.
+      await waitFor(() => {
+        expect(window.octopus.workspaces.prepare).toHaveBeenCalledWith('planner/anna')
+      })
       await user.click(await within(bar).findByRole('button', { name: 'Stop' }))
 
       expect(await within(bar).findByRole('button', { name: 'Run' })).toBeEnabled()
+    })
+
+    // A runner used to be mounted only for a workspace picked while the Scripts
+    // tab was on screen, so a press here for any other one bumped a token
+    // nobody heard and left the bar spinning with nothing to press.
+    it('builds a workspace picked while the Scripts tab is not shown', async () => {
+      const user = await onAnna({ setup: '/tmp/planner/setup.sh', ...SERVER_ONLY })
+      const bar = titleBar()
+
+      await user.click(await within(bar).findByRole('button', { name: 'Run' }))
+
+      await waitFor(() => {
+        expect(window.octopus.workspaces.prepare).toHaveBeenCalledWith('planner/anna')
+      })
+    })
+
+    it('builds a workspace picked with the pane folded', async () => {
+      givenTwoProjects()
+      givenScriptsOf({ planner: { setup: '/tmp/planner/setup.sh', ...SERVER_ONLY } })
+      const user = await openApp()
+      await user.click(await findTab('PL'))
+      await user.click(screen.getByRole('button', { name: 'Scripts' }))
+      const bar = titleBar()
+      await user.click(within(bar).getByRole('button', { name: 'Collapse panel' }))
+
+      await user.click(await screen.findByText('anna'))
+      await user.click(await within(bar).findByRole('button', { name: 'Run' }))
+
+      await waitFor(() => {
+        expect(window.octopus.workspaces.prepare).toHaveBeenCalledWith('planner/anna')
+      })
     })
   })
 

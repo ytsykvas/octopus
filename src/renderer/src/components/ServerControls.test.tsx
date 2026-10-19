@@ -83,6 +83,18 @@ describe('ServerControls', () => {
     expect(screen.queryByRole('button', { name: 'Run' })).not.toBeInTheDocument()
   })
 
+  // A build that hangs used to leave the bar spinning with nothing to press.
+  it('stops the build it shows going', async () => {
+    const user = userEvent.setup()
+    const stopRun = vi.fn()
+    renderControls({ activeRun: { ...IDLE, stage: 'building' }, building: true, stopRun })
+
+    await user.click(screen.getByRole('button', { name: 'Stop' }))
+
+    expect(stopRun).toHaveBeenCalledTimes(1)
+    expect(screen.getByRole('button', { name: 'Building…' })).toBeDisabled()
+  })
+
   it('links to the port the server is on and stops it, once it serves', async () => {
     const user = userEvent.setup()
     const stopRun = vi.fn()

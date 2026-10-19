@@ -64,6 +64,14 @@ interface TerminalProps {
    * terminal waited for ever.
    */
   readonly onFailed?: (reason: string) => void
+  /**
+   * Bumped to end the session while keeping its output on screen; the value it
+   * mounts with ends nothing.
+   *
+   * Unmounting ends a session too, and takes the screen with it. A stopped build
+   * keeps its log this way, and `onExit` still reports the process going.
+   */
+  readonly stopToken?: number
 }
 
 /**
@@ -83,9 +91,12 @@ export function Terminal({
   owner,
   onExit,
   onClosed,
-  onFailed
+  onFailed,
+  stopToken = 0
 }: TerminalProps): React.JSX.Element {
   const host = useRef<HTMLDivElement>(null)
+  // Set by the session effect, which is the only place that knows the id.
+  const stopSession = useRef<(() => void) | null>(null)
   // Kept in a ref so the effect below never re-runs on a changed callback,
   // which would tear the session down mid-login.
   const exitHandler = useRef(onExit)
@@ -143,6 +154,14 @@ export function Terminal({
     // An AbortController rather than a boolean: TypeScript cannot see that a
     // closure mutates a local, and would treat the check as always false.
     const lifetime = new AbortController()
+    // A stop that lands before the session exists is kept for when it does,
+    // as a controller for the same reason. The id is not cleared on a stop, so
+    // the exit that follows still matches.
+    const stopAsked = new AbortController()
+    stopSession.current = () => {
+      if (sessionId) void window.octopus.terminal.dispose(sessionId)
+      else stopAsked.abort()
+    }
 
     const unsubscribeData = window.octopus.terminal.onData(({ id, data }) => {
       if (id === sessionId) term.write(data)
@@ -192,6 +211,7 @@ export function Terminal({
       }
 
       sessionId = result.value
+      if (stopAsked.signal.aborted) void window.octopus.terminal.dispose(sessionId)
       term.onData((data) => {
         if (sessionId) window.octopus.terminal.write(sessionId, data)
       })
@@ -206,6 +226,7 @@ export function Terminal({
 
     return () => {
       lifetime.abort()
+      stopSession.current = null
       themes.disconnect()
       observer.disconnect()
       unsubscribeData()
@@ -223,6 +244,16 @@ export function Terminal({
     // a new terminal, which the caller expresses by remounting with a new key.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
+
+  // Seeded rather than started from zero, so the token a terminal mounts with
+  // is not read as a press.
+  const seenStop = useRef(stopToken)
+  useEffect(() => {
+    if (stopToken === seenStop.current) return
+
+    seenStop.current = stopToken
+    stopSession.current?.()
+  }, [stopToken])
 
   return (
     <div
