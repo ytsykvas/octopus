@@ -168,6 +168,26 @@ describe('what a tool call changed', () => {
     expect(readChange('Write', { file_path: '/a.ts', content: 'x\n' })?.everywhere).toBe(false)
   })
 
+  // Several edits to one file, from an older CLI. They land in different
+  // places, so a gap stands between them rather than one hunk reading through.
+  it('draws each edit of a MultiEdit, with a gap between them', () => {
+    const change = readChange('MultiEdit', {
+      file_path: '/a.ts',
+      edits: [
+        { old_string: 'a', new_string: 'b' },
+        { old_string: 'c', new_string: 'd', replace_all: true }
+      ]
+    })
+
+    expect(change?.lines.map((line) => line.sign)).toEqual(['-', '+', 'gap', '-', '+'])
+    expect(change).toMatchObject({ added: 2, removed: 2, everywhere: true })
+    expect(
+      readChange('MultiEdit', { file_path: '/a.ts', edits: [{ old_string: 'a', new_string: 'b' }] })
+        ?.everywhere
+    ).toBe(false)
+    expect(readChange('MultiEdit', { file_path: '/a.ts', edits: [] })).toBeNull()
+  })
+
   it('answers nothing for a tool that changes no file', () => {
     expect(readChange('Grep', { pattern: 'octopus' })).toBeNull()
     expect(readChange('Bash', { command: 'ls' })).toBeNull()

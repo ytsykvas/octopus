@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest'
 import type { ChatEntry } from '@core/transcript.js'
 
 import { BLOCK_PART, DAY_PART, toThreadMessages } from './threadMessages.js'
-import type { LogBlock } from './toolRuns.js'
+import type { LogBlock } from './logBlocks.js'
 
 const AT = '2026-08-13T09:00:00.000Z'
 
@@ -104,7 +104,21 @@ describe('the log as the library sees it', () => {
   })
 
   it('gives a block that is not an entry the same treatment', () => {
-    const tools: LogBlock = { kind: 'tools', at: 1, entries: [] }
+    const tools: LogBlock = {
+      kind: 'tool',
+      at: 1,
+      call: {
+        toolUseId: 'c-1',
+        name: 'Read',
+        input: {},
+        uuid: undefined,
+        result: null,
+        change: null,
+        context: null,
+        settled: false,
+        steps: null
+      }
+    }
     const messages = messagesOf(user(0, 'go'), tools)
 
     expect(messages[1]).toMatchObject({

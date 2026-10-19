@@ -2,7 +2,11 @@ import { z } from 'zod'
 
 /** One line of a change, as it will be drawn. */
 export interface ChangeLine {
-  readonly sign: '+' | '-' | ' '
+  /**
+   * `gap` separates the edits of a `MultiEdit`: they land in different places
+   * in the file, and drawn back to back they would read as one hunk.
+   */
+  readonly sign: '+' | '-' | ' ' | 'gap'
   readonly text: string
 }
 
@@ -28,6 +32,23 @@ const EditSchema = z.object({
   old_string: z.string(),
   new_string: z.string(),
   replace_all: z.boolean().optional()
+})
+
+/**
+ * An older CLI's several edits to one file in one call. The current SDK has no
+ * such tool, but conversations recorded with it still open.
+ */
+const MultiEditSchema = z.object({
+  file_path: z.string().min(1),
+  edits: z
+    .array(
+      z.object({
+        old_string: z.string(),
+        new_string: z.string(),
+        replace_all: z.boolean().optional()
+      })
+    )
+    .min(1)
 })
 
 const WriteSchema = z.object({
@@ -177,6 +198,22 @@ export function readChange(toolName: string, input: unknown): Change | null {
       parsed.data.file_path,
       lineDiff(parsed.data.old_string, parsed.data.new_string),
       parsed.data.replace_all ?? false
+    )
+  }
+
+  if (toolName === 'MultiEdit') {
+    const parsed = MultiEditSchema.safeParse(input)
+    if (!parsed.success) return null
+
+    const { file_path, edits } = parsed.data
+    const lines = edits.flatMap((edit, index) => [
+      ...(index > 0 ? [{ sign: 'gap' as const, text: '' }] : []),
+      ...lineDiff(edit.old_string, edit.new_string)
+    ])
+    return summarise(
+      file_path,
+      lines,
+      edits.some((edit) => edit.replace_all === true)
     )
   }
 
