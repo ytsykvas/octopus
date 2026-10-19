@@ -133,11 +133,16 @@ export function useFileTree(
        * after a switch to another workspace and back. Read now rather than with
        * the tree, which is what says which folders they are. Checked against
        * the listings as they are now, so one opened while the tree was read is
-       * not asked for twice.
+       * not asked for twice — and against what the folders re-read just now
+       * answered, so `node_modules/pkg` back after a reinstall is read on this
+       * turn rather than the next.
        */
+      const known = new Map<string, Held>(held.current)
+      for (const [folder, listing] of again)
+        known.set(folder, listing.ok ? listing.value : 'failed')
       const unheld = tree.ok
         ? foldersFromDisk(tree.value.entries, open.current).filter(
-            (folder) => !opened.current.includes(folder) && !unnamed(held.current, folder)
+            (folder) => !opened.current.includes(folder) && !unnamed(known, folder)
           )
         : []
       const late = await Promise.all(unheld.map(directory))

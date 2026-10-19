@@ -1,7 +1,7 @@
 import { act, renderHook, waitFor } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
-import type { FileTreeSnapshot } from '@core/fileTree.js'
+import type { DirectoryListing, FileTreeSnapshot } from '@core/fileTree.js'
 
 import { emitAgentEvent } from '../test/chat.js'
 import { held } from '../test/held.js'
@@ -510,6 +510,44 @@ describe('the tree of a workspace', () => {
         .mocked(octopus().files.directory)
         .mock.calls.filter(([, path]) => path.startsWith('node_modules/pkg'))
     ).toHaveLength(reads)
+
+    // Installed again: the outer listing read on this turn names it, so it is
+    // read on this turn too, not on the one after.
+    installed = true
+    act(() => {
+      result.current.refresh()
+    })
+    await waitFor(() => {
+      expect(result.current.listings.get('node_modules/pkg/lib')?.status).toBe('ready')
+    })
+    expect(octopus().files.tree).toHaveBeenCalledTimes(4)
+  })
+
+  // Still loading, a listing says nothing about what is inside it yet.
+  it('reads a folder inside one whose listing is still on its way', async () => {
+    const tree = held<{ ok: true; value: FileTreeSnapshot }>()
+    vi.mocked(octopus().files.tree).mockReturnValue(tree.promise)
+    const outer = held<{ ok: true; value: DirectoryListing }>()
+    vi.mocked(octopus().files.directory).mockImplementation((_, path) =>
+      path === 'node_modules'
+        ? outer.promise
+        : Promise.resolve({ ok: true, value: { entries: [], truncated: false } })
+    )
+    const open = new Set(['node_modules', 'node_modules/pkg'])
+    const { result } = renderHook(() => useFileTree(WORKSPACE, true, open))
+    act(() => {
+      result.current.openFolder('node_modules')
+    })
+    expect(result.current.listings.get('node_modules')?.status).toBe('loading')
+
+    await act(async () => {
+      tree.resolve({ ok: true, value: SNAPSHOT })
+      await Promise.resolve()
+    })
+    await waitFor(() => {
+      expect(result.current.listings.get('node_modules/pkg')?.status).toBe('ready')
+    })
+    expect(result.current.listings.get('node_modules')?.status).toBe('loading')
   })
 
   // A parent that could not be read says nothing about what is inside it.
