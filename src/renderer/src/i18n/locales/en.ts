@@ -11,6 +11,7 @@ export const en = {
 
   sidebar: {
     empty: 'Nothing here yet. Add a repository with the "+" button.',
+    pick: 'Pick a project on the far left.',
     addProject: 'Add repository',
     // The dot on a project's tab when one of its agents finished out of sight.
     projectDone: 'An agent finished here while you were away',
@@ -1271,7 +1272,7 @@ export const en = {
     noProjectsBody:
       'Add one from this machine, or clone it from GitHub. Workspaces are created inside it — each with its own branch, directory and agent session.',
     noSelectionTitle: 'Which project today?',
-    noSelectionBody: 'Pick one from the list on the left, or add another repository.',
+    noSelectionBody: 'Pick one on the far left, or add another repository.',
     /* The workspace half of the same pane. A project is chosen and the centre
        still has nothing to show, which is two different situations: one where
        there is nothing to pick, and one where nothing has been picked. */

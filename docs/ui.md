@@ -1624,7 +1624,11 @@ rewrite twenty files while the row went on saying what it said an hour ago,
 beside a diff pane that re-reads itself on the same event. The list now listens
 for the same turn endings and settles for the same 300ms, and re-reads only the
 project the workspace belongs to: a turn ending is a poor reason to run
-`git status` over every workspace of every project.
+`git status` over every workspace of every project. That status runs with
+`--no-optional-locks`, as the Files tab's does: a plain one holds `index.lock`
+for as long as it scans, and a `git add` or `git commit` running in the same
+worktree at that moment — another conversation, the terminal, a hook — fails
+with "Unable to create index.lock".
 
 **The right pane carries six tabs.** Terminal, then Files, Changes, Scripts
 and Pull request, then Notes. Build and server were two tabs and are now two halves of one: they
@@ -2882,7 +2886,10 @@ show, a script waiting to be run. The line is
 drawn at the pane: a picker's "Nothing found", a popover or a settings list
 keeps its plain line, because a drawing has no room there and would read as a
 broken image. The sidebar keeps its line too — with no projects, the centre is
-already showing the octopus beside it.
+already showing the octopus beside it. Like the centre, it tells the first two
+cases apart: it asks for a repository only when there is none, and otherwise
+points at the strip, because telling someone with three project tabs beside the
+list to add a repository sends them the wrong way.
 
 `compact` is the right column's variant: no panel around it, since the column is
 already a panel of its own and a box inside it reads as a dialog nobody opened;
