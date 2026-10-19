@@ -538,9 +538,10 @@ function isCommand(text: string, command: string, commands: readonly AgentComman
  * Whether this message is the user asking for the conversation to be forgotten.
  *
  * Asked before the message is sent, and remembered, because the event that
- * comes back cannot answer it: the SDK emits `conversation_reset` for leaving
- * plan mode and for fresh-session flows as well. Clearing the visible log on
- * the event alone would erase the conversation every time a plan was approved.
+ * comes back from an older CLI cannot answer it: the SDK emits
+ * `conversation_reset` for leaving plan mode and for fresh-session flows as
+ * well, and only a newer one says which. Clearing the visible log on such an
+ * event alone would erase the conversation every time a plan was approved.
  */
 export function isClearCommand(text: string, commands: readonly AgentCommand[]): boolean {
   return isCommand(text, CLEAR_COMMAND, commands)

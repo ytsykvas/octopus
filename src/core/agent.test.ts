@@ -514,14 +514,40 @@ describe('mapping SDK messages', () => {
     expect(mapMessage(message)).toEqual([{ type: 'conversation_reset', cleared: false }])
   })
 
-  // Whether the user asked for it cannot be known from one message — the same
-  // reset arrives when the agent leaves plan mode — so the mapping reports the
-  // form that changes nothing, and the service, which sent the message, decides.
-  it('never claims a reset was asked for', () => {
+  // An older CLI does not say what caused the reset, and the same message
+  // arrives when the agent leaves plan mode — so the mapping reports the form
+  // that changes nothing, and the service, which sent the message, decides.
+  it('does not claim a reset was asked for when the message does not say', () => {
     const message = { type: 'conversation_reset' } as unknown as SDKMessage
     const [event] = mapMessage(message)
 
     expect(event).toEqual({ type: 'conversation_reset', cleared: false })
+  })
+
+  it('reads a reset the CLI says came from /clear as asked for', () => {
+    const message = { type: 'conversation_reset', trigger: 'clear' } as unknown as SDKMessage
+
+    expect(mapMessage(message)).toEqual([
+      { type: 'conversation_reset', cleared: true, trigger: 'clear' }
+    ])
+  })
+
+  it('passes on what else caused a reset, without reading it as asked for', () => {
+    const message = {
+      type: 'conversation_reset',
+      trigger: 'plan_mode_exit'
+    } as unknown as SDKMessage
+
+    expect(mapMessage(message)).toEqual([
+      { type: 'conversation_reset', cleared: false, trigger: 'plan_mode_exit' }
+    ])
+  })
+
+  // The SDK's own advice: an unrecognised value is an unspecified reset.
+  it('reads a cause it does not know as no cause at all', () => {
+    const message = { type: 'conversation_reset', trigger: 'teleport' } as unknown as SDKMessage
+
+    expect(mapMessage(message)).toEqual([{ type: 'conversation_reset', cleared: false }])
   })
 
   it('passes on a new command list, translated', () => {

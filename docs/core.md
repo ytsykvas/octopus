@@ -547,10 +547,14 @@ more reason to state it outright instead of hoping nothing else does.
 ### A reset is not consent
 
 `conversation_reset` is emitted by `/clear`, by leaving plan mode, and by
-fresh-session flows. Only the first should empty the log, so the intent is
-recorded where it is known — `sendToChat` notes that the message was a clearing
-command, aliases included — and consumed by the event it caused. Read off the
-event alone, approving a plan would erase the conversation that produced it.
+fresh-session flows. Only the first should empty the log. A newer CLI names the
+cause in `trigger`, and `mapMessage` reads `clear` as asked for and anything
+else as not. An older one sends no `trigger`, so the intent is also recorded
+where it is known — `sendToChat` notes that the message was a clearing command,
+aliases included — and consumed by the event it caused. Read off an untagged
+event alone, approving a plan would erase the conversation that produced it. A
+named cause outranks the note: a reset tagged as another flow's leaves a waiting
+`/clear` for its own reset.
 
 **The clearing turn outlives its own reset by one event.** The transcript is
 discarded the moment the reset says it was asked for, and the command's own
