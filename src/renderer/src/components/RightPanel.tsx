@@ -802,7 +802,12 @@ export function RightPanel({
               before anything tries to bind it again. A build can be stopped
               too: one that hangs otherwise left Run disabled for good. */}
               {servingAt === null && (
-                <Button size="sm" variant="accent" disabled={runAll === undefined} onClick={runAll}>
+                <Button
+                  size="sm"
+                  variant="success"
+                  disabled={runAll === undefined}
+                  onClick={runAll}
+                >
                   <Play aria-hidden size={12} />
                   {t(building ? 'scripts.running' : 'scripts.runAll')}
                 </Button>
