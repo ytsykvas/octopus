@@ -2043,9 +2043,10 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
   /**
    * A conversation that is a tab, for what only makes sense in one.
    *
-   * Sending and rewinding change the worktree, and a closed conversation has no
-   * tab and no status to show it at it. A window that has not heard about the
-   * close is exactly who asks.
+   * Sending and rewinding change the worktree, and a closed conversation has
+   * no tab and no status to show that happening — a window that has not heard
+   * about the close is exactly who asks. And a session started on one would
+   * never be ended (`closeChat`), which is why `startFor` asks too.
    */
   function requireOpenChat(chatId: string): Chat {
     const chat = requireChat(chatId)
@@ -3807,9 +3808,13 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
     // snapshot from before all of the above, and a mode, an effort, a model or
     // a skill list changed while they ran went to a session not registered yet —
     // so it reached nothing, and the conversation started on what it had been.
-    // Two things reach here that did not before a rewind could start one: a
-    // message joining a start somebody else began.
-    const chat = requireChat(asked.id)
+    // And since a rewind can start one too, the snapshot may be the other
+    // caller's: a message joining a start a rewind began never handed over its
+    // own snapshot.
+    //
+    // Open, too: a tab closed while this ran found no session to end
+    // (`closeChat`).
+    const chat = requireOpenChat(asked.id)
 
     // A rewind's cut, applied by this session and settled by it: once a turn
     // has run on top of it, a plain resume follows the new branch, and before
@@ -5353,7 +5358,11 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
       })
 
       // After the record says it may close, so a refused close leaves its
-      // session running.
+      // session running. And after it is written: a session still starting,
+      // which this cannot see, re-reads the record just before it registers —
+      // so it either registered already and is ended here, or reads the close
+      // and refuses (`startFor`). One registered on a closed conversation is
+      // never ended, since a workspace's removal walks the open ones.
       await closeOneChat(chat)
       // Only the records past the keep limit lose their history, and after the
       // commit, for the reason `discardHistories` gives.
@@ -5463,18 +5472,6 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
        * fixed here.
        */
       /*
-       * Whether this message is the one that throws the conversation away.
-       *
-       * Decided here because here is the only place it can be: the reset that
-       * comes back looks identical to the one the agent sends when it leaves
-       * plan mode, so read from the event alone it would erase the log every
-       * time a plan was approved. Aliases count — `/reset` and `/new` are the
-       * same command — which is why the chat's own list is consulted rather
-       * than the text compared to one word.
-       */
-      if (isClearCommand(text, chat.knownCommands)) clearRequests.add(chatId)
-
-      /*
        * The model is deliberately **not** re-asserted here, unlike the mode.
        *
        * It was, briefly, on the belief that `/model` changed the session behind
@@ -5561,6 +5558,27 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
         return null
       }
 
+      /*
+       * Whether this message is the one that throws the conversation away.
+       *
+       * Decided here because here is the only place it can be: the reset that
+       * comes back looks identical to the one the agent sends when it leaves
+       * plan mode, so read from the event alone it would erase the log every
+       * time a plan was approved. Aliases count — `/reset` and `/new` are the
+       * same command — which is why the chat's own list is consulted rather
+       * than the text compared to one word.
+       *
+       * Only once the message is going, and only while the session it goes to
+       * is still the chat's. Marked earlier, a start that failed or was
+       * refused, or a session a close or a rewind ended during the awaits
+       * above, left the request with no reset coming — and the next reset the
+       * agent sent of its own accord was read as the clear. A `/clear` that
+       * also restarted the session for a new window was the opposite: the
+       * restart emptied the set, and the clear asked for was never honoured.
+       */
+      if (sessions.get(chatId) === session && isClearCommand(text, chat.knownCommands)) {
+        clearRequests.add(chatId)
+      }
       session.send(text, messageId)
 
       await setChatStatus(chatId, 'running')

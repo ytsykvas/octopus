@@ -563,6 +563,13 @@ the reset, `clearedTurns` at the result that follows it. Only the **writing** is
 skipped — the result is still announced, being what stops the composer offering
 to stop.
 
+A request is added only as the message goes to the session, and only while that
+session is still the chat's. Added earlier, a start that failed or was refused,
+or a session a close or a rewind ended while the mode was being set, left it with
+no reset coming, and the next reset the agent sent of its own accord was read as
+the clear. A `/clear` that also restarted the session for a new compaction
+window was lost the other way: the restart emptied the set first.
+
 Both sets are also emptied with the chat when its workspace is removed, which is
 bookkeeping rather than a guard. Neither can strand a flag that matters: a
 `/clear` whose result never arrives means the session stopped answering, and
@@ -700,9 +707,9 @@ been.
 `sessionFor` is the one way a session is started: a message being sent and a
 rewind that needs a session both reach for one, and without it each would start
 its own, the second registered over the first and the first's child process left
-running with nothing holding it. `requireOpenChat` is what sending and rewinding
-ask for instead of `requireChat`, since a closed conversation has no tab and no
-status to show a session at it; and `setChatStatus` skips a closed one, so the
+running with nothing holding it. `requireOpenChat` is what sending, rewinding
+and `startFor` — just before it registers — ask for instead of `requireChat`,
+since a closed conversation has no tab and no status to show a session at it; and `setChatStatus` skips a closed one, so the
 late `result` of the session that has just ended cannot leave it `error`. It
 asks inside its commit, not before: the close is written before the session
 ends, and a status queued while that write was on its way would otherwise land
@@ -720,6 +727,12 @@ before it, two closes of the last two tabs each saw the other still open and
 left none — and the session is closed only after the commit, so a close it
 refuses leaves the session running. A tab closed twice at once, from two
 windows, is closed once and refused never: the second finds it closed already.
+
+The order matters a second time for a session still starting, which the close
+cannot see: `startFor` re-reads the record with `requireOpenChat` just before it
+registers, so a start either registered in time to be ended or reads the close
+and refuses. One registered on a closed conversation would never be ended —
+`closeChatsOf` walks the open ones.
 
 A closed conversation is invisible to everything that means "the tabs of this
 workspace" — `chatsOfWorkspace` skips it, so the cap, the strip, the workspace's
