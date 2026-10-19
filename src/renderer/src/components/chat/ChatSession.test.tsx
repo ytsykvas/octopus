@@ -2378,7 +2378,8 @@ describe('choosing where the conversation compacts', () => {
           effective: 1_000_000,
           modelWindow: 1_000_000,
           override: null,
-          pending: false
+          pending: false,
+          settled: false
         }
       }
     })
