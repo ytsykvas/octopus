@@ -353,6 +353,28 @@ export function buildTree(entries: readonly TreeEntry[]): Map<string, TreeNode[]
 }
 
 /**
+ * Which of these folders have their children read from disk: one git names
+ * whole — ignored, or a submodule — and any folder inside one.
+ *
+ * Told from the entries alone, so a folder open inside another is found
+ * without waiting for the outer one's listing.
+ */
+export function foldersFromDisk(
+  entries: readonly TreeEntry[],
+  folders: Iterable<string>
+): string[] {
+  const whole = new Set(
+    entries.filter((entry) => entry.kind === 'directory').map((entry) => entry.path)
+  )
+  return [...folders].filter((folder) => {
+    for (let at = folder; at !== ''; at = parentOf(at)) {
+      if (whole.has(at)) return true
+    }
+    return false
+  })
+}
+
+/**
  * A folder read from disk, as rows of the tree.
  *
  * Each row is ignored when the folder is: what lies inside an ignored folder

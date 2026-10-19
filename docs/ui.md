@@ -2426,10 +2426,22 @@ path the status names.
 `node_modules/` as one entry, and its contents are read from disk only when it
 is expanded, through the same containment check as opening a file. A folder
 lists at most 5 000 entries and says so under the last. A refresh reads again
-only the ignored folders still open — one opened once and closed must not cost
-a long read on every turn after — and a listing is laid into the tree only while
-git still calls its folder ignored, so `git add -f` or an edited `.gitignore`
-hands the folder back to git's own children and marks.
+only the ignored folders still open — one opened once and closed must not cost a
+long read on every turn after. An open folder with no listing yet is read along
+with them: every one of them after a switch to another workspace and back, since
+the open folders outlive the switch and the listings do not. A listing is laid
+into the tree only while git still calls its folder ignored, so `git add -f` or
+an edited `.gitignore` hands the folder back to git's own children and marks.
+
+**A submodule is a folder, read from disk the same way**, and nothing inside it
+is greyed or marked: the outer repository has nothing to say about it, its own
+ignored folders included. `ls-files --cached` names one like any file, which
+drew it as a file the viewer then found to be a folder, so the tracked files are
+read with `--stage` and a mode of `160000` makes the entry a folder. Every
+folder inside it is read from disk in turn — git lists nothing in there — and a
+submodule git reports as changed, by a new commit or an edit inside, carries
+that status on the folder's row. A workspace's submodules are often not checked
+out, and then the folder opens empty.
 
 **A submodule is a folder, read from disk the same way**, and nothing inside it
 is greyed or marked: the outer repository has nothing to say about it, its own

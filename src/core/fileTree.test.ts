@@ -11,6 +11,7 @@ import {
   collectTreeEntries,
   compareNodes,
   folderStatuses,
+  foldersFromDisk,
   listingNodes,
   MAX_TREE_ENTRIES,
   parseIgnored,
@@ -320,6 +321,31 @@ describe('buildTree', () => {
 
   it('answers an empty root for an empty tree', () => {
     expect(buildTree([]).get('')).toEqual([])
+  })
+})
+
+describe('foldersFromDisk', () => {
+  const entries: TreeEntry[] = [
+    file('src/a.ts'),
+    { path: 'node_modules', kind: 'directory', ignored: true },
+    { path: 'vendor/lib', kind: 'directory', ignored: false }
+  ]
+
+  it('names a folder git lists whole, and every folder inside one', () => {
+    expect(
+      foldersFromDisk(entries, [
+        'node_modules',
+        'node_modules/pkg/dist',
+        'vendor/lib',
+        'vendor/lib/src'
+      ])
+    ).toEqual(['node_modules', 'node_modules/pkg/dist', 'vendor/lib', 'vendor/lib/src'])
+  })
+
+  // `vendor` holds a submodule and is git's own; `node_modules2` only shares a
+  // prefix with an ignored folder.
+  it('leaves out a folder git lists the inside of', () => {
+    expect(foldersFromDisk(entries, ['src', 'vendor', 'node_modules2'])).toEqual([])
   })
 })
 

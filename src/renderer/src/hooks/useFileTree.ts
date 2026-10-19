@@ -5,6 +5,7 @@ import {
   type DirectoryListing,
   type FileTreeSnapshot,
   folderStatuses,
+  foldersFromDisk,
   listingNodes,
   type TreeIndex,
   type TreeStatus
@@ -89,14 +90,28 @@ export function useFileTree(
   const read = useCallback(
     async (id: string) => {
       const attempt = ++generation.current
-      const [tree, listings] = await Promise.all([
+      const directory = async (folder: string) =>
+        [folder, await window.octopus.files.directory(id, folder)] as const
+      const [tree, again] = await Promise.all([
         window.octopus.files.tree(id),
-        Promise.all(
-          opened.current.map(
-            async (folder) => [folder, await window.octopus.files.directory(id, folder)] as const
-          )
-        )
+        Promise.all(opened.current.map(directory))
       ])
+      if (attempt !== generation.current) return
+
+      /*
+       * The open folders the tree says are read from disk and no listing holds
+       * — open before this hook had read anything, which is every one of them
+       * after a switch to another workspace and back. Read now rather than with
+       * the tree, which is what says which folders they are. Checked against
+       * the listings as they are now, so one opened while the tree was read is
+       * not asked for twice.
+       */
+      const unheld = tree.ok
+        ? foldersFromDisk(tree.value.entries, open.current).filter(
+            (folder) => !opened.current.includes(folder)
+          )
+        : []
+      const late = await Promise.all(unheld.map(directory))
       if (attempt !== generation.current) return
 
       setState((current) => {
@@ -107,13 +122,13 @@ export function useFileTree(
         // while this read was under way is not among those re-read, and
         // dropping it would leave its row reading for ever. A closed one is
         // let go, and read afresh if it is opened again.
-        const held = new Map<string, Held>(
+        const kept = new Map<string, Held>(
           [...current.listings].filter(([folder]) => open.current.has(folder))
         )
-        for (const [folder, listing] of listings) {
-          held.set(folder, listing.ok ? listing.value : 'failed')
+        for (const [folder, listing] of [...again, ...late]) {
+          kept.set(folder, listing.ok ? listing.value : 'failed')
         }
-        return { id, snapshot: tree.value, listings: held, error: null }
+        return { id, snapshot: tree.value, listings: kept, error: null }
       })
     },
     [describeFailure]
