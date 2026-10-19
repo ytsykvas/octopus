@@ -418,6 +418,20 @@ each, for no behaviour the field lacks, and the tests that pin those behaviours
 describe this field, not that one. If a feature ever needs what the primitives
 offer, the seam is `ChatSession`: the runtime already lives one level down.
 
+**A move into another worktree is a line, not a tool row.** The agent is offered
+`EnterWorktree` and `ExitWorktree`, and either moves its working directory away
+from the workspace's worktree while Changes, Files, the terminal and the scripts
+stay on it. Drawn as a tool row the call was a name with nothing readable beside
+it, so it is said in the warning colour instead — where the agent went, by the
+name or path it asked for, and whether it kept or removed the worktree on the
+way back — and never folded into a run of steps. Not refused: octopus is a
+harness, not a filter. The line is drawn from the call, so it says what the
+agent is doing rather than what happened: the CLI asks permission for a path
+outside its own worktrees and refuses a removal with uncommitted work on
+purpose, and either answer is the line below it. A move with neither name nor
+path says "a new worktree", since only the result knows the name the CLI made
+up. A subagent's move stays a step inside its fold: it moves the subagent only.
+
 **A subagent's work is folded under the call that started it.** Its messages
 arrive on the conversation's own stream, told apart only by the id of that call
 (`parentToolUseId` on its text, reasoning, calls and results), and drawn at the
