@@ -257,7 +257,9 @@ export async function renameBranch(exec: GitExec, from: string, to: string): Pro
  * when a turn ends, in a worktree where another conversation, the terminal or a
  * hook may be running git too — and a `git add` or `git commit` there at that
  * moment fails with "Unable to create index.lock: File exists". `readFileTree`
- * passes it for the same reason.
+ * passes it for the same reason. It is not the general cure: `git diff` writes
+ * the index back with it all the same, so the diff is read against a copy
+ * instead (`withIndexCopy`).
  */
 export async function changedFiles(exec: GitExec): Promise<string[]> {
   const output = await exec(['--no-optional-locks', 'status', '--porcelain', '-uall'])

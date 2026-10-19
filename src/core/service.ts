@@ -68,7 +68,7 @@ import {
 } from './diff.js'
 import { revertFile } from './revert.js'
 import { draftPullRequest, type DraftedPullRequest } from './pullRequestDraft.js'
-import { isListening, settlePort } from './ports.js'
+import { isListening, type PortProbe, settlePort } from './ports.js'
 import {
   carriedFiles,
   carryInto,
@@ -143,7 +143,7 @@ import {
   readPullRequestDetail
 } from './pullRequests.js'
 import type { PullRequestDetail } from './pullRequestShapes.js'
-import { gitIn, isIgnored } from './git.js'
+import { gitIn, isIgnored, withIndexCopy } from './git.js'
 import { FETCH_OPTIONS, resolveBase } from './remotes.js'
 import { type InstructionSource, instructionSources } from './instructionSources.js'
 import { assertShown, capabilityFiles, type RepositoryTrust, trustDigest } from './repoTrust.js'
@@ -450,6 +450,14 @@ export interface ServiceOptions {
    * directory — a parameter so a test never reads the machine's real one.
    */
   readonly cliConfigDir?: string
+  /**
+   * Whether something answers on a port, asked when a workspace is made, when
+   * its port is settled before a run and when the pane asks if it is serving.
+   *
+   * Opens a socket by default; a parameter so a test sees the machine it
+   * describes rather than the one it runs on (`docs/testing.md`).
+   */
+  readonly listening?: PortProbe
   /**
    * Who outranks a chat's compaction window for a session about to start.
    *
@@ -1459,6 +1467,7 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
   const dataRoot = options.dataRoot ?? rootDir()
   const cliDir = options.cliConfigDir ?? cliConfigDir()
   const windowOverrideFor = options.windowOverride ?? findWindowOverride
+  const listening = options.listening ?? isListening
   // Corrected for the packaged app, where the SDK's own guess points into
   // `app.asar` and cannot be started (`agentBinary.ts`).
   const runQuery = options.query ?? withAgentBinary(defaultQuery, unpackedAgentBinary())
@@ -1774,6 +1783,23 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
     } catch {
       return baseBranch
     }
+  }
+
+  /**
+   * What a workspace changed against its base, read as the pane and the
+   * pull-request draft both read it.
+   *
+   * Against a copy of the worktree's index (`withIndexCopy`), so a re-read as a
+   * turn ends never writes the index under a `git add` running beside it. Run
+   * from the worktree, not the repository: the base branch is a fact about the
+   * project, but everything else — the working tree, the index, the untracked
+   * files — is a fact about this workspace's own directory.
+   */
+  async function readDiffOf(workspace: Workspace, project: Project): Promise<WorkspaceDiff> {
+    const baseBranch = await baseRefOf(project)
+    return withIndexCopy(workspace.path, makeExec, (exec) =>
+      readWorkspaceDiff(exec, { baseBranch, root: workspace.path, branch: workspace.branch })
+    )
   }
 
   /**
@@ -2231,14 +2257,6 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
   }
 
   /**
-   * Records what a conversation is doing, and says so.
-   *
-   * Its own stream beside the workspace's, because the tab strip draws the
-   * conversation while the list draws the workspace, and the two move at
-   * different moments: a second tab finishing leaves a workspace whose first
-   * tab is still running exactly where it was.
-   */
-  /**
    * Back to `running` once a question is answered — unless the same chat is
    * still asking another.
    *
@@ -2253,24 +2271,41 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
     return setChatStatus(chatId, asking ? 'waiting_permission' : 'running')
   }
 
+  /**
+   * Records what a conversation is doing, and says so.
+   *
+   * Its own stream beside the workspace's, because the tab strip draws the
+   * conversation while the list draws the workspace, and the two move at
+   * different moments: a second tab finishing leaves a workspace whose first
+   * tab is still running exactly where it was.
+   */
   function setChatStatus(chatId: string, status: ChatStatus): Promise<void> {
     const before = findChat(state, chatId)
-    // A closing session goes on emitting for a moment after its conversation
-    // was closed, and there is nothing left to record it against. A closed
-    // conversation is not a tab any more: a late `result` from the session that
-    // has just ended must not leave it `error`, red on the day it is reopened.
-    if (!before || !isOpenChat(before)) return Promise.resolve()
+    if (!before) return Promise.resolve()
 
     const { workspaceId } = before
+    let changed = false
 
-    // Mapped for the same reason the workspaces are: a conversation closed
+    // Mapped for the same reason the workspaces are: a conversation removed
     // while its session's last events were still arriving is not in the list,
     // and that is the whole of what has to happen about it.
     return commitChats(workspaceId, (current) => ({
       ...current,
-      chats: current.chats.map((chat) => (chat.id === chatId ? { ...chat, status } : chat))
+      chats: current.chats.map((chat) => {
+        // A closing session goes on emitting for a moment after its
+        // conversation was closed. A closed conversation is not a tab any more:
+        // a late `result` must not leave it `error`, red on the day it is
+        // reopened. Asked here rather than before the commit, because the
+        // close is recorded before its session ends and may still be queued —
+        // and whether the status moves is asked here too: two writes in flight
+        // both read the one before either, and the second, finding its status
+        // equal to that, never announced the end of the first.
+        if (chat.id !== chatId || !isOpenChat(chat) || chat.status === status) return chat
+        changed = true
+        return { ...chat, status }
+      })
     })).then(() => {
-      if (before.status === status) return
+      if (!changed) return
       for (const listener of chatStatusListeners) listener({ chatId, workspaceId, status })
     })
   }
@@ -4331,7 +4366,7 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
     },
 
     async isWorkspaceServing(workspaceId) {
-      return isListening(requireWorkspace(workspaceId).port)
+      return listening(requireWorkspace(workspaceId).port)
     },
 
     async ensureWorkspacePort(workspaceId) {
@@ -4342,7 +4377,8 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
 
         const free = await settlePort(
           workspace.port,
-          state.workspaces.flatMap((other) => (other.id === workspaceId ? [] : [other.port]))
+          state.workspaces.flatMap((other) => (other.id === workspaceId ? [] : [other.port])),
+          listening
         )
         if (free === workspace.port) return free
 
@@ -4749,6 +4785,7 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
       // Cut from the base in effect, which the repository may state.
       const created = await createWorkspace(await liveProject(project), state, exec, {
         root: dataRoot,
+        answers: listening,
         fetchExec: makeExec(project.repoPath, FETCH_OPTIONS)
       })
 
@@ -4903,9 +4940,11 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
       const workspace = requireWorkspace(workspaceId)
       const project = requireProject(workspace.projectId)
 
-      const sides = await readWholeFileSides(makeExec(workspace.path), {
-        baseBranch: await baseRefOf(project)
-      })
+      // Against a copy of the index, for the reason `readDiffOf` gives.
+      const baseBranch = await baseRefOf(project)
+      const sides = await withIndexCopy(workspace.path, makeExec, (exec) =>
+        readWholeFileSides(exec, { baseBranch })
+      )
 
       // A record rather than the Map it is built as: this crosses IPC, where
       // structured cloning keeps a Map and the preload's own types would then
@@ -4917,14 +4956,7 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
       const workspace = requireWorkspace(workspaceId)
       const project = requireProject(workspace.projectId)
 
-      // Run from the worktree, not the repository: the base branch is a fact
-      // about the project, but everything else — the working tree, the index,
-      // the untracked files — is a fact about this workspace's own directory.
-      return readWorkspaceDiff(makeExec(workspace.path), {
-        baseBranch: await baseRefOf(project),
-        root: workspace.path,
-        branch: workspace.branch
-      })
+      return readDiffOf(workspace, project)
     },
 
     async revertWorkspaceFile(workspaceId, path, oldPath = null) {
@@ -4971,11 +5003,7 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
       const project = requireProject(workspace.projectId)
 
       const [diff, changed, instruction, commitInstruction] = await Promise.all([
-        readWorkspaceDiff(makeExec(workspace.path), {
-          baseBranch: await baseRefOf(project),
-          root: workspace.path,
-          branch: workspace.branch
-        }),
+        readDiffOf(workspace, project),
         changeCount(workspace, makeExec),
         // The same chain the pane reads and the prepared prompts send. These
         // two called `effectiveInstruction` directly and so skipped the
@@ -5250,14 +5278,6 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
     async closeChat(chatId) {
       const chat = requireChat(chatId)
 
-      // A workspace without a conversation has no way back to one but the
-      // first message, and throwing the only one away is `/clear` — which does
-      // it without leaving the pane with nothing to draw.
-      if (chatsOfWorkspace(state, chat.workspaceId).length <= 1) {
-        throw new ChatError('lastChat', { chatId }, `Chat ${chatId} is its workspace's only one.`)
-      }
-
-      await closeOneChat(chat)
       // Through `commitChats` rather than a plain commit: the workspace's
       // status is derived from its conversations, and one of them has left the
       // tabs — closing the tab that was running leaves the workspace idle, and
@@ -5267,11 +5287,28 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
       // or a conversation closed mid-turn would reopen claiming to be working.
       let expired: Chat[] = []
       await commitChats(chat.workspaceId, (current) => {
+        // Closed already — the same tab, closed from a second window at once.
+        // What was asked for has happened, and counting it would refuse it.
+        if (findChat(current, chatId)?.closedAt !== null) return current
+
+        // A workspace without a conversation has no way back to one but the
+        // first message, and throwing the only one away is `/clear` — which
+        // does it without leaving the pane with nothing to draw. Inside the
+        // commit, so two closes of the last two tabs cannot both pass.
+        if (chatsOfWorkspace(current, chat.workspaceId).length <= 1) {
+          throw new ChatError('lastChat', { chatId }, `Chat ${chatId} is its workspace's only one.`)
+        }
+
         const closed = updateChat(current, chatId, { closedAt: now(), status: 'idle' })
-        expired = expiredClosedChats(closed, chat.workspaceId)
+        // Never the one being closed, which a clock tie could sort among the
+        // oldest: its session is closed below and needs the record to be there.
+        expired = expiredClosedChats(closed, chat.workspaceId).filter((gone) => gone.id !== chatId)
         return expired.reduce((next, gone) => removeChat(next, gone.id), closed)
       })
 
+      // After the record says it may close, so a refused close leaves its
+      // session running.
+      await closeOneChat(chat)
       // Only the records past the keep limit lose their history, and after the
       // commit, for the reason `discardHistories` gives.
       await discardHistories(expired)

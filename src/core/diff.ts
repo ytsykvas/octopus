@@ -6,7 +6,10 @@
  *
  * Nothing here writes: no `--intent-to-add`, no index, no stash. A review pane
  * that modified the repository it is reporting on would change the answer by
- * asking the question.
+ * asking the question. git itself writes the index back when a diff refreshes
+ * it, so the reads of the working tree are handed an executor on a copy of the
+ * index (`withIndexCopy`) — a plain one brings back the `index.lock` a `git
+ * add` beside the pane then trips over.
  */
 
 import { readFile, stat } from 'node:fs/promises'
