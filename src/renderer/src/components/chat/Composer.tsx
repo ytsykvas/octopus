@@ -1,4 +1,4 @@
-import { ArrowUp, CheckCheck, Map, Shield } from 'lucide-react'
+import { ArrowUp, CheckCheck, Map, Shield, Zap } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
@@ -148,12 +148,15 @@ interface ComposerProps {
   readonly onNotesSent: () => void
 }
 
-const MODE_LABELS: Record<ChatMode, 'chat.modeDefault' | 'chat.modeAcceptEdits' | 'chat.planMode'> =
-  {
-    default: 'chat.modeDefault',
-    acceptEdits: 'chat.modeAcceptEdits',
-    plan: 'chat.planMode'
-  }
+const MODE_LABELS: Record<
+  ChatMode,
+  'chat.modeDefault' | 'chat.modeAcceptEdits' | 'chat.planMode' | 'chat.modeAuto'
+> = {
+  default: 'chat.modeDefault',
+  acceptEdits: 'chat.modeAcceptEdits',
+  plan: 'chat.planMode',
+  auto: 'chat.modeAuto'
+}
 
 /**
  * The mode's own icon rather than one for the control, because the row is
@@ -162,12 +165,30 @@ const MODE_LABELS: Record<ChatMode, 'chat.modeDefault' | 'chat.modeAcceptEdits' 
  *
  * A pencil stood for accepting edits for a while and read as "edit this
  * setting" — the icon of the control rather than of what it says. The double
- * tick is what the mode does: answering yes before being asked.
+ * tick is what the mode does: answering yes before being asked. The bolt is
+ * auto mode's: the agent goes ahead on its own judgement, quickly.
  */
 const MODE_ICONS: Record<ChatMode, React.ReactNode> = {
   default: <Shield aria-hidden size={12} />,
   acceptEdits: <CheckCheck aria-hidden size={12} />,
-  plan: <Map aria-hidden size={12} />
+  plan: <Map aria-hidden size={12} />,
+  auto: <Zap aria-hidden size={12} />
+}
+
+/**
+ * How each mode tints the chip.
+ *
+ * Tinted for the modes that change what the agent does unasked or at all: of
+ * the settings in this row, those are the ones worth noticing without being
+ * looked for. Auto mode in its own colour rather than the accent the other two
+ * share, because it is the one where a classifier, not a rule, decides — the
+ * mode most worth telling apart at a glance.
+ */
+const MODE_TINTS: Record<ChatMode, string> = {
+  default: 'text-ink-soft hover:bg-muted hover:text-ink',
+  acceptEdits: 'bg-accent/12 text-accent',
+  plan: 'bg-accent/12 text-accent',
+  auto: 'bg-success/12 text-success'
 }
 
 /**
@@ -180,7 +201,8 @@ const MODE_ICONS: Record<ChatMode, React.ReactNode> = {
 const NEXT_MODE: Record<ChatMode, ChatMode> = {
   default: 'acceptEdits',
   acceptEdits: 'plan',
-  plan: 'default'
+  plan: 'auto',
+  auto: 'default'
 }
 
 /**
@@ -704,9 +726,9 @@ export function Composer({
 
               One control for what is stored as two fields. Planning is not a
               degree of permission — the agent runs no tools in it — but the
-              three are what Claude Code cycles through on shift+tab, and one
+              four are what Claude Code cycles through on shift+tab, and one
               place to look beats two that each say half of it. Switched in
-              place rather than picked from a menu: three states in a fixed
+              place rather than picked from a menu: four states in a fixed
               ring are a click each, and a list would be two. */}
           <span className="ml-auto flex items-center gap-2">
             <button
@@ -714,14 +736,7 @@ export function Composer({
               aria-label={t('chat.modeToggle', { mode: t(MODE_LABELS[mode]) })}
               title={t('chat.modeCycle')}
               onClick={nextMode}
-              // Tinted for the two modes that change what the agent does
-              // unasked or at all: of the settings in this row, those are the
-              // ones worth noticing without being looked for.
-              className={`focus-ring inline-flex h-6 shrink-0 items-center gap-1 rounded-[var(--radius-control)] px-1.5 text-[11px] transition-colors ${
-                mode === 'default'
-                  ? 'text-ink-soft hover:bg-muted hover:text-ink'
-                  : 'bg-accent/12 text-accent'
-              }`}
+              className={`focus-ring inline-flex h-6 shrink-0 items-center gap-1 rounded-[var(--radius-control)] px-1.5 text-[11px] transition-colors ${MODE_TINTS[mode]}`}
             >
               {MODE_ICONS[mode]}
               {t(MODE_LABELS[mode])}

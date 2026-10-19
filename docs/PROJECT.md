@@ -364,7 +364,7 @@ Files opened from the right pane's tree take tabs of their own in the same strip
 | `⌘C`        | in a file: copy the lines' reference |
 | `⇧⇥`        | next mode                            |
 
-`⇧⇥` works in the composer's field only, and goes round ask first → `Accept edits` → plan, the order Claude Code's own shift+tab uses; anywhere else in the window it still moves the focus back.
+`⇧⇥` works in the composer's field only, and goes round `Manual` → `Accept edits` → plan → `Auto`, the order Claude Code's own shift+tab uses; anywhere else in the window it still moves the focus back.
 
 `⌘W` closes a file tab and nothing else: with a conversation in front the key is left alone, because closing a conversation is a menu item on purpose.
 
@@ -753,7 +753,7 @@ The terminal moved into scope early: account sign-in needs an interactive sessio
 ## 16. Open questions
 
 - **Workspace naming** — given names drawn at random from a pool of 256, task-derived names, or generated from the prompt text.
-- **Tool permissions** — settled for now: the read-only tools are automatic, everything else prompts in the chat, and an answer of "always" is stored per tool in the config where it can be taken back. The mode a new chat starts in is a global setting, so the question is not asked again on each new branch. Open: whether per-project profiles are needed, and whether "always" should narrow to an argument (`Bash(npm test:*)`) rather than a whole tool.
+- **Tool permissions** — settled for now: the read-only tools are automatic, everything else prompts in the chat, and an answer of "always" is stored per tool in the config where it can be taken back. In `Auto` the SDK's classifier decides instead, prompting only when it cannot, and every refusal it makes is drawn in the log; `bypassPermissions` stays out. The mode a new chat starts in, and the one an approved plan is carried out in, are global settings, so the question is not asked again on each new branch. Open: whether per-project profiles are needed, and whether "always" should narrow to an argument (`Bash(npm test:*)`) rather than a whole tool.
 - **Cross-platform** — whether Linux stays in the plans (affects CI only, not architecture).
 - **Task sources** — creating a workspace from a GitHub issue or a Linear ticket.
 - **Code review** — answered twice over. A note against a line rides out inside

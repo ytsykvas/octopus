@@ -152,6 +152,8 @@ export function useErrorMessage(): (failure: Failure) => string {
           return t('errors.rewindInProgress')
         case 'chatClosed':
           return t('errors.chatClosed')
+        case 'autoModeUnavailable':
+          return t('errors.autoModeUnavailable', { reason: failure.params?.reason ?? '' })
         case 'rewindUnavailable':
           // The agent's own reason, when it gave one: "no checkpoint for that
           // message" is the answer to *why*, and the generic line is not.
