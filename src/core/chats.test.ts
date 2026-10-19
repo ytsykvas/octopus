@@ -63,7 +63,7 @@ describe('a new chat', () => {
       planEffort: null,
       effort: 'medium',
       workingMode: 'default',
-      planMode: false,
+      planMode: true,
       autoCompactWindow: null,
       knownCommands: [],
       skillOverrides: {},
@@ -246,10 +246,10 @@ describe('a new chat', () => {
     expect(free.workingMode).toBe('acceptEdits')
   })
 
-  // Planning is asked for about a task, not inherited from a setting, so a
-  // fresh conversation is never already in it.
-  it('never starts out planning', () => {
-    expect(newChat('planner/kyiv', { ...options, workingMode: 'acceptEdits' }).planMode).toBe(false)
+  // The first message of a task is where it gets scoped, so a fresh
+  // conversation starts out planning whatever the working mode is.
+  it('starts out planning', () => {
+    expect(newChat('planner/kyiv', { ...options, workingMode: 'acceptEdits' }).planMode).toBe(true)
   })
 })
 

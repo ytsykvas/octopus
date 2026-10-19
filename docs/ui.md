@@ -362,6 +362,19 @@ memory only: a log reopened fully expanded would mount every diff in it at once.
 A dialog that is open keeps ⌘O, and a conversation behind a file does not hear
 it.
 
+That button sits at the log's top-left, clear of the day chip in the middle.
+
+**The log opens at its end and keeps to it** while the reader is there. Two
+things used to undo that. A hidden tab is `display:none`, and hiding it resets
+the scroll and fires a scroll event with no height behind it — read as the
+reader leaving the end, it stopped the following for good, so a conversation
+came back at its top. A scroll with `clientHeight` 0 is therefore ignored. And
+rows grow after they are laid out (markdown, code), so the one scroll to the
+end landed short; a `ResizeObserver` on the log's content scrolls again while
+the reader is still pinned. More than one screen above the end, a small round
+accent button with a cloud-and-arrow icon floats at the bottom-right of the
+log; it jumps straight to the end and pins it again.
+
 **A path in a row opens the file in the centre**, the way the right pane's tree
 does: a click previews, a double-click keeps it. The agent names absolute paths
 and the tabs relative ones, so `workspaceRelative` takes the workspace off — and
@@ -1200,7 +1213,9 @@ they could not both be true, which is why approving a plan once had no mode to
 return to — and why a toggle stayed lit over an agent that had started editing.
 So the record keeps `planMode` beside `workingMode`, and the composer shows the
 two as one control beside send: `planMode` wins when it is on, and the working
-mode is what shows otherwise.
+mode is what shows otherwise. A new conversation starts with `planMode` on — the
+composer shows Plan before the record exists, to match what the first send
+creates — and a fork starts with it off.
 
 It **switches in place**, going round `Manual` → `Accept edits` → plan →
 `Auto` → `Manual`: the ring Claude Code's own shift+tab goes round, and
@@ -1229,6 +1244,10 @@ second one left to say what should follow a plan, and a plan read and approved
 is the edits accepted in advance — which is why `Manual` is not offered there.
 Because that widens what the agent may do, the plan dialog says so beside its
 button, before the click.
+
+The dialog's note field sends on Enter, as the composer does, and also has the
+composer's own send button (`SendButton`) in its corner. It is never disabled:
+a plan sent back with nothing written is still an answer.
 
 **Only out of planning, and never down from `Auto`.** The agent may call the
 plan tool from any mode, and handing over there would let it raise a

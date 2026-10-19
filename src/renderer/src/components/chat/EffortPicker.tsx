@@ -143,6 +143,14 @@ export function EffortPicker({
    * one the chip named.
    */
   const [tab, setTab] = useState<'code' | 'plan'>(planMode ? 'plan' : 'code')
+  // Followed when the running half changes: the pane is drawn before the
+  // conversation's record has been read, as planning, and a tab fixed at that
+  // moment stayed on the planning half for a conversation that was not.
+  const [shownPlanMode, setShownPlanMode] = useState(planMode)
+  if (planMode !== shownPlanMode) {
+    setShownPlanMode(planMode)
+    setTab(planMode ? 'plan' : 'code')
+  }
 
   const shown = tab === 'plan' ? (planValue ?? value) : value
   const inForce = effortInForce({ planMode, effort: value, planEffort: planValue })

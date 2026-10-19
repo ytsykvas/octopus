@@ -1224,6 +1224,7 @@ export const en = {
     /* Claude Code's ctrl+o: every row and every piece of reasoning at once. */
     expandAll: 'Show every step (⌘O)',
     collapseAll: 'Fold every step (⌘O)',
+    jumpToEnd: 'Jump to the latest message',
     workingElapsed: 'Working… {{elapsed}}',
 
     /* Where the `+1 −1` normally sits, for an edit that replaced its text
@@ -1253,6 +1254,7 @@ export const en = {
       'Runs in Auto — each step is approved or refused for you, and anything unclear is asked.',
     planFeedback: 'Anything to work out first?',
     planFeedbackPlaceholder: 'Write here and the agent will revise the plan',
+    planSendFeedback: 'Send the note and keep planning',
     questionTitle: 'The agent is asking',
     questionOther: 'Something else',
     questionOtherPlaceholder: 'Write your own answer',
