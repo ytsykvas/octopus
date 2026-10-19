@@ -36,8 +36,10 @@ Two practical habits:
 ## Conductor is compiled — say what you actually know
 
 `/Applications/Conductor.app/Contents/MacOS/conductor` is a 73 MB Mach-O arm64
-executable (a Tauri shell). There is no readable source. Anyone who claims to know how a Conductor
-feature is implemented is, in most cases, guessing.
+executable (a Tauri shell). Its source is not published, but very little of it is opaque:
+the window's own code ships inside that executable, and the agent runtime is a JavaScript
+bundle (see "The binary is not a wall"). Anyone who claims to know how a Conductor feature
+is implemented without having read one of those is guessing.
 
 So label every claim by how it is known. Three tiers, and the reader should always be
 able to tell which one they are getting:
@@ -90,6 +92,7 @@ In descending order of authority. Prefer the specific over the general.
 | `https://conductor.build/schemas/settings.schema.json`    | Full user-settings surface (also `settings.repo.schema.json`)          | `curl`                            |
 | `~/.conductor/settings.toml`, `~/.conductor/projects/`    | This user's own Conductor configuration                                | Read directly                     |
 | `.../bin/.internal/conductor-runtime`                     | A Bun-compiled JS bundle — `strings` yields near-source minified code  | `strings -a … \| grep`            |
+| `Contents/MacOS/conductor`, embedded assets               | The window's own code (`assets/main-*.js`), brotli-compressed          | Extract by path, `brotli -d`      |
 
 `llms-full.txt` is the single best source and it is one fetch. When the references
 don't cover a question, go there before anything else — grep it for `^# ` to see every
@@ -103,6 +106,16 @@ are `ClaudeAgentRunner`, `CodexAgentRunner`, `CursorAgentRunner` and `AcpAgentRu
 behind an `agentType` discriminator, or which Agent SDK options the Claude runner
 passes. That is real evidence and it belongs in an answer — described in our own
 words, like everything else under "The boundary".
+
+**The window's code is in the main executable, compressed.** Tauri embeds the whole front
+end — about 1,950 files of the React app, `assets/main-*.js` among them — in
+`Contents/MacOS/conductor`, each file brotli-compressed and indexed by its path. A plain
+`strings` pass lists the paths and none of the code, so grepping the runtime and finding
+nothing is not evidence that the app does not do it. Pull a file out by the table that
+points at it, `brotli -d` it, and what the window does is readable: which button starts
+what, and logic the docs only summarise. The run-mode check that stops other workspaces'
+run scripts lives there, not in the runtime. Extract into `$TMPDIR`, never into the
+repository.
 
 Read it carefully, though. A symbol name is **observed**; what the type _does_ is
 **inferred**, and a string in a binary may be dead code, a stale experiment, or a

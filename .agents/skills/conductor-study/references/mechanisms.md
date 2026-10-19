@@ -245,6 +245,19 @@ Also bundled: `gh` (40 MB, 2.100.0) and `watchexec` (7 MB, 2.3.2) — Conductor 
 dependencies rather than requiring them on `PATH`, the same reasoning behind bundling
 Claude Code and Codex.
 
+## Run mode — **observed** in the front end
+
+The check behind `run_mode = "nonconcurrent"` is in the window's own code
+(`assets/main-*.js`, extracted from the main executable — see SKILL.md), not in the
+runtime, and none of it appears in a plain `strings` pass. Before a run script starts, if
+the repository does not allow concurrent runs, the window lists the workspaces of the
+**same repository** and kills the run-script process of every other one, dropping it
+from its own process list on the spot. Other repositories are left alone. The kill is
+sent and not awaited, so the new script starts while the old one may still be shutting
+down under the five-second SIGTERM-then-SIGKILL sequence — a port held for those seconds
+is the new server's problem. **Inferred**: that is a choice rather than an oversight;
+nothing in the code says which.
+
 ## What is NOT knowable
 
 Do not invent answers about any of these:
@@ -255,7 +268,7 @@ Support/com.conductor.app/` holds a SQLite `conductor.db` (hundreds of MB on a u
   not read, and the user's live database is not the place to go reading it.
 - How diffs and the terminal are rendered beyond the library names above — which
   component does what is inference.
-- Scheduling, concurrency limits, how sessions are supervised.
+- How the runtime supervises a session it has started.
 - Anything about the Cloud backend beyond "Vercel Sandbox", which is documented.
 
 (The UI framework used to head this list. It is now answered: Tauri around a React app,
