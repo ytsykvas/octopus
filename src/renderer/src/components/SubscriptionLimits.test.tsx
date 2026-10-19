@@ -205,6 +205,20 @@ describe('the account block', () => {
     expect(refresh).toHaveBeenCalled()
   })
 
+  // Arrows that stop turning for "Reduce motion" and only dim read as a control
+  // that is unavailable; a loader standing still still reads as working.
+  it('shows a loader in place of the arrows while it reads', () => {
+    const { container, rerender } = render(
+      <SubscriptionLimits subscription={controller({ busy: true })} />
+    )
+    expect(container.querySelector('.lucide-loader-circle')).not.toBeNull()
+    expect(container.querySelector('.lucide-refresh-cw')).toBeNull()
+
+    rerender(<SubscriptionLimits subscription={controller({ busy: false })} />)
+    expect(container.querySelector('.lucide-loader-circle')).toBeNull()
+    expect(container.querySelector('.lucide-refresh-cw')).not.toBeNull()
+  })
+
   // Starting a session takes a moment, and a second press would start a second.
   it('will not be pressed twice while it is reading', () => {
     render(<SubscriptionLimits subscription={controller({ busy: true })} />)

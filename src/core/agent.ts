@@ -789,9 +789,22 @@ export function startSession(options: SessionOptions, hooks: SessionHooks): Agen
     async setSkills(skillOverrides) {
       // The whole map every time, never a difference: `applyFlags` sends every
       // flag together, and the map is the record's whole answer. Turning a
-      // skill back on is an explicit `'on'` in it — a key left out does not
-      // undo a withhold the session started with (`skillOverridesFor`).
-      skills = skillOverrides
+      // skill back on is an explicit `'on'` — a key left out does not undo a
+      // withhold the session started with — so every key this session was
+      // told before and the new map no longer names is said `'on'`: a key the
+      // record stopped naming is one it no longer withholds. Without it, taking
+      // a skill off a default list reached the record and not the session.
+      const next: Record<string, SkillOverride> = { ...skillOverrides }
+      for (const key of Object.keys(skills)) next[key] ??= 'on'
+
+      // Nothing moved, nothing sent: `applyFlags` carries the effort too, and
+      // a push that changes no skill would undo an `/effort` given in the
+      // session — which `pushEffort`'s guard exists to keep.
+      // Every key of the old map is in `next` by now, so one comparison covers
+      // a value that moved and a key that is new.
+      if (Object.keys(next).every((key) => next[key] === skills[key])) return
+
+      skills = next
       await applyFlags()
     },
 
@@ -889,8 +902,34 @@ export function mapMessage(message: SDKMessage): AgentEvent[] {
         // is the whole basis of resuming after a restart. It arrives more than
         // once: every slash command produces a fresh one, so whoever records it
         // has to tolerate being told the same id repeatedly.
+        //
+        // It also names the mode the session actually started in, which is
+        // how a request for `auto` that the CLI turned down becomes visible.
         case 'init':
-          return [{ type: 'session_started', sessionId: message.session_id }]
+          return [
+            { type: 'session_started', sessionId: message.session_id },
+            { type: 'mode_reported', mode: message.permissionMode }
+          ]
+
+        // Sent when the session's state moves, and carrying the mode when that
+        // is what moved — the CLI's own fall back out of auto mode among them.
+        case 'status':
+          return message.permissionMode === undefined
+            ? []
+            : [{ type: 'mode_reported', mode: message.permissionMode }]
+
+        /* A call refused without a prompt. Under auto mode that is the
+           classifier's verdict, and without this line it would show only as a
+           tool that failed. */
+        case 'permission_denied':
+          return [
+            {
+              type: 'permission_denied',
+              toolName: message.tool_name,
+              byClassifier: message.decision_reason_type === 'classifier',
+              reason: message.decision_reason ?? null
+            }
+          ]
 
         case 'commands_changed':
           return [{ type: 'commands_changed', commands: toAgentCommands(message.commands) }]

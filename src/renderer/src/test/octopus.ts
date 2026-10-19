@@ -337,6 +337,7 @@ function defaultConfig(): Config {
     cloneDirectory: '',
     settingSources: 'none' as const,
     workingMode: 'default' as const,
+    planExecutionMode: 'auto' as const,
     effort: 'medium',
     model: null,
     planModel: null,

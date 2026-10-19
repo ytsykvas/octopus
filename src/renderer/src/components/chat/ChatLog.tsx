@@ -10,9 +10,11 @@ import {
   Play,
   Repeat,
   ShieldAlert,
+  ShieldX,
   TriangleAlert,
   Undo2,
-  Wrench
+  Wrench,
+  ZapOff
 } from 'lucide-react'
 import {
   AssistantRuntimeProvider,
@@ -34,6 +36,7 @@ import type { ChatEntry } from '@core/transcript.js'
 
 import { Button } from '../Button.js'
 import { DisclosureChevron } from '../Disclosure.js'
+import { ColouredLines, useColouredText } from '../diff/colouredText.js'
 import { named } from '../diff/invisible.js'
 import { shown } from '../diff/shown.js'
 import type { Streaming } from '../../hooks/useChat.js'
@@ -530,6 +533,12 @@ function AgentRow({
     case 'model_refusal_no_fallback':
       return <RefusalNoFallbackRow event={event} />
 
+    case 'permission_denied':
+      return <DeniedRow event={event} />
+
+    case 'auto_mode_unavailable':
+      return <AutoFellBackRow event={event} />
+
     // A record, not a row. What it names is struck through above it, and a line
     // of its own would say the same thing twice.
     case 'retracted':
@@ -653,6 +662,10 @@ function NoteCard({
 }: {
   readonly note: Extract<MessageBlock, { kind: 'note' }>
 }): React.JSX.Element {
+  // In its file's colours, as the viewer and the diff draw the same lines: a
+  // few lines out of context are where colour helps most.
+  const { lines, tokens } = useColouredText(note.path, note.quote)
+
   return (
     <div className="border-line bg-canvas text-ink min-w-0 overflow-hidden rounded-[var(--radius-control)] border">
       <p className="text-ink-soft border-line flex min-w-0 items-center gap-1.5 border-b px-2 py-1 font-mono text-[11px]">
@@ -663,8 +676,8 @@ function NoteCard({
         {note.suffix !== null && <span className="text-ink-faint shrink-0">{note.suffix}</span>}
       </p>
       {/* Not wrapped: code read with its lines broken is code misread. */}
-      <pre className="text-ink-soft overflow-x-auto px-2 py-1 font-mono text-[11px] leading-[16px] whitespace-pre">
-        {note.quote}
+      <pre className="diff-code text-ink overflow-x-auto px-2 py-1 font-mono text-[11px] leading-[16px] whitespace-pre">
+        <ColouredLines lines={lines} tokens={tokens} />
       </pre>
       {note.text !== '' && <p className="border-line border-t px-2 py-1">{note.text}</p>}
     </div>
@@ -1435,9 +1448,60 @@ function RefusalNoFallbackRow({
 }
 
 /**
- * What both refusal lines are made of.
+ * The line where a tool call was refused without anyone being asked.
  *
- * Shared because the two differ in one sentence and one glyph, and the markup
+ * Auto mode's classifier, mostly, and the reason this is drawn: the call it
+ * blocked otherwise shows only as a tool that failed, and a mode that decides
+ * on the user's behalf has to leave those decisions where they can be read.
+ * The reason is the deciding component's own prose, shown as given.
+ */
+function DeniedRow({
+  event
+}: {
+  event: Extract<AgentEvent, { type: 'permission_denied' }>
+}): React.JSX.Element {
+  const { t } = useTranslation()
+
+  return (
+    <RefusalRow
+      icon={<ShieldX aria-hidden size={12} />}
+      said={t(event.byClassifier ? 'chat.deniedByAuto' : 'chat.deniedByRule', {
+        tool: event.toolName
+      })}
+      explanation={event.reason}
+    />
+  )
+}
+
+/**
+ * The line where auto mode was given up, which is why the chip moved.
+ *
+ * The chip changed by itself, and this is the only account of it: the mode it
+ * went to, and the SDK's reason when there was one — which plan, model or
+ * setting stood in the way.
+ */
+function AutoFellBackRow({
+  event
+}: {
+  event: Extract<AgentEvent, { type: 'auto_mode_unavailable' }>
+}): React.JSX.Element {
+  const { t } = useTranslation()
+
+  return (
+    <RefusalRow
+      icon={<ZapOff aria-hidden size={12} />}
+      said={t('chat.autoFellBack', {
+        mode: t(event.fallback === 'acceptEdits' ? 'chat.modeAcceptEdits' : 'chat.modeDefault')
+      })}
+      explanation={event.reason}
+    />
+  )
+}
+
+/**
+ * What the refusal and denial lines are made of.
+ *
+ * Shared because the lines differ in one sentence and one glyph, and the markup
  * under them is load-bearing — the explanation is a second paragraph, so this
  * is the one row in the quiet register that is a `div` rather than a `p`.
  * Two copies of that would drift the first time either is touched.
