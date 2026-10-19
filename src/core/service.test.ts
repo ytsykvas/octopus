@@ -9766,6 +9766,66 @@ describe('the agent chat', () => {
       expect(agents).toHaveLength(0)
     })
 
+    /*
+     * A message sent and the tab closed at once: the send's session was still
+     * starting, so the close found nothing to end, and the start then
+     * registered a session on a closed conversation — one nothing would ever
+     * end, since removing the workspace walks the open ones only. Whichever
+     * way the race falls, no session may be left on it, and none running.
+     */
+    it('leaves no session on a conversation closed while its session started', async () => {
+      const { service, workspaceId } = await withWorkspace()
+      const first = await service.openChat(workspaceId)
+      await service.createChat(workspaceId)
+
+      const sent = service.sendToChat(first.id, 'go').catch(() => undefined)
+      await service.closeChat(first.id)
+      await sent
+
+      expect(agents.every((started) => started.closed() > 0)).toBe(true)
+      await expect(service.sessionUsage(first.id)).resolves.toEqual({
+        context: null,
+        autoCompact: null
+      })
+    })
+
+    // The narrow half of the same race: the start reads the record between the
+    // close being decided and it being written. Held at the start's last await
+    // and let go the moment the close begins, it would read the conversation
+    // as open; the close is written first so that what it registers then is
+    // still there to be ended.
+    it('ends a session that registered while the close was being written', async () => {
+      let release: () => void = () => undefined
+      let asked = false
+      const { service, workspaceId } = await withWorkspace({
+        windowOverride: () => {
+          asked = true
+          return new Promise((resolve) => {
+            release = () => {
+              resolve(null)
+            }
+          })
+        }
+      })
+      const first = await service.openChat(workspaceId)
+      await service.createChat(workspaceId)
+      const sent = service.sendToChat(first.id, 'go').catch(() => undefined)
+      await vi.waitFor(() => {
+        expect(asked).toBe(true)
+      })
+
+      const closing = service.closeChat(first.id)
+      release()
+      await closing
+      await sent
+
+      expect(agents.every((started) => started.closed() > 0)).toBe(true)
+      await expect(service.sessionUsage(first.id)).resolves.toEqual({
+        context: null,
+        autoCompact: null
+      })
+    })
+
     // The session that has just ended may still say something. It must not
     // leave the record `error`, red on the day it is reopened.
     it('keeps a closed conversation idle when its session speaks late', async () => {

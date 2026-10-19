@@ -3730,7 +3730,13 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
     // so it reached nothing, and the conversation started on what it had been.
     // Two things reach here that did not before a rewind could start one: a
     // message joining a start somebody else began.
-    const chat = requireChat(asked.id)
+    //
+    // Open, too: a tab closed while this ran found no session to end, and one
+    // registered now would be on a conversation nothing ends any more — the
+    // workspace's removal walks the open ones. `closeChat` records the close
+    // before it ends the session, so a start either registers in time to be
+    // ended or reads the close here.
+    const chat = requireOpenChat(asked.id)
 
     // A rewind's cut, applied by this session and settled by it: once a turn
     // has run on top of it, a plain resume follows the new branch, and before
@@ -5268,20 +5274,26 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
         throw new ChatError('lastChat', { chatId }, `Chat ${chatId} is its workspace's only one.`)
       }
 
-      await closeOneChat(chat)
       // Through `commitChats` rather than a plain commit: the workspace's
       // status is derived from its conversations, and one of them has left the
       // tabs — closing the tab that was running leaves the workspace idle, and
       // the list has to hear about it.
       //
       // Kept rather than removed. `status` goes back to idle with the session,
-      // or a conversation closed mid-turn would reopen claiming to be working.
+      // or a conversation closed mid-turn would reopen claiming to be working;
+      // a late event from the session cannot move it, since `setChatStatus`
+      // ignores a closed conversation.
       let expired: Chat[] = []
       await commitChats(chat.workspaceId, (current) => {
         const closed = updateChat(current, chatId, { closedAt: now(), status: 'idle' })
         expired = expiredClosedChats(closed, chat.workspaceId)
         return expired.reduce((next, gone) => removeChat(next, gone.id), closed)
       })
+
+      // The session after the record, not before: a start still under way
+      // re-reads the record just before it registers, so it either registered
+      // already and is ended here, or reads the close and refuses (`startFor`).
+      await closeOneChat(chat)
 
       // Only the records past the keep limit lose their history, and after the
       // commit, for the reason `discardHistories` gives.

@@ -696,6 +696,13 @@ conversation is `/clear`, which does it without leaving the pane with nothing to
 draw — and does it with a confirmation, which a second route through the tab's
 menu would not have carried.
 
+The record is written **before** the session is ended, and `startFor` re-reads
+it with `requireOpenChat` just before it registers. A message sent as the tab
+closed has a session still starting, which the close cannot see; ending first
+and writing second let that start register on a closed conversation, and
+nothing ends one of those — `closeChatsOf` walks the open ones. In this order a
+start either registered in time to be ended, or reads the close and refuses.
+
 A closed conversation is invisible to everything that means "the tabs of this
 workspace" — `chatsOfWorkspace` skips it, so the cap, the strip, the workspace's
 status and `openChat` never see it. Whatever has to reach the history as well —
