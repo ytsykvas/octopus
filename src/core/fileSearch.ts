@@ -1,3 +1,4 @@
+import { parseStaged, parseUntracked } from './fileTree.js'
 import type { GitExec } from './git.js'
 
 /**
@@ -25,12 +26,26 @@ export const MAX_MENTION_RESULTS = 8
  * walking the tree is what makes `.gitignore` apply without this module
  * knowing the rules.
  *
+ * Files only. A submodule is one entry in the index and a repository nested in
+ * the worktree one among the untracked, and either, picked, attached a folder's
+ * path as a file. They are told apart the way the Files tab tells them — by the
+ * mode in `--stage` and the trailing slash in `--others` — which is also why
+ * this is two reads: `--stage` prints the untracked without a mode. Its costs
+ * are `readFileTree`'s and are said there: the mode's bytes against git's
+ * output ceiling, and `Promise.all` because `parallel.ts` is not safe for the
+ * window.
+ *
  * NUL-separated, because a path may contain anything but NUL and a newline in a
  * file name would otherwise split one file into two.
  */
 export async function listFiles(exec: GitExec): Promise<string[]> {
-  const output = await exec(['ls-files', '-z', '--cached', '--others', '--exclude-standard'])
-  return [...new Set(output.split('\0').filter((path) => path !== ''))]
+  const [staged, others] = await Promise.all([
+    exec(['ls-files', '-z', '--stage']),
+    exec(['ls-files', '-z', '--others', '--exclude-standard'])
+  ])
+  return [...parseStaged(staged), ...parseUntracked(others)]
+    .filter((entry) => entry.kind === 'file')
+    .map((entry) => entry.path)
 }
 
 /**

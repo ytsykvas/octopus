@@ -962,6 +962,16 @@ describe('workspaces', () => {
       expect(found.map(({ path }) => path)).toEqual(['readme-link.md'])
     })
 
+    // git names it `nested/`, a folder; picked, it attached a folder as a file.
+    it('leaves out a repository nested in the worktree', async () => {
+      const { service, projectId } = await withProject()
+      const workspace = await service.createWorkspaceIn(projectId)
+      await mkdir(join(workspace.path, 'nested'))
+      await run('git', ['init', '-q'], { cwd: join(workspace.path, 'nested') })
+
+      await expect(service.searchFiles(workspace.id, 'nested')).resolves.toEqual([])
+    })
+
     // Git still lists a tracked file that was deleted from the disk.
     it('leaves out a file that is listed but gone', async () => {
       const { service, projectId } = await withProject()
