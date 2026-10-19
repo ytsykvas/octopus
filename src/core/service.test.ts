@@ -4087,6 +4087,18 @@ describe('the agent chat', () => {
     session_id: 'sess-1'
   } as unknown as SDKMessage
 
+  /** What a session that was stopped says last. */
+  const abortedResultMessage = {
+    type: 'result',
+    subtype: 'error_during_execution',
+    is_error: true,
+    total_cost_usd: 0,
+    duration_ms: 1,
+    usage: { input_tokens: 1, output_tokens: 1 },
+    terminal_reason: 'aborted',
+    session_id: 'sess-1'
+  } as unknown as SDKMessage
+
   /** A service with a project, a workspace and a stubbed agent. */
   async function withWorkspace(extra: ServiceOptions = {}): Promise<{
     service: OctopusService
@@ -6521,6 +6533,33 @@ describe('the agent chat', () => {
       await vi.waitFor(() => {
         expect(service.listChats(workspaceId)[0]?.status).toBe('running')
       })
+    })
+
+    /*
+     * What the window hears last is what is stored. Both status writes used to
+     * decide whether to announce against the record as it was before either
+     * landed, so a question withdrawn before its wait was written announced
+     * the wait and never its end: the tab stayed amber over a running turn.
+     */
+    it('tells the window the turn goes on when a question is withdrawn at once', async () => {
+      const { service, workspaceId, events } = await withWorkspace()
+      const chat = await service.openChat(workspaceId)
+      await service.sendToChat(chat.id, 'run it')
+      const heard: ChatStatusEvent[] = []
+      service.onChatStatus((event) => heard.push(event))
+
+      const withdraw = new AbortController()
+      const decision = agent().ask('Bash', { command: 'ls' }, undefined, undefined, {
+        signal: withdraw.signal
+      })
+      await waitForRequest(events)
+      withdraw.abort()
+      await decision
+
+      await vi.waitFor(() => {
+        expect(heard.at(-1)?.status).toBe('running')
+      })
+      expect(service.listChats(workspaceId)[0]?.status).toBe('running')
     })
 
     it('takes nothing back from a question already answered', async () => {
@@ -9771,21 +9810,36 @@ describe('the agent chat', () => {
     it('keeps a closed conversation idle when its session speaks late', async () => {
       const { service, workspaceId } = await withWorkspace()
       const first = await service.openChat(workspaceId)
-      await service.createChat(workspaceId)
+      const second = await service.createChat(workspaceId)
       await service.sendToChat(first.id, 'go')
       await service.closeChat(first.id)
+      const heard: ChatStatusEvent[] = []
+      service.onChatStatus((event) => heard.push(event))
 
-      agent().emit({
-        type: 'result',
-        subtype: 'error_during_execution',
-        is_error: true,
-        total_cost_usd: 0,
-        duration_ms: 1,
-        usage: { input_tokens: 1, output_tokens: 1 },
-        terminal_reason: 'aborted',
-        session_id: 'sess-1'
-      } as unknown as SDKMessage)
-      await new Promise((resolve) => setTimeout(resolve, 20))
+      agent().emit(abortedResultMessage)
+      // A write queued after the late one, so it has landed by the time this has.
+      await new Promise((resolve) => setTimeout(resolve, 0))
+      await service.renameChat(second.id, 'barrier')
+
+      const [closed] = await service.listClosedChats(workspaceId)
+      expect(closed?.chat.status).toBe('idle')
+      // Nor is the window told it went red: the dot would be drawn that way.
+      expect(heard).toEqual([])
+    })
+
+    // The record is closed before the session is, so the session can still be
+    // speaking while that write is on its way.
+    it('keeps a closed conversation idle when its session speaks as it closes', async () => {
+      const { service, workspaceId } = await withWorkspace()
+      const first = await service.openChat(workspaceId)
+      const second = await service.createChat(workspaceId)
+      await service.sendToChat(first.id, 'go')
+
+      const closing = service.closeChat(first.id)
+      agent().emit(abortedResultMessage)
+      await closing
+      await new Promise((resolve) => setTimeout(resolve, 0))
+      await service.renameChat(second.id, 'barrier')
 
       const [closed] = await service.listClosedChats(workspaceId)
       expect(closed?.chat.status).toBe('idle')
@@ -9958,6 +10012,48 @@ describe('the agent chat', () => {
         name: 'ChatError',
         code: 'lastChat'
       })
+      expect(service.listChats(workspaceId)).toHaveLength(1)
+    })
+
+    // Decided inside the commit: two closes of the last two tabs each saw the
+    // other still open, and the workspace was left with none.
+    it('keeps one conversation open when the last two close at once', async () => {
+      const { service, workspaceId } = await withWorkspace()
+      const first = await service.openChat(workspaceId)
+      const second = await service.createChat(workspaceId)
+
+      const [closedFirst, closedSecond] = await Promise.allSettled([
+        service.closeChat(first.id),
+        service.closeChat(second.id)
+      ])
+
+      expect(closedFirst.status).toBe('fulfilled')
+      expect(closedSecond).toMatchObject({ status: 'rejected', reason: { code: 'lastChat' } })
+      expect(service.listChats(workspaceId)).toHaveLength(1)
+    })
+
+    // And the one refused keeps its session: it is still a tab, mid-turn.
+    it('leaves the session of the one it refuses running', async () => {
+      const { service, workspaceId } = await withWorkspace()
+      const first = await service.openChat(workspaceId)
+      const second = await service.createChat(workspaceId)
+      await service.sendToChat(first.id, 'one')
+      await service.sendToChat(second.id, 'two')
+
+      await Promise.allSettled([service.closeChat(first.id), service.closeChat(second.id)])
+
+      expect(agents.map((one) => one.closed())).toEqual([1, 0])
+    })
+
+    // Two windows closing the same tab: the close they asked for happened.
+    it('closes the same conversation asked for twice at once', async () => {
+      const { service, workspaceId } = await withWorkspace()
+      const first = await service.openChat(workspaceId)
+      await service.createChat(workspaceId)
+
+      await expect(
+        Promise.all([service.closeChat(first.id), service.closeChat(first.id)])
+      ).resolves.toEqual([undefined, undefined])
       expect(service.listChats(workspaceId)).toHaveLength(1)
     })
 
