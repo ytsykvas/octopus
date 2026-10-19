@@ -1870,6 +1870,7 @@ export const en = {
       'Could not determine a base branch in {{path}}. Check out the branch you want and try again.',
     baseUnknown:
       'Could not find where this workspace branched off {{branch}}. The branch may have been renamed or deleted — check the project settings.',
+    notRemoved: '{{path}} is still there: it could not be removed.',
     duplicateProject: 'This repository is already added as project "{{name}}".',
     notConnected: 'Could not reach GitHub. Check the account in Settings.',
     listFailed: 'GitHub returned something unexpected.',

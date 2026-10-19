@@ -9,14 +9,14 @@
  */
 
 import { execFile } from 'node:child_process'
-import { access, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
+import { access, mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { promisify } from 'node:util'
 
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 
-import { readWorkspaceDiff } from './diff.js'
+import { DiffError, readWorkspaceDiff } from './diff.js'
 import { type GitExec, gitIn } from './git.js'
 import { revertFile } from './revert.js'
 
@@ -286,6 +286,26 @@ describe('revertFile', () => {
 
     expect(await exists('new.txt')).toBe(false)
     expect(await changed()).toEqual([])
+  })
+
+  /*
+   * Any other failure is not "already gone", and saying it was is a
+   * destructive button reporting success over a file still on disk. A folder
+   * is the failure every user meets alike — `unlink` will not remove one,
+   * whoever asks — where a permission test would pass for root.
+   */
+  it('says so when the path could not be removed', async () => {
+    await mkdir(join(dir, 'folder'))
+    await writeFile(join(dir, 'folder', 'inside.txt'), 'kept\n', 'utf8')
+
+    const failure = revert('folder')
+
+    await expect(failure).rejects.toBeInstanceOf(DiffError)
+    await expect(failure).rejects.toMatchObject({
+      code: 'notRemoved',
+      params: { path: 'folder' }
+    })
+    expect(await exists('folder/inside.txt')).toBe(true)
   })
 
   it('refuses a path that leaves the workspace', async () => {
