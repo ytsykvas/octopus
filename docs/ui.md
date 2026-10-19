@@ -335,7 +335,10 @@ once it has waited a quarter of a second: every message passes through
 `queued`, one sent to an idle agent for two milliseconds, and marking at once
 would flash the word under each of them. Its tooltip says what
 Stop does not do: an interrupt leaves a queued message in place (the receipt
-lists it under `still_queued`) and it then runs as a turn of its own. The
+lists it under `still_queued`) and it then runs as a turn of its own — which
+the tab shows as running: `started` for a message after the previous turn's
+result sets the chat `running` again (`handleEvent`), where before only a send
+did and the agent worked under an idle tab with no Stop. The
 protocol can cancel it, but the installed SDK offers no typed call for that, so
 the mark tells the truth rather than Stop pretending to do more.
 
@@ -3129,8 +3132,9 @@ committed `.claude/settings.json`, and the user's own file carries a
 file it came from, which is where the change has to be made.
 
 **Shown, never edited.** `.claude/settings.local.json` is one of the files the
-worktree's trust digest is taken over, so writing to it would put the project
-back to unapproved and empty the skill listing with it. A refusal is drawn
+worktree's trust digest is taken over — all of it, or all but its allow rules
+when the carry list brought it — so writing to it could put the project back to
+unapproved and empty the skill listing with it. A refusal is drawn
 first and in the danger tone: a reader looking for why something will not run
 needs it before a list of what will.
 

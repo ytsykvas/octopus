@@ -807,6 +807,18 @@ at — a private key, say — into the trust card; leaving it out is how a hook 
 to run without anybody being shown it. Retargeting such a link therefore asks
 again, while nothing else about the repository has changed.
 
+The allow rules of a `settings.local.json` the project's carry list brought are
+left out of the digest (`carriedTrust.ts`): the CLI adds to them on every
+"always allow", so a carried copy asked again in every new worktree. Only when
+the file is reached through no link, a carry line names it, and git tracks it
+neither in the worktree nor where it was carried from — all compared without
+case, as macOS reads paths, so neither a line spelled
+`.CLAUDE/settings.local.json` nor a committed `.Claude/settings.local.json` gets
+a repository's file through. The rest of the file — hooks, MCP servers, `env`,
+the other permissions — is still digested, and shown as what is left; contents
+that are not a JSON object count whole. A digest approved before this counted
+the rules, so such a project is asked once more.
+
 A linked **directory** is the same: one entry, never walked. The listing is
 walked by hand, one level at a time, because `readdir`'s own `recursive` stopped
 meaning that between Node 26.0 and 26.11 — the newer one walks through a linked

@@ -25,7 +25,7 @@
 
 import { constants, copyFile, mkdir, readFile, writeFile } from 'node:fs/promises'
 import { homedir } from 'node:os'
-import { dirname, isAbsolute, join } from 'node:path'
+import { dirname, isAbsolute, join, normalize } from 'node:path'
 
 import { z } from 'zod'
 
@@ -86,6 +86,14 @@ export async function writeCarryList(
 
   await mkdir(dirname(path), { recursive: true })
   await writeFile(path, contents, 'utf8')
+}
+
+/**
+ * The key two lines are the same file by: normalised, and case-folded — on
+ * macOS `.CLAUDE/x` and `.claude/x` land in one file.
+ */
+export function sameFile(path: string): string {
+  return normalize(path).toLowerCase()
 }
 
 /** One line of the list: where the file lands, and where it comes from. */
@@ -184,8 +192,11 @@ export function carryListForExport(list: string | null): string | null {
  *
  * Only ever a *read*. Where the file lands is decided by `path` alone, which
  * `carriedFiles` has already confined to the worktree.
+ *
+ * Exported for the trust digest, which has to know where a carried file came
+ * from before it may call the file the user's own (`carriedTrust.ts`).
  */
-function sourcePath(source: string | null, repoPath: string, path: string): string {
+export function carrySource({ path, from: source }: CarriedFile, repoPath: string): string {
   if (source === null) return join(repoPath, path)
 
   const expanded =
@@ -266,7 +277,8 @@ export async function carryInto(
   const written: string[] = []
   const missing: string[] = []
 
-  for (const { path, from: source } of files) {
+  for (const file of files) {
+    const { path } = file
     // `carriedFiles` already drops a destination that climbs out, and every
     // list today is built from it — but this is the function that writes, and
     // `unlinkedInside` below walks segments without ever objecting to `..`.
@@ -276,7 +288,7 @@ export async function carryInto(
       continue
     }
 
-    const from = sourcePath(source, repoPath, path)
+    const from = carrySource(file, repoPath)
     const to = join(workspacePath, path)
 
     // Before the mkdir, which creates the intermediate directories itself — a

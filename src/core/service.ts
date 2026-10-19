@@ -149,6 +149,7 @@ import { gitIn, isIgnored, withIndexCopy } from './git.js'
 import { FETCH_OPTIONS, resolveBase } from './remotes.js'
 import { type InstructionSource, instructionSources } from './instructionSources.js'
 import { assertShown, capabilityFiles, type RepositoryTrust, trustDigest } from './repoTrust.js'
+import { narrowCarried } from './carriedTrust.js'
 import {
   effectiveInstruction,
   type InstructionKind,
@@ -2512,6 +2513,18 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
       )
     }
 
+    /*
+     * A message the CLI held in its queue, taken: a turn is running for it. Most
+     * of the time one already was and this changes nothing, but a message not
+     * folded into the turn it was sent during — and after a Stop, always — is
+     * run as a turn of its own once that one has ended, and only `sendToChat`
+     * said `running` before. Through `carryOn`, so a question still open keeps
+     * its amber. `started` alone: `finished` arrives after a result too.
+     */
+    if (event.type === 'message_queue' && event.state === 'started') {
+      background(chat, carryOn(chat.id))
+    }
+
     if (event.type === 'error') {
       background(chat, setChatStatus(chat.id, 'error'))
     }
@@ -3421,9 +3434,19 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
    * Three copies of this used to compute the digest each for itself, and an
    * approval that recorded one digest while the gate checked another would
    * have asked forever.
+   *
+   * The allow rules of a `settings.local.json` the user's carry list put
+   * there are not the repository's, and are left out (`carriedTrust.ts`) —
+   * otherwise every worktree carrying a file the CLI keeps rewriting asked
+   * again.
    */
   async function settingsTrustIn(cwd: string, project: Project): Promise<RepositoryTrust> {
-    const files = await capabilityFiles(cwd)
+    const files = await narrowCarried(await capabilityFiles(cwd), {
+      cwd,
+      repoPath: project.repoPath,
+      carried: await carriedIn(project, cwd),
+      execIn: makeExec
+    })
     const digest = trustDigest(files)
 
     // Nothing to grant is nothing to approve, which is most repositories.
