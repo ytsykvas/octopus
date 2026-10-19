@@ -126,12 +126,14 @@ const ITEM_LABELS = {
   'instruction.multiAgentReview': 'instructions.multiAgentReview',
   'instruction.resolveConflicts': 'instructions.resolveConflicts',
   'project.baseBranch': 'project.baseBranch',
-  'project.envFile': 'project.envFile'
+  'project.envFile': 'project.envFile',
+  'project.carry': 'project.files'
 } as const satisfies Record<SourceItemId, string>
 
 /** The sections that draw where a setting comes from. */
 const SOURCED_SECTIONS: readonly SectionId[] = [
   'scripts',
+  'files',
   'instructions',
   'git',
   'env',
@@ -142,6 +144,7 @@ const SOURCED_SECTIONS: readonly SectionId[] = [
 function sectionOf(id: SourceItemId): SectionId {
   if (id.startsWith('script.')) return 'scripts'
   if (id.startsWith('instruction.')) return 'instructions'
+  if (id === 'project.carry') return 'files'
   return id === 'project.baseBranch' ? 'git' : 'env'
 }
 
@@ -687,16 +690,21 @@ export function ProjectSettings({
               lead to genuinely differs: one file is run, the others are
               copied. */}
           {section === 'files' && (
-            <FileEditor
+            <LayeredEditor
               label={t('project.files')}
               hint={t('project.filesHint')}
               placeholder={'.env\nconfig/master.key'}
               rows={12}
+              view={origins.get('project.carry')}
               read={async () => {
                 const result = await window.octopus.projects.readCarryList(project.id)
                 return result.ok ? result.value : null
               }}
               save={(contents) => window.octopus.projects.saveCarryList(project.id, contents)}
+              onPreferLocal={(on) => {
+                preferLocal('project.carry', on)
+              }}
+              onSaved={reloadOrigins}
             />
           )}
 

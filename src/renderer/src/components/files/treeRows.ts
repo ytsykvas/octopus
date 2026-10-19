@@ -64,7 +64,8 @@ export function visibleRows(
     })
   }
 
-  // A folder read from disk — ignored, or a submodule — may not be read yet.
+  // A folder read from disk — ignored, a submodule, a nested repository — may
+  // not be read yet.
   const inside = (node: TreeNode, level: number): void => {
     if (!node.childrenFromDisk) {
       walk(node.path, level)

@@ -24,7 +24,7 @@ export interface FileTreeController {
   readonly listings: ReadonlyMap<string, ListingState>
   readonly truncated: boolean
   readonly error: string | null
-  /** Reads a folder from disk — ignored, or a submodule. The caller asks only for one not yet held. */
+  /** Reads a folder from disk — ignored, a submodule, a nested repository. The caller asks only for one not yet held. */
   readonly openFolder: (path: string) => void
   readonly refresh: () => void
 }

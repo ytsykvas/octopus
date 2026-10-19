@@ -924,6 +924,34 @@ function compactionFrom(message: object): AgentEvent {
   }
 }
 
+/**
+ * A message's place in the CLI's queue, as the frame says it.
+ *
+ * Not in the SDK's typed union — the CLI sends it when it advertises
+ * `msg_lifecycle_v1` — so it is recognised by its shape rather than by a case,
+ * and a frame that does not match says nothing. `command_uuid` is the uuid the
+ * message was sent with (`userMessage`).
+ */
+const LifecycleSchema = z.object({
+  type: z.literal('command_lifecycle'),
+  command_uuid: z.string(),
+  state: z.enum(['queued', 'started', 'completed', 'cancelled'])
+})
+
+function fromLifecycle(message: unknown): AgentEvent[] {
+  const lifecycle = LifecycleSchema.safeParse(message)
+  if (!lifecycle.success) return []
+
+  const { command_uuid: messageId, state } = lifecycle.data
+  return [
+    {
+      type: 'message_queue',
+      messageId,
+      state: state === 'completed' || state === 'cancelled' ? 'finished' : state
+    }
+  ]
+}
+
 export function mapMessage(message: SDKMessage): AgentEvent[] {
   switch (message.type) {
     case 'system':
@@ -1058,7 +1086,7 @@ export function mapMessage(message: SDKMessage): AgentEvent[] {
       ]
 
     default:
-      return []
+      return fromLifecycle(message)
   }
 }
 

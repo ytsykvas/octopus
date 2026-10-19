@@ -16,6 +16,7 @@ import {
   projectSkillsRoot,
   resolvesInside,
   rootDir,
+  unlinkedInside,
   skillsDirOf,
   stateFile,
   stateTempFile,
@@ -165,6 +166,41 @@ describe('insideWorktree', () => {
     expect(insideWorktree('../outside.txt')).toBe(false)
     expect(insideWorktree('a/../../outside.txt')).toBe(false)
     expect(insideWorktree('')).toBe(false)
+  })
+})
+
+describe('unlinkedInside', () => {
+  let root: string
+
+  beforeEach(async () => {
+    root = await mkdtemp(join(tmpdir(), 'octopus-unlinked-'))
+  })
+  afterEach(async () => {
+    await rm(root, { recursive: true, force: true })
+  })
+
+  it('accepts a path with no link along it, present or not', async () => {
+    await mkdir(join(root, 'config'))
+
+    await expect(unlinkedInside(root, 'config/master.key')).resolves.toBe(true)
+    await expect(unlinkedInside(root, 'absent/master.key')).resolves.toBe(true)
+  })
+
+  it('refuses a path through a linked directory', async () => {
+    await symlink(tmpdir(), join(root, 'cfg'))
+
+    await expect(unlinkedInside(root, 'cfg/id_rsa')).resolves.toBe(false)
+  })
+
+  /*
+   * `x/../cfg/id_rsa` is `cfg/id_rsa` to every `join` that later reads or
+   * writes it. Walked raw, the walk stopped at the missing `x` and answered
+   * "no link" for a path whose `cfg` was one.
+   */
+  it('walks the path as it will be used, not as it was spelled', async () => {
+    await symlink(tmpdir(), join(root, 'cfg'))
+
+    await expect(unlinkedInside(root, 'x/../cfg/id_rsa')).resolves.toBe(false)
   })
 })
 

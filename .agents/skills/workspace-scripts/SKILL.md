@@ -215,9 +215,11 @@ asking them for anything — `git worktree list`, or a sibling directory with th
 same remote — and propose the two lines rather than the question.
 
 Those sources stay on this machine: export strips them out of `.octopus/carry`,
-so what the repository carries is still just the list of files. Which also means
-pressing **Import** replaces the list and takes the sources with it — worth
-saying out loud to whoever will press it.
+so what the repository carries is still just the list of files. Coming back the
+same holds: a trusted repository's list is added to the project's own as each
+worktree is prepared, paths only and only those git ignores there, so a line
+with a source belongs in the project's list, which wins on the same path. Until
+the repository is trusted only the project's own list is carried.
 
 ## Where to put what
 

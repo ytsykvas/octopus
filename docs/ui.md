@@ -324,6 +324,21 @@ as a messenger's does — read off the separators' positions on each scroll
 (`useDayAtTop`), since a sticky separator could never leave the message that
 holds it.
 
+**A message sent while the agent works says "Queued" beside its hour until the
+agent takes it.** The CLI holds such a message in its queue and folds it into
+the running turn between tool rounds, or starts a turn for it once the current
+one ends — measured on a live session, seconds after it was sent. It says so in
+`command_lifecycle` frames, which `mapMessage` turns into `message_queue` and
+`useChat` keeps as a set of message ids; a turn ending empties the set, so a
+mark cannot outlive the session that held its message. A message is marked only
+once it has waited a quarter of a second: every message passes through
+`queued`, one sent to an idle agent for two milliseconds, and marking at once
+would flash the word under each of them. Its tooltip says what
+Stop does not do: an interrupt leaves a queued message in place (the receipt
+lists it under `still_queued`) and it then runs as a turn of its own. The
+protocol can cancel it, but the installed SDK offers no typed call for that, so
+the mark tells the truth rather than Stop pretending to do more.
+
 **A failed one is shown, and shortened from the middle.** It is the row the user
 has to act on, so it is not summarised away — but it cannot be unbounded either,
 and where it is cut decides what survives. A validation error names the rule at
@@ -616,7 +631,8 @@ Two rules there are worth keeping:
   the middle of a run of tool calls — splitting one fold into two, with a break
   the reader cannot see. `isEphemeral` in `core/events.ts` names the
   events that are not part of the conversation — the two streamed fragments, the
-  rate limit, and the command list — and the log drops every one.
+  rate limit, the command list, a rewind and a message waiting in the queue —
+  and the log adds none of them as a row.
 - **A refusal is named beside the numbers, never over them.** The first attempt
   had the account's status replace the percentages, which is what the old header
   chip did — fair there, where one number gave way to a word. Here it covered
@@ -1433,13 +1449,13 @@ than a switch for scripts here and nothing but a banner in the chat for the rest
 The chat's banner and the Scripts tab's panel stay where the question is asked;
 this is where it is answered for good.
 
-**Every script, instruction and live field says where it comes from.** It used
-to be plain editors: with a repository script present, editing Build saved
-happily and changed nothing that runs, and a repository's pull-request
-instruction overrode the text somebody was editing without a word. A box that
-takes an edit it will not honour is worse than no box. Now each one has, under
-its name — which comes first, because under the tabs it read as the end of the
-editor above and the switch looked like that one's:
+**Every script, instruction, live field and the carry list says where it comes
+from.** It used to be plain editors: with a repository script present, editing
+Build saved happily and changed nothing that runs, and a repository's
+pull-request instruction overrode the text somebody was editing without a word.
+A box that takes an edit it will not honour is worse than no box. Now each one
+has, under its name — which comes first, because under the tabs it read as the
+end of the editor above and the switch looked like that one's:
 
 - **a badge** — _In effect: Repository / This project / Settings / Template_, or
   _Nothing runs_ for a script nobody wrote;
@@ -1455,6 +1471,15 @@ The base branch and env file get the same as a line under their fields
 (`FieldSource`): what the repository sets, which value applies, and — when the
 repository's was refused — why, in words: not trusted yet, no such branch, a
 file git would commit.
+
+The carry list (Files) is a `LayeredEditor` too, with the differences a merge
+makes: the repository's list is **added to** the project's rather than
+replacing it, so the editor opens on _This project_ — in effect either way, and
+the one edited — and its repository tab and switch say "added to" where the rest
+say "instead of" (chosen from `view.id`, as the script template's line is).
+_In effect: Repository_ there means the repository's lines are being added. Its
+lines wait for trust like the env file's, and the editor says so in the same
+words `FieldSource` uses (`SOURCE_WARNINGS`).
 
 **Project settings → Repository opens on the trust switch** — the warnings under
 Git, Env and Scripts send people there to turn it on — **and then the overview**
@@ -1489,7 +1514,8 @@ identical strings collide as keys.
 **One row's answer depends on which directory the section asked about.**
 `.claude/settings.local.json` is gitignored by Claude Code's own convention, so
 seeing it in the **checkout** says nothing about the worktree a session runs in
-— there it arrives only by being carried, and the carry list is the evidence.
+— there it arrives only by being carried, and the carry list is the evidence:
+the one a worktree would get, the repository's lines included.
 Seeing it in the **worktree** is the whole fact: the session is started in that
 directory and the SDK reads what is in it. Since the section asks about the open
 workspace, the carry-list rule ran against a directory it was never written for,
@@ -2453,7 +2479,11 @@ submodule git reports as changed, by a new commit or an edit inside, carries
 that status on the folder's row. A workspace's submodules are often not checked
 out — `git worktree add` leaves every one an empty folder — and any folder read
 from disk with nothing in it says so on a line of its own, rather than opening
-onto nothing that reads as still loading.
+onto nothing that reads as still loading. A repository cloned or initialised
+inside the worktree without being added as a submodule is the same kind of
+folder: git names it `nested/` among the untracked and never looks inside, and
+taken as a path that drew a folder holding a row with no name. It now opens like
+a submodule, ungreyed, with the untracked mark on its own row.
 
 **Read when it could have changed, never watched**: when the tab is shown, when
 a turn of any of the workspace's chats ends (settled 300ms, like the diff), when

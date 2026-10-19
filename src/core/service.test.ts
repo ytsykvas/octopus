@@ -2160,6 +2160,33 @@ describe('env overrides a project adds', () => {
     expect(carried.find((entry) => entry.id === 'localSettings')).toMatchObject({ loaded: true })
   })
 
+  /*
+   * The same rule, with the line coming from the repository's own list. It
+   * reaches every worktree as surely as one typed here, so reporting the file
+   * unread would be wrong in the direction that reassures.
+   */
+  it("counts what the repository's carry list brings, before a workspace is open", async () => {
+    const { id, repo } = await withProject()
+    await service.updateProjectById(id, { trustRepository: true })
+    await service.saveProjectCarryList(id, '')
+    await writeFile(join(repo, '.gitignore'), '.claude/settings.local.json\n', 'utf8')
+    await mkdir(join(repo, '.octopus'), { recursive: true })
+    await writeFile(join(repo, '.octopus', 'carry'), '.claude/settings.local.json\n', 'utf8')
+    await run('git', ['add', '-A'], { cwd: repo })
+    await run('git', ['commit', '-q', '-m', 'carry local settings'], { cwd: repo })
+    await mkdir(join(repo, '.claude'), { recursive: true })
+    await writeFile(join(repo, '.claude', 'settings.local.json'), '{}', 'utf8')
+    const workspace = await service.createWorkspaceIn(id)
+    await approveSettingsIn(service, workspace.id)
+
+    const sources = await service.projectInstructionSources(id, null)
+
+    expect(sources.find((entry) => entry.id === 'localSettings')).toMatchObject({
+      present: true,
+      loaded: true
+    })
+  })
+
   it('falls back to the checkout when no workspace is open', async () => {
     const { id, repo } = await withProject()
     await writeFile(join(repo, 'CLAUDE.md'), '# rules\n', 'utf8')
@@ -3235,9 +3262,9 @@ describe('settings a repository carries', () => {
   })
 
   /*
-   * What a wiped installation does, and the reason the folder exists. Scripts
-   * and instructions are read live, so there is nothing to bring back in; the
-   * look of the project and its carry list are taken once, when it is added.
+   * What a wiped installation does, and the reason the folder exists. Scripts,
+   * instructions and the carry list are read live, so there is nothing to
+   * bring back in; the look of the project is taken once, when it is added.
    */
   it('goes out and comes back by adding the project again', async () => {
     const { id, repo } = await withProject()
@@ -3254,47 +3281,132 @@ describe('settings a repository carries', () => {
     const other = await fresh.addProjectFromPath(repo)
 
     expect(other).toMatchObject({ name: 'Planner', icon: 'rocket', color: 'teal' })
-    await expect(fresh.readProjectCarryList(other.id)).resolves.toContain('master.key')
     const sources = await fresh.projectSources(other.id, null)
+    // Waiting for trust, as the env file a repository names does.
+    expect(sources.find((view) => view.id === 'project.carry')).toMatchObject({
+      effective: 'project',
+      warning: 'repositoryNotTrusted'
+    })
     expect(sources.find((view) => view.id === 'script.setup')?.effective).toBe('repository')
     expect(sources.find((view) => view.id === 'instruction.review')?.effective).toBe('repository')
   })
 
-  /*
-   * A source is a path on somebody's machine, and from a repository a way to
-   * have this one copy a private key into the worktree. Taken as a list of
-   * files, read from the checkout as a list typed here would be.
-   */
-  it('takes a carry list without where its files come from', async () => {
-    const repo = join(dir, 'planner')
-    await initRepo(repo)
-    await writeFile(join(repo, '.gitignore'), '.env\n', 'utf8')
-    await carry(repo, 'carry', '.env = ~/.ssh/id_rsa\n')
-
-    const project = await service.addProjectFromPath(repo)
-
-    const list = await service.readProjectCarryList(project.id)
-    expect(list).not.toContain('id_rsa')
-    expect(list).toContain('.env')
-  })
+  /** Commits what the checkout holds, so a worktree cut from `main` has it too. */
+  async function commitAll(repo: string, message: string): Promise<void> {
+    await run('git', ['add', '-A'], { cwd: repo })
+    await run('git', ['commit', '-q', '-m', message], { cwd: repo })
+  }
 
   /*
-   * A carry list is a list of what is not committed. A repository naming a file
-   * it does not ignore would have this machine's real copy land in the worktree
-   * as something the next `git add -A` publishes, so that line is not taken.
+   * The list is read live, so copying it at add would only leave a stale
+   * version behind — the reason the repository's never reached a project
+   * already added.
    */
-  it('takes only the files git ignores', async () => {
+  it("does not copy the repository's carry list when a project is added", async () => {
     const repo = join(dir, 'planner')
     await initRepo(repo)
     await writeFile(join(repo, '.gitignore'), 'config/master.key\n', 'utf8')
-    await carry(repo, 'carry', '# secrets\n.env\nconfig/master.key\n')
+    await carry(repo, 'carry', 'config/master.key\n')
 
     const project = await service.addProjectFromPath(repo)
 
-    const list = await service.readProjectCarryList(project.id)
-    expect(list).toContain('# secrets')
-    expect(list).toContain('config/master.key')
-    expect(list.split('\n')).not.toContain('.env')
+    await expect(service.readProjectCarryList(project.id)).resolves.not.toContain('master.key')
+  })
+
+  /*
+   * The bug: a list changed upstream never reached a project already added.
+   * Committed after the add, and carried all the same.
+   */
+  it('carries what a branch adds to the list, for a project added before it did', async () => {
+    const { id, repo } = await withProject()
+    await service.updateProjectById(id, { trustRepository: true })
+    await service.saveProjectCarryList(id, '')
+    await writeFile(join(repo, '.gitignore'), 'config/master.key\n', 'utf8')
+    await carry(repo, 'carry', 'config/master.key = ~/.ssh/id_rsa\n')
+    await commitAll(repo, 'carry the key')
+    await mkdir(join(repo, 'config'), { recursive: true })
+    await writeFile(join(repo, 'config', 'master.key'), 'abc123\n', 'utf8')
+
+    const workspace = await service.createWorkspaceIn(id)
+
+    // From the checkout, as a bare line's file is — never from the source the
+    // repository named.
+    await expect(readFile(join(workspace.path, 'config', 'master.key'), 'utf8')).resolves.toBe(
+      'abc123\n'
+    )
+  })
+
+  /*
+   * Asked of the worktree, not the checkout. The checkout ignores `.env` here
+   * and the branch does not, so obeying the checkout's answer would put the
+   * real `.env` where the branch's `git add -A` commits it.
+   */
+  it('skips a repository line the worktree would commit', async () => {
+    const { id, repo } = await withProject()
+    await service.updateProjectById(id, { trustRepository: true })
+    await service.saveProjectCarryList(id, '')
+    await carry(repo, 'carry', '.env\n')
+    await commitAll(repo, 'carry the env')
+    await writeFile(join(repo, '.gitignore'), '.env\n', 'utf8')
+    await writeFile(join(repo, '.env'), 'API_KEY=secret\n', 'utf8')
+
+    const workspace = await service.createWorkspaceIn(id)
+
+    await expect(access(join(workspace.path, '.env'))).rejects.toThrow()
+  })
+
+  /*
+   * A run prepares the worktree's working tree, which the agent writes. An
+   * untrusted repository's list could be the agent's own, so it waits.
+   */
+  it("carries the project's own list alone until the repository is trusted", async () => {
+    const { id, repo } = await withProject()
+    await service.saveProjectCarryList(id, '')
+    await writeFile(join(repo, '.gitignore'), 'config/master.key\n', 'utf8')
+    await carry(repo, 'carry', 'config/master.key\n')
+    await commitAll(repo, 'carry the key')
+    await mkdir(join(repo, 'config'), { recursive: true })
+    await writeFile(join(repo, 'config', 'master.key'), 'abc123\n', 'utf8')
+
+    const workspace = await service.createWorkspaceIn(id)
+
+    await expect(access(join(workspace.path, 'config', 'master.key'))).rejects.toThrow()
+  })
+
+  // Degraded, as the live fields are: a bad file in a branch does not stop
+  // the workspace being made, and the project's own list still arrives.
+  it("makes the workspace with the project's own list when the branch's is a link", async () => {
+    const { id, repo } = await withProject()
+    await service.updateProjectById(id, { trustRepository: true })
+    await mkdir(join(repo, '.octopus'), { recursive: true })
+    await symlink(join(repo, 'README.md'), join(repo, '.octopus', 'carry'))
+    await commitAll(repo, 'a linked list')
+    await writeFile(join(repo, '.env'), 'A=1\n', 'utf8')
+    await service.saveProjectCarryList(id, '.env\n')
+
+    const workspace = await service.createWorkspaceIn(id)
+
+    await expect(readFile(join(workspace.path, '.env'), 'utf8')).resolves.toBe('A=1\n')
+  })
+
+  it("carries the project's own list alone once the user chose it", async () => {
+    const { id, repo } = await withProject()
+    await service.saveProjectCarryList(id, '')
+    await writeFile(join(repo, '.gitignore'), 'config/master.key\n', 'utf8')
+    await carry(repo, 'carry', 'config/master.key\n')
+    await commitAll(repo, 'carry the key')
+    await mkdir(join(repo, 'config'), { recursive: true })
+    await writeFile(join(repo, 'config', 'master.key'), 'abc123\n', 'utf8')
+    await service.updateProjectById(id, { preferLocal: ['project.carry'], trustRepository: true })
+
+    const workspace = await service.createWorkspaceIn(id)
+
+    await expect(access(join(workspace.path, 'config', 'master.key'))).rejects.toThrow()
+    const sources = await service.projectSources(id, workspace.id)
+    expect(sources.find((view) => view.id === 'project.carry')).toMatchObject({
+      effective: 'project',
+      preferLocal: true
+    })
   })
 
   // The base branch and env file stay live, so copying them would leave a

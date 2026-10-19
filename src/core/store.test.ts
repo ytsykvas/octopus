@@ -1141,6 +1141,24 @@ describe('choosing your own over the repository', () => {
       ProjectPatchSchema.parse({ preferLocal: ['script.setup'], disabledSkillDefaults: ['review'] })
     ).toEqual({})
   })
+
+  // The carry list joined the items later; a project that chose its own keeps it.
+  it('loads and accepts the carry list as an item', async () => {
+    expect(ProjectPatchSchema.safeParse({ preferLocal: ['project.carry'] }).success).toBe(true)
+
+    await writeFile(
+      file,
+      JSON.stringify({
+        version: 1,
+        projects: [{ ...project, preferLocal: ['project.carry'] }],
+        workspaces: [],
+        chats: []
+      }),
+      'utf8'
+    )
+
+    expect((await loadState(file)).projects[0]?.preferLocal).toEqual(['project.carry'])
+  })
 })
 
 describe('recording an approval', () => {

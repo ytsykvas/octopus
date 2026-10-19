@@ -28,10 +28,13 @@
  */
 
 import { readFile } from 'node:fs/promises'
-import { join } from 'node:path'
+import { join, normalize } from 'node:path'
 
+import { type CarriedFile, carriedFiles, readCarryList } from './carry.js'
+import { type GitExec, ignoredAmong, isIgnored } from './git.js'
 import { INSTRUCTION_FILES, type InstructionKind } from './instructions.js'
-import { REPO_DIR, assertUnlinkedPath } from './repoConfig.js'
+import { unlinkedInside } from './paths.js'
+import { REPO_DIR, assertUnlinkedPath, readStatedCarry } from './repoConfig.js'
 import { trustDigest } from './repoTrust.js'
 import { SCRIPT_KINDS } from './scriptEnv.js'
 import { SCRIPT_FILES, type ScriptKind, readScript, scriptExists, scriptPath } from './scripts.js'
@@ -222,4 +225,113 @@ export async function repoInstruction(
   }
 
   return null
+}
+
+/** What decides whether a repository's carry list is read at all. */
+export interface CarryChoice {
+  /** "Use mine instead": the repository's list is not read. */
+  readonly preferLocal: boolean
+  /** Whether the repository is trusted (`trustRepository`). */
+  readonly trusted: boolean
+}
+
+/**
+ * Which candidates git ignores: one ask for all, and one each if git refuses
+ * the batch.
+ *
+ * One path git will not answer for — inside a submodule, say — fails the whole
+ * `check-ignore`, and without the second pass it took every other repository
+ * line with it. Asked alone, a line git still refuses is simply not honoured:
+ * not a reason to fail a workspace, since the project's own list is still
+ * right and a line nobody could vouch for is one not to carry.
+ */
+async function ignoredBy(exec: GitExec, candidates: readonly string[]): Promise<Set<string>> {
+  try {
+    return await ignoredAmong(exec, candidates)
+  } catch {
+    // One at a time: the list may run to thousands of lines, and this is the
+    // path a list built to fail the batch takes.
+    const ignored = new Set<string>()
+    for (const path of candidates) {
+      if (await isIgnored(exec, `./${path}`).catch(() => false)) ignored.add(path)
+    }
+    return ignored
+  }
+}
+
+/** The key two lines are the same file by: normalised, and case-folded for macOS. */
+function sameFile(path: string): string {
+  return normalize(path).toLowerCase()
+}
+
+/**
+ * The files to carry into one worktree: the project's own list, and what the
+ * repository's `.octopus/carry` adds to it.
+ *
+ * Read from `cwd`, the worktree being prepared — the branch's list is the one
+ * that counts, not the checkout's. Obeying a committed list means letting a
+ * branch choose which of this machine's gitignored files land where the agent
+ * reads them and `git add -A` commits them, so a repository line has to pass
+ * every one of these:
+ *
+ * - **The repository is trusted.** The same gate as the repository's env file,
+ *   and the same decision as for its scripts: trust accepts what the worktree
+ *   holds, whoever wrote it. The worktree is the agent's to write, so a trusted
+ *   project also obeys a list the agent wrote there — with a `.gitignore` line
+ *   to match, `.env.production` comes in on the next run — exactly as it runs
+ *   a script the agent wrote. Untrusted, none of it applies.
+ * - **Only its destination is used.** Its file comes from the project's
+ *   checkout, as a bare line's does. `.env = ~/.ssh/id_rsa` would otherwise
+ *   copy a private key in.
+ * - **No link along it, in the worktree or in the checkout** — walked
+ *   normalised, so `x/../leak.txt` is checked as `leak.txt`. A link in the
+ *   worktree would redirect the write; a checkout tracking
+ *   `leak.txt -> ~/.ssh/id_rsa` would hand the key over under an innocent
+ *   name.
+ * - **git ignores it in that worktree.** A branch listing `.env` without
+ *   ignoring it would have the user's real one land as a file the next commit
+ *   publishes. One `check-ignore` for every line, then one each if git
+ *   refuses the batch; a line git still refuses is not honoured, and nothing
+ *   here stops the workspace.
+ * - **The local line wins on the same path**, `= source` and all, and a line
+ *   only the project lists is kept. A repository list replacing the local one
+ *   would silently drop a `config/master.key` the user added — the failure the
+ *   carry list was written to prevent.
+ *
+ * A list that cannot be read — behind a link, too long — counts as none, so
+ * the project's own still applies (`readStatedCarry`).
+ */
+export async function resolveCarry(
+  cwd: string,
+  repoPath: string,
+  projectId: ProjectId,
+  exec: GitExec,
+  choice: CarryChoice,
+  root?: string
+): Promise<CarriedFile[]> {
+  const own = carriedFiles(await readCarryList(projectId, root))
+  if (choice.preferLocal || !choice.trusted) return own
+
+  const stated = await readStatedCarry(cwd)
+  if (stated === null) return own
+
+  const taken = new Set(own.map(({ path }) => sameFile(path)))
+  const candidates: string[] = []
+
+  for (const { path } of carriedFiles(stated)) {
+    const key = sameFile(path)
+    if (taken.has(key)) continue
+    taken.add(key)
+
+    if (!(await unlinkedInside(cwd, path))) continue
+    if (!(await unlinkedInside(repoPath, path))) continue
+    candidates.push(path)
+  }
+
+  const ignored = await ignoredBy(exec, candidates)
+
+  return [
+    ...own,
+    ...candidates.filter((path) => ignored.has(path)).map((path) => ({ path, from: null }))
+  ]
 }

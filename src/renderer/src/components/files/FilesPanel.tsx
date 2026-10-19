@@ -141,8 +141,9 @@ function WorkspaceTree({
 
   const toggle = (node: TreeNode): void => {
     const opening = !expanded.has(node.path)
-    // An ignored folder's contents, or a submodule's, come from disk, asked for
-    // the first time it is opened; after that a refresh keeps them current.
+    // The contents of a folder git names whole — ignored, a submodule, a nested
+    // repository — come from disk, asked for the first time it is opened;
+    // after that a refresh keeps them current.
     if (opening && node.childrenFromDisk && !tree.listings.has(node.path))
       tree.openFolder(node.path)
 
