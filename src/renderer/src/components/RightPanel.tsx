@@ -322,8 +322,10 @@ export function RightPanel({
   }
   const {
     sequence,
+    portOf,
     activeWorkspace,
     activeRun,
+    runnable,
     building,
     servingAt,
     runAll,
@@ -733,22 +735,27 @@ export function RightPanel({
             second only makes sense after the first. The halves carry nothing —
             four buttons across two of them, two saying the same word, is what
             this replaced. */}
-          <div className="border-line flex shrink-0 items-center gap-2 border-b px-3 py-1.5">
-            <span className="text-ink-faint min-w-0 flex-1 truncate text-[11px]">
-              {activeRun.stage === 'failed' ? (
-                <span className="text-danger">{t('scripts.buildFailed')}</span>
-              ) : servingAt !== null && silentPort ? (
-                /* Said rather than enforced. The script is the user's, and being
+          {/* Two rows: the sentence and the way to the scripts above, the
+            controls below. One row held the sentence, the switch and up to four
+            controls, and the sentence — what Run is about to do — was the part
+            cut to a couple of words. */}
+          <div className="border-line shrink-0 border-b">
+            <div className="flex items-center gap-2 px-3 pt-1.5">
+              <span className="text-ink-faint min-w-0 flex-1 truncate text-[11px]">
+                {activeRun.stage === 'failed' ? (
+                  <span className="text-danger">{t('scripts.buildFailed')}</span>
+                ) : servingAt !== null && silentPort ? (
+                  /* Said rather than enforced. The script is the user's, and being
                  wrong about it must not take the link or the controls away. */
-                <span className="text-warning">
-                  {t('scripts.portSilent', { port: servingAt.port })}
-                </span>
-              ) : (
-                t(STAGE_HINTS[activeRun.stage])
-              )}
-            </span>
+                  <span className="text-warning">
+                    {t('scripts.portSilent', { port: servingAt.port })}
+                  </span>
+                ) : (
+                  t(STAGE_HINTS[activeRun.stage])
+                )}
+              </span>
 
-            {/* The way to the scripts themselves, and the only control here that
+              {/* The way to the scripts themselves, and the only control here that
               does not change with the run.
 
               It sits before the rest deliberately. Everything after it swaps as
@@ -759,53 +766,58 @@ export function RightPanel({
               it starts being wanted: `ScriptRunner` offers **Write the script**
               while there is no script, so a tab whose whole subject is
               `setup.sh` led nowhere the moment `setup.sh` was written. */}
-            <Button
-              size="sm"
-              disabled={projectId === null}
-              onClick={onEditScripts}
-              title={t('scripts.editScripts')}
-              aria-label={t('scripts.editScripts')}
-            >
-              <Pencil aria-hidden size={12} />
-            </Button>
+              <Button
+                size="sm"
+                disabled={projectId === null}
+                onClick={onEditScripts}
+                title={t('scripts.editScripts')}
+                aria-label={t('scripts.editScripts')}
+              >
+                <Pencil aria-hidden size={12} />
+              </Button>
+            </div>
 
-            {/* After the button above rather than before it: the switch appears
-              only once the sets are read and is held while a build runs, and
-              the button that never changes must not be moved by it. */}
-            {activeWorkspace !== null && (
-              <EnvProfileSwitch
-                profiles={envProfiles}
-                value={profileOf(activeWorkspace)}
-                disabled={building}
-                onChange={(name) => {
-                  void setWorkspaceProfile(activeWorkspace.id, name)
-                }}
-              />
-            )}
+            <div className="flex items-center justify-end gap-2 px-3 py-1.5">
+              {/* In the row below the button above rather than beside it: the
+              switch appears only once the sets are read and is held while a
+              build runs, and the button that never changes must not be moved by
+              it. At the left edge, with the controls at the right. */}
+              {activeWorkspace !== null && (
+                <div className="mr-auto">
+                  <EnvProfileSwitch
+                    profiles={envProfiles}
+                    value={profileOf(activeWorkspace)}
+                    disabled={building}
+                    onChange={(name) => {
+                      void setWorkspaceProfile(activeWorkspace.id, name)
+                    }}
+                  />
+                </div>
+              )}
 
-            {/* Every control for the tab, and none in the halves — and only ever
+              {/* Every control for the tab, and none in the halves — and only ever
               the ones that can mean something. Run goes once the server is up:
               what it offers has already happened, and a rebuild from there is
               Stop and then Run, which is also the order that frees the port
               before anything tries to bind it again. A build can be stopped
               too: one that hangs otherwise left Run disabled for good. */}
-            {servingAt === null && (
-              <Button size="sm" variant="accent" disabled={runAll === undefined} onClick={runAll}>
-                <Play aria-hidden size={12} />
-                {t(building ? 'scripts.running' : 'scripts.runAll')}
-              </Button>
-            )}
+              {servingAt === null && (
+                <Button size="sm" variant="accent" disabled={runAll === undefined} onClick={runAll}>
+                  <Play aria-hidden size={12} />
+                  {t(building ? 'scripts.running' : 'scripts.runAll')}
+                </Button>
+              )}
 
-            {servingAt === null && stopRun !== undefined && (
-              <Button size="sm" variant="danger" onClick={stopRun}>
-                <Square aria-hidden size={12} />
-                {t('scripts.stop')}
-              </Button>
-            )}
+              {servingAt === null && stopRun !== undefined && (
+                <Button size="sm" variant="danger" onClick={stopRun}>
+                  <Square aria-hidden size={12} />
+                  {t('scripts.stop')}
+                </Button>
+              )}
 
-            {servingAt !== null && (
-              <>
-                {/* An anchor rather than a button: `setWindowOpenHandler` already
+              {servingAt !== null && (
+                <>
+                  {/* An anchor rather than a button: `setWindowOpenHandler` already
                   hands a `_blank` target to the system browser, so this needs no
                   channel of its own — and it is a link, which is what a reader
                   expects to be able to copy or open in a new tab.
@@ -813,34 +825,35 @@ export function RightPanel({
                   Styled as a control because it stands in a row of them, and
                   only while something is serving: a port with nothing behind it
                   opens on a connection refused. */}
-                <a
-                  href={`http://localhost:${String(servingAt.port)}`}
-                  target="_blank"
-                  rel="noreferrer"
-                  title={t('scripts.openInBrowser', { port: servingAt.port })}
-                  aria-label={t('scripts.openInBrowser', { port: servingAt.port })}
-                  className="focus-ring border-line bg-canvas text-ink hover:bg-muted inline-flex h-6 items-center justify-center gap-1.5 rounded-[var(--radius-control)] border px-2 text-[11px] font-medium transition-colors"
-                >
-                  <ExternalLink aria-hidden size={12} />
-                </a>
+                  <a
+                    href={`http://localhost:${String(servingAt.port)}`}
+                    target="_blank"
+                    rel="noreferrer"
+                    title={t('scripts.openInBrowser', { port: servingAt.port })}
+                    aria-label={t('scripts.openInBrowser', { port: servingAt.port })}
+                    className="focus-ring border-line bg-canvas text-ink hover:bg-muted inline-flex h-6 items-center justify-center gap-1.5 rounded-[var(--radius-control)] border px-2 text-[11px] font-medium transition-colors"
+                  >
+                    <ExternalLink aria-hidden size={12} />
+                  </a>
 
-                {/* The common half of a restart: the code changed under a running
+                  {/* The common half of a restart: the code changed under a running
                   server and needs picking up, while the checkout did not. */}
-                <Button
-                  size="sm"
-                  onClick={restartServer}
-                  title={t('scripts.serverRestart')}
-                  aria-label={t('scripts.serverRestart')}
-                >
-                  <RotateCw aria-hidden size={12} />
-                </Button>
+                  <Button
+                    size="sm"
+                    onClick={restartServer}
+                    title={t('scripts.serverRestart')}
+                    aria-label={t('scripts.serverRestart')}
+                  >
+                    <RotateCw aria-hidden size={12} />
+                  </Button>
 
-                <Button size="sm" variant="danger" onClick={stopRun}>
-                  <Square aria-hidden size={12} />
-                  {t('scripts.stop')}
-                </Button>
-              </>
-            )}
+                  <Button size="sm" variant="danger" onClick={stopRun}>
+                    <Square aria-hidden size={12} />
+                    {t('scripts.stop')}
+                  </Button>
+                </>
+              )}
+            </div>
           </div>
 
           {/* Under the row rather than in its text, and wrapped: while a server
@@ -1072,9 +1085,22 @@ export function RightPanel({
             aria-label={t('scripts.server')}
             className="border-line flex min-h-0 flex-1 flex-col border-t"
           >
-            <p aria-hidden className="section-label border-line shrink-0 border-b px-3 py-1.5">
-              {t('scripts.server')}
-            </p>
+            {/* The half's name and its port in one row, the port at the right
+              edge: a row of its own under this one held the port and nothing
+              else, a line of the terminal's height spent on one word. */}
+            <div className="border-line flex shrink-0 items-center gap-2 border-b px-3 py-1.5">
+              <p aria-hidden className="section-label min-w-0 flex-1">
+                {t('scripts.server')}
+              </p>
+              {activeRun.stage === 'serving' && (
+                <span className="text-ink-faint text-[11px]">{t('scripts.busy')}</span>
+              )}
+              {activeWorkspace !== null && runnable && (
+                <span className="text-ink-faint font-mono text-[11px]">
+                  {`OCTOPUS_PORT=${String(portOf(activeWorkspace))}`}
+                </span>
+              )}
+            </div>
             <WorkspaceScripts
               workspaces={scriptable}
               activeId={activeWorkspaceId}
