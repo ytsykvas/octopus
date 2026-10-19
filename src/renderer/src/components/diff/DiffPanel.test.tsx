@@ -317,6 +317,20 @@ describe('DiffPanel', () => {
     expect(await screen.findByText(/Binary file/)).toBeInTheDocument()
   })
 
+  // A revert there would remove a file, and this is a folder git has no record of.
+  it('says a nested repository is one of its own, with no revert', async () => {
+    answer(
+      workspaceDiff([
+        fileDiff('vendor/clone', { status: 'untracked', omitted: 'repository', hunks: [] })
+      ])
+    )
+    renderPanel()
+
+    await expandAll()
+    expect(await screen.findByText(/A repository of its own/)).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /Revert vendor\/clone/ })).not.toBeInTheDocument()
+  })
+
   it('says a file is too large to draw, and how many others were', async () => {
     answer(
       workspaceDiff([fileDiff('huge.json', { omitted: 'tooLarge', hunks: [] })], {

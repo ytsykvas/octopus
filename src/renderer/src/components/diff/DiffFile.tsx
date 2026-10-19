@@ -365,18 +365,22 @@ export const DiffFile = memo(function DiffFile({
           {/* Named after the file rather than "Revert": twenty buttons sharing
             one name identify nothing, and this is the row's only destructive
             control. Outside the collapse button for the same reason the mark
-            above is — that button already owns the whole row as its name. */}
-          <button
-            type="button"
-            onClick={() => {
-              onRevert(file)
-            }}
-            aria-label={t('diff.revertFile', { path: file.path })}
-            title={t('diff.revert')}
-            className="focus-ring text-ink-faint hover:text-danger shrink-0 rounded-[var(--radius-control)] p-0.5 transition-colors"
-          >
-            <Undo2 aria-hidden size={12} />
-          </button>
+            above is — that button already owns the whole row as its name.
+            Not on a nested repository: git has no record of it to undo, and
+            the untracked revert removes a file, which a folder is not. */}
+          {file.omitted !== 'repository' && (
+            <button
+              type="button"
+              onClick={() => {
+                onRevert(file)
+              }}
+              aria-label={t('diff.revertFile', { path: file.path })}
+              title={t('diff.revert')}
+              className="focus-ring text-ink-faint hover:text-danger shrink-0 rounded-[var(--radius-control)] p-0.5 transition-colors"
+            >
+              <Undo2 aria-hidden size={12} />
+            </button>
+          )}
 
           <DropdownMenu
             align="right"
@@ -451,6 +455,10 @@ function DiffBody({
 
   if (file.omitted === 'tooLarge') {
     return <p className="text-ink-soft px-3 py-2">{t('diff.tooLarge')}</p>
+  }
+
+  if (file.omitted === 'repository') {
+    return <p className="text-ink-soft px-3 py-2">{t('diff.nestedRepository')}</p>
   }
 
   // A rename with nothing else changed has no lines by construction; the

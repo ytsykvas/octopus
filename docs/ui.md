@@ -2418,6 +2418,13 @@ landed on the base branch after the fork does not. A change staged and then
 reverted in the working tree is invisible, which is the right answer for a pane
 that reports what the workspace now holds.
 
+**A repository nested in the worktree is one row that says so.** Cloned or
+initialised inside it rather than added as a submodule, git lists it as
+`nested/` and never looks inside. The row has nothing to read: git records such
+a folder as a link rather than its files, and only once it has a commit of its
+own. Nor does it offer a revert — git has no record of it to undo, and the
+untracked revert removes a file, which a folder is not.
+
 **How far each change has got, and whether the request is behind it.** One diff
 against the merge base is one comparison, and it folds committed, staged and
 unstaged work into a single pile — which is not the question a reviewer has once

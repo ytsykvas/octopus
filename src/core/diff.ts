@@ -43,8 +43,12 @@ export class DiffError extends CodedError<DiffErrorCode> {
 export type FileStatus =
   'added' | 'modified' | 'deleted' | 'renamed' | 'copied' | 'typeChanged' | 'untracked'
 
-/** Why a file carries no lines, when it carries none. */
-export type DiffOmission = 'none' | 'binary' | 'tooLarge'
+/**
+ * Why a file's lines are not drawn. `repository` is a repository cloned or
+ * initialised inside the worktree: git never looks inside one, and records it
+ * as a link rather than its files.
+ */
+export type DiffOmission = 'none' | 'binary' | 'tooLarge' | 'repository'
 
 export type DiffLineKind = 'context' | 'added' | 'removed'
 
@@ -832,7 +836,7 @@ export async function readWorkspaceDiff(
     readPublishStatus(exec, {
       branch: options.branch,
       baseCommit,
-      untracked: untrackedPaths
+      untracked: untrackedPaths.map(withoutRepositorySlash)
     })
   ])
 
@@ -920,6 +924,11 @@ function splitNul(output: string): string[] {
   return output.split('\0').filter((value) => value !== '')
 }
 
+/** A repository nested in the worktree under its own path: git lists it as `nested/`. */
+function withoutRepositorySlash(path: string): string {
+  return path.endsWith('/') ? path.slice(0, -1) : path
+}
+
 /** Joins what `--numstat` counted to what `--name-status` called it. */
 function trackedFiles(
   counts: readonly NumstatEntry[],
@@ -999,6 +1008,18 @@ async function readUntracked(
     mode: null,
     status: 'untracked' as const,
     hunks: []
+  }
+
+  // A repository nested in the worktree, which git never looks inside: one row
+  // saying what it is, spending nothing of the budget.
+  if (path.endsWith('/')) {
+    return {
+      ...base,
+      path: withoutRepositorySlash(path),
+      added: 0,
+      removed: 0,
+      omitted: 'repository'
+    }
   }
 
   const undrawn = { ...base, added: 0, removed: 0, omitted: 'tooLarge' as const }
