@@ -119,6 +119,14 @@ async function renderPicker(overrides: Partial<PickerProps> = {}): Promise<Picke
 beforeAll(stubDialogElement)
 
 describe('RepositoryPicker', () => {
+  // Opened to find one repository among many, so typing filters at once.
+  it('starts in the search', async () => {
+    offer(repository())
+    await renderPicker()
+
+    expect(screen.getByRole('searchbox')).toHaveFocus()
+  })
+
   it('says it is loading until the account answers', async () => {
     const listing = pending<Result<RepositoryList>>()
     vi.mocked(window.octopus.projects.listRemote).mockReturnValue(listing.promise)

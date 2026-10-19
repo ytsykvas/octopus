@@ -2,6 +2,7 @@ import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { beforeAll, describe, expect, it, vi } from 'vitest'
 
+import { focusAsShowModalDoes } from '../test/dialog.js'
 import { useConfirm, type ConfirmRequest, type ConfirmResult } from './useConfirm.js'
 
 /**
@@ -14,6 +15,7 @@ import { useConfirm, type ConfirmRequest, type ConfirmResult } from './useConfir
 beforeAll(() => {
   HTMLDialogElement.prototype.showModal = function showModal(this: HTMLDialogElement): void {
     this.open = true
+    focusAsShowModalDoes(this)
   }
   HTMLDialogElement.prototype.close = function close(this: HTMLDialogElement): void {
     this.open = false
@@ -100,6 +102,21 @@ describe('useConfirm', () => {
 
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Delete' })).not.toBeInTheDocument()
+  })
+
+  // Enter then answers yes, which is what a question that changes nothing
+  // irreversible is for.
+  it('starts on the confirm button', async () => {
+    await ask()
+
+    expect(screen.getByRole('button', { name: 'Delete' })).toHaveFocus()
+  })
+
+  // And no for one that does: a stray Enter must not be what removes it.
+  it('starts on cancel when the action is destructive', async () => {
+    await ask({ ...QUESTION, destructive: true })
+
+    expect(screen.getByRole('button', { name: 'Keep it' })).toHaveFocus()
   })
 
   it('shows the title, the message and the detail it was given', async () => {

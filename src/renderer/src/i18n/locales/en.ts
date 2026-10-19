@@ -11,6 +11,7 @@ export const en = {
 
   sidebar: {
     empty: 'Nothing here yet. Add a repository with the "+" button.',
+    pick: 'Pick a project on the far left.',
     addProject: 'Add repository',
     // The dot on a project's tab when one of its agents finished out of sight.
     projectDone: 'An agent finished here while you were away',
@@ -995,14 +996,15 @@ export const en = {
        rather than opening a list, so the value is all it shows. */
     modeToggle: 'Permissions: {{mode}}',
     modeDefault: 'Ask first',
-    /* Left in English in every locale: it is what the agent's own interfaces
-       call this, and a translated name for a borrowed one reads as a second
-       setting rather than the same one. */
-    modeAcceptEdits: 'Auto mode',
+    /* Left in English in every locale: it is what Claude Code's own status
+       line calls this, and a translated name for a borrowed one reads as a
+       second setting rather than the same one. Not "Auto mode", which is a
+       different mode there — a classifier approving each call. */
+    modeAcceptEdits: 'Accept edits',
     planMode: 'Plan',
     /* Names the keys rather than the states: the label beside it already
        says which one is in force, and the ring's order is learned by using it. */
-    modeCycle: 'Switch mode — Ask first, Auto mode, Plan (Shift+Tab)',
+    modeCycle: 'Switch mode — Ask first, Accept edits, Plan (Shift+Tab)',
 
     context: 'Context',
     contextTitle: 'Context window — {{used}} of {{total}}',
@@ -1156,8 +1158,8 @@ export const en = {
     planEditLabel: 'The plan, as markdown',
     planEdited: 'Plan, as you edited it',
     /* Said before the click, because the click widens what the agent may do:
-       an approved plan always goes on in Auto mode. */
-    planExecuteHint: 'Runs in Auto mode — edits go ahead without asking.',
+       an approved plan always goes on in Accept edits. */
+    planExecuteHint: 'Runs with Accept edits on — file changes go ahead without asking.',
     planFeedback: 'Anything to work out first?',
     planFeedbackPlaceholder: 'Write here and the agent will revise the plan',
     questionTitle: 'The agent is asking',
@@ -1271,7 +1273,7 @@ export const en = {
     noProjectsBody:
       'Add one from this machine, or clone it from GitHub. Workspaces are created inside it — each with its own branch, directory and agent session.',
     noSelectionTitle: 'Which project today?',
-    noSelectionBody: 'Pick one from the list on the left, or add another repository.',
+    noSelectionBody: 'Pick one on the far left, or add another repository.',
     /* The workspace half of the same pane. A project is chosen and the centre
        still has nothing to show, which is two different situations: one where
        there is nothing to pick, and one where nothing has been picked. */
@@ -1354,7 +1356,7 @@ export const en = {
       'Reading is silent; writing a file or running a command waits for an answer.',
     permissionAcceptEdits: 'Accept edits',
     permissionAcceptEditsHint:
-      'File changes go through without asking. Commands still wait — they leave the worktree.',
+      'File changes go through without asking, the plain file commands too (mkdir, mv, rm). Other commands still wait.',
 
     alwaysAllowed: 'Answered "always"',
     alwaysAllowedHint:
