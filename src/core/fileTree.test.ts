@@ -14,6 +14,7 @@ import {
   foldersFromDisk,
   listingNodes,
   MAX_TREE_ENTRIES,
+  parseEmptyFolders,
   parseIgnored,
   parseStaged,
   parseStatus,
@@ -174,6 +175,46 @@ describe('parseUntracked', () => {
     expect(parseUntracked(['new.ts', 'deep/nested/', ''].join('\0'))).toEqual([
       file('new.ts'),
       { path: 'deep/nested', kind: 'directory', ignored: false }
+    ])
+  })
+})
+
+describe('parseEmptyFolders', () => {
+  const untracked = parseUntracked(['u/f.ts', 'nested/', ''].join('\0'))
+  const ignored = parseIgnored(['logs/', 'logs/x.log', ''].join('\0'))
+
+  // What `--directory` printed for a worktree holding all of these, measured.
+  const listed = ['a/', 'e/', 'logs/', 'nested/', 'src/new/', 'u/', ''].join('\0')
+
+  it('keeps only the folders with no file in them', () => {
+    expect(parseEmptyFolders(listed, untracked, ignored)).toEqual([
+      { path: 'a', kind: 'directory', ignored: false },
+      { path: 'e', kind: 'directory', ignored: false },
+      { path: 'src/new', kind: 'directory', ignored: false }
+    ])
+  })
+
+  // `--directory` names a folder of untracked files `u/` too, and the files
+  // are already rows of their own.
+  it('leaves out a folder whose untracked files are listed', () => {
+    expect(parseEmptyFolders('u/\0', untracked, [])).toEqual([])
+  })
+
+  it('leaves out a nested repository and a folder git ignores', () => {
+    expect(parseEmptyFolders('nested/\0logs/\0', untracked, ignored)).toEqual([])
+  })
+
+  // The tree drops the hidden name, so the folder is all that is left to draw.
+  it('keeps a folder holding only a hidden name', () => {
+    expect(parseEmptyFolders('ds/\0', parseUntracked('ds/.DS_Store\0'), [])).toEqual([
+      { path: 'ds', kind: 'directory', ignored: false }
+    ])
+  })
+
+  // `u2` only shares a prefix with `u`, which holds a file.
+  it('compares whole folder names, not prefixes', () => {
+    expect(parseEmptyFolders('u2/\0', untracked, [])).toEqual([
+      { path: 'u2', kind: 'directory', ignored: false }
     ])
   })
 })
@@ -454,7 +495,8 @@ describe('readFileTree', () => {
       ['--no-optional-locks', 'status', '--porcelain=v1', '-z', '-uall'],
       ['ls-files', '-z', '--stage'],
       ['ls-files', '-z', '--others', '--exclude-standard'],
-      ['ls-files', '-z', '--others', '--ignored', '--exclude-standard', '--directory']
+      ['ls-files', '-z', '--others', '--ignored', '--exclude-standard', '--directory'],
+      ['ls-files', '-z', '--others', '--exclude-standard', '--directory']
     ])
   })
 
@@ -558,6 +600,41 @@ describe('readFileTree', () => {
       expect(tree.entries).toContainEqual({ path: 'nested', kind: 'directory', ignored: false })
       expect(tree.entries.map((entry) => entry.path)).not.toContain('nested/')
       expect(tree.statuses).toEqual({ nested: 'untracked' })
+    })
+
+    // A folder the agent just made, before it writes into it, is what an editor
+    // shows and git never names.
+    it('reads an empty folder, at the top and inside a tracked one', async () => {
+      await mkdir(join(dir, 'fresh'))
+      await mkdir(join(dir, 'src', 'new'), { recursive: true })
+      await writeFile(join(dir, 'src', 'kept.ts'), 'kept\n', 'utf8')
+      await git('add', 'src/kept.ts')
+      await mkdir(join(dir, 'node_modules', 'pkg'), { recursive: true })
+      // `--directory` prints these two as well; neither is an empty folder.
+      await mkdir(join(dir, 'logs'))
+      await writeFile(join(dir, '.gitignore'), 'node_modules/\n.env\n*.log\n', 'utf8')
+      await writeFile(join(dir, 'logs', 'x.log'), 'x\n', 'utf8')
+      await mkdir(join(dir, 'drafts'))
+      await writeFile(join(dir, 'drafts', 'note.md'), 'x\n', 'utf8')
+
+      const tree = await readFileTree(gitIn(dir))
+
+      expect(tree.entries).toContainEqual({ path: 'fresh', kind: 'directory', ignored: false })
+      expect(tree.entries).toContainEqual({ path: 'src/new', kind: 'directory', ignored: false })
+      expect(tree.entries).toContainEqual({
+        path: 'node_modules',
+        kind: 'directory',
+        ignored: true
+      })
+      expect(tree.entries.filter(({ path }) => path === 'logs')).toEqual([
+        { path: 'logs', kind: 'directory', ignored: true }
+      ])
+      expect(tree.entries.map(({ path }) => path)).not.toContain('drafts')
+      expect(tree.statuses).toEqual({
+        '.gitignore': 'modified',
+        'drafts/note.md': 'untracked',
+        'src/kept.ts': 'added'
+      })
     })
 
     it('reads a move announced with `git add -N` as a rename, with no phantom path', async () => {
