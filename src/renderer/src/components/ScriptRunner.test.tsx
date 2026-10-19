@@ -685,6 +685,25 @@ describe('ScriptRunner', () => {
     expect(octopus().terminal.create).toHaveBeenCalledTimes(1)
   })
 
+  // The fit reads the height of the terminal's box. Sized by its content, the
+  // box was as tall as xterm's own 24 rows, the fit read them back, and a build
+  // run while its half was folded drew over the server half once unfolded.
+  // jsdom lays nothing out, so the class is the only handle there is.
+  it('keeps the terminal inside its half', async () => {
+    mountAndStart({
+      workspace: anna,
+      kind: 'setup',
+      script: SETUP_SCRIPT,
+      port: 3111,
+      rootPath: '/Users/test/planner',
+      onOpenSettings: vi.fn()
+    })
+    await sessionsOpened(1)
+
+    const host = document.querySelector('.xterm')?.parentElement
+    expect(host?.parentElement).toHaveClass('min-h-0', 'overflow-hidden')
+  })
+
   // A stop for the server reaches a build that has already finished as a
   // bystander — and unmounting its terminal would throw away the log somebody
   // is reading, which is the one thing `started` exists for.

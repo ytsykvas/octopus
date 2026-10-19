@@ -18,8 +18,10 @@ const { FakeXTerm, FakeFitAddon } = vi.hoisted(() => {
 
     // Deliberately not xterm's own 80x24: the size has to reach the session
     // from the emulator, and a hardcoded default would pass unnoticed.
-    readonly cols = 120
-    readonly rows = 40
+    cols = 120
+    rows = 40
+    /** Every size the component asked for, in order. */
+    readonly resized: [number, number][] = []
     readonly screen: string[] = []
     typed: ((data: string) => void) | null = null
     focused = false
@@ -52,11 +54,23 @@ const { FakeXTerm, FakeFitAddon } = vi.hoisted(() => {
     dispose(): void {
       this.disposed = true
     }
+
+    resize(cols: number, rows: number): void {
+      this.cols = cols
+      this.rows = rows
+      this.resized.push([cols, rows])
+    }
   }
 
   class FakeFitAddon {
-    fit(): void {
-      // Sizing needs measured glyphs, so the fake keeps its size throughout.
+    /**
+     * What a measurement would propose. Sizing needs measured glyphs, so by
+     * default there is none and the emulator keeps its size throughout.
+     */
+    static proposal: { cols: number; rows: number } | undefined = undefined
+
+    proposeDimensions(): { cols: number; rows: number } | undefined {
+      return FakeFitAddon.proposal
     }
   }
 
@@ -95,11 +109,13 @@ class FakeResizeObserver {
 
 beforeEach(() => {
   FakeXTerm.instances.length = 0
+  FakeFitAddon.proposal = undefined
   FakeResizeObserver.instances.length = 0
   vi.stubGlobal('ResizeObserver', FakeResizeObserver)
 })
 
 afterEach(() => {
+  vi.restoreAllMocks()
   // The theme test writes tokens onto the root element. Cleared here rather
   // than at the end of it, so a failed assertion cannot leave them behind.
   document.documentElement.style.removeProperty('--canvas')
@@ -418,6 +434,69 @@ describe('Terminal', () => {
 
     await waitFor(() => {
       expect(window.octopus.terminal.dispose).toHaveBeenCalledWith('term-late')
+    })
+  })
+
+  describe('fitting to its box', () => {
+    /** jsdom lays nothing out, so a box's height is whatever the test says. */
+    function boxHeight(height: number): void {
+      vi.spyOn(HTMLElement.prototype, 'clientHeight', 'get').mockReturnValue(height)
+    }
+
+    it('takes the size a measured box proposes', () => {
+      boxHeight(300)
+      FakeFitAddon.proposal = { cols: 100, rows: 30 }
+
+      render(<Terminal cwd="/tmp/planner/anna" />)
+
+      expect(emulator().resized).toEqual([[100, 30]])
+    })
+
+    // A folded box has its width and no height. Squeezed to one row there, a
+    // build's progress display could not move above row 1 and every frame
+    // would land in the scrollback the reader opens the pane to.
+    it('keeps its rows in a box with no height, and takes the columns', () => {
+      boxHeight(0)
+      FakeFitAddon.proposal = { cols: 100, rows: 30 }
+
+      render(<Terminal cwd="/tmp/planner/anna" />)
+
+      expect(emulator().resized).toEqual([[100, 40]])
+    })
+
+    // A hidden box measures nothing at all; guessing a size there is how a
+    // terminal came up two columns wide.
+    it('leaves its size alone when nothing could be measured', () => {
+      boxHeight(300)
+      FakeFitAddon.proposal = { cols: Number.NaN, rows: Number.NaN }
+
+      render(<Terminal cwd="/tmp/planner/anna" />)
+
+      expect(emulator().resized).toEqual([])
+    })
+
+    it('does not resize to the size it already has', () => {
+      boxHeight(300)
+      FakeFitAddon.proposal = { cols: 120, rows: 40 }
+
+      render(<Terminal cwd="/tmp/planner/anna" />)
+
+      expect(emulator().resized).toEqual([])
+    })
+
+    it('fits again when its box changes, and tells the session', async () => {
+      boxHeight(300)
+      render(<Terminal cwd="/tmp/planner/anna" />)
+      await sessionStarted()
+      await waitFor(() => {
+        expect(emulator().focused).toBe(true)
+      })
+
+      FakeFitAddon.proposal = { cols: 90, rows: 20 }
+      resizer().notify()
+
+      expect(emulator().resized).toEqual([[90, 20]])
+      expect(window.octopus.terminal.resize).toHaveBeenCalledWith('term-1', 90, 20)
     })
   })
 

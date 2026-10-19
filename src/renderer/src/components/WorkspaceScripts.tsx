@@ -113,7 +113,7 @@ export function WorkspaceScripts({
     )
 
   return (
-    <div className="relative flex-1">
+    <div className="relative flex-1 overflow-hidden">
       {/* Shown over the runners rather than instead of them, so a stray click
           that clears the selection does not end every run in the project. The
           runner itself owns this text; a second copy of it here would be one

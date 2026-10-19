@@ -148,7 +148,21 @@ export function Terminal({
     const fit = new FitAddon()
     term.loadAddon(fit)
     term.open(container)
-    fit.fit()
+
+    /*
+     * `fit.fit()`, except in a box with a width and no height — the folded
+     * build half — where it takes the columns and keeps the rows. Fitted to one
+     * row there, a progress display could not move above it, and every frame
+     * of it landed in the scrollback the reader unfolds the pane to see.
+     */
+    const refit = (): void => {
+      const size = fit.proposeDimensions()
+      // A hidden box measures nothing at all; leave the size alone rather than guess.
+      if (size === undefined || Number.isNaN(size.cols) || Number.isNaN(size.rows)) return
+      const rows = container.clientHeight > 0 ? size.rows : term.rows
+      if (size.cols !== term.cols || rows !== term.rows) term.resize(size.cols, rows)
+    }
+    refit()
 
     let sessionId: string | null = null
     // An AbortController rather than a boolean: TypeScript cannot see that a
@@ -219,7 +233,7 @@ export function Terminal({
     })()
 
     const observer = new ResizeObserver(() => {
-      fit.fit()
+      refit()
       if (sessionId) window.octopus.terminal.resize(sessionId, term.cols, term.rows)
     })
     observer.observe(container)
