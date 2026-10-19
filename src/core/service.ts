@@ -205,10 +205,12 @@ import {
   skillOverridesFor,
   type SkillPreview,
   type SkillSave,
+  type SkillVisibility,
   writeRawSkill,
   writeSkill
 } from './skills.js'
 import { describeSessionSkill, withholdable } from './sessionSkills.js'
+import { skillsInFiles } from './settingsFiles.js'
 import { type OwnSkillScope, skillKey } from './skillNames.js'
 import type { Store } from './stores.js'
 import { type QuestionAnswer, readQuestions, withAnswers } from './questions.js'
@@ -476,6 +478,15 @@ export interface ServiceOptions {
     cwd: string,
     sources: readonly SettingSourceName[]
   ) => Promise<WindowOverride | null>
+  /**
+   * What the settings files a session reads say about each skill
+   * (`skillsInFiles`). Reads the user's own file by default, so a test passes
+   * its own.
+   */
+  readonly skillsInFiles?: (
+    cwd: string,
+    sources: readonly SettingSourceName[]
+  ) => Promise<ReadonlyMap<string, SkillVisibility>>
 }
 
 /**
@@ -1475,6 +1486,7 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
   const dataRoot = options.dataRoot ?? rootDir()
   const cliDir = options.cliConfigDir ?? cliConfigDir()
   const windowOverrideFor = options.windowOverride ?? findWindowOverride
+  const fileSkillsFor = options.skillsInFiles ?? skillsInFiles
   const listening = options.listening ?? isListening
   // Corrected for the packaged app, where the SDK's own guess points into
   // `app.asar` and cannot be started (`agentBinary.ts`).
@@ -4002,7 +4014,10 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
         askPermission: (ask) => askPermission(chat, ask),
         // The snapshot, as `askPermission` above takes it: this reads only the
         // chat's id and its workspace, and neither of those changes.
-        askElicitation: (ask) => askElicitation(chat, ask)
+        askElicitation: (ask) => askElicitation(chat, ask),
+        // The sources this session started with, not the project's current
+        // ones: those are the files it reads.
+        skillsInFiles: () => fileSkillsFor(workspace.path, settingSources)
       }
     )
 

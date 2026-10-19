@@ -31,7 +31,7 @@ import { sessionEffort } from './chats.js'
 import { type AnswerValue, type ElicitationField, readForm } from './elicitation.js'
 import { type AgentEvent, ResetTriggerSchema } from './events.js'
 import { describeError } from './persist.js'
-import type { SkillOverride } from './skills.js'
+import type { SkillOverride, SkillVisibility } from './skills.js'
 import type { UsageReport } from './usage.js'
 import { toUsageReport } from './usage.js'
 
@@ -242,6 +242,13 @@ export interface SessionHooks {
    * comes back, which is what an elicitation is for.
    */
   readonly askElicitation: (ask: ElicitationAsk) => Promise<ElicitationAnswer>
+  /**
+   * What the settings files this session reads say about each skill they
+   * name (`skillsInFiles`) — asked as a skill drops off octopus's map, since
+   * that is what it goes back to. Optional because the account probe is
+   * never told about skills; a session left without it goes back to `'on'`.
+   */
+  readonly skillsInFiles?: () => Promise<ReadonlyMap<string, SkillVisibility>>
 }
 
 /** What an MCP server wants from the user, once the form has been read. */
@@ -549,7 +556,42 @@ export function startSession(options: SessionOptions, hooks: SessionHooks): Agen
   let effortChoice = options.effort
   /** What each model holds, as the turns' results said — see `ContextUsage.modelWindow`. */
   const modelWindows = new Map<string, number>()
-  let skills: Readonly<Record<string, SkillOverride>> = options.skillOverrides
+  let skills: Readonly<Record<string, SkillVisibility>> = options.skillOverrides
+
+  /** The skill push in flight, so the next one waits for it — `setSkills`. */
+  let skillTurn: Promise<void> = Promise.resolve()
+
+  async function moveSkills(
+    skillOverrides: Readonly<Record<string, SkillOverride>>
+  ): Promise<void> {
+    // The whole map every time, never a difference: `applyFlags` sends every
+    // flag together, and the map is the record's whole answer. A key left
+    // out does not undo a withhold the session started with, so every key
+    // this session was told before and the new map no longer names is said
+    // explicitly — and said as the user's own settings files say it, `'on'`
+    // only where they are silent. Measured (SDK 0.3.299): the flag layer
+    // outranks the files, so `'on'` brought back a skill the user had
+    // switched off there, for the rest of the session. A key once dropped
+    // stays in the map, so every later push reads the files again — a few
+    // small reads, and the files may have changed in between.
+    const next: Record<string, SkillVisibility> = { ...skillOverrides }
+    // `hasOwn` rather than `in` or `??=`: a skill may be called `constructor`.
+    const dropped = Object.keys(skills).filter((key) => !Object.hasOwn(next, key))
+    if (dropped.length > 0) {
+      const files = (await hooks.skillsInFiles?.()) ?? new Map<string, SkillVisibility>()
+      for (const key of dropped) next[key] = files.get(key) ?? 'on'
+    }
+
+    // Nothing moved, nothing sent: `applyFlags` carries the effort too, and
+    // a push that changes no skill would undo an `/effort` given in the
+    // session — which `pushEffort`'s guard exists to keep.
+    // Every key of the old map is in `next` by now, so one comparison covers
+    // a value that moved and a key that is new.
+    if (Object.keys(next).every((key) => next[key] === skills[key])) return
+
+    skills = next
+    await applyFlags()
+  }
 
   async function applyFlags(): Promise<void> {
     const current = sessionEffort(effortChoice)
@@ -786,26 +828,14 @@ export function startSession(options: SessionOptions, hooks: SessionHooks): Agen
       await applyFlags()
     },
 
-    async setSkills(skillOverrides) {
-      // The whole map every time, never a difference: `applyFlags` sends every
-      // flag together, and the map is the record's whole answer. Turning a
-      // skill back on is an explicit `'on'` — a key left out does not undo a
-      // withhold the session started with — so every key this session was
-      // told before and the new map no longer names is said `'on'`: a key the
-      // record stopped naming is one it no longer withholds. Without it, taking
-      // a skill off a default list reached the record and not the session.
-      const next: Record<string, SkillOverride> = { ...skillOverrides }
-      for (const key of Object.keys(skills)) next[key] ??= 'on'
-
-      // Nothing moved, nothing sent: `applyFlags` carries the effort too, and
-      // a push that changes no skill would undo an `/effort` given in the
-      // session — which `pushEffort`'s guard exists to keep.
-      // Every key of the old map is in `next` by now, so one comparison covers
-      // a value that moved and a key that is new.
-      if (Object.keys(next).every((key) => next[key] === skills[key])) return
-
-      skills = next
-      await applyFlags()
+    setSkills(skillOverrides) {
+      // One at a time: a push may wait on the settings files, and two
+      // overlapping ones — a default list changed, then a chat's own switch —
+      // would both start from the same map, the slower read sending the older
+      // record last.
+      const turn = skillTurn.then(() => moveSkills(skillOverrides))
+      skillTurn = turn.catch(() => undefined)
+      return turn
     },
 
     async refreshSkills() {

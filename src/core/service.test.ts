@@ -132,10 +132,12 @@ const started: OctopusService[] = []
 const answering = new Set<number>()
 
 async function createService(options: ServiceOptions = {}): Promise<OctopusService> {
-  // Nobody outranks a window unless a test says so: the default reads the
-  // machine's own `~/.claude/settings.json` and environment.
+  // Nobody outranks a window and no file names a skill unless a test says so:
+  // the defaults read the machine's own `~/.claude/settings.json` and
+  // environment.
   const made = await makeService({
     windowOverride: () => Promise.resolve(null),
+    skillsInFiles: () => Promise.resolve(new Map()),
     listening: (port) => Promise.resolve(answering.has(port)),
     ...options
   })
@@ -11832,6 +11834,31 @@ describe('the agent chat', () => {
       await service.updateConfig({ disabledSkillDefaults: [] })
 
       expect(agent().flagSettings().at(-1)?.skillOverrides).toEqual({ review: 'on' })
+    })
+
+    /*
+     * The flag layer outranks the user's own files, so a skill octopus stops
+     * withholding goes back to what the files the session reads say — asked of
+     * the checkout and the sources that session started with.
+     */
+    it("gives a skill back as the user's settings files say it", async () => {
+      const asked: { cwd: string; sources: readonly string[] }[] = []
+      const { service, workspaceId } = await withWorkspace({
+        skillsInFiles: (cwd, sources) => {
+          asked.push({ cwd, sources })
+          return Promise.resolve(new Map([['review', 'name-only' as const]]))
+        }
+      })
+      await service.updateConfig({ disabledSkillDefaults: ['review'] })
+      const chat = await service.openChat(workspaceId)
+      await service.sendToChat(chat.id, 'work')
+
+      await service.updateConfig({ disabledSkillDefaults: [] })
+
+      expect(agent().flagSettings().at(-1)?.skillOverrides).toEqual({ review: 'name-only' })
+      expect(asked).toEqual([
+        { cwd: agent().options().cwd, sources: agent().options().settingSources }
+      ])
     })
 
     it('gives a running conversation back a skill its project stops withholding', async () => {
