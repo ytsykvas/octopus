@@ -530,6 +530,22 @@ describe('workspaces', () => {
   })
 
   /*
+   * Typed the way a branch reads on GitHub, the prefix used to give
+   * `octo//magda`, and every new workspace failed with git's own refusal.
+   */
+  it('creates a workspace under a prefix typed with a slash too many', async () => {
+    const repo = join(dir, 'planner')
+    await initRepo(repo)
+    const service = await createService(paths(dir))
+    await service.updateConfig({ branchPrefix: 'octo/' })
+    const project = await service.addProjectFromPath(repo)
+
+    const workspace = await service.createWorkspaceIn(project.id)
+
+    expect(workspace.branch).toMatch(/^octo\/[^/]+$/)
+  })
+
+  /*
    * A file whose times moved and whose content did not — a binary as well as a
    * text one. A plain `git diff` against the working tree refreshes the index
    * for it and writes it back under `index.lock` (`--no-optional-locks` or

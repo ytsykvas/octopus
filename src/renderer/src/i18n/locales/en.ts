@@ -1317,7 +1317,8 @@ export const en = {
     branchPrefix: 'Branch prefix',
     branchPrefixHint:
       'Workspace branches are named <prefix>/<workspace>. A GitHub username is a common choice.',
-    branchPrefixEmpty: 'The prefix cannot be empty.',
+    branchPrefixUnusable: 'The prefix needs at least one character git can use.',
+    branchPrefixBecomes: 'Will be saved as {{prefix}}',
 
     cloneDirectory: 'Clone destination',
     cloneDirectoryHint:
