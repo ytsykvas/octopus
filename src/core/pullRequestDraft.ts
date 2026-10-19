@@ -12,7 +12,15 @@
 
 import { z } from 'zod'
 
-import { InputQueue, mapMessage, type QueryFn, READ_ONLY_TOOLS, userMessage } from './agent.js'
+import {
+  InputQueue,
+  mapMessage,
+  type QueryFn,
+  READ_ONLY_TOOLS,
+  refusingBash,
+  userMessage
+} from './agent.js'
+import { branchGuard } from './branchGuard.js'
 import type { SettingSourceName } from './config.js'
 import type { WorkspaceDiff } from './diff.js'
 import { GitHubError } from './github.js'
@@ -253,6 +261,9 @@ export async function draftPullRequest(
         allowedTools: [...READ_ONLY_TOOLS],
         permissionMode: 'default',
         settingSources: [...options.settingSources],
+        // The user's allow rules come in with `settingSources`, and one of
+        // them could still run a command that leaves the branch.
+        hooks: refusingBash(branchGuard(() => options.branch, options.cwd)),
         ...(options.model === null ? {} : { model: options.model })
       }
     })

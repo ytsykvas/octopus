@@ -32,6 +32,7 @@ import {
   READ_ONLY_TOOLS,
   startSession
 } from './agent.js'
+import { branchGuard } from './branchGuard.js'
 import { unpackedAgentBinary, withAgentBinary } from './agentBinary.js'
 import {
   type AgentCommand,
@@ -4130,7 +4131,12 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
         askElicitation: (ask) => askElicitation(chat, ask),
         // The sources this session started with, not the project's current
         // ones: those are the files it reads.
-        skillsInFiles: () => fileSkillsFor(workspace.path, settingSources)
+        skillsInFiles: () => fileSkillsFor(workspace.path, settingSources),
+        // Re-read rather than closed over: a rename changes the branch.
+        refuseBash: branchGuard(
+          () => state.workspaces.find((item) => item.id === workspace.id)?.branch ?? null,
+          workspace.path
+        )
       }
     )
 
