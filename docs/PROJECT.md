@@ -545,6 +545,8 @@ const q = query({
 
 The config keeps the switch — nothing / `project` / `user + project + local` — for anyone who wants isolation; it is simply no longer what everybody gets. Version 2 of the config raises an install that was still on `nothing`.
 
+**One workspace is one branch and one pull request.** The request, the Changes tab and the push button are all found by the workspace's branch, so an agent that leaves it — `git checkout -b`, `git switch`, `git branch -m`, `gh pr create --head` elsewhere — empties all three while its work goes to a request the app cannot see. Every session in a worktree, the pull-request draft's included, carries a `PreToolUse` hook on `Bash` (`branchGuard.ts`) that refuses such a command whatever the mode or the user's allow rules say, and tells the agent why; going back to the workspace's branch, and `git checkout` of a file, still run. It is a refusal with its reason, as `DENIED` is, not text put into the agent's context — so it stays inside §4. A command hidden in a script the agent runs is out of its reach; the Changes tab's warning about HEAD is what catches that.
+
 **A repository is asked about before it is believed.** Loading every source means
 a clone can pre-approve tools through `permissions.allow`, run shell commands
 around every tool call through `hooks`, and start servers through `.mcp.json`.

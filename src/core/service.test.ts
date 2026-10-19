@@ -20,6 +20,7 @@ import { promisify } from 'node:util'
 
 import type {
   ModelInfo,
+  Options,
   PermissionUpdate,
   Query,
   SDKMessage,
@@ -4543,6 +4544,33 @@ describe('the agent chat', () => {
    * reaches a conversation by starting its session again, and only when
    * nothing is in flight that the old process would take with it.
    */
+  // One workspace, one pull request: the agent is kept on the branch the app
+  // tracks, and on the new one after a rename.
+  it('refuses a command that would take the agent off its branch', async () => {
+    const { service, projectId, workspaceId } = await withWorkspace()
+    const chat = await service.openChat(workspaceId)
+    await service.sendToChat(chat.id, 'work')
+    const hooks = agent().options().hooks as NonNullable<Options['hooks']>
+    const [hook] = hooks.PreToolUse?.[0]?.hooks ?? []
+    if (!hook) throw new Error('no guard')
+    const decide = async (command: string): Promise<string> =>
+      JSON.stringify(
+        await hook({ tool_input: { command } } as never, 'tool-1', {
+          signal: new AbortController().signal
+        })
+      )
+
+    expect(await decide('git checkout -b feat/elsewhere')).toContain('deny')
+
+    await service.renameWorkspaceById(workspaceId, 'fix auth')
+    const [renamed] = await service.listWorkspaces(projectId)
+    expect(await decide(`git checkout ${renamed?.branch ?? ''}`)).toBe('{}')
+
+    // A hook still held by a session whose workspace has gone guards nothing.
+    await service.removeWorkspaceById(workspaceId, { deleteBranch: true })
+    expect(await decide('git checkout -b feat/elsewhere')).toBe('{}')
+  })
+
   describe('where a conversation compacts', () => {
     /** Sends one message and lets its turn finish, leaving a session with history. */
     async function idleAfterOneTurn(): Promise<{

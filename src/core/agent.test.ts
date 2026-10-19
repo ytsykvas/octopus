@@ -17,6 +17,7 @@ import {
   type PermissionAsk,
   type PermissionOutcome,
   READ_ONLY_TOOLS,
+  refusingBash,
   type SessionOptions,
   promptTokens,
   readContextUsage,
@@ -73,6 +74,7 @@ function fakeAgent(
     rewind?: Record<string, unknown>
     /** What the session's settings files say about skills; left out, it reads none. */
     skillsInFiles?: () => Promise<ReadonlyMap<string, SkillVisibility>>
+    refuseBash?: (command: string) => string | null
   } = {}
 ): { agent: FakeQuery; events: AgentEvent[] } {
   const queued: SDKMessage[] = []
@@ -205,7 +207,8 @@ function fakeAgent(
         hooks.askPermission?.(ask) ?? Promise.resolve({ allow: true } as const),
       askElicitation: (ask) =>
         hooks.askElicitation?.(ask) ?? Promise.resolve({ action: 'decline' } as const),
-      ...(hooks.skillsInFiles && { skillsInFiles: hooks.skillsInFiles })
+      ...(hooks.skillsInFiles && { skillsInFiles: hooks.skillsInFiles }),
+      ...(hooks.refuseBash && { refuseBash: hooks.refuseBash })
     }
   )
 
@@ -1815,6 +1818,45 @@ describe('a session that will not close', () => {
     )
 
     await expect(session.close()).rejects.toThrow('the process would not die')
+  })
+})
+
+describe('refusingBash', () => {
+  const refuse = (command: string): string | null =>
+    command.startsWith('git checkout -b') ? 'Stay on the branch.' : null
+
+  /** Runs the one hook on a call, as the SDK would. */
+  async function decide(input: unknown): Promise<unknown> {
+    const [matcher] = refusingBash(refuse).PreToolUse ?? []
+    expect(matcher?.matcher).toBe('Bash')
+    const [hook] = matcher?.hooks ?? []
+    if (!hook) throw new Error('no hook')
+    return hook(input as never, 'tool-1', { signal: new AbortController().signal })
+  }
+
+  it('denies a command the guard refuses, with its reason', async () => {
+    await expect(
+      decide({ hook_event_name: 'PreToolUse', tool_input: { command: 'git checkout -b x' } })
+    ).resolves.toEqual({
+      hookSpecificOutput: {
+        hookEventName: 'PreToolUse',
+        permissionDecision: 'deny',
+        permissionDecisionReason: 'Stay on the branch.'
+      }
+    })
+  })
+
+  it('says nothing about a command it lets through', async () => {
+    await expect(decide({ tool_input: { command: 'git status' } })).resolves.toEqual({})
+  })
+
+  it('says nothing about a call that carries no command', async () => {
+    await expect(decide({ tool_input: {} })).resolves.toEqual({})
+  })
+
+  it('reaches the session only when there is a guard', () => {
+    expect(fakeAgent().agent.options().hooks).toBeUndefined()
+    expect(fakeAgent({}, { refuseBash: refuse }).agent.options().hooks).toHaveProperty('PreToolUse')
   })
 })
 

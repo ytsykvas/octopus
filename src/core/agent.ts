@@ -250,6 +250,11 @@ export interface SessionHooks {
    * never told about skills; a session left without it goes back to `'on'`.
    */
   readonly skillsInFiles?: () => Promise<ReadonlyMap<string, SkillVisibility>>
+  /**
+   * A refusal for a shell command, or null to let it run (`branchGuard`).
+   * Optional because the account probe runs no commands at all.
+   */
+  readonly refuseBash?: (command: string) => string | null
 }
 
 /** What an MCP server wants from the user, once the form has been read. */
@@ -529,6 +534,45 @@ export const DENIED = 'The user declined this action in octopus.'
  * nobody declined anything — the turn the question belonged to ended first, so
  * saying "the user declined" would teach it something untrue about the user.
  */
+/** The one field of a Bash call the guard reads. */
+const BashCallSchema = z.object({ tool_input: z.object({ command: z.string() }) })
+
+/**
+ * The SDK hooks that put `refuse` in front of every shell command.
+ *
+ * A hook rather than a check in `canUseTool`, which is consulted last: a
+ * command the user's own allow rules cover, or one `auto` mode approves, never
+ * reaches it. A `PreToolUse` refusal holds in every mode.
+ */
+export function refusingBash(
+  refuse: (command: string) => string | null
+): NonNullable<Options['hooks']> {
+  return {
+    PreToolUse: [
+      {
+        matcher: 'Bash',
+        hooks: [
+          (input) => {
+            const call = BashCallSchema.safeParse(input)
+            const reason = call.success ? refuse(call.data.tool_input.command) : null
+            return Promise.resolve(
+              reason === null
+                ? {}
+                : {
+                    hookSpecificOutput: {
+                      hookEventName: 'PreToolUse' as const,
+                      permissionDecision: 'deny' as const,
+                      permissionDecisionReason: reason
+                    }
+                  }
+            )
+          }
+        ]
+      }
+    ]
+  }
+}
+
 export const ABANDONED = 'The turn this question belonged to ended before it was answered.'
 
 /**
@@ -643,6 +687,7 @@ export function startSession(options: SessionOptions, hooks: SessionHooks): Agen
       systemPrompt: { type: 'preset', preset: 'claude_code' },
       permissionMode: options.permissionMode,
       allowedTools: [...options.allowedTools],
+      ...(hooks.refuseBash && { hooks: refusingBash(hooks.refuseBash) }),
       // What makes text appear while it is being written rather than in one
       // block at the end of a turn.
       includePartialMessages: true,

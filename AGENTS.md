@@ -179,6 +179,13 @@ here can step over is decoration. Every change, a one-line fix included, goes
 through a branch and a pull request, and merges once CI is green — when the
 maintainer asks for each step (the hard rule below):
 
+**Inside an Octopus workspace, do not `git checkout -b`.** One workspace is one
+branch and one pull request: the app finds both by the workspace's branch
+(`octopus/<name>`), so commit on it. A second
+independent change belongs in another workspace. Agents the app runs are refused
+the branch switch outright (`branchGuard.ts`); this line is for the ones it does
+not run. The recipe below is for a plain checkout:
+
 ```bash
 git checkout -b fix/short-description
 # work, then `npm run check`
@@ -186,7 +193,8 @@ git push -u origin fix/short-description
 gh pr create --title "fix: …" --body-file body.md
 ```
 
-**The pull request itself**, in English like everything else here:
+**The pull request itself**, when you are asked to write one — in English like
+everything else here:
 
 - **Title** — Conventional Commits, imperative, under 72 characters. A squash
   merge makes it the commit on `main`, so it is written as one.

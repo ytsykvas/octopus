@@ -1,3 +1,4 @@
+import type { Options } from '@anthropic-ai/claude-agent-sdk'
 import { describe, expect, it } from 'vitest'
 
 import type { QueryFn } from './agent.js'
@@ -86,6 +87,17 @@ function failing(message: string): QueryFn {
   return () => {
     throw new Error(message)
   }
+}
+
+/** What the session's Bash guard says to a command, as the SDK would ask it. */
+async function refusalOf(captured: Record<string, unknown>, command: string): Promise<unknown> {
+  const hooks = captured.hooks as NonNullable<Options['hooks']>
+  const [hook] = hooks.PreToolUse?.[0]?.hooks ?? []
+  if (!hook) throw new Error('no guard')
+  const output = await hook({ tool_input: { command } } as never, 'tool-1', {
+    signal: new AbortController().signal
+  })
+  return JSON.stringify(output)
 }
 
 const options = {
@@ -325,6 +337,8 @@ describe('draftPullRequest', () => {
     // Describing a change is not a licence to make one.
     expect(captured.allowedTools).not.toContain('Edit')
     expect(captured.allowedTools).not.toContain('Bash')
+    // A command one of the user's allow rules lets through still meets the guard.
+    expect(await refusalOf(captured, 'git checkout -b other')).toContain('feature/thing')
   })
 
   // Left out, the SDK loads every source — an unapproved repository's hooks
