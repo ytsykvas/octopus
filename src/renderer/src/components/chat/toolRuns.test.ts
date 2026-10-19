@@ -148,6 +148,22 @@ describe('folding a run of tool calls', () => {
     ])
   })
 
+  // The rest of the window stays on the workspace's own worktree; folded into a
+  // count, the line that says so would be inside a closed fold.
+  it('never folds a move into another worktree into the working out', () => {
+    const move = agent({
+      type: 'tool_use',
+      toolUseId: 'c-enter',
+      name: 'EnterWorktree',
+      input: { name: 'spike' }
+    })
+
+    expect(groupToolRuns([call('Grep'), call('Grep'), move]).map((block) => block.kind)).toEqual([
+      'tools',
+      'entry'
+    ])
+  })
+
   // The position is the key React draws with, and the log is append-only, so a
   // block has to be identified by where it starts.
   it('remembers where each block began', () => {
