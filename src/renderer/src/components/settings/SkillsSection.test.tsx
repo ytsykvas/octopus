@@ -27,7 +27,7 @@ const holding = (skills: readonly SkillEntry[]): void => {
 }
 
 interface Rendered {
-  readonly onDefaults: ReturnType<typeof vi.fn>
+  readonly onDefault: ReturnType<typeof vi.fn>
   readonly onCopyToGlobal: ReturnType<typeof vi.fn>
 }
 
@@ -38,7 +38,7 @@ async function renderSection(
     readonly workspaceId?: string | null
   } = {}
 ): Promise<Rendered> {
-  const onDefaults = vi.fn()
+  const onDefault = vi.fn()
   const onCopyToGlobal = vi.fn().mockResolvedValue(true)
 
   render(
@@ -47,7 +47,7 @@ async function renderSection(
         options.project === true ? { kind: 'project', projectId: 'planner' } : { kind: 'global' }
       }
       disabledDefaults={options.disabled ?? []}
-      onDefaults={onDefaults}
+      onDefault={onDefault}
       workspaceId={options.workspaceId ?? null}
       onCopyToGlobal={onCopyToGlobal}
     />
@@ -57,7 +57,7 @@ async function renderSection(
     expect(octopus().skills.list).toHaveBeenCalled()
   })
 
-  return { onDefaults, onCopyToGlobal }
+  return { onDefault, onCopyToGlobal }
 }
 
 beforeEach(() => {
@@ -105,11 +105,11 @@ describe('the skills one store holds', () => {
    */
   it('takes a skill out of the default list, and puts it back', async () => {
     holding([entry()])
-    const { onDefaults } = await renderSection()
+    const { onDefault } = await renderSection()
 
     await userEvent.click(screen.getByRole('switch', { name: 'On by default' }))
 
-    expect(onDefaults).toHaveBeenCalledExactlyOnceWith(['review'])
+    expect(onDefault).toHaveBeenCalledExactlyOnceWith('review', false)
   })
 
   /*
@@ -119,23 +119,23 @@ describe('the skills one store holds', () => {
    */
   it('keys the default by the name the agent uses, in either store', async () => {
     holding([entry()])
-    const { onDefaults } = await renderSection({ project: true })
+    const { onDefault } = await renderSection({ project: true })
 
     await userEvent.click(screen.getByRole('switch', { name: 'On by default' }))
 
-    expect(onDefaults).toHaveBeenCalledExactlyOnceWith(['review'])
+    expect(onDefault).toHaveBeenCalledExactlyOnceWith('review', false)
   })
 
   it('shows a skill already off as off, and turns it back on', async () => {
     holding([entry()])
-    const { onDefaults } = await renderSection({ disabled: ['review'] })
+    const { onDefault } = await renderSection({ disabled: ['review'] })
 
     const control = screen.getByRole('switch', { name: 'On by default' })
     expect(control).not.toBeChecked()
 
     await userEvent.click(control)
 
-    expect(onDefaults).toHaveBeenCalledExactlyOnceWith([])
+    expect(onDefault).toHaveBeenCalledExactlyOnceWith('review', true)
   })
 })
 
@@ -666,7 +666,7 @@ describe("the checkout's own skills", () => {
       ok: true,
       value: [entry({ name: 'xibo-bridge', description: 'From the checkout.', path: '/ws/x' })]
     })
-    const { onDefaults } = await renderSection({ project: true, workspaceId: 'planner/kyiv' })
+    const { onDefault } = await renderSection({ project: true, workspaceId: 'planner/kyiv' })
 
     await waitFor(() => {
       expect(screen.getByText('xibo-bridge')).toBeInTheDocument()
@@ -674,7 +674,7 @@ describe("the checkout's own skills", () => {
 
     await userEvent.click(screen.getByRole('switch', { name: 'On by default' }))
 
-    expect(onDefaults).toHaveBeenCalledExactlyOnceWith(['xibo-bridge'])
+    expect(onDefault).toHaveBeenCalledExactlyOnceWith('xibo-bridge', false)
     expect(octopus().skills.save).not.toHaveBeenCalled()
   })
 
@@ -729,7 +729,7 @@ describe('an answer that arrives too late', () => {
     vi.mocked(octopus().skills.list).mockReturnValue(pending.promise)
 
     const view = render(
-      <SkillsSection store={{ kind: 'global' }} disabledDefaults={[]} onDefaults={vi.fn()} />
+      <SkillsSection store={{ kind: 'global' }} disabledDefaults={[]} onDefault={vi.fn()} />
     )
     view.unmount()
     pending.resolve({ ok: true, value: [entry()] })
@@ -749,7 +749,7 @@ describe('a repository answer that arrives too late', () => {
       <SkillsSection
         store={{ kind: 'project', projectId: 'planner' }}
         disabledDefaults={[]}
-        onDefaults={vi.fn()}
+        onDefault={vi.fn()}
         workspaceId="planner/kyiv"
         onCopyToGlobal={vi.fn()}
       />
@@ -807,7 +807,7 @@ describe('when the store cannot be read', () => {
       code: 'skillMissing'
     })
 
-    render(<SkillsSection store={{ kind: 'global' }} disabledDefaults={[]} onDefaults={vi.fn()} />)
+    render(<SkillsSection store={{ kind: 'global' }} disabledDefaults={[]} onDefault={vi.fn()} />)
 
     await waitFor(() => {
       expect(screen.getByText(/no longer there/)).toBeInTheDocument()

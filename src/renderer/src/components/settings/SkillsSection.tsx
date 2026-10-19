@@ -19,7 +19,8 @@ interface SkillsSectionProps {
   readonly store: Store
   /** Keys switched off in every new conversation of this scope. */
   readonly disabledDefaults: readonly string[]
-  readonly onDefaults: (next: string[]) => void
+  /** One skill switched, by the key the agent knows it by — never the whole list. */
+  readonly onDefault: (key: string, enabled: boolean) => void
   /**
    * A workspace of this project, or null for the installation-wide section.
    *
@@ -45,7 +46,7 @@ interface SkillsSectionProps {
 export function SkillsSection({
   store,
   disabledDefaults,
-  onDefaults,
+  onDefault,
   workspaceId = null,
   onCopyToGlobal
 }: SkillsSectionProps): React.JSX.Element {
@@ -118,10 +119,9 @@ export function SkillsSection({
     if (confirmed) await skills.remove(folder)
   }
 
+  // The switch, not the list it would make (`ConfigEditSchema`).
   const setDefault = (name: string, on: boolean): void => {
-    const key = skillKey(name)
-
-    onDefaults(on ? disabledDefaults.filter((entry) => entry !== key) : [...disabledDefaults, key])
+    onDefault(skillKey(name), on)
   }
 
   return (

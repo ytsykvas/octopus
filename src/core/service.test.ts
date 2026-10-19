@@ -1302,6 +1302,27 @@ describe('config', () => {
     await expect(accepted).resolves.toMatchObject({ theme: 'dark' })
   })
 
+  // Applied inside the write's turn, so edits made at once all land
+  // (`ConfigEditSchema`).
+  it('keeps every one of several list edits made at once', async () => {
+    await Promise.all([
+      service.editConfig({ kind: 'skillDefault', key: 'review', enabled: false }),
+      service.editConfig({ kind: 'skillDefault', key: 'ship', enabled: false }),
+      service.editConfig({ kind: 'dismissTip', id: 'tabs' })
+    ])
+
+    expect(service.getConfig()).toMatchObject({
+      disabledSkillDefaults: ['review', 'ship'],
+      dismissedTips: ['tabs']
+    })
+  })
+
+  it('answers an edit with the config as it now stands', async () => {
+    await expect(service.editConfig({ kind: 'dismissTip', id: 'tabs' })).resolves.toMatchObject({
+      dismissedTips: ['tabs']
+    })
+  })
+
   // Quitting waits for a write still being made, or the old file survives the
   // last change before Cmd-Q and a temporary file is left beside it.
   it('finishes a config write before it is done shutting down', async () => {
@@ -1316,6 +1337,22 @@ describe('config', () => {
 })
 
 describe('projects', () => {
+  // The config's list edits one layer down, for the same reason.
+  it('keeps both of two list edits made to a project at once', async () => {
+    const repo = join(dir, 'planner')
+    await initRepo(repo)
+    const project = await service.addProjectFromPath(repo)
+
+    // Two switches of the same list: the case a list sent whole got wrong.
+    await Promise.all([
+      service.editProjectById(project.id, { kind: 'skillDefault', key: 'review', enabled: false }),
+      service.editProjectById(project.id, { kind: 'skillDefault', key: 'ship', enabled: false })
+    ])
+
+    // Both, in whichever order the two writes took their turns.
+    expect(service.listProjects()[0]?.disabledSkillDefaults.toSorted()).toEqual(['review', 'ship'])
+  })
+
   it('starts with an empty list', () => {
     expect(service.listProjects()).toHaveLength(0)
   })
@@ -1786,16 +1823,18 @@ describe('env overrides a project adds', () => {
     await service.saveEnvProfile(id, 'default', 'API_KEY=secret\n')
     const workspace = await service.createWorkspaceIn(id)
 
-    await service.updateProjectById(id, { preferLocal: ['project.envFile'] })
-    await service.prepareWorkspace(workspace.id)
+    await service.editProjectById(id, { kind: 'preferLocal', item: 'project.envFile', on: true })
 
+    // Gone at the switch, not at the next preparation — a server already
+    // running goes on reading the old file until then. A file holding nothing
+    // but ours is removed rather than left empty.
+    const left = await readFile(join(workspace.path, '.env.local'), 'utf8').catch(() => '')
+    expect(left).not.toContain('API_KEY')
+
+    await service.prepareWorkspace(workspace.id)
     await expect(readFile(join(workspace.path, '.env'), 'utf8')).resolves.toContain(
       'API_KEY=secret'
     )
-    // Gone, or at least without the block: a file holding nothing but ours is
-    // removed rather than left empty.
-    const left = await readFile(join(workspace.path, '.env.local'), 'utf8').catch(() => '')
-    expect(left).not.toContain('API_KEY')
   })
 
   /*
@@ -3398,7 +3437,8 @@ describe('settings a repository carries', () => {
     await commitAll(repo, 'carry the key')
     await mkdir(join(repo, 'config'), { recursive: true })
     await writeFile(join(repo, 'config', 'master.key'), 'abc123\n', 'utf8')
-    await service.updateProjectById(id, { preferLocal: ['project.carry'], trustRepository: true })
+    await service.updateProjectById(id, { trustRepository: true })
+    await service.editProjectById(id, { kind: 'preferLocal', item: 'project.carry', on: true })
 
     const workspace = await service.createWorkspaceIn(id)
 
@@ -3575,7 +3615,11 @@ describe('scripts a repository supplies', () => {
     await inWorktree(workspaceId, '.octopus/scripts/setup.sh', '#!/bin/sh\nrepo\n')
     await service.saveProjectScript(projectId, 'setup', '#!/bin/sh\nmine\n')
 
-    await service.updateProjectById(projectId, { preferLocal: ['script.setup'] })
+    await service.editProjectById(projectId, {
+      kind: 'preferLocal',
+      item: 'script.setup',
+      on: true
+    })
 
     await expect(service.workspaceScripts(workspaceId)).resolves.toMatchObject({
       approved: true,
@@ -3862,7 +3906,11 @@ describe('project instructions', () => {
       'Repo.\n'
     )
 
-    await service.updateProjectById(projectId, { preferLocal: ['instruction.pullRequest'] })
+    await service.editProjectById(projectId, {
+      kind: 'preferLocal',
+      item: 'instruction.pullRequest',
+      on: true
+    })
 
     await expect(service.readEffectiveInstruction(workspace.id, 'pullRequest')).resolves.toBe(
       'Mine.\n'
@@ -6861,6 +6909,27 @@ describe('the agent chat', () => {
 
       // The second call must not ask at all.
       await expect(agent().ask('Edit')).resolves.toMatchObject({ behavior: 'allow' })
+    })
+
+    // Settings forgetting one rule while the agent's "always" records another:
+    // both land, where a list sent whole from the window dropped the new one.
+    it('keeps an "always" recorded while another rule is forgotten', async () => {
+      const { service, workspaceId, events } = await withWorkspace()
+      const forgotten = { toolName: 'Bash', ruleContent: 'ls' }
+      await service.updateConfig({ alwaysAllowedTools: [forgotten] })
+      const chat = await service.openChat(workspaceId)
+      await service.sendToChat(chat.id, 'edit it')
+
+      void agent().ask('Edit')
+      const requestId = await waitForRequest(events)
+      await Promise.all([
+        service.answerPermission(requestId, 'always'),
+        service.editConfig({ kind: 'forgetStanding', rule: forgotten })
+      ])
+
+      expect(service.getConfig().alwaysAllowedTools).toEqual([
+        { toolName: 'Edit', ruleContent: null }
+      ])
     })
 
     /*
@@ -11956,7 +12025,11 @@ describe('the agent chat', () => {
     it('reads the default lists for a workspace as well as for a conversation', async () => {
       const { service, projectId, workspaceId } = await withWorkspace()
       await service.saveStoredSkill({ kind: 'global' }, 'review', { kind: 'raw', text: DOCUMENT })
-      await service.updateProjectById(projectId, { disabledSkillDefaults: ['review'] })
+      await service.editProjectById(projectId, {
+        kind: 'skillDefault',
+        key: 'review',
+        enabled: false
+      })
 
       expect((await service.skillsForWorkspace(workspaceId))[0]?.enabled).toBe(false)
     })
@@ -11980,7 +12053,11 @@ describe('the agent chat', () => {
       const { service, projectId, workspaceId } = await withWorkspace()
       await service.saveStoredSkill({ kind: 'global' }, 'review', { kind: 'raw', text: DOCUMENT })
       await service.updateConfig({ disabledSkillDefaults: ['review'] })
-      await service.updateProjectById(projectId, { disabledSkillDefaults: ['review'] })
+      await service.editProjectById(projectId, {
+        kind: 'skillDefault',
+        key: 'review',
+        enabled: false
+      })
 
       const chat = await service.openChat(workspaceId)
       await service.setChatSkill(chat.id, 'review', true)
@@ -11997,7 +12074,11 @@ describe('the agent chat', () => {
     it('keeps a renamed skill switched off where it was switched off', async () => {
       const { service, projectId, workspaceId } = await withWorkspace()
       await service.saveStoredSkill({ kind: 'global' }, 'review', { kind: 'raw', text: DOCUMENT })
-      await service.updateProjectById(projectId, { disabledSkillDefaults: ['review'] })
+      await service.editProjectById(projectId, {
+        kind: 'skillDefault',
+        key: 'review',
+        enabled: false
+      })
 
       await service.renameStoredSkill({ kind: 'global' }, 'review', 'reviewer')
 
@@ -12021,12 +12102,27 @@ describe('the agent chat', () => {
       expect(agent().flagSettings().at(-1)?.skillOverrides).toEqual({ review: 'off' })
     })
 
+    // The way the window switches one: an edit, not a whole list.
+    it('tells a running conversation when one installation default is switched', async () => {
+      const { service, workspaceId } = await withWorkspace()
+      const chat = await service.openChat(workspaceId)
+      await service.sendToChat(chat.id, 'work')
+
+      await service.editConfig({ kind: 'skillDefault', key: 'review', enabled: false })
+
+      expect(agent().flagSettings().at(-1)?.skillOverrides).toEqual({ review: 'off' })
+    })
+
     it('tells a running conversation when its project\u2019s defaults change', async () => {
       const { service, projectId, workspaceId } = await withWorkspace()
       const chat = await service.openChat(workspaceId)
       await service.sendToChat(chat.id, 'work')
 
-      await service.updateProjectById(projectId, { disabledSkillDefaults: ['review'] })
+      await service.editProjectById(projectId, {
+        kind: 'skillDefault',
+        key: 'review',
+        enabled: false
+      })
 
       expect(agent().flagSettings().at(-1)?.skillOverrides).toEqual({ review: 'off' })
     })
@@ -12071,11 +12167,19 @@ describe('the agent chat', () => {
 
     it('gives a running conversation back a skill its project stops withholding', async () => {
       const { service, projectId, workspaceId } = await withWorkspace()
-      await service.updateProjectById(projectId, { disabledSkillDefaults: ['review'] })
+      await service.editProjectById(projectId, {
+        kind: 'skillDefault',
+        key: 'review',
+        enabled: false
+      })
       const chat = await service.openChat(workspaceId)
       await service.sendToChat(chat.id, 'work')
 
-      await service.updateProjectById(projectId, { disabledSkillDefaults: [] })
+      await service.editProjectById(projectId, {
+        kind: 'skillDefault',
+        key: 'review',
+        enabled: true
+      })
 
       expect(agent().flagSettings().at(-1)?.skillOverrides).toEqual({ review: 'on' })
     })
@@ -12106,7 +12210,11 @@ describe('the agent chat', () => {
     it('tells a running conversation when a skill it withholds is renamed', async () => {
       const { service, projectId, workspaceId } = await withWorkspace()
       await service.saveStoredSkill({ kind: 'global' }, 'review', { kind: 'raw', text: DOCUMENT })
-      await service.updateProjectById(projectId, { disabledSkillDefaults: ['review'] })
+      await service.editProjectById(projectId, {
+        kind: 'skillDefault',
+        key: 'review',
+        enabled: false
+      })
       const chat = await service.openChat(workspaceId)
       await service.sendToChat(chat.id, 'work')
 
@@ -12138,7 +12246,11 @@ describe('the agent chat', () => {
       const chat = await service.openChat(workspace.id)
       await service.sendToChat(chat.id, 'work')
 
-      await service.updateProjectById(projectId, { disabledSkillDefaults: ['review'] })
+      await service.editProjectById(projectId, {
+        kind: 'skillDefault',
+        key: 'review',
+        enabled: false
+      })
 
       expect(agent().flagSettings()).toEqual([])
     })
@@ -12191,7 +12303,16 @@ describe('the agent chat', () => {
     it('leaves answers about other skills alone', async () => {
       const { service, projectId } = await withWorkspace()
       await service.saveStoredSkill({ kind: 'global' }, 'review', { kind: 'raw', text: DOCUMENT })
-      await service.updateProjectById(projectId, { disabledSkillDefaults: ['ship', 'review'] })
+      await service.editProjectById(projectId, {
+        kind: 'skillDefault',
+        key: 'ship',
+        enabled: false
+      })
+      await service.editProjectById(projectId, {
+        kind: 'skillDefault',
+        key: 'review',
+        enabled: false
+      })
 
       await service.renameStoredSkill({ kind: 'global' }, 'review', 'reviewer')
 
@@ -12208,14 +12329,22 @@ describe('the agent chat', () => {
       expect((await service.skillsForChat(chat.id))[0]?.enabled).toBe(false)
 
       await service.updateConfig({ disabledSkillDefaults: [] })
-      await service.updateProjectById(projectId, { disabledSkillDefaults: ['review'] })
+      await service.editProjectById(projectId, {
+        kind: 'skillDefault',
+        key: 'review',
+        enabled: false
+      })
       expect((await service.skillsForChat(chat.id))[0]?.enabled).toBe(false)
     })
 
     it("lets the conversation's own answer win over both", async () => {
       const { service, projectId, workspaceId } = await withWorkspace()
       await service.saveStoredSkill({ kind: 'global' }, 'review', { kind: 'raw', text: DOCUMENT })
-      await service.updateProjectById(projectId, { disabledSkillDefaults: ['review'] })
+      await service.editProjectById(projectId, {
+        kind: 'skillDefault',
+        key: 'review',
+        enabled: false
+      })
 
       const chat = await service.openChat(workspaceId)
       await service.setChatSkill(chat.id, 'review', true)
@@ -12256,7 +12385,11 @@ describe('the agent chat', () => {
       const workspace = (await service.listWorkspaces(projectId))[0]
       if (!workspace) throw new Error('no workspace')
       await placeInRepo(workspace.path, 'xibo-bridge')
-      await service.updateProjectById(projectId, { disabledSkillDefaults: ['xibo-bridge'] })
+      await service.editProjectById(projectId, {
+        kind: 'skillDefault',
+        key: 'xibo-bridge',
+        enabled: false
+      })
 
       const chat = await service.openChat(workspaceId)
       await service.sendToChat(chat.id, 'hello')

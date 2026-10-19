@@ -269,6 +269,31 @@ describe('useProjects', () => {
       expect(result.current.all).toEqual([{ ...planner, name: 'Planner v2' }])
     })
 
+    // A list changed by an operation, read back the way an update is.
+    it('applies an edit to a list and reads the projects again', async () => {
+      vi.mocked(window.octopus.projects.list)
+        .mockResolvedValueOnce({ ok: true, value: [planner] })
+        .mockResolvedValue({ ok: true, value: [{ ...planner, disabledSkillDefaults: ['review'] }] })
+      const onError = vi.fn<OnError>()
+
+      const { result } = renderHook(() => useProjects(accepts(), onError))
+      await waitFor(() => {
+        expect(result.current.all).toEqual([planner])
+      })
+
+      const saved = await act(() =>
+        result.current.edit('planner', { kind: 'skillDefault', key: 'review', enabled: false })
+      )
+
+      expect(saved).toBe(true)
+      expect(window.octopus.projects.edit).toHaveBeenCalledWith('planner', {
+        kind: 'skillDefault',
+        key: 'review',
+        enabled: false
+      })
+      expect(result.current.all).toEqual([{ ...planner, disabledSkillDefaults: ['review'] }])
+    })
+
     // The dialog keeps itself open on a refusal, which it can only do if the
     // hook tells it the change did not go through.
     it('reports a refusal instead of pretending the change went through', async () => {

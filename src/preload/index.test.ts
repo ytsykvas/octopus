@@ -93,6 +93,7 @@ describe('channel names', () => {
     ['theme.get', () => method('theme', 'get')(), 'theme:get'],
     ['config.get', () => method('config', 'get')(), 'config:get'],
     ['config.update', () => method('config', 'update')({} as never), 'config:update'],
+    ['config.edit', () => method('config', 'edit')({} as never), 'config:edit'],
     ['projects.list', () => method('projects', 'list')(), 'projects:list'],
     ['projects.add', () => method('projects', 'add')(), 'projects:add'],
     [
@@ -100,6 +101,7 @@ describe('channel names', () => {
       () => method('projects', 'update')('p' as never, {} as never),
       'projects:update'
     ],
+    ['projects.edit', () => method('projects', 'edit')('p' as never, {} as never), 'projects:edit'],
     ['projects.remove', () => method('projects', 'remove')('p' as never), 'projects:remove'],
     ['projects.branches', () => method('projects', 'branches')('p' as never), 'projects:branches'],
     [

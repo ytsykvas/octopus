@@ -1,7 +1,9 @@
 import { useCallback, useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
-import type { Project, ProjectPatch } from '@core/store.js'
+import type { Project, ProjectEdit, ProjectPatch } from '@core/store.js'
+
+import type { Result } from '../../../preload/index.js'
 
 import type { ConfirmRequest, ConfirmResult } from './useConfirm.js'
 import { useErrorMessage } from './useErrorMessage.js'
@@ -15,6 +17,8 @@ interface UseProjects {
   readonly addFromDisk: () => Promise<Project | null>
   /** Returns whether the change went through, so a dialog can report a refusal. */
   readonly update: (projectId: string, patch: ProjectPatch) => Promise<boolean>
+  /** One list changed by an operation — the counterpart of `update` for lists. */
+  readonly edit: (projectId: string, edit: ProjectEdit) => Promise<boolean>
   /** Asks first, then removes the project and everything it owns. */
   readonly remove: (projectId: string, workspaceCount: number) => Promise<boolean>
 }
@@ -89,10 +93,11 @@ export function useProjects(
     }
   }, [refresh, describeFailure, onError])
 
-  const update = useCallback(
-    async (projectId: string, patch: ProjectPatch): Promise<boolean> => {
+  /** Runs one write, says what went wrong, and reads the list again after it. */
+  const write = useCallback(
+    async (run: () => Promise<Result<void>>): Promise<boolean> => {
       onError(null)
-      const result = await window.octopus.projects.update(projectId, patch)
+      const result = await run()
       if (!result.ok) {
         onError(describeFailure(result))
         return false
@@ -102,6 +107,18 @@ export function useProjects(
       return true
     },
     [refresh, describeFailure, onError]
+  )
+
+  const update = useCallback(
+    (projectId: string, patch: ProjectPatch) =>
+      write(() => window.octopus.projects.update(projectId, patch)),
+    [write]
+  )
+
+  const edit = useCallback(
+    (projectId: string, change: ProjectEdit) =>
+      write(() => window.octopus.projects.edit(projectId, change)),
+    [write]
   )
 
   const remove = useCallback(
@@ -138,5 +155,5 @@ export function useProjects(
     [all, confirm, refresh, describeFailure, onError, t]
   )
 
-  return { all, busy, refresh, addFromDisk, update, remove }
+  return { all, busy, refresh, addFromDisk, update, edit, remove }
 }

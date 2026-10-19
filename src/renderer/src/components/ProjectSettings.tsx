@@ -21,7 +21,7 @@ import type { InstructionSource } from '@core/instructionSources.js'
 import { initials } from '@core/initials.js'
 import { scriptItem, type SourceItemId, instructionItem } from '@core/sourceItems.js'
 import type { ScriptKind } from '@core/scripts.js'
-import type { Project, ProjectPatch } from '@core/store.js'
+import type { Project, ProjectEdit, ProjectPatch } from '@core/store.js'
 
 import { isProfileName } from '@core/envProfileNames.js'
 
@@ -50,6 +50,8 @@ interface ProjectSettingsProps {
   readonly project: Project
   /** Applies a change; omitted keys are left alone. */
   readonly onUpdate: (patch: ProjectPatch) => Promise<boolean>
+  /** A list changed by an operation, never sent whole (`ProjectEdit`). */
+  readonly onEdit: (edit: ProjectEdit) => Promise<boolean>
   readonly onRemove: () => void
   /**
    * The project changed somewhere the dialog's copy cannot see — the checkout
@@ -225,6 +227,7 @@ const SECTIONS: readonly {
 export function ProjectSettings({
   project,
   onUpdate,
+  onEdit,
   onRemove,
   onImported,
   onClose,
@@ -267,9 +270,8 @@ export function ProjectSettings({
 
   /** "Use mine instead", for one item, then the answer read again. */
   const preferLocal = (id: SourceItemId, on: boolean): void => {
-    const others = project.preferLocal.filter((entry) => entry !== id)
     void (async () => {
-      await onUpdate({ preferLocal: on ? [...others, id] : others })
+      await onEdit({ kind: 'preferLocal', item: id, on })
       reloadOrigins()
     })()
   }
@@ -831,8 +833,8 @@ export function ProjectSettings({
             <SkillsSection
               store={{ kind: 'project', projectId: project.id }}
               disabledDefaults={project.disabledSkillDefaults}
-              onDefaults={(disabledSkillDefaults) => {
-                void onUpdate({ disabledSkillDefaults })
+              onDefault={(key, enabled) => {
+                void onEdit({ kind: 'skillDefault', key, enabled })
               }}
               workspaceId={workspaceId}
               onCopyToGlobal={(path) =>

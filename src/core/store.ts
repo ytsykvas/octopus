@@ -14,7 +14,9 @@ import { BranchPrefixSchema } from './branches.js'
 import { CodedError } from './codedError.js'
 import { NotesBodySchema } from './notes.js'
 import type { AgentSkill } from './agent.js'
+import { withMember } from './lists.js'
 import { withApproval } from './repoTrust.js'
+import { SkillKeySchema } from './skillNames.js'
 import { SourceItemIdSchema } from './sourceItems.js'
 import { UsageWindowsSchema } from './usage.js'
 
@@ -540,8 +542,6 @@ export const ProjectPatchSchema = z
         envProfile: true,
         trustRepoScripts: true,
         trustRepository: true,
-        preferLocal: true,
-        disabledSkillDefaults: true,
         repoPath: true
       }).shape
     )
@@ -551,11 +551,47 @@ export const ProjectPatchSchema = z
 export type ProjectPatch = z.infer<typeof ProjectPatchSchema>
 
 /**
- * Updates a project's editable fields.
- *
- * Only the keys present in the patch are touched, so changing the base branch
- * cannot quietly rewrite the name with a stale copy held by the UI.
+ * One change to a list of a project, as the window asks for it — the config's
+ * `ConfigEditSchema` one layer down, for the reason given there.
  */
+export const ProjectEditSchema = z.discriminatedUnion('kind', [
+  z.object({ kind: z.literal('skillDefault'), key: SkillKeySchema, enabled: z.boolean() }),
+  z.object({ kind: z.literal('preferLocal'), item: SourceItemIdSchema, on: z.boolean() })
+])
+
+export type ProjectEdit = z.infer<typeof ProjectEditSchema>
+
+/** The part of a project an edit changes — `editedConfig`'s counterpart. */
+function editedProject(project: Project, edit: ProjectEdit): Partial<Project> {
+  switch (edit.kind) {
+    case 'skillDefault':
+      return {
+        disabledSkillDefaults: withMember(project.disabledSkillDefaults, edit.key, !edit.enabled)
+      }
+    case 'preferLocal':
+      return { preferLocal: withMember(project.preferLocal, edit.item, edit.on) }
+  }
+}
+
+/**
+ * Applies an edit to the project as `state` holds it — handed the state the
+ * commit is applying to, like `recordApproval`, so nothing read before an
+ * await can be written back.
+ */
+export function editProject(state: State, projectId: string, edit: ProjectEdit): State {
+  const project = findProject(state, projectId)
+  if (!project) throw new StateConflictError(`Project ${projectId} not found`)
+
+  const change = editedProject(project, edit)
+
+  return {
+    ...state,
+    projects: state.projects.map((entry) =>
+      entry.id === projectId ? { ...entry, ...change } : entry
+    )
+  }
+}
+
 /**
  * Records an approval against the project as it stands in `state`.
  *
@@ -582,6 +618,12 @@ export function recordApproval(
   }
 }
 
+/**
+ * Updates a project's editable fields.
+ *
+ * Only the keys present in the patch are touched, so changing the base branch
+ * cannot quietly rewrite the name with a stale copy held by the UI.
+ */
 export function updateProject(state: State, projectId: string, patch: ProjectPatch): State {
   if (!state.projects.some((project) => project.id === projectId)) {
     throw new StateConflictError(`Project ${projectId} not found`)
@@ -675,10 +717,6 @@ export function updateProject(state: State, projectId: string, patch: ProjectPat
             }),
             ...(patch.trustRepository !== undefined && {
               trustRepository: patch.trustRepository
-            }),
-            ...(patch.preferLocal !== undefined && { preferLocal: patch.preferLocal }),
-            ...(patch.disabledSkillDefaults !== undefined && {
-              disabledSkillDefaults: patch.disabledSkillDefaults
             }),
             ...(repoPath !== undefined && { repoPath }),
             ...(patch.approvedSettings !== undefined && {
