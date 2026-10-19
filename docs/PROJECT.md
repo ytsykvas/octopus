@@ -339,7 +339,7 @@ The layout of the existing tools is the model — proven by daily use and free o
 
 **Second pane — workspaces of the active project.** Carries a gradient wash of that project's colour, strongest at the project name and fading down the list, so "where am I" reads peripherally rather than by reading names. A workspace is recognised primarily **by its branch name**; the directory name is the secondary identifier.
 
-**Centre — agent chat.** The main working area: the session event stream and the input field.
+**Centre — agent chat.** The main working area: the session event stream and the input field. The stream is shaped like Claude Code's own transcript — the agent's prose, and every tool call as one row with what came back under it, a diff under an edit, a checklist under a task list — and a row opens on a click to its input and its whole output. `⌘O` opens every row at once.
 
 A workspace holds up to **three conversations at once**, switched by a strip of underlined tabs across the pane's header row. Each is called after the agent that runs it and its place in the strip — `Claude 1`, `Claude 2` — which is a name that needs no inventing and stops being a guess the moment there is a second kind of agent. A conversation can be given a name of its own by double-clicking its tab, and clearing that name gives the automatic one back. Each tab carries the same status dot the workspace list uses, so which agent is working, which is waiting on an answer and which has stopped is readable without opening any of them. A conversation is created empty; a tab's menu also offers to continue an existing one in a new tab, which forks the agent's session so the two diverge from a shared past.
 
@@ -364,6 +364,7 @@ Files opened from the right pane's tree, or from a changed file's menu, take tab
 | `⌘⇧P`       | pull request                         |
 | `⌘W`        | close the file in front              |
 | `⌘C`        | in a file: copy the lines' reference |
+| `⌘O`        | open every step of the conversation  |
 | `⇧⇥`        | next mode                            |
 
 `⇧⇥` works in the composer's field only, and goes round `Manual` → `Accept edits` → plan → `Auto`, the order Claude Code's own shift+tab uses; anywhere else in the window it still moves the focus back.

@@ -955,11 +955,6 @@ export const en = {
     filesRewoundSkipped_few: '({{count}} left alone — a link sat at their path)',
     filesRewoundSkipped_many: '({{count}} left alone — a link sat at their path)',
     filesRewoundSkipped_other: '({{count}} left alone — a link sat at their path)',
-    /* What a subagent did, folded under the call that started it. */
-    subagentSteps_one: '{{count}} step by the subagent',
-    subagentSteps_few: '{{count}} steps by the subagent',
-    subagentSteps_many: '{{count}} steps by the subagent',
-    subagentSteps_other: '{{count}} steps by the subagent',
     /* The history of what was closed. Closing keeps a conversation, so this is
        how one comes back — and ⌘⇧T brings back the last. */
     history: 'Closed conversations',
@@ -1169,12 +1164,66 @@ export const en = {
     effortFaster: 'Faster',
     effortSmarter: 'Smarter',
 
-    // Ukrainian needs `few` and `many` as well; i18next picks the form that
-    // applies to the active language and ignores the rest.
-    toolSteps_one: '{{count}} step',
-    toolSteps_few: '{{count}} steps',
-    toolSteps_many: '{{count}} steps',
-    toolSteps_other: '{{count}} steps',
+    /* A tool call is one row, as in Claude Code: a mark, the tool, what it
+       acted on, and a line under it saying what came back. The marks are read
+       aloud by these, since a spinner and a dot say nothing to a screen
+       reader. Ukrainian needs `few` and `many` for the counts below; i18next
+       picks the form that applies to the active language. */
+    toolRunning: 'Running',
+    toolDone: 'Done',
+    toolFailed: 'Failed',
+    toolStopped: 'No result — the turn ended first',
+    toolScope: 'in {{scope}}',
+    resultLines_one: '{{count}} line',
+    resultLines_few: '{{count}} lines',
+    resultLines_many: '{{count}} lines',
+    resultLines_other: '{{count}} lines',
+    resultLinesAtLeast_one: 'at least {{count}} line',
+    resultLinesAtLeast_few: 'at least {{count}} lines',
+    resultLinesAtLeast_many: 'at least {{count}} lines',
+    resultLinesAtLeast_other: 'at least {{count}} lines',
+    resultFiles_one: '{{count}} file',
+    resultFiles_few: '{{count}} files',
+    resultFiles_many: '{{count}} files',
+    resultFiles_other: '{{count}} files',
+    resultMatches_one: '{{count}} match',
+    resultMatches_few: '{{count}} matches',
+    resultMatches_many: '{{count}} matches',
+    resultMatches_other: '{{count}} matches',
+    resultMoreLines_one: '… +{{count}} line',
+    resultMoreLines_few: '… +{{count}} lines',
+    resultMoreLines_many: '… +{{count}} lines',
+    resultMoreLines_other: '… +{{count}} lines',
+    resultEmpty: '(no output)',
+    agentToolUses_one: '{{count}} tool use',
+    agentToolUses_few: '{{count}} tool uses',
+    agentToolUses_many: '{{count}} tool uses',
+    agentToolUses_other: '{{count}} tool uses',
+    /* Sent off to run on its own: its report does not come back with the call. */
+    agentBackground: 'Running in the background',
+    diffMoreLines_one: '{{count}} more line',
+    diffMoreLines_few: '{{count}} more lines',
+    diffMoreLines_many: '{{count}} more lines',
+    diffMoreLines_other: '{{count}} more lines',
+    outputMoreLines_one: 'Show {{count}} more line',
+    outputMoreLines_few: 'Show {{count}} more lines',
+    outputMoreLines_many: 'Show {{count}} more lines',
+    outputMoreLines_other: 'Show {{count}} more lines',
+    /* A conversation read back after a restart kept only the head of each
+       output, and the opened row says so rather than passing it off as whole. */
+    outputSavedHead: 'Only the start of this output was saved.',
+    outputSavedHeadOf_one: 'Only the start of this output was saved — {{count}} line in all.',
+    outputSavedHeadOf_few: 'Only the start of this output was saved — {{count}} lines in all.',
+    outputSavedHeadOf_many: 'Only the start of this output was saved — {{count}} lines in all.',
+    outputSavedHeadOf_other: 'Only the start of this output was saved — {{count}} lines in all.',
+    toolInput: 'Input',
+    toolOutput: 'Output',
+    agentReport: 'Report',
+    openFile: 'Open {{path}} — double-click to keep it open',
+    /* Claude Code's ctrl+o: every row and every piece of reasoning at once. */
+    expandAll: 'Show every step (⌘O)',
+    collapseAll: 'Fold every step (⌘O)',
+    workingElapsed: 'Working… {{elapsed}}',
 
     /* Where the `+1 −1` normally sits, for an edit that replaced its text
        everywhere it appeared. No number, because the call carries none: it is

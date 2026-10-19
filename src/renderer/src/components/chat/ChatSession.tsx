@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
+import { ChevronsDownUp, ChevronsUpDown } from 'lucide-react'
 
 import {
   type Chat,
@@ -31,6 +32,7 @@ import { useRewindChoice } from '../../hooks/useRewindChoice.js'
 import { useSessionUsage } from '../../hooks/useSessionUsage.js'
 import { useSkills } from '../../hooks/useSkills.js'
 import { ChatLog } from './ChatLog.js'
+import { COLLAPSED, type Expansion } from './expansion.js'
 import { DayChip } from './DayChip.js'
 import { Composer } from './Composer.js'
 import { HeadsUp } from './HeadsUp.js'
@@ -102,6 +104,8 @@ interface ChatSessionProps {
   readonly dismissedTips: readonly string[]
   /** "I knew this" on a heads-up — kept in the settings, for every conversation. */
   readonly onDismissTip: (id: string) => void
+  /** Opens a workspace-relative path in the centre: kept open, or as a preview. */
+  readonly onOpenFile: (path: string, pinned: boolean) => void
 }
 
 /**
@@ -132,9 +136,56 @@ export function ChatSession({
   projectEnvProfile,
   onWorkspacesChanged,
   dismissedTips,
-  onDismissTip
+  onDismissTip,
+  onOpenFile
 }: ChatSessionProps): React.JSX.Element {
   const { t } = useTranslation()
+
+  /*
+   * Whether every row of the log is open — Claude Code's ctrl+o, here ⌘O.
+   *
+   * Per conversation and in memory only: a reading mode for the moment, and a
+   * log reopened with every row open would mount every diff in it at once.
+   */
+  const [expansion, setExpansion] = useState<Expansion>(COLLAPSED)
+  const toggleExpansion = useCallback(() => {
+    setExpansion((current) => ({ all: !current.all, generation: current.generation + 1 }))
+  }, [])
+
+  useEffect(() => {
+    if (!visible) return
+
+    const onKey = (event: KeyboardEvent): void => {
+      // A dialog owns the keyboard while it is open, as the window's own
+      // shortcuts already treat it.
+      if (document.querySelector('dialog[open]') !== null) return
+      if (!event.metaKey || event.shiftKey || event.altKey || event.key.toLowerCase() !== 'o') {
+        return
+      }
+
+      event.preventDefault()
+      toggleExpansion()
+    }
+
+    window.addEventListener('keydown', onKey)
+    return () => {
+      window.removeEventListener('keydown', onKey)
+    }
+  }, [visible, toggleExpansion])
+
+  /*
+   * The window's opener, kept where a steady handler can read it: the pane
+   * above writes it inline, and handed to the log as it came it would be a new
+   * function on every render — which would redraw every tool row for every
+   * token the answer streams in.
+   */
+  const opener = useRef(onOpenFile)
+  useEffect(() => {
+    opener.current = onOpenFile
+  }, [onOpenFile])
+  const openFile = useCallback((path: string, pinned: boolean) => {
+    opener.current(path, pinned)
+  }, [])
 
   /* An attachment that could not be taken — a paste too large, a dialog that
      failed — shown in the conversation's own banner rather than a second one:
@@ -375,6 +426,26 @@ export function ChatSession({
             <DayChip day={dayAtTop.day} floating />
           </div>
         )}
+        {/* "Show every step", in the same floating arrangement as the day: it
+            stays in reach however far up the log has been read. */}
+        {chat.entries.length > 0 && (
+          <div className="pointer-events-none sticky top-2 z-10 flex h-0 items-start justify-end overflow-visible px-3">
+            <button
+              type="button"
+              aria-pressed={expansion.all}
+              onClick={toggleExpansion}
+              title={t(expansion.all ? 'chat.collapseAll' : 'chat.expandAll')}
+              aria-label={t(expansion.all ? 'chat.collapseAll' : 'chat.expandAll')}
+              className="border-line bg-surface text-ink-faint hover:text-ink focus-ring pointer-events-auto flex size-7 items-center justify-center rounded-[var(--radius-control)] border transition-colors"
+            >
+              {expansion.all ? (
+                <ChevronsDownUp aria-hidden size={14} />
+              ) : (
+                <ChevronsUpDown aria-hidden size={14} />
+              )}
+            </button>
+          </div>
+        )}
         {/* Streaming counts as content even before the first entry lands:
             without it the answer to the very first message would draw over the
             placeholder, and the pane would say "start the conversation" while
@@ -434,6 +505,9 @@ export function ChatSession({
             // only out of planning: a plan the agent offered unasked does not
             // lift a conversation out of Manual.
             onRewind={(messageId) => void rewind(messageId)}
+            expansion={expansion}
+            workspacePath={workspace.path}
+            onOpenFile={openFile}
             onExecutePlan={(plan) => {
               void (async () => {
                 if (record?.planMode === true) {

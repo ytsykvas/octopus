@@ -7,6 +7,7 @@ import type { ChatEntry } from '@core/transcript.js'
 
 import { highlight } from '../diff/highlight.js'
 import { ChatLog } from './ChatLog.js'
+import { COLLAPSED } from './expansion.js'
 
 // Stood in for, as every pane that colours code is tested: the real one loads a
 // grammar, and its answer would land after the test that drew the card.
@@ -30,13 +31,26 @@ const NOT_WAITING: ReadonlySet<string> = new Set()
  */
 const TURN: ChatEntry = fromAgent({ type: 'text', text: 'that is done' })
 
+/**
+ * A line of a drawn change as it reads: its number, its sign and its text.
+ * Found by the text, which is a span of its own beside the gutter.
+ */
+function diffRow(text: string): string {
+  return screen.getByText(text).closest('div')?.textContent ?? ''
+}
+
+/** The checkout the agent works in, which the paths in these fixtures sit under. */
+const WORKSPACE = '/tmp/planner/anna'
+
 function renderLog(overrides: Partial<React.ComponentProps<typeof ChatLog>> = {}): {
   onAnswer: ReturnType<typeof vi.fn>
   onAnswerElicitation: ReturnType<typeof vi.fn>
   onAnswerQuestions: ReturnType<typeof vi.fn>
   onExecutePlan: ReturnType<typeof vi.fn>
   onRewind: ReturnType<typeof vi.fn>
+  onOpenFile: ReturnType<typeof vi.fn>
 } {
+  const onOpenFile = vi.fn()
   const onAnswer = vi.fn()
   const onAnswerElicitation = vi.fn()
   const onAnswerQuestions = vi.fn()
@@ -56,11 +70,14 @@ function renderLog(overrides: Partial<React.ComponentProps<typeof ChatLog>> = {}
       onExecutePlan={onExecutePlan}
       onRewind={onRewind}
       waiting={NOT_WAITING}
+      expansion={COLLAPSED}
+      workspacePath={WORKSPACE}
+      onOpenFile={onOpenFile}
       {...overrides}
     />
   )
 
-  return { onAnswer, onAnswerElicitation, onAnswerQuestions, onExecutePlan, onRewind }
+  return { onAnswer, onAnswerElicitation, onAnswerQuestions, onExecutePlan, onRewind, onOpenFile }
 }
 
 describe('a subagent’s work', () => {
@@ -102,70 +119,92 @@ describe('a subagent’s work', () => {
     })
   ]
 
-  it('is folded under the call that started it, closed', () => {
+  it('is one row for the call that started it, closed', () => {
     renderLog({ entries })
 
     expect(screen.getByText('Task')).toBeInTheDocument()
-    expect(screen.getByText('1 step by the subagent')).toBeInTheDocument()
-    // Inside a closed disclosure: there for whoever opens it.
-    expect(screen.getByText('Grep').closest('details')).not.toHaveAttribute('open')
+    expect(screen.getByText('Look around')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /Task/ })).toHaveAttribute('aria-expanded', 'false')
+    // Inside the closed row: there for whoever opens it.
+    expect(screen.queryByText('Grep')).not.toBeInTheDocument()
   })
 
-  /*
-   * The browser holds a `<details>`' state, so the mark follows it with CSS —
-   * by the summary's own direct path, since these folds nest and an inner one
-   * must not turn because the outer one is open.
-   */
-  it('marks each fold with a chevron that turns with its own details', () => {
-    renderLog({ entries })
-
-    const summaries = [...document.querySelectorAll('summary')]
-    expect(summaries).not.toHaveLength(0)
-    for (const summary of summaries) {
-      const mark = summary.querySelector(':scope > svg')
-      expect(mark).toHaveClass('lucide-chevron-right', '[details[open]>summary>&]:rotate-90')
-    }
-  })
-
-  it('shows what it did and said when opened', async () => {
+  it('shows what it did and said when opened, with the same rows', async () => {
     const user = userEvent.setup()
     renderLog({ entries })
 
-    await user.click(screen.getByText('1 step by the subagent'))
+    await user.click(screen.getByRole('button', { name: /Task/ }))
 
     expect(screen.getByText('Grep')).toBeVisible()
-    expect(screen.getByText('TODO')).toBeVisible()
-    // One line of what it said; the whole answer is the call's own result.
+    expect(screen.getByText('"TODO"')).toBeVisible()
+    // One line of what it said; the whole answer is the report.
     expect(screen.getByText('Three matches in auth.rb.')).toBeVisible()
     expect(screen.queryByText(/Nothing else/)).not.toBeInTheDocument()
+    // Its failure under its own row, as every failure is.
     expect(screen.getByText(/no such directory/)).toBeVisible()
-    // Its reasoning and its quiet successes stay its own.
+    // Its reasoning stays its own.
     expect(screen.queryByText('Let me think.')).not.toBeInTheDocument()
-    expect(screen.queryByText('fine')).not.toBeInTheDocument()
   })
 
   it('does not draw them again at the top level', () => {
-    const { container } = render(
-      <ChatLog
-        entries={entries}
-        streaming={{ text: '', thinking: '' }}
-        busy={false}
-        pendingRequestId={null}
-        pendingElicitationId={null}
-        onAnswer={vi.fn()}
-        onAnswerElicitation={vi.fn()}
-        onAnswerQuestions={vi.fn()}
-        onExecutePlan={vi.fn()}
-        onRewind={vi.fn()}
-        waiting={NOT_WAITING}
-      />
-    )
+    renderLog({ entries })
 
-    expect(screen.getAllByText('Grep')).toHaveLength(1)
-    expect(container.querySelectorAll('details')).toHaveLength(1)
+    expect(screen.queryByText('Grep')).not.toBeInTheDocument()
+    expect(screen.queryByText('Three matches in auth.rb.')).not.toBeInTheDocument()
   })
 
-  it('folds a run of subagent calls into the count too', async () => {
+  // Its own words, without the trailer the CLI appends to the result for the
+  // model — the agent's id and a usage block.
+  it('ends with the subagent’s report once it has answered', async () => {
+    const user = userEvent.setup()
+    renderLog({
+      entries: [
+        ...entries,
+        fromAgent({
+          type: 'tool_result',
+          toolUseId: TASK,
+          ok: true,
+          content: 'It is **fixed**.\nagentId: a-1',
+          report: 'It is **fixed**.',
+          stats: { toolUses: 3 }
+        })
+      ]
+    })
+
+    expect(screen.getByText('3 tool uses')).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: /Task/ }))
+
+    expect(screen.getByRole('region', { name: 'Report' })).toHaveTextContent('It is fixed.')
+    expect(screen.getByText('fixed').tagName).toBe('STRONG')
+    expect(screen.queryByText(/agentId/)).not.toBeInTheDocument()
+  })
+
+  it('says a subagent sent off on its own is running in the background', () => {
+    renderLog({
+      entries: [
+        entries[0] ?? fromAgent({ type: 'text', text: '' }),
+        fromAgent({
+          type: 'tool_result',
+          toolUseId: TASK,
+          ok: true,
+          content: 'Launched',
+          stats: { background: true }
+        })
+      ]
+    })
+
+    expect(screen.getByText('Running in the background')).toBeInTheDocument()
+  })
+
+  // With the row closed, the latest step is the one sign that something is
+  // happening inside it.
+  it('names its latest step while it is still working', () => {
+    renderLog({ entries: entries.slice(0, 2), busy: true })
+
+    expect(screen.getByText(/Grep/)).toBeInTheDocument()
+  })
+
+  it('nests one subagent inside another', async () => {
     const user = userEvent.setup()
     renderLog({
       entries: [
@@ -192,9 +231,8 @@ describe('a subagent’s work', () => {
       ]
     })
 
-    const [outer] = screen.getAllByText(/step by the subagent/)
-    if (outer) await user.click(outer)
-    const [, inner] = screen.getAllByText(/step by the subagent/)
+    await user.click(screen.getByRole('button', { name: /Task/ }))
+    const [, inner] = screen.getAllByRole('button', { name: /Task/ })
     if (inner) await user.click(inner)
 
     expect(screen.getByText('/deep.ts')).toBeVisible()
@@ -450,6 +488,9 @@ describe('what the log shows', () => {
         onExecutePlan={vi.fn()}
         onRewind={vi.fn()}
         waiting={NOT_WAITING}
+        expansion={COLLAPSED}
+        workspacePath={WORKSPACE}
+        onOpenFile={vi.fn()}
       />
     )
 
@@ -483,6 +524,9 @@ describe('what the log shows', () => {
         onExecutePlan={vi.fn()}
         onRewind={vi.fn()}
         waiting={NOT_WAITING}
+        expansion={COLLAPSED}
+        workspacePath={WORKSPACE}
+        onOpenFile={vi.fn()}
       />
     )
 
@@ -544,9 +588,9 @@ describe('what the log shows', () => {
     expect(screen.getByText('TodoWrite')).toBeInTheDocument()
   })
 
-  // The agent's list says how far it has got, which is what is worth reading
-  // on a row that carries none of the fields the summary looks for.
-  it('says how far the agent has got on a task list', () => {
+  // The list itself under the row, as Claude Code draws it: what is done, what
+  // is under way, what is left.
+  it('draws a task list as a checklist under its row', () => {
     renderLog({
       entries: [
         fromAgent({
@@ -565,19 +609,19 @@ describe('what the log shows', () => {
     })
 
     expect(screen.getByText('TodoWrite')).toBeInTheDocument()
-    expect(screen.getByText('1 of 3')).toBeInTheDocument()
+    expect(screen.getByText('a')).toHaveClass('line-through')
+    expect(screen.getByText('b')).not.toHaveClass('line-through')
+    // The marks are read aloud, since a tick and a spinner say nothing alone.
+    expect(screen.getByText('in progress', { selector: '.sr-only' })).toBeInTheDocument()
+    expect(screen.getByText('to do', { selector: '.sr-only' })).toBeInTheDocument()
   })
 
   /*
-   * A rename went through fifty-nine tool calls, and one line each buried the
-   * two things worth reading: what the agent said, and what it changed.
-   *
-   * Folded rather than dropped — the same disclosure reasoning uses, closed to
-   * begin with. `toBeVisible` is the assertion that matters, since the rows are
-   * in the document either way.
+   * Every call is its own row, with what came back under it — the shape of
+   * Claude Code's own transcript. A successful result used to draw nothing at
+   * all, so the log said what the agent looked at and never what it found.
    */
-  it('folds a run of tool calls into the count of them', async () => {
-    const user = userEvent.setup()
+  it('draws every call as its own row, with what came back under it', () => {
     renderLog({
       entries: [
         fromAgent({
@@ -592,26 +636,29 @@ describe('what the log shows', () => {
           toolUseId: 'c-2',
           name: 'Read',
           input: { file_path: '/a.ts' }
+        }),
+        fromAgent({
+          type: 'tool_result',
+          toolUseId: 'c-2',
+          ok: true,
+          content: 'one',
+          stats: { lines: 120 }
         })
       ]
     })
 
-    const summary = screen.getByText('2 steps')
-    expect(screen.getByText('Grep')).not.toBeVisible()
-
-    await user.click(summary)
-
     expect(screen.getByText('Grep')).toBeVisible()
+    expect(screen.getByText('lots')).toBeVisible()
     expect(screen.getByText('/a.ts')).toBeVisible()
+    expect(screen.getByText('120 lines')).toBeVisible()
   })
 
   /*
    * The log used to say a file was edited and never what the edit did.
    *
-   * Drawn without opening anything, and outside the fold: the searching above
-   * it is working out, this is the answer. The counts matter most — they are
-   * what gets trusted at a glance, so a diff that miscounts is a lie in the
-   * place most likely to be read.
+   * Drawn under its row without opening anything, as Claude Code draws it. The
+   * counts matter most — they are what gets trusted at a glance, so a diff that
+   * miscounts is a lie in the place most likely to be read.
    */
   it('shows what an edit changed, in the open', () => {
     renderLog({
@@ -632,13 +679,10 @@ describe('what the log shows', () => {
     })
 
     expect(screen.getByText('/src/core/service.ts')).toBeVisible()
-    expect(screen.getByText('-two')).toBeVisible()
-    expect(screen.getByText('+TWO')).toBeVisible()
+    expect(diffRow('two')).toBe('-two')
+    expect(diffRow('TWO')).toBe('+TWO')
     expect(screen.getByText('+1')).toBeVisible()
     expect(screen.getByText('−1')).toBeVisible()
-
-    // The searching either side of it is still folded away.
-    expect(screen.getByText('2 steps')).toBeInTheDocument()
   })
 
   /*
@@ -666,15 +710,12 @@ describe('what the log shows', () => {
       ]
     })
 
-    // The row is the number and the line together, so this reads as it looks.
-    const row = (text: string): string => screen.getByText(text).parentElement?.textContent ?? ''
-
-    expect(row('one')).toBe('1 one')
+    expect(diffRow('one')).toBe('1 one')
     // Gone from the file, so there is no line of the file to point at.
-    expect(row('-two')).toBe('-two')
-    expect(row('+TWO')).toBe('2+TWO')
-    expect(row('+EXTRA')).toBe('3+EXTRA')
-    expect(row('four')).toBe('4 four')
+    expect(diffRow('two')).toBe('-two')
+    expect(diffRow('TWO')).toBe('2+TWO')
+    expect(diffRow('EXTRA')).toBe('3+EXTRA')
+    expect(diffRow('four')).toBe('4 four')
   })
 
   // An older transcript, or a file since changed. The change is drawn without
@@ -691,10 +732,8 @@ describe('what the log shows', () => {
       ]
     })
 
-    const row = (text: string): string => screen.getByText(text).parentElement?.textContent ?? ''
-
-    expect(row('-one')).toBe('-one')
-    expect(row('+two')).toBe('+two')
+    expect(diffRow('one')).toBe('-one')
+    expect(diffRow('two')).toBe('+two')
   })
 
   /*
@@ -725,8 +764,8 @@ describe('what the log shows', () => {
     expect(screen.queryByText('−1')).not.toBeInTheDocument()
 
     // The lines stay: they are exactly right for each place it landed.
-    expect(screen.getByText('-oldName')).toBeVisible()
-    expect(screen.getByText('+newName')).toBeVisible()
+    expect(diffRow('oldName')).toBe('-oldName')
+    expect(diffRow('newName')).toBe('+newName')
   })
 
   // What stood there before is not in the call, so a `Write` says only what it
@@ -745,7 +784,7 @@ describe('what the log shows', () => {
 
     expect(screen.getByText('+2')).toBeVisible()
     expect(screen.queryByText('−0')).not.toBeInTheDocument()
-    expect(screen.getByText('+one')).toBeVisible()
+    expect(diffRow('one')).toBe('+one')
   })
 
   /*
@@ -962,11 +1001,26 @@ describe('what the log shows', () => {
     const user = userEvent.setup()
     renderLog({ entries: [fromAgent({ type: 'thinking', text: 'weighing it up' })] })
 
-    const summary = screen.getByText('Thinking')
-    expect(screen.getByText('weighing it up')).not.toBeVisible()
+    expect(screen.queryByText('weighing it up')).not.toBeInTheDocument()
 
-    await user.click(summary)
+    await user.click(screen.getByRole('button', { name: 'Thinking' }))
     expect(screen.getByText('weighing it up')).toBeVisible()
+  })
+
+  // Claude Code's ctrl+o: every row and every piece of reasoning at once.
+  it('opens everything when the log is asked to show every step', () => {
+    renderLog({
+      entries: [
+        fromAgent({ type: 'thinking', text: 'weighing it up' }),
+        fromAgent({ type: 'tool_use', toolUseId: 'c-1', name: 'Bash', input: { command: 'ls' } }),
+        fromAgent({ type: 'tool_result', toolUseId: 'c-1', ok: true, content: 'a.ts' })
+      ],
+      expansion: { all: true, generation: 1 }
+    })
+
+    expect(screen.getByText('weighing it up')).toBeVisible()
+    expect(screen.getByRole('region', { name: 'Input' })).toHaveTextContent('ls')
+    expect(screen.getByRole('region', { name: 'Output' })).toHaveTextContent('a.ts')
   })
 
   it('closes a turn with how long it took and what the exchange took', () => {
@@ -1429,6 +1483,32 @@ describe('what the log shows', () => {
     expect(screen.getByText('The real one').closest('.line-through')).toBeNull()
   })
 
+  // A tool call is a row of its own now, and is struck through the same way.
+  it('strikes through a tool call the agent took back', () => {
+    renderLog({
+      entries: [
+        fromAgent({
+          type: 'tool_use',
+          toolUseId: 'c-1',
+          name: 'Grep',
+          input: { pattern: 'first' },
+          uuid: 'u-1'
+        }),
+        fromAgent({ type: 'retracted', uuids: ['u-1'] }),
+        fromAgent({
+          type: 'tool_use',
+          toolUseId: 'c-2',
+          name: 'Grep',
+          input: { pattern: 'second' },
+          uuid: 'u-2'
+        })
+      ]
+    })
+
+    expect(screen.getByText('"first"').closest('.line-through')).not.toBeNull()
+    expect(screen.getByText('"second"').closest('.line-through')).toBeNull()
+  })
+
   // An id nothing matches is ordinary: the CLI names everything it evicted, and
   // some of it may never have reached this transcript.
   it('leaves the log alone for an id it does not have', () => {
@@ -1480,12 +1560,24 @@ describe('while an answer is arriving', () => {
     expect(screen.getByText('Working…')).toBeInTheDocument()
   })
 
-  // With text arriving the answer is visibly under way; a second indicator is
-  // only noise.
-  it('drops the indicator once text starts arriving', () => {
+  // Kept while text arrives, as the CLI keeps its spinner: text arriving says
+  // the agent is talking, not that the turn is over.
+  it('keeps saying it is working while text arrives', () => {
     renderLog({ busy: true, streaming: { text: 'Looking', thinking: '' } })
 
-    expect(screen.queryByText('Working…')).not.toBeInTheDocument()
+    expect(screen.getByRole('status')).toBeInTheDocument()
+  })
+
+  it('counts how long the turn has been going', () => {
+    vi.useFakeTimers({ toFake: ['Date'] })
+    vi.setSystemTime(new Date(Date.parse(AT) + 12_000))
+    try {
+      renderLog({ busy: true, entries: [{ role: 'user', at: AT, text: 'go' }] })
+
+      expect(screen.getByRole('status')).toHaveTextContent('Working… 12s')
+    } finally {
+      vi.useRealTimers()
+    }
   })
 })
 
@@ -1825,7 +1917,10 @@ describe('a log cut back and written again', () => {
       onAnswerQuestions: vi.fn(),
       onExecutePlan: vi.fn(),
       onRewind: vi.fn(),
-      waiting: NOT_WAITING
+      waiting: NOT_WAITING,
+      expansion: COLLAPSED,
+      workspacePath: WORKSPACE,
+      onOpenFile: vi.fn()
     }
     const { rerender } = render(
       <ChatLog {...props} entries={[said, asked('r-1', 'Which one?')]} pendingRequestId="r-1" />
@@ -1912,19 +2007,9 @@ describe('a question the agent asked', () => {
     expect(screen.queryByText('AskUserQuestion')).not.toBeInTheDocument()
   })
 
-  /*
-   * And it is not a step either. Counted as one, the fold would promise a row
-   * that nothing inside it accounts for — the same reason a plan and an edit
-   * are kept out of the count.
-   *
-   * **The disclosure is opened**, which this test used not to do. Asserting the
-   * summary alone stated the property and checked half of it: the count came
-   * from `isToolRow` while the body mapped every `tool_use`, so the fold said
-   * two steps and opened on three, the third reading `AskUserQuestion` with
-   * nothing beside it — the row the unfolded path returns null for.
-   */
-  it('does not count as a step in a run of tool calls, or appear when it opens', async () => {
-    const user = userEvent.setup()
+  // And it is not a tool row either: the card is the whole of it, and a row
+  // beside it would be the same question twice.
+  it('draws no row of its own among the tool calls around it', () => {
     renderLog({
       entries: [
         fromAgent({ type: 'tool_use', toolUseId: 'c-1', name: 'Grep', input: { pattern: 'x' } }),
@@ -1932,8 +2017,6 @@ describe('a question the agent asked', () => {
         fromAgent({ type: 'tool_use', toolUseId: 'c-3', name: 'Read', input: { file_path: '/a' } })
       ]
     })
-
-    await user.click(screen.getByText('2 steps'))
 
     expect(screen.getByText('Grep')).toBeVisible()
     expect(screen.getByText('Read')).toBeVisible()

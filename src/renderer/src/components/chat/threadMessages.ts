@@ -3,7 +3,7 @@ import type { ThreadMessageLike } from '@assistant-ui/react'
 import type { ChatEntry } from '@core/transcript.js'
 
 import { localDayKey } from './format.js'
-import type { LogBlock } from './toolRuns.js'
+import type { LogBlock } from './logBlocks.js'
 
 /**
  * What a log block is, as the library's runtime sees one.
@@ -11,7 +11,7 @@ import type { LogBlock } from './toolRuns.js'
  * Every block rides as a `data` part carrying itself, and nothing is mapped onto
  * the library's own `text`, `reasoning` or `tool-call` parts. The log is one row
  * per event rather than a bubble per turn, with rules the library has no word
- * for — a run folded into its count, an edit drawn as a diff, an answer struck
+ * for — a call and its answer as one row, an edit drawn as a diff, an answer struck
  * through because the agent took it back — and every one of them lives in the
  * block. Translating into the library's parts would mean encoding those rules
  * a second time, and being wrong about them in one of the two places.

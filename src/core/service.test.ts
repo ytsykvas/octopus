@@ -7802,6 +7802,8 @@ describe('the agent chat', () => {
               ok: true,
               content: 'x'.repeat(2000),
               truncated: true,
+              // How long the whole was, so the count reads the same reopened.
+              lineCount: 1,
               uuid: 'u-result'
             }
           })

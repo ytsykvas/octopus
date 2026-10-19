@@ -54,6 +54,25 @@ export type ResetTrigger = z.infer<typeof ResetTriggerSchema>
  * it. Removed lines are not numbered: they belong to the file as it was, and
  * that is not something we kept.
  */
+/**
+ * What a tool's structured output says in numbers.
+ *
+ * Every field optional, because each tool fills only the ones it has: a `Read`
+ * its lines, a `Glob` its files, an `Agent` its run totals.
+ */
+export const ToolStatsSchema = z.object({
+  lines: z.number().int().nonnegative().optional(),
+  files: z.number().int().nonnegative().optional(),
+  matches: z.number().int().nonnegative().optional(),
+  toolUses: z.number().int().nonnegative().optional(),
+  tokens: z.number().int().nonnegative().optional(),
+  durationMs: z.number().nonnegative().optional(),
+  /** A subagent sent to the background: its report arrives some other way. */
+  background: z.literal(true).optional()
+})
+
+export type ToolStats = z.infer<typeof ToolStatsSchema>
+
 const ChangeContextSchema = z.object({
   before: z.array(z.string()),
   after: z.array(z.string()),
@@ -126,6 +145,29 @@ export const AgentEventSchema = z.discriminatedUnion('type', [
      * none.
      */
     taskId: z.string().optional(),
+    /**
+     * How many lines the whole output had, where `content` keeps only its head.
+     *
+     * Set by `forTranscript` alongside `truncated`, so "120 lines" reads the
+     * same after a restart as it did live. Counting the kept head instead
+     * would make the number shrink on reopening.
+     */
+    lineCount: z.number().int().nonnegative().optional(),
+    /**
+     * Counts from the tool's structured output.
+     *
+     * The same argument `taskId` makes: "Found 3 files" is prose, and a summary
+     * built by parsing it would break on the next wording change.
+     */
+    stats: ToolStatsSchema.optional(),
+    /**
+     * A subagent's final answer, as it wrote it.
+     *
+     * Its own field because `content` carries the CLI's trailer after the
+     * report — the agent's id and a usage block meant for the model, not for a
+     * reader. Never cut on disk: it is the one thing the subagent was for.
+     */
+    report: z.string().optional(),
     uuid: z.string().optional(),
     parentToolUseId: ParentSchema
   }),
@@ -575,17 +617,17 @@ const KEPT_RESULT_CHARS = 2000
  *
  * The sibling of `isEphemeral`: that one says whether an event is written down
  * at all, this one says how much of it. A successful tool result is the only
- * thing they treat differently, and it is the only one that needed to be —
- * nothing can draw its content today. `AgentRow` returns null when `ok`, and
- * the fold renders only `tool_use` entries, so a `Read` of three thousand
- * lines was written to disk in full, parsed back on every open, shipped over
- * IPC and held in the window, to be dropped at render time. The transcript is
- * append-only and never trimmed, so opening a conversation cost what the agent
- * had **read** rather than what it said.
+ * thing they treat differently. The transcript is append-only and never
+ * trimmed, so keeping a `Read` of three thousand lines whole made opening a
+ * conversation cost what the agent had **read** rather than what it said.
  *
- * Bounded rather than dropped, because the fold opens into the working-out and
- * showing a call's output there is the obvious next thing to build. Dropping
- * the field would spend that option to save the same bytes.
+ * The log draws the head of an output under its call and opens into the rest,
+ * so the head is what is kept, with `lineCount` saying how long the whole was.
+ * Live, the event carries everything; reopened, the expanded row says that
+ * only the start was saved.
+ *
+ * A subagent's `report` is not cut: it is a separate field for exactly that
+ * reason.
  *
  * **A failure keeps everything.** Its content is drawn, and is the whole of
  * what a failure says; the pane shortens it from the middle for display, which
@@ -596,7 +638,19 @@ export function forTranscript(event: AgentEvent): AgentEvent {
   if (event.type !== 'tool_result' || !event.ok) return event
   if (event.content.length <= KEPT_RESULT_CHARS) return event
 
-  return { ...event, content: event.content.slice(0, KEPT_RESULT_CHARS), truncated: true }
+  return {
+    ...event,
+    content: event.content.slice(0, KEPT_RESULT_CHARS),
+    truncated: true,
+    lineCount: countLines(event.content)
+  }
+}
+
+/** Lines in a tool's output, not counting the newline most of them end with. */
+export function countLines(text: string): number {
+  if (text === '') return 0
+  const lines = text.split('\n')
+  return lines.at(-1) === '' ? lines.length - 1 : lines.length
 }
 
 export function isEphemeral(event: AgentEvent): boolean {

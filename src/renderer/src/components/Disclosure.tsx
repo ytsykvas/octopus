@@ -2,19 +2,8 @@ import { ChevronRight } from 'lucide-react'
 import type { ReactNode } from 'react'
 
 interface DisclosureChevronProps {
-  /**
-   * Turns it to point down — where React holds the state. A `<details>`
-   * holds its own, and `inSummary` follows that instead.
-   */
+  /** Turns it to point down. */
   readonly open?: boolean
-  /**
-   * Turns with the `<details>` whose `<summary>` it sits directly in.
-   *
-   * By the direct path rather than a `group`: the log nests one fold inside
-   * another, and a group variant matches any open ancestor, so a closed inner
-   * fold would point down because the outer one was open.
-   */
-  readonly inSummary?: boolean
   readonly size?: number
   readonly className?: string
 }
@@ -23,26 +12,22 @@ interface DisclosureChevronProps {
  * The mark on everything in the window that folds: pointing right while folded,
  * turned down while open.
  *
- * One icon that turns rather than two that swap, so it can follow a state
- * React does not hold — the log's `<details>` open and close on their own, and
- * the mark there never changed at all. Every fold in the window used to
- * draw its own and they had drifted apart: two pairs of icons, four sizes, and
- * three that never moved.
+ * One icon that turns rather than two that swap. Every fold in the window used
+ * to draw its own and they had drifted apart: two pairs of icons, four sizes,
+ * and three that never moved.
  */
 export function DisclosureChevron({
   open = false,
-  inSummary = false,
   size = 12,
   className = ''
 }: DisclosureChevronProps): React.JSX.Element {
   const turned = open ? 'rotate-90' : ''
-  const follows = inSummary ? '[details[open]>summary>&]:rotate-90' : ''
 
   return (
     <ChevronRight
       aria-hidden
       size={size}
-      className={`shrink-0 transition-transform motion-reduce:transition-none ${turned} ${follows} ${className}`}
+      className={`shrink-0 transition-transform motion-reduce:transition-none ${turned} ${className}`}
     />
   )
 }

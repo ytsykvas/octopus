@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest'
 import {
   type AgentEvent,
   AgentEventSchema,
+  countLines,
   forTranscript,
   isEphemeral,
   turnOutcome
@@ -13,18 +14,33 @@ describe('how much of it gets stored', () => {
     ({ type: 'tool_result', toolUseId: 'c-1', ok: true, content: 'done', ...overrides }) as const
 
   /*
-   * Nothing can draw this. `AgentRow` returns null when the call succeeded and
-   * the fold renders only `tool_use` entries, so a `Read` of three thousand
-   * lines was written to disk whole, parsed back on every open and held in the
-   * window — to be dropped at render time. The transcript is append-only, so
-   * opening a conversation cost what the agent had read rather than what it
-   * said.
+   * The transcript is append-only, so keeping a `Read` of three thousand lines
+   * whole made opening a conversation cost what the agent had read rather than
+   * what it said. The log draws the head, so the head is what is kept.
    */
-  it('keeps only the head of a long result nothing can draw', () => {
+  it('keeps only the head of a long result', () => {
     const kept = forTranscript(result({ content: 'x'.repeat(5000) }))
 
     expect(kept).toMatchObject({ truncated: true })
     expect(kept.type === 'tool_result' && kept.content.length).toBe(2000)
+  })
+
+  // Counted before the cut, so "120 lines" reads the same reopened as it did
+  // live — the head alone would make the number shrink on a restart.
+  it('says how many lines the whole output had', () => {
+    const whole = Array.from({ length: 900 }, (_, i) => `line ${String(i)}`).join('\n')
+
+    expect(forTranscript(result({ content: whole }))).toMatchObject({ lineCount: 900 })
+    expect(forTranscript(result())).not.toHaveProperty('lineCount')
+  })
+
+  // The report is what the subagent was for, and it is a field of its own so
+  // that cutting the content does not cut it.
+  it('keeps a subagent report whole', () => {
+    const report = 'r'.repeat(9000)
+    const kept = forTranscript(result({ content: 'x'.repeat(5000), report }))
+
+    expect(kept).toMatchObject({ report })
   })
 
   // Under the bound it is the event itself, unmarked: a reader has to be able
@@ -52,6 +68,16 @@ describe('how much of it gets stored', () => {
     const event: AgentEvent = { type: 'text', text: 'x'.repeat(5000) }
 
     expect(forTranscript(event)).toBe(event)
+  })
+})
+
+describe('counting the lines of an output', () => {
+  it('does not count the newline an output ends with', () => {
+    expect(countLines('')).toBe(0)
+    expect(countLines('one')).toBe(1)
+    expect(countLines('one\n')).toBe(1)
+    expect(countLines('one\ntwo')).toBe(2)
+    expect(countLines('one\n\n')).toBe(2)
   })
 })
 

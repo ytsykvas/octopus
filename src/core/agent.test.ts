@@ -976,6 +976,24 @@ describe('mapping SDK messages', () => {
       expect(events.some((event) => 'taskId' in event)).toBe(false)
     })
 
+    // Counts and the report come off the same output, by the same rule: one
+    // result to a message, or nothing.
+    it('carries the counts and the report of a single result', () => {
+      const done = {
+        status: 'completed',
+        content: [{ type: 'text', text: 'All clear.' }],
+        totalToolUseCount: 4,
+        totalTokens: 1200,
+        totalDurationMs: 900
+      }
+
+      expect(mapMessage(results(['call-1'], done))[0]).toMatchObject({
+        report: 'All clear.',
+        stats: { toolUses: 4, tokens: 1200, durationMs: 900 }
+      })
+      expect(mapMessage(results(['call-1', 'call-2'], done))[0]).not.toHaveProperty('stats')
+    })
+
     it('is left off an output that names no task', () => {
       expect(mapMessage(results(['call-1'], { success: true, taskId: '1' }))[0]).not.toHaveProperty(
         'taskId'
