@@ -74,9 +74,10 @@ export function useFileTree(
   const generation = useRef(0)
 
   /*
-   * The folders read from disk, held and still open, so a re-read refreshes them with
-   * the rest — and only them: `node_modules/.pnpm` opened once and closed again
-   * must not cost a 5 000-entry read on every turn from then on. Mirrored into
+   * The folders read from disk, held, still open and still named whole, so a
+   * re-read refreshes them with the rest — and only them: `node_modules/.pnpm`
+   * opened once and closed again must not cost a 5 000-entry read on every
+   * turn from then on. Mirrored into
    * refs rather than read from state, because the read is started from
    * callbacks that would otherwise hold a stale copy.
    */
@@ -120,13 +121,16 @@ export function useFileTree(
 
         // Merged into what is held rather than replacing it: a folder opened
         // while this read was under way is not among those re-read, and
-        // dropping it would leave its row reading for ever. A closed one is
-        // let go, and read afresh if it is opened again.
+        // dropping it would leave its row reading for ever.
+        // A closed folder is let go, and read afresh if it is opened again. So
+        // is one git no longer names whole, deleted or taken back in: held, it
+        // would be read on every turn for a listing nothing lays out.
+        const fromDisk = new Set(foldersFromDisk(tree.value.entries, open.current))
         const kept = new Map<string, Held>(
-          [...current.listings].filter(([folder]) => open.current.has(folder))
+          [...current.listings].filter(([folder]) => fromDisk.has(folder))
         )
         for (const [folder, listing] of [...again, ...late]) {
-          kept.set(folder, listing.ok ? listing.value : 'failed')
+          if (fromDisk.has(folder)) kept.set(folder, listing.ok ? listing.value : 'failed')
         }
         return { id, snapshot: tree.value, listings: kept, error: null }
       })
