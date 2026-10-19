@@ -885,16 +885,25 @@ first one's key back — in the record and in what the session was told. The
 key is now added to the record as the write's turn finds it, and the session is
 sent the map read back from the committed state.
 
-**Every write that moves the answer tells the running sessions, not only a
+**Every write that can move the answer tells the running sessions, not only a
 chat's own switch.** Either default list and a rename change the map just as
 much, and they used to reach a conversation only on its next start — the panel
 read the new record at once while the agent went on with the old one.
 `pushSkillsToRunning` sends each running session its own record's map after
-those three writes (`skillMapOf`, which `setChatSkill` uses for its one). A
-rename lists the skills again first, so the session knows the new name before
-it is told what to withhold under it. Settled rather than awaited whole: the
-write has landed, and one session that will not answer must not fail it for the
+every `updateConfig`, every `updateProjectById` and a rename (`skillMapOf`,
+which `setChatSkill` uses for its one). Settled rather than awaited whole: the write
+has landed, and one session that will not answer must not fail it for the
 others.
+
+The session's side of it (`setSkills` in `agent.ts`) does two things the
+record cannot. A key it was told before and the new map no longer names is
+sent as `'on'` — taking a skill off a default list drops its key from the map,
+and a dropped key leaves the withhold standing. And a map that moves nothing is
+not sent at all, because the flags carry the effort too and a resend would
+undo an `/effort` given in the session; that check is also why the writes above
+are not narrowed to the ones naming a list. A session still starting is not in
+the map a push walks, so it is built from `skillMapOf` read after its last
+await, like the mode and the model.
 
 **And a withheld skill keeps its row.** Its name and description are gone from
 the answer the moment the switch works, so `knownSkills` in `state.json`

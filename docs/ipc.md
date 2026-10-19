@@ -101,7 +101,8 @@ The only channel outside this shape is `theme:get`, which cannot fail.
 The default marks need no channel of their own: they are a field on the config
 and a field on the project, so they travel on `config:update` and
 `projects:update` like any other setting — and either one carrying them tells
-every running session at once, as `skills:rename` does.
+every running session at once, as `skills:rename` does, including that a skill
+is back on.
 
 ### Plugins
 
