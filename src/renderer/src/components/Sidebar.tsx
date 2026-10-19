@@ -17,6 +17,12 @@ const MAX_WIDTH = 560
 interface SidebarProps {
   /** The project whose workspaces are listed; null when none is selected. */
   readonly project: Project | null
+  /**
+   * Whether any project exists, which a null `project` does not say: with none
+   * chosen the line points at the strip, and only with none at all does it ask
+   * for a repository.
+   */
+  readonly hasProjects: boolean
   readonly workspaces: readonly WorkspaceView[]
   /**
    * What each branch's pull request is, by branch name.
@@ -50,6 +56,7 @@ interface SidebarProps {
  */
 export function Sidebar({
   project,
+  hasProjects,
   workspaces,
   requests,
   selectedWorkspaceId,
@@ -134,7 +141,9 @@ export function Sidebar({
           </nav>
         </div>
       ) : (
-        <p className="text-ink-faint flex-1 px-4 py-3 leading-relaxed">{t('sidebar.empty')}</p>
+        <p className="text-ink-faint flex-1 px-4 py-3 leading-relaxed">
+          {t(hasProjects ? 'sidebar.pick' : 'sidebar.empty')}
+        </p>
       )}
     </aside>
   )
