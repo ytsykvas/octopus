@@ -1,5 +1,6 @@
 import { fireEvent, render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
+import { StrictMode } from 'react'
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest'
 
 import { focusAsShowModalDoes } from '../test/dialog.js'
@@ -48,6 +49,20 @@ afterEach(() => {
 describe('Modal', () => {
   // `showModal` puts it on the ×. The body mounts after it, so an
   // `autoFocus` inside is not spent on a dialog that is still closed.
+  // The app mounts in StrictMode, where the effect runs twice and the second
+  // `showModal` puts the focus on the × again — before the body has mounted.
+  it('gives it to what asks for it under StrictMode too', () => {
+    render(
+      <StrictMode>
+        <Modal title="Rename workspace" onClose={vi.fn()}>
+          <input aria-label="Name" autoFocus />
+        </Modal>
+      </StrictMode>
+    )
+
+    expect(screen.getByRole('textbox', { name: 'Name' })).toHaveFocus()
+  })
+
   it('gives the focus to what asks for it on opening', () => {
     render(
       <Modal title="Rename workspace" onClose={vi.fn()}>

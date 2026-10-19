@@ -68,6 +68,7 @@ export function useConfirm(): Confirmation {
     [checked]
   )
 
+  const destructive = request?.destructive === true
   const dialog =
     request === null ? null : (
       <Modal
@@ -83,7 +84,7 @@ export function useConfirm(): Confirmation {
                 what removes it. */}
             <Button
               variant="quiet"
-              autoFocus={request.destructive === true}
+              autoFocus={destructive}
               onClick={() => {
                 close(false)
               }}
@@ -91,8 +92,8 @@ export function useConfirm(): Confirmation {
               {request.cancelLabel}
             </Button>
             <Button
-              variant={request.destructive === true ? 'destructive' : 'accent'}
-              autoFocus={request.destructive !== true}
+              variant={destructive ? 'destructive' : 'accent'}
+              autoFocus={!destructive}
               onClick={() => {
                 close(true)
               }}
@@ -103,7 +104,7 @@ export function useConfirm(): Confirmation {
         }
       >
         <div className="flex gap-3 p-5">
-          {request.destructive === true && (
+          {destructive && (
             <span
               aria-hidden
               className="bg-danger-bg text-danger flex size-8 shrink-0 items-center justify-center rounded-full"
