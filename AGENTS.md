@@ -254,6 +254,9 @@ error at all. Kill it by path — `pkill -f "octopus/node_modules/electron/dist"
 this editor included. Then wait until `pgrep` on that path comes back empty
 before starting again: it takes a few seconds to exit, and a `sleep 2` was not
 enough — the new copy lost the lock and the old build stayed on screen.
+The packaged `/Applications/Octopus.app` holds the same lock: while it is open,
+`npm run dev` builds, prints `DevTools listening` and exits 0 with no window.
+It is the maintainer's working copy, so ask before quitting it.
 
 **The running app holds the state in memory.** Editing `~/.octopus/state.json`
 from the outside while it runs makes the two disagree, and the app will happily

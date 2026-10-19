@@ -393,6 +393,9 @@ export const en = {
     runBuilding: 'Building. The server starts when this finishes.',
     runServing: 'Serving.',
     buildFailed: 'The build failed, so the server was not started.',
+    /* The title bar's Run, held while the repository's scripts wait to be read
+       on the Scripts tab — the button has no room to say why on its own. */
+    awaitingApproval: 'Allow this repository\u2019s scripts on the Scripts tab first.',
     /* Said rather than enforced: the script belongs to whoever wrote it, and
        being wrong about it must not take the link or the controls away. */
     portSilent: 'Running, but nothing is listening on {{port}}. Does the script use $OCTOPUS_PORT?',
@@ -449,8 +452,7 @@ export const en = {
     ignored: 'ignored by git',
     /* Said aloud after a folder's name when its dot is drawn. */
     changesInside: 'has changes',
-    /* The letter for a conflict, beside the diff's own A, M, D, U. */
-    statusConflicted: '!',
+    /* Said aloud after a conflicted file's name; the `!` says it to the eye. */
     statusConflictedLabel: 'Conflicted',
     tabs: 'Open files',
     preview: '{{name}} — preview. Opening another file replaces it; double-click to keep it open.',
@@ -766,6 +768,8 @@ export const en = {
     modeChanged: 'mode {{from}} \u2192 {{to}}',
     binary: 'Binary file — nothing to show.',
     tooLarge: 'Too large to draw here. Open the file to read it.',
+    nestedRepository:
+      'A repository of its own. Git records it as a link rather than its files, once it has a commit of its own.',
     revert: 'Revert',
     revertFile: 'Revert {{path}}',
     revertTitle: 'Revert this file?',
@@ -830,15 +834,6 @@ export const en = {
     copyFailed: 'Could not copy',
     openFile: 'Open file',
     fileActions: 'Actions for {{path}}',
-    // The one-letter marks in a file's header. Each is the initial of the word
-    // beside it, so a translation changes both together or neither.
-    statusAdded: 'A',
-    statusModified: 'M',
-    statusDeleted: 'D',
-    statusRenamed: 'R',
-    statusCopied: 'C',
-    statusTypeChanged: 'T',
-    statusUntracked: 'U',
     statusAddedLabel: 'Added',
     statusModifiedLabel: 'Modified',
     statusDeletedLabel: 'Deleted',
@@ -980,6 +975,13 @@ export const en = {
        than silence: after a fallback the reader has an answer, and here the
        turn just ends — which reads as the app having dropped something. */
     refusalDeclined: '{{from}} declined this turn, and no other model took it',
+    /* A call refused without anyone being asked. Auto mode's classifier is the
+       usual source, and named, because a mode that decides for the user has
+       to leave its decisions on the screen; a deny rule is the other. */
+    deniedByAuto: 'Auto mode blocked {{tool}}',
+    deniedByRule: '{{tool}} was refused without asking',
+    /* The chip moved by itself, and this is the line that says why. */
+    autoFellBack: 'Auto mode is not available here, so this chat is on {{mode}} now',
     /* Struck through rather than dropped: the work was really done and then
        abandoned, and a log that quietly loses it reads as though the agent
        never started down that road. */
@@ -995,16 +997,18 @@ export const en = {
     /* Names the control and the mode in force together: the button switches
        rather than opening a list, so the value is all it shows. */
     modeToggle: 'Permissions: {{mode}}',
-    modeDefault: 'Ask first',
-    /* Left in English in every locale: it is what Claude Code's own status
-       line calls this, and a translated name for a borrowed one reads as a
-       second setting rather than the same one. Not "Auto mode", which is a
-       different mode there — a classifier approving each call. */
+    /* Manual, Accept edits and Auto are left in English in every locale: they
+       are what Claude Code's own status line calls these, and a translated
+       name for a borrowed one reads as a second setting rather than the same
+       one. Accept edits is not Auto: that one is a classifier approving each
+       call, this one accepts file edits and nothing else. */
+    modeDefault: 'Manual',
     modeAcceptEdits: 'Accept edits',
+    modeAuto: 'Auto',
     planMode: 'Plan',
     /* Names the keys rather than the states: the label beside it already
        says which one is in force, and the ring's order is learned by using it. */
-    modeCycle: 'Switch mode — Ask first, Accept edits, Plan (Shift+Tab)',
+    modeCycle: 'Switch mode — Manual, Accept edits, Plan, Auto (Shift+Tab)',
 
     context: 'Context',
     contextTitle: 'Context window — {{used}} of {{total}}',
@@ -1029,6 +1033,8 @@ export const en = {
     autoCompactOverriddenEnv:
       '{{variable}}={{value}} in the environment decides instead. Take it out there, then choose here again.',
     autoCompactMismatch: 'In effect: {{effective}}, not the chosen {{chosen}}.',
+    autoCompactMismatchRetry:
+      'In effect: {{effective}}, not the chosen {{chosen}}. Choose it again to start the session over.',
     clearTitle: 'Clear this conversation?',
     clearMessage: 'The agent starts again with no memory of what was said here.',
     clearDetail: 'The log is deleted with it, and cannot be brought back.',
@@ -1104,6 +1110,10 @@ export const en = {
        as well. The model that resolves to is named underneath, because that is
        the fact the reader came for. */
     modelsSame: 'Same as writing code',
+    /* Above the columns while a `/model` command has the session on a model
+       they do not tick: the command lasts for the session, the columns are
+       what this conversation chose. */
+    modelsSessionOnly: 'This session is running {{model}}: /model chose it for this session only.',
 
     effort: 'Effort',
     effortLow: 'Low',
@@ -1160,6 +1170,10 @@ export const en = {
     /* Said before the click, because the click widens what the agent may do:
        an approved plan always goes on in Accept edits. */
     planExecuteHint: 'Runs with Accept edits on — file changes go ahead without asking.',
+    /* The exception: a chat in Auto goes back to Auto, which already decides
+       each step on its own. */
+    planExecuteHintAuto:
+      'Runs in Auto — each step is approved or refused for you, and anything unclear is asked.',
     planFeedback: 'Anything to work out first?',
     planFeedbackPlaceholder: 'Write here and the agent will revise the plan',
     questionTitle: 'The agent is asking',
@@ -1317,7 +1331,8 @@ export const en = {
     branchPrefix: 'Branch prefix',
     branchPrefixHint:
       'Workspace branches are named <prefix>/<workspace>. A GitHub username is a common choice.',
-    branchPrefixEmpty: 'The prefix cannot be empty.',
+    branchPrefixUnusable: 'The prefix needs at least one character git can use.',
+    branchPrefixBecomes: 'Will be saved as {{prefix}}',
 
     cloneDirectory: 'Clone destination',
     cloneDirectoryHint:
@@ -1351,12 +1366,21 @@ export const en = {
     permissionMode: 'What a new chat may do',
     permissionModeHint:
       'The starting point for every workspace, so the question is not asked again on each new branch. A chat can still be switched on its own.',
-    permissionAsk: 'Ask first',
+    permissionAsk: 'Manual',
     permissionAskHint:
       'Reading is silent; writing a file or running a command waits for an answer.',
     permissionAcceptEdits: 'Accept edits',
     permissionAcceptEditsHint:
       'File changes go through without asking, the plain file commands too (mkdir, mv, rm). Other commands still wait.',
+    permissionAuto: 'Auto',
+    permissionAutoHint:
+      'A classifier approves or refuses each step, and asks when it cannot tell. Refusals show in the chat. Not every account and model has it; a chat falls back to Manual when it is not there.',
+    planExecution: 'Carrying out an approved plan',
+    planExecutionHint: 'What a chat switches to when you press Execute on a plan.',
+    planExecutionAutoHint:
+      'Each step is approved or refused by the classifier. Where Auto is not available, Accept edits is used instead.',
+    planExecutionAcceptEditsHint:
+      'File changes go through without asking; other commands still wait.',
 
     alwaysAllowed: 'Answered "always"',
     alwaysAllowedHint:
@@ -1852,6 +1876,7 @@ export const en = {
       'Could not determine a base branch in {{path}}. Check out the branch you want and try again.',
     baseUnknown:
       'Could not find where this workspace branched off {{branch}}. The branch may have been renamed or deleted — check the project settings.',
+    notRemoved: '{{path}} is still there: it could not be removed.',
     duplicateProject: 'This repository is already added as project "{{name}}".',
     notConnected: 'Could not reach GitHub. Check the account in Settings.',
     listFailed: 'GitHub returned something unexpected.',
@@ -1909,6 +1934,7 @@ export const en = {
     rewindUnavailableReason: 'This conversation cannot be rewound to that message: {{reason}}',
     rewindInProgress: 'This conversation is being rewound. Wait for it to finish.',
     chatClosed: 'That conversation was closed. Reopen it from the history first.',
+    autoModeUnavailable: 'Auto mode is not available here: {{reason}}',
     repoConfigSymlink:
       '{{path}} is a symbolic link. octopus will not read or write through one, because it can point anywhere outside the repository.',
     repoConfigTooLarge: '{{path}} is larger than this kind of file is allowed to be.',

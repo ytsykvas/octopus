@@ -29,7 +29,7 @@ import type {
 import type { AgentCommand, AgentModel, EffortChoice, FileRewind, PermissionMode } from './chats.js'
 import { sessionEffort } from './chats.js'
 import { type AnswerValue, type ElicitationField, readForm } from './elicitation.js'
-import type { AgentEvent } from './events.js'
+import { type AgentEvent, ResetTriggerSchema } from './events.js'
 import { describeError } from './persist.js'
 import type { SkillOverride, SkillVisibility } from './skills.js'
 import type { UsageReport } from './usage.js'
@@ -932,8 +932,34 @@ export function mapMessage(message: SDKMessage): AgentEvent[] {
         // is the whole basis of resuming after a restart. It arrives more than
         // once: every slash command produces a fresh one, so whoever records it
         // has to tolerate being told the same id repeatedly.
+        //
+        // It also names the mode the session actually started in, which is
+        // how a request for `auto` that the CLI turned down becomes visible.
         case 'init':
-          return [{ type: 'session_started', sessionId: message.session_id }]
+          return [
+            { type: 'session_started', sessionId: message.session_id },
+            { type: 'mode_reported', mode: message.permissionMode }
+          ]
+
+        // Sent when the session's state moves, and carrying the mode when that
+        // is what moved — the CLI's own fall back out of auto mode among them.
+        case 'status':
+          return message.permissionMode === undefined
+            ? []
+            : [{ type: 'mode_reported', mode: message.permissionMode }]
+
+        /* A call refused without a prompt. Under auto mode that is the
+           classifier's verdict, and without this line it would show only as a
+           tool that failed. */
+        case 'permission_denied':
+          return [
+            {
+              type: 'permission_denied',
+              toolName: message.tool_name,
+              byClassifier: message.decision_reason_type === 'classifier',
+              reason: message.decision_reason ?? null
+            }
+          ]
 
         case 'commands_changed':
           return [{ type: 'commands_changed', commands: toAgentCommands(message.commands) }]
@@ -982,12 +1008,17 @@ export function mapMessage(message: SDKMessage): AgentEvent[] {
           return []
       }
 
-    // The conversation was replaced by an empty one. Whether the user asked for
-    // that is not knowable here — the SDK sends the same message for leaving
-    // plan mode — so it maps to the "nobody asked" form and the service, which
-    // knows what was sent, decides.
-    case 'conversation_reset':
-      return [{ type: 'conversation_reset', cleared: false }]
+    // The conversation was replaced by an empty one. A newer CLI says what did
+    // it, and only `/clear` is the user asking. An older one, or a cause this
+    // build does not know, maps to the "nobody asked" form, and the service,
+    // which knows what was sent, decides.
+    case 'conversation_reset': {
+      const trigger = ResetTriggerSchema.safeParse(message.trigger)
+      if (!trigger.success) return [{ type: 'conversation_reset', cleared: false }]
+      return [
+        { type: 'conversation_reset', cleared: trigger.data === 'clear', trigger: trigger.data }
+      ]
+    }
 
     case 'assistant':
       return fromAssistant(message)

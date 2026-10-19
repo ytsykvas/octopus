@@ -262,14 +262,80 @@ function assistant(content: unknown[]): SDKMessage {
 }
 
 describe('mapping SDK messages', () => {
-  it('reports the session id from the init message', () => {
+  // And the mode it actually started in, which is the only sign that a
+  // request for auto mode was quietly turned down.
+  it('reports the session id and the mode from the init message', () => {
     const message = {
       type: 'system',
       subtype: 'init',
-      session_id: 'sess-42'
+      session_id: 'sess-42',
+      permissionMode: 'default'
     } as unknown as SDKMessage
 
-    expect(mapMessage(message)).toEqual([{ type: 'session_started', sessionId: 'sess-42' }])
+    expect(mapMessage(message)).toEqual([
+      { type: 'session_started', sessionId: 'sess-42' },
+      { type: 'mode_reported', mode: 'default' }
+    ])
+  })
+
+  it('reports the mode a status message carries', () => {
+    const message = {
+      type: 'system',
+      subtype: 'status',
+      status: null,
+      permissionMode: 'default'
+    } as unknown as SDKMessage
+
+    expect(mapMessage(message)).toEqual([{ type: 'mode_reported', mode: 'default' }])
+  })
+
+  // Most status messages are about compacting or a request, not the mode.
+  it('says nothing for a status message without a mode', () => {
+    const message = {
+      type: 'system',
+      subtype: 'status',
+      status: 'requesting'
+    } as unknown as SDKMessage
+
+    expect(mapMessage(message)).toEqual([])
+  })
+
+  // A call blocked by auto mode's classifier would otherwise show only as a
+  // tool that failed.
+  it('reports a call the classifier refused, with its reason', () => {
+    const message = {
+      type: 'system',
+      subtype: 'permission_denied',
+      tool_name: 'Bash',
+      tool_use_id: 'tool-1',
+      decision_reason_type: 'classifier',
+      decision_reason: 'Downloads and runs a remote script',
+      message: 'Permission for this action was denied'
+    } as unknown as SDKMessage
+
+    expect(mapMessage(message)).toEqual([
+      {
+        type: 'permission_denied',
+        toolName: 'Bash',
+        byClassifier: true,
+        reason: 'Downloads and runs a remote script'
+      }
+    ])
+  })
+
+  it('reports a call a rule refused, with no reason when it gave none', () => {
+    const message = {
+      type: 'system',
+      subtype: 'permission_denied',
+      tool_name: 'Write',
+      tool_use_id: 'tool-2',
+      decision_reason_type: 'rule',
+      message: 'Denied by a rule'
+    } as unknown as SDKMessage
+
+    expect(mapMessage(message)).toEqual([
+      { type: 'permission_denied', toolName: 'Write', byClassifier: false, reason: null }
+    ])
   })
 
   /*
@@ -490,7 +556,7 @@ describe('mapping SDK messages', () => {
   it('ignores system messages it has no use for', () => {
     const message = {
       type: 'system',
-      subtype: 'permission_denied',
+      subtype: 'hook_started',
       session_id: 'sess-42'
     } as unknown as SDKMessage
 
@@ -518,14 +584,40 @@ describe('mapping SDK messages', () => {
     expect(mapMessage(message)).toEqual([{ type: 'conversation_reset', cleared: false }])
   })
 
-  // Whether the user asked for it cannot be known from one message — the same
-  // reset arrives when the agent leaves plan mode — so the mapping reports the
-  // form that changes nothing, and the service, which sent the message, decides.
-  it('never claims a reset was asked for', () => {
+  // An older CLI does not say what caused the reset, and the same message
+  // arrives when the agent leaves plan mode — so the mapping reports the form
+  // that changes nothing, and the service, which sent the message, decides.
+  it('does not claim a reset was asked for when the message does not say', () => {
     const message = { type: 'conversation_reset' } as unknown as SDKMessage
     const [event] = mapMessage(message)
 
     expect(event).toEqual({ type: 'conversation_reset', cleared: false })
+  })
+
+  it('reads a reset the CLI says came from /clear as asked for', () => {
+    const message = { type: 'conversation_reset', trigger: 'clear' } as unknown as SDKMessage
+
+    expect(mapMessage(message)).toEqual([
+      { type: 'conversation_reset', cleared: true, trigger: 'clear' }
+    ])
+  })
+
+  it('passes on what else caused a reset, without reading it as asked for', () => {
+    const message = {
+      type: 'conversation_reset',
+      trigger: 'plan_mode_exit'
+    } as unknown as SDKMessage
+
+    expect(mapMessage(message)).toEqual([
+      { type: 'conversation_reset', cleared: false, trigger: 'plan_mode_exit' }
+    ])
+  })
+
+  // The SDK's own advice: an unrecognised value is an unspecified reset.
+  it('reads a cause it does not know as no cause at all', () => {
+    const message = { type: 'conversation_reset', trigger: 'teleport' } as unknown as SDKMessage
+
+    expect(mapMessage(message)).toEqual([{ type: 'conversation_reset', cleared: false }])
   })
 
   it('passes on a new command list, translated', () => {

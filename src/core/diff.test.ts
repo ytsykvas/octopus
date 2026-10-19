@@ -10,7 +10,7 @@
  */
 
 import { execFile } from 'node:child_process'
-import { chmod, mkdtemp, readFile, rm, symlink, writeFile } from 'node:fs/promises'
+import { chmod, mkdir, mkdtemp, readFile, rm, symlink, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { promisify } from 'node:util'
@@ -749,6 +749,39 @@ describe('readWorkspaceDiff', () => {
 
     expect(diff.files[0]).toMatchObject({ path: 'fresh.txt', status: 'untracked', added: 2 })
     expect(diff.files[0]?.hunks[0]?.lines).toHaveLength(2)
+  })
+
+  /*
+   * A clone inside the worktree, not added as a submodule: git names it
+   * `nested/` and never looks inside. Read as a path it was a binary file; left
+   * out, the pane said nothing had changed while the change count and the
+   * commit still saw it. One row says what it is.
+   */
+  it('draws a repository nested in the worktree as one row with nothing to read', async () => {
+    const nested = join(dir, 'nested')
+    await mkdir(nested)
+    await run('git', ['init', '-q'], { cwd: nested })
+    await writeFile(join(nested, 'inside.txt'), 'inside\n', 'utf8')
+    await run('git', ['add', '.'], { cwd: nested })
+    await run(
+      'git',
+      ['-c', 'user.name=Test', '-c', 'user.email=test@example.com', 'commit', '-qm', 'clone'],
+      {
+        cwd: nested
+      }
+    )
+
+    const diff = await readDiff()
+
+    expect(diff.files).toEqual([
+      expect.objectContaining({
+        path: 'nested',
+        status: 'untracked',
+        omitted: 'repository',
+        hunks: [],
+        publish: 'uncommitted'
+      })
+    ])
   })
 
   it('leaves out a file the repository ignores', async () => {

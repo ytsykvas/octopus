@@ -22,10 +22,12 @@ import {
   isClearCommand,
   isUsageCommand,
   MAX_CHATS_PER_WORKSPACE,
+  modeAfterPlan,
   newChat,
   opusPlanSplit,
   PERMISSION_MODES,
   PermissionAnswerSchema,
+  PLAN_EXECUTION_MODES,
   sessionEffort,
   sessionMode,
   sessionModel,
@@ -151,7 +153,25 @@ describe('a new chat', () => {
     // Planning wins: the agent runs no tools at all, so there is nothing for
     // "accept edits" to accept until the plan is approved.
     expect(sessionMode({ planMode: true, workingMode: 'acceptEdits' })).toBe('plan')
+    expect(sessionMode({ planMode: false, workingMode: 'auto' })).toBe('auto')
+    expect(sessionMode({ planMode: true, workingMode: 'auto' })).toBe('plan')
   })
+
+  // What follows an approved plan: the setting, out of planning; nothing new
+  // for a plan the agent offered unasked; and never down from auto mode.
+  it.each([
+    [true, 'default', 'acceptEdits', 'acceptEdits'],
+    [true, 'default', 'auto', 'auto'],
+    [true, 'acceptEdits', 'auto', 'auto'],
+    [true, 'auto', 'acceptEdits', 'auto'],
+    [false, 'default', 'auto', 'default'],
+    [false, 'acceptEdits', 'auto', 'acceptEdits']
+  ] as const)(
+    'goes on from planning %s in %s, set to %s, in %s',
+    (planMode, workingMode, executeIn, expected) => {
+      expect(modeAfterPlan({ planMode, workingMode }, executeIn)).toBe(expected)
+    }
+  )
 
   /*
    * The model's twin, and the case worth spelling out is the third one: the
@@ -243,16 +263,23 @@ describe('the agent kind', () => {
 })
 
 describe('permission modes', () => {
-  it('offers asking, planning and accepting edits', () => {
-    expect(PERMISSION_MODES).toEqual(['default', 'plan', 'acceptEdits'])
+  it('offers asking, planning, accepting edits and auto mode', () => {
+    expect(PERMISSION_MODES).toEqual(['default', 'plan', 'acceptEdits', 'auto'])
   })
 
   // The stored half is the SDK's union minus planning, and it has to stay a
   // subset of it: a value here the SDK does not know is a session that never
   // starts, found at runtime rather than at the build.
   it('stores every mode but planning, and nothing the SDK would not take', () => {
-    expect(WORKING_MODES).toEqual(['default', 'acceptEdits'])
+    expect(WORKING_MODES).toEqual(['default', 'acceptEdits', 'auto'])
     for (const mode of WORKING_MODES) expect(PERMISSION_MODES).toContain(mode)
+  })
+
+  // Manual is not among them: it would ask about every step of a plan the
+  // user has just approved.
+  it('carries a plan out only in a mode that does not ask about edits', () => {
+    expect(PLAN_EXECUTION_MODES).toEqual(['acceptEdits', 'auto'])
+    for (const mode of PLAN_EXECUTION_MODES) expect(WORKING_MODES).toContain(mode)
   })
 
   // §4 puts transparency above convenience, and a mode where nothing is ever
