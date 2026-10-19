@@ -105,6 +105,7 @@ function renderPanel(workspace = anna, visible = true): void {
       comments={commentController()}
       revert={revertController()}
       onError={vi.fn()}
+      onOpenFile={vi.fn()}
     />
   )
 }
@@ -121,6 +122,7 @@ describe('DiffPanel', () => {
         comments={commentController()}
         revert={revertController()}
         onError={vi.fn()}
+        onOpenFile={vi.fn()}
       />
     )
 
@@ -225,6 +227,7 @@ describe('DiffPanel', () => {
         comments={commentController()}
         revert={revertController()}
         onError={vi.fn()}
+        onOpenFile={vi.fn()}
       />
     )
     const { rerender } = render(panel(anna))
@@ -315,6 +318,20 @@ describe('DiffPanel', () => {
 
     await expandAll()
     expect(await screen.findByText(/Binary file/)).toBeInTheDocument()
+  })
+
+  // A revert there would remove a file, and this is a folder git has no record of.
+  it('says a nested repository is one of its own, with no revert', async () => {
+    answer(
+      workspaceDiff([
+        fileDiff('vendor/clone', { status: 'untracked', omitted: 'repository', hunks: [] })
+      ])
+    )
+    renderPanel()
+
+    await expandAll()
+    expect(await screen.findByText(/A repository of its own/)).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /Revert vendor\/clone/ })).not.toBeInTheDocument()
   })
 
   it('says a file is too large to draw, and how many others were', async () => {
@@ -500,6 +517,7 @@ describe('DiffPanel', () => {
         comments={commentController()}
         revert={revertController()}
         onError={vi.fn()}
+        onOpenFile={vi.fn()}
       />
     )
 
@@ -521,6 +539,7 @@ describe('DiffPanel', () => {
         comments={commentController()}
         revert={revertController()}
         onError={vi.fn()}
+        onOpenFile={vi.fn()}
       />
     )
 
@@ -546,6 +565,7 @@ describe('DiffPanel', () => {
         comments={commentController()}
         revert={revertController()}
         onError={vi.fn()}
+        onOpenFile={vi.fn()}
       />
     )
 
@@ -587,6 +607,7 @@ describe('DiffPanel', () => {
         comments={commentController()}
         revert={revertController()}
         onError={vi.fn()}
+        onOpenFile={vi.fn()}
       />
     )
 
@@ -635,6 +656,7 @@ describe('DiffPanel', () => {
         comments={commentController()}
         revert={revertController()}
         onError={vi.fn()}
+        onOpenFile={vi.fn()}
       />
     )
 
@@ -660,6 +682,7 @@ describe('DiffPanel', () => {
         comments={commentController()}
         revert={revertController()}
         onError={vi.fn()}
+        onOpenFile={vi.fn()}
       />
     )
 
@@ -685,6 +708,7 @@ describe('DiffPanel', () => {
           comments={comments}
           revert={revertController()}
           onError={vi.fn()}
+          onOpenFile={vi.fn()}
         />
       )
       return comments
@@ -1059,6 +1083,7 @@ describe('DiffPanel', () => {
           comments={comments}
           revert={revertController()}
           onError={vi.fn()}
+          onOpenFile={vi.fn()}
         />
       )
       await expandAll()
@@ -1417,6 +1442,7 @@ describe('DiffPanel', () => {
           comments={comments}
           revert={revertController()}
           onError={vi.fn()}
+          onOpenFile={vi.fn()}
         />
       )
 
@@ -1466,6 +1492,7 @@ describe('DiffPanel', () => {
         comments={commentController()}
         revert={revertController()}
         onError={vi.fn()}
+        onOpenFile={vi.fn()}
       />
     )
     rerender(
@@ -1478,6 +1505,7 @@ describe('DiffPanel', () => {
         comments={commentController()}
         revert={revertController()}
         onError={vi.fn()}
+        onOpenFile={vi.fn()}
       />
     )
 
@@ -1498,6 +1526,7 @@ describe('DiffPanel', () => {
         comments={commentController()}
         revert={revertController()}
         onError={vi.fn()}
+        onOpenFile={vi.fn()}
       />
     )
     await expandAll()
@@ -1513,6 +1542,7 @@ describe('DiffPanel', () => {
         comments={commentController()}
         revert={revertController()}
         onError={vi.fn()}
+        onOpenFile={vi.fn()}
       />
     )
 
@@ -1521,26 +1551,15 @@ describe('DiffPanel', () => {
     })
   })
 
-  it('opens a file where the system would', async () => {
+  /*
+   * In the window's own viewer rather than whatever the system picks: reading a
+   * changed file whole is the common case, and leaving the app for it is what
+   * the viewer was built to avoid. Kept open, like a double-click in the tree —
+   * a file asked for from a menu is not a glance.
+   */
+  it('opens a file in the viewer, and keeps it open', async () => {
     const user = userEvent.setup()
-    answer(workspaceDiff([fileDiff('src/a.ts')]))
-    renderPanel()
-
-    await user.click(await screen.findByRole('button', { name: 'Actions for src/a.ts' }))
-    await user.click(screen.getByRole('menuitem', { name: 'Open file' }))
-
-    expect(octopus().files.open).toHaveBeenCalledWith(anna.id, 'src/a.ts')
-  })
-
-  // The main process reports what the system said about a refused open; a pane
-  // that drops it leaves a click that opened nothing looking like one that did.
-  it('says so when a file would not open', async () => {
-    const user = userEvent.setup()
-    const onError = vi.fn()
-    vi.mocked(octopus().files.open).mockResolvedValue({
-      ok: false,
-      error: 'no application knows this file'
-    })
+    const onOpenFile = vi.fn()
     answer(workspaceDiff([fileDiff('src/a.ts')]))
     render(
       <DiffPanel
@@ -1551,18 +1570,16 @@ describe('DiffPanel', () => {
         width={WIDE}
         comments={commentController()}
         revert={revertController()}
-        onError={onError}
+        onError={vi.fn()}
+        onOpenFile={onOpenFile}
       />
     )
 
     await user.click(await screen.findByRole('button', { name: 'Actions for src/a.ts' }))
     await user.click(screen.getByRole('menuitem', { name: 'Open file' }))
 
-    await waitFor(() => {
-      expect(onError).toHaveBeenCalledWith(
-        expect.stringContaining('no application knows this file')
-      )
-    })
+    expect(onOpenFile).toHaveBeenCalledExactlyOnceWith('src/a.ts', true)
+    expect(octopus().files.open).not.toHaveBeenCalled()
   })
 
   it('confirms a path that was copied', async () => {
@@ -1658,6 +1675,7 @@ describe('reverting one file', () => {
         comments={commentController()}
         revert={revert}
         onError={vi.fn()}
+        onOpenFile={vi.fn()}
       />
     )
 
@@ -1695,6 +1713,7 @@ describe('reverting one file', () => {
         comments={commentController()}
         revert={revert}
         onError={vi.fn()}
+        onOpenFile={vi.fn()}
       />
     )
 
@@ -1828,6 +1847,7 @@ describe('who wrote which file', () => {
         comments={commentController()}
         revert={revertController()}
         onError={vi.fn()}
+        onOpenFile={vi.fn()}
       />
     )
 
@@ -1844,6 +1864,7 @@ describe('who wrote which file', () => {
         comments={commentController()}
         revert={revertController()}
         onError={vi.fn()}
+        onOpenFile={vi.fn()}
       />
     )
 
@@ -2247,6 +2268,7 @@ describe('what has reached GitHub', () => {
         comments={commentController()}
         revert={revertController()}
         onError={vi.fn()}
+        onOpenFile={vi.fn()}
       />
     )
 
@@ -2263,6 +2285,7 @@ describe('what has reached GitHub', () => {
         comments={commentController()}
         revert={revertController()}
         onError={vi.fn()}
+        onOpenFile={vi.fn()}
       />
     )
 
@@ -2300,6 +2323,7 @@ describe('what has reached GitHub', () => {
         comments={commentController()}
         revert={revertController()}
         onError={onError}
+        onOpenFile={vi.fn()}
       />
     )
 

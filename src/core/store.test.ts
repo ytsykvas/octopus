@@ -144,6 +144,20 @@ describe('load and save', () => {
     await expect(loadState(file)).resolves.toEqual(marked)
   })
 
+  // A project copies the prefix as it was when it was added, so one stored
+  // with a slash too many kept failing every workspace after the setting was
+  // put right.
+  it('reads a project’s stored branch prefix as git will take it', async () => {
+    const stored = {
+      ...withProject,
+      projects: withProject.projects.map((one) => ({ ...one, branchPrefix: 'octo/' }))
+    }
+    await writeFile(file, JSON.stringify(stored), 'utf8')
+
+    const loaded = await loadState(file)
+    expect(loaded.projects[0]?.branchPrefix).toBe('octo')
+  })
+
   // Every project on disk predates icons, and a state file that refused to load
   // over a missing key would lose the whole list.
   it('loads a project written before icons existed', async () => {
@@ -866,6 +880,30 @@ describe('the remembered model list', () => {
 
     const state = await loadState(file)
     expect(state.chats[0]?.effort).toBe('medium')
+  })
+
+  // Auto mode is stored like any other working mode, and a chat left in it
+  // has to come back in it.
+  it('loads a chat left in auto mode', async () => {
+    const chat = {
+      id: 'chat-1',
+      workspaceId: 'planner/kyiv',
+      agent: 'claude',
+      status: 'idle',
+      title: null,
+      sessionId: null,
+      model: null,
+      effort: 'medium',
+      workingMode: 'auto',
+      planMode: false,
+      knownCommands: [],
+      skillOverrides: {},
+      createdAt: '2026-08-11T09:00:00.000Z'
+    }
+    await writeFile(file, JSON.stringify({ ...withProject, chats: [chat] }), 'utf8')
+
+    const state = await loadState(file)
+    expect(state.chats[0]?.workingMode).toBe('auto')
   })
 
   // Written before a conversation could be rewound: it never was, so there is

@@ -1,10 +1,11 @@
-import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import type { FileTreeSnapshot, TreeEntry } from '@core/fileTree.js'
 import type { WorkspaceView } from '@core/workspaces.js'
 
+import i18n, { DEFAULT_LANGUAGE } from '../../i18n/index.js'
 import { octopus } from '../../test/octopus.js'
 import { workspaceView } from '../../test/workspaces.js'
 import { FilesPanel, ROW_HEIGHT } from './FilesPanel.js'
@@ -156,6 +157,33 @@ describe('FilesPanel', () => {
     expect(names()).toEqual(['node_modules', 'src', '.env', 'README.md'])
   })
 
+  /*
+   * The letters editors draw, in every language. The initial of the translated
+   * word was the mark at first, and in Ukrainian "changed" is `З` — which
+   * before a path reads as the digit 3.
+   */
+  describe('in another language', () => {
+    // Unmounted first: switching back under a mounted panel re-renders it
+    // outside act, after the test has ended.
+    afterEach(async () => {
+      cleanup()
+      await i18n.changeLanguage(DEFAULT_LANGUAGE)
+    })
+
+    it("marks a row with the editor's letter, and says the word aloud", async () => {
+      answering()
+      renderPanel()
+      await shown()
+      await act(async () => {
+        await i18n.changeLanguage('uk')
+      })
+
+      await userEvent.click(row('src'))
+      expect(within(row('b.ts')).getByText('M')).toHaveClass('text-info')
+      expect(row('b.ts')).toHaveAccessibleName(/Змінено/)
+    })
+  })
+
   // Two toggles before React renders again must both count.
   it('opens two folders clicked within one frame', async () => {
     answering()
@@ -197,6 +225,62 @@ describe('FilesPanel', () => {
     expect(row('README.md')).toHaveAttribute('aria-selected', 'true')
     expect(row('README.md')).toHaveClass('row-selected')
     expect(row('.env')).toHaveAttribute('aria-selected', 'false')
+  })
+
+  /*
+   * A submodule is one path in git's listing, and was drawn as a file the
+   * viewer then could not open. It is a folder read from disk the way an
+   * ignored one is, and nothing inside it is greyed or marked: the outer
+   * repository has nothing to say about it.
+   */
+  describe('a submodule', () => {
+    const withSubmodule: FileTreeSnapshot = {
+      entries: [file('README.md'), { path: 'vendor', kind: 'directory', ignored: false }],
+      statuses: { vendor: 'modified' },
+      truncated: false
+    }
+
+    it('opens as a folder read from disk, its rows neither greyed nor called ignored', async () => {
+      answering(withSubmodule)
+      vi.mocked(octopus().files.directory)
+        .mockResolvedValueOnce({
+          ok: true,
+          value: {
+            entries: [
+              { name: 'src', kind: 'directory' },
+              { name: 'lib.ts', kind: 'file' }
+            ],
+            truncated: false
+          }
+        })
+        .mockResolvedValueOnce({
+          ok: true,
+          value: { entries: [{ name: 'deep.ts', kind: 'file' }], truncated: false }
+        })
+      renderPanel()
+      await shown()
+
+      expect(row('vendor')).toHaveAttribute('aria-expanded', 'false')
+      await userEvent.click(row('vendor'))
+      const lib = await screen.findByRole('treeitem', { name: /^lib\.ts/ })
+      expect(lib).not.toHaveAccessibleName(/ignored by git/)
+      expect(within(lib).getByText('lib.ts')).not.toHaveClass('text-ink-faint')
+
+      // A folder inside one is read from disk in turn: git lists nothing in there.
+      await userEvent.click(row('src'))
+      expect(await screen.findByRole('treeitem', { name: /^deep\.ts/ })).toBeInTheDocument()
+      expect(octopus().files.directory).toHaveBeenLastCalledWith(ANNA.id, 'vendor/src')
+    })
+
+    // A new commit or an edit inside: either way the one status git gives it,
+    // on the folder's own path.
+    it('says when it has changed', async () => {
+      answering(withSubmodule)
+      renderPanel()
+      await shown()
+
+      expect(row('vendor')).toHaveAccessibleName(/has changes/)
+    })
   })
 
   describe('an ignored folder', () => {

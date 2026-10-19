@@ -8,6 +8,7 @@ import { randomUUID } from 'node:crypto'
 
 import { z } from 'zod'
 
+import { BranchPrefixSchema, DEFAULT_BRANCH_PREFIX } from './branches.js'
 import { withMember } from './lists.js'
 import { SkillKeySchema } from './skillNames.js'
 import { StandingPermissionSchema, withoutStanding } from './standingPermissions.js'
@@ -16,6 +17,7 @@ import {
   DEFAULT_EFFORT,
   type Effort,
   EXIT_PLAN_MODE,
+  PlanExecutionModeSchema,
   StoredEffortSchema,
   type WorkingMode,
   WorkingModeSchema
@@ -116,8 +118,8 @@ export const ConfigSchema = z.object({
    */
   version: z.literal(2),
 
-  /** Branch prefix for workspaces, e.g. a GitHub username. */
-  branchPrefix: z.string().min(1),
+  /** Branch prefix for workspaces, e.g. a GitHub username — cleaned, see `BranchPrefixSchema`. */
+  branchPrefix: BranchPrefixSchema,
 
   /**
    * Where repositories cloned from GitHub land.
@@ -143,6 +145,16 @@ export const ConfigSchema = z.object({
    * never being asked it.
    */
   workingMode: WorkingModeSchema.default('default'),
+
+  /**
+   * What an approved plan is carried out in.
+   *
+   * Auto by default: the plan is the part a person reads and agrees to, and
+   * auto mode carries it out with a classifier watching each step rather than
+   * a question for each one. Where auto mode is not available the work goes on
+   * in Accept edits instead, which is the other choice here.
+   */
+  planExecutionMode: PlanExecutionModeSchema.default('auto'),
 
   /**
    * How much thinking a new chat asks for; always a level.
@@ -379,6 +391,7 @@ export function createDefaultConfig(
     branchPrefix,
     settingSources: 'all',
     workingMode,
+    planExecutionMode: 'auto',
     effort,
     // Nothing to name: no catalogue has arrived on a first run, and the two
     // nulls are already the right answers — the agent's own choice, and no
@@ -446,7 +459,7 @@ export function migrateConfig(config: StoredConfig): Config {
 /** Reads the config, creating and persisting it if the file is missing. */
 export async function loadConfig(
   filePath: string = configFile(),
-  defaults: Config = createDefaultConfig('octopus')
+  defaults: Config = createDefaultConfig(DEFAULT_BRANCH_PREFIX)
 ): Promise<Config> {
   const existing = await readJsonFile<StoredConfig | null>(
     filePath,
