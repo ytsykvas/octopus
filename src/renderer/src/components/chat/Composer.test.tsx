@@ -1105,6 +1105,8 @@ describe('the model the session is running', () => {
 
     expect(transfer.dropEffect).toBe('copy')
     expect(box.className).toContain('border-accent')
+    // The plain accent is the whole signal: the colour ring steps aside.
+    expect(box.className).not.toContain('composer-ring')
   })
 
   /* Dragging over a child fires `dragleave` for the parent, so the naive
@@ -1121,6 +1123,15 @@ describe('the model the session is running', () => {
     expect(box.className).toContain('border-accent')
 
     fireEvent(box, leaving(box, document.body))
+    expect(box.className).not.toContain('border-accent')
+    expect(box.className).toContain('composer-ring')
+  })
+
+  it('wears the colour ring at rest', () => {
+    renderComposer()
+    const box = field().closest('div') as HTMLElement
+
+    expect(box.className).toContain('composer-ring')
     expect(box.className).not.toContain('border-accent')
   })
 

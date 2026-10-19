@@ -123,15 +123,27 @@ function paths(root: string): Parameters<typeof createService>[0] {
  */
 const started: OctopusService[] = []
 
+/**
+ * The ports something answers on, as far as every service here is concerned.
+ * Empty unless a test fills it; `docs/testing.md` says why it is not the
+ * machine's.
+ */
+const answering = new Set<number>()
+
 async function createService(options: ServiceOptions = {}): Promise<OctopusService> {
   // Nobody outranks a window unless a test says so: the default reads the
   // machine's own `~/.claude/settings.json` and environment.
-  const made = await makeService({ windowOverride: () => Promise.resolve(null), ...options })
+  const made = await makeService({
+    windowOverride: () => Promise.resolve(null),
+    listening: (port) => Promise.resolve(answering.has(port)),
+    ...options
+  })
   started.push(made)
   return made
 }
 
 beforeEach(async () => {
+  answering.clear()
   dir = await mkdtemp(join(tmpdir(), 'octopus-service-'))
   service = await createService(paths(dir))
 })
@@ -3407,6 +3419,15 @@ describe('the port a workspace serves on', () => {
     expect(second.port).toBe(first.port + BLOCK)
   })
 
+  // A block is free only if nothing answers on it — ours or anybody else's.
+  it('steps over a block something else already answers on', async () => {
+    answering.add(POOL_START)
+
+    const { port } = await withWorkspace()
+
+    expect(port).toBe(POOL_START + BLOCK)
+  })
+
   // Nothing of ours is running, so whatever answers is somebody else's — which
   // is exactly what makes the answer knowable here.
   it('keeps the port when nothing is answering on it', async () => {
@@ -3426,21 +3447,14 @@ describe('the port a workspace serves on', () => {
     const project = service.listProjects()[0]
     await service.createWorkspaceIn(project?.id ?? '')
 
-    const squatter = createServer()
-    await new Promise<void>((resolve) => {
-      squatter.listen(port, '127.0.0.1', resolve)
-    })
+    answering.add(port)
 
-    try {
-      const settled = await service.ensureWorkspacePort(id)
+    const settled = await service.ensureWorkspacePort(id)
 
-      expect(settled).not.toBe(port)
-      // Persisted, not just answered: the pane and the link both read it back.
-      expect(service.listWorkspaces.length).toBeGreaterThan(0)
-      await expect(service.ensureWorkspacePort(id)).resolves.toBe(settled)
-    } finally {
-      await new Promise((resolve) => squatter.close(resolve))
-    }
+    expect(settled).not.toBe(port)
+    // Persisted, not just answered: the pane and the link both read it back.
+    const stored = await service.listWorkspaces(project?.id ?? '')
+    expect(stored.find((workspace) => workspace.id === id)?.port).toBe(settled)
   })
 
   /*
@@ -3456,21 +3470,14 @@ describe('the port a workspace serves on', () => {
 
     // Something on the first workspace's port, so both have to move — which is
     // what puts them in the window where they can choose alike.
-    const squatter = createServer()
-    await new Promise<void>((resolve) => {
-      squatter.listen(port, '127.0.0.1', resolve)
-    })
+    answering.add(port)
 
-    try {
-      const [a, b] = await Promise.all([
-        service.ensureWorkspacePort(first),
-        service.ensureWorkspacePort(second.id)
-      ])
+    const [a, b] = await Promise.all([
+      service.ensureWorkspacePort(first),
+      service.ensureWorkspacePort(second.id)
+    ])
 
-      expect(a).not.toBe(b)
-    } finally {
-      await new Promise((resolve) => squatter.close(resolve))
-    }
+    expect(a).not.toBe(b)
   })
 
   // A failure must not stop the workspace queued behind it from being served.
@@ -3501,6 +3508,37 @@ describe('a workspace\u2019s port', () => {
     const workspace = await service.createWorkspaceIn(project.id)
 
     await expect(service.isWorkspaceServing(workspace.id)).resolves.toBe(false)
+  })
+
+  it('reports a server once something answers on its port', async () => {
+    const repo = join(dir, 'planner')
+    await initRepo(repo)
+    const project = await service.addProjectFromPath(repo)
+    const workspace = await service.createWorkspaceIn(project.id)
+    answering.add(workspace.port)
+
+    await expect(service.isWorkspaceServing(workspace.id)).resolves.toBe(true)
+  })
+
+  // The probe a test does not replace is the real one, which opens a socket.
+  it('asks the machine when no probe is given', async () => {
+    const real = await makeService(paths(dir))
+    started.push(real)
+    const repo = join(dir, 'planner')
+    await initRepo(repo)
+    const project = await real.addProjectFromPath(repo)
+    const workspace = await real.createWorkspaceIn(project.id)
+    const server = createServer()
+    await new Promise<void>((resolve, reject) => {
+      server.once('error', reject)
+      server.listen(workspace.port, '127.0.0.1', resolve)
+    })
+
+    try {
+      await expect(real.isWorkspaceServing(workspace.id)).resolves.toBe(true)
+    } finally {
+      await new Promise((resolve) => server.close(resolve))
+    }
   })
 
   it('refuses to ask about a workspace that does not exist', async () => {
@@ -4049,6 +4087,18 @@ describe('the agent chat', () => {
     session_id: 'sess-1'
   } as unknown as SDKMessage
 
+  /** What a session that was stopped says last. */
+  const abortedResultMessage = {
+    type: 'result',
+    subtype: 'error_during_execution',
+    is_error: true,
+    total_cost_usd: 0,
+    duration_ms: 1,
+    usage: { input_tokens: 1, output_tokens: 1 },
+    terminal_reason: 'aborted',
+    session_id: 'sess-1'
+  } as unknown as SDKMessage
+
   /** A service with a project, a workspace and a stubbed agent. */
   async function withWorkspace(extra: ServiceOptions = {}): Promise<{
     service: OctopusService
@@ -4229,7 +4279,11 @@ describe('the agent chat', () => {
         const repo = join(dir, 'planner')
         await initRepo(repo)
         agents = []
-        const plain = await makeService({ ...paths(dir), query: fakeQuery() })
+        const plain = await makeService({
+          ...paths(dir),
+          query: fakeQuery(),
+          listening: () => Promise.resolve(false)
+        })
         started.push(plain)
         const project = await plain.addProjectFromPath(repo)
         const workspace = await plain.createWorkspaceIn(project.id)
@@ -6479,6 +6533,33 @@ describe('the agent chat', () => {
       await vi.waitFor(() => {
         expect(service.listChats(workspaceId)[0]?.status).toBe('running')
       })
+    })
+
+    /*
+     * What the window hears last is what is stored. Both status writes used to
+     * decide whether to announce against the record as it was before either
+     * landed, so a question withdrawn before its wait was written announced
+     * the wait and never its end: the tab stayed amber over a running turn.
+     */
+    it('tells the window the turn goes on when a question is withdrawn at once', async () => {
+      const { service, workspaceId, events } = await withWorkspace()
+      const chat = await service.openChat(workspaceId)
+      await service.sendToChat(chat.id, 'run it')
+      const heard: ChatStatusEvent[] = []
+      service.onChatStatus((event) => heard.push(event))
+
+      const withdraw = new AbortController()
+      const decision = agent().ask('Bash', { command: 'ls' }, undefined, undefined, {
+        signal: withdraw.signal
+      })
+      await waitForRequest(events)
+      withdraw.abort()
+      await decision
+
+      await vi.waitFor(() => {
+        expect(heard.at(-1)?.status).toBe('running')
+      })
+      expect(service.listChats(workspaceId)[0]?.status).toBe('running')
     })
 
     it('takes nothing back from a question already answered', async () => {
@@ -9729,21 +9810,36 @@ describe('the agent chat', () => {
     it('keeps a closed conversation idle when its session speaks late', async () => {
       const { service, workspaceId } = await withWorkspace()
       const first = await service.openChat(workspaceId)
-      await service.createChat(workspaceId)
+      const second = await service.createChat(workspaceId)
       await service.sendToChat(first.id, 'go')
       await service.closeChat(first.id)
+      const heard: ChatStatusEvent[] = []
+      service.onChatStatus((event) => heard.push(event))
 
-      agent().emit({
-        type: 'result',
-        subtype: 'error_during_execution',
-        is_error: true,
-        total_cost_usd: 0,
-        duration_ms: 1,
-        usage: { input_tokens: 1, output_tokens: 1 },
-        terminal_reason: 'aborted',
-        session_id: 'sess-1'
-      } as unknown as SDKMessage)
-      await new Promise((resolve) => setTimeout(resolve, 20))
+      agent().emit(abortedResultMessage)
+      // A write queued after the late one, so it has landed by the time this has.
+      await new Promise((resolve) => setTimeout(resolve, 0))
+      await service.renameChat(second.id, 'barrier')
+
+      const [closed] = await service.listClosedChats(workspaceId)
+      expect(closed?.chat.status).toBe('idle')
+      // Nor is the window told it went red: the dot would be drawn that way.
+      expect(heard).toEqual([])
+    })
+
+    // The record is closed before the session is, so the session can still be
+    // speaking while that write is on its way.
+    it('keeps a closed conversation idle when its session speaks as it closes', async () => {
+      const { service, workspaceId } = await withWorkspace()
+      const first = await service.openChat(workspaceId)
+      const second = await service.createChat(workspaceId)
+      await service.sendToChat(first.id, 'go')
+
+      const closing = service.closeChat(first.id)
+      agent().emit(abortedResultMessage)
+      await closing
+      await new Promise((resolve) => setTimeout(resolve, 0))
+      await service.renameChat(second.id, 'barrier')
 
       const [closed] = await service.listClosedChats(workspaceId)
       expect(closed?.chat.status).toBe('idle')
@@ -9916,6 +10012,48 @@ describe('the agent chat', () => {
         name: 'ChatError',
         code: 'lastChat'
       })
+      expect(service.listChats(workspaceId)).toHaveLength(1)
+    })
+
+    // Decided inside the commit: two closes of the last two tabs each saw the
+    // other still open, and the workspace was left with none.
+    it('keeps one conversation open when the last two close at once', async () => {
+      const { service, workspaceId } = await withWorkspace()
+      const first = await service.openChat(workspaceId)
+      const second = await service.createChat(workspaceId)
+
+      const [closedFirst, closedSecond] = await Promise.allSettled([
+        service.closeChat(first.id),
+        service.closeChat(second.id)
+      ])
+
+      expect(closedFirst.status).toBe('fulfilled')
+      expect(closedSecond).toMatchObject({ status: 'rejected', reason: { code: 'lastChat' } })
+      expect(service.listChats(workspaceId)).toHaveLength(1)
+    })
+
+    // And the one refused keeps its session: it is still a tab, mid-turn.
+    it('leaves the session of the one it refuses running', async () => {
+      const { service, workspaceId } = await withWorkspace()
+      const first = await service.openChat(workspaceId)
+      const second = await service.createChat(workspaceId)
+      await service.sendToChat(first.id, 'one')
+      await service.sendToChat(second.id, 'two')
+
+      await Promise.allSettled([service.closeChat(first.id), service.closeChat(second.id)])
+
+      expect(agents.map((one) => one.closed())).toEqual([1, 0])
+    })
+
+    // Two windows closing the same tab: the close they asked for happened.
+    it('closes the same conversation asked for twice at once', async () => {
+      const { service, workspaceId } = await withWorkspace()
+      const first = await service.openChat(workspaceId)
+      await service.createChat(workspaceId)
+
+      await expect(
+        Promise.all([service.closeChat(first.id), service.closeChat(first.id)])
+      ).resolves.toEqual([undefined, undefined])
       expect(service.listChats(workspaceId)).toHaveLength(1)
     })
 
