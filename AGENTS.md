@@ -136,10 +136,10 @@ added here is paid for in all of them:
   `vitest.config.ts` and `vitest.renderer.config.ts` share it. Size the renderer
   tests accordingly; only the files in `bootstrapOnly` are exempt.
 - Tests are written alongside the code. A bug is reproduced by a test first.
-- **Closing a finding is four things, and none of them waits to be asked:** a
-  test that pins it, the documentation it falsified made true, the note deleted
-  from `docs/tasks/`, and the pull request. The first three belong in the commit that
-  fixes it, not in a pass afterwards — and a pass afterwards found something
+- **Closing a finding is three things, and none of them waits to be asked:** a
+  test that pins it, the documentation it falsified made true, and the note
+  deleted from `docs/tasks/`. All three belong in the commit that fixes it, not
+  in a pass afterwards — and a pass afterwards found something
   every time it was run, which is how this line was earned.
 - **A field added to anything under `StateSchema` needs a default.** The reader
   throws on a mismatch rather than falling back, so a record written before the
@@ -179,7 +179,7 @@ through a branch and a pull request, and merges once CI is green:
 
 **Inside an Octopus workspace, do not `git checkout -b`.** One workspace is one
 branch and one pull request: the app finds both by the workspace's branch
-(`octopus/<name>`), so commit on it and open the pull request from it. A second
+(`octopus/<name>`), so commit on it. A second
 independent change belongs in another workspace. Agents the app runs are refused
 the branch switch outright (`branchGuard.ts`); this line is for the ones it does
 not run. The recipe below is for a plain checkout:
@@ -191,7 +191,8 @@ git push -u origin fix/short-description
 gh pr create --title "fix: …" --body-file body.md
 ```
 
-**The pull request itself**, in English like everything else here:
+**The pull request itself**, when you are asked to write one — in English like
+everything else here:
 
 - **Title** — Conventional Commits, imperative, under 72 characters. A squash
   merge makes it the commit on `main`, so it is written as one.
@@ -208,10 +209,13 @@ gh pr create --title "fix: …" --body-file body.md
   `CLAUDE.md`, `.claude/`: the repository is public and the reader cannot follow
   it.
 
-Opening the pull request is standing permission, not a question each time —
-closing a finding ends with it. What still needs asking is anything destructive
-beyond deleting a landed task note, and `git push --force`, which the local
-`deny` refuses.
+**Pushing and opening the pull request are the maintainer's**, done from the
+app's Pull request tab, which is where a workspace's request lives. An agent
+commits and stops there unless it is asked, in that conversation, to push or to
+open one. Standing permission to open requests on its own is what produced
+three of them from one workspace. Also asked first: anything destructive beyond
+deleting a landed task note, and `git push --force`, which the local `deny`
+refuses.
 
 If `main` is ever broken so badly that it cannot be fixed through a pipeline
 that is also broken, turn the protection off deliberately in Settings and back

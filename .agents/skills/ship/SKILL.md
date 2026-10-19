@@ -59,7 +59,8 @@ allowed-tools: Bash(npm run:*), Bash(git status:*), Bash(git diff:*), Bash(git l
    name exactly this change's files, and nothing else, before committing.
 
 5. **Report.** Tell the user in plain Ukrainian what was recorded, and say the
-   branch is waiting to be pushed and opened. Do not recite the diff.
+   branch is waiting to be pushed and opened from the app's Pull request tab.
+   Do not recite the diff.
 
 ## Do not
 
