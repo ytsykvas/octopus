@@ -1538,7 +1538,7 @@ describe('the permission mode', () => {
         toolName: 'ExitPlanMode',
         input: { plan: '# Normalising the locales' }
       })
-      await user.click(await screen.findByRole('button', { name: 'Edit the plan' }))
+      await user.click(await screen.findByRole('button', { name: 'Edit' }))
       const editor = screen.getByRole('textbox', { name: 'The plan, as markdown' })
       await user.clear(editor)
       await user.type(editor, '# Only English first')
@@ -1567,7 +1567,7 @@ describe('the permission mode', () => {
         toolName: 'ExitPlanMode',
         input: { plan: '# First plan' }
       })
-      await user.click(await screen.findByRole('button', { name: 'Edit the plan' }))
+      await user.click(await screen.findByRole('button', { name: 'Edit' }))
       const editor = screen.getByRole('textbox', { name: 'The plan, as markdown' })
       await user.clear(editor)
       await user.type(editor, '# My edit of the first')

@@ -921,7 +921,7 @@ export const uk: Translation = {
     copyFailed: 'Не вдалося',
     planReady: 'План готовий',
     planExecute: 'Виконати',
-    planEdit: 'Редагувати план',
+    planEdit: 'Редагувати',
     planEditDone: 'Назад до плану',
     planEditLabel: 'План у форматі markdown',
     planEdited: 'План у вашій редакції',

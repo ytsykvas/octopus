@@ -105,7 +105,7 @@ describe('the two ways out', () => {
       const user = userEvent.setup()
       renderDialog()
 
-      await user.click(screen.getByRole('button', { name: 'Edit the plan' }))
+      await user.click(screen.getByRole('button', { name: 'Edit' }))
       expect(editor()).toHaveValue(PLAN)
 
       await user.click(screen.getByRole('button', { name: 'Back to the plan' }))
@@ -119,7 +119,7 @@ describe('the two ways out', () => {
       const user = userEvent.setup()
       const { onExecute } = renderDialog()
 
-      await user.click(screen.getByRole('button', { name: 'Edit the plan' }))
+      await user.click(screen.getByRole('button', { name: 'Edit' }))
       await user.clear(editor())
       await user.type(editor(), '# Only the tests')
       await user.click(screen.getByRole('button', { name: 'Execute' }))
@@ -132,7 +132,7 @@ describe('the two ways out', () => {
       const user = userEvent.setup()
       const { onExecute } = renderDialog()
 
-      await user.click(screen.getByRole('button', { name: 'Edit the plan' }))
+      await user.click(screen.getByRole('button', { name: 'Edit' }))
       await user.clear(editor())
       await user.type(editor(), '# Rewritten')
       await user.click(screen.getByRole('button', { name: 'Back to the plan' }))
@@ -148,7 +148,7 @@ describe('the two ways out', () => {
       const user = userEvent.setup()
       const { onExecute } = renderDialog()
 
-      await user.click(screen.getByRole('button', { name: 'Edit the plan' }))
+      await user.click(screen.getByRole('button', { name: 'Edit' }))
       await user.type(editor(), ' ')
       await user.click(screen.getByRole('button', { name: 'Execute' }))
 
@@ -161,7 +161,7 @@ describe('the two ways out', () => {
       const user = userEvent.setup()
       const { onExecute } = renderDialog()
 
-      await user.click(screen.getByRole('button', { name: 'Edit the plan' }))
+      await user.click(screen.getByRole('button', { name: 'Edit' }))
       await user.clear(editor())
 
       expect(screen.getByRole('button', { name: 'Execute' })).toBeDisabled()

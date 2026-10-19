@@ -552,7 +552,7 @@ answers its call at once, and its row says it is running in the background.
 A step whose call is not in the log (a conversation cleared halfway) stays at
 the top level rather than vanishing.
 
-**The plan can be rewritten before it is approved.** The dialog's `Edit the plan`
+**The plan can be rewritten before it is approved.** The dialog's `Edit`
 swaps the rendered plan for its markdown, in a monospace field, and back; the
 edits are kept when the field is closed to look at the result, and held by the
 pane keyed by the request, so a plan the agent replaces mid-edit does not
