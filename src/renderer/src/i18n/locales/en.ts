@@ -768,6 +768,8 @@ export const en = {
     modeChanged: 'mode {{from}} \u2192 {{to}}',
     binary: 'Binary file — nothing to show.',
     tooLarge: 'Too large to draw here. Open the file to read it.',
+    nestedRepository:
+      'A repository of its own. Git records it as a link rather than its files, once it has a commit of its own.',
     revert: 'Revert',
     revertFile: 'Revert {{path}}',
     revertTitle: 'Revert this file?',
