@@ -397,7 +397,7 @@ describe('App', () => {
     await user.click(await screen.findByText('anna'))
 
     expect(await screen.findByRole('button', { name: /^Permissions:/ })).toHaveTextContent(
-      'Auto mode'
+      'Accept edits'
     )
   })
 

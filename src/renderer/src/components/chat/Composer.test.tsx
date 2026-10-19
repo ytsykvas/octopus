@@ -543,10 +543,10 @@ describe('the settings the next message runs under', () => {
   it('shows which permission mode is in force', () => {
     renderComposer({ workingMode: 'acceptEdits' })
 
-    expect(modeButton()).toHaveTextContent('Auto mode')
+    expect(modeButton()).toHaveTextContent('Accept edits')
     // The control names itself as well as its value: with no menu to open, the
     // visible word is the setting and would otherwise be all a reader hears.
-    expect(modeButton()).toHaveAccessibleName('Permissions: Auto mode')
+    expect(modeButton()).toHaveAccessibleName('Permissions: Accept edits')
   })
 
   // Planning is stored apart from the working mode, and wins over it here: the
@@ -592,7 +592,7 @@ describe('the settings the next message runs under', () => {
 
     expect(modeButton()).toHaveAttribute(
       'title',
-      'Switch mode — Ask first, Auto mode, Plan (Shift+Tab)'
+      'Switch mode — Ask first, Accept edits, Plan (Shift+Tab)'
     )
   })
 

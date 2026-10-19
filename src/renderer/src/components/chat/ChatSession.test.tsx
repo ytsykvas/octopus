@@ -857,10 +857,10 @@ describe('deciding on a plan', () => {
    * record changed, so a control still saying Plan over an agent that has
    * started editing is exactly the state this was reported as.
    *
-   * To Auto mode whatever the chat was asking before, as the core does: that
+   * To Accept edits whatever the chat was asking before, as the core does: that
    * is what an approved plan runs in, so it is what the control must name.
    */
-  it('answers and shows the chat in Auto mode', async () => {
+  it('answers and shows the chat in Accept edits', async () => {
     const user = userEvent.setup()
     givenChat([], { planMode: true, workingMode: 'default' })
     await openLoadedChat()
@@ -869,13 +869,13 @@ describe('deciding on a plan', () => {
 
     emitAgentEvent(planRequest)
     expect(
-      await screen.findByText('Runs in Auto mode — edits go ahead without asking.')
+      await screen.findByText('Runs in Accept edits — file edits go ahead without asking.')
     ).toBeInTheDocument()
     await user.click(screen.getByRole('button', { name: 'Execute' }))
 
     expect(octopus().chats.answerPermission).toHaveBeenCalledWith('r-plan', 'allow', undefined)
     await waitFor(() => {
-      expect(mode()).toHaveTextContent('Auto mode')
+      expect(mode()).toHaveTextContent('Accept edits')
     })
   })
 
@@ -928,7 +928,7 @@ describe('deciding on a plan', () => {
     await user.click(await screen.findByRole('button', { name: 'Execute' }))
 
     expect(octopus().chats.answerPermission).toHaveBeenCalledWith('r-plan', 'allow', undefined)
-    expect(screen.queryByText(/Runs in Auto mode/)).not.toBeInTheDocument()
+    expect(screen.queryByText(/Runs in Accept edits/)).not.toBeInTheDocument()
     expect(mode()).toHaveTextContent('Ask first')
   })
 
@@ -979,7 +979,7 @@ describe('deciding on a plan', () => {
     expect(accepting).toBeLessThan(stopped)
     expect(stopped).toBeLessThan(sent)
 
-    expect(mode()).toHaveTextContent('Auto mode')
+    expect(mode()).toHaveTextContent('Accept edits')
   })
 
   // Sending it back is not leaving planning: the agent is still working the
@@ -1015,7 +1015,7 @@ describe('the permission mode', () => {
     await openLoadedChat()
 
     await waitFor(() => {
-      expect(picker()).toHaveTextContent('Auto mode')
+      expect(picker()).toHaveTextContent('Accept edits')
     })
 
     await user.click(picker())
@@ -1034,7 +1034,7 @@ describe('the permission mode', () => {
   it('names what the settings will create the first record with', async () => {
     await openChat(workspaceView('anna'), { workingMode: 'acceptEdits', effort: 'high' })
 
-    expect(picker()).toHaveTextContent('Auto mode')
+    expect(picker()).toHaveTextContent('Accept edits')
     expect(screen.getByRole('button', { name: 'Effort' })).toHaveTextContent('High')
   })
 
@@ -1064,7 +1064,7 @@ describe('the permission mode', () => {
 
     await user.click(picker())
     await waitFor(() => {
-      expect(picker()).toHaveTextContent('Auto mode')
+      expect(picker()).toHaveTextContent('Accept edits')
     })
 
     await user.click(picker())

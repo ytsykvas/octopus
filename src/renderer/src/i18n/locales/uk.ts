@@ -837,9 +837,9 @@ export const uk: Translation = {
 
     modeToggle: 'Дозволи: {{mode}}',
     modeDefault: 'Питати',
-    modeAcceptEdits: 'Auto mode',
+    modeAcceptEdits: 'Accept edits',
     planMode: 'План',
-    modeCycle: 'Змінити режим — Питати, Auto mode, План (Shift+Tab)',
+    modeCycle: 'Змінити режим — Питати, Accept edits, План (Shift+Tab)',
 
     toolSteps_one: '{{count}} дія',
     toolSteps_few: '{{count}} дії',
@@ -860,7 +860,7 @@ export const uk: Translation = {
     planEditDone: 'Назад до плану',
     planEditLabel: 'План у форматі markdown',
     planEdited: 'План у вашій редакції',
-    planExecuteHint: 'Виконується в Auto mode — зміни вносяться без запитів.',
+    planExecuteHint: 'Виконується в Accept edits — зміни у файлах вносяться без запитів.',
     planFeedback: 'Щось іще треба уточнити?',
     planFeedbackPlaceholder: 'Напишіть, і агент доопрацює план',
     questionTitle: 'Агент запитує',

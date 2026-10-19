@@ -56,21 +56,21 @@ describe('the plan itself', () => {
 
 describe('the two ways out', () => {
   // Executing out of planning widens what the agent may do — it goes on in
-  // Auto mode — so the dialog says it before the click, not after.
-  it('says executing runs in Auto mode', () => {
+  // Accept edits — so the dialog says it before the click, not after.
+  it('says executing runs in Accept edits', () => {
     renderDialog()
 
     expect(
-      screen.getByText('Runs in Auto mode — edits go ahead without asking.')
+      screen.getByText('Runs in Accept edits — file edits go ahead without asking.')
     ).toBeInTheDocument()
   })
 
   // A plan the agent offered unasked changes no mode, so there is nothing to
   // warn about — and a warning that is not true is one nobody reads twice.
-  it('says nothing about Auto mode when executing changes no mode', () => {
+  it('says nothing about Accept edits when executing changes no mode', () => {
     renderDialog({ accepting: false })
 
-    expect(screen.queryByText(/Runs in Auto mode/)).not.toBeInTheDocument()
+    expect(screen.queryByText(/Runs in Accept edits/)).not.toBeInTheDocument()
   })
 
   it('executes when that is what was chosen', async () => {

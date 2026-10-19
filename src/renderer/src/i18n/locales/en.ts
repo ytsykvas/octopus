@@ -995,14 +995,15 @@ export const en = {
        rather than opening a list, so the value is all it shows. */
     modeToggle: 'Permissions: {{mode}}',
     modeDefault: 'Ask first',
-    /* Left in English in every locale: it is what the agent's own interfaces
-       call this, and a translated name for a borrowed one reads as a second
-       setting rather than the same one. */
-    modeAcceptEdits: 'Auto mode',
+    /* Left in English in every locale: it is what Claude Code's own status
+       line calls this, and a translated name for a borrowed one reads as a
+       second setting rather than the same one. Not "Auto mode", which is a
+       different mode there — a classifier approving each call. */
+    modeAcceptEdits: 'Accept edits',
     planMode: 'Plan',
     /* Names the keys rather than the states: the label beside it already
        says which one is in force, and the ring's order is learned by using it. */
-    modeCycle: 'Switch mode — Ask first, Auto mode, Plan (Shift+Tab)',
+    modeCycle: 'Switch mode — Ask first, Accept edits, Plan (Shift+Tab)',
 
     context: 'Context',
     contextTitle: 'Context window — {{used}} of {{total}}',
@@ -1156,8 +1157,8 @@ export const en = {
     planEditLabel: 'The plan, as markdown',
     planEdited: 'Plan, as you edited it',
     /* Said before the click, because the click widens what the agent may do:
-       an approved plan always goes on in Auto mode. */
-    planExecuteHint: 'Runs in Auto mode — edits go ahead without asking.',
+       an approved plan always goes on in Accept edits. */
+    planExecuteHint: 'Runs in Accept edits — file edits go ahead without asking.',
     planFeedback: 'Anything to work out first?',
     planFeedbackPlaceholder: 'Write here and the agent will revise the plan',
     questionTitle: 'The agent is asking',

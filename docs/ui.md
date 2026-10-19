@@ -827,7 +827,7 @@ way to one; what the agent did next was start editing files.
 
 **One button and a field**, which is what the question actually has:
 
-- **Execute** runs it, in `Auto mode` out of planning — see the footer's mode above for
+- **Execute** runs it, in `Accept edits` out of planning — see the footer's mode above for
   why. A line beside the button says so, because the click widens what the
   agent may do and that is worth reading before it rather than in the footer
   after it.
@@ -991,19 +991,19 @@ set and the writing one on the default, with the error on the banner.
 
 **The footer's mode is one control over two stored fields.** `plan` is not a
 third degree of permission but a state the conversation is in: the agent runs
-no tools at all in it, so `Auto mode` has nothing to accept. Held as one field
+no tools at all in it, so `Accept edits` has nothing to accept. Held as one field
 they could not both be true, which is why approving a plan once had no mode to
 return to — and why a toggle stayed lit over an agent that had started editing.
 So the record keeps `planMode` beside `workingMode`, and the composer shows the
 two as one control beside send: `planMode` wins when it is on, and the working
 mode is what shows otherwise.
 
-It **switches in place**, going round ask first → `Auto mode` → plan → ask
+It **switches in place**, going round ask first → `Accept edits` → plan → ask
 first: the ring Claude Code's own shift+tab goes round, and Shift+Tab in the
 field does the same here. There used to be two controls — the permission chip
 among the pickers and a plan toggle by send — and each said half of what this
 says. The pickers beside it keep their menus, because their lists are
-open-ended. It is tinted for `Auto mode` and for plan, the two states where the
+open-ended. It is tinted for `Accept edits` and for plan, the two states where the
 agent does something other than ask.
 
 Leaving plan for ask first moves the working mode **before** planning ends.
@@ -1012,7 +1012,7 @@ it — so turned the other way round the session would pass through it, and an
 edit landing then would go through unasked. `setMode` in `useChat.ts` owns that
 order so no caller has to know it.
 
-**A plan approved out of planning goes on in `Auto mode`**, whatever the
+**A plan approved out of planning goes on in `Accept edits`**, whatever the
 conversation was asking before — the core writes both fields when the plan tool
 is allowed, and executing a plan from the log does the same. With one control
 there is no second one left to say what should follow a plan, and a plan read
@@ -1024,9 +1024,13 @@ handing over there would let it raise a conversation set to ask first into one
 that does not, by asking once. Outside planning, approving changes no mode and
 the dialog carries no such line.
 
-`Auto mode` keeps its English name in every locale — it is what the agent's own
-interfaces call it, and a translated name for a borrowed one reads as a second
-setting rather than the same one.
+`Accept edits` keeps its English name in every locale — it is what Claude
+Code's own status line calls the mode, and a translated name for a borrowed one
+reads as a second setting rather than the same one. It was `Accept edits` until
+Claude Code gained a mode of that name, a classifier approving each call (`auto`
+in the SDK's `PermissionMode`): someone who knows the agent read the chip as
+that one and expected commands to run unasked, where `acceptEdits` accepts only
+file edits.
 
 **The right pane** holds Changes, Terminal, Scripts and Pull request. The
 Scripts tab runs `setup.sh` on its build half and `run.sh` on its server half,
