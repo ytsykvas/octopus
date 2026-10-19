@@ -902,8 +902,34 @@ export function mapMessage(message: SDKMessage): AgentEvent[] {
         // is the whole basis of resuming after a restart. It arrives more than
         // once: every slash command produces a fresh one, so whoever records it
         // has to tolerate being told the same id repeatedly.
+        //
+        // It also names the mode the session actually started in, which is
+        // how a request for `auto` that the CLI turned down becomes visible.
         case 'init':
-          return [{ type: 'session_started', sessionId: message.session_id }]
+          return [
+            { type: 'session_started', sessionId: message.session_id },
+            { type: 'mode_reported', mode: message.permissionMode }
+          ]
+
+        // Sent when the session's state moves, and carrying the mode when that
+        // is what moved — the CLI's own fall back out of auto mode among them.
+        case 'status':
+          return message.permissionMode === undefined
+            ? []
+            : [{ type: 'mode_reported', mode: message.permissionMode }]
+
+        /* A call refused without a prompt. Under auto mode that is the
+           classifier's verdict, and without this line it would show only as a
+           tool that failed. */
+        case 'permission_denied':
+          return [
+            {
+              type: 'permission_denied',
+              toolName: message.tool_name,
+              byClassifier: message.decision_reason_type === 'classifier',
+              reason: message.decision_reason ?? null
+            }
+          ]
 
         case 'commands_changed':
           return [{ type: 'commands_changed', commands: toAgentCommands(message.commands) }]

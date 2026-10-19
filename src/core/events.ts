@@ -466,6 +466,51 @@ export const AgentEventSchema = z.discriminatedUnion('type', [
    */
   z.object({ type: z.literal('usage'), report: UsageReportSchema.nullable() }),
 
+  /**
+   * The mode the session says it is in.
+   *
+   * Ephemeral: it describes the session now, and the record is what says what
+   * was chosen. It exists for one case — a session asked to start in `auto`
+   * that the CLI quietly started in `default`, because the account, the model
+   * or a setting does not allow auto mode. Nothing else reports that, so the
+   * service reads this to stop the chip claiming a mode that is not running.
+   * A plain string rather than the SDK's union, since only one value is read.
+   */
+  z.object({ type: z.literal('mode_reported'), mode: z.string() }),
+
+  /**
+   * A tool call refused without anyone being asked.
+   *
+   * Mostly auto mode's classifier, which is why it is drawn: a call the
+   * classifier blocks otherwise shows only as a failed tool, and a mode that
+   * decides on the user's behalf has to leave its decisions on the screen. A
+   * deny rule produces the same message, and `byClassifier` tells the two
+   * apart. `reason` is the deciding component's own prose, shown and never
+   * parsed.
+   */
+  z.object({
+    type: z.literal('permission_denied'),
+    toolName: z.string(),
+    byClassifier: z.boolean(),
+    reason: z.string().nullable()
+  }),
+
+  /**
+   * Auto mode was asked for and could not be had, so the chat moved to
+   * `fallback` — `default`, or `acceptEdits` when auto came from carrying out
+   * an approved plan, which Manual would undo.
+   *
+   * Written by the service rather than mapped from the SDK, which either
+   * refuses the switch with a reason or reports a different mode with none.
+   * Kept in the transcript: the chip changed on its own, and this is the line
+   * that says why — and the only word of it the window gets.
+   */
+  z.object({
+    type: z.literal('auto_mode_unavailable'),
+    reason: z.string().nullable(),
+    fallback: z.enum(['default', 'acceptEdits'])
+  }),
+
   z.object({ type: z.literal('error'), message: z.string() })
 ])
 
@@ -481,7 +526,8 @@ export type AgentEvent = Readonly<z.infer<typeof AgentEventSchema>>
  * A rate limit is ephemeral for a different reason: it describes the account
  * at this moment, not the conversation. Reading "you were at 62%" back a week
  * later says nothing, and it would put a row in the log nobody asked for.
- * The command list is ephemeral on the same grounds.
+ * The command list is ephemeral on the same grounds, and so is the mode the
+ * session reports.
  */
 /**
  * How much of a successful tool result is worth writing down.
@@ -527,7 +573,8 @@ export function isEphemeral(event: AgentEvent): boolean {
     event.type === 'thinking_delta' ||
     event.type === 'rate_limit' ||
     event.type === 'commands_changed' ||
-    event.type === 'conversation_rewound'
+    event.type === 'conversation_rewound' ||
+    event.type === 'mode_reported'
   )
 }
 

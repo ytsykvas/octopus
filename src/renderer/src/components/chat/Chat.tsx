@@ -1,4 +1,4 @@
-import type { Chat as ChatRecord, Effort, WorkingMode } from '@core/chats.js'
+import type { Chat as ChatRecord, Effort, PlanExecutionMode, WorkingMode } from '@core/chats.js'
 import type { ProjectColor } from '@core/colors.js'
 import type { WorkspaceView } from '@core/workspaces.js'
 
@@ -63,6 +63,8 @@ interface ChatProps {
    */
   readonly color: ProjectColor
   readonly defaultWorkingMode: WorkingMode
+  /** What an approved plan is carried out in, from the settings. */
+  readonly planExecutionMode: PlanExecutionMode
   readonly defaultEffort: Effort
   readonly defaultModel: string | null
   readonly defaultPlanModel: string | null
@@ -107,6 +109,7 @@ export function Chat({
   codeNotes,
   color,
   defaultWorkingMode,
+  planExecutionMode,
   defaultEffort,
   defaultModel,
   defaultPlanModel,
@@ -237,6 +240,7 @@ export function Chat({
           quotes={quotes}
           codeNotes={codeNotes}
           defaultWorkingMode={defaultWorkingMode}
+          planExecutionMode={planExecutionMode}
           defaultEffort={defaultEffort}
           defaultModel={defaultModel}
           defaultPlanModel={defaultPlanModel}

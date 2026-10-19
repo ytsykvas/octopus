@@ -58,6 +58,7 @@ function config(overrides: Partial<Config> = {}): Config {
     cloneDirectory: '',
     settingSources: 'none',
     workingMode: 'default',
+    planExecutionMode: 'auto',
     effort: 'medium',
     model: null,
     planModel: null,

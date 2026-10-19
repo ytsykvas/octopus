@@ -750,6 +750,7 @@ export function App(): React.JSX.Element {
   // footer has to name what the record will actually be created with. The
   // schema's own defaults stand in until the file has been read.
   const defaultWorkingMode = config?.workingMode ?? 'default'
+  const planExecutionMode = config?.planExecutionMode ?? 'auto'
   const defaultEffort = config?.effort ?? DEFAULT_EFFORT
   // Whether a plugin installed for every project can load here: that layer is
   // where it is switched on. Before the config is read the default stands, and
@@ -1016,6 +1017,7 @@ export function App(): React.JSX.Element {
               quotes={reviewQuotes}
               codeNotes={codeNotes}
               defaultWorkingMode={defaultWorkingMode}
+              planExecutionMode={planExecutionMode}
               defaultEffort={defaultEffort}
               defaultModel={defaultModel}
               defaultPlanModel={defaultPlanModel}

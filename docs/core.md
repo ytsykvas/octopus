@@ -286,6 +286,22 @@ that can spell a state nothing means is a shape the renderer has to answer for.
 A second member of the union also leaves every transcript already on disk
 untouched, since no line written before it carries that type.
 
+**Auto mode leaves three events behind, and two of them are drawn.**
+`permission_denied` maps the SDK's message of that name — a call refused with
+no prompt, usually by auto mode's classifier (`byClassifier`), sometimes by a
+deny rule — so a blocked call reads as a decision rather than a tool that
+failed. `mode_reported` is ephemeral: the mode `init` and `status` say the
+session is in. It exists because the CLI turns a request to start in `auto`
+down silently and runs `default`; the service, seeing `default` under a record
+that says auto, asks for auto again (`assertMode`) rather than believing the
+report, which can be a moment behind a switch still on its way. Only a refusal
+of that ask falls back. `auto_mode_unavailable` is the service's own line for
+the fall back, carrying where it went — `acceptEdits` when auto came from
+carrying out a plan (`autoFromPlan`, held in memory), `default` otherwise — and
+it is the only word of the change a window gets. A switch to auto that someone
+has just made is not a fall back: the record goes back and the refusal returns
+as `autoModeUnavailable`.
+
 **And what the fallback took back is taken back here too.** The refused model
 had usually already said something — a half-answer, and any tool results that
 went with it — and the CLI evicts those from its own state when it retries. They
