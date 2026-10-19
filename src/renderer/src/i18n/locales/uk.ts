@@ -324,6 +324,7 @@ export const uk: Translation = {
     runBuilding: 'Збирається. Сервер запуститься, коли це завершиться.',
     runServing: 'Сервер працює.',
     buildFailed: 'Збірка впала, тож сервер не запускався.',
+    awaitingApproval: 'Спершу дозвольте скрипти цього репозиторію на вкладці Scripts.',
     portSilent: 'Працює, але на {{port}} ніхто не слухає. Чи використовує скрипт $OCTOPUS_PORT?',
     noWorkspaceTitle: 'Ще немає що запускати',
     noWorkspaceBody: 'Виберіть воркспейс ліворуч, щоб запускати тут його скрипти.',

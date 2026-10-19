@@ -27,6 +27,7 @@ import { ProjectSettings, type SectionId as ProjectSection } from './components/
 import { ProjectTabs } from './components/ProjectTabs.js'
 import { PluginsWindow } from './components/plugins/PluginsWindow.js'
 import { RightPanel } from './components/RightPanel.js'
+import { ServerControls } from './components/ServerControls.js'
 import { type SectionId, Settings } from './components/Settings.js'
 import { Sidebar } from './components/Sidebar.js'
 import { SidebarFooter } from './components/SidebarFooter.js'
@@ -43,6 +44,7 @@ import { type ChatTab, type ChatTabsController, useChatTabs } from './hooks/useC
 import { useFileTabs } from './hooks/useFileTabs.js'
 import { usePlugins } from './hooks/usePlugins.js'
 import { useProjects } from './hooks/useProjects.js'
+import { useServerControls } from './hooks/useServerControls.js'
 import { useWorkspaceScripts } from './hooks/useWorkspaceScripts.js'
 import { useWorkspaces } from './hooks/useWorkspaces.js'
 import { useAttention } from './hooks/useAttention.js'
@@ -674,6 +676,19 @@ export function App(): React.JSX.Element {
     editingProjectId
   )
 
+  /*
+   * Build-then-serve for the selected workspace. Held here rather than in the
+   * pane because the title bar offers the same Run and Stop, and the pane is
+   * hidden rather than unmounted when folded — so a press up there still
+   * reaches a runner that is mounted.
+   */
+  const server = useServerControls({
+    workspaces: workspaces.flat,
+    activeWorkspaceId: selectedWorkspaceId,
+    scripts: workspaceScripts.scripts,
+    onError: setError
+  })
+
   /* One read for the whole project, which is what lets the list mark every row
      without a network call per row. Below `openProjectId` rather than beside
      the other stores, because that is where the project it is about is worked
@@ -872,6 +887,17 @@ export function App(): React.JSX.Element {
             </>
           )}
 
+          <ServerControls
+            runnable={server.runnable}
+            activeRun={server.activeRun}
+            building={server.building}
+            servingAt={server.servingAt}
+            runAll={server.runAll}
+            stopRun={server.stopRun}
+          />
+
+          {server.runnable && <span aria-hidden className="bg-line h-4 w-px" />}
+
           {/* One control in one place, rather than a collapse inside the pane and
             an expand out here: the button that folds something away should be
             the button that brings it back, or the second one has to be hunted
@@ -1052,6 +1078,7 @@ export function App(): React.JSX.Element {
           color={selectedProject?.color ?? null}
           projectId={openProjectId}
           scripts={workspaceScripts.scripts}
+          server={server}
           scriptFailures={workspaceScripts.failures}
           onScriptsChanged={workspaceScripts.refresh}
           onWorkspacesChanged={() => {
