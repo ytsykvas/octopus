@@ -189,7 +189,6 @@ Versions below are **actually installed and verified** (`npm run check` and `ele
 | @vitejs/plugin-react | 6.0.5         | React in Vite                  |
 | i18next              | 26.3.6        | localisation                   |
 | react-i18next        | 17.0.11       | React bindings                 |
-| motion               | 13.0.0        | animation                      |
 | lucide-react         | 1.30.0        | icons                          |
 | node-pty             | 1.1.0         | pseudo-terminals (native)      |
 | @xterm/xterm         | 6.0.0         | terminal rendering             |
@@ -204,6 +203,11 @@ a claim rather than a tool is worse than none, because the next person to reach
 for shared state reads the line, adds a store, and the application has two ways
 of doing one thing. If the prop threading ever stops being shallow, that is the
 moment to reconsider — not before.
+
+**Animation is CSS.** `motion` sat in this table the same way, and nothing
+imported it either: every animation is CSS, so one rule in `styles.css` stops
+them all under Reduce motion — a JavaScript library would slip past it
+(`docs/ui.md`, "Motion").
 
 **Native modules.** Stage 1 started without them to avoid a build step, and that held until the embedded terminal arrived: `node-pty` is native. A `postinstall` script runs `electron-builder install-app-deps` — the same tool that packages the app, so the two cannot disagree — and `npm install` remains a single step. The binding is built through Node-API rather than against V8 directly, so it is not tied to Electron's ABI: the same binary loads under plain Node and under Electron.
 
@@ -285,7 +289,8 @@ Every status has a paired `*-bg` background for badges and notices.
 `styles.css` provides the base patterns — check them before writing new styles:
 
 - `.panel` — surface with border and radius;
-- `.composer-ring` — the composer's colour ring and glow;
+- `.composer-ring` — the composer's colour ring and glow, with `.composer-ring-line`
+  as its own first child (the one layer that turns, and only while focused);
 - `.row` / `.row-selected` — list row with hover and selection;
 - `.section-label` — section heading;
 - `.focus-ring` — visible keyboard focus;
@@ -329,7 +334,7 @@ The layout of the existing tools is the model — proven by daily use and free o
 
 **Tab strip — projects.** A colour each, and either two initials or an icon chosen in the project's settings. The colour is stored on the project rather than derived from its name: a hash would repaint the project the moment it was renamed, and constancy is what makes it recognisable. Fifteen colours, each measured for contrast in both themes. The initials are the fallback rather than the goal — two letters collide as soon as two repositories start alike, and 40px hold a picture or a pair of letters, not both. A dot in the tile's corner says what the project's agents want of you: amber while one waits on an answer, red for a turn that failed and green for one that finished, both of the last two only until you open the workspace.
 
-**Title bar — where you are.** The project's name, its directory, and the branch of the selected workspace. The branch used to sit in the chat's own header, which spent a whole row on one short string while answering a question about the window rather than about any conversation in it — the row it left belongs to the tab strip now.
+**Title bar — where you are.** The project's name, its directory, and the branch of the selected workspace. At its right end, beside the fold toggle, the selected workspace's server: Play, then a link to its port and Stop while it serves — the Scripts tab's own controls, from the same state. The branch used to sit in the chat's own header, which spent a whole row on one short string while answering a question about the window rather than about any conversation in it — the row it left belongs to the tab strip now.
 
 **Second pane — workspaces of the active project.** Carries a gradient wash of that project's colour, strongest at the project name and fading down the list, so "where am I" reads peripherally rather than by reading names. A workspace is recognised primarily **by its branch name**; the directory name is the secondary identifier.
 
@@ -339,7 +344,7 @@ A workspace holds up to **three conversations at once**, switched by a strip of 
 
 They run in the same worktree with no locking between them, deliberately (§16). Every tab stays mounted while its workspace is open, so a conversation keeps its place in the log and the answer being streamed into it while another is on screen — but only the one showing may raise a dialog, since a modal about work the reader cannot see is the worst kind of interruption.
 
-Files opened from the right pane's tree take tabs of their own in the same strip, after the conversations, read-only with syntax colours. One click opens a loose tab, set in italics, that the next one-click file replaces — an editor's preview — and a double-click keeps it. A file in front hides every conversation behind it, still running; asking for a conversation in any way puts the files behind it again. Read-only on purpose: the agent writes these files, and a second writer in the same window would race it with nothing to say which won. "Open in editor" is the way to change one. Selected lines can be sent as a note to any one of the workspace's conversations, chosen by name, while the file stays in front — a review is several files and a note on each, gathered in the conversation that will act on them.
+Files opened from the right pane's tree, or from a changed file's menu, take tabs of their own in the same strip, after the conversations, read-only with syntax colours. One click opens a loose tab, set in italics, that the next one-click file replaces — an editor's preview — and a double-click keeps it. A file in front hides every conversation behind it, still running; asking for a conversation in any way puts the files behind it again. Read-only on purpose: the agent writes these files, and a second writer in the same window would race it with nothing to say which won. "Open in editor" is the way to change one. Selected lines can be sent as a note to any one of the workspace's conversations, chosen by name, while the file stays in front — a review is several files and a note on each, gathered in the conversation that will act on them.
 
 **Right pane — terminal, files, changes, scripts, the pull request and notes** in tabs, pinned to the pane's right edge. Shows what the agent did and gives manual access to the workspace. Draggable, and its width, which tab is showing and whether it is folded away all persist. It keeps its width when the window is resized — the centre takes the difference — and folding hides it rather than closing it, so its terminals and servers keep running. Its tabs are tiles tinted with the open project's colour, like the project strip's, and the chosen one runs down and joins the view below, which carries the same wash as the workspace list, fading out within its first 160px; with no project open the colours fall back to the accent and the neutral inks.
 
@@ -360,7 +365,7 @@ Files opened from the right pane's tree take tabs of their own in the same strip
 | `⌘C`        | in a file: copy the lines' reference |
 | `⇧⇥`        | next mode                            |
 
-`⇧⇥` works in the composer's field only, and goes round ask first → `Auto mode` → plan, the order Claude Code's own shift+tab uses; anywhere else in the window it still moves the focus back.
+`⇧⇥` works in the composer's field only, and goes round `Manual` → `Accept edits` → plan → `Auto`, the order Claude Code's own shift+tab uses; anywhere else in the window it still moves the focus back.
 
 `⌘W` closes a file tab and nothing else: with a conversation in front the key is left alone, because closing a conversation is a menu item on purpose.
 
@@ -437,17 +442,15 @@ The codebase follows **the best practices of its stack**. This is a condition, n
 
 #### Testing
 
-The coverage target is differentiated, and that is a deliberate decision rather than a relaxation:
+The coverage target is **100% on every layer** — statements, branches, functions and lines — held by one threshold (`vitest.shared.ts`) that both `vitest.config.ts` (core, main, preload) and `vitest.renderer.config.ts` (the window) apply, and `npm run check` and CI fail when either drops. Only `bootstrapOnly` in `vitest.shared.ts` is exempt: the bootstrap that mounts a framework or starts the app, type-only modules, and the tests and their helpers.
 
-| Layer               | Target        | Why                                                                                          |
-| ------------------- | ------------- | -------------------------------------------------------------------------------------------- |
-| `core/`             | **100%**      | pure headless logic without Electron; trivially testable, and this is where costly bugs live |
-| `main/`, `preload/` | IPC contracts | a thin proxy layer; the point is that channels carry what they promise                       |
-| `renderer/`         | behaviour     | tests on user actions rather than markup snapshots                                           |
+| Layer               | What the tests pin                                                                           |
+| ------------------- | -------------------------------------------------------------------------------------------- |
+| `core/`             | pure headless logic without Electron; trivially testable, and this is where costly bugs live |
+| `main/`, `preload/` | IPC contracts: that channels carry what they promise                                         |
+| `renderer/`         | behaviour: user actions rather than markup snapshots                                         |
 
-The 100% figure for `core/` is a threshold in `vitest.config.ts` and fails the build when it drops.
-
-We deliberately do **not** chase 100% on UI and IPC: there, chasing the number breeds hollow tests that catch nothing yet break on every refactor. Coverage is a tool, not a metric for a report.
+It began differentiated, with 100% for `core/` alone, on the reasoning that chasing the number on UI and IPC breeds hollow tests. UI and IPC reached it anyway. The original worry stands as a rule rather than a target: 100% says a line ran, not that anything would notice if it went, so a guard is verified by putting the bug back and watching the suite go red ([testing.md](testing.md#100-coverage-is-not-the-same-as-tested)). Coverage is a tool, not a metric for a report.
 
 Further rules:
 
@@ -495,7 +498,7 @@ Further rules:
 - `setup.sh` — prepares a workspace: installing dependencies, building what a fresh checkout needs. Runs on a button, not on workspace creation — no step is mandatory (§4).
 - `run.sh` — the dev server; receives `$OCTOPUS_PORT`.
 - `archive.sh` — runs when a workspace is removed, in its directory, while it still exists. It takes back what setup gave out — a database or a container named after the workspace. Nothing it does can stop the removal: a workspace that cannot be deleted because a cleanup script is broken is the worse problem of the two.
-- One **Run** on the Scripts tab does both in order: build, then serve when the build succeeds. A failed build stops there; a missing build script is skipped rather than waited on. Once a server is up, Run gives way to a link to its port, **Restart** and **Stop**. Running is decided on that header and never in the halves, which is why there is one Run rather than a button in each.
+- One **Run** on the Scripts tab does both in order: build, then serve when the build succeeds. A failed build stops there; a missing build script is skipped rather than waited on. Once a server is up, Run gives way to a link to its port, **Restart** and **Stop**. Running is decided on that header and never in the halves, which is why there is one Run rather than a button in each. The title bar mirrors Run, the link and Stop as icons, read from the same state, so the server can be run with the pane folded.
 - Beside it, and unchanging as all of that turns over, **the way to the scripts themselves** — it opens the project's Scripts section. The offer to write one appears where a script is missing and therefore disappears the moment it exists, which left the tab that runs `setup.sh` with no way to open it.
 - **Ports come from a pool, ten at a time.** A workspace owns `$OCTOPUS_PORT` and the nine after it, named `$OCTOPUS_PORT_1`…`_9`: one port is not enough for a stack that is more than one process. Twenty blocks live at 3100–3299 — small enough to reason about and firewall, and far past what anybody runs at once. 3000 is deliberately outside it, being what an unconfigured framework binds.
 - A block is free when no workspace holds it **and nothing answers on it**. The old scheme checked only our own records, so a port another application held was handed out anyway and the server failed as it bound, blaming itself.
@@ -635,7 +638,8 @@ the app never sees a token (§10.9).
   reading order. The inline ones come from a GraphQL query by the request's node
   id, for the one field REST does not carry: whether the thread is resolved.
   **Add to chat** puts a remark into the composer beside the diff's own notes,
-  so a question can be typed under it rather than the app asking one.
+  so a question can be typed under it rather than the app asking one. A thread
+  is replied to, resolved and reopened from the same list.
 - **The four prepared messages** — answer the review, review it, review it with
   several subagents, resolve the conflicts — each the project's own instruction
   plus a line naming the request, sent as one visible user message (§4).
@@ -749,15 +753,15 @@ The terminal moved into scope early: account sign-in needs an interactive sessio
 ## 16. Open questions
 
 - **Workspace naming** — given names drawn at random from a pool of 256, task-derived names, or generated from the prompt text.
-- **Tool permissions** — settled for now: the read-only tools are automatic, everything else prompts in the chat, and an answer of "always" is stored per tool in the config where it can be taken back. The mode a new chat starts in is a global setting, so the question is not asked again on each new branch. Open: whether per-project profiles are needed, and whether "always" should narrow to an argument (`Bash(npm test:*)`) rather than a whole tool.
+- **Tool permissions** — settled for now: the read-only tools are automatic, everything else prompts in the chat, and an answer of "always" is stored per tool in the config where it can be taken back. In `Auto` the SDK's classifier decides instead, prompting only when it cannot, and every refusal it makes is drawn in the log; `bypassPermissions` stays out. The mode a new chat starts in, and the one an approved plan is carried out in, are global settings, so the question is not asked again on each new branch. Open: whether per-project profiles are needed, and whether "always" should narrow to an argument (`Bash(npm test:*)`) rather than a whole tool.
 - **Cross-platform** — whether Linux stays in the plans (affects CI only, not architecture).
 - **Task sources** — creating a workspace from a GitHub issue or a Linear ticket.
-- **Code review** — answered twice over. A note against a line rides out inside
+- **Code review** — answered. A note against a line rides out inside
   the next message, as readable text rather than as anything hidden (§4); and
   GitHub's review threads now appear on the same surface, with **Add to chat**
-  putting a remark into the same composer strip the diff's own notes use. Still
-  open is the other direction: a thread can be read here and not replied to, so
-  the answer goes back as a commit or in a browser.
+  putting a remark into the same composer strip the diff's own notes use. The
+  other direction is answered too: a thread is replied to, resolved or reopened
+  from the same pane (§12.4).
 - **Several agents per workspace** — half answered. The interface offers it: up to three conversations per workspace, no locking between them (§10.8). Still open is what two agents editing the same files at once actually does — the changes pane shows one diff for the workspace, with no way to tell whose work is whose, and a review note against a line may be about a line another conversation has since moved. `agent` is still an enum with one member, so a second _kind_ of agent remains a widened enum rather than a migration.
 - **What the list shows** — agent status, change count, CI state. Not session cost: the SDK's `total_cost_usd` is what the same tokens would have cost through the API, which a subscription never pays, and its own documentation calls it "an estimate, not a billing statement". Shown beside a workspace name it is a made-up number in a currency, and the second half of this stands — usage belongs on the list as tokens or as distance to a rate limit, if at all.
 

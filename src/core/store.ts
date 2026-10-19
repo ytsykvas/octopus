@@ -10,6 +10,7 @@ import { isAbsolute } from 'node:path'
 
 import { z } from 'zod'
 
+import { BranchPrefixSchema } from './branches.js'
 import { CodedError } from './codedError.js'
 import { NotesBodySchema } from './notes.js'
 import type { AgentSkill } from './agent.js'
@@ -61,7 +62,8 @@ export const ProjectSchema = z.object({
   name: z.string().min(1),
   repoPath: z.string().min(1),
   baseBranch: z.string().min(1),
-  branchPrefix: z.string().min(1),
+  /** Copied from the config when the project was added; cleaned, see `BranchPrefixSchema`. */
+  branchPrefix: BranchPrefixSchema,
   /**
    * Optional on disk, always present in memory.
    *

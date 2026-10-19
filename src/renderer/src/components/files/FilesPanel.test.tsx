@@ -1,10 +1,11 @@
-import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import type { FileTreeSnapshot, TreeEntry } from '@core/fileTree.js'
 import type { WorkspaceView } from '@core/workspaces.js'
 
+import i18n, { DEFAULT_LANGUAGE } from '../../i18n/index.js'
 import { octopus } from '../../test/octopus.js'
 import { workspaceView } from '../../test/workspaces.js'
 import { FilesPanel, ROW_HEIGHT } from './FilesPanel.js'
@@ -154,6 +155,33 @@ describe('FilesPanel', () => {
 
     await userEvent.click(row('src'))
     expect(names()).toEqual(['node_modules', 'src', '.env', 'README.md'])
+  })
+
+  /*
+   * The letters editors draw, in every language. The initial of the translated
+   * word was the mark at first, and in Ukrainian "changed" is `З` — which
+   * before a path reads as the digit 3.
+   */
+  describe('in another language', () => {
+    // Unmounted first: switching back under a mounted panel re-renders it
+    // outside act, after the test has ended.
+    afterEach(async () => {
+      cleanup()
+      await i18n.changeLanguage(DEFAULT_LANGUAGE)
+    })
+
+    it("marks a row with the editor's letter, and says the word aloud", async () => {
+      answering()
+      renderPanel()
+      await shown()
+      await act(async () => {
+        await i18n.changeLanguage('uk')
+      })
+
+      await userEvent.click(row('src'))
+      expect(within(row('b.ts')).getByText('M')).toHaveClass('text-info')
+      expect(row('b.ts')).toHaveAccessibleName(/Змінено/)
+    })
   })
 
   // Two toggles before React renders again must both count.

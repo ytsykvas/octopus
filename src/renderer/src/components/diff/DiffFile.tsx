@@ -1,4 +1,4 @@
-import { CloudAlert, Copy, ExternalLink, MoreHorizontal, TriangleAlert, Undo2 } from 'lucide-react'
+import { CloudAlert, Copy, FileText, MoreHorizontal, TriangleAlert, Undo2 } from 'lucide-react'
 import { memo, useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
@@ -276,10 +276,9 @@ export const DiffFile = memo(function DiffFile({
             className="focus-ring row flex min-w-0 flex-1 items-center gap-2 px-1 py-0.5 text-left"
           >
             {/* Where the status letter used to be. The letter is gone from this
-                tab: what happened to the file is on its name below, and the
-                Ukrainian `З` for "changed" read as the digit 3 in front of a
-                path. False when every file is in the same place — the strip
-                at the top says it once instead. */}
+                tab: what happened to the file is on its name below. False when
+                every file is in the same place — the strip at the top says it
+                once instead. */}
             {showPublish && <PublishBadge state={file.publish} />}
             {/* The directory is what gives way. Truncating the whole path cut the
               filename off the end — the one part that identifies the row — so
@@ -365,18 +364,22 @@ export const DiffFile = memo(function DiffFile({
           {/* Named after the file rather than "Revert": twenty buttons sharing
             one name identify nothing, and this is the row's only destructive
             control. Outside the collapse button for the same reason the mark
-            above is — that button already owns the whole row as its name. */}
-          <button
-            type="button"
-            onClick={() => {
-              onRevert(file)
-            }}
-            aria-label={t('diff.revertFile', { path: file.path })}
-            title={t('diff.revert')}
-            className="focus-ring text-ink-faint hover:text-danger shrink-0 rounded-[var(--radius-control)] p-0.5 transition-colors"
-          >
-            <Undo2 aria-hidden size={12} />
-          </button>
+            above is — that button already owns the whole row as its name.
+            Not on a nested repository: git has no record of it to undo, and
+            the untracked revert removes a file, which a folder is not. */}
+          {file.omitted !== 'repository' && (
+            <button
+              type="button"
+              onClick={() => {
+                onRevert(file)
+              }}
+              aria-label={t('diff.revertFile', { path: file.path })}
+              title={t('diff.revert')}
+              className="focus-ring text-ink-faint hover:text-danger shrink-0 rounded-[var(--radius-control)] p-0.5 transition-colors"
+            >
+              <Undo2 aria-hidden size={12} />
+            </button>
+          )}
 
           <DropdownMenu
             align="right"
@@ -390,7 +393,7 @@ export const DiffFile = memo(function DiffFile({
               {
                 id: 'open',
                 label: t('diff.openFile'),
-                icon: <ExternalLink aria-hidden size={14} />,
+                icon: <FileText aria-hidden size={14} />,
                 onSelect: () => {
                   onOpen(file.path)
                 }
@@ -451,6 +454,10 @@ function DiffBody({
 
   if (file.omitted === 'tooLarge') {
     return <p className="text-ink-soft px-3 py-2">{t('diff.tooLarge')}</p>
+  }
+
+  if (file.omitted === 'repository') {
+    return <p className="text-ink-soft px-3 py-2">{t('diff.nestedRepository')}</p>
   }
 
   // A rename with nothing else changed has no lines by construction; the
