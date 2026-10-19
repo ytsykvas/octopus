@@ -268,6 +268,9 @@ Every status has a paired `*-bg` background for badges and notices.
 - Radii: `--radius-control` 6px for buttons and rows, `--radius-panel` 10px for panes.
 - 1px borders in `line`. Panes are separated by borders, **not** shadows.
 - Shadows only for things floating above content: `--shadow-pop`, `--shadow-modal`.
+- The one exception is the composer: a still ring of the project palette (blue → red →
+  amber → green) with a soft glow outside it. It is the single place the user types, and
+  it is meant to be found at a glance.
 - Control heights: 24px (`sm`), 28px (`md`). The interface is dense because there is a lot of data.
 
 ### 10.3 Typography
@@ -282,6 +285,7 @@ Every status has a paired `*-bg` background for badges and notices.
 `styles.css` provides the base patterns — check them before writing new styles:
 
 - `.panel` — surface with border and radius;
+- `.composer-ring` — the composer's colour ring and glow;
 - `.row` / `.row-selected` — list row with hover and selection;
 - `.section-label` — section heading;
 - `.focus-ring` — visible keyboard focus;
@@ -356,7 +360,7 @@ Files opened from the right pane's tree take tabs of their own in the same strip
 | `⌘C`        | in a file: copy the lines' reference |
 | `⇧⇥`        | next mode                            |
 
-`⇧⇥` works in the composer's field only, and goes round ask first → `Auto mode` → plan, the order Claude Code's own shift+tab uses; anywhere else in the window it still moves the focus back.
+`⇧⇥` works in the composer's field only, and goes round ask first → `Accept edits` → plan, the order Claude Code's own shift+tab uses; anywhere else in the window it still moves the focus back.
 
 `⌘W` closes a file tab and nothing else: with a conversation in front the key is left alone, because closing a conversation is a menu item on purpose.
 
