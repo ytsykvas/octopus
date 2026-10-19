@@ -1624,7 +1624,11 @@ rewrite twenty files while the row went on saying what it said an hour ago,
 beside a diff pane that re-reads itself on the same event. The list now listens
 for the same turn endings and settles for the same 300ms, and re-reads only the
 project the workspace belongs to: a turn ending is a poor reason to run
-`git status` over every workspace of every project.
+`git status` over every workspace of every project. That status runs with
+`--no-optional-locks`, as the Files tab's does: a plain one holds `index.lock`
+for as long as it scans, and a `git add` or `git commit` running in the same
+worktree at that moment — another conversation, the terminal, a hook — fails
+with "Unable to create index.lock".
 
 **The right pane carries six tabs.** Terminal, then Files, Changes, Scripts
 and Pull request, then Notes. Build and server were two tabs and are now two halves of one: they
