@@ -644,6 +644,7 @@ export function App(): React.JSX.Element {
   ])
 
   const selectedProject = projects.all.find((project) => project.id === selectedProjectId) ?? null
+  const hasProjects = projects.all.length > 0
   const projectWorkspaces = selectedProject
     ? (workspaces.byProject.get(selectedProject.id) ?? [])
     : []
@@ -929,6 +930,7 @@ export function App(): React.JSX.Element {
             {sidebarOpen && (
               <Sidebar
                 project={selectedProject}
+                hasProjects={hasProjects}
                 workspaces={projectWorkspaces}
                 requests={branchRequests.byBranch}
                 selectedWorkspaceId={selectedWorkspaceId}
@@ -972,12 +974,12 @@ export function App(): React.JSX.Element {
           {/* The chat needs the full height of the pane — a padded, scrolling
               wrapper around it would give it two scrollbars, one of which
               would carry the composer off the bottom of the window. */}
-          {projects.all.length === 0 || !selectedProject ? (
+          {!hasProjects || !selectedProject ? (
             // No padded wrapper: the placeholder brings its own frame and
             // centres itself, so one here would centre it inside a box already
             // inset from the pane and leave it sitting low.
             <CenterPane
-              hasProjects={projects.all.length > 0}
+              hasProjects={hasProjects}
               busy={projects.busy || checkingGitHub}
               checkingGitHub={checkingGitHub}
               onAddFromDisk={() => void addFromDisk()}
@@ -1224,13 +1226,6 @@ interface CenterPaneProps {
   readonly onAddFromGitHub: () => void
 }
 
-/**
- * What the centre shows before there is a project to talk to the agent about.
- *
- * It carries the same two ways in as the tab strip's menu, because this is the
- * screen a first run lands on, and telling someone where the button is while
- * having room for the button is a strange thing to do.
- */
 interface WorkspacePaneProps {
   /** Whether there is anything to select, or only something to create. */
   readonly hasWorkspaces: boolean
@@ -1273,6 +1268,13 @@ function WorkspacePane({
   )
 }
 
+/**
+ * What the centre shows before there is a project to talk to the agent about.
+ *
+ * It carries the same two ways in as the tab strip's menu, because this is the
+ * screen a first run lands on, and telling someone where the button is while
+ * having room for the button is a strange thing to do.
+ */
 function CenterPane({
   hasProjects,
   busy,
