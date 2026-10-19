@@ -1667,7 +1667,7 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
    * awaits, so a status change from the agent and one the user asked for
    * genuinely can land together.
    */
-  let stateWrites: Promise<void> = Promise.resolve()
+  const stateWrites = oneAtATime()
 
   /**
    * Applies a change to the state and persists it.
@@ -1681,25 +1681,15 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
    * write it is already part of, and wait for itself.
    */
   function commit(change: (current: State) => State): Promise<void> {
-    const apply = async (): Promise<void> => {
+    return stateWrites(async () => {
       const next = change(state)
       await saveState(next, statePath, stateTempPath)
       state = next
-    }
-
-    // Chained onto both outcomes: one write that could not be made is not a
-    // reason to stop making the rest.
-    const run = stateWrites.then(apply, apply)
-    stateWrites = run.then(
-      () => undefined,
-      () => undefined
-    )
-
-    return run
+    })
   }
 
   /** Config writes, run one after another for the reasons `stateWrites` gives. */
-  let configWrites: Promise<void> = Promise.resolve()
+  const configWrites = oneAtATime()
 
   /**
    * Applies a change to the config and persists it, in turn.
@@ -1714,20 +1704,12 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
    * whatever arrived — and the two could disagree until the next restart.
    */
   function applyConfig(change: (current: Config) => Partial<Config>): Promise<Config> {
-    const apply = async (): Promise<Config> => {
+    return configWrites(async () => {
       const next: Config = ConfigSchema.parse({ ...config, ...change(config) })
       await saveConfig(next, configPath)
       config = next
       return next
-    }
-
-    const run = configWrites.then(apply, apply)
-    configWrites = run.then(
-      () => undefined,
-      () => undefined
-    )
-
-    return run
+    })
   }
 
   /**
@@ -2059,7 +2041,7 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
    * state, so making it wait for a save would only slow the log down. What it
    * does need is order — two appends racing would interleave the conversation.
    */
-  let transcriptWrites: Promise<void> = Promise.resolve()
+  const transcriptWrites = oneAtATime()
 
   function record(chat: Chat, entry: ChatEntry): void {
     const append = async (): Promise<void> => {
@@ -2069,7 +2051,7 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
       if (findChat(state, chat.id)) await appendEntry(chat.id, entry, dataRoot)
     }
 
-    transcriptWrites = transcriptWrites.then(append, append).catch((error: unknown) => {
+    transcriptWrites(append).catch((error: unknown) => {
       report(chat, error)
     })
   }
@@ -2087,7 +2069,7 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
     // already absent is exactly what was wanted anyway.
     const remove = (): Promise<void> => removeTranscript(chat.id, dataRoot)
 
-    transcriptWrites = transcriptWrites.then(remove, remove).catch((error: unknown) => {
+    transcriptWrites(remove).catch((error: unknown) => {
       report(chat, error)
     })
   }
@@ -2101,13 +2083,7 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
    * about to hand the new conversation to a window that reads the file at once.
    */
   function copyHistory(from: Chat, to: Chat): Promise<void> {
-    // No failure arms, unlike `record` and `discard`: the queue's tail is
-    // always a settled promise because both of those end in a `catch`, and
-    // `copyTranscript` is silent rather than throwing.
-    const run = transcriptWrites.then(() => copyTranscript(from.id, to.id, dataRoot))
-    transcriptWrites = run
-
-    return run
+    return transcriptWrites(() => copyTranscript(from.id, to.id, dataRoot))
   }
 
   /**
@@ -2116,17 +2092,10 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
    *
    * In the same queue as the appends, for the reason `discard` gives. Awaited,
    * unlike `record`: a failure here has to undo the rewind around it rather
-   * than surface as a stray error. The queue's tail is left settled either
-   * way, since everything after it chains on without failure arms.
+   * than surface as a stray error.
    */
   function cutHistory(chat: Chat, messageId: string): Promise<string | null> {
-    const run = transcriptWrites.then(() => truncateTranscript(chat.id, messageId, dataRoot))
-    transcriptWrites = run.then(
-      () => undefined,
-      () => undefined
-    )
-
-    return run
+    return transcriptWrites(() => truncateTranscript(chat.id, messageId, dataRoot))
   }
 
   /**
@@ -2509,8 +2478,8 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
 
     // State and config writes are serialised on chains of their own, which the
     // work above will have added to.
-    await stateWrites
-    await configWrites
+    await stateWrites.idle()
+    await configWrites.idle()
   }
 
   /**
@@ -2969,7 +2938,7 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
       if (cut !== null) {
         // Once the log is what it will be: every window holding it reads it
         // again on this, and a read racing the line above would miss it.
-        await transcriptWrites
+        await transcriptWrites.idle()
         handleEvent(chat, { type: 'conversation_rewound', messageId })
       }
 

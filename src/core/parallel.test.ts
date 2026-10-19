@@ -180,4 +180,18 @@ describe('one at a time', () => {
     await expect(after).resolves.toBe('after')
     expect(order).toEqual(['failed', 'after starts'])
   })
+
+  // What a shutdown waits on: everything already queued, a failure included.
+  it('says when everything queued so far has settled', async () => {
+    const line = oneAtATime()
+    const order: string[] = []
+
+    void line(() => later('first', 10, () => order.push('first ends')))
+    line(() => failsLater(new Error('refused'), 20, () => order.push('second fails'))).catch(
+      () => undefined
+    )
+    await line.idle()
+
+    expect(order).toEqual(['first ends', 'second fails'])
+  })
 })
