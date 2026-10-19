@@ -1019,6 +1019,16 @@ describe('workspaces', () => {
       expect(found.map(({ path }) => path)).toEqual(['readme-link.md'])
     })
 
+    // git names it `nested/`, a folder; picked, it attached a folder as a file.
+    it('leaves out a repository nested in the worktree', async () => {
+      const { service, projectId } = await withProject()
+      const workspace = await service.createWorkspaceIn(projectId)
+      await mkdir(join(workspace.path, 'nested'))
+      await run('git', ['init', '-q'], { cwd: join(workspace.path, 'nested') })
+
+      await expect(service.searchFiles(workspace.id, 'nested')).resolves.toEqual([])
+    })
+
     // Git still lists a tracked file that was deleted from the disk.
     it('leaves out a file that is listed but gone', async () => {
       const { service, projectId } = await withProject()
@@ -2199,6 +2209,36 @@ describe('env overrides a project adds', () => {
     // And approving records nothing, so the list does not fill with blanks.
     await approveSettingsIn(service, workspace.id)
     expect(service.listProjects()[0]?.approvedSettings).toEqual([])
+  })
+
+  /*
+   * The CLI adds to the allow rules in `settings.local.json` on every "always
+   * allow", so a carried copy differs in each new worktree — and every one of
+   * them asked again, for a file that is the user's own. Once no carry line names it, the same file
+   * is asked about again.
+   */
+  it("asks nothing of the local settings the user's carry list brings", async () => {
+    const { id, repo } = await withProject()
+    await mkdir(join(repo, '.claude'), { recursive: true })
+    await writeFile(
+      join(repo, '.claude', 'settings.local.json'),
+      '{"permissions":{"allow":["Bash(ls)"]}}',
+      'utf8'
+    )
+    await service.saveProjectCarryList(id, '.claude/settings.local.json\n')
+
+    const carried = await service.createWorkspaceIn(id)
+    await expect(service.workspaceTrust(carried.id)).resolves.toEqual({
+      approved: true,
+      digest: '',
+      files: []
+    })
+
+    await service.saveProjectCarryList(id, '.env\n')
+    await expect(service.workspaceTrust(carried.id)).resolves.toMatchObject({
+      approved: false,
+      files: [{ path: '.claude/settings.local.json' }]
+    })
   })
 
   it('asks again once the settings change', async () => {
@@ -4316,6 +4356,62 @@ describe('the agent chat', () => {
         insertions: 12,
         deletions: 4
       })
+  })
+
+  /*
+   * A message sent while the agent works and not folded into that turn — and
+   * after a Stop, always — is run by the CLI as a turn of its own once the
+   * first one has ended. Measured on a live session: the turn's result, then
+   * `completed` or `cancelled` for the message that started it, then `started`
+   * for the one that waited. Only `sendToChat` used to say `running`, so that
+   * second turn ran under an idle tab with no Stop.
+   */
+  describe('a turn the agent starts from its queue', () => {
+    const lifecycle = (command_uuid: string, state: string): SDKMessage =>
+      ({
+        type: 'command_lifecycle',
+        command_uuid,
+        state,
+        uuid: 'frame',
+        session_id: 'sess-1'
+      }) as unknown as SDKMessage
+
+    it('is shown as running', async () => {
+      const { service, workspaceId } = await withWorkspace()
+      const chat = await service.openChat(workspaceId)
+      await service.sendToChat(chat.id, 'work')
+      agent().emit(initMessage)
+      agent().emit(resultMessage)
+      agent().emit(lifecycle('first', 'completed'))
+      await vi.waitFor(() => {
+        expect(service.listChats(workspaceId)[0]?.status).toBe('idle')
+      })
+
+      agent().emit(lifecycle('waited', 'started'))
+
+      await vi.waitFor(() => {
+        expect(service.listChats(workspaceId)[0]?.status).toBe('running')
+      })
+    })
+
+    // `completed` and `cancelled` arrive after the result as well, and they
+    // end a turn rather than start one.
+    it('is not imagined from a message that finished', async () => {
+      const { service, workspaceId } = await withWorkspace()
+      const chat = await service.openChat(workspaceId)
+      await service.sendToChat(chat.id, 'work')
+      agent().emit(initMessage)
+      agent().emit(resultMessage)
+      agent().emit(lifecycle('first', 'cancelled'))
+      agent().emit(lifecycle('first', 'completed'))
+
+      await vi.waitFor(() => {
+        expect(service.listChats(workspaceId)[0]?.status).toBe('idle')
+      })
+      // Long enough for a status write those frames started to have landed.
+      await new Promise((resolve) => setTimeout(resolve, 50))
+      expect(service.listChats(workspaceId)[0]?.status).toBe('idle')
+    })
   })
 
   /*

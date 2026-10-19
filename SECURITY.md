@@ -34,6 +34,24 @@ service of its own — so most of the usual surface does not exist. What does:
   saying, so a hook nobody had read ran when somebody asked for a description.
   A way to get settings or a hook honoured without that prompt is the most
   serious bug this project can have.
+- **One part of one file is left out of that digest on purpose.** The allow
+  rules of a `.claude/settings.local.json` the user's own carry list copied
+  into a worktree. The CLI adds to them on every "always allow", so the carried
+  file differed in every new worktree and asked again, for settings that are
+  the user's, not the repository's. `src/core/carriedTrust.ts` does this only
+  when the file is reached through no link, named by a carry line, and
+  untracked — compared without case, as macOS reads paths — both in the
+  worktree and where it was carried from. Its hooks, MCP servers, `defaultMode`,
+  `deny`, `additionalDirectories` and every other key stay in the digest, and
+  no other file is narrowed. The accepted cost: an allow rule that a setup
+  script or the agent writes into that file afterwards is not asked about —
+  the power the CLI's own "always allow" button exercises, and an allowed setup
+  script runs arbitrary shell already. Tying the rules to the copy that was
+  carried would undo the change, since adding to them in the worktree is what
+  the CLI does. A `.claude` that is a submodule is asked in its own repository,
+  which tracks the file. A way to
+  get the **repository's** committed content past the gate through this door
+  is the bug above.
 - **A repository can supply the shell the Run button executes.** A checkout
   carrying `.octopus/scripts/` decides what runs, ahead of anything configured
   in the app — so a `git pull` can change it.

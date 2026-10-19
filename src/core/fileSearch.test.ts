@@ -12,22 +12,49 @@ const FILES = [
 ]
 
 describe('listing the files of a worktree', () => {
-  it('asks git for tracked and untracked files, and nothing it ignores', async () => {
+  const blob = (path: string, stage = 0): string =>
+    `100644 a09ef9334a022405ac5f08b981bdaa1d5c194e8c ${String(stage)}\t${path}`
+
+  const answering =
+    (staged: string[], others: string[]) =>
+    (args: readonly string[]): Promise<string> =>
+      Promise.resolve([...(args.includes('--stage') ? staged : others), ''].join('\0'))
+
+  it('asks git for the tracked files with their modes, and the untracked it does not ignore', async () => {
     const calls: string[][] = []
 
     await listFiles((args) => {
       calls.push([...args])
-      return Promise.resolve('a.ts\0b.ts\0')
+      return Promise.resolve('')
     })
 
-    expect(calls).toEqual([['ls-files', '-z', '--cached', '--others', '--exclude-standard']])
+    expect(calls).toEqual([
+      ['ls-files', '-z', '--stage'],
+      ['ls-files', '-z', '--others', '--exclude-standard']
+    ])
   })
 
-  // A path may hold a newline, and splitting on one would make two files of it.
-  it('splits on NUL and drops the empty tail and duplicates', async () => {
-    const files = await listFiles(() => Promise.resolve('a.ts\0odd\nname.ts\0a.ts\0'))
+  // A path may hold a newline, and splitting on one would make two files of it;
+  // a conflicted path is in the index once per stage.
+  it('splits on NUL, and lists a conflicted path once', async () => {
+    const files = await listFiles(
+      answering([blob('a.ts', 1), blob('a.ts', 2), blob('odd\nname.ts')], ['new.ts'])
+    )
 
-    expect(files).toEqual(['a.ts', 'odd\nname.ts'])
+    expect(files).toEqual(['a.ts', 'odd\nname.ts', 'new.ts'])
+  })
+
+  // Either is a folder, and picked from the list it attached a folder's path
+  // as a file.
+  it('leaves out a submodule and a repository nested in the worktree', async () => {
+    const files = await listFiles(
+      answering(
+        [blob('a.ts'), '160000 a16a57ce22daca2d5424b4ba00748ef1f06fb2fe 0\tlib/inner'],
+        ['nested/', 'b.ts']
+      )
+    )
+
+    expect(files).toEqual(['a.ts', 'b.ts'])
   })
 })
 
