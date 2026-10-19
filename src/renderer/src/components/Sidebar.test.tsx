@@ -32,6 +32,7 @@ type SidebarProps = React.ComponentProps<typeof Sidebar>
 function renderSidebar(overrides: Partial<SidebarProps> = {}): SidebarProps {
   const props: SidebarProps = {
     project: project(),
+    hasProjects: true,
     workspaces: [],
     requests: new Map(),
     selectedWorkspaceId: null,
@@ -103,12 +104,26 @@ describe('Sidebar', () => {
     expect(screen.getByText('anna')).toBeInTheDocument()
   })
 
-  it('asks for a repository when no project is selected', () => {
-    renderSidebar({ project: null })
+  it('asks for a repository when there is none', () => {
+    renderSidebar({ project: null, hasProjects: false })
 
     expect(
       screen.getByText('Nothing here yet. Add a repository with the "+" button.')
     ).toBeInTheDocument()
+  })
+
+  /*
+   * Projects exist and none is chosen — on start, or after the open project's
+   * tile is pressed again. Asking for a repository then contradicted the strip
+   * beside it, which holds one.
+   */
+  it('points at the strip when projects exist but none is chosen', () => {
+    renderSidebar({ project: null, hasProjects: true })
+
+    expect(screen.getByText('Pick a project on the far left.')).toBeInTheDocument()
+    expect(
+      screen.queryByText('Nothing here yet. Add a repository with the "+" button.')
+    ).not.toBeInTheDocument()
   })
 
   // The limits moved to the footer, which spans the tab strip as well. Left

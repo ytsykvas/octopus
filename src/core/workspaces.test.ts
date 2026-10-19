@@ -10,7 +10,7 @@ import type { Chat } from './chats.js'
 import { GitError, type GitExec, gitIn } from './git.js'
 import { NAME_POOL_SIZE, type Random, WORKSPACE_NAMES } from './names.js'
 import { addProject, EMPTY_STATE, type Project, type State, type Workspace } from './store.js'
-import { POOL_START } from './ports.js'
+import { POOL_START, type PortProbe } from './ports.js'
 import { listWorktrees, isBranchMerged } from './worktree.js'
 import {
   branchFor,
@@ -112,11 +112,18 @@ afterEach(async () => {
  */
 const first: Random = () => 0
 
+/** No port answers, so nothing here opens a socket to find a free block. */
+const nothingListens: PortProbe = () => Promise.resolve(false)
+
 const [FIRST_NAME, SECOND_NAME] = WORKSPACE_NAMES as [string, string]
 
 /** Creates a workspace and folds it into the state, as the service does. */
 async function create(): Promise<Workspace> {
-  const workspace = await createWorkspace(project, state, exec, { root, random: first })
+  const workspace = await createWorkspace(project, state, exec, {
+    root,
+    answers: nothingListens,
+    random: first
+  })
   state = { ...state, workspaces: [...state.workspaces, workspace] }
   return workspace
 }
@@ -161,7 +168,7 @@ describe('freshBase', () => {
     const remote = await addRemote()
     const landed = await commitOnRemote(remote, 'main')
 
-    const workspace = await createWorkspace(project, state, exec, { root })
+    const workspace = await createWorkspace(project, state, exec, { root, answers: nothingListens })
     const head = (await run('git', ['rev-parse', 'HEAD'], { cwd: workspace.path })).stdout.trim()
 
     expect(head).toBe(landed)
@@ -170,7 +177,7 @@ describe('freshBase', () => {
   // The project added from a local folder that was never pushed. Nothing to
   // fetch, nothing stale, and above all not an error.
   it('creates a workspace normally when there is no remote at all', async () => {
-    const workspace = await createWorkspace(project, state, exec, { root })
+    const workspace = await createWorkspace(project, state, exec, { root, answers: nothingListens })
 
     expect(workspace.branch).toBe(branchFor(project, workspace.name))
     expect(await listWorktrees(exec)).toHaveLength(2)
@@ -183,7 +190,7 @@ describe('freshBase', () => {
       return exec(args)
     }
 
-    await createWorkspace(project, state, watching, { root })
+    await createWorkspace(project, state, watching, { root, answers: nothingListens })
     expect(asked.some((args) => args[0] === 'fetch')).toBe(false)
   })
 
@@ -198,9 +205,10 @@ describe('freshBase', () => {
     const remote = await addRemote()
     await rm(remote, { recursive: true, force: true })
 
-    const failure = await createWorkspace(project, state, exec, { root }).catch(
-      (error: unknown) => error
-    )
+    const failure = await createWorkspace(project, state, exec, {
+      root,
+      answers: nothingListens
+    }).catch((error: unknown) => error)
 
     expect(failure).toBeInstanceOf(WorkspaceError)
     expect((failure as WorkspaceError).code).toBe('fetchFailed')
@@ -214,7 +222,9 @@ describe('freshBase', () => {
     const remote = await addRemote()
     await rm(remote, { recursive: true, force: true })
 
-    await expect(createWorkspace(project, state, exec, { root })).rejects.toThrow()
+    await expect(
+      createWorkspace(project, state, exec, { root, answers: nothingListens })
+    ).rejects.toThrow()
 
     expect(await listWorktrees(exec)).toHaveLength(1)
     const branches = (await run('git', ['branch', '--format=%(refname:short)'], { cwd: repo }))
@@ -241,7 +251,7 @@ describe('freshBase', () => {
       return exec(args)
     }
 
-    await createWorkspace(project, state, exec, { root, fetchExec })
+    await createWorkspace(project, state, exec, { root, answers: nothingListens, fetchExec })
     expect(asked).toEqual([['fetch', 'origin']])
   })
 })
@@ -298,7 +308,11 @@ describe('createWorkspace', () => {
     const other: Project = { ...project, id: 'esl', name: 'esl', repoPath: otherRepo }
 
     const mine = await create()
-    const theirs = await createWorkspace(other, state, gitIn(otherRepo), { root, random: first })
+    const theirs = await createWorkspace(other, state, gitIn(otherRepo), {
+      root,
+      answers: nothingListens,
+      random: first
+    })
 
     expect(theirs.name).toBe(mine.name)
     expect(theirs.id).not.toBe(mine.id)
@@ -327,9 +341,11 @@ describe('createWorkspace', () => {
   it('refuses when the directory is already occupied', async () => {
     const occupied = (): Promise<boolean> => Promise.resolve(true)
 
-    const error = await createWorkspace(project, state, exec, { root, exists: occupied }).catch(
-      (cause: unknown) => cause
-    )
+    const error = await createWorkspace(project, state, exec, {
+      root,
+      answers: nothingListens,
+      exists: occupied
+    }).catch((cause: unknown) => cause)
 
     expect(error).toBeInstanceOf(WorkspaceError)
     expect((error as WorkspaceError).code).toBe('pathExists')
@@ -345,7 +361,7 @@ describe('createWorkspace', () => {
   it('checks the real filesystem when no checker is supplied', async () => {
     // Without an `exists` override the default runs; the path is free, so
     // creation proceeds.
-    const workspace = await createWorkspace(project, state, exec, { root })
+    const workspace = await createWorkspace(project, state, exec, { root, answers: nothingListens })
     expect(WORKSPACE_NAMES).toContain(workspace.name)
   })
 
@@ -381,7 +397,11 @@ describe('createWorkspace', () => {
     const workspace = await create()
     await rename(workspace, 'fix-auth')
 
-    const next = await createWorkspace(project, state, exec, { root, random: first })
+    const next = await createWorkspace(project, state, exec, {
+      root,
+      answers: nothingListens,
+      random: first
+    })
 
     expect(next.name).not.toBe(FIRST_NAME)
   })
@@ -390,9 +410,11 @@ describe('createWorkspace', () => {
     // Occupy the path the generator is made to pick.
     await mkdir(join(root, 'workspaces', 'planner', FIRST_NAME), { recursive: true })
 
-    const error = await createWorkspace(project, state, exec, { root, random: first }).catch(
-      (cause: unknown) => cause
-    )
+    const error = await createWorkspace(project, state, exec, {
+      root,
+      answers: nothingListens,
+      random: first
+    }).catch((cause: unknown) => cause)
 
     expect((error as WorkspaceError).code).toBe('pathExists')
   })
@@ -406,7 +428,11 @@ describe('createWorkspace', () => {
       return exec(args)
     }
 
-    const workspace = await createWorkspace(project, state, quiet, { root, random: first })
+    const workspace = await createWorkspace(project, state, quiet, {
+      root,
+      answers: nothingListens,
+      random: first
+    })
     expect(workspace.path).toContain(join('workspaces', 'planner', FIRST_NAME))
   })
 
@@ -418,7 +444,11 @@ describe('createWorkspace', () => {
       return exec(args)
     }
 
-    const workspace = await createWorkspace(project, state, broken, { root, random: first })
+    const workspace = await createWorkspace(project, state, broken, {
+      root,
+      answers: nothingListens,
+      random: first
+    })
     expect(workspace.path).toContain(FIRST_NAME)
   })
 })
@@ -439,7 +469,11 @@ describe('renameWorkspace', () => {
    */
   it("refuses a name that would name another workspace's database", async () => {
     const first = await create()
-    const second = await createWorkspace(project, state, exec, { root, random: () => 0.5 })
+    const second = await createWorkspace(project, state, exec, {
+      root,
+      answers: nothingListens,
+      random: () => 0.5
+    })
     state = { ...state, workspaces: [...state.workspaces, second] }
     const renamed = await renameWorkspace(first, project, 'fix-login', exec, state.workspaces)
     state = {

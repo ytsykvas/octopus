@@ -68,7 +68,7 @@ import {
 } from './diff.js'
 import { revertFile } from './revert.js'
 import { draftPullRequest, type DraftedPullRequest } from './pullRequestDraft.js'
-import { isListening, settlePort } from './ports.js'
+import { isListening, type PortProbe, settlePort } from './ports.js'
 import {
   carriedFiles,
   carryInto,
@@ -450,6 +450,14 @@ export interface ServiceOptions {
    * directory — a parameter so a test never reads the machine's real one.
    */
   readonly cliConfigDir?: string
+  /**
+   * Whether something answers on a port, asked when a workspace is made, when
+   * its port is settled before a run and when the pane asks if it is serving.
+   *
+   * Opens a socket by default; a parameter so a test sees the machine it
+   * describes rather than the one it runs on (`docs/testing.md`).
+   */
+  readonly listening?: PortProbe
   /**
    * Who outranks a chat's compaction window for a session about to start.
    *
@@ -1459,6 +1467,7 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
   const dataRoot = options.dataRoot ?? rootDir()
   const cliDir = options.cliConfigDir ?? cliConfigDir()
   const windowOverrideFor = options.windowOverride ?? findWindowOverride
+  const listening = options.listening ?? isListening
   // Corrected for the packaged app, where the SDK's own guess points into
   // `app.asar` and cannot be started (`agentBinary.ts`).
   const runQuery = options.query ?? withAgentBinary(defaultQuery, unpackedAgentBinary())
@@ -4367,7 +4376,7 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
     },
 
     async isWorkspaceServing(workspaceId) {
-      return isListening(requireWorkspace(workspaceId).port)
+      return listening(requireWorkspace(workspaceId).port)
     },
 
     async ensureWorkspacePort(workspaceId) {
@@ -4378,7 +4387,8 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
 
         const free = await settlePort(
           workspace.port,
-          state.workspaces.flatMap((other) => (other.id === workspaceId ? [] : [other.port]))
+          state.workspaces.flatMap((other) => (other.id === workspaceId ? [] : [other.port])),
+          listening
         )
         if (free === workspace.port) return free
 
@@ -4773,6 +4783,7 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
       // Cut from the base in effect, which the repository may state.
       const created = await createWorkspace(await liveProject(project), state, exec, {
         root: dataRoot,
+        answers: listening,
         fetchExec: makeExec(project.repoPath, FETCH_OPTIONS)
       })
 
