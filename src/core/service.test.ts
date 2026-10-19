@@ -530,6 +530,22 @@ describe('workspaces', () => {
   })
 
   /*
+   * Typed the way a branch reads on GitHub, the prefix used to give
+   * `octo//magda`, and every new workspace failed with git's own refusal.
+   */
+  it('creates a workspace under a prefix typed with a slash too many', async () => {
+    const repo = join(dir, 'planner')
+    await initRepo(repo)
+    const service = await createService(paths(dir))
+    await service.updateConfig({ branchPrefix: 'octo/' })
+    const project = await service.addProjectFromPath(repo)
+
+    const workspace = await service.createWorkspaceIn(project.id)
+
+    expect(workspace.branch).toMatch(/^octo\/[^/]+$/)
+  })
+
+  /*
    * A file whose times moved and whose content did not — a binary as well as a
    * text one. A plain `git diff` against the working tree refreshes the index
    * for it and writes it back under `index.lock` (`--no-optional-locks` or
@@ -3905,6 +3921,8 @@ describe('the agent chat', () => {
   let usageAnswer: () => Promise<unknown>
   /** What the session answers when asked to put the files back to a message. */
   let rewindAnswer: () => Promise<unknown>
+  /** How setting the session's mode settles — held, to make a send wait on it. */
+  let modeAnswer: () => Promise<void>
 
   function fakeQuery(): QueryFn {
     return (params) => {
@@ -4056,7 +4074,7 @@ describe('the agent chat', () => {
         },
         setPermissionMode: (mode: string) => {
           modes.push(mode)
-          return Promise.resolve()
+          return modeAnswer()
         },
         close: () => {
           closed++
@@ -4162,6 +4180,7 @@ describe('the agent chat', () => {
 
   beforeEach(() => {
     agents = []
+    modeAnswer = () => Promise.resolve()
     offered = () => Promise.resolve([])
     offeredCommands = () => Promise.resolve([])
     contextAnswer = () => Promise.resolve(CONTEXT_RESPONSE)
@@ -4286,6 +4305,39 @@ describe('the agent chat', () => {
       // The message went to the new session, not the one being closed.
       expect(agents[0]?.sent).toEqual(['work'])
       expect(agents[1]?.sent).toEqual(['more'])
+    })
+
+    // The message that applies the window can be `/clear`. Marked before the
+    // restart, the request went with the old session, and the clear asked for
+    // came back as one nobody asked for.
+    it('honours a /clear that is also the message the window waited for', async () => {
+      const { service, workspaceId, events } = await withWorkspace()
+      const chat = await service.openChat(workspaceId)
+      await service.sendToChat(chat.id, 'work')
+      agent().emit(initMessage)
+      await vi.waitFor(() => {
+        expect(service.listChats(workspaceId)[0]?.status).toBe('running')
+      })
+      await service.setChatAutoCompact(chat.id, 600_000)
+      agents[0]?.emit(resultMessage)
+      await vi.waitFor(() => {
+        expect(service.listChats(workspaceId)[0]?.status).toBe('idle')
+      })
+
+      await service.sendToChat(chat.id, '/clear')
+      expect(agents).toHaveLength(2)
+      agents[1]?.emit({
+        type: 'conversation_reset',
+        new_conversation_id: 'conv-2',
+        session_id: 'sess-1'
+      } as unknown as SDKMessage)
+
+      await vi.waitFor(() => {
+        expect(events.map((announced) => announced.event)).toContainEqual({
+          type: 'conversation_reset',
+          cleared: true
+        })
+      })
     })
 
     it('says who outranks the choice, asked of the files the session reads', async () => {
@@ -5762,6 +5814,29 @@ describe('the agent chat', () => {
       expect(
         history.some((entry) => entry.role === 'agent' && entry.event.type === 'conversation_reset')
       ).toBe(true)
+    })
+
+    // A request with no session to send it to — a start that failed, or one a
+    // close refused — has no reset coming. Kept, it waited for the next one the
+    // agent sent of its own accord, on leaving plan mode, and erased the log.
+    it('keeps no request whose message never reached the agent', async () => {
+      let failing = true
+      const { service, workspaceId, events } = await withWorkspace({
+        windowOverride: () =>
+          failing ? Promise.reject(new Error('settings unreadable')) : Promise.resolve(null)
+      })
+      const chat = await service.openChat(workspaceId)
+      await expect(service.sendToChat(chat.id, '/clear')).rejects.toThrow('settings unreadable')
+
+      failing = false
+      await sendAndReset(service, chat.id, 'get on with it')
+
+      await vi.waitFor(() => {
+        expect(events.map((announced) => announced.event)).toContainEqual({
+          type: 'conversation_reset',
+          cleared: false
+        })
+      })
     })
 
     // A request belongs to the reset it caused. Left behind, it would clear the
@@ -10015,6 +10090,29 @@ describe('the agent chat', () => {
   })
 
   describe('closing a conversation', () => {
+    /** A session start held at its last await until the test lets it go. */
+    function heldStart(): {
+      windowOverride: () => Promise<null>
+      asked: () => boolean
+      release: () => void
+    } {
+      let release: () => void = () => undefined
+      let asked = false
+      const held = new Promise<null>((resolve) => {
+        release = () => {
+          resolve(null)
+        }
+      })
+      return {
+        windowOverride: () => {
+          asked = true
+          return held
+        },
+        asked: () => asked,
+        release
+      }
+    }
+
     // A click that was a slip used to cost the whole conversation. Closing a
     // tab ends its session and takes it out of the strip, and keeps the rest.
     it('ends the session, keeps the history and takes the tab out of the strip', async () => {
@@ -10065,6 +10163,116 @@ describe('the agent chat', () => {
         service.rewindChat(first.id, '00000000-0000-4000-8000-000000000000', 'both')
       ).rejects.toMatchObject({ code: 'chatClosed' })
       expect(agents).toHaveLength(0)
+    })
+
+    /*
+     * A message sent and the tab closed at once: the send's session was still
+     * starting, so the close found nothing to end, and the start then
+     * registered a session on a closed conversation — one nothing would ever
+     * end, since removing the workspace walks the open ones only. Held until
+     * the close has been written, the start reads it and refuses.
+     */
+    it('refuses to start a session on a conversation closed while it started', async () => {
+      const start = heldStart()
+      const { service, workspaceId } = await withWorkspace({
+        windowOverride: start.windowOverride
+      })
+      const first = await service.openChat(workspaceId)
+      await service.createChat(workspaceId)
+      const sent = service.sendToChat(first.id, 'go')
+      await vi.waitFor(() => {
+        expect(start.asked()).toBe(true)
+      })
+
+      await service.closeChat(first.id)
+      start.release()
+
+      await expect(sent).rejects.toMatchObject({ code: 'chatClosed' })
+      expect(agents).toHaveLength(0)
+    })
+
+    /*
+     * The other way the race falls: let go as the close begins, the start reads
+     * the record before the close is written and registers. The close is
+     * written before the session is ended, so that session is there to be
+     * ended — and the send's `running`, queued behind the close, must not
+     * land on the closed record.
+     */
+    it('ends a session that registered while the close was being written', async () => {
+      const start = heldStart()
+      const { service, workspaceId } = await withWorkspace({
+        windowOverride: start.windowOverride
+      })
+      const first = await service.openChat(workspaceId)
+      await service.createChat(workspaceId)
+      const sent = service.sendToChat(first.id, 'go')
+      await vi.waitFor(() => {
+        expect(start.asked()).toBe(true)
+      })
+
+      const closing = service.closeChat(first.id)
+      start.release()
+      await closing
+
+      await expect(sent).resolves.toEqual(expect.any(String))
+      expect(agents).toHaveLength(1)
+      expect(agent().closed()).toBe(1)
+      const [closed] = await service.listClosedChats(workspaceId)
+      expect(closed?.chat.status).toBe('idle')
+      await expect(service.sessionUsage(first.id)).resolves.toEqual({
+        context: null,
+        autoCompact: null
+      })
+    })
+
+    /*
+     * A `/clear` to a live session, and the tab closed while its mode was being
+     * set: the close emptied the clear requests, and one marked after it waited
+     * for a reset that would never come — so on the reopened tab the next reset
+     * the agent sent of its own accord was read as the clear.
+     */
+    it('strands no clear request when the tab closes while the message waits', async () => {
+      const { service, workspaceId, events } = await withWorkspace()
+      const first = await service.openChat(workspaceId)
+      await service.createChat(workspaceId)
+      await service.sendToChat(first.id, 'work')
+      agent().emit(initMessage)
+      agent().emit(resultMessage)
+      await vi.waitFor(() => {
+        expect(service.listChats(workspaceId)[0]?.status).toBe('idle')
+      })
+
+      let release: () => void = () => undefined
+      let asked = false
+      modeAnswer = () => {
+        asked = true
+        return new Promise<void>((resolve) => {
+          release = resolve
+        })
+      }
+      const sent = service.sendToChat(first.id, '/clear')
+      await vi.waitFor(() => {
+        expect(asked).toBe(true)
+      })
+      await service.closeChat(first.id)
+      modeAnswer = () => Promise.resolve()
+      release()
+      await sent
+
+      await service.reopenChat(first.id)
+      await service.sendToChat(first.id, 'carry on')
+      agents.at(-1)?.emit({
+        type: 'conversation_reset',
+        new_conversation_id: 'conv-2',
+        session_id: 'sess-1'
+      } as unknown as SDKMessage)
+
+      await vi.waitFor(() => {
+        expect(events.map((announced) => announced.event)).toContainEqual({
+          type: 'conversation_reset',
+          cleared: false
+        })
+      })
     })
 
     // The session that has just ended may still say something. It must not

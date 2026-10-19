@@ -1,11 +1,16 @@
-import { render, screen } from '@testing-library/react'
+import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, it, vi } from 'vitest'
 
 import type { AgentEvent } from '@core/events.js'
 import type { ChatEntry } from '@core/transcript.js'
 
+import { highlight } from '../diff/highlight.js'
 import { ChatLog } from './ChatLog.js'
+
+// Stood in for, as every pane that colours code is tested: the real one loads a
+// grammar, and its answer would land after the test that drew the card.
+vi.mock('../diff/highlight.js', () => ({ highlight: vi.fn(() => Promise.resolve(null)) }))
 
 const AT = '2026-08-11T09:00:00.000Z'
 
@@ -353,7 +358,11 @@ describe('rewinding from a message', () => {
 describe('a message carrying notes on code', () => {
   const user = (text: string): ChatEntry => ({ role: 'user', at: AT, text })
 
-  it('draws each note as a card: where, the lines, and what was said', () => {
+  it('draws each note as a card: where, the lines, and what was said', async () => {
+    vi.mocked(highlight).mockResolvedValueOnce([
+      [{ text: 'const a = 1', light: '#111', dark: '#eee' }],
+      [{ text: 'const b = 2', light: '#222', dark: '#ddd' }]
+    ])
     renderLog({
       entries: [
         user(
@@ -373,6 +382,17 @@ describe('a message carrying notes on code', () => {
     expect(second).toHaveTextContent('(as it was)')
     expect(second?.querySelectorAll('p')).toHaveLength(1)
     expect(screen.getByText('Look.')).toBeInTheDocument()
+
+    // The lines in their file's colours, as the viewer and the diff draw them:
+    // a few lines out of context are where colour helps most.
+    await waitFor(() => {
+      expect(
+        card?.querySelector<HTMLElement>('pre span')?.style.getPropertyValue('--shiki-light')
+      ).toBe('#111')
+    })
+    expect(highlight).toHaveBeenCalledWith('typescript', 'const a = 1\nconst b = 2')
+    expect(card?.querySelector('pre')).toHaveClass('diff-code')
+    expect(card?.querySelector('pre')?.textContent).toBe('const a = 1\nconst b = 2')
   })
 
   it('draws a reference in running text as a chip', () => {

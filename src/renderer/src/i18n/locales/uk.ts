@@ -1000,7 +1000,8 @@ export const uk: Translation = {
     branchPrefix: 'Префікс гілок',
     branchPrefixHint:
       'Гілки воркспейсів називаються <префікс>/<воркспейс>. Зазвичай беруть GitHub-username.',
-    branchPrefixEmpty: 'Префікс не може бути порожнім.',
+    branchPrefixUnusable: 'У префіксі має бути хоча б один символ, який приймає git.',
+    branchPrefixBecomes: 'Буде збережено як {{prefix}}',
 
     cloneDirectory: 'Тека для клонування',
     cloneDirectoryHint:

@@ -243,15 +243,16 @@ place. `⌘W` closes the file in front and is
 left alone otherwise. The files live in memory, per workspace, like which
 conversation was in front.
 
-**The viewer is mounted only while its tab is in front**, unlike a
-conversation: there is nothing in it to lose by going, and coming forward is
-exactly when a file may have changed, so it reads the file again then — and after
-each turn, and when the window regains focus. Read-only, highlighted by the
-diff's own `highlight()` up to 256 KB, 20 000 lines and lines of 2 000
-characters, plain past that with a line saying why. Two `<pre>`s side by side
-rather than a row per line: a long file is a handful of elements, and a
-selection in the code never picks up the numbers. A deleted file opens onto what
-HEAD still holds, under a banner saying so.
+**The viewer is mounted only while its tab is in front**, unlike a conversation:
+there is nothing in it to lose by going, and coming forward is exactly when a
+file may have changed, so it reads the file again then — and after each turn,
+and when the window regains focus. Read-only, highlighted by the diff's own
+`highlight()` up to 256 KB, 20 000 lines and lines of 2 000 characters, plain
+past that with a line saying why — limits and colouring both in
+`useColouredText` (`diff/colouredText.tsx`), which the chat's note cards share.
+Two `<pre>`s side by side rather than a row per line: a long file is a handful
+of elements, and a selection in the code never picks up the numbers. A deleted
+file opens onto what HEAD still holds, under a banner saying so.
 
 **Code review happens from the viewer.** Selecting lines floats a toolbar over
 them: a button per conversation of the workspace — "Add to Claude 2", the one
@@ -797,11 +798,13 @@ instead would be a different design.
 **A sent message is drawn from what it is made of** (`userMessage.ts`), and
 never changed: what the agent read is what the log shows, only laid out. A note
 on code — a `path:12-18` line with `>` lines under it, the shape `withNotes`
-writes — becomes a card: the place in mono, the lines unwrapped, the remark
-under them. A reference in running text, like a pasted ⌘C, becomes a mono chip;
-a path has to look like one, so `10:30` stays a time and a URL's port stays in
-the URL. A message with neither is drawn exactly as it always was, character for
-character.
+writes — becomes a card: the place in mono, the lines unwrapped and coloured by
+their file's grammar, the remark under them. The colours land after the card is
+drawn, as the viewer's do, and come from the quoted lines alone — four lines
+from inside a comment opened above them are coloured as code. A reference in
+running text, like a pasted ⌘C, becomes a mono chip; a path has to look like
+one, so `10:30` stays a time and a URL's port stays in the URL. A message with
+neither is drawn exactly as it always was, character for character.
 
 **A turn's footer needs a turn.** One at the head of the log has nothing above
 it to close, and `/clear` used to leave exactly that: the transcript went with
@@ -3071,6 +3074,26 @@ than with `image-rendering: pixelated`. Nearest-neighbour at those ratios drops
 pixels
 unevenly and the blocks come out different sizes, which reads as a broken image
 rather than as pixel art.
+
+## Motion
+
+Under the system's "Reduce motion" nothing in the window moves on its own: one
+rule at the end of `styles.css` stops every animation on every element, rather
+than `motion-reduce:animate-none` beside each use, which seven spinners and
+pulses had been written without. A list of selectors would have been one more
+thing to keep in step; `motion.test.ts` only checks the rule is still there. It
+covers CSS animations only — one driven from JavaScript would have to ask
+`prefers-reduced-motion` itself.
+
+**A spinner has to read as working standing still**, so it is a mark whose
+shape says loading, or one with a word beside it — never the control's own icon
+turning. The limits' refresh broke this: its arrows stopped and only dimmed,
+which reads as unavailable, and it shows a loader while it reads now, like the
+new-workspace button.
+
+Transitions are left alone — they answer the pointer rather than moving on
+their own — though the plugin tile's turn and a folding chevron drop theirs
+with `motion-reduce:transition-none`.
 
 ## Ready-made classes
 
