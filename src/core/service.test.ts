@@ -11,6 +11,7 @@ import {
   rm,
   stat,
   symlink,
+  utimes,
   writeFile
 } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
@@ -526,6 +527,44 @@ describe('workspaces', () => {
     const workspace = await service.createWorkspaceIn(projectId)
 
     await expect(service.revertWorkspaceFile(workspace.id, '../escape.txt')).rejects.toThrow()
+  })
+
+  /*
+   * A file whose times moved and whose content did not — a binary as well as a
+   * text one. A plain `git diff` against the working tree refreshes the index
+   * for it and writes it back under `index.lock` (`--no-optional-locks` or
+   * not), and a `git add` in the worktree at that moment fails. The pane reads
+   * as a turn ends, which is when those run. Read against a copy of the index,
+   * git refreshes the copy and the worktree's own is never written.
+   */
+  it('reads the changes without writing the worktree\u2019s index', async () => {
+    const { service, projectId } = await withProject()
+    const repo = join(dir, 'planner')
+    await writeFile(join(repo, 'logo.png'), Uint8Array.from([0x89, 0x50, 0x00, 0x01, 0x02]))
+    await run('git', ['add', 'logo.png'], { cwd: repo })
+    await run('git', ['commit', '-q', '-m', 'logo'], { cwd: repo })
+    const workspace = await service.createWorkspaceIn(projectId)
+    await writeFile(join(workspace.path, 'README.md'), '# changed\n', 'utf8')
+    const later = new Date(Date.now() + 60_000)
+    await utimes(join(workspace.path, 'logo.png'), later, later)
+    const { stdout } = await run(
+      'git',
+      ['rev-parse', '--path-format=absolute', '--git-path', 'index'],
+      { cwd: workspace.path }
+    )
+    const index = stdout.trim()
+    const stamp = async (): Promise<string> => {
+      const info = await stat(index)
+      return `${String(info.ino)}:${String(info.mtimeMs)}`
+    }
+    const before = await stamp()
+
+    const diff = await service.readWorkspaceChanges(workspace.id)
+    const sides = await service.readWorkspaceFileSides(workspace.id)
+
+    expect(await stamp()).toBe(before)
+    expect(diff.files.map((file) => file.path)).toEqual(['README.md'])
+    expect(Object.keys(sides)).toEqual(['README.md'])
   })
 
   it('reads what a workspace changed against the project’s base branch', async () => {
