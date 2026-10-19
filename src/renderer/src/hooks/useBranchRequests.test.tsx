@@ -6,7 +6,7 @@ import type { BranchRequest } from '@core/pullRequestShapes.js'
 import { held } from '../test/held.js'
 import { octopus } from '../test/octopus.js'
 import { failOnUpdatesOutsideAct } from '../test/updatesOutsideAct.js'
-import { useBranchRequests } from './useBranchRequests.js'
+import { RUNNING_INTERVAL_MS, useBranchRequests } from './useBranchRequests.js'
 
 // Every read here answers through a promise, and one answered after a test had
 // ended failed a CI run with every test green.
@@ -141,6 +141,28 @@ describe('what each branch of a project has become', () => {
     await act(() => vi.advanceTimersByTimeAsync(70_000))
 
     expect(vi.mocked(octopus().projects.pullRequests).mock.calls.length).toBeGreaterThan(1)
+  })
+
+  // A row spinning for a minute after the tab said the run was over is what
+  // this clock is for: while a check runs the read comes round at the tab's pace.
+  it('looks again sooner while a check is still running', async () => {
+    vi.useFakeTimers()
+    answer(request({ checks: 'running' }))
+    renderHook(() => useBranchRequests(PLANNER))
+
+    await act(() => vi.advanceTimersByTimeAsync(RUNNING_INTERVAL_MS + 100))
+
+    expect(vi.mocked(octopus().projects.pullRequests).mock.calls.length).toBeGreaterThan(1)
+  })
+
+  it('keeps the slow clock when nothing is running', async () => {
+    vi.useFakeTimers()
+    answer(request({ checks: 'passed' }))
+    renderHook(() => useBranchRequests(PLANNER))
+
+    await act(() => vi.advanceTimersByTimeAsync(RUNNING_INTERVAL_MS + 100))
+
+    expect(octopus().projects.pullRequests).toHaveBeenCalledOnce()
   })
 
   it('stops looking once the project is closed', async () => {

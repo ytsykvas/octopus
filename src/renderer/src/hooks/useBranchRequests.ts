@@ -29,6 +29,16 @@ export interface BranchRequestController {
 const INTERVAL_MS = 60_000
 
 /**
+ * How often to look again while some request still has a check running.
+ *
+ * The pull request tab reads on this clock, and the mark on a row is the same
+ * fact: left at a minute, the row kept spinning for up to a minute after the tab
+ * had already said the checks were done. Only while something is running, so a
+ * project with nothing in flight costs what it did.
+ */
+export const RUNNING_INTERVAL_MS = 15_000
+
+/**
  * Every branch of a project that has a pull request.
  *
  * One call for the whole project rather than one per workspace. The mark is
@@ -77,15 +87,17 @@ export function useBranchRequests(projectId: string | null): BranchRequestContro
       const result = await window.octopus.projects.pullRequests(projectId)
       if (stopped) return
 
+      let running = false
       if (result.ok) {
         setByBranch(new Map(result.value.requests.map((request) => [request.branch, request])))
         setCapped(result.value.capped)
+        running = result.value.requests.some((request) => request.checks === 'running')
       }
 
       // Rescheduled from the answer rather than run on an interval, so a slow
       // reply never has a second read stacked on top of it — and a refusal is
       // retried on the same clock rather than giving up for the session.
-      timer = setTimeout(() => void read(), INTERVAL_MS)
+      timer = setTimeout(() => void read(), running ? RUNNING_INTERVAL_MS : INTERVAL_MS)
     }
 
     void read()
