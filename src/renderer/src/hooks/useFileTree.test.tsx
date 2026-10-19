@@ -411,6 +411,41 @@ describe('the tree of a workspace', () => {
     })
   })
 
+  // Deleted whole, or taken back into git: the listing is let go with the row,
+  // or every turn would read a folder nobody is shown again, and fail on one
+  // that is gone.
+  it('stops reading an open folder git no longer names whole', async () => {
+    answering()
+    vi.mocked(octopus().files.directory).mockResolvedValue({
+      ok: true,
+      value: { entries: [], truncated: false }
+    })
+    const { result } = renderHook(() => useFileTree(WORKSPACE, true, OPEN))
+    await waitFor(() => {
+      expect(result.current.listings.get('node_modules')?.status).toBe('ready')
+    })
+
+    answering({ entries: [], statuses: {}, truncated: false })
+    act(() => {
+      result.current.refresh()
+    })
+    await waitFor(() => {
+      expect(result.current.listings.has('node_modules')).toBe(false)
+    })
+    const reads = vi.mocked(octopus().files.directory).mock.calls.length
+
+    act(() => {
+      result.current.refresh()
+    })
+    await waitFor(() => {
+      expect(octopus().files.tree).toHaveBeenCalledTimes(3)
+    })
+    await act(async () => {
+      await Promise.resolve()
+    })
+    expect(octopus().files.directory).toHaveBeenCalledTimes(reads)
+  })
+
   it('lays a folder read inside a read folder into the tree', async () => {
     answering()
     vi.mocked(octopus().files.directory).mockImplementation((_, path) =>
