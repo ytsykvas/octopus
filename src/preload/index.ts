@@ -30,7 +30,7 @@ import type { QuestionAnswer } from '@core/questions.js'
 import type { RewindOutcome, RewindPreview, RewindScope } from '@core/rewind.js'
 import type { ChatEntry } from '@core/transcript.js'
 import type { TerminalExit, TerminalOutput, TerminalSession, TerminalSpec } from '@core/terminal.js'
-import type { Config, ConfigEdit } from '@core/config.js'
+import type { Config, ConfigEdit, ConfigPatch } from '@core/config.js'
 import type { CliPermission } from '@core/cliPermissions.js'
 import type { FileSides, WorkspaceDiff } from '@core/diff.js'
 import type { MergeMethod, PullRequestDraft, PullRequestView } from '@core/pullRequests.js'
@@ -103,7 +103,7 @@ const api = {
   config: {
     get: (): Promise<Result<Config>> => ipcRenderer.invoke('config:get') as Promise<Result<Config>>,
 
-    update: (patch: Partial<Config>): Promise<Result<Config>> =>
+    update: (patch: ConfigPatch): Promise<Result<Config>> =>
       ipcRenderer.invoke('config:update', patch) as Promise<Result<Config>>,
 
     /** Changes one list in the config — an operation, never the finished list. */

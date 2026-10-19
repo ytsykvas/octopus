@@ -18,6 +18,7 @@ import { type AgentModel, DEFAULT_MODEL, type Effort, type WorkingMode } from '@
 import type {
   Config,
   ConfigEdit,
+  ConfigPatch,
   LanguagePreference,
   SettingSourcesMode,
   ThemePreference
@@ -45,7 +46,7 @@ import { fileSize } from './fileSize.js'
 
 interface SettingsProps {
   readonly config: Config
-  readonly onChange: (patch: Partial<Config>) => Promise<void>
+  readonly onChange: (patch: ConfigPatch) => Promise<void>
   /** A list changed by an operation, never sent whole (`ConfigEdit`). */
   readonly onEdit: (edit: ConfigEdit) => Promise<void>
   readonly onClose: () => void
@@ -156,7 +157,7 @@ export function Settings({
 
 interface SectionProps {
   readonly config: Config
-  readonly onChange: (patch: Partial<Config>) => Promise<void>
+  readonly onChange: (patch: ConfigPatch) => Promise<void>
 }
 
 /**
@@ -399,7 +400,7 @@ function DefaultModels({
   onChange
 }: {
   config: Config
-  onChange: (patch: Partial<Config>) => Promise<void>
+  onChange: (patch: ConfigPatch) => Promise<void>
 }): React.JSX.Element {
   const { t } = useTranslation()
   const models = useModels()

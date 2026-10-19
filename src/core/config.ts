@@ -337,6 +337,16 @@ export const ConfigEditSchema = z.discriminatedUnion('kind', [
 export type ConfigEdit = z.infer<typeof ConfigEditSchema>
 
 /** The part of the config an edit changes, worked out from the config as it stands. */
+/**
+ * What the window may change by sending the new value: every setting except the
+ * lists, which change one switch at a time through `ConfigEdit`. A list sent
+ * whole is a snapshot of the window's copy, and two switches inside one round
+ * trip wrote the first back out.
+ */
+export type ConfigPatch = Partial<
+  Omit<Config, 'disabledSkillDefaults' | 'dismissedTips' | 'alwaysAllowedTools'>
+>
+
 export function editedConfig(config: Config, edit: ConfigEdit): Partial<Config> {
   switch (edit.kind) {
     case 'skillDefault':

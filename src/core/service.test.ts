@@ -6413,6 +6413,27 @@ describe('the agent chat', () => {
       await expect(agent().ask('Edit')).resolves.toMatchObject({ behavior: 'allow' })
     })
 
+    // Settings forgetting one rule while the agent's "always" records another:
+    // both land, where a list sent whole from the window dropped the new one.
+    it('keeps an "always" recorded while another rule is forgotten', async () => {
+      const { service, workspaceId, events } = await withWorkspace()
+      const forgotten = { toolName: 'Bash', ruleContent: 'ls' }
+      await service.updateConfig({ alwaysAllowedTools: [forgotten] })
+      const chat = await service.openChat(workspaceId)
+      await service.sendToChat(chat.id, 'edit it')
+
+      void agent().ask('Edit')
+      const requestId = await waitForRequest(events)
+      await Promise.all([
+        service.answerPermission(requestId, 'always'),
+        service.editConfig({ kind: 'forgetStanding', rule: forgotten })
+      ])
+
+      expect(service.getConfig().alwaysAllowedTools).toEqual([
+        { toolName: 'Edit', ruleContent: null }
+      ])
+    })
+
     /*
      * Each rule is worked out from the list as its write comes round, not as
      * it was when the answer arrived — two answered together otherwise both

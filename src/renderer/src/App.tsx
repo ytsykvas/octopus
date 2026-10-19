@@ -12,7 +12,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import { DEFAULT_EFFORT } from '@core/chats.js'
-import type { Config, ConfigEdit } from '@core/config.js'
+import type { Config, ConfigEdit, ConfigPatch } from '@core/config.js'
 import type { ThemeName } from '@core/types.js'
 
 import type { Failure, Result } from '../../preload/index.js'
@@ -411,7 +411,7 @@ export function App(): React.JSX.Element {
   )
 
   const updateConfig = useCallback(
-    async (patch: Partial<Config>) => {
+    async (patch: ConfigPatch) => {
       settleConfig(await window.octopus.config.update(patch))
     },
     [settleConfig]
@@ -439,7 +439,7 @@ export function App(): React.JSX.Element {
    * write rather than racing it.
    */
   const showRightPanel = useCallback(
-    (open: boolean, patch: Partial<Config> = {}) => {
+    (open: boolean, patch: ConfigPatch = {}) => {
       setRightPanelOpen(open)
       void updateConfig({ ...patch, rightPanelOpen: open })
     },

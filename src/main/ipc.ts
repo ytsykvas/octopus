@@ -10,7 +10,7 @@
 import type { OpenDialogOptions, WebContents } from 'electron'
 import { z } from 'zod'
 
-import { type Config, ConfigEditSchema } from '../core/config.js'
+import { type Config, ConfigEditSchema, type ConfigPatch } from '../core/config.js'
 import {
   type AccountKind,
   BUTTON_TIMEOUT_MS,
@@ -228,7 +228,7 @@ export function registerIpc(
 
   host.handle('config:get', () => attempt(() => service.getConfig()))
 
-  host.handle('config:update', (_event, patch: Partial<Config>) =>
+  host.handle('config:update', (_event, patch: ConfigPatch) =>
     attempt(() => writeConfig(host, () => service.updateConfig(patch)))
   )
 
