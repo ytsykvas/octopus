@@ -348,7 +348,7 @@ describe('FilesPanel', () => {
       answering()
       vi.mocked(octopus().files.directory).mockResolvedValue({
         ok: true,
-        value: { entries: [], truncated: true }
+        value: { entries: [{ name: 'pkg', kind: 'file' }], truncated: true }
       })
       renderPanel()
       await shown()
@@ -356,6 +356,22 @@ describe('FilesPanel', () => {
       await userEvent.click(row('node_modules'))
 
       expect(await screen.findByText(/Only the first 5,000 entries are listed/)).toBeInTheDocument()
+    })
+
+    // A submodule never checked out here is the usual one; with no row under
+    // it, the open folder looked like it was still being read.
+    it('says when there is nothing in it', async () => {
+      answering()
+      vi.mocked(octopus().files.directory).mockResolvedValue({
+        ok: true,
+        value: { entries: [], truncated: false }
+      })
+      renderPanel()
+      await shown()
+
+      await userEvent.click(row('node_modules'))
+
+      expect(await screen.findByText('Nothing in this folder.')).toHaveClass('text-ink-faint')
     })
   })
 
